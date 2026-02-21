@@ -154,6 +154,7 @@ Project-specific skills in `.claude/skills/`:
 | `geode-scoring` | score, psm, tier, rubric, formula | Scoring formulas, 14-axis rubric |
 | `geode-analysis` | analyst, evaluator, clean context | Analyst/Evaluator patterns, prompts |
 | `geode-verification` | guardrail, bias, cause, decision tree | G1-G4, BiasBuster, Decision Tree |
+| `geode-gitflow` | branch, git, feature, release, hotfix | Gitflow strategy, commit convention |
 
 ## Linked Skills (from parent project)
 
