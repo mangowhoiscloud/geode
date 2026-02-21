@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+
+# Cache
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Environment
+.env
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# SQLite checkpoints
+*.db
+
+# Checkpoint DB
+geode_checkpoints.db
