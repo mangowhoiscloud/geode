@@ -6,6 +6,9 @@ Supports Send API pattern for parallel execution (like analysts).
 from __future__ import annotations
 
 import logging
+from typing import Any
+
+from pydantic import ValidationError
 
 from geode.infrastructure.ports.llm_port import get_llm_json
 from geode.llm.prompts import EVALUATOR_AXES, EVALUATOR_SYSTEM, EVALUATOR_USER
@@ -86,7 +89,16 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
     if state.get("verbose"):
         log.debug("Running %s evaluator...", evaluator_type)
     data = get_llm_json()(system, user)
-    return EvaluatorResult(**data)
+    try:
+        return EvaluatorResult(**data)
+    except ValidationError as ve:
+        log.warning("Evaluator %s LLM response failed schema validation: %s", evaluator_type, ve)
+        return EvaluatorResult(
+            evaluator_type=evaluator_type,
+            axes={},
+            composite_score=0.0,
+            rationale=f"LLM response failed validation (degraded): {str(ve)[:200]}",
+        )
 
 
 def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
@@ -232,7 +244,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
 # ---------------------------------------------------------------------------
 
 
-def evaluator_node(state: GeodeState) -> dict:
+def evaluator_node(state: GeodeState) -> dict[str, Any]:
     """Run a single evaluator. Called via Send API for parallel execution."""
     try:
         evaluator_type = state.get("_evaluator_type", "quality_judge")
@@ -263,19 +275,3 @@ def make_evaluator_sends(state: GeodeState) -> list:
         }
         sends.append(Send("evaluator", send_state))
     return sends
-
-
-def evaluators_node(state: GeodeState) -> dict:
-    """Run all 3 evaluators sequentially (backward-compatible entry point).
-
-    Note: For parallel execution, use evaluator_node + make_evaluator_sends
-    with the Send API in the graph definition.
-    """
-    try:
-        results: dict[str, EvaluatorResult] = {}
-        for etype in EVALUATOR_TYPES:
-            results[etype] = _run_evaluator(etype, state)
-        return {"evaluations": results}
-    except Exception as exc:
-        log.error("Node evaluators failed: %s", exc)
-        return {"evaluations": {}, "errors": [f"evaluators: {exc}"]}

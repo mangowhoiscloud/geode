@@ -107,12 +107,11 @@ _llm_text_ctx: ContextVar[LLMTextCallable | None] = ContextVar("llm_text", defau
 
 def set_llm_callable(
     json_fn: LLMJsonCallable,
-    text_fn: LLMTextCallable | None = None,
+    text_fn: LLMTextCallable,
 ) -> None:
     """Inject LLM callables (typically called by GeodeRuntime.create())."""
     _llm_json_ctx.set(json_fn)
-    if text_fn is not None:
-        _llm_text_ctx.set(text_fn)
+    _llm_text_ctx.set(text_fn)
 
 
 def get_llm_json() -> LLMJsonCallable:

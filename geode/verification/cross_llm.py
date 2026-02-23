@@ -30,7 +30,10 @@ _DEFAULT_PRIMARY_MODEL = "claude-opus-4-6"
 _DEFAULT_SECONDARY_MODEL = "gpt-5.3"
 
 
-def _derive_model_names(secondary_adapter: LLMClientPort | None = None) -> list[str]:
+def _derive_model_names(
+    primary_adapter: LLMClientPort | None = None,
+    secondary_adapter: LLMClientPort | None = None,
+) -> list[str]:
     """Derive model names from adapter attributes (dynamic, not hardcoded).
 
     Adapters may expose a ``model_name`` or ``default_model`` attribute.
@@ -38,6 +41,11 @@ def _derive_model_names(secondary_adapter: LLMClientPort | None = None) -> list[
     """
     primary = _DEFAULT_PRIMARY_MODEL
     secondary = _DEFAULT_SECONDARY_MODEL
+
+    if primary_adapter is not None:
+        primary = getattr(primary_adapter, "model_name", None) or getattr(
+            primary_adapter, "default_model", _DEFAULT_PRIMARY_MODEL
+        )
 
     if secondary_adapter is not None:
         secondary = getattr(secondary_adapter, "model_name", None) or getattr(
@@ -90,7 +98,7 @@ def run_cross_llm_check(
         return {
             "cross_llm_agreement": 1.0,
             "metric": "agreement_coefficient",
-            "models_compared": _derive_model_names(secondary_adapter),
+            "models_compared": _derive_model_names(secondary_adapter=secondary_adapter),
             "n_raters": len(analyses),
             "passed": True,
             "verification_mode": "insufficient_data",
@@ -184,7 +192,7 @@ def run_cross_llm_check(
         "score_agreement": round(score_agreement, 4),
         "confidence_agreement": round(conf_agreement, 4),
         "metric": "agreement_coefficient",
-        "models_compared": _derive_model_names(secondary_adapter),
+        "models_compared": _derive_model_names(secondary_adapter=secondary_adapter),
         "n_raters": len(analyses),
         "passed": passed,
         "threshold": AGREEMENT_THRESHOLD,
@@ -263,6 +271,10 @@ def run_dual_adapter_check(
         return {
             **base_result,
             "cross_llm_agreement": round(combined, 4),
+            "models_compared": _derive_model_names(
+                primary_adapter=primary_adapter,
+                secondary_adapter=secondary_adapter,
+            ),
             "secondary_agreement": secondary_agreement,
             "secondary_normalized": round(secondary_normalized, 4),
             "verification_mode": "dual_adapter",

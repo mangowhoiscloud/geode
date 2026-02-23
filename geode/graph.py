@@ -75,22 +75,19 @@ def _make_hooked_node(
             hook_data["duration_ms"] = duration_ms
             hook_data["result_keys"] = list(result.keys())
 
+            # Auto-attach drift scan hint for scoring node
+            if node_name == "scoring":
+                score = result.get("final_score", 0.0)
+                if score > 0:
+                    hook_data["drift_scan_hint"] = True
+                    hook_data["final_score"] = score
+
             # NODE_EXIT
             hooks.trigger(HookEvent.NODE_EXIT, hook_data)
 
             # Node-specific completion events
             if node_name in _NODE_COMPLETION_EVENTS:
                 hooks.trigger(_NODE_COMPLETION_EVENTS[node_name], hook_data)
-
-            # Auto-trigger drift scan after scoring completes
-            if node_name == "scoring":
-                score = result.get("final_score", 0.0)
-                if score > 0:
-                    hooks.trigger(HookEvent.NODE_EXIT, {
-                        **hook_data,
-                        "drift_scan_hint": True,
-                        "final_score": score,
-                    })
 
             # Verification pass/fail
             if node_name == "verification":
@@ -235,7 +232,7 @@ def build_graph(
     graph.add_edge("evaluator", "scoring")
     graph.add_edge("scoring", "verification")
 
-    # Feedback Loop: verification → _should_continue → synthesizer or gather → cortex
+    # Feedback Loop: verification → _configured_should_continue → synthesizer or gather → cortex
     # Use injected thresholds via closure for configurability
     def _configured_should_continue(state: GeodeState) -> str:
         guardrails = state.get("guardrails")

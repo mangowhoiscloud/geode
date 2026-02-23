@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from geode.state import GeodeState
 
 log = logging.getLogger(__name__)
 
 
-def router_node(state: GeodeState) -> dict:
+def router_node(state: GeodeState) -> dict[str, Any]:
     """Set pipeline mode (defaults to full_pipeline)."""
     try:
         mode = state.get("pipeline_mode", "full_pipeline")

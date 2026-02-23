@@ -7,6 +7,9 @@ to prevent anchoring bias.
 from __future__ import annotations
 
 import logging
+from typing import Any
+
+from pydantic import ValidationError
 
 from geode.infrastructure.ports.llm_port import get_llm_json
 from geode.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_USER
@@ -61,7 +64,18 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
         return _dry_run_result(analyst_type, state.get("ip_name", ""))
 
     data = get_llm_json()(system, user)
-    return AnalysisResult(**data)
+    try:
+        return AnalysisResult(**data)
+    except ValidationError as ve:
+        log.warning("Analyst %s LLM response failed schema validation: %s", analyst_type, ve)
+        return AnalysisResult(
+            analyst_type=analyst_type,
+            score=3.0,
+            key_finding="LLM response failed validation (degraded)",
+            reasoning=str(ve)[:200],
+            evidence=[],
+            confidence=0.0,
+        )
 
 
 def _dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
@@ -245,7 +259,7 @@ def _dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
     return mock.get(analyst_type, mock["game_mechanics"])
 
 
-def analyst_node(state: GeodeState) -> dict:
+def analyst_node(state: GeodeState) -> dict[str, Any]:
     """Run a single analyst. Called via Send API for parallel execution."""
     try:
         analyst_type = state.get("_analyst_type", "narrative")

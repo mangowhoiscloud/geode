@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 
 
 def _hash_prompt(text: str) -> str:
@@ -302,3 +303,20 @@ PROMPT_VERSIONS: dict[str, str] = {
     "BIASBUSTER_SYSTEM": _hash_prompt(BIASBUSTER_SYSTEM),
     "BIASBUSTER_USER": _hash_prompt(BIASBUSTER_USER),
 }
+
+_log = logging.getLogger(__name__)
+_log.debug("Prompt versions loaded: %s", PROMPT_VERSIONS)
+
+__all__ = [
+    "ANALYST_SPECIFIC",
+    "ANALYST_SYSTEM",
+    "ANALYST_USER",
+    "BIASBUSTER_SYSTEM",
+    "BIASBUSTER_USER",
+    "EVALUATOR_AXES",
+    "EVALUATOR_SYSTEM",
+    "EVALUATOR_USER",
+    "PROMPT_VERSIONS",
+    "SYNTHESIZER_SYSTEM",
+    "SYNTHESIZER_USER",
+]

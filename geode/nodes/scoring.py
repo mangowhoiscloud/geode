@@ -7,6 +7,7 @@ PSM uses fixture data but applies real statistical formulas.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import numpy as np
 
@@ -189,7 +190,7 @@ def _determine_tier(score: float) -> str:
 # ---------------------------------------------------------------------------
 
 
-def scoring_node(state: GeodeState) -> dict:
+def scoring_node(state: GeodeState) -> dict[str, Any]:
     """Layer 4: Compute PSM + all subscores + final score + tier."""
     try:
         ip_name = state.get("ip_name", "unknown")

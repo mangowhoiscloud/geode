@@ -11,7 +11,7 @@ from geode.state import GeodeState
 log = logging.getLogger(__name__)
 
 
-def signals_node(state: GeodeState) -> dict:
+def signals_node(state: GeodeState) -> dict[str, Any]:
     """Load external signals from fixtures."""
     try:
         ip_name = state["ip_name"]

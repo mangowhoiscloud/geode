@@ -91,9 +91,6 @@ def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return input_tokens * prices.get("input", 0) + output_tokens * prices.get("output", 0)
 
 
-# Backward-compatible alias for internal callers
-_calculate_cost = calculate_cost
-
 # Thread-safe usage accumulator via contextvars
 # Note: No default= argument — avoids sharing a single mutable instance across contexts.
 _usage_ctx: contextvars.ContextVar[LLMUsageAccumulator] = contextvars.ContextVar("llm_usage")
@@ -219,8 +216,6 @@ def call_llm(
     if seed is not None:
         log.info("Reproducibility seed=%d requested (logged for auditing)", seed)
 
-    _last_usage: dict[str, Any] = {}
-
     def _do_call(*, model: str) -> str:
         response = client.messages.create(
             model=model,
@@ -241,7 +236,6 @@ def call_llm(
                 cost_usd=cost,
             )
             get_usage_accumulator().record(usage)
-            _last_usage["value"] = usage
             log.debug(
                 "LLM usage: model=%s in=%d out=%d cost=$%.4f",
                 model,

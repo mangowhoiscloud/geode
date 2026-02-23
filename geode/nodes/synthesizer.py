@@ -10,6 +10,9 @@ CAUSE_TO_ACTION: architecture-v6 §13.9.3
 from __future__ import annotations
 
 import logging
+from typing import Any
+
+from pydantic import ValidationError
 
 from geode.infrastructure.ports.llm_port import get_llm_json
 from geode.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_USER
@@ -241,15 +244,24 @@ def _build_llm_synthesis(
     )
 
     data = get_llm_json()(SYNTHESIZER_SYSTEM, user)
-    return SynthesisResult(
-        undervaluation_cause=cause,
-        action_type=action,
-        value_narrative=data.get("value_narrative", ""),
-        target_gamer_segment=data.get("target_gamer_segment", ""),
-    )
+    try:
+        return SynthesisResult(
+            undervaluation_cause=cause,
+            action_type=action,
+            value_narrative=data.get("value_narrative", ""),
+            target_gamer_segment=data.get("target_gamer_segment", ""),
+        )
+    except ValidationError as ve:
+        log.warning("Synthesizer LLM response failed schema validation: %s", ve)
+        return SynthesisResult(
+            undervaluation_cause=cause,
+            action_type=action,
+            value_narrative=f"LLM response failed validation (degraded): {str(ve)[:200]}",
+            target_gamer_segment="Unknown (degraded)",
+        )
 
 
-def synthesizer_node(state: GeodeState) -> dict:
+def synthesizer_node(state: GeodeState) -> dict[str, Any]:
     """Layer 5: Classify cause + generate narrative via LLM."""
     try:
         evaluations = state.get("evaluations", {})

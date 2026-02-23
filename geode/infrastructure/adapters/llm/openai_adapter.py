@@ -131,7 +131,11 @@ class OpenAIAdapter:
         text = raw.strip()
         text = re.sub(r"^```\w*\s*\n", "", text)
         text = re.sub(r"\n```\s*$", "", text)
-        result: dict[str, Any] = json.loads(text)
+        try:
+            result: dict[str, Any] = json.loads(text)
+        except json.JSONDecodeError as exc:
+            log.error("Failed to parse OpenAI JSON response. Raw text: %s", text[:500])
+            raise ValueError(f"OpenAI returned invalid JSON: {exc}") from exc
         return result
 
     def generate_stream(
@@ -185,5 +189,6 @@ class OpenAIAdapter:
             if model_idx < len(models_to_try) - 1:
                 log.warning("Falling back to next OpenAI model")
 
-        assert last_error is not None
+        if last_error is None:
+            raise RuntimeError("All retries exhausted with no error recorded")
         raise last_error
