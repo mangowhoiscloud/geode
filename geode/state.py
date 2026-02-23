@@ -18,9 +18,7 @@ from pydantic import BaseModel, Field, model_validator
 class LLMPort(Protocol):
     """Port for LLM calls — any provider (Anthropic, OpenAI, mock) implements this."""
 
-    def complete(
-        self, system: str, user: str, *, temperature: float = 0.3
-    ) -> str: ...
+    def complete(self, system: str, user: str, *, temperature: float = 0.3) -> str: ...
 
     def complete_json(
         self, system: str, user: str, *, temperature: float = 0.3
@@ -34,6 +32,7 @@ class DataPort(Protocol):
     def load_monolake(self, ip_name: str) -> dict[str, Any]: ...
     def load_signals(self, ip_name: str) -> dict[str, Any]: ...
     def load_psm_covariates(self, ip_name: str) -> dict[str, Any]: ...
+
 
 # ---------------------------------------------------------------------------
 # Type aliases for Literal types (used by synthesizer.py etc.)
@@ -82,9 +81,14 @@ class EvaluatorResult(BaseModel):
         """Validate that axes keys match evaluator_type and values are in [1.0, 5.0]."""
         valid_axes_map = {
             "quality_judge": {
-                "a_score", "b_score", "c_score",
-                "b1_score", "c1_score", "c2_score",
-                "m_score", "n_score",
+                "a_score",
+                "b_score",
+                "c_score",
+                "b1_score",
+                "c1_score",
+                "c2_score",
+                "m_score",
+                "n_score",
             },
             "hidden_value": {"d_score", "e_score", "f_score"},
             "community_momentum": {"j_score", "k_score", "l_score"},
@@ -181,12 +185,21 @@ class GeodeState(TypedDict, total=False):
     # Verification
     guardrails: GuardrailResult
     biasbuster: BiasBusterResult
+    cross_llm: dict[str, Any]
 
     # Meta
     dry_run: bool
     verbose: bool
     skip_verification: bool
     errors: Annotated[list[str], operator.add]
+
+    # Feedback Loop (L3)
+    iteration: int  # Current iteration count (starts at 1)
+    max_iterations: int  # Maximum allowed iterations before force-proceeding
+    iteration_history: list[dict[str, Any]]  # Per-iteration snapshots
+
+    # Telemetry
+    run_id: str  # Unique pipeline execution ID
 
     # Internal (Send API)
     _analyst_type: str

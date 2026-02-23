@@ -20,9 +20,7 @@ def load_fixture(ip_name: str) -> dict[str, Any]:
     key = ip_name.lower().strip()
     filename = FIXTURE_MAP.get(key)
     if not filename:
-        raise ValueError(
-            f"No fixture found for '{ip_name}'. Available: {list(FIXTURE_MAP.keys())}"
-        )
+        raise ValueError(f"No fixture found for '{ip_name}'. Available: {list(FIXTURE_MAP.keys())}")
     path = FIXTURES_DIR / filename
     result: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     return result

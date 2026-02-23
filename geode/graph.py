@@ -2,11 +2,21 @@
 
 Topology: START → router → cortex → signals → analyst×4 (Send)
        → evaluators → scoring → verification → synthesizer → END
+
+Feedback Loop (L3): verification → _should_continue
+  - confidence >= 0.7 → synthesizer
+  - confidence < 0.7 AND iteration < max_iterations → cortex (loopback)
+  - iteration >= max_iterations → synthesizer (force proceed)
+
+Hook Integration (L4): NODE_ENTER/EXIT/ERROR events triggered at each node.
 """
 
 from __future__ import annotations
 
 import logging
+import time
+from pathlib import Path
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
@@ -17,11 +27,91 @@ from geode.nodes.router import route_after_router, router_node
 from geode.nodes.scoring import scoring_node
 from geode.nodes.signals import signals_node
 from geode.nodes.synthesizer import synthesizer_node
+from geode.orchestration.hooks import HookEvent, HookSystem
 from geode.state import GeodeState
 from geode.verification.biasbuster import run_biasbuster
+from geode.verification.cross_llm import run_cross_llm_check
 from geode.verification.guardrails import run_guardrails
 
 log = logging.getLogger(__name__)
+
+# Confidence threshold for feedback loop (L3)
+CONFIDENCE_THRESHOLD = 0.7
+DEFAULT_MAX_ITERATIONS = 3
+
+# Node → specific hook event mapping
+_NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
+    "analyst": HookEvent.ANALYST_COMPLETE,
+    "evaluators": HookEvent.EVALUATOR_COMPLETE,
+    "scoring": HookEvent.SCORING_COMPLETE,
+}
+
+
+def _make_hooked_node(
+    node_fn,
+    node_name: str,
+    hooks: HookSystem,
+):
+    """Wrap a node function with hook triggers."""
+
+    def _wrapped(state: GeodeState) -> dict[str, Any]:
+        hook_data: dict[str, Any] = {"node": node_name, "ip_name": state.get("ip_name", "")}
+
+        # NODE_ENTER
+        hooks.trigger(HookEvent.NODE_ENTER, hook_data)
+
+        # PIPELINE_START (router is the first real node)
+        if node_name == "router":
+            hooks.trigger(HookEvent.PIPELINE_START, hook_data)
+
+        start_time = time.time()
+        try:
+            result: dict[str, Any] = node_fn(state)
+
+            duration_ms = (time.time() - start_time) * 1000
+            hook_data["duration_ms"] = duration_ms
+            hook_data["result_keys"] = list(result.keys())
+
+            # NODE_EXIT
+            hooks.trigger(HookEvent.NODE_EXIT, hook_data)
+
+            # Node-specific completion events
+            if node_name in _NODE_COMPLETION_EVENTS:
+                hooks.trigger(_NODE_COMPLETION_EVENTS[node_name], hook_data)
+
+            # Auto-trigger drift scan after scoring completes
+            if node_name == "scoring":
+                score = result.get("final_score", 0.0)
+                if score > 0:
+                    hooks.trigger(HookEvent.NODE_EXIT, {
+                        **hook_data,
+                        "drift_scan_hint": True,
+                        "final_score": score,
+                    })
+
+            # Verification pass/fail
+            if node_name == "verification":
+                guardrails = result.get("guardrails")
+                biasbuster = result.get("biasbuster")
+                if guardrails and guardrails.all_passed and biasbuster and biasbuster.overall_pass:
+                    hooks.trigger(HookEvent.VERIFICATION_PASS, hook_data)
+                else:
+                    hooks.trigger(HookEvent.VERIFICATION_FAIL, hook_data)
+
+            # PIPELINE_END (synthesizer is the last real node)
+            if node_name == "synthesizer":
+                hooks.trigger(HookEvent.PIPELINE_END, hook_data)
+
+            return result
+
+        except Exception as exc:
+            hook_data["error"] = str(exc)
+            hooks.trigger(HookEvent.NODE_ERROR, hook_data)
+            hooks.trigger(HookEvent.PIPELINE_ERROR, hook_data)
+            raise
+
+    _wrapped.__name__ = f"hooked_{node_name}"
+    return _wrapped
 
 
 def _verification_node(state: GeodeState) -> dict:
@@ -35,41 +125,131 @@ def _verification_node(state: GeodeState) -> dict:
         }
     guardrails = run_guardrails(state)
     biasbuster = run_biasbuster(state)
+    cross_llm = run_cross_llm_check(state)
     errors: list[str] = []
     if not guardrails.all_passed:
         errors.append("Guardrails failed — results may be unreliable (demo mode)")
     if not biasbuster.overall_pass:
         errors.append("BiasBuster flagged potential bias in analysis")
+    if not cross_llm.get("passed", True):
+        errors.append("Cross-LLM agreement below threshold")
     result: dict = {
         "guardrails": guardrails,
         "biasbuster": biasbuster,
+        "cross_llm": cross_llm,
     }
     if errors:
         result["errors"] = errors
     return result
 
 
-def _should_synthesize(state: GeodeState) -> str:
-    """Conditional edge: proceed to synthesizer or abort."""
+def _should_continue(state: GeodeState) -> str:
+    """Feedback loop conditional edge (L3).
+
+    - confidence >= CONFIDENCE_THRESHOLD → synthesizer
+    - confidence < CONFIDENCE_THRESHOLD AND iteration < max_iterations → cortex (loopback)
+    - iteration >= max_iterations → synthesizer (force proceed)
+    """
     guardrails = state.get("guardrails")
     if guardrails and not guardrails.all_passed:
         log.warning("Guardrails failed — proceeding in demo mode")
-    return "synthesizer"
+
+    confidence = state.get("analyst_confidence", 100.0)
+    iteration = state.get("iteration", 1)
+    max_iter = state.get("max_iterations", DEFAULT_MAX_ITERATIONS)
+
+    # Normalize confidence to 0-1 range if stored as 0-100
+    conf_normalized = confidence / 100.0 if confidence > 1.0 else confidence
+
+    if conf_normalized >= CONFIDENCE_THRESHOLD:
+        log.info("Confidence %.2f >= %.2f — synthesizer", conf_normalized, CONFIDENCE_THRESHOLD)
+        return "synthesizer"
+
+    if iteration >= max_iter:
+        log.warning(
+            "Confidence %.2f < %.2f but max iterations (%d) reached — force proceeding",
+            conf_normalized,
+            CONFIDENCE_THRESHOLD,
+            max_iter,
+        )
+        return "synthesizer"
+
+    log.info(
+        "Confidence %.2f < %.2f — looping back (iteration %d/%d)",
+        conf_normalized,
+        CONFIDENCE_THRESHOLD,
+        iteration,
+        max_iter,
+    )
+    return "gather"
 
 
-def build_graph() -> StateGraph:
-    """Build the GEODE LangGraph StateGraph."""
+def _gather_node(state: GeodeState) -> dict:
+    """Feedback loop gather node — increment iteration, snapshot, and adapt.
+
+    Adaptive behavior (G5): identifies weak areas from the current iteration
+    and records them so downstream nodes can focus on low-confidence dimensions.
+    """
+    iteration = state.get("iteration", 1)
+    log.info("Feedback loop: re-entering pipeline (iteration %d → %d)", iteration, iteration + 1)
+
+    # Snapshot current iteration's metrics before re-entering
+    confidence = state.get("analyst_confidence", 0.0)
+    final_score = state.get("final_score", 0.0)
+    tier = state.get("tier", "")
+
+    # Adaptive analysis: identify weak subscores to focus on next iteration
+    subscores = state.get("subscores", {})
+    weak_areas = [k for k, v in subscores.items() if v < 50.0] if subscores else []
+
+    history_entry: dict[str, Any] = {
+        "iteration": iteration,
+        "confidence": confidence,
+        "final_score": final_score,
+        "tier": tier,
+        "weak_areas": weak_areas,
+    }
+    history = list(state.get("iteration_history", []))
+    history.append(history_entry)
+
+    if weak_areas:
+        log.info("Adaptive feedback: weak areas identified — %s", weak_areas)
+
+    return {"iteration": iteration + 1, "iteration_history": history}
+
+
+def build_graph(
+    *,
+    hooks: HookSystem | None = None,
+    confidence_threshold: float = CONFIDENCE_THRESHOLD,
+    max_iterations: int = DEFAULT_MAX_ITERATIONS,
+) -> StateGraph:
+    """Build the GEODE LangGraph StateGraph.
+
+    Args:
+        hooks: Optional HookSystem for event-driven extensions.
+            If provided, all nodes are wrapped with hook triggers.
+        confidence_threshold: Override the feedback loop confidence threshold.
+        max_iterations: Override maximum feedback loop iterations.
+    """
     graph = StateGraph(GeodeState)
 
+    # Optionally wrap nodes with hook triggers
+    def _node(fn, name: str):
+        if hooks is not None:
+            return _make_hooked_node(fn, name, hooks)
+        return fn
+
     # Add nodes
-    graph.add_node("router", router_node)
-    graph.add_node("cortex", cortex_node)
-    graph.add_node("signals", signals_node)
-    graph.add_node("analyst", analyst_node)
-    graph.add_node("evaluators", evaluators_node)
-    graph.add_node("scoring", scoring_node)
-    graph.add_node("verification", _verification_node)
-    graph.add_node("synthesizer", synthesizer_node)
+    graph.add_node("router", _node(router_node, "router"))
+    graph.add_node("cortex", _node(cortex_node, "cortex"))
+    graph.add_node("signals", _node(signals_node, "signals"))
+    graph.add_node("analyst", analyst_node)  # Send API — not wrapped (runs in parallel)
+    graph.add_node("evaluators", _node(evaluators_node, "evaluators"))
+    graph.add_node("scoring", _node(scoring_node, "scoring"))
+    graph.add_node("verification", _node(_verification_node, "verification"))
+    graph.add_node("synthesizer", _node(synthesizer_node, "synthesizer"))
+    graph.add_node("gather", _node(_gather_node, "gather"))
 
     # Edges: START → router
     graph.add_edge(START, "router")
@@ -87,21 +267,84 @@ def build_graph() -> StateGraph:
     # Send API: signals → 4 analysts in parallel (Clean Context)
     graph.add_conditional_edges("signals", make_analyst_sends, ["analyst"])
 
-    # Sequential: analysts → evaluators → scoring → verification → synthesizer → END
+    # Sequential: analysts → evaluators → scoring → verification
     graph.add_edge("analyst", "evaluators")
     graph.add_edge("evaluators", "scoring")
     graph.add_edge("scoring", "verification")
+
+    # Feedback Loop: verification → _should_continue → synthesizer or gather → cortex
+    # Use injected thresholds via closure for configurability
+    def _configured_should_continue(state: GeodeState) -> str:
+        guardrails = state.get("guardrails")
+        if guardrails and not guardrails.all_passed:
+            log.warning("Guardrails failed — proceeding in demo mode")
+
+        confidence = state.get("analyst_confidence", 100.0)
+        iteration = state.get("iteration", 1)
+        max_iter = state.get("max_iterations", max_iterations)
+
+        conf_normalized = confidence / 100.0 if confidence > 1.0 else confidence
+
+        if conf_normalized >= confidence_threshold:
+            log.info("Confidence %.2f >= %.2f — synthesizer", conf_normalized, confidence_threshold)
+            return "synthesizer"
+
+        if iteration >= max_iter:
+            log.warning(
+                "Confidence %.2f < %.2f but max iterations (%d) reached — force proceeding",
+                conf_normalized, confidence_threshold, max_iter,
+            )
+            return "synthesizer"
+
+        log.info(
+            "Confidence %.2f < %.2f — looping back (iteration %d/%d)",
+            conf_normalized, confidence_threshold, iteration, max_iter,
+        )
+        return "gather"
+
     graph.add_conditional_edges(
         "verification",
-        _should_synthesize,
-        {"synthesizer": "synthesizer"},
+        _configured_should_continue,
+        {"synthesizer": "synthesizer", "gather": "gather"},
     )
+    graph.add_edge("gather", "cortex")
+
     graph.add_edge("synthesizer", END)
 
     return graph
 
 
-def compile_graph():
-    """Compile the graph for execution."""
-    graph = build_graph()
+def compile_graph(
+    *,
+    checkpoint_db: str | None = None,
+    hooks: HookSystem | None = None,
+    confidence_threshold: float = CONFIDENCE_THRESHOLD,
+    max_iterations: int = DEFAULT_MAX_ITERATIONS,
+):
+    """Compile the graph for execution.
+
+    Args:
+        checkpoint_db: Path to SQLite database for LangGraph checkpointing.
+            If provided, enables SqliteSaver for state persistence/recovery.
+            If None, runs without checkpointing (default).
+        hooks: Optional HookSystem for event-driven extensions.
+        confidence_threshold: Override feedback loop confidence threshold.
+        max_iterations: Override maximum feedback loop iterations.
+    """
+    graph = build_graph(
+        hooks=hooks,
+        confidence_threshold=confidence_threshold,
+        max_iterations=max_iterations,
+    )
+
+    if checkpoint_db is not None:
+        import sqlite3
+
+        from langgraph.checkpoint.sqlite import SqliteSaver
+
+        db_path = Path(checkpoint_db)
+        conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        saver = SqliteSaver(conn)
+        return graph.compile(checkpointer=saver)
+
     return graph.compile()
