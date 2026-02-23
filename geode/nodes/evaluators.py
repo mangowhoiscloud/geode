@@ -6,48 +6,14 @@ Supports Send API pattern for parallel execution (like analysts).
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
 
+from geode.infrastructure.ports.llm_port import get_llm_json
 from geode.llm.prompts import EVALUATOR_AXES, EVALUATOR_SYSTEM, EVALUATOR_USER
 from geode.state import AnalysisResult, EvaluatorResult, GeodeState
 
 log = logging.getLogger(__name__)
 
 EVALUATOR_TYPES = ["quality_judge", "hidden_value", "community_momentum"]
-
-
-# ---------------------------------------------------------------------------
-# LLM port injection (Clean Architecture: nodes depend on abstraction)
-# ---------------------------------------------------------------------------
-
-
-class LLMJsonCallable(Protocol):
-    def __call__(
-        self,
-        system: str,
-        user: str,
-        *,
-        model: str | None = ...,
-        max_tokens: int = ...,
-        temperature: float = ...,
-    ) -> dict[str, Any]: ...
-
-
-_llm_json: LLMJsonCallable | None = None
-
-
-def set_llm_json(fn: LLMJsonCallable) -> None:
-    """Inject an LLM JSON callable (for testing or alternative providers)."""
-    global _llm_json  # noqa: PLW0603
-    _llm_json = fn
-
-
-def _get_llm_json() -> LLMJsonCallable:
-    if _llm_json is not None:
-        return _llm_json
-    from geode.llm.client import call_llm_json
-
-    return call_llm_json
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +85,7 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
     system, user = _build_evaluator_prompt(evaluator_type, state)
     if state.get("verbose"):
         log.debug("Running %s evaluator...", evaluator_type)
-    data = _get_llm_json()(system, user)
+    data = get_llm_json()(system, user)
     return EvaluatorResult(**data)
 
 

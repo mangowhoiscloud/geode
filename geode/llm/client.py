@@ -95,14 +95,22 @@ def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 _calculate_cost = calculate_cost
 
 # Thread-safe usage accumulator via contextvars
-_usage_ctx: contextvars.ContextVar[LLMUsageAccumulator] = contextvars.ContextVar(
-    "llm_usage", default=LLMUsageAccumulator()
-)
+# Note: No default= argument — avoids sharing a single mutable instance across contexts.
+_usage_ctx: contextvars.ContextVar[LLMUsageAccumulator] = contextvars.ContextVar("llm_usage")
 
 
 def get_usage_accumulator() -> LLMUsageAccumulator:
-    """Get the context-local usage accumulator (thread-safe)."""
-    return _usage_ctx.get()
+    """Get the context-local usage accumulator (thread-safe).
+
+    Creates a fresh accumulator on first access per context to avoid
+    the shared-mutable-default pitfall.
+    """
+    try:
+        return _usage_ctx.get()
+    except LookupError:
+        acc = LLMUsageAccumulator()
+        _usage_ctx.set(acc)
+        return acc
 
 
 def reset_usage_accumulator() -> None:
@@ -184,7 +192,8 @@ def _retry_with_backoff(
                 next_model,
             )
 
-    assert last_error is not None
+    if last_error is None:
+        raise RuntimeError("All retries exhausted with no error recorded")
     log.error("All models and retries exhausted. Last error: %s", last_error)
     raise last_error
 
@@ -231,7 +240,7 @@ def call_llm(
                 output_tokens=out_tok,
                 cost_usd=cost,
             )
-            _usage_ctx.get().record(usage)
+            get_usage_accumulator().record(usage)
             _last_usage["value"] = usage
             log.debug(
                 "LLM usage: model=%s in=%d out=%d cost=$%.4f",
@@ -242,7 +251,8 @@ def call_llm(
             )
 
         block = response.content[0]
-        assert hasattr(block, "text"), f"Expected TextBlock, got {type(block)}"
+        if not hasattr(block, "text"):
+            raise TypeError(f"Expected TextBlock, got {type(block)}")
         return block.text  # type: ignore[return-value]
 
     result: str = _retry_with_backoff(_do_call, model=target_model)
@@ -266,7 +276,11 @@ def call_llm_json(
     text = raw.strip()
     text = re.sub(r"^```\w*\s*\n", "", text)
     text = re.sub(r"\n```\s*$", "", text)
-    result: dict[str, Any] = json.loads(text)
+    try:
+        result: dict[str, Any] = json.loads(text)
+    except json.JSONDecodeError as exc:
+        log.error("Failed to parse LLM JSON response. Raw text: %s", text[:500])
+        raise ValueError(f"LLM returned invalid JSON: {exc}") from exc
     return result
 
 
@@ -308,7 +322,7 @@ def call_llm_streaming(
                     output_tokens=out_tok,
                     cost_usd=cost,
                 )
-                _usage_ctx.get().record(usage)
+                get_usage_accumulator().record(usage)
                 log.debug(
                     "Streaming usage: model=%s in=%d out=%d cost=$%.4f",
                     model,
@@ -337,5 +351,6 @@ def call_llm_streaming(
                 )
                 time.sleep(delay)
 
-    assert last_error is not None
+    if last_error is None:
+        raise RuntimeError("All retries exhausted with no error recorded")
     raise last_error

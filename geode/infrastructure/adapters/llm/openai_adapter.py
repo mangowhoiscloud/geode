@@ -16,7 +16,6 @@ from typing import Any
 from geode.config import settings
 from geode.llm.client import (
     LLMUsage,
-    calculate_cost,
     get_usage_accumulator,
 )
 
@@ -32,6 +31,17 @@ DEFAULT_OPENAI_MODEL = "gpt-5.3"
 
 # OpenAI fallback chain
 OPENAI_FALLBACK_MODELS = ["gpt-5.3"]
+
+# Model pricing (USD per token) — local copy to avoid coupling to Anthropic client internals
+_MODEL_PRICING: dict[str, dict[str, float]] = {
+    "gpt-5.3": {"input": 10.0 / 1_000_000, "output": 30.0 / 1_000_000},
+}
+
+
+def _calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Calculate cost in USD for OpenAI models."""
+    prices = _MODEL_PRICING.get(model, {})
+    return input_tokens * prices.get("input", 0) + output_tokens * prices.get("output", 0)
 
 
 def _get_openai_client():
@@ -87,7 +97,7 @@ class OpenAIAdapter:
             if response.usage:
                 in_tok = response.usage.prompt_tokens
                 out_tok = response.usage.completion_tokens or 0
-                cost = calculate_cost(model, in_tok, out_tok)
+                cost = _calculate_cost(model, in_tok, out_tok)
                 usage = LLMUsage(
                     model=model, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost
                 )

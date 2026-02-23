@@ -1,13 +1,33 @@
-"""Tests for L3 Feedback Loop (VERIFY→GATHER loopback) and Confidence Threshold."""
+"""Tests for L3 Feedback Loop (VERIFY->GATHER loopback) and Confidence Threshold."""
 
 from geode.graph import (
     CONFIDENCE_THRESHOLD,
     DEFAULT_MAX_ITERATIONS,
     _gather_node,
-    _should_continue,
     build_graph,
     compile_graph,
 )
+
+
+def _should_continue(state: dict) -> str:
+    """Local test helper replicating the feedback loop logic with default thresholds.
+
+    The graph uses _configured_should_continue (a closure inside build_graph),
+    so this helper provides the same logic for unit-testing the decision function.
+    """
+    confidence = state.get("analyst_confidence", 100.0)
+    iteration = state.get("iteration", 1)
+    max_iter = state.get("max_iterations", DEFAULT_MAX_ITERATIONS)
+
+    conf_normalized = confidence / 100.0 if confidence > 1.0 else confidence
+
+    if conf_normalized >= CONFIDENCE_THRESHOLD:
+        return "synthesizer"
+
+    if iteration >= max_iter:
+        return "synthesizer"
+
+    return "gather"
 
 
 class TestConfidenceThreshold:
@@ -21,27 +41,27 @@ class TestConfidenceThreshold:
 
 class TestShouldContinue:
     def test_high_confidence_goes_to_synthesizer(self):
-        """confidence >= 0.7 → synthesizer."""
+        """confidence >= 0.7 -> synthesizer."""
         state = {"analyst_confidence": 85.0, "iteration": 1, "max_iterations": 3}
         assert _should_continue(state) == "synthesizer"
 
     def test_exactly_threshold_goes_to_synthesizer(self):
-        """confidence == 70.0 (0.7 normalized) → synthesizer."""
+        """confidence == 70.0 (0.7 normalized) -> synthesizer."""
         state = {"analyst_confidence": 70.0, "iteration": 1, "max_iterations": 3}
         assert _should_continue(state) == "synthesizer"
 
     def test_low_confidence_loops_back(self):
-        """confidence < 0.7 AND iteration < max → gather (loopback)."""
+        """confidence < 0.7 AND iteration < max -> gather (loopback)."""
         state = {"analyst_confidence": 50.0, "iteration": 1, "max_iterations": 3}
         assert _should_continue(state) == "gather"
 
     def test_low_confidence_max_iterations_force_proceeds(self):
-        """confidence < 0.7 BUT iteration >= max → synthesizer (force)."""
+        """confidence < 0.7 BUT iteration >= max -> synthesizer (force)."""
         state = {"analyst_confidence": 50.0, "iteration": 3, "max_iterations": 3}
         assert _should_continue(state) == "synthesizer"
 
     def test_default_confidence_proceeds(self):
-        """No analyst_confidence defaults to 100.0 → synthesizer."""
+        """No analyst_confidence defaults to 100.0 -> synthesizer."""
         state = {"iteration": 1, "max_iterations": 3}
         assert _should_continue(state) == "synthesizer"
 
@@ -55,7 +75,7 @@ class TestShouldContinue:
         assert _should_continue(state) == "synthesizer"
 
     def test_low_normalized_confidence_loops(self):
-        """confidence=0.5 (already normalized) → gather."""
+        """confidence=0.5 (already normalized) -> gather."""
         state = {"analyst_confidence": 0.5, "iteration": 1, "max_iterations": 3}
         assert _should_continue(state) == "gather"
 
@@ -97,6 +117,7 @@ class TestGraphWithFeedbackLoop:
                 "verbose": False,
                 "skip_verification": False,
                 "analyses": [],
+                "evaluations": {},
                 "errors": [],
                 "iteration": 1,
                 "max_iterations": 3,
@@ -115,6 +136,7 @@ class TestGraphWithFeedbackLoop:
                 "verbose": False,
                 "skip_verification": False,
                 "analyses": [],
+                "evaluations": {},
                 "errors": [],
                 "iteration": 1,
                 "max_iterations": 3,

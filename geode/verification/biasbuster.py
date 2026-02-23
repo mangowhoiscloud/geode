@@ -3,48 +3,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Any
 
 import numpy as np
+from pydantic import ValidationError
 
+from geode.infrastructure.ports.llm_port import get_llm_json
 from geode.llm.prompts import BIASBUSTER_SYSTEM, BIASBUSTER_USER
 from geode.state import AnalysisResult, BiasBusterResult, GeodeState
 
 log = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# LLM port injection (Clean Architecture: verification depends on abstraction)
-# ---------------------------------------------------------------------------
-
-
-class LLMJsonCallable(Protocol):
-    def __call__(
-        self,
-        system: str,
-        user: str,
-        *,
-        model: str | None = ...,
-        max_tokens: int = ...,
-        temperature: float = ...,
-    ) -> dict[str, Any]: ...
-
-
-_llm_json: LLMJsonCallable | None = None
-
-
-def set_llm_json(fn: LLMJsonCallable) -> None:
-    """Inject an LLM JSON callable (for testing or alternative providers)."""
-    global _llm_json  # noqa: PLW0603
-    _llm_json = fn
-
-
-def _get_llm_json() -> LLMJsonCallable:
-    if _llm_json is not None:
-        return _llm_json
-    from geode.llm.client import call_llm_json
-
-    return call_llm_json
 
 
 # ---------------------------------------------------------------------------
@@ -116,8 +84,20 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
         )
 
         try:
-            data = _get_llm_json()(BIASBUSTER_SYSTEM, user)
-            return BiasBusterResult(**data)
+            data = get_llm_json()(BIASBUSTER_SYSTEM, user)
+            try:
+                return BiasBusterResult(**data)
+            except ValidationError as ve:
+                log.warning("BiasBuster LLM response failed validation: %s", ve)
+                return BiasBusterResult(
+                    confirmation_bias=False,
+                    recency_bias=False,
+                    anchoring_bias=low_variance_flag,
+                    overall_pass=not low_variance_flag,
+                    explanation=(
+                        f"Statistical check only (LLM response invalid). CV={stats['cv']:.2f}"
+                    ),
+                )
         except Exception as e:
             log.warning("BiasBuster LLM call failed: %s", e)
             return BiasBusterResult(

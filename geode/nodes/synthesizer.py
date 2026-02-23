@@ -10,8 +10,8 @@ CAUSE_TO_ACTION: architecture-v6 §13.9.3
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
 
+from geode.infrastructure.ports.llm_port import get_llm_json
 from geode.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_USER
 from geode.state import (
     ActionLiteral,
@@ -21,40 +21,6 @@ from geode.state import (
 )
 
 log = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# LLM port injection (Clean Architecture: nodes depend on abstraction)
-# ---------------------------------------------------------------------------
-
-
-class LLMJsonCallable(Protocol):
-    def __call__(
-        self,
-        system: str,
-        user: str,
-        *,
-        model: str | None = ...,
-        max_tokens: int = ...,
-        temperature: float = ...,
-    ) -> dict[str, Any]: ...
-
-
-_llm_json: LLMJsonCallable | None = None
-
-
-def set_llm_json(fn: LLMJsonCallable) -> None:
-    """Inject an LLM JSON callable (for testing or alternative providers)."""
-    global _llm_json  # noqa: PLW0603
-    _llm_json = fn
-
-
-def _get_llm_json() -> LLMJsonCallable:
-    if _llm_json is not None:
-        return _llm_json
-    from geode.llm.client import call_llm_json
-
-    return call_llm_json
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +240,7 @@ def _build_llm_synthesis(
         signals_summary=sig_summary,
     )
 
-    data = _get_llm_json()(SYNTHESIZER_SYSTEM, user)
+    data = get_llm_json()(SYNTHESIZER_SYSTEM, user)
     return SynthesisResult(
         undervaluation_cause=cause,
         action_type=action,

@@ -7,48 +7,14 @@ to prevent anchoring bias.
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
 
+from geode.infrastructure.ports.llm_port import get_llm_json
 from geode.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_USER
 from geode.state import AnalysisResult, GeodeState
 
 log = logging.getLogger(__name__)
 
 ANALYST_TYPES = ["game_mechanics", "player_experience", "growth_potential", "discovery"]
-
-
-# ---------------------------------------------------------------------------
-# LLM port injection (Clean Architecture: nodes depend on abstraction)
-# ---------------------------------------------------------------------------
-
-
-class LLMJsonCallable(Protocol):
-    def __call__(
-        self,
-        system: str,
-        user: str,
-        *,
-        model: str | None = ...,
-        max_tokens: int = ...,
-        temperature: float = ...,
-    ) -> dict[str, Any]: ...
-
-
-_llm_json: LLMJsonCallable | None = None
-
-
-def set_llm_json(fn: LLMJsonCallable) -> None:
-    """Inject an LLM JSON callable (for testing or alternative providers)."""
-    global _llm_json  # noqa: PLW0603
-    _llm_json = fn
-
-
-def _get_llm_json() -> LLMJsonCallable:
-    if _llm_json is not None:
-        return _llm_json
-    from geode.llm.client import call_llm_json
-
-    return call_llm_json
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +60,7 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     if state.get("dry_run"):
         return _dry_run_result(analyst_type, state.get("ip_name", ""))
 
-    data = _get_llm_json()(system, user)
+    data = get_llm_json()(system, user)
     return AnalysisResult(**data)
 
 

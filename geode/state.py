@@ -6,34 +6,9 @@ Domain layer: pure data models with no infrastructure dependencies.
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, Literal, Protocol, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
-
-# ---------------------------------------------------------------------------
-# Deprecated port re-exports (canonical ports: geode.infrastructure.ports)
-# Kept for backward compatibility with existing tests.
-# ---------------------------------------------------------------------------
-
-
-class LLMPort(Protocol):
-    """Deprecated: use geode.infrastructure.ports.llm_port.LLMClientPort instead."""
-
-    def complete(self, system: str, user: str, *, temperature: float = 0.3) -> str: ...
-
-    def complete_json(
-        self, system: str, user: str, *, temperature: float = 0.3
-    ) -> dict[str, Any]: ...
-
-
-class DataPort(Protocol):
-    """Deprecated: use geode.infrastructure.ports for data abstractions."""
-
-    def load_ip_info(self, ip_name: str) -> dict[str, Any]: ...
-    def load_monolake(self, ip_name: str) -> dict[str, Any]: ...
-    def load_signals(self, ip_name: str) -> dict[str, Any]: ...
-    def load_psm_covariates(self, ip_name: str) -> dict[str, Any]: ...
-
 
 # ---------------------------------------------------------------------------
 # Type aliases for Literal types (used by synthesizer.py etc.)
@@ -151,6 +126,16 @@ class BiasBusterResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# LangGraph reducers
+# ---------------------------------------------------------------------------
+
+
+def _merge_dicts(a: dict, b: dict) -> dict:  # type: ignore[type-arg]
+    """Merge two dicts (LangGraph reducer for parallel Send results)."""
+    return {**a, **b}
+
+
+# ---------------------------------------------------------------------------
 # LangGraph State
 # ---------------------------------------------------------------------------
 
@@ -170,8 +155,8 @@ class GeodeState(TypedDict, total=False):
     # Layer 3: Analysts (accumulated via Send)
     analyses: Annotated[list[AnalysisResult], operator.add]
 
-    # Layer 3: Evaluators
-    evaluations: dict[str, EvaluatorResult]
+    # Layer 3: Evaluators (merged via _merge_dicts for parallel Send results)
+    evaluations: Annotated[dict[str, EvaluatorResult], _merge_dicts]
 
     # Layer 4: Scoring
     psm_result: PSMResult
@@ -204,3 +189,4 @@ class GeodeState(TypedDict, total=False):
 
     # Internal (Send API)
     _analyst_type: str
+    _evaluator_type: str  # Which evaluator to run (for Send API)

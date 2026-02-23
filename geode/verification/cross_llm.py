@@ -8,15 +8,12 @@ distributions using a normalized agreement coefficient.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 
+from geode.infrastructure.ports.llm_port import LLMClientPort
 from geode.state import AnalysisResult, GeodeState
-from geode.ui.console import console
-
-if TYPE_CHECKING:
-    from geode.infrastructure.ports.llm_port import LLMClientPort
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +24,27 @@ AGREEMENT_THRESHOLD = 0.67
 _SCALE_MIN = 1.0
 _SCALE_MAX = 5.0
 _MAX_VARIANCE = ((_SCALE_MAX - _SCALE_MIN) / 2) ** 2  # 4.0 — max possible variance
+
+# Default model name when adapter info is unavailable
+_DEFAULT_PRIMARY_MODEL = "claude-opus-4-6"
+_DEFAULT_SECONDARY_MODEL = "gpt-5.3"
+
+
+def _derive_model_names(secondary_adapter: LLMClientPort | None = None) -> list[str]:
+    """Derive model names from adapter attributes (dynamic, not hardcoded).
+
+    Adapters may expose a ``model_name`` or ``default_model`` attribute.
+    Falls back to sensible defaults when the attribute is absent.
+    """
+    primary = _DEFAULT_PRIMARY_MODEL
+    secondary = _DEFAULT_SECONDARY_MODEL
+
+    if secondary_adapter is not None:
+        secondary = getattr(secondary_adapter, "model_name", None) or getattr(
+            secondary_adapter, "default_model", _DEFAULT_SECONDARY_MODEL
+        )
+
+    return [primary, secondary]
 
 
 def _calc_agreement(scores: list[float], scale_max_var: float = _MAX_VARIANCE) -> float:
@@ -68,11 +86,11 @@ def run_cross_llm_check(
     analyses: list[AnalysisResult] = state.get("analyses", [])
 
     if len(analyses) < 2:
-        console.print("    [muted]Cross-LLM check: insufficient analysts (<2)[/muted]")
+        log.debug("Cross-LLM check: insufficient analysts (<2)")
         return {
             "cross_llm_agreement": 1.0,
             "metric": "agreement_coefficient",
-            "models_compared": ["claude-opus-4-6", "gpt-5.3"],
+            "models_compared": _derive_model_names(secondary_adapter),
             "n_raters": len(analyses),
             "passed": True,
             "verification_mode": "insufficient_data",
@@ -152,11 +170,13 @@ def run_cross_llm_check(
     )
 
     if state.get("verbose"):
-        console.print(
-            f"    [muted]Cross-LLM: agreement={combined:.3f} "
-            f"(score={score_agreement:.3f}, conf={conf_agreement:.3f}) "
-            f"mode={verification_mode} "
-            f"{'✓' if passed else '✗'}[/muted]"
+        log.debug(
+            "Cross-LLM: agreement=%.3f (score=%.3f, conf=%.3f) mode=%s %s",
+            combined,
+            score_agreement,
+            conf_agreement,
+            verification_mode,
+            "passed" if passed else "failed",
         )
 
     result: dict[str, Any] = {
@@ -164,7 +184,7 @@ def run_cross_llm_check(
         "score_agreement": round(score_agreement, 4),
         "confidence_agreement": round(conf_agreement, 4),
         "metric": "agreement_coefficient",
-        "models_compared": ["claude-opus-4-6", "gpt-5.3"],
+        "models_compared": _derive_model_names(secondary_adapter),
         "n_raters": len(analyses),
         "passed": passed,
         "threshold": AGREEMENT_THRESHOLD,
@@ -178,8 +198,8 @@ def run_cross_llm_check(
 def run_dual_adapter_check(
     state: GeodeState,
     *,
-    primary_adapter=None,
-    secondary_adapter=None,
+    primary_adapter: LLMClientPort | None = None,
+    secondary_adapter: LLMClientPort | None = None,
 ) -> dict[str, Any]:
     """Cross-LLM verification using dual adapters (Claude ↔ GPT).
 

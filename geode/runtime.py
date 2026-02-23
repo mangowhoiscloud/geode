@@ -519,6 +519,12 @@ class GeodeRuntime:
         if settings.openai_api_key:
             secondary_adapter = OpenAIAdapter()
 
+        # Inject LLM callables so node modules can resolve via contextvars
+        from geode.infrastructure.ports.llm_port import set_llm_callable
+        from geode.llm.client import call_llm, call_llm_json
+
+        set_llm_callable(call_llm_json, call_llm)
+
         # Coalescing queue (250ms debounce)
         coalescing = CoalescingQueue(window_ms=250.0)
 

@@ -1,9 +1,9 @@
 """StateGraph build + compile for the GEODE pipeline.
 
 Topology: START → router → cortex → signals → analyst×4 (Send)
-       → evaluators → scoring → verification → synthesizer → END
+       → evaluator×3 (Send) → scoring → verification → synthesizer → END
 
-Feedback Loop (L3): verification → _should_continue
+Feedback Loop (L3): verification → _configured_should_continue
   - confidence >= 0.7 → synthesizer
   - confidence < 0.7 AND iteration < max_iterations → cortex (loopback)
   - iteration >= max_iterations → synthesizer (force proceed)
@@ -13,6 +13,7 @@ Hook Integration (L4): NODE_ENTER/EXIT/ERROR events triggered at each node.
 
 from __future__ import annotations
 
+import atexit
 import logging
 import sqlite3
 import time
@@ -24,7 +25,7 @@ from langgraph.graph import END, START, StateGraph
 
 from geode.nodes.analysts import analyst_node, make_analyst_sends
 from geode.nodes.cortex import cortex_node
-from geode.nodes.evaluators import evaluators_node
+from geode.nodes.evaluators import evaluator_node, make_evaluator_sends
 from geode.nodes.router import route_after_router, router_node
 from geode.nodes.scoring import scoring_node
 from geode.nodes.signals import signals_node
@@ -44,7 +45,7 @@ DEFAULT_MAX_ITERATIONS = 3
 # Node → specific hook event mapping
 _NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
     "analyst": HookEvent.ANALYST_COMPLETE,
-    "evaluators": HookEvent.EVALUATOR_COMPLETE,
+    "evaluator": HookEvent.EVALUATOR_COMPLETE,
     "scoring": HookEvent.SCORING_COMPLETE,
 }
 
@@ -116,7 +117,7 @@ def _make_hooked_node(
     return _wrapped
 
 
-def _verification_node(state: GeodeState) -> dict:
+def _verification_node(state: GeodeState) -> dict[str, Any]:
     """Run guardrails + biasbuster."""
     if state.get("skip_verification"):
         return {
@@ -141,27 +142,6 @@ def _verification_node(state: GeodeState) -> dict:
     if errors:
         result["errors"] = errors
     return result
-
-
-def _should_continue(state: GeodeState) -> str:
-    """Feedback loop conditional edge with default thresholds (backward-compatible).
-
-    The graph itself uses a configurable closure (_configured_should_continue)
-    inside build_graph(). This module-level function exists for test compatibility.
-    """
-    confidence = state.get("analyst_confidence", 100.0)
-    iteration = state.get("iteration", 1)
-    max_iter = state.get("max_iterations", DEFAULT_MAX_ITERATIONS)
-
-    conf_normalized = confidence / 100.0 if confidence > 1.0 else confidence
-
-    if conf_normalized >= CONFIDENCE_THRESHOLD:
-        return "synthesizer"
-
-    if iteration >= max_iter:
-        return "synthesizer"
-
-    return "gather"
 
 
 def _gather_node(state: GeodeState) -> dict:
@@ -224,7 +204,7 @@ def build_graph(
     graph.add_node("cortex", _node(cortex_node, "cortex"))
     graph.add_node("signals", _node(signals_node, "signals"))
     graph.add_node("analyst", analyst_node)  # Send API — not wrapped (runs in parallel)
-    graph.add_node("evaluators", _node(evaluators_node, "evaluators"))
+    graph.add_node("evaluator", evaluator_node)  # Send API — parallel evaluators
     graph.add_node("scoring", _node(scoring_node, "scoring"))
     graph.add_node("verification", _node(_verification_node, "verification"))
     graph.add_node("synthesizer", _node(synthesizer_node, "synthesizer"))
@@ -234,10 +214,12 @@ def build_graph(
     graph.add_edge(START, "router")
 
     # Router conditional edges (§langgraph-flow: 6 modes → 3 destinations)
+    # Note: route_after_router returns "evaluators" (plural) for evaluation mode,
+    # which maps to the "evaluator" node (singular, Send API pattern).
     graph.add_conditional_edges(
         "router",
         route_after_router,
-        {"cortex": "cortex", "evaluators": "evaluators", "scoring": "scoring"},
+        {"cortex": "cortex", "evaluators": "evaluator", "scoring": "scoring"},
     )
 
     # Sequential: cortex → signals
@@ -246,9 +228,11 @@ def build_graph(
     # Send API: signals → 4 analysts in parallel (Clean Context)
     graph.add_conditional_edges("signals", make_analyst_sends, ["analyst"])
 
-    # Sequential: analysts → evaluators → scoring → verification
-    graph.add_edge("analyst", "evaluators")
-    graph.add_edge("evaluators", "scoring")
+    # Send API: analysts → 3 evaluators in parallel (Clean Context)
+    graph.add_conditional_edges("analyst", make_evaluator_sends, ["evaluator"])
+
+    # Sequential: evaluators → scoring → verification
+    graph.add_edge("evaluator", "scoring")
     graph.add_edge("scoring", "verification")
 
     # Feedback Loop: verification → _should_continue → synthesizer or gather → cortex
@@ -324,6 +308,7 @@ def compile_graph(
     if checkpoint_db is not None:
         db_path = Path(checkpoint_db)
         conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        atexit.register(conn.close)
         compile_kwargs["checkpointer"] = SqliteSaver(conn)
 
     if interrupt_before:

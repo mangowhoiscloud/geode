@@ -14,7 +14,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from geode.infrastructure.ports.llm_port import LLMClientPort
-from geode.llm.client import call_llm_streaming
+from geode.llm.client import call_llm_streaming, get_usage_accumulator
 from geode.ui.console import console
 
 
@@ -89,13 +89,24 @@ def stream_panel(
             # Rough token estimate: ~4 chars per token
             token_estimate = len(full_text) // 4
 
+    # Use actual token count from usage accumulator if available
+    acc = get_usage_accumulator()
+    actual_tokens: int | None = None
+    if acc.calls:
+        last_call = acc.calls[-1]
+        actual_tokens = last_call.output_tokens
+
     # Print final panel (non-transient)
     elapsed = time.time() - start_time
-    tps = token_estimate / elapsed if elapsed > 0 else 0
+    final_tokens = actual_tokens if actual_tokens else token_estimate
+    tps = final_tokens / elapsed if elapsed > 0 else 0
     footer_parts = []
     if model:
         footer_parts.append(f"model: {model}")
-    footer_parts.append(f"~{token_estimate} tokens")
+    if actual_tokens:
+        footer_parts.append(f"{actual_tokens} tokens")
+    else:
+        footer_parts.append(f"~{token_estimate} tokens")
     footer_parts.append(f"{elapsed:.1f}s")
     footer_parts.append(f"{tps:.0f} tok/s")
 

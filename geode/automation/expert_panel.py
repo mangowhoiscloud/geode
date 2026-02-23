@@ -176,9 +176,9 @@ def calculate_krippendorff_alpha(
     if abs(expected_disagreement) < 1e-12:
         return 1.0  # Perfect agreement (no variance)
 
-    # alpha = 1 - D_o / D_e  where D_o is summed over items and D_e over marginals
-    # Scale: D_o accumulated per-item; D_e is mean pairwise; multiply D_e by n
-    alpha = 1.0 - observed_disagreement / (n_total * expected_disagreement)
+    # Canonical: alpha = 1 - D_o / D_e  (Krippendorff 2011)
+    # observed_disagreement is accumulated raw; divide by n_total for mean per-value
+    alpha = 1.0 - (observed_disagreement / n_total) / expected_disagreement
     return float(np.clip(alpha, -1.0, 1.0))
 
 
