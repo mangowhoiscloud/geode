@@ -265,7 +265,7 @@ def evaluator_node(state: GeodeState) -> dict[str, Any]:
         return {"evaluations": {}, "errors": [f"evaluator: {exc}"]}
 
 
-def make_evaluator_sends(state: GeodeState) -> list:
+def make_evaluator_sends(state: GeodeState) -> list[Any]:
     """Create Send objects for all 3 evaluators."""
     from langgraph.types import Send
 

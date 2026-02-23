@@ -81,6 +81,14 @@ class RedisSessionStore:
             return None
         return entry.data
 
+    def list_sessions(self) -> list[str]:
+        """List all non-expired session IDs."""
+        now = time.time()
+        return [
+            sid for sid, entry in self._store.items()
+            if now - entry.created_at <= entry.ttl_seconds
+        ]
+
 
 # ---------------------------------------------------------------------------
 # PostgreSQL Session Store (file-based simulation)
@@ -152,6 +160,12 @@ class PostgreSQLSessionStore:
             return result
         except (json.JSONDecodeError, OSError):
             return None
+
+    def list_sessions(self) -> list[str]:
+        """List all session IDs from stored files."""
+        return [
+            f.stem for f in self._dir.glob("*.json")
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -227,3 +241,7 @@ class HybridSessionStore:
         if data is not None:
             return data
         return self._l2.load_checkpoint(session_id)
+
+    def list_sessions(self) -> list[str]:
+        """List sessions from both tiers (deduplicated)."""
+        return list(set(self._l1.list_sessions()) | set(self._l2.list_sessions()))

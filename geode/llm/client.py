@@ -176,7 +176,7 @@ def get_anthropic_client() -> anthropic.Anthropic:
 
 
 def _retry_with_backoff(
-    fn,
+    fn: Any,
     *,
     model: str,
     max_retries: int = MAX_RETRIES,
@@ -297,7 +297,7 @@ def call_llm(
         block = response.content[0]
         if not hasattr(block, "text"):
             raise TypeError(f"Expected TextBlock, got {type(block)}")
-        return block.text  # type: ignore[return-value]
+        return block.text
 
     result: str = _retry_with_backoff(_do_call, model=target_model)
     return result

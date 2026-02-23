@@ -7,18 +7,17 @@ reports from GEODE pipeline output.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from string import Template
 from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
 
 
-class ReportFormat(str, Enum):
+class ReportFormat(StrEnum):
     """Supported report output formats."""
 
     HTML = "html"
@@ -26,7 +25,7 @@ class ReportFormat(str, Enum):
     MARKDOWN = "markdown"
 
 
-class ReportTemplate(str, Enum):
+class ReportTemplate(StrEnum):
     """Report detail levels."""
 
     SUMMARY = "summary"
@@ -290,7 +289,7 @@ class ReportGenerator:
         """Extract common fields from the result dict."""
         return {
             "ip_name": result.get("ip_name", "Unknown IP"),
-            "timestamp": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "timestamp": datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC"),
             "final_score": result.get("final_score", 0.0),
             "tier": result.get("tier", "N/A"),
             "subscores": result.get("subscores", {}),

@@ -18,7 +18,7 @@ def _g1_schema(state: GeodeState) -> tuple[bool, str]:
     return not errors, "; ".join(errors) or "Schema OK"
 
 
-def _validate_analyst_ranges(analyses: list) -> list[str]:
+def _validate_analyst_ranges(analyses: list[AnalysisResult]) -> list[str]:
     """Check analyst score ranges [1, 5]."""
     return [
         f"Analyst {a.analyst_type} score {a.score} out of range [1,5]"
@@ -27,7 +27,7 @@ def _validate_analyst_ranges(analyses: list) -> list[str]:
     ]
 
 
-def _validate_evaluator_ranges(evaluations: dict) -> list[str]:
+def _validate_evaluator_ranges(evaluations: dict[str, Any]) -> list[str]:
     """Check evaluator composite [0,100] and axis [1,5] ranges."""
     errors: list[str] = []
     for key, ev in evaluations.items():
@@ -95,8 +95,6 @@ def _g3_grounding(
                     flat_signals[sub_k] = sub_v
 
     for a in state.get("analyses", []):
-        if not isinstance(a, AnalysisResult):
-            continue
         if not a.evidence:
             errors.append(f"Analyst {a.analyst_type} has no evidence")
         elif flat_signals is not None:
@@ -110,7 +108,8 @@ def _g3_grounding(
             if grounded_count == 0 and a.evidence:
                 # Soft signal: record as detail but don't fail G3
                 details_only.append(
-                    f"Analyst {a.analyst_type}: no evidence grounded in signals (review recommended)"
+                    f"Analyst {a.analyst_type}: no evidence grounded in "
+                    f"signals (review recommended)"
                 )
         if not a.reasoning:
             errors.append(f"Analyst {a.analyst_type} has no reasoning")

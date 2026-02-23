@@ -21,7 +21,7 @@ from geode.automation.expert_panel import ExpertPanel
 from geode.automation.model_registry import ModelRegistry
 
 if TYPE_CHECKING:
-    from geode.orchestration.hooks import HookSystem
+    from geode.infrastructure.ports.hook_port import HookSystemPort
 
 log = logging.getLogger(__name__)
 
@@ -154,7 +154,7 @@ class FeedbackLoop:
         expert_panel: ExpertPanel | None = None,
         correlation_analyzer: CorrelationAnalyzer | None = None,
         drift_detector: CUSUMDetector | None = None,
-        hooks: HookSystem | None = None,
+        hooks: HookSystemPort | None = None,
     ) -> None:
         self._model_registry = model_registry
         self._expert_panel = expert_panel

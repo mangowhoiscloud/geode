@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import numpy as np
 from pydantic import ValidationError
@@ -20,7 +19,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _run_statistical_checks(analyses: list[AnalysisResult]) -> dict:
+def _run_statistical_checks(analyses: list[AnalysisResult]) -> dict[str, float]:
     """Quick statistical checks for anchoring bias signals."""
     scores = [a.score for a in analyses if isinstance(a, AnalysisResult)]
     if len(scores) < 2:

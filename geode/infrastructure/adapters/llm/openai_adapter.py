@@ -65,7 +65,7 @@ def _get_openai_client() -> Any:
     return _openai_client
 
 
-def _get_retryable_errors() -> tuple:
+def _get_retryable_errors() -> tuple[type[Exception], ...]:
     """Get retryable error types from openai SDK."""
     import openai
 
@@ -206,9 +206,10 @@ class OpenAIAdapter:
                         cost,
                     )
 
-        return self._retry_with_backoff(_do_stream, model=target_model)
+        result: Iterator[str] = self._retry_with_backoff(_do_stream, model=target_model)
+        return result
 
-    def _retry_with_backoff(self, fn, *, model: str) -> Any:
+    def _retry_with_backoff(self, fn: Any, *, model: str) -> Any:
         """Retry with exponential backoff + model fallback + circuit breaker."""
         import openai
 

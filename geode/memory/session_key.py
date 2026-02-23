@@ -16,6 +16,7 @@ Examples:
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # Phase constants (pipeline stages)
 CORTEX = "cortex"
@@ -75,7 +76,7 @@ def parse_session_key(key: str) -> dict[str, str | None]:
     }
 
 
-def build_thread_config(ip_name: str, phase: str, sub_context: str | None = None) -> dict:
+def build_thread_config(ip_name: str, phase: str, sub_context: str | None = None) -> dict[str, Any]:
     """Build a LangGraph thread config with hierarchical session key.
 
     Returns:

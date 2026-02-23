@@ -115,7 +115,13 @@ _FULL_PIPELINE_STEPS: list[tuple[str, str, str, float, list[str]]] = [
     ("analyst_market", "Market analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
     ("analyst_creative", "Creative quality analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
     ("analyst_technical", "Technical depth analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
-    ("analyst_community", "Community momentum analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
+    (
+        "analyst_community",
+        "Community momentum analyst evaluation",
+        "analyst",
+        12.0,
+        ["signals_fetch"],
+    ),
     (
         "evaluators",
         "Multi-axis evaluator scoring",
@@ -125,7 +131,13 @@ _FULL_PIPELINE_STEPS: list[tuple[str, str, str, float, list[str]]] = [
     ),
     ("scoring", "Compute composite score and tier", "scoring", 5.0, ["evaluators"]),
     ("verification", "Run guardrails and bias checks", "verification", 8.0, ["scoring"]),
-    ("synthesis", "Generate value narrative and action plan", "synthesizer", 10.0, ["verification"]),
+    (
+        "synthesis",
+        "Generate value narrative and action plan",
+        "synthesizer",
+        10.0,
+        ["verification"],
+    ),
 ]
 
 
@@ -228,7 +240,7 @@ class PlanMode:
             self._counter += 1
             plan_id = f"plan-{self._counter:04d}"
 
-        plan = factory(plan_id, ip_name)
+        plan: AnalysisPlan = factory(plan_id, ip_name)
         self._plans[plan.plan_id] = plan
         self._stats.created += 1
         log.info(

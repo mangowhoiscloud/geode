@@ -17,7 +17,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from geode.orchestration.hooks import HookSystem
+    from geode.infrastructure.ports.hook_port import HookSystemPort
 
 log = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ class TriggerManager:
     def __init__(
         self,
         scheduler_interval_s: float = 60.0,
-        hooks: HookSystem | None = None,
+        hooks: HookSystemPort | None = None,
     ) -> None:
         self._triggers: dict[str, TriggerConfig] = {}
         self._results: list[TriggerResult] = []

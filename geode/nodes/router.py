@@ -25,10 +25,9 @@ def route_after_router(state: GeodeState) -> str:
     mode = state.get("pipeline_mode", "full_pipeline")
     if mode in ("cortex_only", "discovery", "analysis", "full_pipeline"):
         return "cortex"
-    elif mode == "evaluation":
+    if mode == "evaluation":
         return "evaluators"
-    elif mode == "scoring":
+    if mode == "scoring":
         return "scoring"
-    else:
-        log.warning("Unknown pipeline_mode '%s', defaulting to cortex", mode)
-        return "cortex"
+    log.warning("Unknown pipeline_mode '%s', defaulting to cortex", mode)
+    return "cortex"

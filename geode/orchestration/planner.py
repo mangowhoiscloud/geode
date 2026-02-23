@@ -298,23 +298,24 @@ class Planner:
     @staticmethod
     def _matches_refresh(text: str) -> bool:
         """Check if input requests a data refresh."""
-        return bool(re.search(r"\b(refresh|update|re-?fetch|stale|outdated)\b", text, re.IGNORECASE))
+        pattern = r"\b(refresh|update|re-?fetch|stale|outdated)\b"
+        return bool(re.search(pattern, text, re.IGNORECASE))
 
     @staticmethod
     def _matches_aspect(text: str) -> bool:
         """Check if input requests aspect-specific re-analysis."""
-        for pattern in _ASPECT_PATTERNS:
-            if re.search(pattern, text, re.IGNORECASE):
-                return True
-        return False
+        return any(
+            re.search(pattern, text, re.IGNORECASE)
+            for pattern in _ASPECT_PATTERNS
+        )
 
     @staticmethod
     def _matches_prospect(text: str) -> bool:
         """Check if input describes a non-gamified IP."""
-        for pattern in _PROSPECT_PATTERNS:
-            if re.search(pattern, text, re.IGNORECASE):
-                return True
-        return False
+        return any(
+            re.search(pattern, text, re.IGNORECASE)
+            for pattern in _PROSPECT_PATTERNS
+        )
 
 
 class _PlannerStats:

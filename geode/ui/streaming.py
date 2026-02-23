@@ -143,10 +143,10 @@ def stream_adapter_to_console(
 
 def stream_graph_progress(
     graph: Any,
-    state: dict,
-    config: dict | None = None,
+    state: dict[str, Any],
+    config: dict[str, Any] | None = None,
     console: RichConsole | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Stream graph execution with node-by-node progress display.
 
     Accumulates state updates using the correct merge strategy:
@@ -164,7 +164,7 @@ def stream_graph_progress(
         Final accumulated state dict.
     """
     _console = console or RichConsole()
-    final_state: dict = {}
+    final_state: dict[str, Any] = {}
 
     for event in graph.stream(state, config=config):
         for node_name, state_update in event.items():

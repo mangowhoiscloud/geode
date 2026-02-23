@@ -26,6 +26,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from geode.infrastructure.ports.hook_port import HookSystemPort
 from geode.nodes.analysts import analyst_node, make_analyst_sends
 from geode.nodes.cortex import cortex_node
 from geode.nodes.evaluators import evaluator_node, make_evaluator_sends
@@ -33,8 +34,7 @@ from geode.nodes.router import route_after_router, router_node
 from geode.nodes.scoring import scoring_node
 from geode.nodes.signals import signals_node
 from geode.nodes.synthesizer import synthesizer_node
-from geode.infrastructure.ports.hook_port import HookSystemPort
-from geode.orchestration.hooks import HookEvent, HookSystem
+from geode.orchestration.hooks import HookEvent
 from geode.state import BiasBusterResult, GeodeState, GuardrailResult
 from geode.verification.biasbuster import run_biasbuster
 from geode.verification.cross_llm import run_cross_llm_check
@@ -138,7 +138,7 @@ def _verification_node(state: GeodeState) -> dict[str, Any]:
         errors.append("BiasBuster flagged potential bias in analysis")
     if not cross_llm.get("passed", True):
         errors.append("Cross-LLM agreement below threshold")
-    result: dict = {
+    result: dict[str, Any] = {
         "guardrails": guardrails,
         "biasbuster": biasbuster,
         "cross_llm": cross_llm,
@@ -148,7 +148,7 @@ def _verification_node(state: GeodeState) -> dict[str, Any]:
     return result
 
 
-def _gather_node(state: GeodeState) -> dict:
+def _gather_node(state: GeodeState) -> dict[str, Any]:
     """Feedback loop gather node — increment iteration, snapshot, and adapt.
 
     Adaptive behavior (G5): identifies weak areas from the current iteration
@@ -186,7 +186,7 @@ def build_graph(
     hooks: HookSystemPort | None = None,
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
-) -> StateGraph:
+) -> StateGraph[GeodeState]:
     """Build the GEODE LangGraph StateGraph.
 
     Args:
@@ -205,16 +205,16 @@ def build_graph(
             return _make_hooked_node(fn, name, hooks)
         return fn
 
-    # Add nodes
-    graph.add_node("router", _node(router_node, "router"))
-    graph.add_node("cortex", _node(cortex_node, "cortex"))
-    graph.add_node("signals", _node(signals_node, "signals"))
+    # Add nodes (type: ignore needed — LangGraph type stubs don't match runtime)
+    graph.add_node("router", _node(router_node, "router"))  # type: ignore[call-overload]
+    graph.add_node("cortex", _node(cortex_node, "cortex"))  # type: ignore[call-overload]
+    graph.add_node("signals", _node(signals_node, "signals"))  # type: ignore[call-overload]
     graph.add_node("analyst", analyst_node)  # Send API — not wrapped (runs in parallel)
     graph.add_node("evaluator", evaluator_node)  # Send API — parallel evaluators
-    graph.add_node("scoring", _node(scoring_node, "scoring"))
-    graph.add_node("verification", _node(_verification_node, "verification"))
-    graph.add_node("synthesizer", _node(synthesizer_node, "synthesizer"))
-    graph.add_node("gather", _node(_gather_node, "gather"))
+    graph.add_node("scoring", _node(scoring_node, "scoring"))  # type: ignore[arg-type]
+    graph.add_node("verification", _node(_verification_node, "verification"))  # type: ignore[arg-type]
+    graph.add_node("synthesizer", _node(synthesizer_node, "synthesizer"))  # type: ignore[arg-type]
+    graph.add_node("gather", _node(_gather_node, "gather"))  # type: ignore[arg-type]
 
     # Edges: START → router
     graph.add_edge(START, "router")
@@ -291,7 +291,7 @@ def compile_graph(
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     interrupt_before: list[str] | None = None,
     memory_fallback: bool = False,
-) -> CompiledStateGraph:
+) -> CompiledStateGraph[Any, None, Any, Any]:
     """Compile the graph for execution.
 
     Args:

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class PluginState(str, Enum):
+class PluginState(StrEnum):
     """Lifecycle states for a plugin."""
 
     INSTALLED = "installed"

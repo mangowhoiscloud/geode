@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from geode.orchestration.hooks import HookSystem
+    from geode.infrastructure.ports.hook_port import HookSystemPort
 
 log = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ class ModelRegistry:
     """
 
     def __init__(
-        self, storage_dir: Path | None = None, hooks: HookSystem | None = None,
+        self, storage_dir: Path | None = None, hooks: HookSystemPort | None = None,
     ) -> None:
         self._versions: dict[str, ModelVersion] = {}
         self._storage_dir = storage_dir
@@ -277,12 +277,16 @@ class ModelRegistry:
                         f"Validation gate failed for {version_id}: "
                         f"cannot promote to {target_stage.value}"
                     )
-            elif target_stage in self.DEFAULT_METRIC_GATES:
-                if not self._default_validation(version, target_stage, self.DEFAULT_METRIC_GATES):
-                    raise ValueError(
-                        f"Default metric gate failed for {version_id}: "
-                        f"cannot promote to {target_stage.value}"
-                    )
+            elif (
+                target_stage in self.DEFAULT_METRIC_GATES
+                and not self._default_validation(
+                    version, target_stage, self.DEFAULT_METRIC_GATES
+                )
+            ):
+                raise ValueError(
+                    f"Default metric gate failed for {version_id}: "
+                    f"cannot promote to {target_stage.value}"
+                )
 
             old_stage = version.stage
             version.stage = target_stage

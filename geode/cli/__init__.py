@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, cast
 
 import typer
 from rich.text import Text
@@ -68,7 +68,7 @@ def _get_nl_router() -> NLRouter:
     if router is None:
         router = NLRouter()
         _nl_router_ctx.set(router)
-    return router
+    return cast(NLRouter, router)
 
 
 def _get_search_engine() -> IPSearchEngine:
@@ -77,12 +77,12 @@ def _get_search_engine() -> IPSearchEngine:
     if engine is None:
         engine = IPSearchEngine()
         _search_engine_ctx.set(engine)
-    return engine
+    return cast(IPSearchEngine, engine)
 
 
 def _get_readiness() -> ReadinessReport | None:
     """Get the context-local ReadinessReport."""
-    return _readiness_ctx.get()
+    return cast("ReadinessReport | None", _readiness_ctx.get())
 
 
 def _set_readiness(report: ReadinessReport) -> None:
@@ -156,7 +156,7 @@ def _execute_pipeline(
     verbose: bool,
     *,
     runtime: GeodeRuntime,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Execute the GEODE pipeline with step-by-step progress."""
     graph = runtime.compile_graph()
 
@@ -165,11 +165,11 @@ def _execute_pipeline(
 
     done: list[str] = []
     analyst_count = 0
-    final_state: dict = dict(initial_state)
+    final_state: dict[str, Any] = dict(initial_state)
 
     with console.status(_progress_line(done)) as status:
         try:
-            for event in graph.stream(initial_state, config=runtime.thread_config):
+            for event in graph.stream(initial_state, config=runtime.thread_config):  # type: ignore[arg-type]
                 for node_name, output in event.items():
                     if node_name == "__end__":
                         continue
@@ -208,7 +208,7 @@ def _execute_pipeline(
     return final_state
 
 
-def _render_data_panels(result: dict) -> None:
+def _render_data_panels(result: dict[str, Any]) -> None:
     """Render gather/analyst/evaluator/score panels."""
     if result.get("ip_info"):
         gather_panel(result["ip_info"], result.get("monolake", {}), result.get("signals", {}))
@@ -225,7 +225,7 @@ def _render_data_panels(result: dict) -> None:
         )
 
 
-def _render_verification(result: dict, *, verbose: bool) -> None:
+def _render_verification(result: dict[str, Any], *, verbose: bool) -> None:
     """Render guardrail + biasbuster verification panel."""
     guardrails = result.get("guardrails")
     biasbuster = result.get("biasbuster")
@@ -242,7 +242,7 @@ def _render_verification(result: dict, *, verbose: bool) -> None:
         console.print()
 
 
-def _render_result(result: dict, *, skip_verification: bool, verbose: bool) -> None:
+def _render_result(result: dict[str, Any], *, skip_verification: bool, verbose: bool) -> None:
     """Render all output panels from pipeline result."""
     _render_data_panels(result)
     if not skip_verification:
@@ -300,7 +300,7 @@ def _run_analysis(
 # ---------------------------------------------------------------------------
 
 
-def _render_search_results(query: str, results: list) -> None:
+def _render_search_results(query: str, results: list[Any]) -> None:
     """Render IP search results."""
     console.print()
     console.print(f"  [header]Search: '{query}'[/header]")
@@ -384,7 +384,7 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
     intent = _get_nl_router().classify(text)
 
     if intent.action == "search":
-        results = _search_engine.search(intent.args.get("query", text))
+        results = _get_search_engine().search(intent.args.get("query", text))
         _render_search_results(intent.args.get("query", text), results)
 
     elif intent.action == "analyze":

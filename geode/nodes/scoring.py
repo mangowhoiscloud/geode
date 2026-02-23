@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _compute_psm(ip_name: str, monolake: dict) -> PSMResult:
+def _compute_psm(ip_name: str, monolake: dict[str, Any]) -> PSMResult:
     """Compute PSM result.
 
     For demo: uses expected_results from fixture for ATT/Z/Gamma,

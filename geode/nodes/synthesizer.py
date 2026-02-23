@@ -19,6 +19,7 @@ from geode.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_USER
 from geode.state import (
     ActionLiteral,
     CauseLiteral,
+    EvaluatorResult,
     GeodeState,
     SynthesisResult,
 )
@@ -107,7 +108,7 @@ def _classify_cause(
     return cause, CAUSE_DESCRIPTIONS[cause]
 
 
-def _detect_timing_issue(monolake: dict) -> bool:
+def _detect_timing_issue(monolake: dict[str, Any]) -> bool:
     """release_timing_issue 판별 휴리스틱.
 
     게임이 존재했으나 오래 전이고 타이밍 관련 실패 징후가 있는 경우.
@@ -125,7 +126,7 @@ def _detect_timing_issue(monolake: dict) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _extract_def_scores(evaluations: dict) -> tuple[int, int, int]:
+def _extract_def_scores(evaluations: dict[str, EvaluatorResult]) -> tuple[int, int, int]:
     """Extract D/E/F scores from evaluations, rounded to int per §13.9.2."""
     hv = evaluations.get("hidden_value")
     d = round(hv.axes.get("d_score", 3.0)) if hv else 3

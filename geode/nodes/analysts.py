@@ -271,7 +271,7 @@ def analyst_node(state: GeodeState) -> dict[str, Any]:
         return {"analyses": [], "errors": [f"analyst: {exc}"]}
 
 
-def make_analyst_sends(state: GeodeState) -> list:
+def make_analyst_sends(state: GeodeState) -> list[Any]:
     """Create Send objects for all 4 analysts."""
     from langgraph.types import Send
 

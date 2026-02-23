@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -29,7 +31,9 @@ def header_panel(ip_name: str, pipeline_mode: str, model: str) -> None:
     console.print()
 
 
-def gather_panel(ip_info: dict, monolake: dict, signals: dict) -> None:
+def gather_panel(
+    ip_info: dict[str, Any], monolake: dict[str, Any], signals: dict[str, Any],
+) -> None:
     console.print("[step]▸ [GATHER][/step] Loading IP data from MonoLake...")
     tree = Tree("", guide_style="dim")
     tree.add(

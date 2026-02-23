@@ -14,7 +14,6 @@ from typing import Any
 from geode.infrastructure.ports.memory_port import SessionStorePort
 from geode.memory.session import InMemorySessionStore
 
-
 # Thread-safe default session store via contextvars
 _default_session_store_ctx: ContextVar[SessionStorePort | None] = ContextVar(
     "default_session_store", default=None

@@ -20,7 +20,10 @@ from __future__ import annotations
 import logging
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from langgraph.graph.state import CompiledStateGraph
 
 from geode.auth.cooldown import CooldownTracker
 from geode.auth.profiles import ProfileStore
@@ -36,6 +39,7 @@ from geode.automation.triggers import TriggerManager, TriggerType
 from geode.config import settings
 from geode.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
 from geode.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
+from geode.infrastructure.ports.hook_port import HookSystemPort
 from geode.infrastructure.ports.llm_port import LLMClientPort
 from geode.infrastructure.ports.memory_port import (
     OrganizationMemoryPort,
@@ -48,7 +52,6 @@ from geode.memory.project import ProjectMemory
 from geode.memory.session import InMemorySessionStore
 from geode.memory.session_key import build_session_key, build_thread_config
 from geode.orchestration.coalescing import CoalescingQueue
-from geode.infrastructure.ports.hook_port import HookSystemPort
 from geode.orchestration.hooks import HookEvent, HookSystem
 from geode.orchestration.hot_reload import ConfigWatcher
 from geode.orchestration.lane_queue import LaneQueue
@@ -218,7 +221,7 @@ class GeodeRuntime:
         self.session_key = session_key
         self.ip_name = ip_name
         self.run_id = ""
-        self._compiled_graph = None
+        self._compiled_graph: CompiledStateGraph[Any, None, Any, Any] | None = None
         # L4.5 Automation
         self.drift_detector = drift_detector
         self.model_registry = model_registry
@@ -245,7 +248,7 @@ class GeodeRuntime:
         stuck_timeout_s: float,
     ) -> tuple[HookSystemPort, RunLog, StuckDetector]:
         """Build HookSystem with RunLog and StuckDetector handlers."""
-        hooks = HookSystem()
+        hooks: HookSystemPort = HookSystem()  # type: ignore[assignment]
 
         # Run log + hook handler
         run_log = RunLog(session_key, log_dir=log_dir)
@@ -635,7 +638,7 @@ class GeodeRuntime:
         return instance
 
     @property
-    def thread_config(self) -> dict:
+    def thread_config(self) -> dict[str, Any]:
         """LangGraph thread config for this session."""
         return build_thread_config(self.ip_name, "analysis")
 
@@ -649,7 +652,9 @@ class GeodeRuntime:
         db = settings.checkpoint_db
         return db if db and db.strip() else None
 
-    def compile_graph(self, *, enable_checkpoint: bool = True):
+    def compile_graph(
+        self, *, enable_checkpoint: bool = True,
+    ) -> CompiledStateGraph[Any, None, Any, Any]:
         """Compile the GEODE graph with hooks and checkpointing (default: enabled).
 
         Caches the compiled graph for reuse across multiple invocations.
@@ -660,14 +665,15 @@ class GeodeRuntime:
         from geode.graph import compile_graph
 
         checkpoint_db = self.checkpoint_db if enable_checkpoint else None
-        self._compiled_graph = compile_graph(
+        compiled = compile_graph(
             hooks=self.hooks,
             checkpoint_db=checkpoint_db,
             confidence_threshold=settings.confidence_threshold,
             max_iterations=settings.max_iterations,
             memory_fallback=True,
         )
-        return self._compiled_graph
+        self._compiled_graph = compiled
+        return compiled
 
     def store_session_data(self, data: dict[str, Any]) -> None:
         """Store data in the session store under the current session key."""

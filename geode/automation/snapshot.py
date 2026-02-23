@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from geode.orchestration.hooks import HookSystem
+    from geode.infrastructure.ports.hook_port import HookSystemPort
 
 log = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class SnapshotManager:
         self,
         storage_dir: Path | None = None,
         max_recent: int = DEFAULT_MAX_RECENT,
-        hooks: HookSystem | None = None,
+        hooks: HookSystemPort | None = None,
     ) -> None:
         self._storage_dir = storage_dir
         self._max_recent = max_recent

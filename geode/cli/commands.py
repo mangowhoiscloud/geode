@@ -6,11 +6,15 @@ OpenClaw-inspired Binding Router pattern: static command → handler mapping.
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any as _Any
+from typing import cast
 
-from simple_term_menu import TerminalMenu
+from simple_term_menu import TerminalMenu  # type: ignore[import-untyped]
 
+from geode.auth.profiles import ProfileStore
 from geode.ui.console import console
 
 # ---------------------------------------------------------------------------
@@ -208,7 +212,6 @@ def _interactive_model_picker() -> None:
         menu_highlight_style=("fg_cyan", "bold"),
     )
     idx = menu.show()
-
     if idx is None:
         console.print("  [muted]Cancelled[/muted]")
         console.print()
@@ -323,7 +326,7 @@ def cmd_auth(args: str) -> None:
     console.print()
 
 
-def _auth_add_interactive(store, add_args: str) -> None:
+def _auth_add_interactive(store: ProfileStore, add_args: str) -> None:
     """Interactive auth profile addition."""
     from geode.auth.profiles import AuthProfile, CredentialType
 
@@ -390,19 +393,16 @@ def _auth_add_interactive(store, add_args: str) -> None:
 
 
 # Thread-safe profile store via contextvars
-from contextvars import ContextVar
-from typing import Any as _Any
-
 _profile_store_ctx: ContextVar[_Any] = ContextVar("profile_store", default=None)
 
 
-def _get_profile_store():
+def _get_profile_store() -> ProfileStore:
     """Get or create the context-local profile store, seeded from settings."""
-    from geode.auth.profiles import AuthProfile, CredentialType, ProfileStore
+    from geode.auth.profiles import AuthProfile, CredentialType
 
     store = _profile_store_ctx.get()
     if store is not None:
-        return store
+        return cast(ProfileStore, store)
 
     store = ProfileStore()
 

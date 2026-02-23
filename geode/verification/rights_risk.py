@@ -7,13 +7,13 @@ with legal/rights databases; demo uses hardcoded fixture data.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class RightsStatus(str, Enum):
+class RightsStatus(StrEnum):
     """IP rights clearance status."""
 
     CLEAR = "clear"

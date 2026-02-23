@@ -44,13 +44,15 @@ def _derive_model_names(
     secondary = _DEFAULT_SECONDARY_MODEL
 
     if primary_adapter is not None:
-        primary = getattr(primary_adapter, "model_name", None) or getattr(
-            primary_adapter, "default_model", _DEFAULT_PRIMARY_MODEL
+        primary = str(
+            getattr(primary_adapter, "model_name", None)
+            or getattr(primary_adapter, "default_model", _DEFAULT_PRIMARY_MODEL)
         )
 
     if secondary_adapter is not None:
-        secondary = getattr(secondary_adapter, "model_name", None) or getattr(
-            secondary_adapter, "default_model", _DEFAULT_SECONDARY_MODEL
+        secondary = str(
+            getattr(secondary_adapter, "model_name", None)
+            or getattr(secondary_adapter, "default_model", _DEFAULT_SECONDARY_MODEL)
         )
 
     return [primary, secondary]
@@ -150,7 +152,9 @@ def run_cross_llm_check(
 
             # Blend secondary re-score into agreement only when parseable
             if secondary_score is not None:
-                rescore_agreement = 1.0 - abs(first.score - secondary_score) / (_SCALE_MAX - _SCALE_MIN)
+                rescore_agreement = (
+                    1.0 - abs(first.score - secondary_score) / (_SCALE_MAX - _SCALE_MIN)
+                )
                 rescore_agreement = max(0.0, min(1.0, rescore_agreement))
 
                 # Re-weight: 50% intra-model agreement, 50% cross-model re-score
@@ -173,7 +177,7 @@ def run_cross_llm_check(
     # Krippendorff's alpha as secondary reliability measure
     try:
         # Each analyst is a rater scoring 1 item (the IP)
-        ratings_matrix = [[s] for s in scores]
+        ratings_matrix: list[list[float | None]] = [[s] for s in scores]
         alpha = calculate_krippendorff_alpha(ratings_matrix)
         krippendorff_alpha: float | None = round(alpha, 4)
     except Exception:
