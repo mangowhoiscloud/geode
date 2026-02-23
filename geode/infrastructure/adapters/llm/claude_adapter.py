@@ -1,0 +1,57 @@
+"""Claude Adapter — Anthropic API implementation of LLMClientPort.
+
+Wraps existing geode.llm.client functions into the LLMClientPort interface,
+enabling clean dependency injection and testability.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
+
+from geode.llm.client import call_llm, call_llm_json, call_llm_streaming
+
+
+class ClaudeAdapter:
+    """Anthropic Claude adapter implementing LLMClientPort.
+
+    Wraps the existing call_llm/call_llm_json/call_llm_streaming functions
+    from geode.llm.client into the port interface.
+    """
+
+    def generate(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> str:
+        return call_llm(system, user, model=model, max_tokens=max_tokens, temperature=temperature)
+
+    def generate_structured(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> dict[str, Any]:
+        return call_llm_json(
+            system, user, model=model, max_tokens=max_tokens, temperature=temperature
+        )
+
+    def generate_stream(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> Iterator[str]:
+        return call_llm_streaming(
+            system, user, model=model, max_tokens=max_tokens, temperature=temperature
+        )
