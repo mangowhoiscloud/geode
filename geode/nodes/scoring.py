@@ -80,6 +80,18 @@ def _load_developer_score(ip_name: str, quality_fallback: float) -> float:
 # ---------------------------------------------------------------------------
 
 
+def _calc_quality_score(evaluations: dict[str, EvaluatorResult]) -> float:
+    """§13.8.2: Quality = (A+B+C+B1+C1+C2+M+N) / 8 * 20.
+
+    Server-side calculation from raw axes instead of trusting LLM composite.
+    """
+    qj = evaluations.get("quality_judge")
+    if not qj:
+        return 50.0
+    axes_sum = sum(qj.axes.values())
+    return (axes_sum / 8) * 20
+
+
 def _calc_recovery_potential(evaluations: dict[str, EvaluatorResult]) -> float:
     """§13.8.2: Recovery = ((E + F) - 2) / 8 * 100. D excluded."""
     hv = evaluations.get("hidden_value")
@@ -184,9 +196,8 @@ def scoring_node(state: GeodeState) -> dict:
     # PSM
     psm = _compute_psm(ip_name, monolake)
 
-    # Subscores
-    quality = evaluations.get("quality_judge")
-    quality_score = quality.composite_score if quality else 50.0
+    # Subscores (server-side calculation from raw axes)
+    quality_score = _calc_quality_score(evaluations)
     recovery = _calc_recovery_potential(evaluations)
     momentum = _calc_community_momentum(evaluations)
     confidence = _calc_analyst_confidence(analyses)

@@ -25,7 +25,7 @@ from geode.ui.console import console
 
 CAUSE_TO_ACTION: dict[CauseLiteral, ActionLiteral] = {
     "undermarketed": "marketing_boost",
-    "conversion_failure": "marketing_boost",  # + monetization_pivot
+    "conversion_failure": "monetization_pivot",  # §13.9.2: 퍼널+과금 동시 개선
     "monetization_misfit": "monetization_pivot",
     "niche_gem": "platform_expansion",
     "timing_mismatch": "timing_optimization",
@@ -127,6 +127,26 @@ def _extract_def_scores(evaluations: dict) -> tuple[int, int, int]:
     return d, e, f
 
 
+# IP-specific narrative hooks for dry-run mode (F-3: differentiated narratives)
+_IP_NARRATIVE_HOOKS: dict[str, dict[str, str]] = {
+    "berserk": {
+        "hook": "Elden Ring의 성공이 입증한 다크 판타지 Souls-like 시장에서",
+        "insight": "Dragonslayer 대검 기반 전투 시스템은 기존 팬과 Souls 유저 동시 공략 가능",
+        "segment": "Dark Fantasy Souls-like 코어 유저 (20-35세, Achiever형, PvE 고난이도 선호)",
+    },
+    "cowboy bebop": {
+        "hook": "90년대 SF 느와르의 독보적 세계관과 유기적 팬덤 성장세로",
+        "insight": "바운티 헌터 루프 기반 Action RPG는 장르 내 직접 경쟁자 부재",
+        "segment": "SF Action RPG 유저 (25-40세, Explorer/Killer 혼합형, 내러티브 중시)",
+    },
+    "ghost in the shell": {
+        "hook": "사이버펑크 장르의 원조 IP임에도 Cyberpunk 2077 이후 경쟁 심화로",
+        "insight": "스텔스/해킹 하이브리드 시스템은 차별화 가능하나 AAA 수준 실행력 필요",
+        "segment": "Cyberpunk Stealth/RPG 유저 (28-42세, Explorer형, 세계관 몰입 중시)",
+    },
+}
+
+
 def _build_dry_run_synthesis(
     state: GeodeState,
     cause: CauseLiteral,
@@ -135,34 +155,38 @@ def _build_dry_run_synthesis(
 ) -> SynthesisResult:
     """Build a dry-run synthesis with IP-specific insights."""
     ip_name = state.get("ip_name", "Unknown")
+    ip_key = ip_name.lower().strip()
     signals = state.get("signals", {})
-    analyses = state.get("analyses", [])
 
     parts = cause_desc.split("—")
     status = parts[0].strip()
     recommendation = parts[1].strip() if len(parts) > 1 else "종합 전략 수립"
 
-    # Build richer narrative using actual data
+    # Signal formatting
     yt = signals.get("youtube_views", 0)
     rd = signals.get("reddit_subscribers", 0)
     fa = signals.get("fan_art_yoy_pct", 0)
     yt_str = f"{yt / 1_000_000:.0f}M" if yt >= 1_000_000 else f"{yt:,}"
     rd_str = f"{rd / 1000:.0f}K" if rd >= 1000 else f"{rd:,}"
 
-    top_analyst = max(analyses, key=lambda a: a.score) if analyses else None
-    top_insight = f" {top_analyst.key_finding}." if top_analyst else ""
+    # IP-specific hooks (F-2, F-3)
+    hooks = _IP_NARRATIVE_HOOKS.get(ip_key, {})
+    hook = hooks.get("hook", f"YouTube {yt_str}, Reddit {rd_str} 규모의 팬덤에도")
+    insight = hooks.get("insight", f"팬아트 {fa:+.0f}% YoY 성장이 잠재력을 증명")
 
     narrative = (
-        f"{ip_name}은(는) YouTube {yt_str} views, Reddit {rd_str} subscribers, "
-        f"팬아트 {fa:+.0f}% YoY 성장에도 불구하고 {status} 상태입니다.{top_insight} "
-        f"{recommendation}이 권장됩니다."
+        f"{ip_name}: {hook} {status} 상태로 분류됩니다. "
+        f"{insight}. YouTube {yt_str} views, Reddit {rd_str}, 팬아트 {fa:+.0f}% YoY. "
+        f"권장 액션: {recommendation}."
     )
 
-    # Genre-aware segment
-    ip_info = state.get("ip_info", {})
-    genres = ip_info.get("genre", [])
-    genre_str = genres[0] if genres else "action"
-    segment = f"{genre_str.title()} RPG 코어 유저 (25-40세, Achiever/Explorer 혼합형)"
+    # IP-specific segment (F-2)
+    segment = hooks.get("segment", "")
+    if not segment:
+        ip_info = state.get("ip_info", {})
+        genres = ip_info.get("genre", [])
+        genre_str = genres[0] if genres else "action"
+        segment = f"{genre_str.title()} RPG 코어 유저 (25-40세, Achiever/Explorer 혼합형)"
 
     return SynthesisResult(
         undervaluation_cause=cause,
@@ -190,9 +214,7 @@ def _build_llm_synthesis(
         f"- {k}: {v.composite_score:.0f}/100 ({v.rationale[:80]}...)"
         for k, v in evaluations.items()
     )
-    sig_summary = "\n".join(
-        f"- {k}: {v}" for k, v in signals.items() if not k.startswith("_")
-    )
+    sig_summary = "\n".join(f"- {k}: {v}" for k, v in signals.items() if not k.startswith("_"))
 
     qj = evaluations.get("quality_judge")
     cm = evaluations.get("community_momentum")
@@ -236,8 +258,7 @@ def synthesizer_node(state: GeodeState) -> dict:
 
     if state.get("verbose"):
         console.print(
-            f"    [muted]Cause: {cause} → Action: {action}"
-            f" ({ACTION_DESCRIPTIONS[action]})[/muted]"
+            f"    [muted]Cause: {cause} → Action: {action} ({ACTION_DESCRIPTIONS[action]})[/muted]"
         )
 
     if state.get("dry_run"):

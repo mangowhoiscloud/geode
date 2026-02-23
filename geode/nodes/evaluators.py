@@ -16,6 +16,22 @@ def _format_axes_schema(evaluator_type: str) -> str:
     return ", ".join(parts)
 
 
+def _format_rubric_anchors(evaluator_type: str) -> str:
+    """Format per-level rubric anchors for the evaluator prompt."""
+    rubric: dict[str, dict[str, str]] = EVALUATOR_AXES[evaluator_type].get("rubric", {})  # type: ignore[assignment]
+    if not rubric:
+        return ""
+    axes_desc: dict[str, str] = EVALUATOR_AXES[evaluator_type]["axes"]  # type: ignore[assignment]
+    lines = ["## Rubric Anchors (1=Poor, 3=Good, 5=Outstanding)"]
+    for key, anchors in rubric.items():
+        desc = axes_desc.get(key, key)
+        lines.append(f"- {key} ({desc}): 1={anchors['1']}, 3={anchors['3']}, 5={anchors['5']}")
+    formula = EVALUATOR_AXES[evaluator_type].get("composite_formula", "")
+    if formula:
+        lines.append(f"\nComposite formula: {formula}")
+    return "\n".join(lines)
+
+
 def _build_evaluator_prompt(evaluator_type: str, state: GeodeState) -> tuple[str, str]:
     ip = state["ip_info"]
     analyses = state.get("analyses", [])
@@ -46,6 +62,7 @@ def _build_evaluator_prompt(evaluator_type: str, state: GeodeState) -> tuple[str
         analyst_findings=analyst_findings,
         signals_summary=signals_summary,
         evaluator_type=evaluator_type,
+        rubric_anchors=_format_rubric_anchors(evaluator_type),
     )
     return system, user
 
@@ -79,7 +96,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
                 "m_score": 3.8,
                 "n_score": 4.2,
             },
-            composite_score=82.0,
+            composite_score=81.25,  # (4.2+4.0+4.3+3.9+4.1+4.0+3.8+4.2)/8*20
             rationale=(
                 "Strong IP-game adaptation potential with rich narrative "
                 "hooks and engaging world design."
@@ -88,7 +105,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
         "hidden_value": EvaluatorResult(
             evaluator_type="hidden_value",
             axes={"d_score": 5.0, "e_score": 2.0, "f_score": 4.0},
-            composite_score=50.0,
+            composite_score=50.0,  # (2.0+4.0-2)/8*100
             rationale=(
                 "Extreme acquisition gap (D=5) with no active marketing. "
                 "Low monetization gap (E=2) since no game exists to "
@@ -98,7 +115,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
         "community_momentum": EvaluatorResult(
             evaluator_type="community_momentum",
             axes={"j_score": 4.3, "k_score": 4.1, "l_score": 3.9},
-            composite_score=78.0,
+            composite_score=77.50,  # (4.3+4.1+3.9-3)/12*100
             rationale=(
                 "Active organic community with strong growth signals "
                 "despite no game presence. Fan art +42% YoY indicates "
@@ -121,7 +138,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
                 "m_score": 3.8,
                 "n_score": 4.0,
             },
-            composite_score=80.0,
+            composite_score=80.25,  # (4.5+4.2+4.4+3.8+3.8+3.6+3.8+4.0)/8*20
             rationale=(
                 "Berserk's dark fantasy world is ideally suited for Souls-like "
                 "adaptation. Previous game was poor execution, not IP weakness. "
@@ -131,7 +148,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
         "hidden_value": EvaluatorResult(
             evaluator_type="hidden_value",
             axes={"d_score": 4.0, "e_score": 4.5, "f_score": 4.5},
-            composite_score=83.0,
+            composite_score=87.50,  # (4.5+4.5-2)/8*100
             rationale=(
                 "Massive fandom-to-game conversion gap. Both marketing and "
                 "monetization severely underperformed. High expansion potential "
@@ -141,7 +158,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
         "community_momentum": EvaluatorResult(
             evaluator_type="community_momentum",
             axes={"j_score": 4.8, "k_score": 4.6, "l_score": 4.5},
-            composite_score=92.0,
+            composite_score=90.83,  # (4.8+4.6+4.5-3)/12*100
             rationale=(
                 "Exceptionally strong community momentum. Reddit 520K, "
                 "YouTube 25M, fan art +65% YoY. Souls-like genre demand "
@@ -164,7 +181,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
                 "m_score": 3.4,
                 "n_score": 3.5,
             },
-            composite_score=72.0,
+            composite_score=69.25,  # (3.8+3.5+3.6+3.3+3.4+3.2+3.4+3.5)/8*20
             rationale=(
                 "Good IP-game fit for stealth/cyberpunk but prior games "
                 "were average. Needs AAA-quality execution."
@@ -173,7 +190,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
         "hidden_value": EvaluatorResult(
             evaluator_type="hidden_value",
             axes={"d_score": 2.0, "e_score": 2.0, "f_score": 2.0},
-            composite_score=25.0,
+            composite_score=25.0,  # (2.0+2.0-2)/8*100
             rationale=(
                 "No single undervaluation axis is dominant. Complex, "
                 "multi-factor discovery failure."
@@ -182,7 +199,7 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
         "community_momentum": EvaluatorResult(
             evaluator_type="community_momentum",
             axes={"j_score": 3.5, "k_score": 3.3, "l_score": 3.0},
-            composite_score=62.0,
+            composite_score=56.67,  # (3.5+3.3+3.0-3)/12*100
             rationale=(
                 "Moderate community presence. Stable but not growing rapidly. Needs catalyst event."
             ),

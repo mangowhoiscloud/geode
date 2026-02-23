@@ -32,9 +32,7 @@ def _validate_evaluator_ranges(evaluations: dict) -> list[str]:
         if not isinstance(ev, EvaluatorResult):
             continue
         if not (0 <= ev.composite_score <= 100):
-            errors.append(
-                f"Evaluator {key} composite {ev.composite_score} out of range [0,100]"
-            )
+            errors.append(f"Evaluator {key} composite {ev.composite_score} out of range [0,100]")
         errors.extend(
             f"Evaluator {key} axis {axis}={val} out of range [1,5]"
             for axis, val in ev.axes.items()

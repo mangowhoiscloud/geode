@@ -1,19 +1,179 @@
-"""LLM client wrapper for Anthropic and OpenAI."""
+"""LLM client wrapper for Anthropic and OpenAI.
+
+Failover strategy (OpenClaw-inspired 4-stage):
+1. Retry with exponential backoff (max 3 attempts)
+2. Model fallback chain (primary → fallback models)
+3. Context overflow detection (token limit → truncation hint)
+4. Graceful degradation (log + raise after all retries exhausted)
+"""
 
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from typing import Any
 
 import anthropic
 
 from geode.config import settings
 
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Token usage tracking
+# ---------------------------------------------------------------------------
+
+# Model pricing (USD per token) — updated 2026-02
+MODEL_PRICING: dict[str, dict[str, float]] = {
+    "claude-opus-4-6": {"input": 15.0 / 1_000_000, "output": 75.0 / 1_000_000},
+    "claude-sonnet-4-5-20250929": {"input": 3.0 / 1_000_000, "output": 15.0 / 1_000_000},
+    "claude-haiku-4-5-20251001": {"input": 0.80 / 1_000_000, "output": 4.0 / 1_000_000},
+    "gpt-5.3": {"input": 10.0 / 1_000_000, "output": 30.0 / 1_000_000},
+}
+
+
+@dataclass
+class LLMUsage:
+    """Token usage and cost tracking for a single LLM call."""
+
+    model: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cost_usd": self.cost_usd,
+        }
+
+
+@dataclass
+class LLMUsageAccumulator:
+    """Accumulates token usage across multiple LLM calls."""
+
+    calls: list[LLMUsage] = field(default_factory=list)
+
+    @property
+    def total_input_tokens(self) -> int:
+        return sum(u.input_tokens for u in self.calls)
+
+    @property
+    def total_output_tokens(self) -> int:
+        return sum(u.output_tokens for u in self.calls)
+
+    @property
+    def total_cost_usd(self) -> float:
+        return sum(u.cost_usd for u in self.calls)
+
+    def record(self, usage: LLMUsage) -> None:
+        self.calls.append(usage)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
+            "total_cost_usd": self.total_cost_usd,
+            "call_count": len(self.calls),
+        }
+
+
+def _calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Calculate cost in USD for a given model and token counts."""
+    prices = MODEL_PRICING.get(model, {})
+    return input_tokens * prices.get("input", 0) + output_tokens * prices.get("output", 0)
+
+
+# Module-level accumulator for the current pipeline run
+_usage_accumulator = LLMUsageAccumulator()
+
+
+def get_usage_accumulator() -> LLMUsageAccumulator:
+    """Get the module-level usage accumulator."""
+    return _usage_accumulator
+
+
+def reset_usage_accumulator() -> None:
+    """Reset the module-level usage accumulator."""
+    global _usage_accumulator
+    _usage_accumulator = LLMUsageAccumulator()
+
+
+# Failover configuration
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 1.0  # seconds
+RETRY_MAX_DELAY = 30.0
+FALLBACK_MODELS = [
+    "claude-opus-4-6",
+    "claude-sonnet-4-5-20250929",
+]
+
+# Retryable error types
+_RETRYABLE_ERRORS = (
+    anthropic.RateLimitError,
+    anthropic.APIConnectionError,
+    anthropic.InternalServerError,
+)
+
 
 def get_anthropic_client() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=settings.anthropic_api_key)
+
+
+def _retry_with_backoff(
+    fn,
+    *,
+    model: str,
+    max_retries: int = MAX_RETRIES,
+) -> Any:
+    """Execute fn with retry + exponential backoff + model fallback.
+
+    Stage 1: Retry same model with exponential backoff.
+    Stage 2: On persistent failure, try fallback models.
+    """
+    models_to_try = [model] + [m for m in FALLBACK_MODELS if m != model]
+    last_error: Exception | None = None
+
+    for model_idx, current_model in enumerate(models_to_try):
+        for attempt in range(max_retries):
+            try:
+                return fn(model=current_model)
+            except _RETRYABLE_ERRORS as exc:
+                last_error = exc
+                delay = min(RETRY_BASE_DELAY * (2**attempt), RETRY_MAX_DELAY)
+                log.warning(
+                    "LLM call failed (model=%s, attempt=%d/%d): %s. Retrying in %.1fs",
+                    current_model,
+                    attempt + 1,
+                    max_retries,
+                    type(exc).__name__,
+                    delay,
+                )
+                time.sleep(delay)
+            except anthropic.BadRequestError as exc:
+                # Context overflow or invalid request — no retry
+                error_msg = str(exc)
+                if "token" in error_msg.lower() or "context" in error_msg.lower():
+                    log.error("Context overflow detected (model=%s): %s", current_model, error_msg)
+                raise
+
+        if model_idx < len(models_to_try) - 1:
+            next_model = models_to_try[model_idx + 1]
+            log.warning(
+                "All retries exhausted for model=%s. Falling back to %s",
+                current_model,
+                next_model,
+            )
+
+    assert last_error is not None
+    log.error("All models and retries exhausted. Last error: %s", last_error)
+    raise last_error
 
 
 def call_llm(
@@ -24,19 +184,47 @@ def call_llm(
     max_tokens: int = 4096,
     temperature: float = 0.3,
 ) -> str:
-    """Synchronous Claude call. Returns text content."""
+    """Synchronous Claude call with failover. Returns text content."""
     client = get_anthropic_client()
-    model = model or settings.model
-    response = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    )
-    block = response.content[0]
-    assert hasattr(block, "text"), f"Expected TextBlock, got {type(block)}"
-    return block.text  # type: ignore[return-value]
+    target_model = model or settings.model
+
+    _last_usage: dict[str, Any] = {}
+
+    def _do_call(*, model: str) -> str:
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        # Capture token usage
+        if hasattr(response, "usage") and response.usage:
+            in_tok = response.usage.input_tokens
+            out_tok = response.usage.output_tokens
+            cost = _calculate_cost(model, in_tok, out_tok)
+            usage = LLMUsage(
+                model=model,
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+                cost_usd=cost,
+            )
+            _usage_accumulator.record(usage)
+            _last_usage["value"] = usage
+            log.debug(
+                "LLM usage: model=%s in=%d out=%d cost=$%.4f",
+                model,
+                in_tok,
+                out_tok,
+                cost,
+            )
+
+        block = response.content[0]
+        assert hasattr(block, "text"), f"Expected TextBlock, got {type(block)}"
+        return block.text  # type: ignore[return-value]
+
+    result: str = _retry_with_backoff(_do_call, model=target_model)
+    return result
 
 
 def call_llm_json(
@@ -47,7 +235,7 @@ def call_llm_json(
     max_tokens: int = 4096,
     temperature: float = 0.3,
 ) -> dict[str, Any]:
-    """Claude call that parses JSON from the response."""
+    """Claude call that parses JSON from the response. Includes failover."""
     raw = call_llm(system, user, model=model, max_tokens=max_tokens, temperature=temperature)
     # Strip markdown code fences if present (handles ```json, ``` with trailing spaces, etc.)
     text = raw.strip()
@@ -65,14 +253,39 @@ def call_llm_streaming(
     max_tokens: int = 4096,
     temperature: float = 0.3,
 ) -> Iterator[str]:
-    """Streaming Claude call. Yields text deltas."""
+    """Streaming Claude call with failover. Yields text deltas."""
     client = get_anthropic_client()
-    model = model or settings.model
-    with client.messages.stream(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    ) as stream:
-        yield from stream.text_stream
+    target_model = model or settings.model
+
+    def _do_stream(*, model: str) -> Iterator[str]:
+        with client.messages.stream(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        ) as stream:
+            yield from stream.text_stream
+
+    # For streaming, retry at connection level only
+    models_to_try = [target_model] + [m for m in FALLBACK_MODELS if m != target_model]
+    last_error: Exception | None = None
+
+    for current_model in models_to_try:
+        for attempt in range(MAX_RETRIES):
+            try:
+                return _do_stream(model=current_model)
+            except _RETRYABLE_ERRORS as exc:
+                last_error = exc
+                delay = min(RETRY_BASE_DELAY * (2**attempt), RETRY_MAX_DELAY)
+                log.warning(
+                    "Streaming call failed (model=%s, attempt=%d/%d): %s",
+                    current_model,
+                    attempt + 1,
+                    MAX_RETRIES,
+                    type(exc).__name__,
+                )
+                time.sleep(delay)
+
+    assert last_error is not None
+    raise last_error
