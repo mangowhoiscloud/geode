@@ -22,7 +22,7 @@ class TestDryRunResult:
     def test_cowboy_bebop_quality(self):
         result = _dry_run_result("quality_judge", "Cowboy Bebop")
         assert result.evaluator_type == "quality_judge"
-        assert result.composite_score == 82.0
+        assert result.composite_score == 81.25  # (sum/8)*20
         assert "a_score" in result.axes
         assert len(result.axes) == 8  # Full 8-axis
 
@@ -32,12 +32,12 @@ class TestDryRunResult:
 
     def test_berserk_quality_s_tier(self):
         result = _dry_run_result("quality_judge", "Berserk")
-        assert result.composite_score == 80.0
+        assert result.composite_score == 80.25  # (sum/8)*20
         assert len(result.axes) == 8
 
     def test_berserk_momentum(self):
         result = _dry_run_result("community_momentum", "Berserk")
-        assert result.composite_score == 92.0
+        assert result.composite_score == 90.83  # (J+K+L-3)/12*100
 
     def test_ghost_hidden_low(self):
         result = _dry_run_result("hidden_value", "Ghost in the Shell")
@@ -54,7 +54,7 @@ class TestDryRunResult:
 
     def test_unknown_ip_falls_back(self):
         result = _dry_run_result("quality_judge", "Unknown")
-        assert result.composite_score == 82.0  # Cowboy Bebop default
+        assert result.composite_score == 81.25  # Cowboy Bebop default
 
 
 class TestFormatAxesSchema:

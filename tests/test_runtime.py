@@ -1,0 +1,274 @@
+"""Tests for GeodeRuntime — production wiring integration."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from geode.memory.session import InMemorySessionStore
+from geode.orchestration.coalescing import CoalescingQueue
+from geode.orchestration.hooks import HookEvent, HookSystem
+from geode.orchestration.hot_reload import ConfigWatcher
+from geode.orchestration.lane_queue import LaneQueue
+from geode.orchestration.run_log import RunLog
+from geode.orchestration.stuck_detection import StuckDetector
+from geode.runtime import (
+    GeodeRuntime,
+    _build_default_lanes,
+    _build_default_policies,
+    _build_default_registry,
+    _make_run_log_handler,
+)
+from geode.tools.policy import PolicyChain
+from geode.tools.registry import ToolRegistry
+
+
+class TestGeodeRuntimeCreate:
+    def test_create_basic(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        assert runtime.ip_name == "Berserk"
+        assert runtime.session_key == "ip:berserk:analysis"
+        assert isinstance(runtime.hooks, HookSystem)
+        assert isinstance(runtime.session_store, InMemorySessionStore)
+        assert isinstance(runtime.policy_chain, PolicyChain)
+        assert isinstance(runtime.tool_registry, ToolRegistry)
+        assert isinstance(runtime.run_log, RunLog)
+
+    def test_create_custom_phase(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Cowboy Bebop", phase="scoring", log_dir=tmp_path)
+        assert runtime.session_key == "ip:cowboy_bebop:scoring"
+
+    def test_thread_config(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        config = runtime.thread_config
+        assert config == {"configurable": {"thread_id": "ip:berserk:analysis"}}
+
+
+class TestRuntimeHooksRunLog:
+    def test_hooks_write_to_run_log(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+
+        # Trigger a pipeline event
+        runtime.hooks.trigger(
+            HookEvent.NODE_ENTER,
+            {"node": "cortex", "ip_name": "Berserk"},
+        )
+        runtime.hooks.trigger(
+            HookEvent.NODE_EXIT,
+            {"node": "cortex", "ip_name": "Berserk", "duration_ms": 42.0},
+        )
+
+        # Verify entries written to run log
+        entries = runtime.run_log.read(limit=10)
+        assert len(entries) == 2
+        assert entries[0].event == "node_exit"
+        assert entries[0].node == "cortex"
+        assert entries[0].duration_ms == 42.0
+        assert entries[1].event == "node_enter"
+
+    def test_all_hook_events_logged(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+
+        # Trigger each event type
+        for event in HookEvent:
+            runtime.hooks.trigger(event, {"node": "test"})
+
+        entries = runtime.run_log.read(limit=30)
+        # 16 direct events + 1 cascading SNAPSHOT_CAPTURED from drift→auto-snapshot chain
+        assert len(entries) >= len(HookEvent)
+
+    def test_error_events_logged_with_error_status(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+
+        runtime.hooks.trigger(
+            HookEvent.NODE_ERROR,
+            {"node": "cortex", "error": "connection timeout"},
+        )
+
+        entries = runtime.run_log.read(limit=1)
+        assert len(entries) == 1
+        assert entries[0].status == "error"
+        assert entries[0].event == "node_error"
+
+
+class TestRuntimeSessionStore:
+    def test_store_and_retrieve(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+
+        runtime.store_session_data({"ip_name": "Berserk", "mode": "full_pipeline"})
+        data = runtime.get_session_data()
+        assert data is not None
+        assert data["ip_name"] == "Berserk"
+
+    def test_no_session_returns_none(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        assert runtime.get_session_data() is None
+
+
+class TestRuntimePolicyChain:
+    def test_dry_run_blocks_llm_tools(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+
+        full_tools = runtime.get_available_tools(mode="full_pipeline")
+        dry_tools = runtime.get_available_tools(mode="dry_run")
+
+        assert "run_analyst" in full_tools
+        assert "run_evaluator" in full_tools
+        assert "psm_calculate" in full_tools
+
+        assert "run_analyst" not in dry_tools
+        assert "run_evaluator" not in dry_tools
+        assert "psm_calculate" in dry_tools
+
+    def test_full_pipeline_allows_all(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        tools = runtime.get_available_tools(mode="full_pipeline")
+        assert len(tools) == 3
+
+
+class TestRuntimeToolRegistry:
+    def test_registry_has_all_tools(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        assert len(runtime.tool_registry) == 3
+        assert "run_analyst" in runtime.tool_registry
+        assert "run_evaluator" in runtime.tool_registry
+        assert "psm_calculate" in runtime.tool_registry
+
+
+class TestRuntimeCompileGraph:
+    def test_compile_without_checkpoint(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        graph = runtime.compile_graph()
+        assert graph is not None
+
+    def test_compile_with_checkpoint(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        graph = runtime.compile_graph(enable_checkpoint=True)
+        assert graph is not None
+
+
+class TestRunLogPruning:
+    def test_prune_logs(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        # Just verify it doesn't error on empty log
+        removed = runtime.prune_logs()
+        assert removed == 0
+
+
+class TestDefaultBuilders:
+    def test_default_policies(self):
+        chain = _build_default_policies()
+        assert len(chain.list_policies()) == 1
+        assert chain.is_allowed("psm_calculate", mode="dry_run") is True
+        assert chain.is_allowed("run_analyst", mode="dry_run") is False
+
+    def test_default_registry(self):
+        registry = _build_default_registry()
+        assert len(registry) == 3
+
+    def test_make_run_log_handler(self, tmp_path: Path):
+        run_log = RunLog("test_session", log_dir=tmp_path)
+        name, handler = _make_run_log_handler(run_log, "test_session", "run-001")
+        assert name == "run_log_writer"
+
+        handler(HookEvent.PIPELINE_START, {"node": "router"})
+        entries = run_log.read(limit=1)
+        assert len(entries) == 1
+        assert entries[0].event == "pipeline_start"
+
+    def test_default_lanes(self):
+        queue = _build_default_lanes()
+        assert "session" in queue.list_lanes()
+        assert "global" in queue.list_lanes()
+        session = queue.get_lane("session")
+        assert session is not None and session.max_concurrent == 1
+        global_lane = queue.get_lane("global")
+        assert global_lane is not None and global_lane.max_concurrent == 4
+
+
+class TestRuntimeNewComponents:
+    def test_coalescing_wired(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        assert isinstance(runtime.coalescing, CoalescingQueue)
+
+    def test_config_watcher_wired(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        assert isinstance(runtime.config_watcher, ConfigWatcher)
+
+    def test_stuck_detector_wired(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        assert isinstance(runtime.stuck_detector, StuckDetector)
+
+    def test_lane_queue_wired(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        assert isinstance(runtime.lane_queue, LaneQueue)
+        assert "session" in runtime.lane_queue.list_lanes()
+        assert "global" in runtime.lane_queue.list_lanes()
+
+    def test_stuck_detector_hooks_wired(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+
+        # Trigger PIPELINE_START → should mark running
+        runtime.hooks.trigger(
+            HookEvent.PIPELINE_START,
+            {"node": "router", "ip_name": "Berserk"},
+        )
+        assert runtime.stuck_detector.running_count == 1
+
+        # Trigger PIPELINE_END → should mark completed
+        runtime.hooks.trigger(
+            HookEvent.PIPELINE_END,
+            {"node": "synthesizer", "ip_name": "Berserk"},
+        )
+        assert runtime.stuck_detector.running_count == 0
+
+    def test_shutdown(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime.shutdown()  # Should not raise
+
+class TestGetHealth:
+    def test_get_health_has_all_components(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        health = runtime.get_health()
+        assert health["ip_name"] == "Berserk"
+        assert "drift" in health
+        assert "model_registry" in health
+        assert "expert_panel" in health
+        assert "correlation" in health
+        assert "outcome_tracker" in health
+        assert "triggers" in health
+        assert "feedback_loop" in health
+        assert "stuck_tasks" in health
+        assert "scheduler_running" in health
+
+    def test_get_health_stats_types(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        health = runtime.get_health()
+        assert isinstance(health["drift"], dict)
+        assert isinstance(health["model_registry"], dict)
+        assert isinstance(health["stuck_tasks"], int)
+
+
+class TestReactiveChains:
+    def test_drift_triggers_snapshot(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        initial_snaps = runtime.snapshot_manager.list_snapshots()
+
+        runtime.hooks.trigger(
+            HookEvent.DRIFT_DETECTED,
+            {"metric": "spearman_rho", "severity": "warning"},
+        )
+
+        after_snaps = runtime.snapshot_manager.list_snapshots()
+        assert len(after_snaps) == len(initial_snaps) + 1
+
+    def test_pipeline_end_triggers_snapshot(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        initial_snaps = runtime.snapshot_manager.list_snapshots()
+
+        runtime.hooks.trigger(
+            HookEvent.PIPELINE_END,
+            {"node": "synthesizer", "ip_name": "Berserk"},
+        )
+
+        after_snaps = runtime.snapshot_manager.list_snapshots()
+        assert len(after_snaps) == len(initial_snaps) + 1

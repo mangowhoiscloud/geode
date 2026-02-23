@@ -87,7 +87,9 @@ class TestBuildDryRunSynthesis:
             "ip_info": {"genre": ["action"]},
         }
         result = _build_dry_run_synthesis(
-            state, "undermarketed", "marketing_boost",
+            state,
+            "undermarketed",
+            "marketing_boost",
             "IP 파워 대비 마케팅/노출 절대 부족 — 마케팅 예산 증액",
         )
         assert "12M" in result.value_narrative
@@ -102,7 +104,9 @@ class TestBuildDryRunSynthesis:
             "ip_info": {"genre": ["dark fantasy"]},
         }
         result = _build_dry_run_synthesis(
-            state, "niche_gem", "platform_expansion",
+            state,
+            "niche_gem",
+            "platform_expansion",
             "품질 좋으나 확장 미진출 상태 — 플랫폼 확장",
         )
         assert "Dark Fantasy" in result.target_gamer_segment

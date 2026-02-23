@@ -18,10 +18,9 @@ class MockLLM:
         self.calls.append((system, user))
         return self._response
 
-    def complete_json(
-        self, system: str, user: str, *, temperature: float = 0.3
-    ) -> dict[str, Any]:
+    def complete_json(self, system: str, user: str, *, temperature: float = 0.3) -> dict[str, Any]:
         import json
+
         self.calls.append((system, user))
         return json.loads(self._response)
 

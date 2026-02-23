@@ -57,9 +57,14 @@ class TestEvaluatorResult:
         r = EvaluatorResult(
             evaluator_type="quality_judge",
             axes={
-                "a_score": 4.0, "b_score": 3.5, "c_score": 4.1,
-                "b1_score": 3.9, "c1_score": 4.0, "c2_score": 3.8,
-                "m_score": 3.8, "n_score": 4.0,
+                "a_score": 4.0,
+                "b_score": 3.5,
+                "c_score": 4.1,
+                "b1_score": 3.9,
+                "c1_score": 4.0,
+                "c2_score": 3.8,
+                "m_score": 3.8,
+                "n_score": 4.0,
             },
             composite_score=82.0,
             rationale="Full 8-axis evaluation",
@@ -190,7 +195,7 @@ class TestSynthesisResult:
         """Verify all 6 cause → 5 action pairs from §13.9.3."""
         pairs = [
             ("undermarketed", "marketing_boost"),
-            ("conversion_failure", "marketing_boost"),
+            ("conversion_failure", "monetization_pivot"),
             ("monetization_misfit", "monetization_pivot"),
             ("niche_gem", "platform_expansion"),
             ("timing_mismatch", "timing_optimization"),
