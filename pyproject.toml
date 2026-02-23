@@ -5,16 +5,17 @@ description = "GEODE — Undervalued IP Discovery Agent CLI Demo"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "typer>=0.15.0",
-    "rich>=13.9.0",
-    "langgraph>=0.4.0",
-    "langgraph-checkpoint-sqlite>=2.0.0",
-    "anthropic>=0.42.0",
-    "openai>=1.60.0",
+    "anthropic>=0.80.0",
+    "langgraph>=1.0.0",
+    "langgraph-checkpoint-sqlite>=3.0.0",
+    "numpy>=2.2.0",
+    "openai>=2.0.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "python-dotenv>=1.0.0",
-    "numpy>=2.2.0",
+    "rich>=14.0.0",
+    "simple-term-menu>=1.6.0",
+    "typer>=0.15.0",
 ]
 
 [project.scripts]
