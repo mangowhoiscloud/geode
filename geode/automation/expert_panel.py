@@ -323,3 +323,50 @@ class ExpertPanel:
             raise KeyError(f"Expert '{expert_id}' not found")
         expert.agreement_score = agreement_score
         expert.tier = classify_expert_tier(agreement_score)
+
+
+def create_pipeline_panel() -> ExpertPanel:
+    """Factory: create an ExpertPanel pre-configured for GEODE pipeline verification.
+
+    Returns a panel with three default expert slots corresponding to
+    the GEODE architecture-v6 evaluation dimensions:
+
+    - quality_expert: Evaluates game quality signals (art, gameplay, audio).
+    - market_expert: Evaluates market potential and community momentum.
+    - technical_expert: Evaluates technical health, platform, and developer track record.
+
+    These slots can be replaced or augmented with real expert profiles
+    before collecting ratings.
+
+    Usage:
+        panel = create_pipeline_panel()
+        panel.collect_ratings("berserk", {"quality_expert": 4.2, "market_expert": 3.8})
+    """
+    panel = ExpertPanel()
+    panel.add_expert(Expert(
+        expert_id="quality_expert",
+        name="Quality Expert",
+        domain="game_quality",
+        agreement_score=0.85,
+        tier=ExpertTier.TIER_3,
+    ))
+    panel.add_expert(Expert(
+        expert_id="market_expert",
+        name="Market Expert",
+        domain="market_analysis",
+        agreement_score=0.75,
+        tier=ExpertTier.TIER_2,
+    ))
+    panel.add_expert(Expert(
+        expert_id="technical_expert",
+        name="Technical Expert",
+        domain="technical_health",
+        agreement_score=0.70,
+        tier=ExpertTier.TIER_2,
+    ))
+    log.info(
+        "Created pipeline panel with %d experts: %s",
+        len(panel.list_experts()),
+        [e.expert_id for e in panel.list_experts()],
+    )
+    return panel

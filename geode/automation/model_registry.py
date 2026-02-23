@@ -189,6 +189,61 @@ class ModelRegistry:
         log.info("Registered model version: %s", version_id)
         return version
 
+    # Default minimum metric thresholds for gated promotion stages
+    DEFAULT_METRIC_GATES: dict[PromotionStage, dict[str, float]] = {
+        PromotionStage.CANARY: {
+            "spearman_rho": 0.40,
+            "precision_at_k": 0.50,
+        },
+        PromotionStage.PROD: {
+            "spearman_rho": 0.55,
+            "precision_at_k": 0.60,
+        },
+    }
+
+    @staticmethod
+    def _default_validation(
+        version: ModelVersion,
+        target_stage: PromotionStage,
+        gates: dict[PromotionStage, dict[str, float]],
+    ) -> bool:
+        """Default validation: check version metrics against stage thresholds.
+
+        Returns True if all metric gates pass, or True if the stage has
+        no gates defined, or True (with warning) if no metrics are recorded.
+        """
+        thresholds = gates.get(target_stage)
+        if thresholds is None:
+            return True
+
+        if not version.metrics:
+            log.warning(
+                "No metrics recorded for %s — skipping metric gate for %s promotion",
+                version.version_id,
+                target_stage.value,
+            )
+            return True
+
+        for metric_name, min_value in thresholds.items():
+            actual = version.metrics.get(metric_name)
+            if actual is None:
+                log.warning(
+                    "Metric '%s' not found in %s metrics — gate skipped",
+                    metric_name,
+                    version.version_id,
+                )
+                continue
+            if actual < min_value:
+                log.warning(
+                    "Metric gate failed: %s=%s < %s (required for %s)",
+                    metric_name,
+                    actual,
+                    min_value,
+                    target_stage.value,
+                )
+                return False
+        return True
+
     def promote(
         self,
         version_id: str,
@@ -196,7 +251,13 @@ class ModelRegistry:
         *,
         validation_fn: Callable[[ModelVersion], bool] | None = None,
     ) -> ModelVersion:
-        """Promote a model version to a new stage."""
+        """Promote a model version to a new stage.
+
+        When no ``validation_fn`` is provided and the target stage is
+        CANARY or PROD, a default metric gate check is applied using
+        ``DEFAULT_METRIC_GATES``.  If no metrics are recorded on the
+        version, a warning is logged and promotion proceeds.
+        """
         with self._lock:
             version = self._versions.get(version_id)
             if version is None:
@@ -209,12 +270,19 @@ class ModelRegistry:
                     f"Valid: {[s.value for s in valid]}"
                 )
 
-            # Optional validation gate (e.g., metric thresholds)
-            if validation_fn is not None and not validation_fn(version):
-                raise ValueError(
-                    f"Validation gate failed for {version_id}: "
-                    f"cannot promote to {target_stage.value}"
-                )
+            # Validation gate: use caller's function or default metric gate
+            if validation_fn is not None:
+                if not validation_fn(version):
+                    raise ValueError(
+                        f"Validation gate failed for {version_id}: "
+                        f"cannot promote to {target_stage.value}"
+                    )
+            elif target_stage in self.DEFAULT_METRIC_GATES:
+                if not self._default_validation(version, target_stage, self.DEFAULT_METRIC_GATES):
+                    raise ValueError(
+                        f"Default metric gate failed for {version_id}: "
+                        f"cannot promote to {target_stage.value}"
+                    )
 
             old_stage = version.stage
             version.stage = target_stage

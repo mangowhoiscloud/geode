@@ -16,8 +16,8 @@ from typing import Any
 from geode.config import settings
 from geode.llm.client import (
     LLMUsage,
-    _calculate_cost,
-    _usage_accumulator,
+    calculate_cost,
+    get_usage_accumulator,
 )
 
 log = logging.getLogger(__name__)
@@ -87,11 +87,11 @@ class OpenAIAdapter:
             if response.usage:
                 in_tok = response.usage.prompt_tokens
                 out_tok = response.usage.completion_tokens or 0
-                cost = _calculate_cost(model, in_tok, out_tok)
+                cost = calculate_cost(model, in_tok, out_tok)
                 usage = LLMUsage(
                     model=model, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost
                 )
-                _usage_accumulator.record(usage)
+                get_usage_accumulator().record(usage)
                 log.debug(
                     "OpenAI usage: model=%s in=%d out=%d cost=$%.4f",
                     model,

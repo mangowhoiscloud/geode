@@ -231,23 +231,19 @@ class GeodeRuntime:
         self.organization_memory = organization_memory
         self.context_assembler = context_assembler
 
-    @classmethod
-    def create(
-        cls,
-        ip_name: str,
-        *,
-        phase: str = "analysis",
-        enable_checkpoint: bool = True,
-        log_dir: Path | str | None = None,
-        session_ttl: float = DEFAULT_SESSION_TTL,
-        stuck_timeout_s: float = DEFAULT_STUCK_TIMEOUT_S,
-    ) -> GeodeRuntime:
-        """Factory method — create a fully wired runtime for an IP analysis."""
-        # Session key + run ID
-        session_key = build_session_key(ip_name, phase)
-        run_id = uuid.uuid4().hex[:12]
+    # ------------------------------------------------------------------
+    # Sub-builders for create() decomposition
+    # ------------------------------------------------------------------
 
-        # Hook system
+    @staticmethod
+    def _build_hooks(
+        *,
+        session_key: str,
+        run_id: str,
+        log_dir: Path | str | None,
+        stuck_timeout_s: float,
+    ) -> tuple[HookSystem, RunLog, StuckDetector]:
+        """Build HookSystem with RunLog and StuckDetector handlers."""
         hooks = HookSystem()
 
         # Run log + hook handler
@@ -262,30 +258,176 @@ class GeodeRuntime:
         for event in (HookEvent.PIPELINE_START, HookEvent.PIPELINE_END, HookEvent.PIPELINE_ERROR):
             hooks.register(event, stuck_fn, name=stuck_name, priority=40)
 
-        # Session store
-        session_store: SessionStorePort = InMemorySessionStore(ttl=session_ttl)
+        return hooks, run_log, stuck_detector
 
-        # Wire HybridSessionStore if redis/postgres URLs configured
-        if settings.redis_url or settings.postgres_url:
-            from geode.memory.hybrid_session import (
-                HybridSessionStore,
-                PostgreSQLSessionStore,
-                RedisSessionStore,
+    @staticmethod
+    def _build_memory(
+        *,
+        session_store: SessionStorePort,
+    ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler]:
+        """Build L2 memory components: project, organization, and context assembler."""
+        project_memory = ProjectMemory()
+
+        org_dir = settings.organization_fixture_dir
+        fixture_dir = Path(org_dir) if org_dir else None
+        organization_memory = MonoLakeOrganizationMemory(fixture_dir=fixture_dir)
+
+        context_assembler = ContextAssembler(
+            organization_memory=organization_memory,
+            project_memory=project_memory,
+            session_store=session_store,
+        )
+
+        # Wire ContextAssembler into cortex node (L2 → L3 bridge)
+        from geode.nodes.cortex import set_context_assembler
+
+        set_context_assembler(context_assembler)
+
+        return project_memory, organization_memory, context_assembler
+
+    @staticmethod
+    def _build_automation(
+        *,
+        hooks: HookSystem,
+        session_key: str,
+        ip_name: str,
+    ) -> dict[str, Any]:
+        """Build L4.5 automation components and wire hook event handlers.
+
+        Returns a dict of component name → instance for passing to the constructor.
+        """
+        # Drift detector (CUSUM)
+        drift_detector = CUSUMDetector()
+
+        # Model registry (file-based)
+        model_registry_dir = Path(settings.model_registry_dir)
+        reg_dir = model_registry_dir if model_registry_dir.name != "" else None
+        model_registry = ModelRegistry(storage_dir=reg_dir, hooks=hooks)
+
+        # Expert panel
+        expert_panel = ExpertPanel()
+
+        # Correlation analyzer
+        correlation_analyzer = CorrelationAnalyzer()
+
+        # Outcome tracker
+        outcome_tracker = OutcomeTracker(hooks=hooks)
+
+        # Snapshot manager
+        snapshot_dir = Path(settings.snapshot_dir) if settings.snapshot_dir else None
+        snapshot_manager = SnapshotManager(
+            storage_dir=snapshot_dir,
+            max_recent=settings.snapshot_max_recent,
+            hooks=hooks,
+        )
+
+        # Trigger manager (auto-start scheduler for cron-based triggers)
+        trigger_manager = TriggerManager(
+            scheduler_interval_s=settings.trigger_scheduler_interval_s,
+            hooks=hooks,
+        )
+        trigger_manager.start_scheduler()
+
+        # Feedback loop (wires all L4.5 components + hooks)
+        feedback_loop = FeedbackLoop(
+            model_registry=model_registry,
+            expert_panel=expert_panel,
+            correlation_analyzer=correlation_analyzer,
+            drift_detector=drift_detector,
+            hooks=hooks,
+        )
+
+        # --- Hook wiring for L4.5 events ---
+
+        def _on_drift(event: HookEvent, data: dict[str, Any]) -> None:
+            log.info("Drift detected: %s", data)
+
+        hooks.register(HookEvent.DRIFT_DETECTED, _on_drift, name="drift_logger", priority=90)
+
+        def _on_snapshot(event: HookEvent, data: dict[str, Any]) -> None:
+            log.info("Snapshot captured: %s", data.get("snapshot_id", ""))
+
+        hooks.register(
+            HookEvent.SNAPSHOT_CAPTURED, _on_snapshot, name="snapshot_logger", priority=90,
+        )
+
+        def _on_trigger(event: HookEvent, data: dict[str, Any]) -> None:
+            log.info("Trigger fired: %s", data.get("trigger_id", ""))
+
+        hooks.register(HookEvent.TRIGGER_FIRED, _on_trigger, name="trigger_logger", priority=90)
+
+        def _on_outcome(event: HookEvent, data: dict[str, Any]) -> None:
+            log.info("Outcome collected: cycle=%s", data.get("cycle_id", ""))
+
+        hooks.register(
+            HookEvent.OUTCOME_COLLECTED, _on_outcome, name="outcome_logger", priority=90,
+        )
+
+        def _on_model_promoted(event: HookEvent, data: dict[str, Any]) -> None:
+            log.info(
+                "Model promoted: %s → %s",
+                data.get("version_id", ""), data.get("stage", ""),
             )
 
-            l1 = RedisSessionStore(ttl_hours=settings.session_ttl_hours)
-            pg_path = settings.postgres_url or ".geode/sessions"
-            pg_dir = Path(pg_path)
-            l2 = PostgreSQLSessionStore(storage_dir=pg_dir)
-            session_store = HybridSessionStore(l1=l1, l2=l2)
+        hooks.register(
+            HookEvent.MODEL_PROMOTED, _on_model_promoted,
+            name="model_promotion_logger", priority=90,
+        )
 
-        # Policy chain
-        policy_chain = _build_default_policies()
+        # Reactive chain: drift → auto-snapshot for debugging
+        def _on_drift_snapshot(event: HookEvent, data: dict[str, Any]) -> None:
+            if snapshot_manager:
+                snapshot_manager.capture(
+                    session_key,
+                    pipeline_state={"trigger": "drift_detected", "alerts": data},
+                    context={"ip_name": ip_name},
+                )
 
-        # Tool registry
-        tool_registry = _build_default_registry()
+        hooks.register(
+            HookEvent.DRIFT_DETECTED, _on_drift_snapshot,
+            name="drift_auto_snapshot", priority=80,
+        )
 
-        # Auth profile system (OpenClaw Auth Profile Rotation)
+        # Wire TriggerManager → pipeline integration
+        trigger_manager.register_pipeline_trigger(
+            trigger_id="drift-reanalysis",
+            ip_name=ip_name,
+            trigger_type=TriggerType.EVENT,
+        )
+        drift_trigger_handler = trigger_manager.make_event_handler("drift-reanalysis")
+        hooks.register(
+            HookEvent.DRIFT_DETECTED, drift_trigger_handler,
+            name="drift_pipeline_trigger", priority=70,
+        )
+
+        # Reactive chain: pipeline end → auto-snapshot for reproducibility
+        def _on_pipeline_end_snapshot(event: HookEvent, data: dict[str, Any]) -> None:
+            if snapshot_manager:
+                snapshot_manager.capture(
+                    session_key,
+                    pipeline_state=data,
+                    context={"ip_name": ip_name},
+                )
+
+        hooks.register(
+            HookEvent.PIPELINE_END, _on_pipeline_end_snapshot,
+            name="pipeline_end_snapshot", priority=80,
+        )
+
+        return {
+            "drift_detector": drift_detector,
+            "model_registry": model_registry,
+            "expert_panel": expert_panel,
+            "correlation_analyzer": correlation_analyzer,
+            "outcome_tracker": outcome_tracker,
+            "snapshot_manager": snapshot_manager,
+            "trigger_manager": trigger_manager,
+            "feedback_loop": feedback_loop,
+        }
+
+    @staticmethod
+    def _build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
+        """Build auth profile system with API key profiles."""
         from geode.auth.profiles import AuthProfile, CredentialType
 
         profile_store = ProfileStore()
@@ -309,6 +451,67 @@ class GeodeRuntime:
             )
         profile_rotator = ProfileRotator(profile_store)
         cooldown_tracker = CooldownTracker()
+
+        return profile_store, profile_rotator, cooldown_tracker
+
+    # ------------------------------------------------------------------
+    # Factory method
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def create(
+        cls,
+        ip_name: str,
+        *,
+        phase: str = "analysis",
+        enable_checkpoint: bool = True,
+        log_dir: Path | str | None = None,
+        session_ttl: float = DEFAULT_SESSION_TTL,
+        stuck_timeout_s: float = DEFAULT_STUCK_TIMEOUT_S,
+    ) -> GeodeRuntime:
+        """Factory method — create a fully wired runtime for an IP analysis.
+
+        Composed from sub-builders:
+        - _build_hooks(): HookSystem, RunLog, StuckDetector
+        - _build_auth(): ProfileStore, ProfileRotator, CooldownTracker
+        - _build_memory(): ProjectMemory, OrganizationMemory, ContextAssembler
+        - _build_automation(): Drift, ModelRegistry, ExpertPanel, etc.
+        """
+        # Session key + run ID
+        session_key = build_session_key(ip_name, phase)
+        run_id = uuid.uuid4().hex[:12]
+
+        # Hooks subsystem
+        hooks, run_log, stuck_detector = cls._build_hooks(
+            session_key=session_key,
+            run_id=run_id,
+            log_dir=log_dir,
+            stuck_timeout_s=stuck_timeout_s,
+        )
+
+        # Session store
+        session_store: SessionStorePort = InMemorySessionStore(ttl=session_ttl)
+
+        # Wire HybridSessionStore if redis/postgres URLs configured
+        if settings.redis_url or settings.postgres_url:
+            from geode.memory.hybrid_session import (
+                HybridSessionStore,
+                PostgreSQLSessionStore,
+                RedisSessionStore,
+            )
+
+            l1 = RedisSessionStore(ttl_hours=settings.session_ttl_hours)
+            pg_path = settings.postgres_url or ".geode/sessions"
+            pg_dir = Path(pg_path)
+            l2 = PostgreSQLSessionStore(storage_dir=pg_dir)
+            session_store = HybridSessionStore(l1=l1, l2=l2)
+
+        # Policy chain + Tool registry
+        policy_chain = _build_default_policies()
+        tool_registry = _build_default_registry()
+
+        # Auth subsystem
+        profile_store, profile_rotator, cooldown_tracker = cls._build_auth()
 
         # LLM adapters (Clean Architecture port/adapter)
         llm_adapter: LLMClientPort = ClaudeAdapter()
@@ -379,148 +582,16 @@ class GeodeRuntime:
         # Lane queue (session serial + global concurrency)
         lane_queue = _build_default_lanes()
 
-        # Project memory (L2 — .claude/MEMORY.md + rules/)
-        project_memory = ProjectMemory()
-
-        # --- L4.5 Automation Components ---
-
-        # Drift detector (CUSUM)
-        drift_detector = CUSUMDetector()
-
-        # Model registry (file-based)
-        model_registry_dir = Path(settings.model_registry_dir)
-        reg_dir = model_registry_dir if model_registry_dir.name != "" else None
-        model_registry = ModelRegistry(storage_dir=reg_dir, hooks=hooks)
-
-        # Expert panel
-        expert_panel = ExpertPanel()
-
-        # Correlation analyzer
-        correlation_analyzer = CorrelationAnalyzer()
-
-        # Outcome tracker
-        outcome_tracker = OutcomeTracker(hooks=hooks)
-
-        # Snapshot manager
-        snapshot_dir = Path(settings.snapshot_dir) if settings.snapshot_dir else None
-        snapshot_manager = SnapshotManager(
-            storage_dir=snapshot_dir,
-            max_recent=settings.snapshot_max_recent,
-            hooks=hooks,
-        )
-
-        # Trigger manager (auto-start scheduler for cron-based triggers)
-        trigger_manager = TriggerManager(
-            scheduler_interval_s=settings.trigger_scheduler_interval_s,
-            hooks=hooks,
-        )
-        trigger_manager.start_scheduler()
-
-        # Feedback loop (wires all L4.5 components + hooks)
-        feedback_loop = FeedbackLoop(
-            model_registry=model_registry,
-            expert_panel=expert_panel,
-            correlation_analyzer=correlation_analyzer,
-            drift_detector=drift_detector,
-            hooks=hooks,
-        )
-
-        # --- L2 Memory Components ---
-
-        # Organization memory (fixture-based)
-        org_dir = settings.organization_fixture_dir
-        fixture_dir = Path(org_dir) if org_dir else None
-        organization_memory = MonoLakeOrganizationMemory(fixture_dir=fixture_dir)
-
-        # Context assembler (3-tier merge)
-        context_assembler = ContextAssembler(
-            organization_memory=organization_memory,
-            project_memory=project_memory,
+        # Memory subsystem
+        project_memory, organization_memory, context_assembler = cls._build_memory(
             session_store=session_store,
         )
 
-        # Wire ContextAssembler into cortex node (L2 → L3 bridge)
-        from geode.nodes.cortex import set_context_assembler
-
-        set_context_assembler(context_assembler)
-
-        # --- Hook wiring for L4.5 events ---
-
-        def _on_drift(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Drift detected: %s", data)
-
-        hooks.register(HookEvent.DRIFT_DETECTED, _on_drift, name="drift_logger", priority=90)
-
-        def _on_snapshot(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Snapshot captured: %s", data.get("snapshot_id", ""))
-
-        hooks.register(
-            HookEvent.SNAPSHOT_CAPTURED, _on_snapshot, name="snapshot_logger", priority=90,
-        )
-
-        def _on_trigger(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Trigger fired: %s", data.get("trigger_id", ""))
-
-        hooks.register(HookEvent.TRIGGER_FIRED, _on_trigger, name="trigger_logger", priority=90)
-
-        def _on_outcome(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Outcome collected: cycle=%s", data.get("cycle_id", ""))
-
-        hooks.register(
-            HookEvent.OUTCOME_COLLECTED, _on_outcome, name="outcome_logger", priority=90,
-        )
-
-        def _on_model_promoted(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info(
-                "Model promoted: %s → %s",
-                data.get("version_id", ""), data.get("stage", ""),
-            )
-
-        hooks.register(
-            HookEvent.MODEL_PROMOTED, _on_model_promoted,
-            name="model_promotion_logger", priority=90,
-        )
-
-        # Reactive chain: drift → auto-snapshot for debugging
-        def _on_drift_snapshot(event: HookEvent, data: dict[str, Any]) -> None:
-            if snapshot_manager:
-                snapshot_manager.capture(
-                    session_key,
-                    pipeline_state={"trigger": "drift_detected", "alerts": data},
-                    context={"ip_name": ip_name},
-                )
-
-        hooks.register(
-            HookEvent.DRIFT_DETECTED, _on_drift_snapshot,
-            name="drift_auto_snapshot", priority=80,
-        )
-
-        # Wire TriggerManager → pipeline integration
-        # Register a drift-triggered re-analysis pipeline trigger
-        trigger_manager.register_pipeline_trigger(
-            trigger_id="drift-reanalysis",
+        # Automation subsystem (L4.5)
+        automation = cls._build_automation(
+            hooks=hooks,
+            session_key=session_key,
             ip_name=ip_name,
-            trigger_type=TriggerType.EVENT,
-        )
-        # Connect drift event → trigger manager for re-analysis scheduling
-        drift_trigger_handler = trigger_manager.make_event_handler("drift-reanalysis")
-        hooks.register(
-            HookEvent.DRIFT_DETECTED, drift_trigger_handler,
-            name="drift_pipeline_trigger", priority=70,
-        )
-
-        # Reactive chain: pipeline end → auto-snapshot for reproducibility
-        def _on_pipeline_end_snapshot(event: HookEvent, data: dict[str, Any]) -> None:
-            if snapshot_manager:
-                snapshot_manager.capture(
-                    session_key,
-                    pipeline_state=data,
-                    context={"ip_name": ip_name},
-                )
-
-        hooks.register(
-            HookEvent.PIPELINE_END, _on_pipeline_end_snapshot,
-            name="pipeline_end_snapshot", priority=80,
         )
 
         log.info(
@@ -549,16 +620,9 @@ class GeodeRuntime:
             project_memory=project_memory,
             session_key=session_key,
             ip_name=ip_name,
-            drift_detector=drift_detector,
-            model_registry=model_registry,
-            expert_panel=expert_panel,
-            correlation_analyzer=correlation_analyzer,
-            outcome_tracker=outcome_tracker,
-            snapshot_manager=snapshot_manager,
-            trigger_manager=trigger_manager,
-            feedback_loop=feedback_loop,
             organization_memory=organization_memory,
             context_assembler=context_assembler,
+            **automation,
         )
         instance.run_id = run_id
         return instance

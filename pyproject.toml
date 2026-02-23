@@ -46,4 +46,4 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false
+disallow_untyped_defs = true

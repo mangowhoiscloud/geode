@@ -6,12 +6,54 @@ to prevent anchoring bias.
 
 from __future__ import annotations
 
-from geode.llm.client import call_llm_json
+import logging
+from typing import Any, Protocol
+
 from geode.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_USER
 from geode.state import AnalysisResult, GeodeState
-from geode.ui.console import console
+
+log = logging.getLogger(__name__)
 
 ANALYST_TYPES = ["game_mechanics", "player_experience", "growth_potential", "discovery"]
+
+
+# ---------------------------------------------------------------------------
+# LLM port injection (Clean Architecture: nodes depend on abstraction)
+# ---------------------------------------------------------------------------
+
+
+class LLMJsonCallable(Protocol):
+    def __call__(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = ...,
+        max_tokens: int = ...,
+        temperature: float = ...,
+    ) -> dict[str, Any]: ...
+
+
+_llm_json: LLMJsonCallable | None = None
+
+
+def set_llm_json(fn: LLMJsonCallable) -> None:
+    """Inject an LLM JSON callable (for testing or alternative providers)."""
+    global _llm_json  # noqa: PLW0603
+    _llm_json = fn
+
+
+def _get_llm_json() -> LLMJsonCallable:
+    if _llm_json is not None:
+        return _llm_json
+    from geode.llm.client import call_llm_json
+
+    return call_llm_json
+
+
+# ---------------------------------------------------------------------------
+# Prompt building
+# ---------------------------------------------------------------------------
 
 
 def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, str]:
@@ -47,12 +89,12 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     """Run a single analyst via Claude API."""
     system, user = _build_analyst_prompt(analyst_type, state)
     if state.get("verbose"):
-        console.print(f"    [muted]Running {analyst_type} analyst...[/muted]")
+        log.debug("Running %s analyst...", analyst_type)
 
     if state.get("dry_run"):
         return _dry_run_result(analyst_type, state.get("ip_name", ""))
 
-    data = call_llm_json(system, user)
+    data = _get_llm_json()(system, user)
     return AnalysisResult(**data)
 
 
@@ -239,9 +281,13 @@ def _dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
 
 def analyst_node(state: GeodeState) -> dict:
     """Run a single analyst. Called via Send API for parallel execution."""
-    analyst_type = state.get("_analyst_type", "narrative")
-    result = _run_analyst(analyst_type, state)
-    return {"analyses": [result]}
+    try:
+        analyst_type = state.get("_analyst_type", "narrative")
+        result = _run_analyst(analyst_type, state)
+        return {"analyses": [result]}
+    except Exception as exc:
+        log.error("Node analyst (%s) failed: %s", state.get("_analyst_type", "?"), exc)
+        return {"analyses": [], "errors": [f"analyst: {exc}"]}
 
 
 def make_analyst_sends(state: GeodeState) -> list:

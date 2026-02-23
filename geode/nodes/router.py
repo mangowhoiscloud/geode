@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import logging
+
 from geode.state import GeodeState
+
+log = logging.getLogger(__name__)
 
 
 def router_node(state: GeodeState) -> dict:
     """Set pipeline mode (defaults to full_pipeline)."""
-    mode = state.get("pipeline_mode", "full_pipeline")
-    return {"pipeline_mode": mode}
+    try:
+        mode = state.get("pipeline_mode", "full_pipeline")
+        return {"pipeline_mode": mode}
+    except Exception as exc:
+        log.error("Node router failed: %s", exc)
+        return {"errors": [f"router: {exc}"]}
 
 
 def route_after_router(state: GeodeState) -> str:

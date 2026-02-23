@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+
+
+def _hash_prompt(text: str) -> str:
+    """Return first 12 chars of SHA-256 hash for prompt versioning."""
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
+
 # ---------------------------------------------------------------------------
 # Analyst Prompts (Layer 3) — Clean Context, no cross-analyst data
 # ---------------------------------------------------------------------------
@@ -280,3 +287,18 @@ Check for biases in this analysis of: {ip_name}
 
 Were the analysts properly isolated (Clean Context)?
 Is there evidence of confirmation, recency, or anchoring bias?"""
+
+# ---------------------------------------------------------------------------
+# Prompt Versioning — SHA-256 hashes for reproducibility auditing
+# ---------------------------------------------------------------------------
+
+PROMPT_VERSIONS: dict[str, str] = {
+    "ANALYST_SYSTEM": _hash_prompt(ANALYST_SYSTEM),
+    "ANALYST_USER": _hash_prompt(ANALYST_USER),
+    "EVALUATOR_SYSTEM": _hash_prompt(EVALUATOR_SYSTEM),
+    "EVALUATOR_USER": _hash_prompt(EVALUATOR_USER),
+    "SYNTHESIZER_SYSTEM": _hash_prompt(SYNTHESIZER_SYSTEM),
+    "SYNTHESIZER_USER": _hash_prompt(SYNTHESIZER_USER),
+    "BIASBUSTER_SYSTEM": _hash_prompt(BIASBUSTER_SYSTEM),
+    "BIASBUSTER_USER": _hash_prompt(BIASBUSTER_USER),
+}

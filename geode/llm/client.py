@@ -9,6 +9,7 @@ Failover strategy (OpenClaw-inspired 4-stage):
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import re
@@ -84,25 +85,29 @@ class LLMUsageAccumulator:
         }
 
 
-def _calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Calculate cost in USD for a given model and token counts."""
     prices = MODEL_PRICING.get(model, {})
     return input_tokens * prices.get("input", 0) + output_tokens * prices.get("output", 0)
 
 
-# Module-level accumulator for the current pipeline run
-_usage_accumulator = LLMUsageAccumulator()
+# Backward-compatible alias for internal callers
+_calculate_cost = calculate_cost
+
+# Thread-safe usage accumulator via contextvars
+_usage_ctx: contextvars.ContextVar[LLMUsageAccumulator] = contextvars.ContextVar(
+    "llm_usage", default=LLMUsageAccumulator()
+)
 
 
 def get_usage_accumulator() -> LLMUsageAccumulator:
-    """Get the module-level usage accumulator."""
-    return _usage_accumulator
+    """Get the context-local usage accumulator (thread-safe)."""
+    return _usage_ctx.get()
 
 
 def reset_usage_accumulator() -> None:
-    """Reset the module-level usage accumulator."""
-    global _usage_accumulator
-    _usage_accumulator = LLMUsageAccumulator()
+    """Reset the context-local usage accumulator."""
+    _usage_ctx.set(LLMUsageAccumulator())
 
 
 # Failover configuration
@@ -191,10 +196,19 @@ def call_llm(
     model: str | None = None,
     max_tokens: int = 4096,
     temperature: float = 0.3,
+    seed: int | None = None,
 ) -> str:
-    """Synchronous Claude call with failover. Returns text content."""
+    """Synchronous Claude call with failover. Returns text content.
+
+    Args:
+        seed: Optional seed for reproducibility tracking. Logged for auditing
+            but not passed to the Anthropic API (not supported by SDK).
+    """
     client = get_anthropic_client()
     target_model = model or settings.model
+
+    if seed is not None:
+        log.info("Reproducibility seed=%d requested (logged for auditing)", seed)
 
     _last_usage: dict[str, Any] = {}
 
@@ -210,14 +224,14 @@ def call_llm(
         if hasattr(response, "usage") and response.usage:
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            cost = _calculate_cost(model, in_tok, out_tok)
+            cost = calculate_cost(model, in_tok, out_tok)
             usage = LLMUsage(
                 model=model,
                 input_tokens=in_tok,
                 output_tokens=out_tok,
                 cost_usd=cost,
             )
-            _usage_accumulator.record(usage)
+            _usage_ctx.get().record(usage)
             _last_usage["value"] = usage
             log.debug(
                 "LLM usage: model=%s in=%d out=%d cost=$%.4f",
@@ -242,9 +256,12 @@ def call_llm_json(
     model: str | None = None,
     max_tokens: int = 4096,
     temperature: float = 0.3,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Claude call that parses JSON from the response. Includes failover."""
-    raw = call_llm(system, user, model=model, max_tokens=max_tokens, temperature=temperature)
+    raw = call_llm(
+        system, user, model=model, max_tokens=max_tokens, temperature=temperature, seed=seed
+    )
     # Strip markdown code fences if present (handles ```json, ``` with trailing spaces, etc.)
     text = raw.strip()
     text = re.sub(r"^```\w*\s*\n", "", text)
@@ -261,7 +278,11 @@ def call_llm_streaming(
     max_tokens: int = 4096,
     temperature: float = 0.3,
 ) -> Iterator[str]:
-    """Streaming Claude call with failover. Yields text deltas."""
+    """Streaming Claude call with failover. Yields text deltas.
+
+    Token usage is captured from the stream's final message and recorded
+    to the context-local accumulator after the stream completes.
+    """
     client = get_anthropic_client()
     target_model = model or settings.model
 
@@ -274,6 +295,27 @@ def call_llm_streaming(
             messages=[{"role": "user", "content": user}],
         ) as stream:
             yield from stream.text_stream
+
+            # Capture token usage from the stream's final response
+            final = stream.get_final_message()
+            if final and hasattr(final, "usage") and final.usage:
+                in_tok = final.usage.input_tokens
+                out_tok = final.usage.output_tokens
+                cost = calculate_cost(model, in_tok, out_tok)
+                usage = LLMUsage(
+                    model=model,
+                    input_tokens=in_tok,
+                    output_tokens=out_tok,
+                    cost_usd=cost,
+                )
+                _usage_ctx.get().record(usage)
+                log.debug(
+                    "Streaming usage: model=%s in=%d out=%d cost=$%.4f",
+                    model,
+                    in_tok,
+                    out_tok,
+                    cost,
+                )
 
     # For streaming, retry at connection level only
     models_to_try = [target_model] + [m for m in FALLBACK_MODELS if m != target_model]

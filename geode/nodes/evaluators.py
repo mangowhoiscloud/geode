@@ -1,13 +1,58 @@
-"""Layer 3: Evaluators — 3 parallel evaluators using 14-axis rubric."""
+"""Layer 3: Evaluators — 3 parallel evaluators using 14-axis rubric.
+
+Supports Send API pattern for parallel execution (like analysts).
+"""
 
 from __future__ import annotations
 
-from geode.llm.client import call_llm_json
+import logging
+from typing import Any, Protocol
+
 from geode.llm.prompts import EVALUATOR_AXES, EVALUATOR_SYSTEM, EVALUATOR_USER
 from geode.state import AnalysisResult, EvaluatorResult, GeodeState
-from geode.ui.console import console
+
+log = logging.getLogger(__name__)
 
 EVALUATOR_TYPES = ["quality_judge", "hidden_value", "community_momentum"]
+
+
+# ---------------------------------------------------------------------------
+# LLM port injection (Clean Architecture: nodes depend on abstraction)
+# ---------------------------------------------------------------------------
+
+
+class LLMJsonCallable(Protocol):
+    def __call__(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = ...,
+        max_tokens: int = ...,
+        temperature: float = ...,
+    ) -> dict[str, Any]: ...
+
+
+_llm_json: LLMJsonCallable | None = None
+
+
+def set_llm_json(fn: LLMJsonCallable) -> None:
+    """Inject an LLM JSON callable (for testing or alternative providers)."""
+    global _llm_json  # noqa: PLW0603
+    _llm_json = fn
+
+
+def _get_llm_json() -> LLMJsonCallable:
+    if _llm_json is not None:
+        return _llm_json
+    from geode.llm.client import call_llm_json
+
+    return call_llm_json
+
+
+# ---------------------------------------------------------------------------
+# Prompt building
+# ---------------------------------------------------------------------------
 
 
 def _format_axes_schema(evaluator_type: str) -> str:
@@ -73,8 +118,8 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
 
     system, user = _build_evaluator_prompt(evaluator_type, state)
     if state.get("verbose"):
-        console.print(f"    [muted]Running {evaluator_type} evaluator...[/muted]")
-    data = call_llm_json(system, user)
+        log.debug("Running %s evaluator...", evaluator_type)
+    data = _get_llm_json()(system, user)
     return EvaluatorResult(**data)
 
 
@@ -216,9 +261,55 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
     return mock[evaluator_type]
 
 
-def evaluators_node(state: GeodeState) -> dict:
-    """Run all 3 evaluators (sequentially for simplicity, parallel in production)."""
-    results: dict[str, EvaluatorResult] = {}
+# ---------------------------------------------------------------------------
+# Send API pattern for parallel evaluators (mirrors analysts.py)
+# ---------------------------------------------------------------------------
+
+
+def evaluator_node(state: GeodeState) -> dict:
+    """Run a single evaluator. Called via Send API for parallel execution."""
+    try:
+        evaluator_type = state.get("_evaluator_type", "quality_judge")
+        result = _run_evaluator(evaluator_type, state)
+        return {"evaluations": {evaluator_type: result}}
+    except Exception as exc:
+        log.error("Node evaluator (%s) failed: %s", state.get("_evaluator_type", "?"), exc)
+        return {"evaluations": {}, "errors": [f"evaluator: {exc}"]}
+
+
+def make_evaluator_sends(state: GeodeState) -> list:
+    """Create Send objects for all 3 evaluators."""
+    from langgraph.types import Send
+
+    sends = []
     for etype in EVALUATOR_TYPES:
-        results[etype] = _run_evaluator(etype, state)
-    return {"evaluations": results}
+        send_state = {
+            "ip_name": state.get("ip_name", ""),
+            "ip_info": state.get("ip_info", {}),
+            "monolake": state.get("monolake", {}),
+            "signals": state.get("signals", {}),
+            "analyses": state.get("analyses", []),
+            "dry_run": state.get("dry_run", False),
+            "verbose": state.get("verbose", False),
+            "_evaluator_type": etype,
+            "evaluations": {},
+            "errors": [],
+        }
+        sends.append(Send("evaluator", send_state))
+    return sends
+
+
+def evaluators_node(state: GeodeState) -> dict:
+    """Run all 3 evaluators sequentially (backward-compatible entry point).
+
+    Note: For parallel execution, use evaluator_node + make_evaluator_sends
+    with the Send API in the graph definition.
+    """
+    try:
+        results: dict[str, EvaluatorResult] = {}
+        for etype in EVALUATOR_TYPES:
+            results[etype] = _run_evaluator(etype, state)
+        return {"evaluations": results}
+    except Exception as exc:
+        log.error("Node evaluators failed: %s", exc)
+        return {"evaluations": {}, "errors": [f"evaluators: {exc}"]}

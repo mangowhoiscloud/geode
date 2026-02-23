@@ -8,12 +8,15 @@ distributions using a normalized agreement coefficient.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from geode.state import AnalysisResult, GeodeState
 from geode.ui.console import console
+
+if TYPE_CHECKING:
+    from geode.infrastructure.ports.llm_port import LLMClientPort
 
 log = logging.getLogger(__name__)
 
@@ -45,13 +48,22 @@ def _calc_agreement(scores: list[float], scale_max_var: float = _MAX_VARIANCE) -
     return max(0.0, min(1.0, agreement))
 
 
-def run_cross_llm_check(state: GeodeState) -> dict[str, Any]:
+def run_cross_llm_check(
+    state: GeodeState,
+    *,
+    secondary_adapter: LLMClientPort | None = None,
+) -> dict[str, Any]:
     """Cross-LLM agreement check using analyst score distributions.
 
     Uses normalized agreement coefficient to measure inter-rater reliability:
     - agreement >= 0.80: Good (strong consensus)
     - agreement >= 0.67: Acceptable (moderate consensus)
     - agreement < 0.67: Low (high variance, needs review)
+
+    When ``secondary_adapter`` is provided, at least one dimension
+    (the first analyst's key finding) is re-scored by the secondary
+    model to provide true cross-model verification.  Without it the
+    function falls back to single-model agreement analysis.
     """
     analyses: list[AnalysisResult] = state.get("analyses", [])
 
@@ -63,6 +75,7 @@ def run_cross_llm_check(state: GeodeState) -> dict[str, Any]:
             "models_compared": ["claude-opus-4-6", "gpt-5.3"],
             "n_raters": len(analyses),
             "passed": True,
+            "verification_mode": "insufficient_data",
         }
 
     # Extract scores and confidence values
@@ -77,24 +90,76 @@ def run_cross_llm_check(state: GeodeState) -> dict[str, Any]:
 
     # Combined: score agreement weighted more heavily
     combined = 0.7 * score_agreement + 0.3 * conf_agreement
+
+    # --- True cross-model re-score when secondary adapter available ---
+    secondary_score: int | None = None
+    verification_mode = "agreement_only"
+
+    if secondary_adapter is not None and analyses:
+        verification_mode = "cross_model"
+        first = analyses[0]
+        ip_name = state.get("ip_name", "Unknown")
+        rescore_prompt = (
+            f"Re-evaluate this analyst finding for IP '{ip_name}'. "
+            f"Analyst type: {first.analyst_type}. "
+            f"Key finding: {first.key_finding}. "
+            f"Evidence: {', '.join(first.evidence[:3])}. "
+            f"Rate the finding quality 1-5 (1=poor, 5=excellent). "
+            f"Respond with ONLY a single digit."
+        )
+        try:
+            response = secondary_adapter.generate(
+                "You are a verification agent. Respond with only a single digit 1-5.",
+                rescore_prompt,
+                temperature=0.1,
+                max_tokens=10,
+            )
+            digit = "".join(c for c in response.strip() if c.isdigit())
+            if digit:
+                secondary_score = max(1, min(5, int(digit[0])))
+            else:
+                secondary_score = 3  # Neutral if unparseable
+
+            # Blend secondary re-score into agreement
+            # Compare secondary score against original analyst score
+            rescore_agreement = 1.0 - abs(first.score - secondary_score) / (_SCALE_MAX - _SCALE_MIN)
+            rescore_agreement = max(0.0, min(1.0, rescore_agreement))
+
+            # Re-weight: 50% intra-model agreement, 50% cross-model re-score
+            combined = 0.5 * combined + 0.5 * rescore_agreement
+
+            log.info(
+                "Cross-model re-score: secondary=%d, original=%.1f, "
+                "rescore_agreement=%.3f, combined=%.3f",
+                secondary_score,
+                first.score,
+                rescore_agreement,
+                combined,
+            )
+        except Exception as exc:
+            log.warning("Secondary adapter re-score failed, using agreement only: %s", exc)
+            verification_mode = "agreement_fallback"
+
     passed = combined >= AGREEMENT_THRESHOLD
 
     log.info(
-        "Cross-LLM agreement: %.3f (score=%.3f, conf=%.3f), passed=%s",
+        "Cross-LLM agreement: %.3f (score=%.3f, conf=%.3f), passed=%s, mode=%s",
         combined,
         score_agreement,
         conf_agreement,
         passed,
+        verification_mode,
     )
 
     if state.get("verbose"):
         console.print(
             f"    [muted]Cross-LLM: agreement={combined:.3f} "
             f"(score={score_agreement:.3f}, conf={conf_agreement:.3f}) "
+            f"mode={verification_mode} "
             f"{'✓' if passed else '✗'}[/muted]"
         )
 
-    return {
+    result: dict[str, Any] = {
         "cross_llm_agreement": round(combined, 4),
         "score_agreement": round(score_agreement, 4),
         "confidence_agreement": round(conf_agreement, 4),
@@ -103,7 +168,11 @@ def run_cross_llm_check(state: GeodeState) -> dict[str, Any]:
         "n_raters": len(analyses),
         "passed": passed,
         "threshold": AGREEMENT_THRESHOLD,
+        "verification_mode": verification_mode,
     }
+    if secondary_score is not None:
+        result["secondary_rescore"] = secondary_score
+    return result
 
 
 def run_dual_adapter_check(

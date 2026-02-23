@@ -9,7 +9,9 @@ CAUSE_TO_ACTION: architecture-v6 §13.9.3
 
 from __future__ import annotations
 
-from geode.llm.client import call_llm_json
+import logging
+from typing import Any, Protocol
+
 from geode.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_USER
 from geode.state import (
     ActionLiteral,
@@ -17,7 +19,43 @@ from geode.state import (
     GeodeState,
     SynthesisResult,
 )
-from geode.ui.console import console
+
+log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# LLM port injection (Clean Architecture: nodes depend on abstraction)
+# ---------------------------------------------------------------------------
+
+
+class LLMJsonCallable(Protocol):
+    def __call__(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = ...,
+        max_tokens: int = ...,
+        temperature: float = ...,
+    ) -> dict[str, Any]: ...
+
+
+_llm_json: LLMJsonCallable | None = None
+
+
+def set_llm_json(fn: LLMJsonCallable) -> None:
+    """Inject an LLM JSON callable (for testing or alternative providers)."""
+    global _llm_json  # noqa: PLW0603
+    _llm_json = fn
+
+
+def _get_llm_json() -> LLMJsonCallable:
+    if _llm_json is not None:
+        return _llm_json
+    from geode.llm.client import call_llm_json
+
+    return call_llm_json
+
 
 # ---------------------------------------------------------------------------
 # CAUSE_TO_ACTION mapping (architecture-v6 §13.9.3 — 그대로)
@@ -236,7 +274,7 @@ def _build_llm_synthesis(
         signals_summary=sig_summary,
     )
 
-    data = call_llm_json(SYNTHESIZER_SYSTEM, user)
+    data = _get_llm_json()(SYNTHESIZER_SYSTEM, user)
     return SynthesisResult(
         undervaluation_cause=cause,
         action_type=action,
@@ -247,23 +285,27 @@ def _build_llm_synthesis(
 
 def synthesizer_node(state: GeodeState) -> dict:
     """Layer 5: Classify cause + generate narrative via LLM."""
-    evaluations = state.get("evaluations", {})
-    monolake = state.get("monolake", {})
+    try:
+        evaluations = state.get("evaluations", {})
+        monolake = state.get("monolake", {})
 
-    d_score, e_score, f_score = _extract_def_scores(evaluations)
-    release_timing_issue = _detect_timing_issue(monolake)
+        d_score, e_score, f_score = _extract_def_scores(evaluations)
+        release_timing_issue = _detect_timing_issue(monolake)
 
-    cause, cause_desc = _classify_cause(d_score, e_score, f_score, release_timing_issue)
-    action = CAUSE_TO_ACTION[cause]
+        cause, cause_desc = _classify_cause(d_score, e_score, f_score, release_timing_issue)
+        action = CAUSE_TO_ACTION[cause]
 
-    if state.get("verbose"):
-        console.print(
-            f"    [muted]Cause: {cause} → Action: {action} ({ACTION_DESCRIPTIONS[action]})[/muted]"
-        )
+        if state.get("verbose"):
+            log.debug(
+                "Cause: %s -> Action: %s (%s)", cause, action, ACTION_DESCRIPTIONS[action]
+            )
 
-    if state.get("dry_run"):
-        synthesis = _build_dry_run_synthesis(state, cause, action, cause_desc)
-    else:
-        synthesis = _build_llm_synthesis(state, cause, action)
+        if state.get("dry_run"):
+            synthesis = _build_dry_run_synthesis(state, cause, action, cause_desc)
+        else:
+            synthesis = _build_llm_synthesis(state, cause, action)
 
-    return {"synthesis": synthesis}
+        return {"synthesis": synthesis}
+    except Exception as exc:
+        log.error("Node synthesizer failed: %s", exc)
+        return {"errors": [f"synthesizer: {exc}"]}

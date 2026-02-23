@@ -77,19 +77,34 @@ class ProfileStore:
     """In-memory store for auth profiles with CRUD operations.
 
     Profiles are stored keyed by name (e.g. 'anthropic:work').
+    Supports active profile tracking per provider.
     """
 
     def __init__(self) -> None:
         self._profiles: dict[str, AuthProfile] = {}
+        self._active: dict[str, str] = {}  # provider → profile name
 
     def add(self, profile: AuthProfile) -> None:
+        """Add a profile. If no active profile exists for the provider, set it."""
         self._profiles[profile.name] = profile
+        if profile.provider not in self._active:
+            self._active[profile.provider] = profile.name
 
     def get(self, name: str) -> AuthProfile | None:
         return self._profiles.get(name)
 
     def remove(self, name: str) -> bool:
-        return self._profiles.pop(name, None) is not None
+        profile = self._profiles.pop(name, None)
+        if profile is None:
+            return False
+        # Clear active tracking if this was the active profile
+        if self._active.get(profile.provider) == name:
+            remaining = self.list_by_provider(profile.provider)
+            if remaining:
+                self._active[profile.provider] = remaining[0].name
+            else:
+                self._active.pop(profile.provider, None)
+        return True
 
     def list_all(self) -> list[AuthProfile]:
         return list(self._profiles.values())
@@ -109,8 +124,23 @@ class ProfileStore:
             groups.setdefault(p.provider, []).append(p)
         return groups
 
+    def set_active(self, name: str) -> None:
+        """Set the active profile by name. Raises KeyError if not found."""
+        profile = self._profiles.get(name)
+        if profile is None:
+            raise KeyError(f"Profile '{name}' not found")
+        self._active[profile.provider] = name
+
+    def get_active(self, provider: str) -> AuthProfile | None:
+        """Get the active profile for a provider."""
+        name = self._active.get(provider)
+        if name is None:
+            return None
+        return self._profiles.get(name)
+
     def clear(self) -> None:
         self._profiles.clear()
+        self._active.clear()
 
     def __len__(self) -> int:
         return len(self._profiles)

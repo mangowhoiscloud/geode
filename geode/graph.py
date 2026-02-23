@@ -14,10 +14,12 @@ Hook Integration (L4): NODE_ENTER/EXIT/ERROR events triggered at each node.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any
 
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 
 from geode.nodes.analysts import analyst_node, make_analyst_sends
@@ -28,7 +30,7 @@ from geode.nodes.scoring import scoring_node
 from geode.nodes.signals import signals_node
 from geode.nodes.synthesizer import synthesizer_node
 from geode.orchestration.hooks import HookEvent, HookSystem
-from geode.state import GeodeState
+from geode.state import BiasBusterResult, GeodeState, GuardrailResult
 from geode.verification.biasbuster import run_biasbuster
 from geode.verification.cross_llm import run_cross_llm_check
 from geode.verification.guardrails import run_guardrails
@@ -117,8 +119,6 @@ def _make_hooked_node(
 def _verification_node(state: GeodeState) -> dict:
     """Run guardrails + biasbuster."""
     if state.get("skip_verification"):
-        from geode.state import BiasBusterResult, GuardrailResult
-
         return {
             "guardrails": GuardrailResult(details=["Skipped by --skip-verification"]),
             "biasbuster": BiasBusterResult(explanation="Skipped"),
@@ -144,43 +144,23 @@ def _verification_node(state: GeodeState) -> dict:
 
 
 def _should_continue(state: GeodeState) -> str:
-    """Feedback loop conditional edge (L3).
+    """Feedback loop conditional edge with default thresholds (backward-compatible).
 
-    - confidence >= CONFIDENCE_THRESHOLD → synthesizer
-    - confidence < CONFIDENCE_THRESHOLD AND iteration < max_iterations → cortex (loopback)
-    - iteration >= max_iterations → synthesizer (force proceed)
+    The graph itself uses a configurable closure (_configured_should_continue)
+    inside build_graph(). This module-level function exists for test compatibility.
     """
-    guardrails = state.get("guardrails")
-    if guardrails and not guardrails.all_passed:
-        log.warning("Guardrails failed — proceeding in demo mode")
-
     confidence = state.get("analyst_confidence", 100.0)
     iteration = state.get("iteration", 1)
     max_iter = state.get("max_iterations", DEFAULT_MAX_ITERATIONS)
 
-    # Normalize confidence to 0-1 range if stored as 0-100
     conf_normalized = confidence / 100.0 if confidence > 1.0 else confidence
 
     if conf_normalized >= CONFIDENCE_THRESHOLD:
-        log.info("Confidence %.2f >= %.2f — synthesizer", conf_normalized, CONFIDENCE_THRESHOLD)
         return "synthesizer"
 
     if iteration >= max_iter:
-        log.warning(
-            "Confidence %.2f < %.2f but max iterations (%d) reached — force proceeding",
-            conf_normalized,
-            CONFIDENCE_THRESHOLD,
-            max_iter,
-        )
         return "synthesizer"
 
-    log.info(
-        "Confidence %.2f < %.2f — looping back (iteration %d/%d)",
-        conf_normalized,
-        CONFIDENCE_THRESHOLD,
-        iteration,
-        max_iter,
-    )
     return "gather"
 
 
@@ -209,13 +189,12 @@ def _gather_node(state: GeodeState) -> dict:
         "tier": tier,
         "weak_areas": weak_areas,
     }
-    history = list(state.get("iteration_history", []))
-    history.append(history_entry)
 
     if weak_areas:
         log.info("Adaptive feedback: weak areas identified — %s", weak_areas)
 
-    return {"iteration": iteration + 1, "iteration_history": history}
+    # Return single-element list — Annotated[..., operator.add] reducer handles accumulation
+    return {"iteration": iteration + 1, "iteration_history": [history_entry]}
 
 
 def build_graph(
@@ -320,6 +299,7 @@ def compile_graph(
     hooks: HookSystem | None = None,
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
+    interrupt_before: list[str] | None = None,
 ):
     """Compile the graph for execution.
 
@@ -330,6 +310,8 @@ def compile_graph(
         hooks: Optional HookSystem for event-driven extensions.
         confidence_threshold: Override feedback loop confidence threshold.
         max_iterations: Override maximum feedback loop iterations.
+        interrupt_before: Optional list of node names to pause before for
+            human-in-the-loop support. E.g. ["verification"].
     """
     graph = build_graph(
         hooks=hooks,
@@ -337,14 +319,14 @@ def compile_graph(
         max_iterations=max_iterations,
     )
 
+    compile_kwargs: dict[str, Any] = {}
+
     if checkpoint_db is not None:
-        import sqlite3
-
-        from langgraph.checkpoint.sqlite import SqliteSaver
-
         db_path = Path(checkpoint_db)
         conn = sqlite3.connect(str(db_path), check_same_thread=False)
-        saver = SqliteSaver(conn)
-        return graph.compile(checkpointer=saver)
+        compile_kwargs["checkpointer"] = SqliteSaver(conn)
 
-    return graph.compile()
+    if interrupt_before:
+        compile_kwargs["interrupt_before"] = interrupt_before
+
+    return graph.compile(**compile_kwargs)

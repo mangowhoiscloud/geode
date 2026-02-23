@@ -13,10 +13,12 @@ Architecture-v6 §4.5: Automation Layer — Correlation Analysis.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -413,3 +415,19 @@ class CorrelationAnalyzer:
         if all(checks.values()):
             self._stats.targets_passed += 1
         return checks
+
+    def save_results(self, path: str | Path, result: CorrelationResult) -> None:
+        """Persist a correlation result and stats to a JSON file.
+
+        Args:
+            path: File path for the output JSON.
+            result: The CorrelationResult to save.
+        """
+        data = {
+            "result": result.to_dict(),
+            "stats": self._stats.to_dict(),
+        }
+        dest = Path(path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        log.info("Saved correlation results to %s", dest)

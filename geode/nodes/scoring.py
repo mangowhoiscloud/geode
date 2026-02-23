@@ -6,6 +6,8 @@ PSM uses fixture data but applies real statistical formulas.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from geode.fixtures import load_fixture
@@ -15,7 +17,8 @@ from geode.state import (
     GeodeState,
     PSMResult,
 )
-from geode.ui.console import console
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # PSM Engine (fixture-based with real formula application)
@@ -188,55 +191,62 @@ def _determine_tier(score: float) -> str:
 
 def scoring_node(state: GeodeState) -> dict:
     """Layer 4: Compute PSM + all subscores + final score + tier."""
-    ip_name = state.get("ip_name", "unknown")
-    monolake = state.get("monolake", {})
-    analyses = state.get("analyses", [])
-    evaluations = state.get("evaluations", {})
+    try:
+        ip_name = state.get("ip_name", "unknown")
+        monolake = state.get("monolake", {})
+        analyses = state.get("analyses", [])
+        evaluations = state.get("evaluations", {})
 
-    # PSM
-    psm = _compute_psm(ip_name, monolake)
+        # PSM
+        psm = _compute_psm(ip_name, monolake)
 
-    # Subscores (server-side calculation from raw axes)
-    quality_score = _calc_quality_score(evaluations)
-    recovery = _calc_recovery_potential(evaluations)
-    momentum = _calc_community_momentum(evaluations)
-    confidence = _calc_analyst_confidence(analyses)
+        # Subscores (server-side calculation from raw axes)
+        quality_score = _calc_quality_score(evaluations)
+        recovery = _calc_recovery_potential(evaluations)
+        momentum = _calc_community_momentum(evaluations)
+        confidence = _calc_analyst_confidence(analyses)
 
-    # Developer track record: use fixture value if available, else proxy
-    developer = _load_developer_score(ip_name, quality_score)
-    growth = _calc_growth_score(evaluations, developer_track_record=developer)
+        # Developer track record: use fixture value if available, else proxy
+        developer = _load_developer_score(ip_name, quality_score)
+        growth = _calc_growth_score(evaluations, developer_track_record=developer)
 
-    if state.get("verbose"):
-        console.print(f"    [muted]PSM: ATT={psm.att_pct:+.1f}%, Z={psm.z_value:.2f}[/muted]")
-        console.print(
-            f"    [muted]Subscores: Q={quality_score:.0f} R={recovery:.0f} "
-            f"G={growth:.0f} M={momentum:.0f}[/muted]"
+        if state.get("verbose"):
+            log.debug("PSM: ATT=%+.1f%%, Z=%.2f", psm.att_pct, psm.z_value)
+            log.debug(
+                "Subscores: Q=%.0f R=%.0f G=%.0f M=%.0f",
+                quality_score,
+                recovery,
+                growth,
+                momentum,
+            )
+
+        final = _calc_final_score(
+            exposure_lift=psm.exposure_lift_score,
+            quality=quality_score,
+            recovery=recovery,
+            growth=growth,
+            momentum=momentum,
+            developer=developer,
+            confidence=confidence,
         )
+        tier = _determine_tier(final)
 
-    final = _calc_final_score(
-        exposure_lift=psm.exposure_lift_score,
-        quality=quality_score,
-        recovery=recovery,
-        growth=growth,
-        momentum=momentum,
-        developer=developer,
-        confidence=confidence,
-    )
-    tier = _determine_tier(final)
+        subscores = {
+            "exposure_lift": psm.exposure_lift_score,
+            "quality": quality_score,
+            "recovery_potential": recovery,
+            "growth": growth,
+            "community_momentum": momentum,
+            "developer_track": developer,
+        }
 
-    subscores = {
-        "exposure_lift": psm.exposure_lift_score,
-        "quality": quality_score,
-        "recovery_potential": recovery,
-        "growth": growth,
-        "community_momentum": momentum,
-        "developer_track": developer,
-    }
-
-    return {
-        "psm_result": psm,
-        "subscores": subscores,
-        "analyst_confidence": confidence,
-        "final_score": final,
-        "tier": tier,
-    }
+        return {
+            "psm_result": psm,
+            "subscores": subscores,
+            "analyst_confidence": confidence,
+            "final_score": final,
+            "tier": tier,
+        }
+    except Exception as exc:
+        log.error("Node scoring failed: %s", exc)
+        return {"errors": [f"scoring: {exc}"]}

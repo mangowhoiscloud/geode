@@ -2,12 +2,54 @@
 
 from __future__ import annotations
 
+import logging
+from typing import Any, Protocol
+
 import numpy as np
 
-from geode.llm.client import call_llm_json
 from geode.llm.prompts import BIASBUSTER_SYSTEM, BIASBUSTER_USER
 from geode.state import AnalysisResult, BiasBusterResult, GeodeState
-from geode.ui.console import console
+
+log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# LLM port injection (Clean Architecture: verification depends on abstraction)
+# ---------------------------------------------------------------------------
+
+
+class LLMJsonCallable(Protocol):
+    def __call__(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = ...,
+        max_tokens: int = ...,
+        temperature: float = ...,
+    ) -> dict[str, Any]: ...
+
+
+_llm_json: LLMJsonCallable | None = None
+
+
+def set_llm_json(fn: LLMJsonCallable) -> None:
+    """Inject an LLM JSON callable (for testing or alternative providers)."""
+    global _llm_json  # noqa: PLW0603
+    _llm_json = fn
+
+
+def _get_llm_json() -> LLMJsonCallable:
+    if _llm_json is not None:
+        return _llm_json
+    from geode.llm.client import call_llm_json
+
+    return call_llm_json
+
+
+# ---------------------------------------------------------------------------
+# Statistical checks
+# ---------------------------------------------------------------------------
 
 
 def _run_statistical_checks(analyses: list[AnalysisResult]) -> dict:
@@ -31,54 +73,66 @@ def _run_statistical_checks(analyses: list[AnalysisResult]) -> dict:
 
 def run_biasbuster(state: GeodeState) -> BiasBusterResult:
     """Run BiasBuster 4-step verification."""
-    analyses = state.get("analyses", [])
-    stats = _run_statistical_checks(analyses)
+    try:
+        analyses = state.get("analyses", [])
+        stats = _run_statistical_checks(analyses)
 
-    # Quick heuristic: if CV is very low (<0.05), possible anchoring
-    low_variance_flag = stats["cv"] < 0.05 and len(analyses) >= 4
+        # Quick heuristic: if CV is very low (<0.05), possible anchoring
+        low_variance_flag = stats["cv"] < 0.05 and len(analyses) >= 4
 
-    if state.get("dry_run"):
-        return BiasBusterResult(
-            confirmation_bias=False,
-            recency_bias=False,
-            anchoring_bias=low_variance_flag,
-            overall_pass=not low_variance_flag,
-            explanation=(
-                "Clean Context applied. Analyst scores show healthy variance "
-                f"(CV={stats['cv']:.2f}). No bias detected."
-            ),
+        if state.get("dry_run"):
+            return BiasBusterResult(
+                confirmation_bias=False,
+                recency_bias=False,
+                anchoring_bias=low_variance_flag,
+                overall_pass=not low_variance_flag,
+                explanation=(
+                    "Clean Context applied. Analyst scores show healthy variance "
+                    f"(CV={stats['cv']:.2f}). No bias detected."
+                ),
+            )
+
+        # LLM-based bias detection
+        analyst_details = "\n".join(
+            f"- {a.analyst_type}: {a.score:.1f}/5 — {a.key_finding} (confidence: {a.confidence:.0f}%)"
+            for a in analyses
+            if isinstance(a, AnalysisResult)
         )
 
-    # LLM-based bias detection
-    analyst_details = "\n".join(
-        f"- {a.analyst_type}: {a.score:.1f}/5 — {a.key_finding} (confidence: {a.confidence:.0f}%)"
-        for a in analyses
-        if isinstance(a, AnalysisResult)
-    )
+        signals = state.get("signals", {})
+        data_points = "\n".join(
+            f"- {k}: {v}" for k, v in signals.items() if not k.startswith("_")
+        )
 
-    signals = state.get("signals", {})
-    data_points = "\n".join(f"- {k}: {v}" for k, v in signals.items() if not k.startswith("_"))
+        user = BIASBUSTER_USER.format(
+            ip_name=state.get("ip_name", "Unknown"),
+            analyst_details=analyst_details,
+            mean=stats["mean"],
+            std=stats["std"],
+            cv=stats["cv"],
+            min_score=stats["min"],
+            max_score=stats["max"],
+            data_points=data_points,
+        )
 
-    user = BIASBUSTER_USER.format(
-        ip_name=state.get("ip_name", "Unknown"),
-        analyst_details=analyst_details,
-        mean=stats["mean"],
-        std=stats["std"],
-        cv=stats["cv"],
-        min_score=stats["min"],
-        max_score=stats["max"],
-        data_points=data_points,
-    )
-
-    try:
-        data = call_llm_json(BIASBUSTER_SYSTEM, user)
-        return BiasBusterResult(**data)
-    except Exception as e:
-        console.print(f"    [warning]BiasBuster LLM call failed: {e}[/warning]")
+        try:
+            data = _get_llm_json()(BIASBUSTER_SYSTEM, user)
+            return BiasBusterResult(**data)
+        except Exception as e:
+            log.warning("BiasBuster LLM call failed: %s", e)
+            return BiasBusterResult(
+                confirmation_bias=False,
+                recency_bias=False,
+                anchoring_bias=low_variance_flag,
+                overall_pass=not low_variance_flag,
+                explanation=f"Statistical check only (LLM unavailable). CV={stats['cv']:.2f}",
+            )
+    except Exception as exc:
+        log.error("BiasBuster failed: %s", exc)
         return BiasBusterResult(
             confirmation_bias=False,
             recency_bias=False,
-            anchoring_bias=low_variance_flag,
-            overall_pass=not low_variance_flag,
-            explanation=f"Statistical check only (LLM unavailable). CV={stats['cv']:.2f}",
+            anchoring_bias=False,
+            overall_pass=True,
+            explanation=f"BiasBuster error (degraded): {exc}",
         )

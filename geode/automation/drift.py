@@ -8,10 +8,12 @@ Architecture-v6 §4.5: Automation Layer — Drift Detection.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -253,3 +255,28 @@ class CUSUMDetector:
     def list_metrics(self) -> list[str]:
         """List all metrics with baselines."""
         return list(self._baselines.keys())
+
+    def save_results(self, path: str | Path) -> None:
+        """Persist detection history (baselines, CUSUM state, stats) as JSON.
+
+        Args:
+            path: File path for the output JSON.
+        """
+        data: dict[str, Any] = {
+            "baselines": {
+                name: {"mean": mean, "std": std}
+                for name, (mean, std) in self._baselines.items()
+            },
+            "cusum_state": {
+                name: {
+                    "s_pos": self._cusum_pos.get(name, 0.0),
+                    "s_neg": self._cusum_neg.get(name, 0.0),
+                }
+                for name in self._baselines
+            },
+            "stats": self._stats.to_dict(),
+        }
+        dest = Path(path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        log.info("Saved drift detection history to %s", dest)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from geode.state import AnalysisResult, EvaluatorResult, GeodeState, GuardrailResult
@@ -54,14 +56,44 @@ def _g2_range(state: GeodeState) -> tuple[bool, str]:
     return not errors, "; ".join(errors) or "Range OK"
 
 
-def _g3_grounding(state: GeodeState) -> tuple[bool, str]:
-    """G3: Verify analyses are grounded in evidence."""
+def _g3_grounding(
+    state: GeodeState,
+    signal_data: dict[str, Any] | None = None,
+) -> tuple[bool, str]:
+    """G3: Verify analyses are grounded in evidence.
+
+    When ``signal_data`` is provided, each evidence string is
+    cross-referenced against signal data keys.  Evidence items that
+    do not match any signal key are flagged as potentially
+    hallucinated.
+    """
     errors: list[str] = []
+    signal_keys: set[str] | None = None
+    if signal_data is not None:
+        # Build a flattened set of signal keys for matching.
+        # Include top-level keys and nested dict keys (one level deep).
+        signal_keys = set()
+        for k, v in signal_data.items():
+            signal_keys.add(k.lower())
+            if isinstance(v, dict):
+                for sub_k in v:
+                    signal_keys.add(sub_k.lower())
+
     for a in state.get("analyses", []):
         if not isinstance(a, AnalysisResult):
             continue
         if not a.evidence:
             errors.append(f"Analyst {a.analyst_type} has no evidence")
+        elif signal_keys is not None:
+            # Cross-reference each evidence string against signal data keys
+            for ev in a.evidence:
+                ev_lower = ev.lower()
+                # An evidence string is grounded if it contains at least one signal key
+                grounded = any(sk in ev_lower for sk in signal_keys)
+                if not grounded:
+                    errors.append(
+                        f"Analyst {a.analyst_type} evidence may be hallucinated: '{ev}'"
+                    )
         if not a.reasoning:
             errors.append(f"Analyst {a.analyst_type} has no reasoning")
     return not errors, "; ".join(errors) or "Grounding OK"
@@ -84,12 +116,26 @@ def _g4_consistency(state: GeodeState) -> tuple[bool, str]:
     return not errors, "; ".join(errors) or "Consistency OK"
 
 
-def run_guardrails(state: GeodeState) -> GuardrailResult:
-    """Run all 4 guardrails in order."""
-    checks = [
+def run_guardrails(
+    state: GeodeState,
+    *,
+    signal_data: dict[str, Any] | None = None,
+) -> GuardrailResult:
+    """Run all 4 guardrails in order.
+
+    Args:
+        state: Current pipeline state.
+        signal_data: Optional signal data dict for G3 grounding
+            cross-reference.  When provided, evidence strings are
+            validated against actual signal keys.
+    """
+    # G3 needs signal_data, so handle it separately
+    g3_fn = lambda s: _g3_grounding(s, signal_data=signal_data)  # noqa: E731
+
+    checks: list[tuple[str, Any]] = [
         ("G1(Schema)", _g1_schema),
         ("G2(Range)", _g2_range),
-        ("G3(Ground)", _g3_grounding),
+        ("G3(Ground)", g3_fn),
         ("G4(Consist)", _g4_consistency),
     ]
     results: dict[str, bool] = {}

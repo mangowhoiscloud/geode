@@ -11,12 +11,13 @@ from typing import Annotated, Any, Literal, Protocol, TypedDict
 from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
-# Ports (Clean Architecture: Domain-level abstractions)
+# Deprecated port re-exports (canonical ports: geode.infrastructure.ports)
+# Kept for backward compatibility with existing tests.
 # ---------------------------------------------------------------------------
 
 
 class LLMPort(Protocol):
-    """Port for LLM calls — any provider (Anthropic, OpenAI, mock) implements this."""
+    """Deprecated: use geode.infrastructure.ports.llm_port.LLMClientPort instead."""
 
     def complete(self, system: str, user: str, *, temperature: float = 0.3) -> str: ...
 
@@ -26,7 +27,7 @@ class LLMPort(Protocol):
 
 
 class DataPort(Protocol):
-    """Port for data retrieval — fixture or real API."""
+    """Deprecated: use geode.infrastructure.ports for data abstractions."""
 
     def load_ip_info(self, ip_name: str) -> dict[str, Any]: ...
     def load_monolake(self, ip_name: str) -> dict[str, Any]: ...
@@ -196,7 +197,7 @@ class GeodeState(TypedDict, total=False):
     # Feedback Loop (L3)
     iteration: int  # Current iteration count (starts at 1)
     max_iterations: int  # Maximum allowed iterations before force-proceeding
-    iteration_history: list[dict[str, Any]]  # Per-iteration snapshots
+    iteration_history: Annotated[list[dict[str, Any]], operator.add]  # Per-iteration snapshots
 
     # Telemetry
     run_id: str  # Unique pipeline execution ID
