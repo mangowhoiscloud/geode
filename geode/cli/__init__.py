@@ -1,13 +1,38 @@
-"""GEODE CLI — Typer entrypoint with interactive mode."""
+"""GEODE CLI — Typer entrypoint with natural language interactive mode.
+
+Architecture (OpenClaw-inspired):
+  /command  → commands.py (Binding Router: deterministic dispatch)
+  free-text → nl_router.py (NL Router: intent classification)
+              → search.py (IP Search Engine: keyword matching)
+"""
 
 from __future__ import annotations
+
+import logging
 
 import typer
 from rich.text import Text
 
 from geode import __version__
+from geode.cli.commands import (
+    cmd_auth,
+    cmd_generate,
+    cmd_key,
+    cmd_list,
+    cmd_model,
+    resolve_action,
+    show_help,
+)
+from geode.cli.nl_router import NLRouter
+from geode.cli.search import IPSearchEngine
+from geode.cli.startup import (
+    ReadinessReport,
+    check_readiness,
+    render_readiness,
+    setup_project_memory,
+)
 from geode.config import settings
-from geode.graph import compile_graph
+from geode.runtime import GeodeRuntime
 from geode.state import GeodeState
 from geode.ui.console import console
 from geode.ui.panels import (
@@ -20,12 +45,19 @@ from geode.ui.panels import (
     verify_panel,
 )
 
+log = logging.getLogger(__name__)
+
 app = typer.Typer(
     name="geode",
     help="GEODE v6.0 — Undervalued IP Discovery Agent",
     no_args_is_help=False,
     invoke_without_command=True,
 )
+
+# Singletons for REPL session
+_nl_router = NLRouter()
+_search_engine = IPSearchEngine()
+_readiness: ReadinessReport | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +74,9 @@ _LOGO = r"""
 
 
 def _welcome_screen() -> None:
-    """Show Claude Code-style welcome screen."""
+    """Show Claude Code-style welcome screen with readiness check."""
+    global _readiness  # noqa: PLW0603
+
     console.print()
     logo = Text(_LOGO, style="bold cyan")
     console.print(logo)
@@ -51,30 +85,22 @@ def _welcome_screen() -> None:
     )
     console.print(f"  [muted]Model: {settings.model}[/muted]")
     console.print()
+
+    # OpenClaw gateway:startup — readiness check
+    _readiness = check_readiness()
+    render_readiness(_readiness)
+
+    # OpenClaw boot-md — initialize project memory if absent
+    setup_project_memory()
+
     console.print("  [muted]/help[/muted] for commands  [muted]·[/muted]  ", end="")
-    console.print("[muted]/quit[/muted] to exit")
-    console.print()
-
-
-def _show_help() -> None:
-    """Show interactive mode help."""
-    console.print()
-    console.print("  [header]Commands[/header]")
-    console.print("  [label]/analyze[/label] <IP name>  — Analyze an IP (dry-run)")
-    console.print("  [label]/run[/label] <IP name>      — Analyze with real LLM")
-    console.print("  [label]/list[/label]               — Show available IPs")
-    console.print("  [label]/verbose[/label]            — Toggle verbose mode")
-    console.print("  [label]/help[/label]               — Show this help")
-    console.print("  [label]/quit[/label]               — Exit GEODE")
-    console.print()
-    console.print("  [muted]Or just type an IP name to analyze (dry-run).[/muted]")
+    console.print("[muted]type naturally[/muted] to search & analyze")
     console.print()
 
 
 # ---------------------------------------------------------------------------
 # Pipeline execution + rendering
 # ---------------------------------------------------------------------------
-
 
 _STEP_LABELS: dict[str, str] = {
     "router": "Route",
@@ -96,16 +122,25 @@ def _progress_line(done: list[str], active: str = "") -> str:
     return " → ".join(parts) if parts else "[bold cyan]Starting...[/bold cyan]"
 
 
-def _execute_pipeline(initial_state: GeodeState, verbose: bool) -> dict | None:
+def _execute_pipeline(
+    initial_state: GeodeState,
+    verbose: bool,
+    *,
+    runtime: GeodeRuntime,
+) -> dict | None:
     """Execute the GEODE pipeline with step-by-step progress."""
-    graph = compile_graph()
+    graph = runtime.compile_graph()
+
+    # Store initial state in session
+    runtime.store_session_data(dict(initial_state))
+
     done: list[str] = []
     analyst_count = 0
     final_state: dict = dict(initial_state)
 
     with console.status(_progress_line(done)) as status:
         try:
-            for event in graph.stream(initial_state):
+            for event in graph.stream(initial_state, config=runtime.thread_config):
                 for node_name, output in event.items():
                     if node_name == "__end__":
                         continue
@@ -114,9 +149,7 @@ def _execute_pipeline(initial_state: GeodeState, verbose: bool) -> dict | None:
                     if node_name == "analyst":
                         analyst_count += 1
                         if analyst_count < 4:
-                            status.update(
-                                _progress_line(done, f"Analyze ({analyst_count}/4)")
-                            )
+                            status.update(_progress_line(done, f"Analyze ({analyst_count}/4)"))
                         else:
                             done.append("Analyze ✓")
                             status.update(_progress_line(done))
@@ -136,6 +169,12 @@ def _execute_pipeline(initial_state: GeodeState, verbose: bool) -> dict | None:
             if verbose:
                 console.print_exception()
             return None
+
+    # Update session with final state
+    runtime.store_session_data(final_state)
+
+    # Prune logs if needed
+    runtime.prune_logs()
 
     return final_state
 
@@ -199,81 +238,110 @@ def _run_analysis(
 ) -> None:
     """Core analysis logic shared by interactive and CLI modes."""
     model = "dry-run (no LLM)" if dry_run else settings.model
-    header_panel(ip_name, "full_pipeline", model)
+    pipeline_mode = "full_pipeline"
+    header_panel(ip_name, pipeline_mode, model)
+
+    # Create runtime with all infrastructure wired
+    runtime = GeodeRuntime.create(ip_name)
+
+    # Log available tools for current mode
+    mode = "dry_run" if dry_run else pipeline_mode
+    available_tools = runtime.get_available_tools(mode=mode)
+    log.debug("Available tools for mode=%s: %s", mode, available_tools)
 
     initial_state: GeodeState = {
         "ip_name": ip_name,
-        "pipeline_mode": "full_pipeline",
+        "pipeline_mode": pipeline_mode,
         "dry_run": dry_run,
         "verbose": verbose,
         "skip_verification": skip_verification,
         "analyses": [],
         "errors": [],
+        "iteration": 1,
+        "max_iterations": 3,
     }
 
-    result = _execute_pipeline(initial_state, verbose)
+    result = _execute_pipeline(initial_state, verbose, runtime=runtime)
     if result:
         _render_result(result, skip_verification=skip_verification, verbose=verbose)
 
 
 # ---------------------------------------------------------------------------
-# Interactive REPL — command dispatch
+# Search result rendering
 # ---------------------------------------------------------------------------
 
-_COMMAND_MAP = {
-    "/quit": "quit",
-    "/exit": "quit",
-    "/q": "quit",
-    "/help": "help",
-    "/list": "list",
-    "/verbose": "verbose",
-    "/analyze": "analyze",
-    "/a": "analyze",
-    "/run": "run",
-    "/r": "run",
-}
 
-
-def _cmd_list() -> None:
-    """List available IP fixtures."""
-    from geode.nodes.cortex import _FIXTURE_MAP
-
+def _render_search_results(query: str, results: list) -> None:
+    """Render IP search results."""
     console.print()
-    console.print("  [header]Available IPs[/header]")
-    for name in _FIXTURE_MAP:
-        console.print(f"    [value]{name.title()}[/value]")
+    console.print(f"  [header]Search: '{query}'[/header]")
+
+    if not results:
+        console.print("  [muted]No matching IPs found.[/muted]")
+        console.print()
+        return
+
+    for r in results:
+        bar_len = int(r.score * 20)
+        bar = "█" * bar_len + "░" * (20 - bar_len)
+        style = "success" if r.score >= 0.5 else "muted"
+        console.print(f"    [{style}]{bar}[/{style}] {r.score:.0%}  [value]{r.ip_name}[/value]")
+        console.print(f"      [muted]matched: {', '.join(r.matches[:5])}[/muted]")
     console.print()
 
 
-def _cmd_analyze_or_run(action: str, args: str, verbose: bool) -> None:
-    """Handle /analyze or /run commands."""
-    dry_run = action == "analyze"
-    label = "/analyze" if dry_run else "/run"
-    if not args:
-        console.print(f"  [warning]Usage: {label} <IP name>[/warning]")
-    else:
-        _run_analysis(args, dry_run=dry_run, verbose=verbose)
+# ---------------------------------------------------------------------------
+# Interactive REPL — OpenClaw-style dual routing
+# ---------------------------------------------------------------------------
 
 
 def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
     """Handle a slash command. Returns (should_break, new_verbose)."""
-    action = _COMMAND_MAP.get(cmd)
+    global _readiness  # noqa: PLW0603
+
+    action = resolve_action(cmd)
 
     if action == "quit":
         console.print("  [muted]Goodbye.[/muted]\n")
         return True, verbose
 
     if action == "help":
-        _show_help()
+        show_help()
     elif action == "list":
-        _cmd_list()
+        cmd_list()
     elif action == "verbose":
         verbose = not verbose
         state = "[success]ON[/success]" if verbose else "[muted]OFF[/muted]"
         console.print(f"  Verbose: {state}")
         console.print()
     elif action in ("analyze", "run"):
-        _cmd_analyze_or_run(action, args, verbose)
+        dry_run = action == "analyze"
+        # Graceful Degradation: force dry-run if no API key
+        if action == "run" and _readiness and _readiness.force_dry_run:
+            console.print("  [warning]API key not configured — forcing dry-run mode[/warning]")
+            dry_run = True
+        label = "/analyze" if dry_run else "/run"
+        if not args:
+            console.print(f"  [warning]Usage: {label} <IP name>[/warning]")
+        else:
+            _run_analysis(args, dry_run=dry_run, verbose=verbose)
+    elif action == "search":
+        if not args:
+            console.print("  [warning]Usage: /search <query>[/warning]")
+        else:
+            results = _search_engine.search(args)
+            _render_search_results(args, results)
+    elif action == "key":
+        changed = cmd_key(args)
+        if changed:
+            _readiness = check_readiness()
+            render_readiness(_readiness)
+    elif action == "model":
+        cmd_model(args)
+    elif action == "auth":
+        cmd_auth(args)
+    elif action == "generate":
+        cmd_generate(args)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -282,8 +350,42 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
     return False, verbose
 
 
+def _handle_natural_language(text: str, verbose: bool) -> None:
+    """Route natural language input via NLRouter."""
+    intent = _nl_router.classify(text)
+
+    if intent.action == "search":
+        results = _search_engine.search(intent.args.get("query", text))
+        _render_search_results(intent.args.get("query", text), results)
+
+    elif intent.action == "analyze":
+        ip_name = intent.args.get("ip_name", text)
+        _run_analysis(ip_name, dry_run=True, verbose=verbose)
+
+    elif intent.action == "compare":
+        ip_a = intent.args.get("ip_a", "")
+        ip_b = intent.args.get("ip_b", "")
+        console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
+        _run_analysis(ip_a, dry_run=True, verbose=verbose)
+        _run_analysis(ip_b, dry_run=True, verbose=verbose)
+
+    elif intent.action == "list":
+        cmd_list()
+
+    elif intent.action == "help":
+        show_help()
+
+    else:
+        _run_analysis(text, dry_run=True, verbose=verbose)
+
+
 def _interactive_loop() -> None:
-    """Claude Code-style interactive REPL."""
+    """Claude Code / OpenClaw-style interactive REPL.
+
+    Two routing paths:
+      /command → deterministic dispatch (commands.py)
+      free-text → NL intent classification (nl_router.py)
+    """
     verbose = False
 
     while True:
@@ -297,13 +399,15 @@ def _interactive_loop() -> None:
             continue
 
         if user_input.startswith("/"):
+            # Slash command → deterministic routing (OpenClaw Binding)
             cmd = user_input.split()[0].lower()
-            args = user_input[len(cmd):].strip()
+            args = user_input[len(cmd) :].strip()
             should_break, verbose = _handle_command(cmd, args, verbose)
             if should_break:
                 break
         else:
-            _run_analysis(user_input, dry_run=True, verbose=verbose)
+            # Natural language → NL Router (intent classification)
+            _handle_natural_language(user_input, verbose)
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +442,15 @@ def analyze(
         verbose=verbose,
         skip_verification=skip_verification,
     )
+
+
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Search query (e.g. 'dark fantasy', '소울라이크')"),
+) -> None:
+    """Search IPs by keyword or genre."""
+    results = _search_engine.search(query)
+    _render_search_results(query, results)
 
 
 @app.command()
