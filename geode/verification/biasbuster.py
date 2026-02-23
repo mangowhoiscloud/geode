@@ -64,11 +64,15 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
             )
 
         # LLM-based bias detection
-        analyst_details = "\n".join(
-            f"- {a.analyst_type}: {a.score:.1f}/5 — {a.key_finding} (confidence: {a.confidence:.0f}%)"
-            for a in analyses
-            if isinstance(a, AnalysisResult)
-        )
+        analyst_details_parts = []
+        for idx, a in enumerate(analyses):
+            if isinstance(a, AnalysisResult):
+                evidence_len = sum(len(e) for e in a.evidence)
+                analyst_details_parts.append(
+                    f"- [{idx+1}] {a.analyst_type}: {a.score:.1f}/5 — {a.key_finding} "
+                    f"(confidence: {a.confidence:.0f}%, evidence_chars: {evidence_len})"
+                )
+        analyst_details = "\n".join(analyst_details_parts)
 
         signals = state.get("signals", {})
         data_points = "\n".join(
@@ -99,7 +103,7 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
                     position_bias=False,
                     verbosity_bias=False,
                     self_enhancement_bias=False,
-                    overall_pass=not low_variance_flag,
+                    overall_pass=False,
                     explanation=(
                         f"Statistical check only (LLM response invalid). CV={stats['cv']:.2f}"
                     ),
@@ -113,7 +117,7 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
                 position_bias=False,
                 verbosity_bias=False,
                 self_enhancement_bias=False,
-                overall_pass=not low_variance_flag,
+                overall_pass=False,
                 explanation=f"Statistical check only (LLM unavailable). CV={stats['cv']:.2f}",
             )
     except Exception as exc:
@@ -125,6 +129,6 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
             position_bias=False,
             verbosity_bias=False,
             self_enhancement_bias=False,
-            overall_pass=True,
+            overall_pass=False,
             explanation=f"BiasBuster error (degraded): {exc}",
         )

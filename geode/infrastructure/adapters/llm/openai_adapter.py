@@ -9,12 +9,14 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
 from collections.abc import Iterator
 from typing import Any
 
 from geode.config import settings
 from geode.llm.client import (
+    CircuitBreaker,
     LLMUsage,
     get_usage_accumulator,
 )
@@ -45,15 +47,21 @@ def _calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 
 
 _openai_client: Any = None  # openai.OpenAI | None — lazy import
+_openai_lock = threading.Lock()
+
+# Circuit breaker for OpenAI API calls
+_openai_circuit_breaker = CircuitBreaker()
 
 
 def _get_openai_client() -> Any:
-    """Lazy import and return cached OpenAI client."""
+    """Lazy import and return cached OpenAI client (thread-safe)."""
     global _openai_client  # noqa: PLW0603
     if _openai_client is None:
-        import openai
+        with _openai_lock:
+            if _openai_client is None:
+                import openai
 
-        _openai_client = openai.OpenAI(api_key=settings.openai_api_key)
+                _openai_client = openai.OpenAI(api_key=settings.openai_api_key)
     return _openai_client
 
 
@@ -201,8 +209,14 @@ class OpenAIAdapter:
         return self._retry_with_backoff(_do_stream, model=target_model)
 
     def _retry_with_backoff(self, fn, *, model: str) -> Any:
-        """Retry with exponential backoff + model fallback."""
+        """Retry with exponential backoff + model fallback + circuit breaker."""
         import openai
+
+        if not _openai_circuit_breaker.can_execute():
+            raise RuntimeError(
+                "Circuit breaker is open — OpenAI API calls are temporarily blocked. "
+                "Too many consecutive failures detected."
+            )
 
         retryable = _get_retryable_errors()
         models_to_try = [model] + [m for m in OPENAI_FALLBACK_MODELS if m != model]
@@ -211,7 +225,9 @@ class OpenAIAdapter:
         for model_idx, current_model in enumerate(models_to_try):
             for attempt in range(_MAX_RETRIES):
                 try:
-                    return fn(model=current_model)
+                    result = fn(model=current_model)
+                    _openai_circuit_breaker.record_success()
+                    return result
                 except retryable as exc:
                     last_error = exc
                     delay = min(_RETRY_BASE_DELAY * (2**attempt), _RETRY_MAX_DELAY)
@@ -252,5 +268,6 @@ class OpenAIAdapter:
 
         if last_error is None:
             raise RuntimeError("All retries exhausted with no error recorded")
-        log.error("All models and retries exhausted. Last error: %s", last_error)
+        _openai_circuit_breaker.record_failure()
+        log.error("All OpenAI models and retries exhausted. Last error: %s", last_error)
         raise last_error

@@ -126,7 +126,7 @@ def _g4_consistency(state: GeodeState) -> tuple[bool, str]:
         return True, "Consistency OK"
 
     mean = float(np.mean(scores))
-    std = float(np.std(scores))
+    std = float(np.std(scores, ddof=1))
     errors = [
         f"Analyst {a.analyst_type} score {a.score:.1f} is >2σ from mean {mean:.1f}"
         for a in analyses

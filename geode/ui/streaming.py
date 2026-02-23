@@ -1,14 +1,16 @@
 """LLM streaming output with Rich Live display.
 
 Enhanced streaming panel with token counting, model display,
-and adapter-agnostic streaming support.
+adapter-agnostic streaming support, and graph-level streaming.
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import Iterator
+from typing import Any
 
+from rich.console import Console as RichConsole
 from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
@@ -137,3 +139,59 @@ def stream_adapter_to_console(
     stream = adapter.generate_stream(system, user, model=model)
     display_model = model or "default"
     return stream_panel(stream, title=title, model=display_model)
+
+
+def stream_graph_progress(
+    graph: Any,
+    state: dict,
+    config: dict | None = None,
+    console: RichConsole | None = None,
+) -> dict:
+    """Stream graph execution with node-by-node progress display.
+
+    Accumulates state updates using the correct merge strategy:
+    - List reducer fields (analyses, errors, iteration_history) are extended.
+    - Dict reducer fields (evaluations, subscores) are merged.
+    - All other (scalar) fields are overwritten.
+
+    Args:
+        graph: Compiled LangGraph StateGraph.
+        state: Initial state dict.
+        config: Optional LangGraph config (e.g. thread config).
+        console: Optional Rich console for output.
+
+    Returns:
+        Final accumulated state dict.
+    """
+    _console = console or RichConsole()
+    final_state: dict = {}
+
+    for event in graph.stream(state, config=config):
+        for node_name, state_update in event.items():
+            if node_name == "__end__":
+                continue
+
+            # Accumulate list reducer fields
+            for key in ("analyses", "errors", "iteration_history"):
+                if key in state_update and isinstance(state_update[key], list):
+                    final_state.setdefault(key, []).extend(state_update[key])
+
+            # Merge dict fields
+            for key in ("evaluations", "subscores"):
+                if key in state_update and isinstance(state_update[key], dict):
+                    final_state.setdefault(key, {}).update(state_update[key])
+
+            # Overwrite scalar fields
+            for key, value in state_update.items():
+                if key not in (
+                    "analyses",
+                    "errors",
+                    "iteration_history",
+                    "evaluations",
+                    "subscores",
+                ):
+                    final_state[key] = value
+
+            _console.print(f"  [dim]completed: {node_name}[/dim]")
+
+    return final_state

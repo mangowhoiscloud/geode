@@ -172,7 +172,9 @@ def run_cross_llm_check(
 
     # Krippendorff's alpha as secondary reliability measure
     try:
-        alpha = calculate_krippendorff_alpha([scores])
+        # Each analyst is a rater scoring 1 item (the IP)
+        ratings_matrix = [[s] for s in scores]
+        alpha = calculate_krippendorff_alpha(ratings_matrix)
         krippendorff_alpha: float | None = round(alpha, 4)
     except Exception:
         krippendorff_alpha = None
@@ -265,33 +267,48 @@ def run_dual_adapter_check(
             secondary_agreement = int(digit[0])
             secondary_agreement = max(1, min(5, secondary_agreement))
         else:
-            secondary_agreement = 3  # Neutral if unparseable
+            secondary_agreement = None
+            log.warning("Dual-adapter secondary response unparseable, marking degraded")
 
         # Combine: base agreement (70%) + secondary cross-check (30%)
-        secondary_normalized = secondary_agreement / 5.0
-        combined = 0.7 * base_result["cross_llm_agreement"] + 0.3 * secondary_normalized
-        passed = combined >= AGREEMENT_THRESHOLD
+        # Skip blending when secondary is unparseable
+        if secondary_agreement is not None:
+            secondary_normalized = secondary_agreement / 5.0
+            combined = 0.7 * base_result["cross_llm_agreement"] + 0.3 * secondary_normalized
+            passed = combined >= AGREEMENT_THRESHOLD
+            verification_mode = "dual_adapter"
 
-        log.info(
-            "Dual-adapter check: base=%.3f, secondary=%d/5 (%.3f), combined=%.3f",
-            base_result["cross_llm_agreement"],
-            secondary_agreement,
-            secondary_normalized,
-            combined,
-        )
+            log.info(
+                "Dual-adapter check: base=%.3f, secondary=%d/5 (%.3f), combined=%.3f",
+                base_result["cross_llm_agreement"],
+                secondary_agreement,
+                secondary_normalized,
+                combined,
+            )
 
-        return {
-            **base_result,
-            "cross_llm_agreement": round(combined, 4),
-            "models_compared": _derive_model_names(
-                primary_adapter=primary_adapter,
-                secondary_adapter=secondary_adapter,
-            ),
-            "secondary_agreement": secondary_agreement,
-            "secondary_normalized": round(secondary_normalized, 4),
-            "verification_mode": "dual_adapter",
-            "passed": passed,
-        }
+            return {
+                **base_result,
+                "cross_llm_agreement": round(combined, 4),
+                "models_compared": _derive_model_names(
+                    primary_adapter=primary_adapter,
+                    secondary_adapter=secondary_adapter,
+                ),
+                "secondary_agreement": secondary_agreement,
+                "secondary_normalized": round(secondary_normalized, 4),
+                "verification_mode": verification_mode,
+                "passed": passed,
+            }
+        else:
+            # Degraded: secondary unparseable, use base result only
+            log.warning("Dual-adapter degraded: secondary unparseable, using base agreement only")
+            return {
+                **base_result,
+                "models_compared": _derive_model_names(
+                    primary_adapter=primary_adapter,
+                    secondary_adapter=secondary_adapter,
+                ),
+                "verification_mode": "dual_adapter_degraded",
+            }
 
     except Exception as exc:
         log.warning("Dual-adapter check failed, falling back: %s", exc)

@@ -375,6 +375,13 @@ def call_llm_streaming(
                     cost,
                 )
 
+    # Circuit breaker check — mirrors call_llm() behavior
+    if not _circuit_breaker.can_execute():
+        raise RuntimeError(
+            "Circuit breaker is open — LLM API calls are temporarily blocked. "
+            "Too many consecutive failures detected."
+        )
+
     # For streaming, retry at connection level only
     models_to_try = [target_model] + [m for m in FALLBACK_MODELS if m != target_model]
     last_error: Exception | None = None
@@ -382,7 +389,9 @@ def call_llm_streaming(
     for current_model in models_to_try:
         for attempt in range(MAX_RETRIES):
             try:
-                return _do_stream(model=current_model)
+                result = _do_stream(model=current_model)
+                _circuit_breaker.record_success()
+                return result
             except _RETRYABLE_ERRORS as exc:
                 last_error = exc
                 delay = min(RETRY_BASE_DELAY * (2**attempt), RETRY_MAX_DELAY)
@@ -397,4 +406,5 @@ def call_llm_streaming(
 
     if last_error is None:
         raise RuntimeError("All retries exhausted with no error recorded")
+    _circuit_breaker.record_failure()
     raise last_error

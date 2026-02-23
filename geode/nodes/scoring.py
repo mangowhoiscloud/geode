@@ -38,7 +38,8 @@ def _compute_psm(ip_name: str, monolake: dict) -> PSMResult:
         att = expected.get("psm_att_pct", 25.0)
         z = expected.get("psm_z_value", 2.0)
         gamma = expected.get("psm_gamma", 1.5)
-    except ValueError:
+    except ValueError as ve:
+        log.warning("PSM fixture load failed for %s: %s", ip_name, ve)
         att = 25.0
         z = 2.0
         gamma = 1.5
@@ -74,8 +75,9 @@ def _load_developer_score(ip_name: str, quality_fallback: float) -> float:
         dev = data.get("expected_results", {}).get("developer_track_record")
         if dev is not None:
             return float(dev)
-    except ValueError:
-        pass
+    except ValueError as ve:
+        log.warning("Developer score fixture load failed: %s", ve)
+
     return quality_fallback * 0.8
 
 

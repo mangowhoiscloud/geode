@@ -44,6 +44,7 @@ class AnalysisResult(BaseModel):
     reasoning: str
     evidence: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0, le=100, default=80.0)
+    is_degraded: bool = False
 
 
 class EvaluatorResult(BaseModel):
@@ -51,6 +52,7 @@ class EvaluatorResult(BaseModel):
     axes: dict[str, float]  # e.g. {"a_score": 4.2, "b_score": 3.8, ...}
     composite_score: float = Field(ge=0, le=100)
     rationale: str
+    is_degraded: bool = False
 
     @model_validator(mode="after")
     def validate_axes(self) -> EvaluatorResult:

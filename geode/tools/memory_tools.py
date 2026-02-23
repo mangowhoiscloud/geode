@@ -11,21 +11,22 @@ from __future__ import annotations
 from contextvars import ContextVar
 from typing import Any
 
+from geode.infrastructure.ports.memory_port import SessionStorePort
 from geode.memory.session import InMemorySessionStore
 
 
 # Thread-safe default session store via contextvars
-_default_session_store_ctx: ContextVar[InMemorySessionStore | None] = ContextVar(
+_default_session_store_ctx: ContextVar[SessionStorePort | None] = ContextVar(
     "default_session_store", default=None
 )
 
 
-def set_default_session_store(store: InMemorySessionStore) -> None:
+def set_default_session_store(store: SessionStorePort) -> None:
     """Set the context-local default session store for memory tools."""
     _default_session_store_ctx.set(store)
 
 
-def _get_session_store(store: InMemorySessionStore | None = None) -> InMemorySessionStore:
+def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePort:
     """Get the session store to use, falling back to default."""
     if store is not None:
         return store
@@ -42,7 +43,7 @@ class MemorySearchTool:
     In production, would also search Project and Organization tiers.
     """
 
-    def __init__(self, session_store: InMemorySessionStore | None = None) -> None:
+    def __init__(self, session_store: SessionStorePort | None = None) -> None:
         self._store = session_store
 
     @property
@@ -118,7 +119,7 @@ class MemorySearchTool:
 class MemoryGetTool:
     """Tool for retrieving a specific memory entry by session ID."""
 
-    def __init__(self, session_store: InMemorySessionStore | None = None) -> None:
+    def __init__(self, session_store: SessionStorePort | None = None) -> None:
         self._store = session_store
 
     @property
@@ -172,7 +173,7 @@ class MemoryGetTool:
 class MemorySaveTool:
     """Tool for saving data to session memory."""
 
-    def __init__(self, session_store: InMemorySessionStore | None = None) -> None:
+    def __init__(self, session_store: SessionStorePort | None = None) -> None:
         self._store = session_store
 
     @property

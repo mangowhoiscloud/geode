@@ -33,6 +33,7 @@ from geode.nodes.router import route_after_router, router_node
 from geode.nodes.scoring import scoring_node
 from geode.nodes.signals import signals_node
 from geode.nodes.synthesizer import synthesizer_node
+from geode.infrastructure.ports.hook_port import HookSystemPort
 from geode.orchestration.hooks import HookEvent, HookSystem
 from geode.state import BiasBusterResult, GeodeState, GuardrailResult
 from geode.verification.biasbuster import run_biasbuster
@@ -56,7 +57,7 @@ _NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
 def _make_hooked_node(
     node_fn: Callable[[GeodeState], dict[str, Any]],
     node_name: str,
-    hooks: HookSystem,
+    hooks: HookSystemPort,
 ) -> Callable[[GeodeState], dict[str, Any]]:
     """Wrap a node function with hook triggers."""
 
@@ -182,7 +183,7 @@ def _gather_node(state: GeodeState) -> dict:
 
 def build_graph(
     *,
-    hooks: HookSystem | None = None,
+    hooks: HookSystemPort | None = None,
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
 ) -> StateGraph:
@@ -285,7 +286,7 @@ def build_graph(
 def compile_graph(
     *,
     checkpoint_db: str | None = None,
-    hooks: HookSystem | None = None,
+    hooks: HookSystemPort | None = None,
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     interrupt_before: list[str] | None = None,
@@ -324,4 +325,8 @@ def compile_graph(
     if interrupt_before:
         compile_kwargs["interrupt_before"] = interrupt_before
 
+    # CLI integration note: the returned CompiledStateGraph supports
+    # .stream(state, config) for node-by-node progress reporting,
+    # yielding intermediate state dicts after each node execution.
+    # Use graph.stream() in CLI/UI layers for real-time progress bars.
     return graph.compile(**compile_kwargs)

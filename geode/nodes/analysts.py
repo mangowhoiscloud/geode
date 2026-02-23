@@ -75,6 +75,7 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
             reasoning="Schema validation failed — degraded result",
             evidence=["validation_error"],
             confidence=0.0,
+            is_degraded=True,
         )
 
 

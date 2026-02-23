@@ -140,6 +140,22 @@ Example (quality_judge):
   "axes": {{"a_score": 4.2, "b_score": 3.8, "c_score": 4.0, "b1_score": 3.5, "c1_score": 3.9, "c2_score": 4.1, "m_score": 3.7, "n_score": 4.0}},
   "composite_score": 78.0,
   "rationale": "Strong core mechanics and engagement hooks. IP integration is solid but trailer metrics lag behind."
+}}
+
+Example (hidden_value):
+{{
+  "evaluator_type": "hidden_value",
+  "axes": {{"d_score": 4.5, "e_score": 3.0, "f_score": 4.0}},
+  "composite_score": 62.5,
+  "rationale": "Severe acquisition gap with no active marketing. Monetization adequate but expansion potential is high."
+}}
+
+Example (community_momentum):
+{{
+  "evaluator_type": "community_momentum",
+  "axes": {{"j_score": 4.0, "k_score": 3.5, "l_score": 3.8}},
+  "composite_score": 69.2,
+  "rationale": "Strong growth velocity and UGC output. Streaming presence growing but not yet viral."
 }}"""
 
 EVALUATOR_AXES = {
@@ -156,14 +172,14 @@ EVALUATOR_AXES = {
             "n_score": "Fun factor (pure entertainment value)",
         },
         "rubric": {
-            "a_score": {"1": "기본 조작 불량", "3": "장르 평균", "5": "혁신적 메카닉"},
-            "b_score": {"1": "IP 무관", "3": "적절한 활용", "5": "IP 핵심 구현"},
-            "c_score": {"1": "D1 Retention <10%", "3": "D1 30-50%", "5": "D1 >70%"},
-            "b1_score": {"1": "like/view <1%", "3": "4-6%", "5": "≥8%"},
-            "c1_score": {"1": "Store score <50", "3": "70-85", "5": "≥90"},
-            "c2_score": {"1": "Mixed reviews", "3": "Positive", "5": "Overwhelmingly Positive"},
-            "m_score": {"1": "버그 다수", "3": "안정적", "5": "완벽"},
-            "n_score": {"1": "재미없음", "3": "적당히 재미", "5": "Flow 달성"},
+            "a_score": {"1": "기본 조작 불량", "2": "장르 이하", "3": "장르 평균", "4": "장르 이상", "5": "혁신적 메카닉"},
+            "b_score": {"1": "IP 무관", "2": "피상적 활용", "3": "적절한 활용", "4": "깊은 활용", "5": "IP 핵심 구현"},
+            "c_score": {"1": "D1 Retention <10%", "2": "D1 10-30%", "3": "D1 30-50%", "4": "D1 50-70%", "5": "D1 >70%"},
+            "b1_score": {"1": "like/view <1%", "2": "1-4%", "3": "4-6%", "4": "6-8%", "5": "≥8%"},
+            "c1_score": {"1": "Store score <50", "2": "50-70", "3": "70-85", "4": "85-90", "5": "≥90"},
+            "c2_score": {"1": "Mixed reviews", "2": "Mostly Negative", "3": "Positive", "4": "Very Positive", "5": "Overwhelmingly Positive"},
+            "m_score": {"1": "버그 다수", "2": "불안정", "3": "안정적", "4": "잘 다듬어짐", "5": "완벽"},
+            "n_score": {"1": "재미없음", "2": "약간 재미", "3": "적당히 재미", "4": "매우 재미", "5": "Flow 달성"},
         },
         "composite_formula": "Average of all 8 axes, scaled to 0-100: (sum / 8) * 20",
     },
@@ -175,9 +191,9 @@ EVALUATOR_AXES = {
             "f_score": "Expansion Potential (untapped platform/market growth)",
         },
         "rubric": {
-            "d_score": {"1": "마케팅 충분", "3": "부분 부족", "5": "심각 부족"},
-            "e_score": {"1": "수익화 양호", "3": "부분 미달", "5": "심각 미달"},
-            "f_score": {"1": "확장 완료", "3": "부분 가능", "5": "큰 기회"},
+            "d_score": {"1": "마케팅 충분", "2": "소폭 부족", "3": "부분 부족", "4": "상당 부족", "5": "심각 부족"},
+            "e_score": {"1": "수익화 양호", "2": "소폭 미달", "3": "부분 미달", "4": "상당 미달", "5": "심각 미달"},
+            "f_score": {"1": "확장 완료", "2": "소폭 가능", "3": "부분 가능", "4": "상당 가능", "5": "큰 기회"},
         },
         "composite_formula": "Recovery potential: ((E + F) - 2) / 8 * 100",
     },
@@ -189,9 +205,9 @@ EVALUATOR_AXES = {
             "l_score": "Platform Momentum (streaming, content creation trend)",
         },
         "rubric": {
-            "j_score": {"1": "MoM <0%", "3": "MoM 0-5%", "5": "MoM >10%"},
-            "k_score": {"1": "UGC 없음", "3": "적당히 활동", "5": "바이럴"},
-            "l_score": {"1": "스트리밍 없음", "3": "간헐적", "5": "활발"},
+            "j_score": {"1": "MoM <0%", "2": "MoM 0-2%", "3": "MoM 0-5%", "4": "MoM 5-10%", "5": "MoM >10%"},
+            "k_score": {"1": "UGC 없음", "2": "소수 활동", "3": "적당히 활동", "4": "활발", "5": "바이럴"},
+            "l_score": {"1": "스트리밍 없음", "2": "드물게", "3": "간헐적", "4": "정기적", "5": "활발"},
         },
         "composite_formula": "((J + K + L) - 3) / 12 * 100",
     },
@@ -315,8 +331,12 @@ Example:
 BIASBUSTER_USER = """\
 Check for biases in this analysis of: {ip_name}
 
-## Analyst Scores
+## Analyst Scores (in execution order, with evidence length)
 {analyst_details}
+
+Note: [N] = execution order. evidence_chars = total character length of evidence list.
+- Position bias: Do scores correlate with execution order?
+- Verbosity bias: Do longer evidence sections correlate with higher scores?
 
 ## Score Statistics
 - Mean: {mean:.2f}, Std: {std:.2f}, CV: {cv:.2f}

@@ -36,10 +36,11 @@ def _format_rubric_anchors(evaluator_type: str) -> str:
     if not rubric:
         return ""
     axes_desc: dict[str, str] = EVALUATOR_AXES[evaluator_type]["axes"]  # type: ignore[assignment]
-    lines = ["## Rubric Anchors (1=Poor, 3=Good, 5=Outstanding)"]
+    lines = ["## Rubric Anchors (1=Poor, 2=Below Avg, 3=Good, 4=Above Avg, 5=Outstanding)"]
     for key, anchors in rubric.items():
         desc = axes_desc.get(key, key)
-        lines.append(f"- {key} ({desc}): 1={anchors['1']}, 3={anchors['3']}, 5={anchors['5']}")
+        parts = [f"{lvl}={anchors[lvl]}" for lvl in ("1", "2", "3", "4", "5") if lvl in anchors]
+        lines.append(f"- {key} ({desc}): {', '.join(parts)}")
     formula = EVALUATOR_AXES[evaluator_type].get("composite_formula", "")
     if formula:
         lines.append(f"\nComposite formula: {formula}")
@@ -106,6 +107,7 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
             axes=default_axes.get(evaluator_type, {"d_score": 1.0, "e_score": 1.0, "f_score": 1.0}),
             composite_score=0.0,
             rationale="LLM response failed validation (degraded)",
+            is_degraded=True,
         )
 
 
