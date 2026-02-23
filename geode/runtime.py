@@ -48,6 +48,7 @@ from geode.memory.project import ProjectMemory
 from geode.memory.session import InMemorySessionStore
 from geode.memory.session_key import build_session_key, build_thread_config
 from geode.orchestration.coalescing import CoalescingQueue
+from geode.infrastructure.ports.hook_port import HookSystemPort
 from geode.orchestration.hooks import HookEvent, HookSystem
 from geode.orchestration.hot_reload import ConfigWatcher
 from geode.orchestration.lane_queue import LaneQueue
@@ -169,7 +170,7 @@ class GeodeRuntime:
     def __init__(
         self,
         *,
-        hooks: HookSystem,
+        hooks: HookSystemPort,
         session_store: SessionStorePort,
         policy_chain: PolicyChain,
         tool_registry: ToolRegistry,
@@ -242,7 +243,7 @@ class GeodeRuntime:
         run_id: str,
         log_dir: Path | str | None,
         stuck_timeout_s: float,
-    ) -> tuple[HookSystem, RunLog, StuckDetector]:
+    ) -> tuple[HookSystemPort, RunLog, StuckDetector]:
         """Build HookSystem with RunLog and StuckDetector handlers."""
         hooks = HookSystem()
 
@@ -288,7 +289,7 @@ class GeodeRuntime:
     @staticmethod
     def _build_automation(
         *,
-        hooks: HookSystem,
+        hooks: HookSystemPort,
         session_key: str,
         ip_name: str,
     ) -> dict[str, Any]:
@@ -640,9 +641,13 @@ class GeodeRuntime:
 
     @property
     def checkpoint_db(self) -> str | None:
-        """Checkpoint DB path from settings, or None."""
+        """Checkpoint DB path from settings, or None.
+
+        Returns None for empty strings so the MemorySaver fallback
+        in compile_graph kicks in.
+        """
         db = settings.checkpoint_db
-        return db if db else None
+        return db if db and db.strip() else None
 
     def compile_graph(self, *, enable_checkpoint: bool = True):
         """Compile the GEODE graph with hooks and checkpointing (default: enabled).
@@ -660,6 +665,7 @@ class GeodeRuntime:
             checkpoint_db=checkpoint_db,
             confidence_threshold=settings.confidence_threshold,
             max_iterations=settings.max_iterations,
+            memory_fallback=True,
         )
         return self._compiled_graph
 

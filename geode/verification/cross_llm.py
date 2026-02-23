@@ -12,6 +12,7 @@ from typing import Any
 
 import numpy as np
 
+from geode.automation.expert_panel import calculate_krippendorff_alpha
 from geode.infrastructure.ports.llm_port import LLMClientPort
 from geode.state import AnalysisResult, GeodeState
 
@@ -66,7 +67,7 @@ def _calc_agreement(scores: list[float], scale_max_var: float = _MAX_VARIANCE) -
     if len(scores) < 2:
         return 1.0
 
-    observed_var = float(np.var(scores))
+    observed_var = float(np.var(scores, ddof=1))
     if scale_max_var == 0:
         return 1.0
 
@@ -144,27 +145,37 @@ def run_cross_llm_check(
             if digit:
                 secondary_score = max(1, min(5, int(digit[0])))
             else:
-                secondary_score = 3  # Neutral if unparseable
+                secondary_score = None  # Mark as unparseable
+                log.warning("Secondary LLM response unparseable, excluding from agreement")
 
-            # Blend secondary re-score into agreement
-            # Compare secondary score against original analyst score
-            rescore_agreement = 1.0 - abs(first.score - secondary_score) / (_SCALE_MAX - _SCALE_MIN)
-            rescore_agreement = max(0.0, min(1.0, rescore_agreement))
+            # Blend secondary re-score into agreement only when parseable
+            if secondary_score is not None:
+                rescore_agreement = 1.0 - abs(first.score - secondary_score) / (_SCALE_MAX - _SCALE_MIN)
+                rescore_agreement = max(0.0, min(1.0, rescore_agreement))
 
-            # Re-weight: 50% intra-model agreement, 50% cross-model re-score
-            combined = 0.5 * combined + 0.5 * rescore_agreement
+                # Re-weight: 50% intra-model agreement, 50% cross-model re-score
+                combined = 0.5 * combined + 0.5 * rescore_agreement
 
-            log.info(
-                "Cross-model re-score: secondary=%d, original=%.1f, "
-                "rescore_agreement=%.3f, combined=%.3f",
-                secondary_score,
-                first.score,
-                rescore_agreement,
-                combined,
-            )
+                log.info(
+                    "Cross-model re-score: secondary=%d, original=%.1f, "
+                    "rescore_agreement=%.3f, combined=%.3f",
+                    secondary_score,
+                    first.score,
+                    rescore_agreement,
+                    combined,
+                )
+            else:
+                verification_mode = "cross_model_degraded"
         except Exception as exc:
             log.warning("Secondary adapter re-score failed, using agreement only: %s", exc)
             verification_mode = "agreement_fallback"
+
+    # Krippendorff's alpha as secondary reliability measure
+    try:
+        alpha = calculate_krippendorff_alpha([scores])
+        krippendorff_alpha: float | None = round(alpha, 4)
+    except Exception:
+        krippendorff_alpha = None
 
     passed = combined >= AGREEMENT_THRESHOLD
 
@@ -191,6 +202,7 @@ def run_cross_llm_check(
         "cross_llm_agreement": round(combined, 4),
         "score_agreement": round(score_agreement, 4),
         "confidence_agreement": round(conf_agreement, 4),
+        "krippendorff_alpha": krippendorff_alpha,
         "metric": "agreement_coefficient",
         "models_compared": _derive_model_names(secondary_adapter=secondary_adapter),
         "n_raters": len(analyses),

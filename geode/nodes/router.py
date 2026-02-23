@@ -30,4 +30,5 @@ def route_after_router(state: GeodeState) -> str:
     elif mode == "scoring":
         return "scoring"
     else:
+        log.warning("Unknown pipeline_mode '%s', defaulting to cortex", mode)
         return "cortex"

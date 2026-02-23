@@ -15,7 +15,7 @@ def _should_continue(state: dict) -> str:
     The graph uses _configured_should_continue (a closure inside build_graph),
     so this helper provides the same logic for unit-testing the decision function.
     """
-    confidence = state.get("analyst_confidence", 100.0)
+    confidence = state.get("analyst_confidence", 0.0)
     iteration = state.get("iteration", 1)
     max_iter = state.get("max_iterations", DEFAULT_MAX_ITERATIONS)
 
@@ -36,7 +36,7 @@ class TestConfidenceThreshold:
         assert CONFIDENCE_THRESHOLD == 0.7
 
     def test_max_iterations_default(self):
-        assert DEFAULT_MAX_ITERATIONS == 3
+        assert DEFAULT_MAX_ITERATIONS == 5
 
 
 class TestShouldContinue:
@@ -60,10 +60,10 @@ class TestShouldContinue:
         state = {"analyst_confidence": 50.0, "iteration": 3, "max_iterations": 3}
         assert _should_continue(state) == "synthesizer"
 
-    def test_default_confidence_proceeds(self):
-        """No analyst_confidence defaults to 100.0 -> synthesizer."""
-        state = {"iteration": 1, "max_iterations": 3}
-        assert _should_continue(state) == "synthesizer"
+    def test_default_confidence_loops(self):
+        """No analyst_confidence defaults to 0.0 -> gather (safe default)."""
+        state = {"iteration": 1, "max_iterations": 5}
+        assert _should_continue(state) == "gather"
 
     def test_zero_confidence_loops(self):
         state = {"analyst_confidence": 0.0, "iteration": 1, "max_iterations": 3}

@@ -21,8 +21,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from geode.nodes.analysts import analyst_node, make_analyst_sends
 from geode.nodes.cortex import cortex_node
@@ -41,7 +43,7 @@ log = logging.getLogger(__name__)
 
 # Confidence threshold for feedback loop (L3)
 CONFIDENCE_THRESHOLD = 0.7
-DEFAULT_MAX_ITERATIONS = 3
+DEFAULT_MAX_ITERATIONS = 5
 
 # Node → specific hook event mapping
 _NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
@@ -118,11 +120,14 @@ def _make_hooked_node(
 def _verification_node(state: GeodeState) -> dict[str, Any]:
     """Run guardrails + biasbuster."""
     if state.get("skip_verification"):
+        log.warning("Verification skipped — results unverified")
         return {
-            "guardrails": GuardrailResult(details=["Skipped by --skip-verification"]),
+            "guardrails": GuardrailResult(
+                details=["WARNING: Verification skipped — results unverified"],
+            ),
             "biasbuster": BiasBusterResult(explanation="Skipped"),
         }
-    guardrails = run_guardrails(state)
+    guardrails = run_guardrails(state, signal_data=state.get("signals"))
     biasbuster = run_biasbuster(state)
     cross_llm = run_cross_llm_check(state)
     errors: list[str] = []
@@ -242,7 +247,7 @@ def build_graph(
         if guardrails and not guardrails.all_passed:
             log.warning("Guardrails failed — proceeding in demo mode")
 
-        confidence = state.get("analyst_confidence", 100.0)
+        confidence = state.get("analyst_confidence", 0.0)
         iteration = state.get("iteration", 1)
         max_iter = state.get("max_iterations", max_iterations)
 
@@ -284,7 +289,8 @@ def compile_graph(
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     interrupt_before: list[str] | None = None,
-) -> Any:  # CompiledGraph
+    memory_fallback: bool = False,
+) -> CompiledStateGraph:
     """Compile the graph for execution.
 
     Args:
@@ -296,6 +302,8 @@ def compile_graph(
         max_iterations: Override maximum feedback loop iterations.
         interrupt_before: Optional list of node names to pause before for
             human-in-the-loop support. E.g. ["verification"].
+        memory_fallback: If True and checkpoint_db is None, use MemorySaver
+            as an in-memory checkpointer (requires thread_id in config).
     """
     graph = build_graph(
         hooks=hooks,
@@ -310,6 +318,8 @@ def compile_graph(
         conn = sqlite3.connect(str(db_path), check_same_thread=False)
         atexit.register(conn.close)
         compile_kwargs["checkpointer"] = SqliteSaver(conn)
+    elif memory_fallback:
+        compile_kwargs["checkpointer"] = MemorySaver()
 
     if interrupt_before:
         compile_kwargs["interrupt_before"] = interrupt_before

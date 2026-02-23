@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import threading
+
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_settings_lock = threading.Lock()
 
 
 class Settings(BaseSettings):
@@ -58,4 +62,19 @@ class Settings(BaseSettings):
     max_iterations: int = 5
 
 
-settings = Settings()
+_settings_instance: Settings | None = None
+
+
+def _get_settings() -> Settings:
+    """Get or create the Settings singleton in a thread-safe manner."""
+    global _settings_instance  # noqa: PLW0603
+    if _settings_instance is not None:
+        return _settings_instance
+    with _settings_lock:
+        # Double-checked locking
+        if _settings_instance is None:
+            _settings_instance = Settings()
+        return _settings_instance
+
+
+settings = _get_settings()

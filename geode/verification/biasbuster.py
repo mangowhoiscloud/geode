@@ -27,7 +27,7 @@ def _run_statistical_checks(analyses: list[AnalysisResult]) -> dict:
         return {"mean": 0, "std": 0, "cv": 0, "min": 0, "max": 0}
 
     mean = float(np.mean(scores))
-    std = float(np.std(scores))
+    std = float(np.std(scores, ddof=1))
     cv = std / mean if mean > 0 else 0
 
     return {
@@ -53,6 +53,9 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
                 confirmation_bias=False,
                 recency_bias=False,
                 anchoring_bias=low_variance_flag,
+                position_bias=False,
+                verbosity_bias=False,
+                self_enhancement_bias=False,
                 overall_pass=not low_variance_flag,
                 explanation=(
                     "Clean Context applied. Analyst scores show healthy variance "
@@ -93,6 +96,9 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
                     confirmation_bias=False,
                     recency_bias=False,
                     anchoring_bias=low_variance_flag,
+                    position_bias=False,
+                    verbosity_bias=False,
+                    self_enhancement_bias=False,
                     overall_pass=not low_variance_flag,
                     explanation=(
                         f"Statistical check only (LLM response invalid). CV={stats['cv']:.2f}"
@@ -104,6 +110,9 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
                 confirmation_bias=False,
                 recency_bias=False,
                 anchoring_bias=low_variance_flag,
+                position_bias=False,
+                verbosity_bias=False,
+                self_enhancement_bias=False,
                 overall_pass=not low_variance_flag,
                 explanation=f"Statistical check only (LLM unavailable). CV={stats['cv']:.2f}",
             )
@@ -113,6 +122,9 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
             confirmation_bias=False,
             recency_bias=False,
             anchoring_bias=False,
+            position_bias=False,
+            verbosity_bias=False,
+            self_enhancement_bias=False,
             overall_pass=True,
             explanation=f"BiasBuster error (degraded): {exc}",
         )

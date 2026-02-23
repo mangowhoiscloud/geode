@@ -69,7 +69,7 @@ def _build_evaluator_prompt(evaluator_type: str, state: GeodeState) -> tuple[str
     system = EVALUATOR_SYSTEM.format(
         evaluator_type=evaluator_type,
         axes_schema=_format_axes_schema(evaluator_type),
-    )
+    ) + "\n\n" + _format_rubric_anchors(evaluator_type)
     user = EVALUATOR_USER.format(
         ip_name=ip["ip_name"],
         ip_summary=ip_summary,

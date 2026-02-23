@@ -121,6 +121,9 @@ class BiasBusterResult(BaseModel):
     confirmation_bias: bool = False
     recency_bias: bool = False
     anchoring_bias: bool = False
+    position_bias: bool = False
+    verbosity_bias: bool = False
+    self_enhancement_bias: bool = False
     overall_pass: bool = True
     explanation: str = ""
 

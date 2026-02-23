@@ -8,27 +8,30 @@ Layer 5 tools for memory access:
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any
 
 from geode.memory.session import InMemorySessionStore
 
 
-# Module-level default session store (can be overridden at runtime)
-_default_session_store: InMemorySessionStore | None = None
+# Thread-safe default session store via contextvars
+_default_session_store_ctx: ContextVar[InMemorySessionStore | None] = ContextVar(
+    "default_session_store", default=None
+)
 
 
 def set_default_session_store(store: InMemorySessionStore) -> None:
-    """Set the module-level default session store for memory tools."""
-    global _default_session_store  # noqa: PLW0603
-    _default_session_store = store
+    """Set the context-local default session store for memory tools."""
+    _default_session_store_ctx.set(store)
 
 
 def _get_session_store(store: InMemorySessionStore | None = None) -> InMemorySessionStore:
     """Get the session store to use, falling back to default."""
     if store is not None:
         return store
-    if _default_session_store is not None:
-        return _default_session_store
+    default = _default_session_store_ctx.get()
+    if default is not None:
+        return default
     return InMemorySessionStore()
 
 

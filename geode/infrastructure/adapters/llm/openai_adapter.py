@@ -30,7 +30,7 @@ _RETRY_MAX_DELAY = 30.0
 DEFAULT_OPENAI_MODEL = "gpt-5.3"
 
 # OpenAI fallback chain
-OPENAI_FALLBACK_MODELS = ["gpt-5.3"]
+OPENAI_FALLBACK_MODELS = ["gpt-5.3", "gpt-4o"]
 
 # Model pricing (USD per token) — local copy to avoid coupling to Anthropic client internals
 _MODEL_PRICING: dict[str, dict[str, float]] = {
@@ -44,11 +44,17 @@ def _calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return input_tokens * prices.get("input", 0) + output_tokens * prices.get("output", 0)
 
 
-def _get_openai_client():
-    """Lazy import and create OpenAI client."""
-    import openai
+_openai_client: Any = None  # openai.OpenAI | None — lazy import
 
-    return openai.OpenAI(api_key=settings.openai_api_key)
+
+def _get_openai_client() -> Any:
+    """Lazy import and return cached OpenAI client."""
+    global _openai_client  # noqa: PLW0603
+    if _openai_client is None:
+        import openai
+
+        _openai_client = openai.OpenAI(api_key=settings.openai_api_key)
+    return _openai_client
 
 
 def _get_retryable_errors() -> tuple:
@@ -97,6 +103,7 @@ class OpenAIAdapter:
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
+                timeout=90.0,
             )
             # Track usage
             if response.usage:
@@ -166,6 +173,7 @@ class OpenAIAdapter:
                 ],
                 stream=True,
                 stream_options={"include_usage": True},
+                timeout=90.0,
             )
             for chunk in response:
                 if chunk.choices and chunk.choices[0].delta.content:

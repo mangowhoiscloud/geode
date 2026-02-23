@@ -9,6 +9,8 @@ Architecture (OpenClaw-inspired):
 from __future__ import annotations
 
 import logging
+from contextvars import ContextVar
+from typing import Any
 
 import typer
 from rich.text import Text
@@ -54,10 +56,38 @@ app = typer.Typer(
     invoke_without_command=True,
 )
 
-# Singletons for REPL session
-_nl_router = NLRouter()
-_search_engine = IPSearchEngine()
-_readiness: ReadinessReport | None = None
+# Thread-safe singletons for REPL session via contextvars
+_nl_router_ctx: ContextVar[Any] = ContextVar("nl_router", default=None)
+_search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
+_readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
+
+
+def _get_nl_router() -> NLRouter:
+    """Get or create the context-local NLRouter."""
+    router = _nl_router_ctx.get()
+    if router is None:
+        router = NLRouter()
+        _nl_router_ctx.set(router)
+    return router
+
+
+def _get_search_engine() -> IPSearchEngine:
+    """Get or create the context-local IPSearchEngine."""
+    engine = _search_engine_ctx.get()
+    if engine is None:
+        engine = IPSearchEngine()
+        _search_engine_ctx.set(engine)
+    return engine
+
+
+def _get_readiness() -> ReadinessReport | None:
+    """Get the context-local ReadinessReport."""
+    return _readiness_ctx.get()
+
+
+def _set_readiness(report: ReadinessReport) -> None:
+    """Set the context-local ReadinessReport."""
+    _readiness_ctx.set(report)
 
 
 # ---------------------------------------------------------------------------
@@ -75,8 +105,6 @@ _LOGO = r"""
 
 def _welcome_screen() -> None:
     """Show Claude Code-style welcome screen with readiness check."""
-    global _readiness  # noqa: PLW0603
-
     console.print()
     logo = Text(_LOGO, style="bold cyan")
     console.print(logo)
@@ -87,8 +115,9 @@ def _welcome_screen() -> None:
     console.print()
 
     # OpenClaw gateway:startup — readiness check
-    _readiness = check_readiness()
-    render_readiness(_readiness)
+    readiness = check_readiness()
+    _set_readiness(readiness)
+    render_readiness(readiness)
 
     # OpenClaw boot-md — initialize project memory if absent
     setup_project_memory()
@@ -297,8 +326,6 @@ def _render_search_results(query: str, results: list) -> None:
 
 def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
     """Handle a slash command. Returns (should_break, new_verbose)."""
-    global _readiness  # noqa: PLW0603
-
     action = resolve_action(cmd)
 
     if action == "quit":
@@ -317,7 +344,8 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
     elif action in ("analyze", "run"):
         dry_run = action == "analyze"
         # Graceful Degradation: force dry-run if no API key
-        if action == "run" and _readiness and _readiness.force_dry_run:
+        readiness = _get_readiness()
+        if action == "run" and readiness and readiness.force_dry_run:
             console.print("  [warning]API key not configured — forcing dry-run mode[/warning]")
             dry_run = True
         label = "/analyze" if dry_run else "/run"
@@ -329,13 +357,14 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
         if not args:
             console.print("  [warning]Usage: /search <query>[/warning]")
         else:
-            results = _search_engine.search(args)
+            results = _get_search_engine().search(args)
             _render_search_results(args, results)
     elif action == "key":
         changed = cmd_key(args)
         if changed:
-            _readiness = check_readiness()
-            render_readiness(_readiness)
+            new_readiness = check_readiness()
+            _set_readiness(new_readiness)
+            render_readiness(new_readiness)
     elif action == "model":
         cmd_model(args)
     elif action == "auth":
@@ -352,7 +381,7 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
 
 def _handle_natural_language(text: str, verbose: bool) -> None:
     """Route natural language input via NLRouter."""
-    intent = _nl_router.classify(text)
+    intent = _get_nl_router().classify(text)
 
     if intent.action == "search":
         results = _search_engine.search(intent.args.get("query", text))
@@ -449,7 +478,7 @@ def search(
     query: str = typer.Argument(..., help="Search query (e.g. 'dark fantasy', '소울라이크')"),
 ) -> None:
     """Search IPs by keyword or genre."""
-    results = _search_engine.search(query)
+    results = _get_search_engine().search(query)
     _render_search_results(query, results)
 
 

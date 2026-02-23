@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from typing import Any
 
 
 def _hash_prompt(text: str) -> str:
-    """Return first 12 chars of SHA-256 hash for prompt versioning."""
+    """Return first 12 chars of SHA-256 hash for template versioning."""
     return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+
+def hash_rendered_prompt(template: str, **kwargs: Any) -> str:
+    """Hash a rendered prompt (not template) for reproducibility auditing."""
+    rendered = template.format(**kwargs) if kwargs else template
+    return hashlib.sha256(rendered.encode()).hexdigest()[:12]
 
 # ---------------------------------------------------------------------------
 # Analyst Prompts (Layer 3) — Clean Context, no cross-analyst data
@@ -125,6 +132,14 @@ Respond in JSON format:
   "axes": {{{axes_schema}}},
   "composite_score": <float 0-100>,
   "rationale": "<2-3 sentences explaining the evaluation>"
+}}
+
+Example (quality_judge):
+{{
+  "evaluator_type": "quality_judge",
+  "axes": {{"a_score": 4.2, "b_score": 3.8, "c_score": 4.0, "b1_score": 3.5, "c1_score": 3.9, "c2_score": 4.1, "m_score": 3.7, "n_score": 4.0}},
+  "composite_score": 78.0,
+  "rationale": "Strong core mechanics and engagement hooks. IP integration is solid but trailer metrics lag behind."
 }}"""
 
 EVALUATOR_AXES = {
@@ -220,6 +235,12 @@ Respond in JSON format:
 {{
   "value_narrative": "<2-3 sentences connecting data insights to the undervaluation cause>",
   "target_gamer_segment": "<specific gamer segment using Bartle Taxonomy with reasoning>"
+}}
+
+Example:
+{{
+  "value_narrative": "Despite 12M YouTube views and +42% fan art growth, no active game exists. The bounty-hunter loop maps to action RPG with zero direct competitors.",
+  "target_gamer_segment": "SF Action RPG users (25-40, Explorer/Killer hybrid, narrative-driven)"
 }}"""
 
 SYNTHESIZER_USER = """\
@@ -263,14 +284,32 @@ Check for:
 1. Confirmation Bias: Are conclusions overly aligned with initial hypotheses?
 2. Recency Bias: Is recent data weighted disproportionately over historical data?
 3. Anchoring Bias: Were analysts influenced by each other's scores? (Check score variance)
+4. Position Bias: Are scores influenced by the order analysts were presented?
+5. Verbosity Bias: Were longer analyst responses scored higher regardless of quality?
+6. Self-Enhancement Bias: Did the LLM favor its own prior outputs or reasoning patterns?
 
 Respond in JSON:
 {{
   "confirmation_bias": <bool>,
   "recency_bias": <bool>,
   "anchoring_bias": <bool>,
+  "position_bias": <bool>,
+  "verbosity_bias": <bool>,
+  "self_enhancement_bias": <bool>,
   "overall_pass": <bool>,
   "explanation": "<brief explanation>"
+}}
+
+Example:
+{{
+  "confirmation_bias": false,
+  "recency_bias": false,
+  "anchoring_bias": true,
+  "position_bias": false,
+  "verbosity_bias": false,
+  "self_enhancement_bias": false,
+  "overall_pass": false,
+  "explanation": "Analyst scores cluster within 0.2 (CV=0.03), suggesting anchoring."
 }}"""
 
 BIASBUSTER_USER = """\
@@ -319,4 +358,5 @@ __all__ = [
     "PROMPT_VERSIONS",
     "SYNTHESIZER_SYSTEM",
     "SYNTHESIZER_USER",
+    "hash_rendered_prompt",
 ]

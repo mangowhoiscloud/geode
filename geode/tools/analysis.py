@@ -10,8 +10,35 @@ from __future__ import annotations
 
 from typing import Any
 
-from geode.nodes.analysts import ANALYST_TYPES, _dry_run_result
-from geode.nodes.scoring import _compute_psm
+from geode.fixtures import load_fixture
+from geode.nodes.analysts import ANALYST_TYPES, get_dry_run_result
+from geode.state import PSMResult
+
+
+def _compute_psm_from_fixture(ip_name: str) -> PSMResult:
+    """Compute PSM result from fixture data (public tool-layer wrapper)."""
+    try:
+        data = load_fixture(ip_name)
+        expected = data.get("expected_results", {})
+        att = expected.get("psm_att_pct", 25.0)
+        z = expected.get("psm_z_value", 2.0)
+        gamma = expected.get("psm_gamma", 1.5)
+    except ValueError:
+        att = 25.0
+        z = 2.0
+        gamma = 1.5
+    exposure_lift = min(100.0, max(0.0, att * 1.5 + 30))
+    z_pass = z > 1.645
+    gamma_pass = gamma <= 2.0
+    smd = 0.05
+    return PSMResult(
+        att_pct=att,
+        z_value=z,
+        rosenbaum_gamma=gamma,
+        max_smd=smd,
+        exposure_lift_score=exposure_lift,
+        psm_valid=z_pass and gamma_pass and smd < 0.1,
+    )
 
 
 class RunAnalystTool:
@@ -53,7 +80,7 @@ class RunAnalystTool:
         if analyst_type not in ANALYST_TYPES:
             return {"error": f"Unknown analyst_type: {analyst_type}"}
 
-        result = _dry_run_result(analyst_type, ip_name)
+        result = get_dry_run_result(analyst_type, ip_name)
         return {
             "result": {
                 "analyst_type": result.analyst_type,
@@ -167,7 +194,7 @@ class PSMCalculateTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs["ip_name"]
         try:
-            psm = _compute_psm(ip_name, {})
+            psm = _compute_psm_from_fixture(ip_name)
             return {
                 "result": {
                     "att_pct": psm.att_pct,

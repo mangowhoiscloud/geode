@@ -44,6 +44,16 @@ def cortex_node(state: GeodeState) -> dict[str, Any]:
             "monolake": fixture["monolake"],
         }
 
+        # Adaptive feedback: propagate weak_areas from previous iterations
+        # so downstream analysts/evaluators can focus on low-confidence dims
+        iteration_history = state.get("iteration_history", [])
+        if iteration_history:
+            latest = iteration_history[-1]
+            weak_areas = latest.get("weak_areas", [])
+            if weak_areas:
+                log.info("Cortex: previous iteration weak areas — %s", weak_areas)
+                result.setdefault("monolake", {})["_weak_areas"] = weak_areas
+
         # 3-tier memory context assembly (if available)
         assembler = _context_assembler_ctx.get()
         if assembler:

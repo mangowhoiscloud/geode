@@ -61,7 +61,7 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
         log.debug("Running %s analyst...", analyst_type)
 
     if state.get("dry_run"):
-        return _dry_run_result(analyst_type, state.get("ip_name", ""))
+        return get_dry_run_result(analyst_type, state.get("ip_name", ""))
 
     data = get_llm_json()(system, user)
     try:
@@ -71,14 +71,14 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
         return AnalysisResult(
             analyst_type=analyst_type,
             score=1.0,
-            key_finding="LLM response failed validation (degraded)",
-            reasoning="Schema validation failed",
-            evidence=[],
+            key_finding="[DEGRADED] LLM response failed validation",
+            reasoning="Schema validation failed — degraded result",
+            evidence=["validation_error"],
             confidence=0.0,
         )
 
 
-def _dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
+def get_dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
     """Return IP-specific mock results for dry-run mode."""
     key = ip_name.lower().strip()
 
@@ -290,3 +290,7 @@ def make_analyst_sends(state: GeodeState) -> list:
         }
         sends.append(Send("analyst", send_state))
     return sends
+
+
+# Backward-compatible alias (prefer get_dry_run_result for new code)
+_dry_run_result = get_dry_run_result

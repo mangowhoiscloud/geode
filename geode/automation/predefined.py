@@ -13,6 +13,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from geode.automation.triggers import TriggerConfig, TriggerType
+
 
 class PipelineConfig(BaseModel):
     """Configuration for a pipeline execution within an automation."""
@@ -177,3 +179,34 @@ def list_automations(*, enabled_only: bool = False) -> list[AutomationTemplate]:
     if enabled_only:
         return [a for a in PREDEFINED_AUTOMATIONS if a.enabled]
     return list(PREDEFINED_AUTOMATIONS)
+
+
+def create_trigger_from_template(template: AutomationTemplate) -> TriggerConfig:
+    """Convert a predefined template to a TriggerConfig for the TriggerManager.
+
+    Maps the template's schedule to the appropriate trigger type:
+    - ``event:<name>`` schedules become EVENT triggers.
+    - Cron expressions become SCHEDULED triggers.
+    """
+    if template.schedule.startswith("event:"):
+        trigger_type = TriggerType.EVENT
+        event_name = template.schedule.removeprefix("event:")
+        cron_expr = ""
+    else:
+        trigger_type = TriggerType.SCHEDULED
+        event_name = ""
+        cron_expr = template.schedule
+
+    return TriggerConfig(
+        trigger_id=template.id,
+        trigger_type=trigger_type,
+        name=template.name,
+        cron_expr=cron_expr,
+        event_name=event_name,
+        enabled=template.enabled,
+        metadata={
+            "description": template.description,
+            "pipeline_config": template.pipeline_config.model_dump(),
+            "tags": template.tags,
+        },
+    )

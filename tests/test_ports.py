@@ -15,6 +15,10 @@ class MockLLM:
         self._response = response
         self.calls: list[tuple[str, str]] = []
 
+    @property
+    def model_name(self) -> str:
+        return "mock-model"
+
     def generate(
         self,
         system: str,

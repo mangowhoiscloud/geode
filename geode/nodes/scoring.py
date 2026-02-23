@@ -92,8 +92,11 @@ def _calc_quality_score(evaluations: dict[str, EvaluatorResult]) -> float:
     qj = evaluations.get("quality_judge")
     if not qj:
         return 50.0
+    expected_count = 8
+    if len(qj.axes) != expected_count:
+        log.warning("Quality score: expected %d axes, got %d", expected_count, len(qj.axes))
     axes_sum = sum(qj.axes.values())
-    return (axes_sum / 8) * 20
+    return (axes_sum / max(len(qj.axes), 1)) * 20
 
 
 def _calc_recovery_potential(evaluations: dict[str, EvaluatorResult]) -> float:
@@ -145,7 +148,7 @@ def _calc_analyst_confidence(analyses: list[AnalysisResult]) -> float:
         return 100.0
     scores = [a.score for a in analyses]
     mean = float(np.mean(scores))
-    std = float(np.std(scores))
+    std = float(np.std(scores, ddof=1))
     if mean == 0:
         return 100.0
     cv = std / mean
@@ -211,6 +214,14 @@ def scoring_node(state: GeodeState) -> dict[str, Any]:
         developer = _load_developer_score(ip_name, quality_score)
         growth = _calc_growth_score(evaluations, developer_track_record=developer)
 
+        # Clamp all subscores to [0, 100] for normalization safety
+        quality_score = max(0.0, min(100.0, quality_score))
+        recovery = max(0.0, min(100.0, recovery))
+        momentum = max(0.0, min(100.0, momentum))
+        confidence = max(0.0, min(100.0, confidence))
+        developer = max(0.0, min(100.0, developer))
+        growth = max(0.0, min(100.0, growth))
+
         if state.get("verbose"):
             log.debug("PSM: ATT=%+.1f%%, Z=%.2f", psm.att_pct, psm.z_value)
             log.debug(
@@ -249,5 +260,5 @@ def scoring_node(state: GeodeState) -> dict[str, Any]:
             "tier": tier,
         }
     except Exception as exc:
-        log.error("Node scoring failed: %s", exc)
-        return {"errors": [f"scoring: {exc}"]}
+        log.exception("Scoring node failed: %s", exc)
+        return {"errors": [f"scoring: {type(exc).__name__}: {exc}"]}

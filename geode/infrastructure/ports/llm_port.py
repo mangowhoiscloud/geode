@@ -27,6 +27,11 @@ class LLMClientPort(Protocol):
     - generate_stream: streaming text generation
     """
 
+    @property
+    def model_name(self) -> str:
+        """Return the default model name for cross-LLM verification."""
+        ...
+
     def generate(
         self,
         system: str,

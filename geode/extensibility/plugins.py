@@ -6,11 +6,14 @@ a clean lifecycle state machine.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +128,34 @@ class Plugin(ABC):
 
 
 # ---------------------------------------------------------------------------
+# Concrete Plugin Example
+# ---------------------------------------------------------------------------
+
+
+class LoggingPlugin(Plugin):
+    """Example plugin that logs pipeline events."""
+
+    def __init__(self) -> None:
+        super().__init__(PluginMetadata(
+            name="logging-plugin",
+            version="1.0.0",
+            description="Logs pipeline lifecycle events for observability.",
+        ))
+
+    def install(self) -> None:
+        log.info("LoggingPlugin installed")
+
+    def activate(self) -> None:
+        log.info("LoggingPlugin activated")
+
+    def deactivate(self) -> None:
+        log.info("LoggingPlugin deactivated")
+
+    def uninstall(self) -> None:
+        log.info("LoggingPlugin uninstalled")
+
+
+# ---------------------------------------------------------------------------
 # Plugin Manager
 # ---------------------------------------------------------------------------
 
@@ -165,8 +196,9 @@ class PluginManager:
         plugin._transition(PluginState.ACTIVE)
         try:
             plugin.activate()
-        except Exception:
+        except Exception as exc:
             plugin._state = PluginState.ERROR
+            log.exception("Plugin activation failed for '%s': %s", name, exc)
             raise
 
     def deactivate(self, name: str) -> None:

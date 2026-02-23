@@ -389,25 +389,28 @@ def _auth_add_interactive(store, add_args: str) -> None:
     console.print()
 
 
-# Module-level profile store singleton
-_profile_store: object | None = None  # ProfileStore (lazy import)
+# Thread-safe profile store via contextvars
+from contextvars import ContextVar
+from typing import Any as _Any
+
+_profile_store_ctx: ContextVar[_Any] = ContextVar("profile_store", default=None)
 
 
 def _get_profile_store():
-    """Get or create the module-level profile store, seeded from settings."""
+    """Get or create the context-local profile store, seeded from settings."""
     from geode.auth.profiles import AuthProfile, CredentialType, ProfileStore
 
-    global _profile_store  # noqa: PLW0603
-    if _profile_store is not None:
-        return _profile_store
+    store = _profile_store_ctx.get()
+    if store is not None:
+        return store
 
-    _profile_store = ProfileStore()
+    store = ProfileStore()
 
     # Seed from existing settings
     from geode.config import settings
 
     if settings.anthropic_api_key:
-        _profile_store.add(
+        store.add(
             AuthProfile(
                 name="anthropic:default",
                 provider="anthropic",
@@ -416,7 +419,7 @@ def _get_profile_store():
             )
         )
     if settings.openai_api_key:
-        _profile_store.add(
+        store.add(
             AuthProfile(
                 name="openai:default",
                 provider="openai",
@@ -424,7 +427,8 @@ def _get_profile_store():
                 key=settings.openai_api_key,
             )
         )
-    return _profile_store
+    _profile_store_ctx.set(store)
+    return store
 
 
 def cmd_generate(args: str) -> None:
