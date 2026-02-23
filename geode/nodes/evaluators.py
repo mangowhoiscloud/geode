@@ -93,11 +93,19 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
         return EvaluatorResult(**data)
     except ValidationError as ve:
         log.warning("Evaluator %s LLM response failed schema validation: %s", evaluator_type, ve)
+        default_axes: dict[str, dict[str, float]] = {
+            "quality_judge": {
+                "a_score": 1.0, "b_score": 1.0, "c_score": 1.0, "b1_score": 1.0,
+                "c1_score": 1.0, "c2_score": 1.0, "m_score": 1.0, "n_score": 1.0,
+            },
+            "hidden_value": {"d_score": 1.0, "e_score": 1.0, "f_score": 1.0},
+            "community_momentum": {"j_score": 1.0, "k_score": 1.0, "l_score": 1.0},
+        }
         return EvaluatorResult(
             evaluator_type=evaluator_type,
-            axes={},
+            axes=default_axes.get(evaluator_type, {"d_score": 1.0, "e_score": 1.0, "f_score": 1.0}),
             composite_score=0.0,
-            rationale=f"LLM response failed validation (degraded): {str(ve)[:200]}",
+            rationale="LLM response failed validation (degraded)",
         )
 
 

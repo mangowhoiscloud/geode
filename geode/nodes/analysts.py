@@ -70,9 +70,9 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
         log.warning("Analyst %s LLM response failed schema validation: %s", analyst_type, ve)
         return AnalysisResult(
             analyst_type=analyst_type,
-            score=3.0,
+            score=1.0,
             key_finding="LLM response failed validation (degraded)",
-            reasoning=str(ve)[:200],
+            reasoning="Schema validation failed",
             evidence=[],
             confidence=0.0,
         )

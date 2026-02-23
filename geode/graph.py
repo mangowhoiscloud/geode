@@ -17,6 +17,7 @@ import atexit
 import logging
 import sqlite3
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -51,10 +52,10 @@ _NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
 
 
 def _make_hooked_node(
-    node_fn,
+    node_fn: Callable[[GeodeState], dict[str, Any]],
     node_name: str,
     hooks: HookSystem,
-):
+) -> Callable[[GeodeState], dict[str, Any]]:
     """Wrap a node function with hook triggers."""
 
     def _wrapped(state: GeodeState) -> dict[str, Any]:
@@ -191,7 +192,9 @@ def build_graph(
     graph = StateGraph(GeodeState)
 
     # Optionally wrap nodes with hook triggers
-    def _node(fn, name: str):
+    def _node(
+        fn: Callable[[GeodeState], dict[str, Any]], name: str,
+    ) -> Callable[[GeodeState], dict[str, Any]]:
         if hooks is not None:
             return _make_hooked_node(fn, name, hooks)
         return fn
@@ -281,7 +284,7 @@ def compile_graph(
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     interrupt_before: list[str] | None = None,
-):
+) -> Any:  # CompiledGraph
     """Compile the graph for execution.
 
     Args:

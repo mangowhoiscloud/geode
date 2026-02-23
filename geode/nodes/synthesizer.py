@@ -256,7 +256,7 @@ def _build_llm_synthesis(
         return SynthesisResult(
             undervaluation_cause=cause,
             action_type=action,
-            value_narrative=f"LLM response failed validation (degraded): {str(ve)[:200]}",
+            value_narrative="Schema validation failed (degraded)",
             target_gamer_segment="Unknown (degraded)",
         )
 

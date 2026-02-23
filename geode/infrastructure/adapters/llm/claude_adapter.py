@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+from geode.config import settings
 from geode.llm.client import call_llm, call_llm_json, call_llm_streaming
 
 
@@ -18,6 +19,11 @@ class ClaudeAdapter:
     Wraps the existing call_llm/call_llm_json/call_llm_streaming functions
     from geode.llm.client into the port interface.
     """
+
+    @property
+    def model_name(self) -> str:
+        """Return the default model name for cross-LLM verification."""
+        return settings.model
 
     def generate(
         self,

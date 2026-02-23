@@ -71,6 +71,11 @@ class OpenAIAdapter:
     def __init__(self, default_model: str = DEFAULT_OPENAI_MODEL) -> None:
         self._default_model = default_model
 
+    @property
+    def model_name(self) -> str:
+        """Return the default model name for cross-LLM verification."""
+        return self._default_model
+
     def generate(
         self,
         system: str,
@@ -148,24 +153,49 @@ class OpenAIAdapter:
         temperature: float = 0.3,
     ) -> Iterator[str]:
         client = _get_openai_client()
-        target = model or self._default_model
+        target_model = model or self._default_model
 
-        stream = client.chat.completions.create(
-            model=target,
-            max_completion_tokens=max_tokens,
-            temperature=temperature,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            stream=True,
-        )
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        def _do_stream(*, model: str) -> Iterator[str]:
+            response = client.chat.completions.create(
+                model=model,
+                max_completion_tokens=max_tokens,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+                # Final chunk carries usage when stream_options includes usage
+                if hasattr(chunk, "usage") and chunk.usage is not None:
+                    in_tok = chunk.usage.prompt_tokens or 0
+                    out_tok = chunk.usage.completion_tokens or 0
+                    cost = _calculate_cost(model, in_tok, out_tok)
+                    usage = LLMUsage(
+                        model=model,
+                        input_tokens=in_tok,
+                        output_tokens=out_tok,
+                        cost_usd=cost,
+                    )
+                    get_usage_accumulator().record(usage)
+                    log.debug(
+                        "OpenAI streaming usage: model=%s in=%d out=%d cost=$%.4f",
+                        model,
+                        in_tok,
+                        out_tok,
+                        cost,
+                    )
+
+        return self._retry_with_backoff(_do_stream, model=target_model)
 
     def _retry_with_backoff(self, fn, *, model: str) -> Any:
         """Retry with exponential backoff + model fallback."""
+        import openai
+
         retryable = _get_retryable_errors()
         models_to_try = [model] + [m for m in OPENAI_FALLBACK_MODELS if m != model]
         last_error: Exception | None = None
@@ -185,10 +215,34 @@ class OpenAIAdapter:
                         type(exc).__name__,
                     )
                     time.sleep(delay)
+                except openai.BadRequestError as exc:
+                    error_msg = str(exc)
+                    # Credit balance / billing error — no retry, clear message
+                    if "billing" in error_msg.lower() or "credit" in error_msg.lower():
+                        log.error("OpenAI billing error: %s", error_msg)
+                        raise RuntimeError(
+                            "OpenAI API billing/credit error. "
+                            "Check your OpenAI account billing settings, "
+                            "or use --dry-run mode."
+                        ) from exc
+                    # Context overflow or token limit — no retry, log details
+                    if "token" in error_msg.lower() or "context" in error_msg.lower():
+                        log.error(
+                            "Context overflow (model=%s): %s",
+                            current_model,
+                            error_msg,
+                        )
+                    raise
 
             if model_idx < len(models_to_try) - 1:
-                log.warning("Falling back to next OpenAI model")
+                next_model = models_to_try[model_idx + 1]
+                log.warning(
+                    "All retries exhausted for model=%s. Falling back to %s",
+                    current_model,
+                    next_model,
+                )
 
         if last_error is None:
             raise RuntimeError("All retries exhausted with no error recorded")
+        log.error("All models and retries exhausted. Last error: %s", last_error)
         raise last_error
