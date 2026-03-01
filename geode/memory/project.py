@@ -26,6 +26,9 @@ log = logging.getLogger(__name__)
 # MEMORY.md max lines loaded into context (SOT: 200)
 MAX_MEMORY_LINES = 200
 
+# Maximum insight entries before oldest-drop rotation
+MAX_INSIGHTS = 50
+
 # YAML frontmatter regex
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 _PATHS_RE = re.compile(r"paths:\s*\n((?:\s*-\s*.+\n)*)", re.MULTILINE)
@@ -132,7 +135,11 @@ class ProjectMemory:
         return matched
 
     def add_insight(self, insight: str) -> bool:
-        """Append an insight to the '## 최근 인사이트' section of MEMORY.md.
+        """Add an insight to the '## 최근 인사이트' section of MEMORY.md.
+
+        - Dedup: same date + same IP substring → skip (return False)
+        - Newest-first: new entry prepended at top of section
+        - Rotation: keeps only MAX_INSIGHTS entries, oldest dropped
 
         Returns True if successfully written, False otherwise.
         """
@@ -148,17 +155,70 @@ class ProjectMemory:
         timestamp = datetime.now().strftime("%Y-%m-%d")
         entry = f"- {timestamp}: {insight}"
 
-        # Find the insights section and append
         marker = "## 최근 인사이트"
+
         if marker in content:
-            # Insert after the marker line
-            idx = content.index(marker) + len(marker)
-            # Skip to end of line
-            newline_idx = content.index("\n", idx)
-            content = content[: newline_idx + 1] + entry + "\n" + content[newline_idx + 1 :]
+            marker_idx = content.index(marker)
+            newline_idx = content.index("\n", marker_idx + len(marker))
+            before = content[: newline_idx + 1]
+            after = content[newline_idx + 1 :]
         else:
-            # Append section at end
-            content = content.rstrip() + f"\n\n{marker}\n{entry}\n"
+            before = content.rstrip() + f"\n\n{marker}\n"
+            after = ""
+
+        # Parse existing insight lines from 'after'
+        existing_lines: list[str] = []
+        remainder_lines: list[str] = []
+        in_insights = True
+        for line in after.split("\n"):
+            if in_insights and line.startswith("- "):
+                existing_lines.append(line)
+            elif in_insights and line.strip() == "":
+                existing_lines.append(line)  # preserve blank between entries
+            else:
+                in_insights = False
+                remainder_lines.append(line)
+
+        # Strip trailing blank lines from insight block
+        while existing_lines and existing_lines[-1].strip() == "":
+            existing_lines.pop()
+
+        # Dedup: skip if same date + same IP substring already exists
+        # Extract IP token from insight, e.g. "[Berserk]" → "Berserk"
+        ip_token = ""
+        if insight.startswith("[") and "]" in insight:
+            ip_token = insight[1 : insight.index("]")]
+
+        if ip_token:
+            for line in existing_lines:
+                if timestamp in line and ip_token in line:
+                    log.debug("Dedup: insight for [%s] on %s already exists", ip_token, timestamp)
+                    return False
+
+        # Prepend new entry (newest-first)
+        existing_lines.insert(0, entry)
+
+        # Rotation: keep only MAX_INSIGHTS entries
+        insight_entries = [ln for ln in existing_lines if ln.startswith("- ")]
+        if len(insight_entries) > MAX_INSIGHTS:
+            # Keep first MAX_INSIGHTS entries, drop oldest (at the end)
+            keep_count = MAX_INSIGHTS
+            kept = 0
+            trimmed: list[str] = []
+            for ln in existing_lines:
+                if ln.startswith("- "):
+                    if kept < keep_count:
+                        trimmed.append(ln)
+                        kept += 1
+                    # else: drop (oldest)
+                else:
+                    trimmed.append(ln)
+            existing_lines = trimmed
+
+        # Reassemble
+        insight_block = "\n".join(existing_lines)
+        remainder = "\n".join(remainder_lines)
+        content = before + insight_block + "\n" + remainder
 
         try:
             self._memory_file.write_text(content, encoding="utf-8")

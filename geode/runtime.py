@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
+    from geode.llm.prompt_assembler import PromptAssembler
+
 from geode.auth.cooldown import CooldownTracker
 from geode.auth.profiles import ProfileStore
 from geode.auth.rotation import ProfileRotator
@@ -57,6 +59,8 @@ from geode.orchestration.hot_reload import ConfigWatcher
 from geode.orchestration.lane_queue import LaneQueue
 from geode.orchestration.run_log import RunLog, RunLogEntry
 from geode.orchestration.stuck_detection import StuckDetector
+from geode.orchestration.task_bridge import TaskGraphHookBridge
+from geode.orchestration.task_system import TaskGraph, create_geode_task_graph
 from geode.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
 from geode.tools.policy import PolicyChain, ToolPolicy
 from geode.tools.registry import ToolRegistry
@@ -202,6 +206,8 @@ class GeodeRuntime:
         # L2 Memory components
         organization_memory: OrganizationMemoryPort | None = None,
         context_assembler: ContextAssembler | None = None,
+        # ADR-007: Prompt Assembly
+        prompt_assembler: PromptAssembler | None = None,
     ) -> None:
         self.hooks = hooks
         self.session_store = session_store
@@ -234,6 +240,11 @@ class GeodeRuntime:
         # L2 Memory
         self.organization_memory = organization_memory
         self.context_assembler = context_assembler
+        # ADR-007: Prompt Assembly
+        self.prompt_assembler: PromptAssembler | None = prompt_assembler
+        # L4 Task tracking
+        self.task_graph: TaskGraph | None = None
+        self._task_bridge: TaskGraphHookBridge | None = None
 
     # ------------------------------------------------------------------
     # Sub-builders for create() decomposition
@@ -295,6 +306,7 @@ class GeodeRuntime:
         hooks: HookSystemPort,
         session_key: str,
         ip_name: str,
+        project_memory: ProjectMemoryPort | None = None,
     ) -> dict[str, Any]:
         """Build L4.5 automation components and wire hook event handlers.
 
@@ -418,6 +430,29 @@ class GeodeRuntime:
             name="pipeline_end_snapshot", priority=80,
         )
 
+        # Memory write-back: pipeline end → add_insight to MEMORY.md (P0 auto-learning)
+        def _on_pipeline_end_memory(event: HookEvent, data: dict[str, Any]) -> None:
+            if project_memory is None:
+                return
+            if data.get("dry_run", False):
+                return  # dry_run은 기록하지 않음
+            ip = data.get("ip_name", "unknown")
+            tier = data.get("tier", "?")
+            score = data.get("final_score", 0.0)
+            cause = data.get("synthesis_cause", "")
+            action = data.get("synthesis_action", "")
+            insight = f"[{ip}] tier={tier}, score={score:.2f}"
+            if cause:
+                insight += f", cause={cause}"
+            if action:
+                insight += f", action={action}"
+            project_memory.add_insight(insight)
+
+        hooks.register(
+            HookEvent.PIPELINE_END, _on_pipeline_end_memory,
+            name="memory_write_back", priority=85,
+        )
+
         return {
             "drift_detector": drift_detector,
             "model_registry": model_registry,
@@ -457,6 +492,36 @@ class GeodeRuntime:
         cooldown_tracker = CooldownTracker()
 
         return profile_store, profile_rotator, cooldown_tracker
+
+    @staticmethod
+    def _build_prompt_assembler(
+        *,
+        hooks: HookSystemPort,
+        skill_dirs: list[Path] | None = None,
+    ) -> PromptAssembler:
+        """Build PromptAssembler with SkillRegistry and hook integration (ADR-007)."""
+        from geode.llm.prompt_assembler import PromptAssembler
+        from geode.llm.skill_registry import SkillRegistry
+
+        skill_registry = SkillRegistry(extra_dirs=skill_dirs or [])
+        skill_registry.discover()
+        return PromptAssembler(
+            skill_registry=skill_registry,
+            hooks=hooks,
+        )
+
+    @staticmethod
+    def _build_task_graph(
+        *,
+        hooks: HookSystemPort,
+        ip_name: str,
+    ) -> tuple[TaskGraph, TaskGraphHookBridge]:
+        """Build TaskGraph and wire the hook bridge for status tracking."""
+        prefix = ip_name.lower().replace(" ", "_")
+        graph = create_geode_task_graph(ip_name)
+        bridge = TaskGraphHookBridge(graph, ip_prefix=prefix)
+        bridge.register(hooks)
+        return graph, bridge
 
     # ------------------------------------------------------------------
     # Factory method
@@ -602,7 +667,18 @@ class GeodeRuntime:
             hooks=hooks,
             session_key=session_key,
             ip_name=ip_name,
+            project_memory=project_memory,
         )
+
+        # Prompt assembler (ADR-007)
+        try:
+            prompt_assembler = cls._build_prompt_assembler(hooks=hooks)
+        except ImportError:
+            log.debug("ADR-007 prompt_assembler/skill_registry not yet available — skipping")
+            prompt_assembler = None
+
+        # Task graph (L4 observer)
+        task_graph, task_bridge = cls._build_task_graph(hooks=hooks, ip_name=ip_name)
 
         log.info(
             "GeodeRuntime created: ip=%s, key=%s, tools=%d, lanes=%s",
@@ -632,9 +708,12 @@ class GeodeRuntime:
             ip_name=ip_name,
             organization_memory=organization_memory,
             context_assembler=context_assembler,
+            prompt_assembler=prompt_assembler,
             **automation,
         )
         instance.run_id = run_id
+        instance.task_graph = task_graph
+        instance._task_bridge = task_bridge
         return instance
 
     @property
@@ -671,6 +750,7 @@ class GeodeRuntime:
             confidence_threshold=settings.confidence_threshold,
             max_iterations=settings.max_iterations,
             memory_fallback=True,
+            prompt_assembler=self.prompt_assembler,
         )
         self._compiled_graph = compiled
         return compiled
@@ -694,6 +774,31 @@ class GeodeRuntime:
             self.context_assembler.mark_assembled(ctx.get("_assembled_at"))
             return ctx
         return self.get_ip_context()
+
+    def get_task_status(self, task_id: str | None = None) -> dict[str, Any]:
+        """Get task graph status. If task_id given, return single task; else summary."""
+        if self.task_graph is None:
+            return {"error": "task_graph not initialized"}
+        if task_id is not None:
+            task = self.task_graph.get_task(task_id)
+            if task is None:
+                return {"error": f"task '{task_id}' not found"}
+            return {
+                "task_id": task.task_id,
+                "name": task.name,
+                "status": task.status.value,
+                "elapsed_s": task.elapsed_s,
+                "error": task.error,
+            }
+        return self.task_graph.execution_summary()
+
+    def reset_task_graph(self) -> None:
+        """Reset task graph for REPL reuse (re-creates graph + bridge)."""
+        if self._task_bridge is not None:
+            self._task_bridge.unregister()
+        graph, bridge = self._build_task_graph(hooks=self.hooks, ip_name=self.ip_name)
+        self.task_graph = graph
+        self._task_bridge = bridge
 
     def get_available_tools(self, *, mode: str = "full_pipeline") -> list[str]:
         """Get tools available under the given pipeline mode."""
@@ -730,6 +835,13 @@ class GeodeRuntime:
         health["coalescing_pending"] = self.coalescing.pending_count
         health["lanes"] = self.lane_queue.list_lanes()
 
+        if self.task_graph is not None:
+            health["task_graph"] = {
+                "total": self.task_graph.task_count,
+                "stats": self.task_graph.stats.to_dict(),
+                "is_complete": self.task_graph.is_complete(),
+            }
+
         return health
 
     def shutdown(self) -> None:
@@ -739,3 +851,5 @@ class GeodeRuntime:
         self.stuck_detector.stop_monitor()
         if self.trigger_manager:
             self.trigger_manager.stop_scheduler()
+        if self._task_bridge:
+            self._task_bridge.unregister()

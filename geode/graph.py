@@ -19,7 +19,10 @@ import sqlite3
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from geode.llm.prompt_assembler import PromptAssembler
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -34,11 +37,13 @@ from geode.nodes.router import route_after_router, router_node
 from geode.nodes.scoring import scoring_node
 from geode.nodes.signals import signals_node
 from geode.nodes.synthesizer import synthesizer_node
+from geode.orchestration.bootstrap import BootstrapManager
 from geode.orchestration.hooks import HookEvent
 from geode.state import BiasBusterResult, GeodeState, GuardrailResult
 from geode.verification.biasbuster import run_biasbuster
 from geode.verification.cross_llm import run_cross_llm_check
 from geode.verification.guardrails import run_guardrails
+from geode.verification.rights_risk import RightsStatus, check_rights_risk
 
 log = logging.getLogger(__name__)
 
@@ -58,11 +63,34 @@ def _make_hooked_node(
     node_fn: Callable[[GeodeState], dict[str, Any]],
     node_name: str,
     hooks: HookSystemPort,
+    bootstrap_mgr: BootstrapManager | None = None,
+    prompt_assembler: PromptAssembler | None = None,
 ) -> Callable[[GeodeState], dict[str, Any]]:
-    """Wrap a node function with hook triggers."""
+    """Wrap a node function with hook triggers and prompt assembly."""
 
     def _wrapped(state: GeodeState) -> dict[str, Any]:
         hook_data: dict[str, Any] = {"node": node_name, "ip_name": state.get("ip_name", "")}
+
+        # Propagate Send API subtype so TaskGraphHookBridge can resolve task IDs
+        if node_name == "analyst" and "_analyst_type" in state:
+            hook_data["_analyst_type"] = state["_analyst_type"]
+        if node_name == "evaluator" and "_evaluator_type" in state:
+            hook_data["_evaluator_type"] = state["_evaluator_type"]
+
+        # NODE_BOOTSTRAP — allow hooks to modify node config before execution
+        effective_state: GeodeState = state
+        if bootstrap_mgr is not None:
+            ip_name = state.get("ip_name", "")
+            ctx = bootstrap_mgr.prepare_node(node_name, ip_name, dict(state))
+            if ctx.skip:
+                log.info("Bootstrap skip: node '%s' skipped for IP '%s'", node_name, ip_name)
+                return {}
+            effective_state = bootstrap_mgr.apply_context(dict(state), ctx)  # type: ignore[assignment]
+
+        # ADR-007: PromptAssembler injection via state
+        if prompt_assembler is not None:
+            effective_state = dict(effective_state)  # type: ignore[assignment]
+            effective_state["_prompt_assembler"] = prompt_assembler  # type: ignore[typeddict-unknown-key]
 
         # NODE_ENTER
         hooks.trigger(HookEvent.NODE_ENTER, hook_data)
@@ -73,7 +101,7 @@ def _make_hooked_node(
 
         start_time = time.time()
         try:
-            result: dict[str, Any] = node_fn(state)
+            result: dict[str, Any] = node_fn(effective_state)
 
             duration_ms = (time.time() - start_time) * 1000
             hook_data["duration_ms"] = duration_ms
@@ -104,6 +132,14 @@ def _make_hooked_node(
 
             # PIPELINE_END (synthesizer is the last real node)
             if node_name == "synthesizer":
+                # Enrich hook_data for memory write-back
+                synthesis = result.get("synthesis")
+                if synthesis:
+                    hook_data["synthesis_cause"] = getattr(synthesis, "undervaluation_cause", "")
+                    hook_data["synthesis_action"] = getattr(synthesis, "action_type", "")
+                hook_data["final_score"] = result.get("final_score", 0.0)
+                hook_data["tier"] = result.get("tier", "")
+                hook_data["dry_run"] = effective_state.get("dry_run", False)
                 hooks.trigger(HookEvent.PIPELINE_END, hook_data)
 
             return result
@@ -119,7 +155,7 @@ def _make_hooked_node(
 
 
 def _verification_node(state: GeodeState) -> dict[str, Any]:
-    """Run guardrails + biasbuster."""
+    """Run guardrails + biasbuster + rights risk check."""
     if state.get("skip_verification"):
         log.warning("Verification skipped — results unverified")
         return {
@@ -131,6 +167,11 @@ def _verification_node(state: GeodeState) -> dict[str, Any]:
     guardrails = run_guardrails(state, signal_data=state.get("signals"))
     biasbuster = run_biasbuster(state)
     cross_llm = run_cross_llm_check(state)
+
+    # Rights risk assessment (GAP-2)
+    ip_name = state.get("ip_name", "")
+    rights_risk = check_rights_risk(ip_name)
+
     errors: list[str] = []
     if not guardrails.all_passed:
         errors.append("Guardrails failed — results may be unreliable (demo mode)")
@@ -138,10 +179,15 @@ def _verification_node(state: GeodeState) -> dict[str, Any]:
         errors.append("BiasBuster flagged potential bias in analysis")
     if not cross_llm.get("passed", True):
         errors.append("Cross-LLM agreement below threshold")
+    if rights_risk.status in (RightsStatus.RESTRICTED, RightsStatus.UNKNOWN):
+        errors.append(
+            f"Rights risk warning: {rights_risk.status.value} — {rights_risk.recommendation}"
+        )
     result: dict[str, Any] = {
         "guardrails": guardrails,
         "biasbuster": biasbuster,
         "cross_llm": cross_llm,
+        "rights_risk": rights_risk,
     }
     if errors:
         result["errors"] = errors
@@ -186,6 +232,8 @@ def build_graph(
     hooks: HookSystemPort | None = None,
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
+    bootstrap_mgr: BootstrapManager | None = None,
+    prompt_assembler: PromptAssembler | None = None,
 ) -> StateGraph[GeodeState]:
     """Build the GEODE LangGraph StateGraph.
 
@@ -194,6 +242,9 @@ def build_graph(
             If provided, all nodes are wrapped with hook triggers.
         confidence_threshold: Override the feedback loop confidence threshold.
         max_iterations: Override maximum feedback loop iterations.
+        bootstrap_mgr: Optional BootstrapManager for pre-execution node
+            configuration. If provided, NODE_BOOTSTRAP fires before each
+            node, allowing hooks to modify prompts/parameters per-IP.
     """
     graph = StateGraph(GeodeState)
 
@@ -202,19 +253,19 @@ def build_graph(
         fn: Callable[[GeodeState], dict[str, Any]], name: str,
     ) -> Callable[[GeodeState], dict[str, Any]]:
         if hooks is not None:
-            return _make_hooked_node(fn, name, hooks)
+            return _make_hooked_node(fn, name, hooks, bootstrap_mgr, prompt_assembler)
         return fn
 
     # Add nodes (type: ignore needed — LangGraph type stubs don't match runtime)
     graph.add_node("router", _node(router_node, "router"))  # type: ignore[call-overload]
     graph.add_node("cortex", _node(cortex_node, "cortex"))  # type: ignore[call-overload]
     graph.add_node("signals", _node(signals_node, "signals"))  # type: ignore[call-overload]
-    graph.add_node("analyst", analyst_node)  # Send API — not wrapped (runs in parallel)
-    graph.add_node("evaluator", evaluator_node)  # Send API — parallel evaluators
-    graph.add_node("scoring", _node(scoring_node, "scoring"))  # type: ignore[arg-type]
-    graph.add_node("verification", _node(_verification_node, "verification"))  # type: ignore[arg-type]
-    graph.add_node("synthesizer", _node(synthesizer_node, "synthesizer"))  # type: ignore[arg-type]
-    graph.add_node("gather", _node(_gather_node, "gather"))  # type: ignore[arg-type]
+    graph.add_node("analyst", _node(analyst_node, "analyst"))  # type: ignore[call-overload]
+    graph.add_node("evaluator", _node(evaluator_node, "evaluator"))  # type: ignore[call-overload]
+    graph.add_node("scoring", _node(scoring_node, "scoring"))  # type: ignore[call-overload]
+    graph.add_node("verification", _node(_verification_node, "verification"))  # type: ignore[call-overload]
+    graph.add_node("synthesizer", _node(synthesizer_node, "synthesizer"))  # type: ignore[call-overload]
+    graph.add_node("gather", _node(_gather_node, "gather"))  # type: ignore[call-overload]
 
     # Edges: START → router
     graph.add_edge(START, "router")
@@ -283,6 +334,39 @@ def build_graph(
     return graph
 
 
+def _register_drift_scan_hook(hooks: HookSystemPort) -> None:
+    """Register a SCORING_COMPLETE handler that triggers CUSUM drift scan.
+
+    When the scoring node completes, this hook checks the drift_scan_hint
+    and emits a DRIFT_DETECTED event if the final_score suggests monitoring
+    is needed. In production, this would feed into FeedbackOrchestrator.
+    """
+    from geode.automation.drift import CUSUMDetector
+
+    detector = CUSUMDetector()
+
+    def _on_scoring_complete(event: HookEvent, data: dict[str, Any]) -> None:
+        if not data.get("drift_scan_hint"):
+            return
+        score = data.get("final_score", 0.0)
+        if score <= 0:
+            return
+        alerts = detector.scan_all({"final_score": score})
+        if alerts:
+            hooks.trigger(HookEvent.DRIFT_DETECTED, {
+                "source": "scoring_complete_hook",
+                "final_score": score,
+                "alerts": [a.to_dict() for a in alerts],
+            })
+
+    hooks.register(
+        HookEvent.SCORING_COMPLETE,
+        _on_scoring_complete,
+        name="drift_scan_on_scoring",
+        priority=50,
+    )
+
+
 def compile_graph(
     *,
     checkpoint_db: str | None = None,
@@ -291,6 +375,9 @@ def compile_graph(
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     interrupt_before: list[str] | None = None,
     memory_fallback: bool = False,
+    enable_drift_scan: bool = False,
+    bootstrap_mgr: BootstrapManager | None = None,
+    prompt_assembler: PromptAssembler | None = None,
 ) -> CompiledStateGraph[Any, None, Any, Any]:
     """Compile the graph for execution.
 
@@ -305,11 +392,21 @@ def compile_graph(
             human-in-the-loop support. E.g. ["verification"].
         memory_fallback: If True and checkpoint_db is None, use MemorySaver
             as an in-memory checkpointer (requires thread_id in config).
+        enable_drift_scan: If True and hooks provided, register CUSUM drift
+            scan handler on SCORING_COMPLETE events.
+        bootstrap_mgr: Optional BootstrapManager for pre-execution node
+            configuration via NODE_BOOTSTRAP hooks.
     """
+    # Register drift scan hook before building graph (GAP-7)
+    if enable_drift_scan and hooks is not None:
+        _register_drift_scan_hook(hooks)
+
     graph = build_graph(
         hooks=hooks,
         confidence_threshold=confidence_threshold,
         max_iterations=max_iterations,
+        bootstrap_mgr=bootstrap_mgr,
+        prompt_assembler=prompt_assembler,
     )
 
     compile_kwargs: dict[str, Any] = {}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from geode.memory.project import MAX_MEMORY_LINES, ProjectMemory
+from geode.memory.project import MAX_INSIGHTS, MAX_MEMORY_LINES, ProjectMemory
 
 
 class TestProjectMemoryExists:
@@ -165,6 +165,73 @@ class TestAddInsight:
         content = mem.memory_file.read_text(encoding="utf-8")
         assert "First insight" in content
         assert "Second insight" in content
+
+    def test_add_insight_dedup_same_ip_same_day(self, tmp_path: Path):
+        """Same IP + same date → second call returns False (dedup)."""
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+
+        assert mem.add_insight("[TestDedup] tier=S, score=0.85") is True
+        assert mem.add_insight("[TestDedup] tier=S, score=0.90") is False
+
+        content = mem.memory_file.read_text(encoding="utf-8")
+        assert content.count("TestDedup") == 1
+
+    def test_add_insight_different_ip_same_day(self, tmp_path: Path):
+        """Different IPs on the same day → both succeed."""
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+
+        assert mem.add_insight("[Berserk] tier=S, score=0.85") is True
+        assert mem.add_insight("[Cowboy Bebop] tier=A, score=0.70") is True
+
+        content = mem.memory_file.read_text(encoding="utf-8")
+        assert "Berserk" in content
+        assert "Cowboy Bebop" in content
+
+    def test_add_insight_rotation_max_50(self, tmp_path: Path):
+        """51st insertion drops oldest entry (rotation)."""
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+
+        # Insert MAX_INSIGHTS + 1 entries (each with unique IP to avoid dedup)
+        for i in range(MAX_INSIGHTS + 1):
+            result = mem.add_insight(f"[IP_{i}] tier=B, score=0.{i:02d}")
+            assert result is True
+
+        content = mem.memory_file.read_text(encoding="utf-8")
+        insight_lines = [ln for ln in content.split("\n") if ln.startswith("- ") and "tier=" in ln]
+        assert len(insight_lines) == MAX_INSIGHTS
+
+        # Oldest (IP_0) should be dropped, newest (IP_50) should be present
+        assert "IP_0" not in content
+        assert f"IP_{MAX_INSIGHTS}" in content
+
+    def test_add_insight_newest_first(self, tmp_path: Path):
+        """New insight appears at the top of the section (newest-first)."""
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+
+        mem.add_insight("[Alpha] tier=A, score=0.80")
+        mem.add_insight("[Beta] tier=B, score=0.60")
+
+        content = mem.memory_file.read_text(encoding="utf-8")
+        alpha_idx = content.index("Alpha")
+        beta_idx = content.index("Beta")
+        # Beta (added second) should appear before Alpha (newest-first)
+        assert beta_idx < alpha_idx
+
+    def test_add_insight_no_ip_bracket_no_dedup(self, tmp_path: Path):
+        """Insights without [IP] brackets don't trigger dedup."""
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+
+        assert mem.add_insight("General insight one") is True
+        assert mem.add_insight("General insight two") is True
+
+        content = mem.memory_file.read_text(encoding="utf-8")
+        assert "General insight one" in content
+        assert "General insight two" in content
 
 
 class TestGetContextForIP:
