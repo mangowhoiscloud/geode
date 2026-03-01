@@ -436,9 +436,9 @@ class GeodeRuntime:
                 return
             if data.get("dry_run", False):
                 return  # dry_run은 기록하지 않음
-            ip = data.get("ip_name", "unknown")
-            tier = data.get("tier", "?")
-            score = data.get("final_score", 0.0)
+            ip = data.get("ip_name") or "unknown"
+            tier = data.get("tier") or "?"
+            score = data.get("final_score") or 0.0
             cause = data.get("synthesis_cause", "")
             action = data.get("synthesis_action", "")
             insight = f"[{ip}] tier={tier}, score={score:.2f}"
@@ -446,7 +446,8 @@ class GeodeRuntime:
                 insight += f", cause={cause}"
             if action:
                 insight += f", action={action}"
-            project_memory.add_insight(insight)
+            if not project_memory.add_insight(insight):
+                log.warning("Failed to write insight for IP=%s", ip)
 
         hooks.register(
             HookEvent.PIPELINE_END, _on_pipeline_end_memory,

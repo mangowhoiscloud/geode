@@ -137,8 +137,8 @@ def _make_hooked_node(
                 if synthesis:
                     hook_data["synthesis_cause"] = getattr(synthesis, "undervaluation_cause", "")
                     hook_data["synthesis_action"] = getattr(synthesis, "action_type", "")
-                hook_data["final_score"] = result.get("final_score", 0.0)
-                hook_data["tier"] = result.get("tier", "")
+                hook_data["final_score"] = effective_state.get("final_score", 0.0)
+                hook_data["tier"] = effective_state.get("tier", "")
                 hook_data["dry_run"] = effective_state.get("dry_run", False)
                 hooks.trigger(HookEvent.PIPELINE_END, hook_data)
 

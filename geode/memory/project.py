@@ -159,9 +159,14 @@ class ProjectMemory:
 
         if marker in content:
             marker_idx = content.index(marker)
-            newline_idx = content.index("\n", marker_idx + len(marker))
-            before = content[: newline_idx + 1]
-            after = content[newline_idx + 1 :]
+            newline_idx = content.find("\n", marker_idx + len(marker))
+            if newline_idx == -1:
+                # Marker at end of file with no trailing newline
+                before = content + "\n"
+                after = ""
+            else:
+                before = content[: newline_idx + 1]
+                after = content[newline_idx + 1 :]
         else:
             before = content.rstrip() + f"\n\n{marker}\n"
             after = ""
@@ -191,7 +196,7 @@ class ProjectMemory:
 
         if ip_token:
             for line in existing_lines:
-                if timestamp in line and ip_token in line:
+                if timestamp in line and f"[{ip_token}]" in line:
                     log.debug("Dedup: insight for [%s] on %s already exists", ip_token, timestamp)
                     return False
 

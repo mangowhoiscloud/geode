@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 from geode.memory.project import ProjectMemory
 from geode.orchestration.hooks import HookEvent, HookSystem
@@ -137,14 +136,12 @@ class TestEnrichedHookData:
         def fake_synthesizer(state: dict[str, Any]) -> dict[str, Any]:
             return {
                 "synthesis": FakeSynthesis(),
-                "final_score": 0.72,
-                "tier": "A",
             }
 
         wrapped = _make_hooked_node(fake_synthesizer, "synthesizer", hooks)  # type: ignore[arg-type]
 
-        # Execute with minimal state
-        wrapped({"ip_name": "Ghost in the Shell"})  # type: ignore[arg-type]
+        # Execute with state containing final_score/tier (set by scoring node)
+        wrapped({"ip_name": "Ghost in the Shell", "final_score": 0.72, "tier": "A"})  # type: ignore[arg-type]
 
         assert len(captured) == 1
         data = captured[0]
