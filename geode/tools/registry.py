@@ -73,6 +73,29 @@ class ToolRegistry:
             if tool.name in allowed_names
         ]
 
+    def to_openai_tools(
+        self, *, policy: PolicyChain | None = None, mode: str = "full_pipeline"
+    ) -> list[dict[str, Any]]:
+        """Convert registered tools to OpenAI function-calling format.
+
+        Args:
+            policy: Optional PolicyChain for filtering.
+            mode: Pipeline mode for policy evaluation.
+        """
+        allowed_names = self.list_tools(policy=policy, mode=mode)
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                },
+            }
+            for tool in self._tools.values()
+            if tool.name in allowed_names
+        ]
+
     def execute(
         self,
         name: str,

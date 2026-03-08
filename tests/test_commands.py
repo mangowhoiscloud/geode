@@ -188,10 +188,10 @@ class TestCmdModel:
         try:
             # Ensure starting model differs from target
             settings.model = "claude-opus-4-6"
-            cmd_model("gpt-5.3")
-            assert settings.model == "gpt-5.3"
+            cmd_model("gpt-5.4")
+            assert settings.model == "gpt-5.4"
             content = (tmp_path / ".env").read_text()
-            assert "GEODE_MODEL=gpt-5.3" in content
+            assert "GEODE_MODEL=gpt-5.4" in content
         finally:
             settings.model = old
 
@@ -238,8 +238,8 @@ class TestApplyModel:
 
         old = settings.model
         try:
-            _apply_model(MODEL_PROFILES[3])  # GPT-5.3
-            assert settings.model == "gpt-5.3"
+            _apply_model(MODEL_PROFILES[3])  # GPT-5.4
+            assert settings.model == "gpt-5.4"
         finally:
             settings.model = old
 

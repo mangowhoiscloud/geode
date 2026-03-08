@@ -157,6 +157,7 @@ class TestModelRegistry:
         v = reg.register("v1.0", prompt_text="Hello", rubric_text="World")
         assert v.prompt_hash != ""
         assert v.rubric_hash != ""
+
     def test_promote_with_validation_gate_pass(self):
         mgr = ModelRegistry()
         v = mgr.register("v1.0.0")
@@ -169,4 +170,3 @@ class TestModelRegistry:
         with pytest.raises(ValueError, match="Validation gate failed"):
             mgr.promote(v.version_id, PromotionStage.STAGING, validation_fn=lambda v: False)
         assert v.stage == PromotionStage.DEV  # unchanged
-

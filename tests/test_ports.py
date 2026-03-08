@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from typing import Any
+from collections.abc import Callable, Iterator
+from typing import Any, TypeVar
+
+from pydantic import BaseModel
 
 from geode.infrastructure.ports.llm_port import LLMClientPort
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class MockLLM:
@@ -45,6 +49,19 @@ class MockLLM:
         self.calls.append((system, user))
         return json.loads(self._response)
 
+    def generate_parsed(
+        self,
+        system: str,
+        user: str,
+        *,
+        output_model: type[T],
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> T:
+        self.calls.append((system, user))
+        return output_model.model_validate({"result": self._response})
+
     def generate_stream(
         self,
         system: str,
@@ -56,6 +73,21 @@ class MockLLM:
     ) -> Iterator[str]:
         self.calls.append((system, user))
         yield self._response
+
+    def generate_with_tools(
+        self,
+        system: str,
+        user: str,
+        *,
+        tools: list[dict[str, Any]],
+        tool_executor: Callable[..., dict[str, Any]],
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+        max_tool_rounds: int = 5,
+    ) -> Any:
+        self.calls.append((system, user))
+        return {"text": self._response, "tool_calls": [], "usage": [], "rounds": 1}
 
 
 class TestLLMClientPort:

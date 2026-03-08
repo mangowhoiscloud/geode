@@ -9,16 +9,11 @@ with systematic boundary values to cover the property-based test intent:
 
 from __future__ import annotations
 
-import itertools
-
 import pytest
 
 from geode.nodes.scoring import (
     _calc_analyst_confidence,
-    _calc_community_momentum,
     _calc_final_score,
-    _calc_quality_score,
-    _calc_recovery_potential,
     _determine_tier,
 )
 
@@ -57,7 +52,7 @@ class TestFinalScoreBounds:
     @pytest.mark.parametrize(
         "subscores",
         [
-            (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),    # All minimum
+            (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),  # All minimum
             (100.0, 100.0, 100.0, 100.0, 100.0, 100.0),  # All maximum
             (50.0, 50.0, 50.0, 50.0, 50.0, 50.0),  # All middle
             (0.0, 100.0, 0.0, 100.0, 0.0, 100.0),  # Alternating
@@ -146,7 +141,14 @@ class TestMonotonicity:
 
     @pytest.mark.parametrize(
         "subscore_idx,label",
-        [(0, "exposure"), (1, "quality"), (2, "recovery"), (3, "growth"), (4, "momentum"), (5, "developer")],
+        [
+            (0, "exposure"),
+            (1, "quality"),
+            (2, "recovery"),
+            (3, "growth"),
+            (4, "momentum"),
+            (5, "developer"),
+        ],
     )
     def test_each_subscore_monotonic(self, subscore_idx: int, label: str):
         """Each subscore should be individually monotonic."""

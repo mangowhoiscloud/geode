@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any as _Any
 from typing import cast
 
-from simple_term_menu import TerminalMenu  # type: ignore[import-untyped]
+from simple_term_menu import TerminalMenu
 
 from geode.auth.profiles import ProfileStore
 from geode.ui.console import console
@@ -36,7 +36,7 @@ MODEL_PROFILES: list[ModelProfile] = [
     ModelProfile("claude-opus-4-6", "Anthropic", "Opus 4.6", "$$$"),
     ModelProfile("claude-sonnet-4-5-20250929", "Anthropic", "Sonnet 4.5", "$$"),
     ModelProfile("claude-haiku-4-5-20251001", "Anthropic", "Haiku 4.5", "$"),
-    ModelProfile("gpt-5.3", "OpenAI", "GPT-5.3", "$$$"),
+    ModelProfile("gpt-5.4", "OpenAI", "GPT-5.4", "$$"),
 ]
 
 _MODEL_INDEX: dict[str, ModelProfile] = {m.id: m for m in MODEL_PROFILES}
@@ -64,6 +64,8 @@ COMMAND_MAP: dict[str, str] = {
     "/auth": "auth",
     "/generate": "generate",
     "/gen": "generate",
+    "/report": "report",
+    "/rpt": "report",
 }
 
 
@@ -81,6 +83,7 @@ def show_help() -> None:
     console.print("  [label]/model[/label]              — Show & switch LLM model")
     console.print("  [label]/auth[/label]               — Manage auth profiles")
     console.print("  [label]/generate[/label] [count]   — Generate synthetic demo data")
+    console.print("  [label]/report[/label] <IP> [fmt]  — Generate report (md/html/json)")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
     console.print()
@@ -90,7 +93,7 @@ def show_help() -> None:
 
 def cmd_list() -> None:
     """List available IP fixtures."""
-    from geode.nodes.cortex import _FIXTURE_MAP
+    from geode.nodes.router import _FIXTURE_MAP
 
     console.print()
     console.print("  [header]Available IPs[/header]")
@@ -225,7 +228,7 @@ def cmd_model(args: str) -> None:
 
     /model         → interactive arrow-key picker
     /model 2       → select by number
-    /model gpt-5.3 → select by name
+    /model gpt-5.4 → select by name
     """
     arg = args.strip()
 

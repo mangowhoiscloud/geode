@@ -119,10 +119,13 @@ class SnapshotManager:
         if self._hooks:
             from geode.orchestration.hooks import HookEvent
 
-            self._hooks.trigger(HookEvent.SNAPSHOT_CAPTURED, {
-                "snapshot_id": snapshot_id,
-                "session_id": session_id,
-            })
+            self._hooks.trigger(
+                HookEvent.SNAPSHOT_CAPTURED,
+                {
+                    "snapshot_id": snapshot_id,
+                    "session_id": session_id,
+                },
+            )
 
         log.info("Captured snapshot %s for session %s", snapshot_id, session_id)
         return snap
@@ -158,7 +161,9 @@ class SnapshotManager:
         with self._lock:
             limit = max_recent or self._max_recent
             all_snaps = sorted(
-                self._snapshots.values(), key=lambda s: s.created_at, reverse=True,
+                self._snapshots.values(),
+                key=lambda s: s.created_at,
+                reverse=True,
             )
 
             if len(all_snaps) <= limit:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from geode.extensibility.plugins import (
@@ -12,7 +10,6 @@ from geode.extensibility.plugins import (
     PluginMetadata,
     PluginState,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test Plugin Implementations

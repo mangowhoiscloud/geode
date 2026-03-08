@@ -7,8 +7,8 @@ import pytest
 from geode.memory.session_key import (
     ALL_PHASES,
     ANALYSIS,
-    CORTEX,
     EVALUATION,
+    ROUTER,
     SCORING,
     SIGNALS,
     SYNTHESIS,
@@ -21,8 +21,8 @@ from geode.memory.session_key import (
 
 class TestBuildSessionKey:
     def test_basic_key(self):
-        key = build_session_key("Berserk", CORTEX)
-        assert key == "ip:berserk:cortex"
+        key = build_session_key("Berserk", ROUTER)
+        assert key == "ip:berserk:router"
 
     def test_multi_word_name(self):
         key = build_session_key("Cowboy Bebop", ANALYSIS)
@@ -43,16 +43,16 @@ class TestBuildSessionKey:
             assert phase in key
 
     def test_uppercase_normalized(self):
-        key = build_session_key("BERSERK", CORTEX)
-        assert key == "ip:berserk:cortex"
+        key = build_session_key("BERSERK", ROUTER)
+        assert key == "ip:berserk:router"
 
 
 class TestParseSessionKey:
     def test_basic_parse(self):
-        result = parse_session_key("ip:berserk:cortex")
+        result = parse_session_key("ip:berserk:router")
         assert result["prefix"] == "ip"
         assert result["ip_name"] == "berserk"
-        assert result["phase"] == "cortex"
+        assert result["phase"] == "router"
         assert result["sub_context"] is None
 
     def test_parse_with_sub_context(self):
@@ -67,7 +67,7 @@ class TestParseSessionKey:
 
     def test_wrong_prefix_raises(self):
         with pytest.raises(ValueError, match="Invalid session key"):
-            parse_session_key("user:berserk:cortex")
+            parse_session_key("user:berserk:router")
 
     def test_roundtrip(self):
         original = build_session_key("Cowboy Bebop", VERIFICATION, "guardrails")
@@ -79,8 +79,7 @@ class TestParseSessionKey:
 class TestBuildThreadConfig:
     def test_basic_config(self):
         config = build_thread_config("Berserk", ANALYSIS)
-        assert "configurable" in config
-        assert config["configurable"]["thread_id"] == "ip:berserk:analysis"
+        assert config == {"configurable": {"thread_id": "ip:berserk:analysis"}}
 
     def test_config_with_sub_context(self):
         config = build_thread_config("Berserk", EVALUATION, "hidden_value")
@@ -92,7 +91,7 @@ class TestPhaseConstants:
         assert len(ALL_PHASES) == 7
 
     def test_phase_values(self):
-        assert CORTEX == "cortex"
+        assert ROUTER == "router"
         assert SIGNALS == "signals"
         assert ANALYSIS == "analysis"
         assert EVALUATION == "evaluation"

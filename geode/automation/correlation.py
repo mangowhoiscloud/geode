@@ -253,15 +253,11 @@ class CorrelationAnalyzer:
         v0 = n * (n - 1.0) * (2.0 * n + 5.0)
         vt = sum(tc * (tc - 1.0) * (2.0 * tc + 5.0) for tc in x_counts)
         vu = sum(uc * (uc - 1.0) * (2.0 * uc + 5.0) for uc in y_counts)
-        v1 = sum(tc * (tc - 1.0) for tc in x_counts) * sum(
-            uc * (uc - 1.0) for uc in y_counts
-        )
+        v1 = sum(tc * (tc - 1.0) for tc in x_counts) * sum(uc * (uc - 1.0) for uc in y_counts)
         v2 = sum(tc * (tc - 1.0) * (tc - 2.0) for tc in x_counts) * sum(
             uc * (uc - 1.0) * (uc - 2.0) for uc in y_counts
         )
-        var_num = (
-            v0 - vt - vu
-        ) / 18.0 + v1 / (2.0 * t0) + v2 / (9.0 * t0 * (n - 2.0))
+        var_num = (v0 - vt - vu) / 18.0 + v1 / (2.0 * t0) + v2 / (9.0 * t0 * (n - 2.0))
         var = max(var_num, 1e-12)
         z = (concordant - discordant) / math.sqrt(var)
         p_value = 2.0 * (1.0 - _normal_cdf(abs(z)))
@@ -325,7 +321,8 @@ class CorrelationAnalyzer:
             lo, hi = bin_boundaries[i], bin_boundaries[i + 1]
             # Items in this bin
             indices = [
-                j for j in range(n)
+                j
+                for j in range(n)
                 if (lo <= confidences[j] < hi) or (i == n_bins - 1 and confidences[j] == hi)
             ]
             if not indices:
@@ -393,7 +390,7 @@ class CorrelationAnalyzer:
         # Fisher z-transform of rho
         z_rho = math.atanh(effect_size)
         n = ((z_alpha + z_power) / z_rho) ** 2 + 3
-        return int(math.ceil(n))
+        return math.ceil(n)
 
     def check_targets(
         self,

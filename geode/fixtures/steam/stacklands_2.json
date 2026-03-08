@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Stacklands 2",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Sokpop Collective",
+    "genre": [
+      "card game",
+      "city builder",
+      "casual"
+    ],
+    "synopsis": "Stacklands 2 — a Card Village Builder game developed by Sokpop Collective, released in 2024 on Steam.",
+    "proof_of_game": "Stacklands 2 (2024, Steam/PC)",
+    "franchise_size": 40,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 6720,
+    "dau_current": 2990,
+    "revenue_ltm": 293706,
+    "revenue_lifetime": 1292306,
+    "retention_d30": 34,
+    "metacritic_score": 83,
+    "store_page_score": 89,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "S"
+  },
+  "signals": {
+    "youtube_views": 373800,
+    "reddit_subscribers": 6230,
+    "fan_art_yoy_pct": 29.0,
+    "google_trends_index": 62,
+    "twitter_mentions_monthly": 1993,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "card game",
+      "city builder",
+      "casual",
+      "strategy",
+      "survival"
+    ],
+    "game_sales_data": "~84,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "card game",
+    "dev_tier": "S",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 40,
+    "metacritic_score": 83,
+    "store_page_score": 89,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 73.2,
+    "cause": "timing_mismatch",
+    "quality_score": 89.5,
+    "momentum_score": 60.4,
+    "developer_track_record": 100,
+    "psm_att_pct": 27.2,
+    "psm_z_value": 2.27,
+    "psm_gamma": 2.2
+  }
+}

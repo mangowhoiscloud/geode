@@ -20,6 +20,7 @@ GEODE_THEME = Theme(
         "error": "bold red",
         "success": "bold green",
         "muted": "dim",
+        "status.spinner": "cyan",
     }
 )
 

@@ -67,7 +67,7 @@ _settings_instance: Settings | None = None
 
 def _get_settings() -> Settings:
     """Get or create the Settings singleton in a thread-safe manner."""
-    global _settings_instance  # noqa: PLW0603
+    global _settings_instance
     if _settings_instance is not None:
         return _settings_instance
     with _settings_lock:

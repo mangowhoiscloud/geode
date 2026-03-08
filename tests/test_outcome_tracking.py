@@ -60,9 +60,13 @@ class TestOutcomeTracker:
     def test_execute_not_found(self):
         tracker = OutcomeTracker()
         with pytest.raises(KeyError, match="not found"):
-            tracker.execute_job("nope", OutcomeData(
-                ip_name="X", tracking_point=TrackingPoint.T_PLUS_30,
-            ))
+            tracker.execute_job(
+                "nope",
+                OutcomeData(
+                    ip_name="X",
+                    tracking_point=TrackingPoint.T_PLUS_30,
+                ),
+            )
 
     def test_fail_job(self):
         tracker = OutcomeTracker()
@@ -129,7 +133,9 @@ class TestOutcomeTracker:
         tracker = OutcomeTracker()
         job = tracker.schedule("Berserk", TrackingPoint.T_PLUS_30)
         outcome = OutcomeData(
-            ip_name="Berserk", tracking_point=TrackingPoint.T_PLUS_30, dau_delta_pct=10.0,
+            ip_name="Berserk",
+            tracking_point=TrackingPoint.T_PLUS_30,
+            dau_delta_pct=10.0,
         )
         tracker.execute_job(job.job_id, outcome)
         outcomes = tracker.get_outcomes("Berserk")
@@ -193,6 +199,7 @@ class TestOutcomeTracker:
     def test_jitter_varies_across_retries(self):
         """Jitter should cause different backoff values for same retry count."""
         import random
+
         random.seed(None)  # Ensure randomness
         backoffs = []
         for _ in range(10):
@@ -212,4 +219,3 @@ class TestOutcomeTracker:
         tracker.fail_job(job.job_id, "err")
         tracker.retry_job(job.job_id)
         assert tracker.stats.jobs_in_backoff >= 1
-

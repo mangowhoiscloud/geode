@@ -61,7 +61,7 @@ class TestGraphBuild:
         assert result["final_score"] >= 80  # S-tier
         assert result["tier"] == "S"
         assert result["synthesis"].undervaluation_cause == "conversion_failure"
-        assert result["synthesis"].action_type == "monetization_pivot"
+        assert result["synthesis"].action_type == "marketing_boost"
 
     def test_dry_run_ghost_in_shell(self):
         """Full pipeline dry-run: Ghost in the Shell → discovery_failure."""
@@ -123,7 +123,7 @@ class TestDecisionTree:
     def test_cause_to_action_mapping(self):
         """Verify CAUSE_TO_ACTION matches §13.9.3."""
         assert CAUSE_TO_ACTION["undermarketed"] == "marketing_boost"
-        assert CAUSE_TO_ACTION["conversion_failure"] == "monetization_pivot"
+        assert CAUSE_TO_ACTION["conversion_failure"] == "marketing_boost"
         assert CAUSE_TO_ACTION["monetization_misfit"] == "monetization_pivot"
         assert CAUSE_TO_ACTION["niche_gem"] == "platform_expansion"
         assert CAUSE_TO_ACTION["timing_mismatch"] == "timing_optimization"

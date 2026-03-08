@@ -10,6 +10,8 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 
+from geode.verification.rights_risk import RightsRiskResult
+
 # ---------------------------------------------------------------------------
 # Type aliases for Literal types (used by synthesizer.py etc.)
 # ---------------------------------------------------------------------------
@@ -70,6 +72,17 @@ class EvaluatorResult(BaseModel):
             },
             "hidden_value": {"d_score", "e_score", "f_score"},
             "community_momentum": {"j_score", "k_score", "l_score"},
+            "prospect_judge": {
+                "g_score",
+                "h_score",
+                "i_score",
+                "o_score",
+                "p_score",
+                "q_score",
+                "r_score",
+                "s_score",
+                "t_score",
+            },
         }
 
         expected_keys = valid_axes_map.get(self.evaluator_type)
@@ -86,6 +99,10 @@ class EvaluatorResult(BaseModel):
                 f"Invalid axis keys for {self.evaluator_type}: {invalid_keys}. "
                 f"Expected subset of: {expected_keys}"
             )
+
+        # Guard against empty axes — LLM may return {} which passes subset check
+        if not self.is_degraded and len(actual_keys) == 0:
+            raise ValueError(f"Empty axes for {self.evaluator_type}. Expected: {expected_keys}")
 
         for key, value in self.axes.items():
             if not (1.0 <= value <= 5.0):
@@ -130,6 +147,62 @@ class BiasBusterResult(BaseModel):
     explanation: str = ""
 
 
+class AxisCalibration(BaseModel):
+    """Per-axis calibration result against Golden Set reference range."""
+
+    axis: str
+    actual: float
+    ref_low: float
+    ref_high: float
+    in_range: bool
+    deviation: float = Field(
+        ge=0, description="Distance from nearest range boundary (0 if in range)"
+    )
+
+
+class EvaluatorCalibration(BaseModel):
+    """Per-evaluator calibration result."""
+
+    evaluator_type: str
+    axes: list[AxisCalibration] = Field(default_factory=list)
+    axes_in_range_pct: float = Field(
+        ge=0, le=100, description="Percentage of axes within reference range"
+    )
+    mean_deviation: float = Field(ge=0, description="Mean deviation from range boundaries")
+
+
+class CalibrationResult(BaseModel):
+    """Ground Truth calibration result for a single IP.
+
+    Compares pipeline output against expert-annotated Golden Set.
+    Components: tier match (20%), cause match (20%), score range (20%), axes accuracy (40%).
+    """
+
+    ip_name: str
+    tier_match: bool
+    tier_actual: str
+    tier_expected: str
+    cause_match: bool
+    cause_actual: str
+    cause_expected: str
+    final_score_in_range: bool
+    final_score_actual: float
+    final_score_range: list[float] = Field(min_length=2, max_length=2)
+    evaluator_results: list[EvaluatorCalibration] = Field(default_factory=list)
+    overall_score: float = Field(ge=0, le=100, default=0.0)
+    passed: bool = False
+    details: list[str] = Field(default_factory=list)
+
+
+class CalibrationReport(BaseModel):
+    """Aggregate calibration report across all Golden Set IPs."""
+
+    results: list[CalibrationResult] = Field(default_factory=list)
+    overall_score: float = Field(ge=0, le=100, default=0.0)
+    passed: bool = False
+    summary: str = ""
+
+
 # ---------------------------------------------------------------------------
 # LangGraph reducers
 # ---------------------------------------------------------------------------
@@ -149,10 +222,13 @@ class GeodeState(TypedDict, total=False):
     # Input
     ip_name: str
     pipeline_mode: str  # full_pipeline, cortex_only, evaluation, scoring
+    ip_type: str  # "gamified" (default) or "prospect" (non-gamified IP)
+    session_id: str  # Hierarchical session key for 3-tier memory
 
-    # Layer 1: Cortex
+    # Layer 1: Data Loading (Router)
     ip_info: dict[str, Any]
     monolake: dict[str, Any]
+    memory_context: dict[str, Any]  # 3-tier merged context from ContextAssembler
 
     # Layer 2: Signals
     signals: dict[str, Any]
@@ -177,6 +253,8 @@ class GeodeState(TypedDict, total=False):
     guardrails: GuardrailResult
     biasbuster: BiasBusterResult
     cross_llm: dict[str, Any]
+    rights_risk: RightsRiskResult
+    calibration: CalibrationResult
 
     # Meta
     dry_run: bool

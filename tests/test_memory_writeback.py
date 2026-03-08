@@ -33,15 +33,18 @@ class TestPipelineEndMemoryWrite:
         )
 
         # Simulate PIPELINE_END with enriched data
-        hooks.trigger(HookEvent.PIPELINE_END, {
-            "node": "synthesizer",
-            "ip_name": "Berserk",
-            "final_score": 0.85,
-            "tier": "S",
-            "synthesis_cause": "conversion_failure",
-            "synthesis_action": "marketing_push",
-            "dry_run": False,
-        })
+        hooks.trigger(
+            HookEvent.PIPELINE_END,
+            {
+                "node": "synthesizer",
+                "ip_name": "Berserk",
+                "final_score": 0.85,
+                "tier": "S",
+                "synthesis_cause": "conversion_failure",
+                "synthesis_action": "marketing_push",
+                "dry_run": False,
+            },
+        )
 
         content = mem.memory_file.read_text(encoding="utf-8")
         assert "Berserk" in content
@@ -61,13 +64,16 @@ class TestPipelineEndMemoryWrite:
             project_memory=mem,
         )
 
-        hooks.trigger(HookEvent.PIPELINE_END, {
-            "node": "synthesizer",
-            "ip_name": "Berserk",
-            "final_score": 0.85,
-            "tier": "S",
-            "dry_run": True,
-        })
+        hooks.trigger(
+            HookEvent.PIPELINE_END,
+            {
+                "node": "synthesizer",
+                "ip_name": "Berserk",
+                "final_score": 0.85,
+                "tier": "S",
+                "dry_run": True,
+            },
+        )
 
         content = mem.memory_file.read_text(encoding="utf-8")
         # The insight section should be empty (only the header from ensure_structure)
@@ -85,13 +91,16 @@ class TestPipelineEndMemoryWrite:
         )
 
         # Should not raise
-        hooks.trigger(HookEvent.PIPELINE_END, {
-            "node": "synthesizer",
-            "ip_name": "Berserk",
-            "final_score": 0.85,
-            "tier": "S",
-            "dry_run": False,
-        })
+        hooks.trigger(
+            HookEvent.PIPELINE_END,
+            {
+                "node": "synthesizer",
+                "ip_name": "Berserk",
+                "final_score": 0.85,
+                "tier": "S",
+                "dry_run": False,
+            },
+        )
 
     def test_minimal_hook_data_still_writes(self, tmp_path: Path):
         """Missing optional fields → insight still written with defaults."""
@@ -104,10 +113,13 @@ class TestPipelineEndMemoryWrite:
             project_memory=mem,
         )
 
-        hooks.trigger(HookEvent.PIPELINE_END, {
-            "node": "synthesizer",
-            "ip_name": "TestIP",
-        })
+        hooks.trigger(
+            HookEvent.PIPELINE_END,
+            {
+                "node": "synthesizer",
+                "ip_name": "TestIP",
+            },
+        )
 
         content = mem.memory_file.read_text(encoding="utf-8")
         assert "TestIP" in content

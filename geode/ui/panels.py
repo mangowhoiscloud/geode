@@ -32,7 +32,9 @@ def header_panel(ip_name: str, pipeline_mode: str, model: str) -> None:
 
 
 def gather_panel(
-    ip_info: dict[str, Any], monolake: dict[str, Any], signals: dict[str, Any],
+    ip_info: dict[str, Any],
+    monolake: dict[str, Any],
+    signals: dict[str, Any],
 ) -> None:
     console.print("[step]▸ [GATHER][/step] Loading IP data from MonoLake...")
     tree = Tree("", guide_style="dim")

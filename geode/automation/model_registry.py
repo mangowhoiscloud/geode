@@ -105,7 +105,7 @@ class ModelVersion:
 class _RegistryStats:
     """Internal instrumentation counters."""
 
-    __slots__ = ("registered", "promoted", "rolled_back", "persisted")
+    __slots__ = ("persisted", "promoted", "registered", "rolled_back")
 
     def __init__(self) -> None:
         self.registered: int = 0
@@ -133,7 +133,9 @@ class ModelRegistry:
     """
 
     def __init__(
-        self, storage_dir: Path | None = None, hooks: HookSystemPort | None = None,
+        self,
+        storage_dir: Path | None = None,
+        hooks: HookSystemPort | None = None,
     ) -> None:
         self._versions: dict[str, ModelVersion] = {}
         self._storage_dir = storage_dir
@@ -277,11 +279,8 @@ class ModelRegistry:
                         f"Validation gate failed for {version_id}: "
                         f"cannot promote to {target_stage.value}"
                     )
-            elif (
-                target_stage in self.DEFAULT_METRIC_GATES
-                and not self._default_validation(
-                    version, target_stage, self.DEFAULT_METRIC_GATES
-                )
+            elif target_stage in self.DEFAULT_METRIC_GATES and not self._default_validation(
+                version, target_stage, self.DEFAULT_METRIC_GATES
             ):
                 raise ValueError(
                     f"Default metric gate failed for {version_id}: "
@@ -298,10 +297,13 @@ class ModelRegistry:
         if self._hooks:
             from geode.orchestration.hooks import HookEvent
 
-            self._hooks.trigger(HookEvent.MODEL_PROMOTED, {
-                "version_id": version_id,
-                "stage": target_stage.value,
-            })
+            self._hooks.trigger(
+                HookEvent.MODEL_PROMOTED,
+                {
+                    "version_id": version_id,
+                    "stage": target_stage.value,
+                },
+            )
 
         return version
 
@@ -342,9 +344,7 @@ class ModelRegistry:
     def get_production(self) -> ModelVersion | None:
         """Get the current production model version (most recently promoted to PROD)."""
         with self._lock:
-            prod_versions = [
-                v for v in self._versions.values() if v.stage == PromotionStage.PROD
-            ]
+            prod_versions = [v for v in self._versions.values() if v.stage == PromotionStage.PROD]
         if not prod_versions:
             return None
         return max(prod_versions, key=lambda v: v.promoted_at or 0.0)

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Patch Quest",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Lychee Game Labs",
+    "genre": [
+      "roguelike",
+      "metroidvania",
+      "bullet hell"
+    ],
+    "synopsis": "Patch Quest — a Roguelike Metroidvania game developed by Lychee Game Labs, released in 2023 on Steam.",
+    "proof_of_game": "Patch Quest (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 2496,
+    "dau_current": 948,
+    "revenue_ltm": 49107,
+    "revenue_lifetime": 916668,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 148200,
+    "reddit_subscribers": 2470,
+    "fan_art_yoy_pct": 31.7,
+    "google_trends_index": 54,
+    "twitter_mentions_monthly": 790,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "roguelike",
+      "metroidvania",
+      "bullet hell",
+      "cute",
+      "exploration"
+    ],
+    "game_sales_data": "~31,200 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "roguelike",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 72.5,
+    "cause": "discovery_failure",
+    "quality_score": 95.5,
+    "momentum_score": 54.8,
+    "developer_track_record": 25,
+    "psm_att_pct": 29.6,
+    "psm_z_value": 2.47,
+    "psm_gamma": 2.4
+  }
+}

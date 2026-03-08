@@ -7,13 +7,15 @@ LangGraph 기반 저평가 IP 발굴 에이전트 CLI.
 
 - **6-Layer Pipeline** — Router → Cortex → Signals → Analysts → Evaluators → Scoring → Verification → Synthesis
 - **14-Axis Rubric** — PSM(Prospect Scoring Model) 기반 정량 평가
-- **Cross-LLM** — Claude Opus 4.6 + GPT-5.3 듀얼 평가, Failover 지원
+- **Cross-LLM** — Claude Opus 4.6 + GPT-5.4 듀얼 평가, Failover 지원
 - **자연어 입력** — 한국어/영어 자유 입력으로 IP 검색 및 분석
+- **Report Generation** — HTML/JSON/Markdown 다중 포맷 리포트 출력
 - **Graceful Degradation** — API 키 없이도 dry-run 분석, 검색 가능
 - **Project Memory** — `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지
 - **Checkpoint** — SqliteSaver 기반 파이프라인 상태 영속화
 - **Feedback Loop** — Confidence < 0.7이면 자동 재분석 (최대 3회)
-- **416 Tests** — pytest + ruff + mypy 전체 통과
+- **Auth Profile Rotation** — 다중 API 키 관리 및 자동 전환
+- **1615 Tests** — 79 modules, pytest + ruff + mypy strict 전체 통과
 
 ## Installation
 
@@ -29,6 +31,9 @@ uv run geode
 
 # Dry-run 분석 (API 키 불필요)
 uv run geode analyze "Berserk"
+
+# 리포트 생성
+uv run geode report "Berserk" --format html --output berserk.html
 
 # IP 검색
 uv run geode search "다크 판타지"
@@ -75,7 +80,12 @@ uv run geode
 | `/analyze <IP>` | `/a` | Dry-run 분석 |
 | `/run <IP>` | `/r` | Full LLM 분석 |
 | `/search <query>` | `/s` | IP 검색 |
+| `/report <IP> [fmt]` | `/rpt` | 리포트 생성 (md/html/json) |
 | `/list` | | IP 목록 |
+| `/generate [count]` | `/gen` | 합성 데모 데이터 생성 |
+| `/model` | | LLM 모델 선택 |
+| `/key [value]` | | API 키 설정 |
+| `/auth` | | 인증 프로필 관리 |
 | `/verbose` | | 상세 출력 토글 |
 | `/help` | | 도움말 |
 | `/quit` | `/q` | 종료 |
@@ -86,18 +96,22 @@ uv run geode
 > Berserk 분석해           → dry-run 분석
 > 소울라이크 찾아줘         → 장르 검색
 > Berserk vs Cowboy Bebop  → 비교 분석
+> Berserk 리포트 생성해     → 리포트 생성
 > 뭐가 있어?               → IP 목록
 ```
 
 ### CLI Mode
 
 ```bash
-geode analyze "Berserk"                         # dry-run
-geode analyze "Berserk" --verbose                # 상세 출력
-geode analyze "Cowboy Bebop" --skip-verification # 검증 생략
-geode search "사이버펑크"                         # 검색
-geode list                                       # 목록
-geode version                                    # 버전
+geode analyze "Berserk"                          # dry-run
+geode analyze "Berserk" --verbose                 # 상세 출력
+geode analyze "Cowboy Bebop" --skip-verification  # 검증 생략
+geode report "Berserk"                            # Markdown summary
+geode report "Berserk" -f html -o berserk.html    # HTML 파일 저장
+geode report "Berserk" -f json -t detailed        # JSON detailed
+geode search "사이버펑크"                          # 검색
+geode list                                        # 목록
+geode version                                     # 버전
 ```
 
 ## Available IPs
@@ -114,7 +128,7 @@ geode version                                    # 버전
 ┌─────────────────────────────────────────────────────────────────┐
 │  L0  CLI / NL Router          (cli/, nl_router.py, search.py)  │
 ├─────────────────────────────────────────────────────────────────┤
-│  L1  Infrastructure           (ports/, adapters/, llm/)        │
+│  L1  Infrastructure           (ports/, adapters/, llm/, auth/) │
 ├─────────────────────────────────────────────────────────────────┤
 │  L2  Memory                   (session, checkpoint, project)   │
 ├─────────────────────────────────────────────────────────────────┤
@@ -122,7 +136,7 @@ geode version                                    # 버전
 ├─────────────────────────────────────────────────────────────────┤
 │  L4  Orchestration            (hooks, run_log, lanes, policies)│
 ├─────────────────────────────────────────────────────────────────┤
-│  L5  Tools                    (registry, analysis, policy)     │
+│  L5  Extensibility            (reports, tools, data, templates)│
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -148,7 +162,11 @@ geode/
 │   ├── nl_router.py        # Natural language intent classification
 │   ├── search.py           # IP search engine (synonym expansion)
 │   └── startup.py          # Readiness check, Graceful Degradation
+├── auth/                   # Auth profile management + rotation
+├── automation/             # Feedback loop, confidence gating
 ├── config.py               # Settings (pydantic-settings)
+├── data/                   # Synthetic data generation
+├── extensibility/          # Report generation (HTML/JSON/MD)
 ├── fixtures/               # Fixture data (Berserk, Cowboy Bebop, GitS)
 ├── graph.py                # LangGraph StateGraph definition
 ├── infrastructure/
@@ -168,10 +186,10 @@ geode/
 │   ├── hot_reload.py       # Config hot reload
 │   └── stuck_detection.py  # Long-running task detection
 ├── runtime.py              # GeodeRuntime (production wiring)
-├── state.py                # GeodeState (TypedDict)
+├── state.py                # GeodeState (TypedDict + Pydantic models)
 ├── tools/                  # Tool Protocol + Registry + Policy
 ├── ui/                     # Rich console + panels
-└── verification/           # Guardrails + BiasBuster
+└── verification/           # Guardrails + BiasBuster + Rights Risk
 ```
 
 ## Testing
@@ -190,7 +208,7 @@ uv run pytest tests/test_nl_router.py
 # 품질 검사
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy geode/ --ignore-missing-imports
+uv run mypy geode/
 ```
 
 ## Configuration
@@ -207,4 +225,4 @@ uv run mypy geode/ --ignore-missing-imports
 
 ## License
 
-Internal use only — Nexon Navigator Team.
+Internal use only.

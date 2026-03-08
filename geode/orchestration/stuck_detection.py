@@ -154,7 +154,7 @@ class StuckDetector:
 class _JobRecord:
     """Internal record for a running job."""
 
-    __slots__ = ("session_key", "started_at", "metadata")
+    __slots__ = ("metadata", "session_key", "started_at")
 
     def __init__(self, *, session_key: str, started_at: float, metadata: dict[str, Any]) -> None:
         self.session_key = session_key

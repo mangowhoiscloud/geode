@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -109,7 +108,7 @@ class TestYamlFrontmatter:
         assert body == text
 
     def test_quoted_values(self):
-        text = '---\nname: "my_agent"\nrole: \'Specialist\'\n---\nPrompt.'
+        text = "---\nname: \"my_agent\"\nrole: 'Specialist'\n---\nPrompt."
         meta, body = _parse_yaml_frontmatter(text)
         assert meta["name"] == "my_agent"
         assert meta["role"] == "Specialist"
@@ -125,7 +124,10 @@ class TestSubagentLoader:
         assert loader.discover() == []
 
     def test_load_file(self, tmp_path: Path):
-        md = "---\nname: loader_test\nrole: Test Role\ntools: [search]\nmodel: gpt-4\n---\nYou are a test agent."
+        md = (
+            "---\nname: loader_test\nrole: Test Role\n"
+            "tools: [search]\nmodel: gpt-4\n---\nYou are a test agent."
+        )
         path = tmp_path / "test_agent.md"
         path.write_text(md)
 

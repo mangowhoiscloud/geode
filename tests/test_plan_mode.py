@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from geode.orchestration.plan_mode import (
     AnalysisPlan,
     PlanMode,
@@ -13,12 +15,12 @@ from geode.orchestration.plan_mode import (
 class TestPlanStep:
     def test_plan_step_creation(self):
         step = PlanStep(
-            step_id="cortex_load",
-            description="Load IP data",
-            node_name="cortex",
+            step_id="router_load",
+            description="Route + load IP data",
+            node_name="router",
             estimated_time_s=8.0,
         )
-        assert step.step_id == "cortex_load"
+        assert step.step_id == "router_load"
         assert step.dependencies == []
 
     def test_plan_step_with_dependencies(self):
@@ -27,9 +29,9 @@ class TestPlanStep:
             description="Fetch signals",
             node_name="signals",
             estimated_time_s=6.0,
-            dependencies=["cortex_load"],
+            dependencies=["router_load"],
         )
-        assert step.dependencies == ["cortex_load"]
+        assert step.dependencies == ["router_load"]
 
 
 class TestAnalysisPlan:
@@ -113,11 +115,8 @@ class TestPlanMode:
 
     def test_unknown_template_raises(self):
         pm = PlanMode()
-        try:
+        with pytest.raises(ValueError, match="nonexistent"):
             pm.create_plan("Test", template="nonexistent")
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "nonexistent" in str(e)
 
     def test_present_plan(self):
         pm = PlanMode()
@@ -146,11 +145,8 @@ class TestPlanMode:
     def test_execute_unapproved_raises(self):
         pm = PlanMode()
         plan = pm.create_plan("Berserk")
-        try:
+        with pytest.raises(ValueError, match="APPROVED"):
             pm.execute_plan(plan)
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "APPROVED" in str(e)
 
     def test_reject_plan(self):
         pm = PlanMode()
@@ -165,11 +161,8 @@ class TestPlanMode:
         plan = pm.create_plan("Berserk")
         pm.approve_plan(plan)
         pm.execute_plan(plan)
-        try:
+        with pytest.raises(ValueError):
             pm.approve_plan(plan)
-            assert False, "Should have raised ValueError"
-        except ValueError:
-            pass
 
     def test_get_plan(self):
         pm = PlanMode()

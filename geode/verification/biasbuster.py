@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import numpy as np
 from pydantic import ValidationError
 
-from geode.infrastructure.ports.llm_port import get_llm_json
+from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
 from geode.llm.prompts import BIASBUSTER_SYSTEM, BIASBUSTER_USER
 from geode.state import AnalysisResult, BiasBusterResult, GeodeState
 
@@ -68,15 +69,13 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
             if isinstance(a, AnalysisResult):
                 evidence_len = sum(len(e) for e in a.evidence)
                 analyst_details_parts.append(
-                    f"- [{idx+1}] {a.analyst_type}: {a.score:.1f}/5 — {a.key_finding} "
+                    f"- [{idx + 1}] {a.analyst_type}: {a.score:.1f}/5 — {a.key_finding} "
                     f"(confidence: {a.confidence:.0f}%, evidence_chars: {evidence_len})"
                 )
         analyst_details = "\n".join(analyst_details_parts)
 
         signals = state.get("signals", {})
-        data_points = "\n".join(
-            f"- {k}: {v}" for k, v in signals.items() if not k.startswith("_")
-        )
+        data_points = "\n".join(f"- {k}: {v}" for k, v in signals.items() if not k.startswith("_"))
 
         user = BIASBUSTER_USER.format(
             ip_name=state.get("ip_name", "Unknown"),
@@ -89,8 +88,32 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
             data_points=data_points,
         )
 
+        # ADR-007: PromptAssembler injection
+        system = BIASBUSTER_SYSTEM
+        assembler: Any = state.get("_prompt_assembler")
+        if assembler is not None:
+            assembled = assembler.assemble(
+                base_system=BIASBUSTER_SYSTEM,
+                base_user=user,
+                state=dict(state),
+                node="biasbuster",
+                role_type="bias_detection",
+            )
+            system = assembled.system
+            user = assembled.user
+
+        # Use Anthropic Structured Output (messages.parse) for guaranteed JSON
         try:
-            data = get_llm_json()(BIASBUSTER_SYSTEM, user)
+            return get_llm_parsed()(system, user, output_model=BiasBusterResult)
+        except Exception as exc:
+            log.warning(
+                "BiasBuster structured output failed: %s — falling back to legacy JSON",
+                exc,
+            )
+
+        # Fallback: legacy JSON parse
+        try:
+            data = get_llm_json()(system, user)
             try:
                 return BiasBusterResult(**data)
             except ValidationError as ve:

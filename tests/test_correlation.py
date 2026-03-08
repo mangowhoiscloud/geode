@@ -142,6 +142,7 @@ class TestCheckTargets:
         assert checks["spearman_rho"] is False  # Q4 needs 0.75
         assert checks["precision_at_k"] is False  # Q4 needs 0.80
 
+
 class TestECE:
     def test_perfectly_calibrated(self):
         """Perfect calibration: confidences match accuracies."""
@@ -164,6 +165,7 @@ class TestECE:
     def test_ece_bounded(self):
         """ECE should always be in [0, 1]."""
         import random as rng
+
         rng.seed(42)
         confs = [rng.random() for _ in range(100)]
         accs = [float(rng.random() > 0.5) for _ in range(100)]
@@ -223,5 +225,4 @@ class TestCorrelationAnalyzer:
 
         # [1,2,3,4] vs [1,3,2,4]: C=5, D=1, n=4, pairs=6, tau=(5-1)/6=2/3
         tau, _ = analyzer.compute_kendall([1, 2, 3, 4], [1, 3, 2, 4])
-        assert abs(tau - (2.0/3.0)) < 0.05  # Allow small tolerance
-
+        assert abs(tau - (2.0 / 3.0)) < 0.05  # Allow small tolerance

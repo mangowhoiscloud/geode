@@ -1,4 +1,6 @@
-"""Tests for L4.5 4-Phase RLHF Feedback Loop."""
+"""Tests for L4.5 5-Phase RLHF Feedback Loop."""
+
+import pytest
 
 from geode.automation.correlation import CorrelationAnalyzer
 from geode.automation.drift import CUSUMDetector
@@ -15,11 +17,12 @@ from geode.automation.model_registry import ModelRegistry
 
 class TestFeedbackPhase:
     def test_all_phases(self):
-        assert len(FeedbackPhase) == 4
+        assert len(FeedbackPhase) == 5
         assert FeedbackPhase.COLLECTION.value == "collection"
         assert FeedbackPhase.ANALYSIS.value == "analysis"
         assert FeedbackPhase.IMPROVEMENT.value == "improvement"
         assert FeedbackPhase.VALIDATION.value == "validation"
+        assert FeedbackPhase.RLAIF.value == "rlaif"
 
 
 class TestFeedbackCycleInput:
@@ -36,11 +39,8 @@ class TestFeedbackCycleInput:
     def test_frozen(self):
         """FeedbackCycleInput should be immutable."""
         inp = FeedbackCycleInput(cycle_id="c1", auto_scores=(1.0,))
-        try:
+        with pytest.raises(AttributeError):
             inp.cycle_id = "changed"  # type: ignore[misc]
-            assert False, "Should have raised FrozenInstanceError"
-        except AttributeError:
-            pass  # Expected for frozen dataclass
 
 
 class TestFeedbackLoop:
@@ -151,6 +151,42 @@ class TestFeedbackLoop:
         assert isinstance(result, FeedbackCycleResult)
         assert result.cycle_id == "full-1"
         assert "collection" in result.phase_results
+        assert "rlaif" in result.phase_results
+
+    def test_rlaif_integration(self):
+        loop = self._make_loop()
+        inp = FeedbackCycleInput(
+            cycle_id="rlaif-1",
+            auto_scores=(1.0, 2.0, 3.0, 4.0, 5.0),
+            human_scores=(1.2, 1.8, 3.2, 3.9, 5.1),
+            expert_ratings={"expert_a": 0.8, "expert_b": 0.7, "expert_c": 0.9},
+        )
+        validation = {"all_passed": True, "candidates": []}
+        candidates = [
+            ImprovementCandidate(
+                candidate_id="c1",
+                description="test improvement",
+            ),
+        ]
+        result = loop.rlaif_integration(inp, validation, candidates)
+        assert result["phase"] == "rlaif"
+        assert result["synthetic_pairs_generated"] >= 1
+        assert len(result["constitutional_checks"]) == 4
+        assert all(c["passed"] for c in result["constitutional_checks"])
+        assert result["ai_feedback_signals"]["n_improvements_evaluated"] == 1
+
+    def test_rlaif_flags_failed_validation(self):
+        loop = self._make_loop()
+        inp = FeedbackCycleInput(
+            cycle_id="rlaif-fail",
+            auto_scores=(1.0, 2.0, 3.0),
+            human_scores=(1.0,),
+        )
+        validation = {"all_passed": False, "candidates": []}
+        result = loop.rlaif_integration(inp, validation, [])
+        # Constitutional checks should flag failure
+        assert any(not c["passed"] for c in result["constitutional_checks"])
+        assert result["ai_feedback_signals"]["augmentation_needed"] is True
 
     def test_apply_improvement_retune(self):
         loop = self._make_loop()

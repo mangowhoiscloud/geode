@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "The Last Spell",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "CCCP",
+    "genre": [
+      "tactical",
+      "roguelite",
+      "turn-based"
+    ],
+    "synopsis": "The Last Spell — a Tactical Roguelite game developed by CCCP, released in 2023 on Steam.",
+    "proof_of_game": "The Last Spell (2023, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 12960,
+    "dau_current": 4510,
+    "revenue_ltm": 425079,
+    "revenue_lifetime": 7934824,
+    "retention_d30": 33,
+    "metacritic_score": 81,
+    "store_page_score": 87,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "T",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 704700,
+    "reddit_subscribers": 11745,
+    "fan_art_yoy_pct": 23.7,
+    "google_trends_index": 67,
+    "twitter_mentions_monthly": 3758,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "tactical",
+      "roguelite",
+      "turn-based",
+      "rpg",
+      "dark fantasy"
+    ],
+    "game_sales_data": "~162,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "tactical",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "T",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 81,
+    "store_page_score": 87,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 76.4,
+    "cause": "timing_mismatch",
+    "quality_score": 87.5,
+    "momentum_score": 63.1,
+    "developer_track_record": 25,
+    "psm_att_pct": 29.5,
+    "psm_z_value": 2.46,
+    "psm_gamma": 2.2
+  }
+}

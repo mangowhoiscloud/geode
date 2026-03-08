@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Everhood",
+    "media_type": "game",
+    "release_year": 2021,
+    "studio": "Chris Nordgren",
+    "genre": [
+      "rhythm",
+      "rpg",
+      "indie"
+    ],
+    "synopsis": "Everhood — a Rhythm RPG game developed by Chris Nordgren, released in 2021 on Steam.",
+    "proof_of_game": "Everhood (2021, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 5
+  },
+  "monolake": {
+    "dau_peak": 11040,
+    "dau_current": 3028,
+    "revenue_ltm": 173735,
+    "revenue_lifetime": 4632936,
+    "retention_d30": 37,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "active_game_count": 1,
+    "last_game_year": 2021,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 662400,
+    "reddit_subscribers": 11040,
+    "fan_art_yoy_pct": 30.0,
+    "google_trends_index": 65,
+    "twitter_mentions_monthly": 3532,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "rhythm",
+      "rpg",
+      "indie",
+      "story rich",
+      "surreal"
+    ],
+    "game_sales_data": "~138,000 owners (Steam, 2021-present)"
+  },
+  "psm_covariates": {
+    "genre": "rhythm",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2021,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "ip_age_years": 5
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 78.5,
+    "cause": "discovery_failure",
+    "quality_score": 96.3,
+    "momentum_score": 63.9,
+    "developer_track_record": 25,
+    "psm_att_pct": 32.9,
+    "psm_z_value": 2.74,
+    "psm_gamma": 2.4
+  }
+}

@@ -1,9 +1,11 @@
 """Trigger Manager — F1-F4 trigger types for pipeline automation.
 
 Supports manual, scheduled (cron), event-driven (HookSystem), and
-webhook triggers. Background scheduler runs as a daemon thread.
+webhook triggers. Unified dispatch method normalizes all trigger types
+into a single pipeline execution flow. Background scheduler runs as
+a daemon thread.
 
-Architecture-v6 §4.5: Automation Layer — Trigger Manager.
+Architecture-v6 §4.5 / §12.2: Automation Layer — Trigger Manager & Dispatch.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from geode.automation.snapshot import SnapshotManager
     from geode.infrastructure.ports.hook_port import HookSystemPort
 
 log = logging.getLogger(__name__)
@@ -123,7 +126,7 @@ class CronParser:
 
 
 class _TriggerStats:
-    __slots__ = ("fired", "errors", "scheduled_checks")
+    __slots__ = ("errors", "fired", "scheduled_checks")
 
     def __init__(self) -> None:
         self.fired: int = 0
@@ -157,6 +160,7 @@ class TriggerManager:
         self,
         scheduler_interval_s: float = 60.0,
         hooks: HookSystemPort | None = None,
+        snapshot_manager: SnapshotManager | None = None,
     ) -> None:
         self._triggers: dict[str, TriggerConfig] = {}
         self._results: list[TriggerResult] = []
@@ -166,6 +170,7 @@ class TriggerManager:
         self._lock = threading.Lock()
         self._stats = _TriggerStats()
         self._hooks = hooks
+        self._snapshot_manager = snapshot_manager
 
     @property
     def stats(self) -> _TriggerStats:
@@ -201,7 +206,8 @@ class TriggerManager:
         return self._execute_trigger(config, data or {})
 
     def check_scheduled(
-        self, dt_tuple: tuple[int, int, int, int, int] | None = None,
+        self,
+        dt_tuple: tuple[int, int, int, int, int] | None = None,
     ) -> list[TriggerResult]:
         """Check and fire all scheduled triggers matching current time (F2)."""
         self._stats.scheduled_checks += 1
@@ -210,7 +216,8 @@ class TriggerManager:
 
         with self._lock:
             scheduled = [
-                t for t in self._triggers.values()
+                t
+                for t in self._triggers.values()
                 if t.trigger_type == TriggerType.SCHEDULED and t.enabled and t.cron_expr
             ]
 
@@ -229,6 +236,7 @@ class TriggerManager:
 
         Returns a handler that can be registered with HookSystem.
         """
+
         def _handler(event: Any, data: dict[str, Any]) -> None:
             config = self._triggers.get(trigger_id)
             if config and config.enabled:
@@ -246,6 +254,104 @@ class TriggerManager:
 
         return self._execute_trigger(config, payload)
 
+    def dispatch(
+        self,
+        trigger_type: TriggerType,
+        payload: dict[str, Any],
+        automation_id: str | None = None,
+    ) -> TriggerResult:
+        """Unified dispatch — all trigger types converge to single pipeline execution.
+
+        Normalizes F1-F4 triggers into a single flow:
+        1. Snapshot capture (if SnapshotManager available)
+        2. Trigger-type-specific preprocessing
+        3. Trigger execution via callback
+        4. Result event publishing
+
+        Architecture-v6 §12.2: Dispatch Layer.
+
+        Args:
+            trigger_type: One of MANUAL, SCHEDULED, EVENT, WEBHOOK.
+            payload: Trigger-specific data dict.
+            automation_id: Optional trigger ID for traceability.
+                If provided, looks up the registered trigger.
+                If None, creates an ephemeral trigger config.
+        """
+        session_id = payload.get(
+            "session_id",
+            f"auto_{int(time.time())}",
+        )
+
+        # 1. Snapshot capture
+        snapshot_id = ""
+        if self._snapshot_manager:
+            snap = self._snapshot_manager.capture(
+                session_id,
+                context={
+                    "trigger_type": trigger_type.value,
+                    "automation_id": automation_id or "",
+                    "payload_keys": list(payload.keys()),
+                },
+            )
+            snapshot_id = snap.snapshot_id
+
+        # 2. Resolve trigger config
+        config: TriggerConfig | None = None
+        if automation_id:
+            config = self._triggers.get(automation_id)
+
+        if config is None:
+            # Ephemeral config for ad-hoc dispatch
+            config = TriggerConfig(
+                trigger_id=automation_id or f"dispatch-{session_id}",
+                trigger_type=trigger_type,
+                name=f"dispatch:{trigger_type.value}",
+            )
+
+        # 3. Trigger-type-specific preprocessing
+        dispatch_payload = {**payload}
+        dispatch_payload["_dispatch"] = {
+            "session_id": session_id,
+            "snapshot_id": snapshot_id,
+            "trigger_type": trigger_type.value,
+            "automation_id": automation_id or "",
+        }
+
+        if trigger_type == TriggerType.SCHEDULED and payload.get("batch"):
+            dispatch_payload["_batch_mode"] = True
+
+        if trigger_type == TriggerType.WEBHOOK:
+            dispatch_payload["_source"] = payload.get("source", "external")
+
+        if trigger_type == TriggerType.EVENT:
+            dispatch_payload["_follow_up"] = (
+                payload.get(
+                    "event",
+                    "",
+                )
+                == "pipeline_complete"
+            )
+
+        # 4. Execute
+        result = self._execute_trigger(config, dispatch_payload)
+
+        # 5. Publish post-dispatch event
+        if self._hooks:
+            from geode.orchestration.hooks import HookEvent
+
+            self._hooks.trigger(
+                HookEvent.POST_ANALYSIS,
+                {
+                    "trigger_type": trigger_type.value,
+                    "automation_id": automation_id or "",
+                    "session_id": session_id,
+                    "snapshot_id": snapshot_id,
+                    "success": result.success,
+                },
+            )
+
+        return result
+
     def _execute_trigger(self, config: TriggerConfig, data: dict[str, Any]) -> TriggerResult:
         """Execute a trigger's callback with error isolation."""
         try:
@@ -262,10 +368,13 @@ class TriggerManager:
             if self._hooks:
                 from geode.orchestration.hooks import HookEvent
 
-                self._hooks.trigger(HookEvent.TRIGGER_FIRED, {
-                    "trigger_id": config.trigger_id,
-                    "type": config.trigger_type.value,
-                })
+                self._hooks.trigger(
+                    HookEvent.TRIGGER_FIRED,
+                    {
+                        "trigger_id": config.trigger_id,
+                        "type": config.trigger_type.value,
+                    },
+                )
         except Exception as exc:
             result = TriggerResult(
                 trigger_id=config.trigger_id,
@@ -280,7 +389,7 @@ class TriggerManager:
             self._results.append(result)
             # Prune oldest results to prevent unbounded growth
             if len(self._results) > self.MAX_RESULTS:
-                self._results = self._results[-self.MAX_RESULTS:]
+                self._results = self._results[-self.MAX_RESULTS :]
         return result
 
     # ---------------------------------------------------------------------------

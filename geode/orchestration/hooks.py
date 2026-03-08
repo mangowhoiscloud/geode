@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (16 events)."""
+    """Pipeline lifecycle events (18 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -24,6 +24,7 @@ class HookEvent(Enum):
     PIPELINE_ERROR = "pipeline_error"
 
     # Node level
+    NODE_BOOTSTRAP = "node_bootstrap"
     NODE_ENTER = "node_enter"
     NODE_EXIT = "node_exit"
     NODE_ERROR = "node_error"
@@ -34,7 +35,7 @@ class HookEvent(Enum):
     SCORING_COMPLETE = "scoring_complete"
 
     # Verification level
-    VERIFICATION_PASS = "verification_pass"
+    VERIFICATION_PASS = "verification_pass"  # noqa: S105 — hook event name, not a password
     VERIFICATION_FAIL = "verification_fail"
 
     # L4.5 Automation level
@@ -43,6 +44,10 @@ class HookEvent(Enum):
     MODEL_PROMOTED = "model_promoted"
     SNAPSHOT_CAPTURED = "snapshot_captured"
     TRIGGER_FIRED = "trigger_fired"
+    POST_ANALYSIS = "post_analysis"
+
+    # Prompt Assembly (ADR-007)
+    PROMPT_ASSEMBLED = "prompt_assembled"
 
 
 @dataclass

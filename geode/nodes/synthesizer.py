@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from geode.infrastructure.ports.llm_port import get_llm_json
+from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
 from geode.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_USER
 from geode.state import (
     ActionLiteral,
@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 CAUSE_TO_ACTION: dict[CauseLiteral, ActionLiteral] = {
     "undermarketed": "marketing_boost",
-    "conversion_failure": "monetization_pivot",  # §13.9.2: 퍼널+과금 동시 개선
+    "conversion_failure": "marketing_boost",  # §13.9.3: 퍼널+마케팅 동시 개선
     "monetization_misfit": "monetization_pivot",
     "niche_gem": "platform_expansion",
     "timing_mismatch": "timing_optimization",
@@ -244,16 +244,49 @@ def _build_llm_synthesis(
         signals_summary=sig_summary,
     )
 
-    data = get_llm_json()(SYNTHESIZER_SYSTEM, user)
+    # ADR-007: PromptAssembler injection
+    system = SYNTHESIZER_SYSTEM
+    assembler: Any = state.get("_prompt_assembler")
+    if assembler is not None:
+        result = assembler.assemble(
+            base_system=SYNTHESIZER_SYSTEM,
+            base_user=user,
+            state=dict(state),
+            node="synthesizer",
+            role_type="synthesis",
+        )
+        system = result.system
+        user = result.user
+
+    # Use Anthropic Structured Output (messages.parse) for guaranteed JSON
     try:
+        result = get_llm_parsed()(system, user, output_model=SynthesisResult)
+        # Ensure cause/action match (LLM may hallucinate different values)
+        if result.undervaluation_cause != cause or result.action_type != action:
+            result = result.model_copy(
+                update={
+                    "undervaluation_cause": cause,
+                    "action_type": action,
+                }
+            )
+        return result
+    except Exception as exc:
+        log.warning(
+            "Synthesizer structured output failed: %s — falling back to legacy JSON parse",
+            exc,
+        )
+
+    # Fallback: legacy JSON parse
+    try:
+        data = get_llm_json()(system, user)
         return SynthesisResult(
             undervaluation_cause=cause,
             action_type=action,
             value_narrative=data.get("value_narrative", ""),
             target_gamer_segment=data.get("target_gamer_segment", ""),
         )
-    except ValidationError as ve:
-        log.warning("Synthesizer LLM response failed schema validation: %s", ve)
+    except (ValidationError, ValueError) as ve:
+        log.warning("Synthesizer legacy fallback also failed: %s", ve)
         return SynthesisResult(
             undervaluation_cause=cause,
             action_type=action,
@@ -275,9 +308,7 @@ def synthesizer_node(state: GeodeState) -> dict[str, Any]:
         action = CAUSE_TO_ACTION[cause]
 
         if state.get("verbose"):
-            log.debug(
-                "Cause: %s -> Action: %s (%s)", cause, action, ACTION_DESCRIPTIONS[action]
-            )
+            log.debug("Cause: %s -> Action: %s (%s)", cause, action, ACTION_DESCRIPTIONS[action])
 
         if state.get("dry_run"):
             synthesis = _build_dry_run_synthesis(state, cause, action, cause_desc)

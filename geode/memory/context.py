@@ -111,6 +111,9 @@ class ContextAssembler:
         context["_session_id"] = session_id
         context["_ip_name"] = ip_name
 
+        # ADR-007: Generate _llm_summary for PromptAssembler consumption
+        context["_llm_summary"] = self._build_llm_summary(context)
+
         return context
 
     def mark_assembled(self, assembled_at: float | None = None) -> None:
@@ -130,3 +133,28 @@ class ContextAssembler:
             return False
         threshold = max_age_s or self._freshness_threshold
         return (time.time() - self._last_assembly_time) < threshold
+
+    @staticmethod
+    def _build_llm_summary(context: dict[str, Any]) -> str:
+        """Build a pre-formatted LLM-readable summary from assembled context.
+
+        Contract (ADR-007): PromptAssembler reads this value directly without parsing.
+        """
+        parts: list[str] = []
+
+        if context.get("_org_loaded"):
+            org_strategy = context.get("organization_strategy", "")
+            if org_strategy:
+                parts.append(f"Organization: {org_strategy}")
+
+        if context.get("_project_loaded"):
+            project_goal = context.get("project_goal", "")
+            if project_goal:
+                parts.append(f"Project: {project_goal}")
+
+        if context.get("_session_loaded"):
+            prev_results = context.get("previous_results", [])
+            for pr in prev_results[-3:]:
+                parts.append(f"Previous: {pr}")
+
+        return " | ".join(parts) if parts else ""

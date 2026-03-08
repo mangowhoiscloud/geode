@@ -136,11 +136,13 @@ class LoggingPlugin(Plugin):
     """Example plugin that logs pipeline events."""
 
     def __init__(self) -> None:
-        super().__init__(PluginMetadata(
-            name="logging-plugin",
-            version="1.0.0",
-            description="Logs pipeline lifecycle events for observability.",
-        ))
+        super().__init__(
+            PluginMetadata(
+                name="logging-plugin",
+                version="1.0.0",
+                description="Logs pipeline lifecycle events for observability.",
+            )
+        )
 
     def install(self) -> None:
         log.info("LoggingPlugin installed")
@@ -178,9 +180,7 @@ class PluginManager:
         # Check dependencies
         for dep in plugin.metadata.dependencies:
             if dep not in self._plugins:
-                raise ValueError(
-                    f"Plugin '{plugin.name}' requires '{dep}' which is not loaded"
-                )
+                raise ValueError(f"Plugin '{plugin.name}' requires '{dep}' which is not loaded")
 
         plugin.install()
         self._plugins[plugin.name] = plugin
@@ -228,9 +228,7 @@ class PluginManager:
             if name in p.metadata.dependencies and p.name != name
         ]
         if dependents:
-            raise ValueError(
-                f"Cannot unload '{name}': required by {dependents}"
-            )
+            raise ValueError(f"Cannot unload '{name}': required by {dependents}")
 
         # Deactivate if active
         if plugin.state == PluginState.ACTIVE:

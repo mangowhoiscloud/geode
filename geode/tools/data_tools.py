@@ -121,10 +121,7 @@ class CortexAnalystTool:
         return {
             "result": {
                 "status": "stub",
-                "message": (
-                    f"Cortex Analyst query against {database} "
-                    f"would execute: '{question}'"
-                ),
+                "message": (f"Cortex Analyst query against {database} would execute: '{question}'"),
                 "rows": [],
                 "columns": [],
             }
@@ -178,10 +175,7 @@ class CortexSearchTool:
         return {
             "result": {
                 "status": "stub",
-                "message": (
-                    f"Cortex Search would return top-{top_k} "
-                    f"results for: '{query}'"
-                ),
+                "message": (f"Cortex Search would return top-{top_k} results for: '{query}'"),
                 "documents": [],
                 "scores": [],
             }

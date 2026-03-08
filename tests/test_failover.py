@@ -12,6 +12,7 @@ from geode.llm.client import (
     MAX_RETRIES,
     _retry_with_backoff,
     call_llm,
+    call_llm_json,
 )
 
 
@@ -112,3 +113,52 @@ class TestFallbackModels:
 
     def test_max_retries_positive(self):
         assert MAX_RETRIES >= 1
+
+
+class TestCallLlmJsonExtraction:
+    """Tests for robust JSON extraction from LLM responses."""
+
+    @patch("geode.llm.client.call_llm")
+    def test_direct_json(self, mock_call):
+        mock_call.return_value = '{"key": "value"}'
+        result = call_llm_json("sys", "usr")
+        assert result == {"key": "value"}
+
+    @patch("geode.llm.client.call_llm")
+    def test_json_with_markdown_fences(self, mock_call):
+        mock_call.return_value = '```json\n{"key": "value"}\n```'
+        result = call_llm_json("sys", "usr")
+        assert result == {"key": "value"}
+
+    @patch("geode.llm.client.call_llm")
+    def test_json_embedded_in_text(self, mock_call):
+        """LLM returns prose before/after JSON — extraction finds the object."""
+        mock_call.return_value = (
+            "Here is the evaluation result:\n\n"
+            '{"evaluator_type": "quality_judge", "axes": {"a_score": 4.2}, '
+            '"composite_score": 72.0, "rationale": "Good."}\n\n'
+            "I hope this helps!"
+        )
+        result = call_llm_json("sys", "usr")
+        assert result["evaluator_type"] == "quality_judge"
+        assert result["composite_score"] == 72.0
+
+    @patch("geode.llm.client.call_llm")
+    def test_json_with_nested_braces(self, mock_call):
+        mock_call.return_value = (
+            'Some text\n{"axes": {"d_score": 4.0, "e_score": 3.0}, "rationale": "test"}\nMore text'
+        )
+        result = call_llm_json("sys", "usr")
+        assert result["axes"]["d_score"] == 4.0
+
+    @patch("geode.llm.client.call_llm")
+    def test_no_json_raises_error(self, mock_call):
+        mock_call.return_value = "This is a plain text response with no JSON."
+        with pytest.raises(ValueError, match="invalid JSON"):
+            call_llm_json("sys", "usr")
+
+    @patch("geode.llm.client.call_llm")
+    def test_whitespace_around_json(self, mock_call):
+        mock_call.return_value = '  \n  {"key": 42}  \n  '
+        result = call_llm_json("sys", "usr")
+        assert result == {"key": 42}

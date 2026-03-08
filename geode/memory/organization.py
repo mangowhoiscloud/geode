@@ -92,6 +92,5 @@ class MonoLakeOrganizationMemory:
     def list_ips(self) -> list[str]:
         """List all known IP names from fixtures."""
         return [
-            self._cache[k].get("ip_info", {}).get("ip_name", k)
-            for k in sorted(self._cache.keys())
+            self._cache[k].get("ip_info", {}).get("ip_name", k) for k in sorted(self._cache.keys())
         ]

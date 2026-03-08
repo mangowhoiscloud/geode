@@ -11,6 +11,8 @@ from geode.orchestration.hot_reload import ConfigWatcher
 from geode.orchestration.lane_queue import LaneQueue
 from geode.orchestration.run_log import RunLog
 from geode.orchestration.stuck_detection import StuckDetector
+from geode.orchestration.task_bridge import TaskGraphHookBridge
+from geode.orchestration.task_system import TaskGraph
 from geode.runtime import (
     GeodeRuntime,
     _build_default_lanes,
@@ -50,18 +52,18 @@ class TestRuntimeHooksRunLog:
         # Trigger a pipeline event
         runtime.hooks.trigger(
             HookEvent.NODE_ENTER,
-            {"node": "cortex", "ip_name": "Berserk"},
+            {"node": "router", "ip_name": "Berserk"},
         )
         runtime.hooks.trigger(
             HookEvent.NODE_EXIT,
-            {"node": "cortex", "ip_name": "Berserk", "duration_ms": 42.0},
+            {"node": "router", "ip_name": "Berserk", "duration_ms": 42.0},
         )
 
         # Verify entries written to run log
         entries = runtime.run_log.read(limit=10)
         assert len(entries) == 2
         assert entries[0].event == "node_exit"
-        assert entries[0].node == "cortex"
+        assert entries[0].node == "router"
         assert entries[0].duration_ms == 42.0
         assert entries[1].event == "node_enter"
 
@@ -81,7 +83,7 @@ class TestRuntimeHooksRunLog:
 
         runtime.hooks.trigger(
             HookEvent.NODE_ERROR,
-            {"node": "cortex", "error": "connection timeout"},
+            {"node": "router", "error": "connection timeout"},
         )
 
         entries = runtime.run_log.read(limit=1)
@@ -225,6 +227,7 @@ class TestRuntimeNewComponents:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         runtime.shutdown()  # Should not raise
 
+
 class TestGetHealth:
     def test_get_health_has_all_components(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
@@ -272,3 +275,65 @@ class TestReactiveChains:
 
         after_snaps = runtime.snapshot_manager.list_snapshots()
         assert len(after_snaps) == len(initial_snaps) + 1
+
+
+class TestRuntimeTaskGraph:
+    def test_task_graph_created_on_init(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        assert runtime.task_graph is not None
+        assert isinstance(runtime.task_graph, TaskGraph)
+        assert runtime.task_graph.task_count == 13
+
+    def test_task_bridge_created(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        assert runtime._task_bridge is not None
+        assert isinstance(runtime._task_bridge, TaskGraphHookBridge)
+
+    def test_get_health_includes_task_graph(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        health = runtime.get_health()
+        assert "task_graph" in health
+        assert health["task_graph"]["total"] == 13
+        assert health["task_graph"]["is_complete"] is False
+
+    def test_get_task_status_summary(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        status = runtime.get_task_status()
+        assert status["total_tasks"] == 13
+        assert status["is_complete"] is False
+
+    def test_get_task_status_single(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        status = runtime.get_task_status("berserk_router")
+        assert status["task_id"] == "berserk_router"
+        assert status["status"] == "pending"
+
+    def test_get_task_status_missing(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        status = runtime.get_task_status("nonexistent")
+        assert "error" in status
+
+    def test_reset_task_graph(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        old_graph = runtime.task_graph
+        # Simulate some progress
+        runtime.hooks.trigger(HookEvent.NODE_ENTER, {"node": "router", "ip_name": "berserk"})
+        assert runtime.task_graph.get_task("berserk_router").status.value == "running"
+
+        # Reset — old handlers should be unregistered
+        runtime.reset_task_graph()
+        assert runtime.task_graph is not old_graph
+        assert runtime.task_graph.get_task("berserk_router").status.value == "pending"
+        assert runtime.task_graph.task_count == 13
+
+        # Verify no duplicate handlers: trigger event → only new graph updates
+        runtime.hooks.trigger(HookEvent.NODE_ENTER, {"node": "router", "ip_name": "berserk"})
+        assert runtime.task_graph.get_task("berserk_router").status.value == "running"
+        # Old graph should NOT have been updated again (it was already running)
+        assert old_graph.get_task("berserk_router").status.value == "running"
+
+    def test_hook_events_update_task_graph(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime.hooks.trigger(HookEvent.NODE_ENTER, {"node": "router", "ip_name": "berserk"})
+        runtime.hooks.trigger(HookEvent.NODE_EXIT, {"node": "router", "ip_name": "berserk"})
+        assert runtime.task_graph.get_task("berserk_router").status.value == "completed"

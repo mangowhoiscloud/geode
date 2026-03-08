@@ -69,8 +69,7 @@ class GenerateReportTool:
             "format": fmt,
             "sections": {
                 "executive_summary": (
-                    f"IP '{ip_name}' evaluated as Tier {tier} "
-                    f"with final score {score:.1f}/100."
+                    f"IP '{ip_name}' evaluated as Tier {tier} with final score {score:.1f}/100."
                 ),
                 "scores": analysis_data.get("subscores", {}),
                 "tier": tier,

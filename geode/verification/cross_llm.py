@@ -28,7 +28,7 @@ _MAX_VARIANCE = ((_SCALE_MAX - _SCALE_MIN) / 2) ** 2  # 4.0 — max possible var
 
 # Default model name when adapter info is unavailable
 _DEFAULT_PRIMARY_MODEL = "claude-opus-4-6"
-_DEFAULT_SECONDARY_MODEL = "gpt-5.3"
+_DEFAULT_SECONDARY_MODEL = "gpt-5.4"
 
 
 def _derive_model_names(
@@ -152,8 +152,8 @@ def run_cross_llm_check(
 
             # Blend secondary re-score into agreement only when parseable
             if secondary_score is not None:
-                rescore_agreement = (
-                    1.0 - abs(first.score - secondary_score) / (_SCALE_MAX - _SCALE_MIN)
+                rescore_agreement = 1.0 - abs(first.score - secondary_score) / (
+                    _SCALE_MAX - _SCALE_MIN
                 )
                 rescore_agreement = max(0.0, min(1.0, rescore_agreement))
 

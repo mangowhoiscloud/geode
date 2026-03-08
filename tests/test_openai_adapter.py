@@ -15,7 +15,7 @@ class TestOpenAIAdapterInterface:
 
     def test_default_model(self):
         adapter = OpenAIAdapter()
-        assert adapter._default_model == "gpt-5.3"
+        assert adapter._default_model == "gpt-5.4"
 
     def test_custom_model(self):
         adapter = OpenAIAdapter(default_model="gpt-4o")

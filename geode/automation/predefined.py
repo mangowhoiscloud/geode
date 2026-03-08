@@ -1,10 +1,11 @@
 """Pre-defined Automation Templates — scheduled pipeline configurations.
 
-Provides reusable automation templates for common GEODE operations:
-weekly discovery scans, calibration drift checks, outcome tracking,
-and auto-report generation.
+Provides 10 reusable automation templates for common GEODE operations:
+discovery scans, pending analysis workers, calibration drift checks,
+data quality scans, anomaly detection, outcome tracking, report generation,
+S-tier reports, discovery summaries, and failed evaluation summaries.
 
-Architecture-v6 SS4.5: Automation Layer.
+Architecture-v6 §4.5 / §12.4: Automation Layer — Pre-defined Automations.
 """
 
 from __future__ import annotations
@@ -149,6 +150,160 @@ PREDEFINED_AUTOMATIONS: list[AutomationTemplate] = [
         ),
         tags=["report", "event-driven"],
     ),
+    AutomationTemplate(
+        id="pending_analysis_worker",
+        name="Pending Analysis Worker",
+        description=(
+            "Process pending IP analysis queue every 30 minutes. "
+            "Picks up IPs awaiting evaluation and runs them through "
+            "the full pipeline with verification."
+        ),
+        schedule="*/30 * * * *",  # Every 30 minutes
+        pipeline_config=PipelineConfig(
+            mode="full_pipeline",
+            batch_size=10,
+            dry_run=False,
+            skip_verification=False,
+            extra={
+                "source": "pending_queue",
+                "priority": "fifo",
+                "max_concurrent": 3,
+            },
+        ),
+        tags=["worker", "queue", "scheduled"],
+    ),
+    AutomationTemplate(
+        id="data_quality_scan",
+        name="Data Quality Scan",
+        description=(
+            "Daily data quality validation at 05:00 UTC. Checks signal "
+            "completeness, schema conformance, and stale data across all "
+            "active IP records in the pipeline."
+        ),
+        schedule="0 5 * * *",  # Daily 05:00 UTC
+        pipeline_config=PipelineConfig(
+            mode="evaluation",
+            batch_size=1,
+            dry_run=False,
+            skip_verification=True,
+            extra={
+                "checks": [
+                    "signal_completeness",
+                    "schema_conformance",
+                    "stale_data",
+                    "duplicate_detection",
+                ],
+                "staleness_threshold_days": 30,
+                "min_signal_coverage": 0.6,
+            },
+        ),
+        tags=["quality", "data", "daily"],
+    ),
+    AutomationTemplate(
+        id="anomaly_detector",
+        name="Anomaly Detector",
+        description=(
+            "Event-triggered anomaly detection on pipeline completion. "
+            "Analyzes scoring distributions for statistical outliers "
+            "and flags IPs with anomalous evaluation patterns."
+        ),
+        schedule="event:pipeline_complete",
+        pipeline_config=PipelineConfig(
+            mode="evaluation",
+            batch_size=1,
+            dry_run=False,
+            skip_verification=True,
+            extra={
+                "detection_methods": ["zscore", "iqr", "isolation_forest"],
+                "zscore_threshold": 3.0,
+                "iqr_multiplier": 1.5,
+                "notify_on_anomaly": True,
+            },
+        ),
+        tags=["anomaly", "detection", "event-driven"],
+    ),
+    AutomationTemplate(
+        id="weekly_s_tier_report",
+        name="Weekly S-Tier Report",
+        description=(
+            "Weekly report of S-tier IP discoveries every Friday at 10:00 UTC. "
+            "Aggregates top-scoring IPs from the week and generates an "
+            "executive briefing with investment recommendations."
+        ),
+        schedule="0 10 * * 5",  # Friday 10:00 UTC
+        pipeline_config=PipelineConfig(
+            mode="scoring",
+            batch_size=1,
+            dry_run=False,
+            skip_verification=False,
+            extra={
+                "tier_filter": ["S", "A"],
+                "report_format": "markdown",
+                "include_sections": [
+                    "executive_summary",
+                    "top_discoveries",
+                    "score_breakdown",
+                    "investment_signals",
+                ],
+                "lookback_days": 7,
+            },
+        ),
+        tags=["report", "s-tier", "weekly"],
+    ),
+    AutomationTemplate(
+        id="weekly_discovery_summary",
+        name="Weekly Discovery Summary",
+        description=(
+            "Monday morning summary of all IP discoveries from the past week. "
+            "Provides pipeline throughput metrics, tier distribution, "
+            "and highlights notable findings. Runs after weekly_discovery_scan."
+        ),
+        schedule="0 10 * * 1",  # Monday 10:00 UTC (after discovery scan at 09:00)
+        pipeline_config=PipelineConfig(
+            mode="scoring",
+            batch_size=1,
+            dry_run=False,
+            skip_verification=False,
+            extra={
+                "report_type": "weekly_summary",
+                "include_metrics": [
+                    "throughput",
+                    "tier_distribution",
+                    "avg_confidence",
+                    "notable_findings",
+                ],
+                "lookback_days": 7,
+            },
+        ),
+        tags=["summary", "discovery", "weekly"],
+    ),
+    AutomationTemplate(
+        id="failed_evaluation_summary",
+        name="Failed Evaluation Summary",
+        description=(
+            "Daily summary of failed evaluations at 08:00 UTC. "
+            "Aggregates pipeline failures, guardrail rejections, and "
+            "verification failures for debugging and process improvement."
+        ),
+        schedule="0 8 * * *",  # Daily 08:00 UTC
+        pipeline_config=PipelineConfig(
+            mode="evaluation",
+            batch_size=1,
+            dry_run=False,
+            skip_verification=True,
+            extra={
+                "failure_categories": [
+                    "pipeline_error",
+                    "guardrail_rejection",
+                    "verification_failure",
+                    "timeout",
+                ],
+                "include_stack_traces": False,
+                "lookback_hours": 24,
+            },
+        ),
+        tags=["failures", "debugging", "daily"],
+    ),
 ]
 
 # Lookup index for O(1) access
@@ -164,9 +319,7 @@ def get_automation(automation_id: str) -> AutomationTemplate:
     template = _AUTOMATION_INDEX.get(automation_id)
     if template is None:
         available = list(_AUTOMATION_INDEX.keys())
-        raise KeyError(
-            f"Automation '{automation_id}' not found. Available: {available}"
-        )
+        raise KeyError(f"Automation '{automation_id}' not found. Available: {available}")
     return template
 
 

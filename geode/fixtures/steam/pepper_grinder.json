@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Pepper Grinder",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Ahr Ech",
+    "genre": [
+      "action",
+      "platformer",
+      "pixel graphics"
+    ],
+    "synopsis": "Pepper Grinder — a Action Platformer game developed by Ahr Ech, released in 2024 on Steam.",
+    "proof_of_game": "Pepper Grinder (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 4320,
+    "dau_current": 1944,
+    "revenue_ltm": 283311,
+    "revenue_lifetime": 1246568,
+    "retention_d30": 34,
+    "metacritic_score": 84,
+    "store_page_score": 90,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 243000,
+    "reddit_subscribers": 4050,
+    "fan_art_yoy_pct": 30.0,
+    "google_trends_index": 58,
+    "twitter_mentions_monthly": 1296,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "action",
+      "platformer",
+      "pixel graphics",
+      "indie",
+      "short"
+    ],
+    "game_sales_data": "~54,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 84,
+    "store_page_score": 90,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 72.9,
+    "cause": "discovery_failure",
+    "quality_score": 90.5,
+    "momentum_score": 57.8,
+    "developer_track_record": 25,
+    "psm_att_pct": 27.8,
+    "psm_z_value": 2.32,
+    "psm_gamma": 2.2
+  }
+}

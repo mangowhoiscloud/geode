@@ -144,6 +144,7 @@ class TestCUSUMDetector:
         assert "alerts_warning" in d
         assert "alerts_critical" in d
 
+
 class TestCUSUMUpwardDrift:
     """Test CUSUM detection for upward (positive) drift."""
 
@@ -184,6 +185,7 @@ class TestPSI:
 
     def test_psi_nonnegative(self):
         import random
+
         random.seed(42)
         expected = [random.gauss(0, 1) for _ in range(100)]
         actual = [random.gauss(0.5, 1) for _ in range(100)]

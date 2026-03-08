@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Citizen Sleeper",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "Jump Over The Age",
+    "genre": [
+      "rpg",
+      "narrative",
+      "sci-fi"
+    ],
+    "synopsis": "Citizen Sleeper — a Narrative RPG game developed by Jump Over The Age, released in 2022 on Steam.",
+    "proof_of_game": "Citizen Sleeper (2022, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 10080,
+    "dau_current": 3158,
+    "revenue_ltm": 264467,
+    "revenue_lifetime": 5994601,
+    "retention_d30": 36,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 592200,
+    "reddit_subscribers": 9870,
+    "fan_art_yoy_pct": 29.0,
+    "google_trends_index": 65,
+    "twitter_mentions_monthly": 3158,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "rpg",
+      "narrative",
+      "sci-fi",
+      "choices matter",
+      "atmospheric"
+    ],
+    "game_sales_data": "~126,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "rpg",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 78.2,
+    "cause": "discovery_failure",
+    "quality_score": 94.5,
+    "momentum_score": 63.0,
+    "developer_track_record": 25,
+    "psm_att_pct": 32.6,
+    "psm_z_value": 2.72,
+    "psm_gamma": 2.3
+  }
+}

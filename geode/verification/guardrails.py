@@ -65,9 +65,7 @@ def _check_evidence_grounding(evidence: str, signals: dict[str, Any]) -> bool:
     # Check key presence
     key_match = any(sk in ev_lower for sk in (k.lower() for k in signals))
     # Check value presence (for numeric values)
-    value_match = any(
-        str(v) in evidence for v in signals.values() if isinstance(v, (int, float))
-    )
+    value_match = any(str(v) in evidence for v in signals.values() if isinstance(v, (int, float)))
     return key_match or value_match
 
 
@@ -113,7 +111,9 @@ def _g3_grounding(
                 )
         if not a.reasoning:
             errors.append(f"Analyst {a.analyst_type} has no reasoning")
-    msg_parts = errors + details_only
+    # Deduplicate soft warnings (feedback loop may produce repeats)
+    unique_details = list(dict.fromkeys(details_only))
+    msg_parts = errors + unique_details
     return not errors, "; ".join(msg_parts) or "Grounding OK"
 
 

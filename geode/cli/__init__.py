@@ -34,6 +34,14 @@ from geode.cli.startup import (
     setup_project_memory,
 )
 from geode.config import settings
+from geode.extensibility.reports import ReportFormat, ReportGenerator, ReportTemplate
+from geode.llm.commentary import (
+    build_analyze_context,
+    build_compare_context,
+    build_list_context,
+    build_search_context,
+    generate_commentary,
+)
 from geode.runtime import GeodeRuntime
 from geode.state import GeodeState
 from geode.ui.console import console
@@ -46,6 +54,7 @@ from geode.ui.panels import (
     score_panel,
     verify_panel,
 )
+from geode.ui.status import GeodeStatus
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +69,7 @@ app = typer.Typer(
 _nl_router_ctx: ContextVar[Any] = ContextVar("nl_router", default=None)
 _search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
 _readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
+_last_result_ctx: ContextVar[Any] = ContextVar("last_result", default=None)
 
 
 def _get_nl_router() -> NLRouter:
@@ -88,6 +98,136 @@ def _get_readiness() -> ReadinessReport | None:
 def _set_readiness(report: ReadinessReport) -> None:
     """Set the context-local ReadinessReport."""
     _readiness_ctx.set(report)
+
+
+def _get_last_result() -> dict[str, Any] | None:
+    """Get the cached last pipeline result."""
+    return cast("dict[str, Any] | None", _last_result_ctx.get())
+
+
+def _set_last_result(result: dict[str, Any]) -> None:
+    """Cache the last pipeline result for report generation."""
+    _last_result_ctx.set(result)
+
+
+# ---------------------------------------------------------------------------
+# Report utilities
+# ---------------------------------------------------------------------------
+
+_FORMAT_KEYWORDS = {"html", "json", "md", "markdown"}
+_TEMPLATE_KEYWORDS = {"summary", "detailed", "executive"}
+
+
+def _state_to_report_dict(state: dict[str, Any]) -> dict[str, Any]:
+    """Convert a GeodeState dict to a plain dict suitable for ReportGenerator.
+
+    Pydantic models are dumped via .model_dump(); scalars pass through.
+    Missing fields get safe defaults.
+    """
+    from pydantic import BaseModel
+
+    out: dict[str, Any] = {}
+    for key, value in state.items():
+        if isinstance(value, BaseModel):
+            out[key] = value.model_dump()
+        elif isinstance(value, list):
+            out[key] = [v.model_dump() if isinstance(v, BaseModel) else v for v in value]
+        elif isinstance(value, dict):
+            out[key] = {
+                k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in value.items()
+            }
+        else:
+            out[key] = value
+
+    # Safe defaults for required report fields
+    out.setdefault("ip_name", "Unknown IP")
+    out.setdefault("final_score", 0.0)
+    out.setdefault("tier", "N/A")
+    out.setdefault("subscores", {})
+    out.setdefault("synthesis", {})
+    out.setdefault("analyses", [])
+    return out
+
+
+def _parse_report_args(parts: list[str]) -> dict[str, str]:
+    """Parse report arguments from a list of tokens.
+
+    Returns dict with keys: ip_name, fmt, template.
+    Example: ["Berserk", "html", "detailed"]
+      → {"ip_name": "Berserk", "fmt": "html", "template": "detailed"}
+    """
+    fmt = "md"
+    template = "summary"
+    ip_parts: list[str] = []
+
+    for part in parts:
+        lower = part.lower()
+        if lower in _FORMAT_KEYWORDS:
+            fmt = "markdown" if lower == "md" else lower
+        elif lower in _TEMPLATE_KEYWORDS:
+            template = lower
+        else:
+            ip_parts.append(part)
+
+    return {
+        "ip_name": " ".join(ip_parts) if ip_parts else "",
+        "fmt": fmt,
+        "template": template,
+    }
+
+
+def _generate_report(
+    ip_name: str,
+    *,
+    fmt: str = "markdown",
+    template: str = "summary",
+    output: str | None = None,
+    dry_run: bool = True,
+    verbose: bool = False,
+) -> None:
+    """Generate a report for the given IP.
+
+    Reuses cached pipeline result if available for the same IP,
+    otherwise runs analysis first.
+    """
+    # Resolve format/template enums
+    try:
+        report_fmt = ReportFormat(fmt)
+    except ValueError:
+        console.print(f"  [warning]Unknown format: {fmt}. Using markdown.[/warning]")
+        report_fmt = ReportFormat.MARKDOWN
+
+    try:
+        report_tpl = ReportTemplate(template)
+    except ValueError:
+        console.print(f"  [warning]Unknown template: {template}. Using summary.[/warning]")
+        report_tpl = ReportTemplate.SUMMARY
+
+    # Try cached result first
+    cached = _get_last_result()
+    if cached and cached.get("ip_name", "").lower() == ip_name.lower():
+        result: dict[str, Any] = cached
+    else:
+        fresh = _run_analysis(ip_name, dry_run=dry_run, verbose=verbose)
+        if fresh is None:
+            return
+        result = fresh
+
+    report_dict = _state_to_report_dict(result)
+    generator = ReportGenerator()
+    content = generator.generate(report_dict, fmt=report_fmt, template=report_tpl)
+
+    if output:
+        from pathlib import Path
+
+        path = Path(output)
+        path.write_text(content, encoding="utf-8")
+        console.print(f"  [success]Report saved to {path}[/success]")
+        console.print()
+    else:
+        console.print()
+        console.print(content)
+        console.print()
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +273,6 @@ def _welcome_screen() -> None:
 
 _STEP_LABELS: dict[str, str] = {
     "router": "Route",
-    "cortex": "Gather",
     "signals": "Signals",
     "analyst": "Analyze",
     "evaluators": "Evaluate",
@@ -217,11 +356,15 @@ def _render_data_panels(result: dict[str, Any]) -> None:
     if result.get("evaluations"):
         evaluator_panel(result["evaluations"])
     if result.get("psm_result") is not None:
+        conf = result.get("analyst_confidence", 0)
+        # In dry-run, confidence is from fixture data — flag it
+        if result.get("dry_run"):
+            conf = 0  # suppress misleading confidence in dry-run
         score_panel(
             result["psm_result"],
             result.get("final_score", 0),
             result.get("subscores", {}),
-            confidence=result.get("analyst_confidence", 0),
+            confidence=conf,
         )
 
 
@@ -237,8 +380,11 @@ def _render_verification(result: dict[str, Any], *, verbose: bool) -> None:
             if "FAIL" in detail:
                 console.print(f"    [warning]{detail}[/warning]")
     if verbose and guardrails:
+        seen: set[str] = set()
         for detail in guardrails.details:
-            console.print(f"    [muted]{detail}[/muted]")
+            if detail not in seen:
+                seen.add(detail)
+                console.print(f"    [muted]{detail}[/muted]")
         console.print()
 
 
@@ -258,14 +404,63 @@ def _render_result(result: dict[str, Any], *, skip_verification: bool, verbose: 
     console.print()
 
 
+def _resolve_ip_name(ip_name: str) -> str | None:
+    """Resolve an IP name to a fixture key with fuzzy matching.
+
+    Resolution order:
+    1. Exact fixture key match
+    2. Canonical name → fixture key map (ip_info.ip_name lookup)
+    3. Substring: fixture key is contained in input
+    4. Substring: input is contained in fixture key
+    """
+    from geode.cli.nl_router import get_ip_name_map
+    from geode.fixtures import FIXTURE_MAP
+
+    key = ip_name.lower().strip()
+
+    # 1. Exact fixture key match
+    if key in FIXTURE_MAP:
+        return key
+
+    # 2. Canonical ip_info.ip_name → fixture key
+    name_map = get_ip_name_map()
+    if key in name_map:
+        return name_map[key]
+
+    # 3. Fixture key is a substring of input (e.g. "ghost in shell" in "ghost in the shell")
+    for fk in FIXTURE_MAP:
+        if fk in key:
+            return fk
+
+    # 4. Input is a substring of fixture key
+    for fk in FIXTURE_MAP:
+        if key in fk:
+            return fk
+
+    return None
+
+
 def _run_analysis(
     ip_name: str,
     *,
     dry_run: bool = True,
     verbose: bool = False,
     skip_verification: bool = False,
-) -> None:
+) -> dict[str, Any] | None:
     """Core analysis logic shared by interactive and CLI modes."""
+    from geode.fixtures import FIXTURE_MAP
+
+    resolved = _resolve_ip_name(ip_name)
+    if resolved is None:
+        available = [n.title() for n in FIXTURE_MAP]
+        console.print(f"\n  [warning]Unknown IP: '{ip_name}'[/warning]")
+        console.print(f"  [muted]Available IPs: {', '.join(available)}[/muted]")
+        console.print("  [muted]Use /search <query> to find IPs by genre or keyword.[/muted]\n")
+        return None
+
+    # Use the resolved fixture key for downstream operations
+    ip_name = resolved
+
     model = "dry-run (no LLM)" if dry_run else settings.model
     pipeline_mode = "full_pipeline"
     header_panel(ip_name, pipeline_mode, model)
@@ -292,7 +487,9 @@ def _run_analysis(
 
     result = _execute_pipeline(initial_state, verbose, runtime=runtime)
     if result:
+        _set_last_result(result)
         _render_result(result, skip_verification=skip_verification, verbose=verbose)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +511,10 @@ def _render_search_results(query: str, results: list[Any]) -> None:
         bar_len = int(r.score * 20)
         bar = "█" * bar_len + "░" * (20 - bar_len)
         style = "success" if r.score >= 0.5 else "muted"
-        console.print(f"    [{style}]{bar}[/{style}] {r.score:.0%}  [value]{r.ip_name}[/value]")
+        console.print(
+            f"    [{style}]{bar}[/{style}] [dim]relevance[/dim] {r.score:.0%}"
+            f"  [value]{r.ip_name}[/value]"
+        )
         console.print(f"      [muted]matched: {', '.join(r.matches[:5])}[/muted]")
     console.print()
 
@@ -371,6 +571,20 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
         cmd_auth(args)
     elif action == "generate":
         cmd_generate(args)
+    elif action == "report":
+        if not args:
+            console.print(
+                "  [warning]Usage: /report <IP name>"
+                " [html|json|md] [summary|detailed|executive][/warning]"
+            )
+        else:
+            report_args = _parse_report_args(args.split())
+            _generate_report(
+                report_args["ip_name"],
+                fmt=report_args["fmt"],
+                template=report_args["template"],
+                verbose=verbose,
+            )
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -379,30 +593,150 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
     return False, verbose
 
 
+def _show_commentary(
+    user_text: str, action: str, context: dict[str, Any], *, is_offline: bool
+) -> None:
+    """Generate and display LLM commentary after tool call results."""
+    if is_offline:
+        return
+    with GeodeStatus("Generating response...", model=settings.model) as status:
+        text = generate_commentary(user_query=user_text, action=action, context=context)
+        status.stop("response" if text else "response (skipped)")
+    if text:
+        console.print()
+        console.print(f"  {text}")
+        console.print()
+
+
 def _handle_natural_language(text: str, verbose: bool) -> None:
-    """Route natural language input via NLRouter."""
-    intent = _get_nl_router().classify(text)
+    """Route natural language input via NLRouter (hybrid pattern + LLM)."""
+    from geode.cli.nl_router import LLM_ROUTER_MODEL
+
+    with GeodeStatus("Classifying intent...", model=LLM_ROUTER_MODEL) as status:
+        intent = _get_nl_router().classify(text)
+
+        # Build summary for the permanent line
+        is_offline = bool(intent.args.get("_error"))
+        if is_offline:
+            summary = f"{intent.action} (offline)"
+        elif intent.action == "analyze":
+            ip_name = intent.args.get("ip_name", text)
+            status.update(f"Tool: analyze_ip ({ip_name})")
+            summary = f"analyze · {ip_name}"
+        elif intent.action == "search":
+            query = intent.args.get("query", text)
+            status.update(f"Tool: search_ips ({query})")
+            summary = f"search · {query}"
+        elif intent.action == "compare":
+            ip_a = intent.args.get("ip_a", "")
+            ip_b = intent.args.get("ip_b", "")
+            status.update(f"Tool: compare_ips ({ip_a}, {ip_b})")
+            summary = f"compare · {ip_a} vs {ip_b}"
+        elif intent.action == "report":
+            ip_name = intent.args.get("ip_name", text)
+            status.update(f"Tool: generate_report ({ip_name})")
+            summary = f"report · {ip_name}"
+        elif intent.action == "list":
+            status.update("Tool: list_ips")
+            summary = "list"
+        elif intent.action == "chat":
+            summary = "chat"
+        elif intent.action == "help":
+            summary = "help"
+        else:
+            summary = intent.action
+
+        status.stop(summary)
+
+    # --- Execute the routed action (unchanged logic) ---
 
     if intent.action == "search":
-        results = _get_search_engine().search(intent.args.get("query", text))
-        _render_search_results(intent.args.get("query", text), results)
+        query = intent.args.get("query", text)
+        results = _get_search_engine().search(query)
+        _render_search_results(query, results)
+        _show_commentary(
+            text, "search", build_search_context(query, results), is_offline=is_offline
+        )
 
     elif intent.action == "analyze":
         ip_name = intent.args.get("ip_name", text)
-        _run_analysis(ip_name, dry_run=True, verbose=verbose)
+        result = _run_analysis(ip_name, dry_run=True, verbose=verbose)
+        if result:
+            _show_commentary(text, "analyze", build_analyze_context(result), is_offline=is_offline)
 
     elif intent.action == "compare":
         ip_a = intent.args.get("ip_a", "")
         ip_b = intent.args.get("ip_b", "")
         console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
-        _run_analysis(ip_a, dry_run=True, verbose=verbose)
-        _run_analysis(ip_b, dry_run=True, verbose=verbose)
+        result_a = _run_analysis(ip_a, dry_run=True, verbose=verbose)
+        result_b = _run_analysis(ip_b, dry_run=True, verbose=verbose)
+        _show_commentary(
+            text,
+            "compare",
+            build_compare_context(ip_a, result_a, ip_b, result_b),
+            is_offline=is_offline,
+        )
 
     elif intent.action == "list":
+        from geode.nodes.router import _FIXTURE_MAP
+
         cmd_list()
+        ip_names = [n.title() for n in _FIXTURE_MAP]
+        _show_commentary(text, "list", build_list_context(ip_names), is_offline=is_offline)
+
+    elif intent.action == "report":
+        ip_name = intent.args.get("ip_name", text)
+        _generate_report(ip_name, verbose=verbose)
+
+    elif intent.action == "chat":
+        response_text = intent.args.get("response", "")
+        if response_text:
+            console.print()
+            console.print(f"  {response_text}")
+            console.print()
+        else:
+            console.print()
+            console.print("  [muted]응답을 생성하지 못했습니다. /help 를 입력해 보세요.[/muted]")
+            console.print()
 
     elif intent.action == "help":
-        show_help()
+        error = intent.args.get("_error", "")
+        if error == "billing":
+            console.print()
+            console.print("  [warning]Anthropic API 크레딧이 부족합니다.[/warning]")
+            console.print(
+                "  [muted]https://console.anthropic.com/settings/billing 에서 충전하세요.[/muted]"
+            )
+            console.print(
+                "  [muted]/list, /search 는 LLM 없이 사용 가능합니다."
+                " /analyze 는 dry-run 모드로 제한됩니다.[/muted]"
+            )
+            console.print()
+        elif error == "auth_error":
+            console.print()
+            console.print("  [warning]Anthropic API 키가 유효하지 않습니다.[/warning]")
+            console.print("  [muted]/key <API_KEY> 로 올바른 키를 설정하세요.[/muted]")
+            console.print()
+        elif error == "no_api_key":
+            console.print()
+            console.print("  [warning]Anthropic API 키가 설정되지 않았습니다.[/warning]")
+            console.print("  [muted]/key <API_KEY> 로 설정하세요.[/muted]")
+            console.print()
+        elif error == "api_error":
+            console.print()
+            console.print("  [warning]Anthropic API 호출에 실패했습니다.[/warning]")
+            console.print("  [muted]/list, /search 는 LLM 없이 사용 가능합니다.[/muted]")
+            console.print()
+        elif is_offline and intent.confidence < 1.0:
+            console.print()
+            console.print("  [muted]입력을 이해하지 못했습니다. 다음을 시도해 보세요:[/muted]")
+            console.print("  [muted]  /list          — IP 목록 보기[/muted]")
+            console.print("  [muted]  /analyze <IP>  — IP 분석[/muted]")
+            console.print("  [muted]  /search <키워드> — IP 검색[/muted]")
+            console.print("  [muted]  /help          — 전체 도움말[/muted]")
+            console.print()
+        else:
+            show_help()
 
     else:
         _run_analysis(text, dry_run=True, verbose=verbose)
@@ -474,6 +808,29 @@ def analyze(
 
 
 @app.command()
+def report(
+    ip_name: str = typer.Argument(..., help="IP name to generate report for"),
+    fmt: str = typer.Option("md", "--format", "-f", help="Output format: md, html, json"),
+    template: str = typer.Option(
+        "summary", "--template", "-t", help="summary, detailed, executive"
+    ),
+    output: str = typer.Option(None, "--output", "-o", help="Save report to file"),
+    dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Use fixture data (no LLM)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
+) -> None:
+    """Generate a report for an IP analysis."""
+    resolved_fmt = "markdown" if fmt == "md" else fmt
+    _generate_report(
+        ip_name,
+        fmt=resolved_fmt,
+        template=template,
+        output=output or None,
+        dry_run=dry_run,
+        verbose=verbose,
+    )
+
+
+@app.command()
 def search(
     query: str = typer.Argument(..., help="Search query (e.g. 'dark fantasy', '소울라이크')"),
 ) -> None:
@@ -491,7 +848,7 @@ def version() -> None:
 @app.command(name="list")
 def list_ips() -> None:
     """List available IP fixtures."""
-    from geode.nodes.cortex import _FIXTURE_MAP
+    from geode.nodes.router import _FIXTURE_MAP
 
     console.print("[header]Available IPs:[/header]")
     for name in _FIXTURE_MAP:

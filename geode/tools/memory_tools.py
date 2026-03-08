@@ -97,11 +97,13 @@ class MemorySearchTool:
                 # Simple string matching against session data values
                 data_str = str(data).lower()
                 if query_lower in data_str:
-                    matches.append({
-                        "session_id": session_id,
-                        "tier": "session",
-                        "data": data,
-                    })
+                    matches.append(
+                        {
+                            "session_id": session_id,
+                            "tier": "session",
+                            "data": data,
+                        }
+                    )
                     if len(matches) >= limit:
                         break
 
@@ -127,10 +129,7 @@ class MemoryGetTool:
 
     @property
     def description(self) -> str:
-        return (
-            "Get a specific memory entry by session ID. "
-            "Returns the full session data if found."
-        )
+        return "Get a specific memory entry by session ID. Returns the full session data if found."
 
     @property
     def parameters(self) -> dict[str, Any]:

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Vampire Survivors: Legacy of the Moonspell",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "poncle",
+    "genre": [
+      "action roguelike",
+      "bullet hell",
+      "dlc"
+    ],
+    "synopsis": "Vampire Survivors: Legacy of the Moonspell — a Action Roguelike DLC game developed by poncle, released in 2022 on Steam.",
+    "proof_of_game": "Vampire Survivors: Legacy of the Moonspell (2022, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 7680,
+    "dau_current": 2380,
+    "revenue_ltm": 30139,
+    "revenue_lifetime": 683155,
+    "retention_d30": 36,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 446400,
+    "reddit_subscribers": 7440,
+    "fan_art_yoy_pct": 28.0,
+    "google_trends_index": 63,
+    "twitter_mentions_monthly": 2380,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "action roguelike",
+      "bullet hell",
+      "dlc",
+      "anime",
+      "casual"
+    ],
+    "game_sales_data": "~96,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "action roguelike",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 73.3,
+    "cause": "discovery_failure",
+    "quality_score": 93.5,
+    "momentum_score": 61.0,
+    "developer_track_record": 25,
+    "psm_att_pct": 27.3,
+    "psm_z_value": 2.27,
+    "psm_gamma": 2.3
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Ravenswatch",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Passtech Games",
+    "genre": [
+      "action",
+      "roguelite",
+      "co-op"
+    ],
+    "synopsis": "Ravenswatch — a Action Roguelite game developed by Passtech Games, released in 2023 on Steam.",
+    "proof_of_game": "Ravenswatch (2023, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 8400,
+    "dau_current": 2688,
+    "revenue_ltm": 220389,
+    "revenue_lifetime": 4113941,
+    "retention_d30": 30,
+    "metacritic_score": 75,
+    "store_page_score": 80,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 420000,
+    "reddit_subscribers": 7000,
+    "fan_art_yoy_pct": 16.7,
+    "google_trends_index": 63,
+    "twitter_mentions_monthly": 2240,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "action",
+      "roguelite",
+      "co-op",
+      "fantasy",
+      "hack and slash"
+    ],
+    "game_sales_data": "~105,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 75,
+    "store_page_score": 80,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 71.5,
+    "cause": "timing_mismatch",
+    "quality_score": 80.5,
+    "momentum_score": 58.2,
+    "developer_track_record": 25,
+    "psm_att_pct": 23.8,
+    "psm_z_value": 1.98,
+    "psm_gamma": 2.0
+  }
+}

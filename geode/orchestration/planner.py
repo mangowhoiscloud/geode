@@ -250,9 +250,7 @@ class Planner:
 
         # Rule 5: Non-gamified IP → prospect
         if self._matches_prospect(text):
-            self._stats.by_route[Route.PROSPECT] = (
-                self._stats.by_route.get(Route.PROSPECT, 0) + 1
-            )
+            self._stats.by_route[Route.PROSPECT] = self._stats.by_route.get(Route.PROSPECT, 0) + 1
             return self._make_decision(
                 Route.PROSPECT,
                 intent="non_gamified_ip",
@@ -304,18 +302,12 @@ class Planner:
     @staticmethod
     def _matches_aspect(text: str) -> bool:
         """Check if input requests aspect-specific re-analysis."""
-        return any(
-            re.search(pattern, text, re.IGNORECASE)
-            for pattern in _ASPECT_PATTERNS
-        )
+        return any(re.search(pattern, text, re.IGNORECASE) for pattern in _ASPECT_PATTERNS)
 
     @staticmethod
     def _matches_prospect(text: str) -> bool:
         """Check if input describes a non-gamified IP."""
-        return any(
-            re.search(pattern, text, re.IGNORECASE)
-            for pattern in _PROSPECT_PATTERNS
-        )
+        return any(re.search(pattern, text, re.IGNORECASE) for pattern in _PROSPECT_PATTERNS)
 
 
 class _PlannerStats:

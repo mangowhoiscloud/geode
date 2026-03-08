@@ -18,13 +18,13 @@ def tmp_log_dir(tmp_path: Path) -> Path:
 class TestRunLogEntry:
     def test_to_json(self):
         entry = RunLogEntry(
-            session_key="ip:berserk:cortex",
+            session_key="ip:berserk:router",
             event="pipeline_start",
             node="router",
         )
         raw = entry.to_json()
         data = json.loads(raw)
-        assert data["session_key"] == "ip:berserk:cortex"
+        assert data["session_key"] == "ip:berserk:router"
         assert data["event"] == "pipeline_start"
         assert data["status"] == "ok"
 
@@ -32,7 +32,7 @@ class TestRunLogEntry:
         original = RunLogEntry(
             session_key="ip:test:analysis",
             event="node_exit",
-            node="cortex",
+            node="router",
             duration_ms=123.4,
             metadata={"ip_name": "test"},
         )

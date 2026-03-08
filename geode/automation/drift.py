@@ -69,7 +69,7 @@ DEFAULT_METRIC_CONFIGS: list[DriftMetricConfig] = [
 class _DriftStats:
     """Internal instrumentation counters."""
 
-    __slots__ = ("scans", "alerts_warning", "alerts_critical")
+    __slots__ = ("alerts_critical", "alerts_warning", "scans")
 
     def __init__(self) -> None:
         self.scans: int = 0
@@ -152,10 +152,12 @@ class CUSUMDetector:
         # k acts as slack to prevent false positives from small fluctuations
         k = self._allowance_k
         self._cusum_pos[metric_name] = max(
-            0.0, self._cusum_pos[metric_name] + z - k,
+            0.0,
+            self._cusum_pos[metric_name] + z - k,
         )
         self._cusum_neg[metric_name] = max(
-            0.0, self._cusum_neg[metric_name] - z - k,
+            0.0,
+            self._cusum_neg[metric_name] - z - k,
         )
 
         # Use the maximum of positive and negative CUSUM
@@ -205,7 +207,6 @@ class CUSUMDetector:
         """Return (mean, std) for a metric, or None."""
         return self._baselines.get(metric_name)
 
-
     @staticmethod
     def compute_psi(expected: list[float], actual: list[float], n_bins: int = 10) -> float:
         """Compute Population Stability Index (PSI).
@@ -218,6 +219,7 @@ class CUSUMDetector:
             Siddiqi, N. (2005). Credit Risk Scorecards. Wiley. Ch.5 PSI.
         """
         import numpy as np
+
         eps = 1e-4
         if len(expected) < 2 or len(actual) < 2:
             return 0.0
@@ -264,8 +266,7 @@ class CUSUMDetector:
         """
         data: dict[str, Any] = {
             "baselines": {
-                name: {"mean": mean, "std": std}
-                for name, (mean, std) in self._baselines.items()
+                name: {"mean": mean, "std": std} for name, (mean, std) in self._baselines.items()
             },
             "cusum_state": {
                 name: {

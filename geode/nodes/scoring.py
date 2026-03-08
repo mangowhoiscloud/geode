@@ -26,12 +26,154 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _compute_psm(ip_name: str, monolake: dict[str, Any]) -> PSMResult:
-    """Compute PSM result.
+def _logistic_propensity(X: np.ndarray, y: np.ndarray, max_iter: int = 100) -> np.ndarray:
+    """Simple logistic regression for propensity score estimation (numpy-only).
 
-    For demo: uses expected_results from fixture for ATT/Z/Gamma,
-    but validates using real statistical thresholds.
+    Uses iteratively reweighted least squares (IRLS) for stable convergence.
+    Returns predicted probabilities P(treatment=1|X).
     """
+    n, k = X.shape
+    # Add intercept
+    X_aug = np.column_stack([np.ones(n), X])
+    beta = np.zeros(X_aug.shape[1])
+
+    for _ in range(max_iter):
+        z = X_aug @ beta
+        # Clip to prevent overflow in exp
+        z = np.clip(z, -20.0, 20.0)
+        p = 1.0 / (1.0 + np.exp(-z))
+        p = np.clip(p, 1e-6, 1 - 1e-6)
+
+        # IRLS update
+        W = np.diag(p * (1 - p))
+        try:
+            beta_new = beta + np.linalg.solve(X_aug.T @ W @ X_aug, X_aug.T @ (y - p))
+        except np.linalg.LinAlgError:
+            break
+        if np.max(np.abs(beta_new - beta)) < 1e-6:
+            beta = beta_new
+            break
+        beta = beta_new
+
+    z = np.clip(X_aug @ beta, -20.0, 20.0)
+    return 1.0 / (1.0 + np.exp(-z))
+
+
+def _nn_match_with_caliper(
+    ps_treated: np.ndarray,
+    ps_control: np.ndarray,
+    caliper: float,
+) -> list[tuple[int, int]]:
+    """1:1 nearest-neighbor matching with caliper constraint.
+
+    Returns list of (treated_idx, control_idx) matched pairs.
+    """
+    matches: list[tuple[int, int]] = []
+    used_control: set[int] = set()
+
+    for t_idx in range(len(ps_treated)):
+        best_dist = float("inf")
+        best_c_idx = -1
+        for c_idx in range(len(ps_control)):
+            if c_idx in used_control:
+                continue
+            dist = abs(ps_treated[t_idx] - ps_control[c_idx])
+            if dist < best_dist and dist <= caliper:
+                best_dist = dist
+                best_c_idx = c_idx
+        if best_c_idx >= 0:
+            matches.append((t_idx, best_c_idx))
+            used_control.add(best_c_idx)
+
+    return matches
+
+
+def _compute_smd(treated: np.ndarray, control: np.ndarray) -> float:
+    """Standardized Mean Difference for balance check."""
+    mean_diff = np.mean(treated) - np.mean(control)
+    pooled_var = (np.var(treated) + np.var(control)) / 2
+    if pooled_var < 1e-12:
+        return 0.0
+    return abs(float(mean_diff / np.sqrt(pooled_var)))
+
+
+def _compute_psm(ip_name: str, monolake: dict[str, Any]) -> PSMResult:
+    """Compute PSM result with simulation engine.
+
+    If monolake contains covariate data (treated/control groups), runs full
+    PSM simulation: logistic PS estimation → 1:1 NN matching → SMD balance
+    check → ATT calculation → z-value → Rosenbaum Gamma bounds.
+
+    Falls back to fixture-based results when covariates are unavailable.
+    """
+    # Try simulation if monolake has covariates
+    covariates = monolake.get("psm_covariates")
+    if covariates is not None:
+        try:
+            X = np.array(covariates["X"], dtype=np.float64)
+            y = np.array(covariates["treatment"], dtype=np.float64)
+            outcomes = np.array(covariates["outcome"], dtype=np.float64)
+
+            # Step 1: Propensity Score estimation
+            ps = _logistic_propensity(X, y)
+
+            # Step 2: 1:1 NN Matching with caliper (0.2 × SD(PS))
+            treated_mask = y == 1
+            control_mask = y == 0
+            ps_treated = ps[treated_mask]
+            ps_control = ps[control_mask]
+            caliper = 0.2 * float(np.std(ps))
+            if caliper < 1e-6:
+                caliper = 0.05  # Floor
+
+            matches = _nn_match_with_caliper(ps_treated, ps_control, caliper)
+
+            if len(matches) < 3:
+                log.warning("PSM: too few matches (%d), falling back to fixture", len(matches))
+                raise ValueError("Insufficient matches for PSM")
+
+            # Extract matched samples
+            t_indices = np.where(treated_mask)[0]
+            c_indices = np.where(control_mask)[0]
+            matched_t = np.array([t_indices[m[0]] for m in matches])
+            matched_c = np.array([c_indices[m[1]] for m in matches])
+
+            # Step 3: SMD balance check (< 0.1 for all covariates)
+            max_smd = 0.0
+            for col in range(X.shape[1]):
+                smd = _compute_smd(X[matched_t, col], X[matched_c, col])
+                max_smd = max(max_smd, smd)
+
+            # Step 4: ATT calculation
+            att = float(np.mean(outcomes[matched_t]) - np.mean(outcomes[matched_c]))
+            att_pct = att * 100  # Convert to percentage
+
+            # Step 5: z-value (Wald test)
+            diff = outcomes[matched_t] - outcomes[matched_c]
+            se = float(np.std(diff)) / np.sqrt(len(diff)) if len(diff) > 0 else 1.0
+            z_value = float(np.mean(diff) / se) if se > 1e-12 else 0.0
+
+            # Step 6: Rosenbaum Gamma bounds (sensitivity analysis)
+            # Approximate: if z > 1.96, gamma ≈ exp(z/sqrt(n_matches))
+            n_matches = len(matches)
+            gamma = float(np.exp(abs(z_value) / np.sqrt(n_matches))) if n_matches > 0 else 1.0
+
+            exposure_lift = min(100.0, max(0.0, att_pct * 1.5 + 30))
+            z_pass = abs(z_value) > 1.645
+            gamma_pass = gamma <= 2.0
+
+            return PSMResult(
+                att_pct=att_pct,
+                z_value=z_value,
+                rosenbaum_gamma=gamma,
+                max_smd=max_smd,
+                exposure_lift_score=exposure_lift,
+                psm_valid=z_pass and gamma_pass and max_smd < 0.1,
+            )
+        except (KeyError, ValueError, np.linalg.LinAlgError) as exc:
+            log.warning("PSM simulation failed for %s: %s — falling back to fixture", ip_name, exc)
+
+    # Graceful degradation: fixture-based fallback
     try:
         data = load_fixture(ip_name)
         expected = data.get("expected_results", {})
@@ -45,7 +187,6 @@ def _compute_psm(ip_name: str, monolake: dict[str, Any]) -> PSMResult:
         gamma = 1.5
 
     # Compute exposure lift score (ATT → 0-100)
-    # Map ATT% to 0-100: ATT of ~30% → ~78 score
     exposure_lift = min(100.0, max(0.0, att * 1.5 + 30))
 
     # Validity checks (real thresholds)
@@ -87,18 +228,26 @@ def _load_developer_score(ip_name: str, quality_fallback: float) -> float:
 
 
 def _calc_quality_score(evaluations: dict[str, EvaluatorResult]) -> float:
-    """§13.8.2: Quality = (A+B+C+B1+C1+C2+M+N) / 8 * 20.
+    """§13.8.2: Quality = (axes_sum - 8) / 32 * 100.
 
     Server-side calculation from raw axes instead of trusting LLM composite.
+    Normalizes 8-axis sum from [8, 40] → [0, 100]. Missing axes padded with 3.0 (neutral).
     """
     qj = evaluations.get("quality_judge")
     if not qj:
         return 50.0
     expected_count = 8
-    if len(qj.axes) != expected_count:
-        log.warning("Quality score: expected %d axes, got %d", expected_count, len(qj.axes))
-    axes_sum = sum(qj.axes.values())
-    return (axes_sum / max(len(qj.axes), 1)) * 20
+    # Pad missing axes with neutral score (3.0)
+    axes_values = list(qj.axes.values())
+    if len(axes_values) < expected_count:
+        log.warning(
+            "Quality score: expected %d axes, got %d — padding with 3.0",
+            expected_count,
+            len(axes_values),
+        )
+        axes_values.extend([3.0] * (expected_count - len(axes_values)))
+    axes_sum = sum(axes_values)
+    return (axes_sum - 8) / 32 * 100
 
 
 def _calc_recovery_potential(evaluations: dict[str, EvaluatorResult]) -> float:
@@ -150,7 +299,7 @@ def _calc_analyst_confidence(analyses: list[AnalysisResult]) -> float:
         return 100.0
     scores = [a.score for a in analyses]
     mean = float(np.mean(scores))
-    std = float(np.std(scores, ddof=1))
+    std = float(np.std(scores))
     if mean == 0:
         return 100.0
     cv = std / mean
@@ -179,6 +328,27 @@ def _calc_final_score(
     return base * multiplier
 
 
+def _calc_prospect_score(evaluations: dict[str, EvaluatorResult]) -> float:
+    """Prospect IP scoring: (axes_sum - 9) / 36 * 100.
+
+    9-axis evaluation for non-gamified IPs. Missing axes padded with 3.0 (neutral).
+    """
+    pj = evaluations.get("prospect_judge")
+    if not pj:
+        return 50.0
+    expected_count = 9
+    axes_values = list(pj.axes.values())
+    if len(axes_values) < expected_count:
+        log.warning(
+            "Prospect score: expected %d axes, got %d — padding with 3.0",
+            expected_count,
+            len(axes_values),
+        )
+        axes_values.extend([3.0] * (expected_count - len(axes_values)))
+    axes_sum = sum(axes_values)
+    return (axes_sum - 9) / 36 * 100
+
+
 def _determine_tier(score: float) -> str:
     if score >= 80:
         return "S"
@@ -196,12 +366,32 @@ def _determine_tier(score: float) -> str:
 
 
 def scoring_node(state: GeodeState) -> dict[str, Any]:
-    """Layer 4: Compute PSM + all subscores + final score + tier."""
+    """Layer 4: Compute PSM + all subscores + final score + tier.
+
+    Handles both standard (gamified, 14-axis) and prospect (9-axis) pipelines.
+    """
     try:
         ip_name = state.get("ip_name", "unknown")
         monolake = state.get("monolake", {})
         analyses = state.get("analyses", [])
         evaluations = state.get("evaluations", {})
+        mode = state.get("pipeline_mode", "full_pipeline")
+
+        # Prospect mode: simplified scoring using 9-axis prospect_judge
+        if mode == "prospect":
+            prospect_score = _calc_prospect_score(evaluations)
+            confidence = _calc_analyst_confidence(analyses)
+            prospect_score = max(0.0, min(100.0, prospect_score))
+            confidence = max(0.0, min(100.0, confidence))
+            multiplier = 0.7 + (0.3 * confidence / 100)
+            final = prospect_score * multiplier
+            tier = _determine_tier(final)
+            return {
+                "subscores": {"prospect_score": prospect_score},
+                "analyst_confidence": confidence,
+                "final_score": final,
+                "tier": tier,
+            }
 
         # PSM
         psm = _compute_psm(ip_name, monolake)

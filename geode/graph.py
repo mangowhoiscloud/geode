@@ -1,11 +1,13 @@
 """StateGraph build + compile for the GEODE pipeline.
 
-Topology: START → router → cortex → signals → analyst×4 (Send)
+Topology: START → router → signals → analyst×4 (Send)
        → evaluator×3 (Send) → scoring → verification → synthesizer → END
+
+Router loads fixture data (ip_info, monolake) and assembles 3-tier memory context.
 
 Feedback Loop (L3): verification → _configured_should_continue
   - confidence >= 0.7 → synthesizer
-  - confidence < 0.7 AND iteration < max_iterations → cortex (loopback)
+  - confidence < 0.7 AND iteration < max_iterations → signals (loopback)
   - iteration >= max_iterations → synthesizer (force proceed)
 
 Hook Integration (L4): NODE_ENTER/EXIT/ERROR events triggered at each node.
@@ -31,7 +33,6 @@ from langgraph.graph.state import CompiledStateGraph
 
 from geode.infrastructure.ports.hook_port import HookSystemPort
 from geode.nodes.analysts import analyst_node, make_analyst_sends
-from geode.nodes.cortex import cortex_node
 from geode.nodes.evaluators import evaluator_node, make_evaluator_sends
 from geode.nodes.router import route_after_router, router_node
 from geode.nodes.scoring import scoring_node
@@ -41,6 +42,7 @@ from geode.orchestration.bootstrap import BootstrapManager
 from geode.orchestration.hooks import HookEvent
 from geode.state import BiasBusterResult, GeodeState, GuardrailResult
 from geode.verification.biasbuster import run_biasbuster
+from geode.verification.calibration import run_calibration_check
 from geode.verification.cross_llm import run_cross_llm_check
 from geode.verification.guardrails import run_guardrails
 from geode.verification.rights_risk import RightsStatus, check_rights_risk
@@ -183,12 +185,18 @@ def _verification_node(state: GeodeState) -> dict[str, Any]:
         errors.append(
             f"Rights risk warning: {rights_risk.status.value} — {rights_risk.recommendation}"
         )
+    # Ground Truth calibration (Layer 5 — Swiss Cheese)
+    calibration = run_calibration_check(state)
+
     result: dict[str, Any] = {
         "guardrails": guardrails,
         "biasbuster": biasbuster,
         "cross_llm": cross_llm,
         "rights_risk": rights_risk,
+        "calibration": calibration,
     }
+    if not calibration.passed:
+        errors.append(f"Calibration check: {calibration.overall_score:.1f}/100 (threshold: 80.0)")
     if errors:
         result["errors"] = errors
     return result
@@ -220,11 +228,17 @@ def _gather_node(state: GeodeState) -> dict[str, Any]:
         "weak_areas": weak_areas,
     }
 
+    result: dict[str, Any] = {"iteration": iteration + 1, "iteration_history": [history_entry]}
+
     if weak_areas:
         log.info("Adaptive feedback: weak areas identified — %s", weak_areas)
+        # Inject weak_areas into monolake so downstream nodes focus on low-confidence dims
+        monolake = dict(state.get("monolake", {}))
+        monolake["_weak_areas"] = weak_areas
+        result["monolake"] = monolake
 
     # Return single-element list — Annotated[..., operator.add] reducer handles accumulation
-    return {"iteration": iteration + 1, "iteration_history": [history_entry]}
+    return result
 
 
 def build_graph(
@@ -250,7 +264,8 @@ def build_graph(
 
     # Optionally wrap nodes with hook triggers
     def _node(
-        fn: Callable[[GeodeState], dict[str, Any]], name: str,
+        fn: Callable[[GeodeState], dict[str, Any]],
+        name: str,
     ) -> Callable[[GeodeState], dict[str, Any]]:
         if hooks is not None:
             return _make_hooked_node(fn, name, hooks, bootstrap_mgr, prompt_assembler)
@@ -258,7 +273,6 @@ def build_graph(
 
     # Add nodes (type: ignore needed — LangGraph type stubs don't match runtime)
     graph.add_node("router", _node(router_node, "router"))  # type: ignore[call-overload]
-    graph.add_node("cortex", _node(cortex_node, "cortex"))  # type: ignore[call-overload]
     graph.add_node("signals", _node(signals_node, "signals"))  # type: ignore[call-overload]
     graph.add_node("analyst", _node(analyst_node, "analyst"))  # type: ignore[call-overload]
     graph.add_node("evaluator", _node(evaluator_node, "evaluator"))  # type: ignore[call-overload]
@@ -276,11 +290,8 @@ def build_graph(
     graph.add_conditional_edges(
         "router",
         route_after_router,
-        {"cortex": "cortex", "evaluators": "evaluator", "scoring": "scoring"},
+        {"signals": "signals", "evaluators": "evaluator", "scoring": "scoring"},
     )
-
-    # Sequential: cortex → signals
-    graph.add_edge("cortex", "signals")
 
     # Send API: signals → 4 analysts in parallel (Clean Context)
     graph.add_conditional_edges("signals", make_analyst_sends, ["analyst"])
@@ -292,7 +303,7 @@ def build_graph(
     graph.add_edge("evaluator", "scoring")
     graph.add_edge("scoring", "verification")
 
-    # Feedback Loop: verification → _configured_should_continue → synthesizer or gather → cortex
+    # Feedback Loop: verification → _configured_should_continue → synthesizer or gather → signals
     # Use injected thresholds via closure for configurability
     def _configured_should_continue(state: GeodeState) -> str:
         guardrails = state.get("guardrails")
@@ -312,13 +323,18 @@ def build_graph(
         if iteration >= max_iter:
             log.warning(
                 "Confidence %.2f < %.2f but max iterations (%d) reached — force proceeding",
-                conf_normalized, confidence_threshold, max_iter,
+                conf_normalized,
+                confidence_threshold,
+                max_iter,
             )
             return "synthesizer"
 
         log.info(
             "Confidence %.2f < %.2f — looping back (iteration %d/%d)",
-            conf_normalized, confidence_threshold, iteration, max_iter,
+            conf_normalized,
+            confidence_threshold,
+            iteration,
+            max_iter,
         )
         return "gather"
 
@@ -327,7 +343,7 @@ def build_graph(
         _configured_should_continue,
         {"synthesizer": "synthesizer", "gather": "gather"},
     )
-    graph.add_edge("gather", "cortex")
+    graph.add_edge("gather", "signals")
 
     graph.add_edge("synthesizer", END)
 
@@ -353,11 +369,14 @@ def _register_drift_scan_hook(hooks: HookSystemPort) -> None:
             return
         alerts = detector.scan_all({"final_score": score})
         if alerts:
-            hooks.trigger(HookEvent.DRIFT_DETECTED, {
-                "source": "scoring_complete_hook",
-                "final_score": score,
-                "alerts": [a.to_dict() for a in alerts],
-            })
+            hooks.trigger(
+                HookEvent.DRIFT_DETECTED,
+                {
+                    "source": "scoring_complete_hook",
+                    "final_score": score,
+                    "alerts": [a.to_dict() for a in alerts],
+                },
+            )
 
     hooks.register(
         HookEvent.SCORING_COMPLETE,

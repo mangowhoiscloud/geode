@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import time
-
 from geode.orchestration.planner import (
+    ROUTE_PROFILES,
     Planner,
-    PlannerDecision,
     Route,
     RouteProfile,
-    ROUTE_PROFILES,
 )
 
 

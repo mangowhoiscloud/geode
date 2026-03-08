@@ -84,9 +84,7 @@ class AnalysisPlan:
 
         while remaining:
             batch = [
-                step
-                for step in remaining
-                if all(dep in completed for dep in step.dependencies)
+                step for step in remaining if all(dep in completed for dep in step.dependencies)
             ]
             if not batch:
                 # Circular dependency or missing dependency — add all remaining
@@ -110,8 +108,8 @@ class AnalysisPlan:
 # ---------------------------------------------------------------------------
 
 _FULL_PIPELINE_STEPS: list[tuple[str, str, str, float, list[str]]] = [
-    ("cortex_load", "Load IP information and MonoLake data", "cortex", 8.0, []),
-    ("signals_fetch", "Fetch market signals and trends", "signals", 6.0, ["cortex_load"]),
+    ("router_load", "Route + load IP data and signals", "router", 8.0, []),
+    ("signals_fetch", "Fetch market signals and trends", "signals", 6.0, ["router_load"]),
     ("analyst_market", "Market analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
     ("analyst_creative", "Creative quality analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
     ("analyst_technical", "Technical depth analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
@@ -164,9 +162,9 @@ def _make_full_pipeline_plan(plan_id: str, ip_name: str) -> AnalysisPlan:
 def _make_prospect_plan(plan_id: str, ip_name: str) -> AnalysisPlan:
     """Create a prospect (non-gamified IP) plan — skips PSM/signals."""
     steps = [
-        PlanStep("cortex_load", "Load IP information", "cortex", 8.0),
-        PlanStep("analyst_creative", "Creative quality analysis", "analyst", 12.0, ["cortex_load"]),
-        PlanStep("analyst_market", "Market potential analysis", "analyst", 12.0, ["cortex_load"]),
+        PlanStep("router_load", "Route + load IP data", "router", 8.0),
+        PlanStep("analyst_creative", "Creative quality analysis", "analyst", 12.0, ["router_load"]),
+        PlanStep("analyst_market", "Market potential analysis", "analyst", 12.0, ["router_load"]),
         PlanStep(
             "evaluators",
             "Multi-axis evaluation",
@@ -232,8 +230,7 @@ class PlanMode:
         factory = _PLAN_TEMPLATES.get(template)
         if factory is None:
             raise ValueError(
-                f"Unknown plan template: '{template}'. "
-                f"Available: {list(_PLAN_TEMPLATES.keys())}"
+                f"Unknown plan template: '{template}'. Available: {list(_PLAN_TEMPLATES.keys())}"
             )
 
         if plan_id is None:
@@ -311,8 +308,7 @@ class PlanMode:
         """
         if plan.status != PlanStatus.APPROVED:
             raise ValueError(
-                f"Cannot execute plan in status '{plan.status.value}'. "
-                "Plan must be APPROVED first."
+                f"Cannot execute plan in status '{plan.status.value}'. Plan must be APPROVED first."
             )
 
         plan.status = PlanStatus.EXECUTING

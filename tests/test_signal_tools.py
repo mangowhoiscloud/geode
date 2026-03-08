@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from geode.tools.base import Tool
+from geode.tools.registry import ToolRegistry
 from geode.tools.signal_tools import (
     GoogleTrendsTool,
     RedditSentimentTool,
@@ -10,7 +11,6 @@ from geode.tools.signal_tools import (
     TwitchStatsTool,
     YouTubeSearchTool,
 )
-from geode.tools.registry import ToolRegistry
 
 
 class TestYouTubeSearchTool:

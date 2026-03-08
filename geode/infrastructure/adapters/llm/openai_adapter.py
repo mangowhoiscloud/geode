@@ -1,6 +1,6 @@
 """OpenAI Adapter — GPT implementation of LLMClientPort.
 
-Mirrors ClaudeAdapter pattern for GPT-5.3 and other OpenAI models.
+Mirrors ClaudeAdapter pattern for GPT-5.4 and other OpenAI models.
 Uses the openai SDK (>=2.0.0) with retry + failover.
 """
 
@@ -11,15 +11,21 @@ import logging
 import re
 import threading
 import time
-from collections.abc import Iterator
-from typing import Any
+from collections.abc import Callable, Iterator
+from typing import Any, TypeVar
+
+from pydantic import BaseModel
 
 from geode.config import settings
 from geode.llm.client import (
     CircuitBreaker,
     LLMUsage,
+    ToolCallRecord,
+    ToolUseResult,
     get_usage_accumulator,
 )
+
+T = TypeVar("T", bound=BaseModel)
 
 log = logging.getLogger(__name__)
 
@@ -29,13 +35,14 @@ _RETRY_BASE_DELAY = 1.0
 _RETRY_MAX_DELAY = 30.0
 
 # Default OpenAI model
-DEFAULT_OPENAI_MODEL = "gpt-5.3"
+DEFAULT_OPENAI_MODEL = "gpt-5.4"
 
 # OpenAI fallback chain
-OPENAI_FALLBACK_MODELS = ["gpt-5.3", "gpt-4o"]
+OPENAI_FALLBACK_MODELS = ["gpt-5.4", "gpt-5.3", "gpt-4o"]
 
 # Model pricing (USD per token) — local copy to avoid coupling to Anthropic client internals
 _MODEL_PRICING: dict[str, dict[str, float]] = {
+    "gpt-5.4": {"input": 2.50 / 1_000_000, "output": 15.0 / 1_000_000},
     "gpt-5.3": {"input": 10.0 / 1_000_000, "output": 30.0 / 1_000_000},
 }
 
@@ -55,7 +62,7 @@ _openai_circuit_breaker = CircuitBreaker()
 
 def _get_openai_client() -> Any:
     """Lazy import and return cached OpenAI client (thread-safe)."""
-    global _openai_client  # noqa: PLW0603
+    global _openai_client
     if _openai_client is None:
         with _openai_lock:
             if _openai_client is None:
@@ -158,6 +165,53 @@ class OpenAIAdapter:
             raise ValueError(f"OpenAI returned invalid JSON: {exc}") from exc
         return result
 
+    def generate_parsed(
+        self,
+        system: str,
+        user: str,
+        *,
+        output_model: type[T],
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> T:
+        """Generate structured output using OpenAI's chat.completions.parse().
+
+        Uses native Pydantic integration for guaranteed valid JSON.
+        """
+        client = _get_openai_client()
+        target = model or self._default_model
+
+        def _do_call(*, model: str) -> T:
+            response = client.beta.chat.completions.parse(
+                model=model,
+                max_completion_tokens=max_tokens,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format=output_model,
+                timeout=90.0,
+            )
+            # Track usage
+            if response.usage:
+                in_tok = response.usage.prompt_tokens
+                out_tok = response.usage.completion_tokens or 0
+                cost = _calculate_cost(model, in_tok, out_tok)
+                usage = LLMUsage(
+                    model=model, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost
+                )
+                get_usage_accumulator().record(usage)
+
+            choice = response.choices[0]
+            if choice.message.parsed is None:
+                raise ValueError("OpenAI returned null parsed output")
+            return choice.message.parsed  # type: ignore[no-any-return]
+
+        result: T = self._retry_with_backoff(_do_call, model=target)
+        return result
+
     def generate_stream(
         self,
         system: str,
@@ -208,6 +262,108 @@ class OpenAIAdapter:
 
         result: Iterator[str] = self._retry_with_backoff(_do_stream, model=target_model)
         return result
+
+    def generate_with_tools(
+        self,
+        system: str,
+        user: str,
+        *,
+        tools: list[dict[str, Any]],
+        tool_executor: Callable[..., dict[str, Any]],
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+        max_tool_rounds: int = 5,
+    ) -> ToolUseResult:
+        """OpenAI tool-use loop. Mirrors ClaudeAdapter pattern."""
+        client = _get_openai_client()
+        target = model or self._default_model
+
+        all_tool_calls: list[ToolCallRecord] = []
+        all_usage: list[LLMUsage] = []
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+
+        for round_idx in range(max_tool_rounds):
+            is_last_round = round_idx == max_tool_rounds - 1
+            tool_choice = "none" if is_last_round else "auto"
+
+            def _do_call(*, model: str, _tc: str = tool_choice) -> Any:
+                return client.chat.completions.create(
+                    model=model,
+                    max_completion_tokens=max_tokens,
+                    temperature=temperature,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice=_tc,
+                    timeout=90.0,
+                )
+
+            response = self._retry_with_backoff(_do_call, model=target)
+
+            # Track usage
+            if response.usage:
+                in_tok = response.usage.prompt_tokens
+                out_tok = response.usage.completion_tokens or 0
+                cost = _calculate_cost(target, in_tok, out_tok)
+                usage = LLMUsage(
+                    model=target, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost
+                )
+                all_usage.append(usage)
+                get_usage_accumulator().record(usage)
+
+            choice = response.choices[0]
+
+            # No tool calls → return text
+            if choice.finish_reason != "tool_calls" or not choice.message.tool_calls:
+                return ToolUseResult(
+                    text=choice.message.content or "",
+                    tool_calls=all_tool_calls,
+                    usage=all_usage,
+                    rounds=round_idx + 1,
+                )
+
+            # Process tool calls
+            messages.append(choice.message)  # assistant message with tool_calls
+            for tc in choice.message.tool_calls:
+                func_name = tc.function.name
+                try:
+                    func_args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    func_args = {}
+
+                t0 = time.time()
+                try:
+                    result = tool_executor(func_name, **func_args)
+                except Exception as exc:
+                    log.warning("Tool '%s' execution failed: %s", func_name, exc)
+                    result = {"error": str(exc)}
+                elapsed_ms = (time.time() - t0) * 1000
+
+                all_tool_calls.append(
+                    ToolCallRecord(
+                        tool_name=func_name,
+                        tool_input=func_args,
+                        tool_result=result,
+                        duration_ms=elapsed_ms,
+                    )
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": json.dumps(result),
+                    }
+                )
+
+        return ToolUseResult(
+            text="",
+            tool_calls=all_tool_calls,
+            usage=all_usage,
+            rounds=max_tool_rounds,
+        )
 
     def _retry_with_backoff(self, fn: Any, *, model: str) -> Any:
         """Retry with exponential backoff + model fallback + circuit breaker."""

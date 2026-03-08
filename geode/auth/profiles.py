@@ -16,7 +16,7 @@ class CredentialType(Enum):
     """Credential type with implicit priority (lower ordinal = higher priority)."""
 
     OAUTH = "oauth"
-    TOKEN = "token"
+    TOKEN = "token"  # noqa: S105 — enum value, not a hardcoded password
     API_KEY = "api_key"
 
 

@@ -166,7 +166,7 @@ class ConfigWatcher:
 class _WatchEntry:
     """Internal tracking for a watched file."""
 
-    __slots__ = ("path", "callback", "name", "last_mtime", "debounce_until")
+    __slots__ = ("callback", "debounce_until", "last_mtime", "name", "path")
 
     def __init__(
         self,

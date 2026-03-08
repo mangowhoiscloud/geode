@@ -41,12 +41,39 @@ from geode.automation.triggers import TriggerManager, TriggerType
 from geode.config import settings
 from geode.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
 from geode.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
+from geode.infrastructure.ports.auth_port import (
+    CooldownTrackerPort,
+    ProfileRotatorPort,
+    ProfileStorePort,
+)
+from geode.infrastructure.ports.automation_port import (
+    CorrelationAnalyzerPort,
+    DriftDetectorPort,
+    ExpertPanelPort,
+    FeedbackLoopPort,
+    ModelRegistryPort,
+    OutcomeTrackerPort,
+    SnapshotManagerPort,
+    TriggerManagerPort,
+)
 from geode.infrastructure.ports.hook_port import HookSystemPort
 from geode.infrastructure.ports.llm_port import LLMClientPort
 from geode.infrastructure.ports.memory_port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
     SessionStorePort,
+)
+from geode.infrastructure.ports.orchestration_port import (
+    CoalescingQueuePort,
+    ConfigWatcherPort,
+    LaneQueuePort,
+    RunLogPort,
+    StuckDetectorPort,
+    TaskGraphPort,
+)
+from geode.infrastructure.ports.tool_port import (
+    PolicyChainPort,
+    ToolRegistryPort,
 )
 from geode.memory.context import ContextAssembler
 from geode.memory.organization import MonoLakeOrganizationMemory
@@ -60,7 +87,7 @@ from geode.orchestration.lane_queue import LaneQueue
 from geode.orchestration.run_log import RunLog, RunLogEntry
 from geode.orchestration.stuck_detection import StuckDetector
 from geode.orchestration.task_bridge import TaskGraphHookBridge
-from geode.orchestration.task_system import TaskGraph, create_geode_task_graph
+from geode.orchestration.task_system import create_geode_task_graph
 from geode.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
 from geode.tools.policy import PolicyChain, ToolPolicy
 from geode.tools.registry import ToolRegistry
@@ -83,7 +110,7 @@ DEFAULT_STUCK_TIMEOUT_S = 7200.0  # 2 hours
 
 
 def _make_run_log_handler(
-    run_log: RunLog,
+    run_log: RunLogPort,
     session_key: str,
     run_id: str,
 ) -> tuple[str, Any]:
@@ -110,7 +137,7 @@ def _make_run_log_handler(
 
 
 def _make_stuck_hook_handler(
-    detector: StuckDetector,
+    detector: StuckDetectorPort,
 ) -> tuple[str, Any]:
     """Create hook handlers for stuck detection lifecycle."""
 
@@ -129,7 +156,7 @@ def _make_stuck_hook_handler(
 # ---------------------------------------------------------------------------
 
 
-def _build_default_policies() -> PolicyChain:
+def _build_default_policies() -> PolicyChainPort:
     """Build default PolicyChain with dry_run restrictions."""
     chain = PolicyChain()
     chain.add_policy(
@@ -143,21 +170,69 @@ def _build_default_policies() -> PolicyChain:
     return chain
 
 
-def _build_default_registry() -> ToolRegistry:
+def _build_default_registry() -> ToolRegistryPort:
     """Build ToolRegistry with all analysis tools registered."""
     registry = ToolRegistry()
     registry.register(RunAnalystTool())
     registry.register(RunEvaluatorTool())
     registry.register(PSMCalculateTool())
-    return registry
+    return registry  # type: ignore[return-value]
 
 
-def _build_default_lanes() -> LaneQueue:
+def _build_default_lanes() -> LaneQueuePort:
     """Build default LaneQueue with session + global lanes."""
     queue = LaneQueue()
     queue.add_lane("session", max_concurrent=1)  # Serial per session
     queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY)
     return queue
+
+
+# ---------------------------------------------------------------------------
+# Tool executor factory
+# ---------------------------------------------------------------------------
+
+
+def _make_tool_executor(
+    llm_adapter: LLMClientPort,
+    registry: ToolRegistryPort,
+    policy_chain: PolicyChainPort,
+) -> Any:
+    """Create a tool_fn callable that binds generate_with_tools to registry.
+
+    Returns a callable with the same signature as LLMToolCallable:
+        (system, user, *, tools, tool_executor, ...) -> ToolUseResult
+
+    If no explicit tool_executor is provided, falls back to registry.execute
+    with the default policy chain.
+    """
+
+    def _default_tool_executor(name: str, **kwargs: Any) -> dict[str, Any]:
+        return registry.execute(name, policy=policy_chain, **kwargs)
+
+    def _tool_fn(
+        system: str,
+        user: str,
+        *,
+        tools: list[dict[str, Any]],
+        tool_executor: Any = None,
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+        max_tool_rounds: int = 5,
+    ) -> Any:
+        executor = tool_executor or _default_tool_executor
+        return llm_adapter.generate_with_tools(
+            system,
+            user,
+            tools=tools,
+            tool_executor=executor,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            max_tool_rounds=max_tool_rounds,
+        )
+
+    return _tool_fn
 
 
 # ---------------------------------------------------------------------------
@@ -179,30 +254,30 @@ class GeodeRuntime:
         *,
         hooks: HookSystemPort,
         session_store: SessionStorePort,
-        policy_chain: PolicyChain,
-        tool_registry: ToolRegistry,
-        run_log: RunLog,
+        policy_chain: PolicyChainPort,
+        tool_registry: ToolRegistryPort,
+        run_log: RunLogPort,
         llm_adapter: LLMClientPort,
         secondary_adapter: LLMClientPort | None = None,
-        profile_store: ProfileStore | None = None,
-        profile_rotator: ProfileRotator | None = None,
-        cooldown_tracker: CooldownTracker | None = None,
-        coalescing: CoalescingQueue,
-        config_watcher: ConfigWatcher,
-        stuck_detector: StuckDetector,
-        lane_queue: LaneQueue,
+        profile_store: ProfileStorePort | None = None,
+        profile_rotator: ProfileRotatorPort | None = None,
+        cooldown_tracker: CooldownTrackerPort | None = None,
+        coalescing: CoalescingQueuePort,
+        config_watcher: ConfigWatcherPort,
+        stuck_detector: StuckDetectorPort,
+        lane_queue: LaneQueuePort,
         project_memory: ProjectMemoryPort,
         session_key: str,
         ip_name: str,
         # L4.5 Automation components
-        drift_detector: CUSUMDetector | None = None,
-        model_registry: ModelRegistry | None = None,
-        expert_panel: ExpertPanel | None = None,
-        correlation_analyzer: CorrelationAnalyzer | None = None,
-        outcome_tracker: OutcomeTracker | None = None,
-        snapshot_manager: SnapshotManager | None = None,
-        trigger_manager: TriggerManager | None = None,
-        feedback_loop: FeedbackLoop | None = None,
+        drift_detector: DriftDetectorPort | None = None,
+        model_registry: ModelRegistryPort | None = None,
+        expert_panel: ExpertPanelPort | None = None,
+        correlation_analyzer: CorrelationAnalyzerPort | None = None,
+        outcome_tracker: OutcomeTrackerPort | None = None,
+        snapshot_manager: SnapshotManagerPort | None = None,
+        trigger_manager: TriggerManagerPort | None = None,
+        feedback_loop: FeedbackLoopPort | None = None,
         # L2 Memory components
         organization_memory: OrganizationMemoryPort | None = None,
         context_assembler: ContextAssembler | None = None,
@@ -243,7 +318,7 @@ class GeodeRuntime:
         # ADR-007: Prompt Assembly
         self.prompt_assembler: PromptAssembler | None = prompt_assembler
         # L4 Task tracking
-        self.task_graph: TaskGraph | None = None
+        self.task_graph: TaskGraphPort | None = None
         self._task_bridge: TaskGraphHookBridge | None = None
 
     # ------------------------------------------------------------------
@@ -257,7 +332,7 @@ class GeodeRuntime:
         run_id: str,
         log_dir: Path | str | None,
         stuck_timeout_s: float,
-    ) -> tuple[HookSystemPort, RunLog, StuckDetector]:
+    ) -> tuple[HookSystemPort, RunLogPort, StuckDetectorPort]:
         """Build HookSystem with RunLog and StuckDetector handlers."""
         hooks: HookSystemPort = HookSystem()  # type: ignore[assignment]
 
@@ -293,8 +368,8 @@ class GeodeRuntime:
             session_store=session_store,
         )
 
-        # Wire ContextAssembler into cortex node (L2 → L3 bridge)
-        from geode.nodes.cortex import set_context_assembler
+        # Wire ContextAssembler into router node (L2 → L3 bridge)
+        from geode.nodes.router import set_context_assembler
 
         set_context_assembler(context_assembler)
 
@@ -364,7 +439,10 @@ class GeodeRuntime:
             log.info("Snapshot captured: %s", data.get("snapshot_id", ""))
 
         hooks.register(
-            HookEvent.SNAPSHOT_CAPTURED, _on_snapshot, name="snapshot_logger", priority=90,
+            HookEvent.SNAPSHOT_CAPTURED,
+            _on_snapshot,
+            name="snapshot_logger",
+            priority=90,
         )
 
         def _on_trigger(event: HookEvent, data: dict[str, Any]) -> None:
@@ -376,18 +454,24 @@ class GeodeRuntime:
             log.info("Outcome collected: cycle=%s", data.get("cycle_id", ""))
 
         hooks.register(
-            HookEvent.OUTCOME_COLLECTED, _on_outcome, name="outcome_logger", priority=90,
+            HookEvent.OUTCOME_COLLECTED,
+            _on_outcome,
+            name="outcome_logger",
+            priority=90,
         )
 
         def _on_model_promoted(event: HookEvent, data: dict[str, Any]) -> None:
             log.info(
                 "Model promoted: %s → %s",
-                data.get("version_id", ""), data.get("stage", ""),
+                data.get("version_id", ""),
+                data.get("stage", ""),
             )
 
         hooks.register(
-            HookEvent.MODEL_PROMOTED, _on_model_promoted,
-            name="model_promotion_logger", priority=90,
+            HookEvent.MODEL_PROMOTED,
+            _on_model_promoted,
+            name="model_promotion_logger",
+            priority=90,
         )
 
         # Reactive chain: drift → auto-snapshot for debugging
@@ -400,8 +484,10 @@ class GeodeRuntime:
                 )
 
         hooks.register(
-            HookEvent.DRIFT_DETECTED, _on_drift_snapshot,
-            name="drift_auto_snapshot", priority=80,
+            HookEvent.DRIFT_DETECTED,
+            _on_drift_snapshot,
+            name="drift_auto_snapshot",
+            priority=80,
         )
 
         # Wire TriggerManager → pipeline integration
@@ -412,8 +498,10 @@ class GeodeRuntime:
         )
         drift_trigger_handler = trigger_manager.make_event_handler("drift-reanalysis")
         hooks.register(
-            HookEvent.DRIFT_DETECTED, drift_trigger_handler,
-            name="drift_pipeline_trigger", priority=70,
+            HookEvent.DRIFT_DETECTED,
+            drift_trigger_handler,
+            name="drift_pipeline_trigger",
+            priority=70,
         )
 
         # Reactive chain: pipeline end → auto-snapshot for reproducibility
@@ -426,8 +514,10 @@ class GeodeRuntime:
                 )
 
         hooks.register(
-            HookEvent.PIPELINE_END, _on_pipeline_end_snapshot,
-            name="pipeline_end_snapshot", priority=80,
+            HookEvent.PIPELINE_END,
+            _on_pipeline_end_snapshot,
+            name="pipeline_end_snapshot",
+            priority=80,
         )
 
         # Memory write-back: pipeline end → add_insight to MEMORY.md (P0 auto-learning)
@@ -450,8 +540,10 @@ class GeodeRuntime:
                 log.warning("Failed to write insight for IP=%s", ip)
 
         hooks.register(
-            HookEvent.PIPELINE_END, _on_pipeline_end_memory,
-            name="memory_write_back", priority=85,
+            HookEvent.PIPELINE_END,
+            _on_pipeline_end_memory,
+            name="memory_write_back",
+            priority=85,
         )
 
         return {
@@ -466,7 +558,7 @@ class GeodeRuntime:
         }
 
     @staticmethod
-    def _build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
+    def _build_auth() -> tuple[ProfileStorePort, ProfileRotatorPort, CooldownTrackerPort]:
         """Build auth profile system with API key profiles."""
         from geode.auth.profiles import AuthProfile, CredentialType
 
@@ -516,7 +608,7 @@ class GeodeRuntime:
         *,
         hooks: HookSystemPort,
         ip_name: str,
-    ) -> tuple[TaskGraph, TaskGraphHookBridge]:
+    ) -> tuple[TaskGraphPort, TaskGraphHookBridge]:
         """Build TaskGraph and wire the hook bridge for status tracking."""
         prefix = ip_name.lower().replace(" ", "_")
         graph = create_geode_task_graph(ip_name)
@@ -593,7 +685,15 @@ class GeodeRuntime:
         # Use the adapter's port methods (not raw functions) for proper DI
         from geode.infrastructure.ports.llm_port import set_llm_callable
 
-        set_llm_callable(llm_adapter.generate_structured, llm_adapter.generate)
+        # Build tool executor bound to registry + policy chain
+        tool_fn = _make_tool_executor(llm_adapter, tool_registry, policy_chain)
+
+        set_llm_callable(
+            llm_adapter.generate_structured,
+            llm_adapter.generate,
+            parsed_fn=llm_adapter.generate_parsed,
+            tool_fn=tool_fn,
+        )
 
         # Coalescing queue (250ms debounce)
         coalescing = CoalescingQueue(window_ms=250.0)
@@ -733,7 +833,9 @@ class GeodeRuntime:
         return db if db and db.strip() else None
 
     def compile_graph(
-        self, *, enable_checkpoint: bool = True,
+        self,
+        *,
+        enable_checkpoint: bool = True,
     ) -> CompiledStateGraph[Any, None, Any, Any]:
         """Compile the GEODE graph with hooks and checkpointing (default: enabled).
 

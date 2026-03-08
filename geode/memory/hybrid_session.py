@@ -85,8 +85,7 @@ class RedisSessionStore:
         """List all non-expired session IDs."""
         now = time.time()
         return [
-            sid for sid, entry in self._store.items()
-            if now - entry.created_at <= entry.ttl_seconds
+            sid for sid, entry in self._store.items() if now - entry.created_at <= entry.ttl_seconds
         ]
 
 
@@ -163,9 +162,7 @@ class PostgreSQLSessionStore:
 
     def list_sessions(self) -> list[str]:
         """List all session IDs from stored files."""
-        return [
-            f.stem for f in self._dir.glob("*.json")
-        ]
+        return [f.stem for f in self._dir.glob("*.json")]
 
 
 # ---------------------------------------------------------------------------

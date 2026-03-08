@@ -139,3 +139,37 @@ class TestToolRegistry:
         registry.register(DummyTool())
         assert "dummy_tool" in registry
         assert "nope" not in registry
+
+    def test_to_openai_tools(self):
+        registry = ToolRegistry()
+        registry.register(DummyTool())
+        tools = registry.to_openai_tools()
+
+        assert len(tools) == 1
+        tool_def = tools[0]
+        assert tool_def["type"] == "function"
+        assert tool_def["function"]["name"] == "dummy_tool"
+        assert "description" in tool_def["function"]
+        assert tool_def["function"]["parameters"]["type"] == "object"
+        assert "input" in tool_def["function"]["parameters"]["properties"]
+
+    def test_to_openai_tools_multiple(self):
+        registry = ToolRegistry()
+        registry.register(DummyTool())
+        registry.register(AnotherTool())
+        tools = registry.to_openai_tools()
+        assert len(tools) == 2
+        names = {t["function"]["name"] for t in tools}
+        assert names == {"dummy_tool", "another_tool"}
+
+    def test_to_openai_tools_matches_anthropic_count(self):
+        """OpenAI and Anthropic tool lists have the same tools."""
+        registry = ToolRegistry()
+        registry.register(DummyTool())
+        registry.register(AnotherTool())
+        anthropic_tools = registry.to_anthropic_tools()
+        openai_tools = registry.to_openai_tools()
+        assert len(anthropic_tools) == len(openai_tools)
+        anthropic_names = {t["name"] for t in anthropic_tools}
+        openai_names = {t["function"]["name"] for t in openai_tools}
+        assert anthropic_names == openai_names

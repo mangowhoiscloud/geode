@@ -259,7 +259,7 @@ class ProjectMemory:
 
 ## 프로젝트 개요
 - 목적: 게임화 IP 중 저평가된 IP 발굴 및 회복 전략 도출
-- 파이프라인: Cortex → Signals → Analysts → Evaluators → Scoring → Synthesis
+- 파이프라인: Router → Signals → Analysts → Evaluators → Scoring → Synthesis
 
 ## 분석 규칙
 - @rules/ 디렉토리의 .md 파일이 자동 로딩됩니다

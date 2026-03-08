@@ -297,9 +297,7 @@ class ReportGenerator:
             "analyses": result.get("analyses", []),
         }
 
-    def _generate_json(
-        self, result: dict[str, Any], template: ReportTemplate
-    ) -> str:
+    def _generate_json(self, result: dict[str, Any], template: ReportTemplate) -> str:
         """Generate JSON report."""
         common = self._extract_common(result)
         output: dict[str, Any] = {
@@ -319,9 +317,7 @@ class ReportGenerator:
 
         return json.dumps(output, indent=2, ensure_ascii=False)
 
-    def _generate_html(
-        self, result: dict[str, Any], template: ReportTemplate
-    ) -> str:
+    def _generate_html(self, result: dict[str, Any], template: ReportTemplate) -> str:
         """Generate HTML report with inline CSS."""
         common = self._extract_common(result)
 
@@ -351,9 +347,7 @@ class ReportGenerator:
             details_section=details_section,
         )
 
-    def _generate_markdown(
-        self, result: dict[str, Any], template: ReportTemplate
-    ) -> str:
+    def _generate_markdown(self, result: dict[str, Any], template: ReportTemplate) -> str:
         """Generate Markdown report."""
         common = self._extract_common(result)
 

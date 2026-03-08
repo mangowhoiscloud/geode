@@ -24,7 +24,7 @@ class TaskStatus(Enum):
     """Lifecycle status of a task."""
 
     PENDING = "pending"
-    READY = "ready"      # All dependencies satisfied, waiting to run
+    READY = "ready"  # All dependencies satisfied, waiting to run
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -72,15 +72,15 @@ class TaskGraph:
 
     Usage:
         graph = TaskGraph()
-        graph.add_task(Task(task_id="cortex", name="Load IP data"))
-        graph.add_task(Task(task_id="signals", name="Fetch signals", dependencies=["cortex"]))
+        graph.add_task(Task(task_id="router", name="Route + load data"))
+        graph.add_task(Task(task_id="signals", name="Fetch signals", dependencies=["router"]))
         graph.add_task(Task(task_id="analyst", name="Run analysts", dependencies=["signals"]))
 
         ready = graph.get_ready_tasks()
-        # → [Task(task_id="cortex", ...)]
+        # → [Task(task_id="router", ...)]
 
-        graph.mark_running("cortex")
-        graph.mark_completed("cortex", result={"ip_info": {...}})
+        graph.mark_running("router")
+        graph.mark_completed("router", result={"ip_info": {...}})
 
         ready = graph.get_ready_tasks()
         # → [Task(task_id="signals", ...)]
@@ -131,9 +131,7 @@ class TaskGraph:
         """Mark a task as running."""
         task = self._require_task(task_id)
         if task.status not in (TaskStatus.PENDING, TaskStatus.READY):
-            raise ValueError(
-                f"Cannot start task '{task_id}' in status '{task.status.value}'"
-            )
+            raise ValueError(f"Cannot start task '{task_id}' in status '{task.status.value}'")
         task.status = TaskStatus.RUNNING
         task.started_at = time.time()
         self._stats.started += 1
@@ -143,9 +141,7 @@ class TaskGraph:
         """Mark a task as completed with an optional result."""
         task = self._require_task(task_id)
         if task.status != TaskStatus.RUNNING:
-            raise ValueError(
-                f"Cannot complete task '{task_id}' in status '{task.status.value}'"
-            )
+            raise ValueError(f"Cannot complete task '{task_id}' in status '{task.status.value}'")
         task.status = TaskStatus.COMPLETED
         task.result = result
         task.completed_at = time.time()
@@ -261,9 +257,7 @@ class TaskGraph:
         for task in self._tasks.values():
             for dep in task.dependencies:
                 if dep not in self._tasks:
-                    errors.append(
-                        f"Task '{task.task_id}' depends on '{dep}' which does not exist"
-                    )
+                    errors.append(f"Task '{task.task_id}' depends on '{dep}' which does not exist")
 
         # Check for cycles via topological sort attempt
         visited: set[str] = set()
@@ -301,11 +295,7 @@ class TaskGraph:
 
     def _get_dependents(self, task_id: str) -> list[Task]:
         """Get all tasks that directly depend on the given task."""
-        return [
-            task
-            for task in self._tasks.values()
-            if task_id in task.dependencies
-        ]
+        return [task for task in self._tasks.values() if task_id in task.dependencies]
 
     def _require_task(self, task_id: str) -> Task:
         """Get a task or raise KeyError."""
@@ -319,19 +309,20 @@ class TaskGraph:
 # Convenience: create a standard single-IP task graph
 # ---------------------------------------------------------------------------
 
+
 def create_ip_analysis_graph(ip_name: str) -> TaskGraph:
     """Create a standard task graph for single-IP analysis (~13 tasks).
 
     Mirrors the GEODE pipeline topology:
-        cortex → signals → 4 analysts (parallel) → evaluators
+        router → signals → 4 analysts (parallel) → evaluators
         → scoring → verification → synthesis
     """
     graph = TaskGraph()
     prefix = ip_name.lower().replace(" ", "_")
 
     tasks = [
-        Task(f"{prefix}_cortex", "Load IP data and MonoLake"),
-        Task(f"{prefix}_signals", "Fetch market signals", dependencies=[f"{prefix}_cortex"]),
+        Task(f"{prefix}_router", "Route + load IP data"),
+        Task(f"{prefix}_signals", "Fetch market signals", dependencies=[f"{prefix}_router"]),
         Task(
             f"{prefix}_analyst_market",
             "Market analyst",
@@ -392,6 +383,80 @@ def create_ip_analysis_graph(ip_name: str) -> TaskGraph:
             "Compile final report",
             dependencies=[f"{prefix}_synthesis"],
         ),
+    ]
+
+    for task in tasks:
+        graph.add_task(task)
+
+    return graph
+
+
+def create_geode_task_graph(ip_name: str) -> TaskGraph:
+    """Create a task graph matching actual GEODE LangGraph node topology.
+
+    Uses real analyst type names (game_mechanics, player_experience, etc.)
+    to enable 1:1 mapping from hook events to task state transitions.
+
+    Topology mirrors graph.py:
+        router → signals → 4 analysts (parallel) → evaluators
+        → scoring + psm (parallel) → verification + cross_llm
+        → synthesis → report
+    """
+    graph = TaskGraph()
+    p = ip_name.lower().replace(" ", "_")
+
+    tasks = [
+        Task(f"{p}_router", "Route + load IP data"),
+        Task(f"{p}_signals", "Fetch market signals", dependencies=[f"{p}_router"]),
+        # 4 analysts — match ANALYST_TYPES in nodes/analysts.py
+        Task(
+            f"{p}_analyst_game_mechanics",
+            "Game mechanics analyst",
+            dependencies=[f"{p}_signals"],
+        ),
+        Task(
+            f"{p}_analyst_player_experience",
+            "Player experience analyst",
+            dependencies=[f"{p}_signals"],
+        ),
+        Task(
+            f"{p}_analyst_growth_potential",
+            "Growth potential analyst",
+            dependencies=[f"{p}_signals"],
+        ),
+        Task(
+            f"{p}_analyst_discovery",
+            "Discovery analyst",
+            dependencies=[f"{p}_signals"],
+        ),
+        # Evaluators — single task, completes after 3 evaluator exits
+        Task(
+            f"{p}_evaluators",
+            "Multi-axis evaluators",
+            dependencies=[
+                f"{p}_analyst_game_mechanics",
+                f"{p}_analyst_player_experience",
+                f"{p}_analyst_growth_potential",
+                f"{p}_analyst_discovery",
+            ],
+        ),
+        # Scoring produces 2 tasks
+        Task(f"{p}_scoring", "Composite scoring", dependencies=[f"{p}_evaluators"]),
+        Task(f"{p}_psm", "PSM causal inference", dependencies=[f"{p}_evaluators"]),
+        # Verification produces 2 tasks
+        Task(
+            f"{p}_verification",
+            "Guardrails + bias check",
+            dependencies=[f"{p}_scoring", f"{p}_psm"],
+        ),
+        Task(f"{p}_cross_llm", "Cross-LLM agreement check", dependencies=[f"{p}_scoring"]),
+        # Synthesis produces 2 tasks
+        Task(
+            f"{p}_synthesis",
+            "Generate value narrative",
+            dependencies=[f"{p}_verification", f"{p}_cross_llm"],
+        ),
+        Task(f"{p}_report", "Compile final report", dependencies=[f"{p}_synthesis"]),
     ]
 
     for task in tasks:

@@ -27,11 +27,18 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q --tb=short --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests requiring external services",
+]
 
 [dependency-groups]
 dev = [
+    "bandit>=1.8.0",
     "mypy>=1.19.1",
     "pytest>=9.0.2",
+    "pytest-cov>=6.0.0",
     "ruff>=0.15.2",
 ]
 
@@ -40,7 +47,41 @@ target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "N", "C4", "RUF"]
+ignore = [
+    "S101",   # assert — used extensively in tests and fixture validation
+    "S311",   # non-cryptographic random — intentional in data generator
+    "N806",   # non-lowercase variable — FIXTURE_MAP, COMMAND_MAP patterns
+    "N803",   # invalid argument name — LangGraph callback signatures
+    "RUF001", # ambiguous unicode char in string — Korean/English mixed project
+    "RUF002", # ambiguous unicode char in docstring
+    "RUF003", # ambiguous unicode char in comment
+    "RUF012", # mutable class default — Pydantic models handle this
+    "RUF059", # unused unpacked variable — LangGraph stream event destructuring
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S105", "S106", "B017"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]
+
+[tool.coverage.run]
+source = ["geode"]
+branch = true
+omit = [
+    "geode/ui/*",
+    "geode/templates/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.",
+]
 
 [tool.mypy]
 python_version = "3.12"
@@ -48,3 +89,12 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 warn_unreachable = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "langgraph.*",
+    "langchain_core.*",
+    "simple_term_menu.*",
+]
+ignore_missing_imports = true

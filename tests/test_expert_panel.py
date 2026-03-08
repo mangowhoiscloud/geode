@@ -98,8 +98,6 @@ class TestKrippendorffAlpha:
         alpha = calculate_krippendorff_alpha(matrix)
         assert alpha > 0.5  # Partial agreement
 
-
-
     def test_known_answer_krippendorff_2011(self):
         """Validate against Krippendorff (2011) worked example.
 
@@ -119,6 +117,7 @@ class TestKrippendorffAlpha:
         alpha = calculate_krippendorff_alpha(ratings)
         # Known result: alpha ~ 0.743 for interval metric
         assert 0.70 <= alpha <= 0.80, f"Expected ~0.743, got {alpha}"
+
 
 class TestExpertPanel:
     def test_add_and_get_expert(self):

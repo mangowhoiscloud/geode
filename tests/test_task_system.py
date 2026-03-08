@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from geode.orchestration.task_system import (
     Task,
     TaskGraph,
@@ -46,11 +48,8 @@ class TestTaskGraph:
     def test_add_duplicate_raises(self):
         graph = TaskGraph()
         graph.add_task(Task(task_id="t1", name="Test"))
-        try:
+        with pytest.raises(ValueError, match="t1"):
             graph.add_task(Task(task_id="t1", name="Duplicate"))
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "t1" in str(e)
 
     def test_get_ready_tasks_no_deps(self):
         graph = TaskGraph()
@@ -210,11 +209,8 @@ class TestTaskGraph:
 
     def test_mark_nonexistent_raises(self):
         graph = TaskGraph()
-        try:
+        with pytest.raises(KeyError):
             graph.mark_running("nope")
-            assert False, "Should have raised KeyError"
-        except KeyError:
-            pass
 
     def test_stats_to_dict(self):
         graph = TaskGraph()
@@ -236,15 +232,15 @@ class TestCreateIPAnalysisGraph:
         graph = create_ip_analysis_graph("Berserk")
         ready = graph.get_ready_tasks()
         assert len(ready) == 1
-        assert ready[0].task_id == "berserk_cortex"
+        assert ready[0].task_id == "berserk_router"
 
     def test_analysts_parallel_after_signals(self):
         graph = create_ip_analysis_graph("Berserk")
 
-        # Complete cortex
+        # Complete router
         graph.get_ready_tasks()
-        graph.mark_running("berserk_cortex")
-        graph.mark_completed("berserk_cortex")
+        graph.mark_running("berserk_router")
+        graph.mark_completed("berserk_router")
 
         # Complete signals
         ready = graph.get_ready_tasks()
@@ -263,6 +259,6 @@ class TestCreateIPAnalysisGraph:
 
     def test_prefix_from_ip_name(self):
         graph = create_ip_analysis_graph("One Piece")
-        task = graph.get_task("one_piece_cortex")
+        task = graph.get_task("one_piece_router")
         assert task is not None
-        assert task.name == "Load IP data and MonoLake"
+        assert task.name == "Route + load IP data"

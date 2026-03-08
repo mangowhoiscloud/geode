@@ -20,13 +20,13 @@ class TestCUSUMNonNegativity:
     @pytest.mark.parametrize(
         "values",
         [
-            [0.5, 0.5, 0.5],              # Constant at baseline
-            [1.0, 0.0, 1.0, 0.0],         # Oscillating
-            [0.0, 0.0, 0.0, 0.0],         # All zeros
-            [1.0, 1.0, 1.0, 1.0],         # All ones
-            [0.1, 0.2, 0.3, 0.4, 0.5],    # Increasing
-            [0.9, 0.7, 0.5, 0.3, 0.1],    # Decreasing
-            [-1.0, -2.0, -3.0],            # All negative
+            [0.5, 0.5, 0.5],  # Constant at baseline
+            [1.0, 0.0, 1.0, 0.0],  # Oscillating
+            [0.0, 0.0, 0.0, 0.0],  # All zeros
+            [1.0, 1.0, 1.0, 1.0],  # All ones
+            [0.1, 0.2, 0.3, 0.4, 0.5],  # Increasing
+            [0.9, 0.7, 0.5, 0.3, 0.1],  # Decreasing
+            [-1.0, -2.0, -3.0],  # All negative
             [100.0, -100.0, 50.0, -50.0],  # Extreme swings
         ],
     )

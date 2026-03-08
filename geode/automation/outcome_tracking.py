@@ -106,7 +106,7 @@ class OutcomeJob:
 class _TrackerStats:
     """Internal instrumentation."""
 
-    __slots__ = ("jobs_scheduled", "jobs_completed", "jobs_failed", "retries", "jobs_in_backoff")
+    __slots__ = ("jobs_completed", "jobs_failed", "jobs_in_backoff", "jobs_scheduled", "retries")
 
     def __init__(self) -> None:
         self.jobs_scheduled: int = 0
@@ -202,11 +202,14 @@ class OutcomeTracker:
         if self._hooks:
             from geode.orchestration.hooks import HookEvent
 
-            self._hooks.trigger(HookEvent.OUTCOME_COLLECTED, {
-                "job_id": job_id,
-                "ip_name": job.ip_name,
-                "tracking_point": job.tracking_point.value,
-            })
+            self._hooks.trigger(
+                HookEvent.OUTCOME_COLLECTED,
+                {
+                    "job_id": job_id,
+                    "ip_name": job.ip_name,
+                    "tracking_point": job.tracking_point.value,
+                },
+            )
 
         return job
 
@@ -239,9 +242,7 @@ class OutcomeTracker:
                 )
 
             if job.retry_count >= job.max_retries:
-                raise ValueError(
-                    f"Job '{job_id}' exceeded max retries ({job.max_retries})"
-                )
+                raise ValueError(f"Job '{job_id}' exceeded max retries ({job.max_retries})")
 
             job.retry_count += 1
             job.status = JobStatus.PENDING
@@ -250,13 +251,15 @@ class OutcomeTracker:
 
             # Enforce backoff via next_eligible_at (with jitter to prevent thundering herd)
             base_backoff = min(
-                self.BASE_BACKOFF_S * (2 ** (job.retry_count - 1)), self.MAX_BACKOFF_S,
+                self.BASE_BACKOFF_S * (2 ** (job.retry_count - 1)),
+                self.MAX_BACKOFF_S,
             )
             jitter = random.uniform(0, 0.1 * base_backoff)  # Up to 10% jitter
             backoff = base_backoff + jitter
             job.next_eligible_at = time.time() + backoff
             self._stats.jobs_in_backoff = sum(
-                1 for j in self._jobs.values()
+                1
+                for j in self._jobs.values()
                 if j.next_eligible_at > 0 and time.time() < j.next_eligible_at
             )
         log.info("Retrying job %s (attempt %d, backoff %.0fs)", job_id, job.retry_count, backoff)
@@ -268,7 +271,8 @@ class OutcomeTracker:
         if job is None:
             raise KeyError(f"Job '{job_id}' not found")
         backoff: float = min(
-            self.BASE_BACKOFF_S * (2 ** max(job.retry_count - 1, 0)), self.MAX_BACKOFF_S,
+            self.BASE_BACKOFF_S * (2 ** max(job.retry_count - 1, 0)),
+            self.MAX_BACKOFF_S,
         )
         return backoff
 
@@ -295,13 +299,16 @@ class OutcomeTracker:
         if not within_sla and self._hooks:
             from geode.orchestration.hooks import HookEvent
 
-            self._hooks.trigger(HookEvent.DRIFT_DETECTED, {
-                "source": "sla_breach",
-                "job_id": job_id,
-                "ip_name": job.ip_name,
-                "tracking_point": job.tracking_point.value,
-                "sla_days": sla_days,
-            })
+            self._hooks.trigger(
+                HookEvent.DRIFT_DETECTED,
+                {
+                    "source": "sla_breach",
+                    "job_id": job_id,
+                    "ip_name": job.ip_name,
+                    "tracking_point": job.tracking_point.value,
+                    "sla_days": sla_days,
+                },
+            )
 
         return within_sla
 
@@ -321,6 +328,29 @@ class OutcomeTracker:
         if status:
             jobs = [j for j in jobs if j.status == status]
         return sorted(jobs, key=lambda j: j.scheduled_at)
+
+    def schedule_tracking(
+        self,
+        ip_name: str,
+        checkpoints: list[TrackingPoint] | None = None,
+    ) -> list[OutcomeJob]:
+        """Schedule outcome collection at standard checkpoints.
+
+        Args:
+            ip_name: IP to track.
+            checkpoints: Tracking points to schedule. Defaults to all three
+                (T+30, T+90, T+180).
+
+        Returns:
+            List of scheduled OutcomeJob objects.
+        """
+        if checkpoints is None:
+            checkpoints = [
+                TrackingPoint.T_PLUS_30,
+                TrackingPoint.T_PLUS_90,
+                TrackingPoint.T_PLUS_180,
+            ]
+        return [self.schedule(ip_name, tp) for tp in checkpoints]
 
     def get_outcomes(self, ip_name: str) -> list[OutcomeData]:
         """Get all collected outcomes for an IP."""

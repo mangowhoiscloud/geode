@@ -6,7 +6,7 @@ hierarchical string for checkpoint filtering and session isolation.
 Format: ip:{name}:{phase}[:{sub_context}]
 
 Examples:
-    ip:berserk:cortex
+    ip:berserk:router
     ip:cowboy_bebop:analysis
     ip:berserk:evaluation:quality_judge
     ip:ghost_in_the_shell:scoring
@@ -19,7 +19,7 @@ import re
 from typing import Any
 
 # Phase constants (pipeline stages)
-CORTEX = "cortex"
+ROUTER = "router"
 SIGNALS = "signals"
 ANALYSIS = "analysis"
 EVALUATION = "evaluation"
@@ -27,7 +27,7 @@ SCORING = "scoring"
 VERIFICATION = "verification"
 SYNTHESIS = "synthesis"
 
-ALL_PHASES = frozenset({CORTEX, SIGNALS, ANALYSIS, EVALUATION, SCORING, VERIFICATION, SYNTHESIS})
+ALL_PHASES = frozenset({ROUTER, SIGNALS, ANALYSIS, EVALUATION, SCORING, VERIFICATION, SYNTHESIS})
 
 _SAFE_NAME_RE = re.compile(r"[^a-z0-9_]")
 
@@ -42,7 +42,7 @@ def build_session_key(ip_name: str, phase: str, sub_context: str | None = None) 
 
     Args:
         ip_name: IP name (e.g. "Berserk", "Cowboy Bebop").
-        phase: Pipeline phase (use constants: CORTEX, ANALYSIS, etc.).
+        phase: Pipeline phase (use constants: ROUTER, ANALYSIS, etc.).
         sub_context: Optional sub-context (e.g. analyst type, evaluator type).
 
     Returns:

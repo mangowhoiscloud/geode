@@ -157,9 +157,7 @@ def calculate_krippendorff_alpha(
         weight = 1.0 / (m - 1)
         for i in range(m):
             for j in range(i + 1, m):
-                observed_disagreement += (
-                    (item_values[i] - item_values[j]) ** 2 * 2.0 * weight
-                )
+                observed_disagreement += (item_values[i] - item_values[j]) ** 2 * 2.0 * weight
 
     # Expected disagreement (D_e) from marginal frequencies
     # D_e = 1/(n-1) * sum over all c,k pairs of n_c * n_k * delta(c,k)
@@ -169,9 +167,7 @@ def calculate_krippendorff_alpha(
     # = n * sum(x^2) - (sum(x))^2 ... via identity
     sum_sq = float(np.sum(arr**2))
     sum_val = float(np.sum(arr))
-    expected_disagreement = (
-        2.0 * (n_total * sum_sq - sum_val**2) / (n_total * (n_total - 1))
-    )
+    expected_disagreement = 2.0 * (n_total * sum_sq - sum_val**2) / (n_total * (n_total - 1))
 
     if abs(expected_disagreement) < 1e-12:
         return 1.0  # Perfect agreement (no variance)
@@ -301,7 +297,9 @@ class ExpertPanel:
                 spread_alert = True
                 log.warning(
                     "High expert disagreement: spread=%.2f, CV=%.2f (n=%d raters)",
-                    spread, cv, len(scores),
+                    spread,
+                    cv,
+                    len(scores),
                 )
 
         return {
@@ -315,6 +313,146 @@ class ExpertPanel:
     def get_ratings(self, item_id: str) -> list[ExpertScoreInput]:
         """Retrieve all ratings for an item."""
         return self._ratings.get(item_id, [])
+
+    def register_expert(
+        self,
+        expert_id: str,
+        name: str,
+        domain: str = "",
+    ) -> Expert:
+        """Register a new expert by ID and name (convenience wrapper).
+
+        Returns the created Expert object.
+        """
+        expert = Expert(expert_id=expert_id, name=name, domain=domain)
+        self.add_expert(expert)
+        return expert
+
+    def submit_rating(
+        self,
+        expert_id: str,
+        item_id: str,
+        score: float,
+        confidence: float = 1.0,
+        notes: str = "",
+    ) -> ExpertScoreInput:
+        """Submit a single rating from an expert for an item.
+
+        Validates expert exists, records the rating, and updates expert stats.
+        Returns the ExpertScoreInput record.
+        """
+        if expert_id not in self._experts:
+            raise KeyError(f"Expert '{expert_id}' not registered")
+
+        rating = ExpertScoreInput(
+            expert_id=expert_id,
+            item_id=item_id,
+            score=score,
+            confidence=confidence,
+            notes=notes,
+        )
+
+        if item_id not in self._ratings:
+            self._ratings[item_id] = []
+        self._ratings[item_id].append(rating)
+        self._stats.ratings_collected += 1
+
+        # Update expert total_ratings
+        expert = self._experts[expert_id]
+        expert.total_ratings += 1
+
+        return rating
+
+    def compute_agreement(self, item_ids: list[str] | None = None) -> float:
+        """Compute Krippendorff's alpha across all (or specified) rated items.
+
+        Builds a rater × item matrix from collected ratings and calls
+        calculate_krippendorff_alpha(). Returns alpha coefficient.
+        """
+        # Determine items to include
+        if item_ids is not None:
+            items = [iid for iid in item_ids if iid in self._ratings]
+        else:
+            items = list(self._ratings.keys())
+
+        if not items:
+            return 0.0
+
+        # Build expert list (ordered)
+        expert_ids = list(self._experts.keys())
+        if len(expert_ids) < 2:
+            return 0.0
+
+        # Build ratings matrix: raters × items (None for missing)
+        ratings_matrix: list[list[float | None]] = []
+        for eid in expert_ids:
+            row: list[float | None] = []
+            for item_id in items:
+                item_ratings = self._ratings.get(item_id, [])
+                # Find this expert's rating for this item (use latest if multiple)
+                expert_score: float | None = None
+                for r in item_ratings:
+                    if r.expert_id == eid:
+                        expert_score = r.score
+                row.append(expert_score)
+            ratings_matrix.append(row)
+
+        alpha = calculate_krippendorff_alpha(ratings_matrix)
+        self._stats.consensus_computed += 1
+        return alpha
+
+    def update_tier(self, item_ids: list[str] | None = None) -> dict[str, ExpertTier]:
+        """Recalculate agreement scores and tiers for all experts.
+
+        Uses leave-one-out approach: for each expert, compute alpha
+        with vs without their ratings, and use the delta as agreement signal.
+
+        Returns dict of expert_id → new ExpertTier.
+        """
+        items = item_ids or list(self._ratings.keys())
+        expert_ids = list(self._experts.keys())
+        updated: dict[str, ExpertTier] = {}
+
+        if len(expert_ids) < 2 or not items:
+            return updated
+
+        # Full alpha
+        full_alpha = self.compute_agreement(items)
+
+        for eid in expert_ids:
+            # Compute alpha without this expert (leave-one-out)
+            remaining = [e for e in expert_ids if e != eid]
+            if len(remaining) < 2:
+                # Can't compute alpha with fewer than 2 raters
+                agreement = max(0.0, full_alpha)
+            else:
+                # Build matrix without this expert
+                loo_matrix: list[list[float | None]] = []
+                for r_eid in remaining:
+                    row: list[float | None] = []
+                    for item_id in items:
+                        item_ratings = self._ratings.get(item_id, [])
+                        score: float | None = None
+                        for r in item_ratings:
+                            if r.expert_id == r_eid:
+                                score = r.score
+                        row.append(score)
+                    loo_matrix.append(row)
+                loo_alpha = calculate_krippendorff_alpha(loo_matrix)
+
+                # If removing this expert *decreases* alpha, they help agreement
+                # Agreement score = how much this expert contributes to consensus
+                if full_alpha >= loo_alpha:
+                    agreement = min(1.0, full_alpha + (full_alpha - loo_alpha))
+                else:
+                    agreement = max(0.0, full_alpha - (loo_alpha - full_alpha))
+
+            expert = self._experts[eid]
+            expert.agreement_score = agreement
+            expert.tier = classify_expert_tier(agreement)
+            updated[eid] = expert.tier
+
+        return updated
 
     def update_expert_agreement(self, expert_id: str, agreement_score: float) -> None:
         """Update an expert's agreement score and reclassify tier."""
@@ -343,27 +481,33 @@ def create_pipeline_panel() -> ExpertPanel:
         panel.collect_ratings("berserk", {"quality_expert": 4.2, "market_expert": 3.8})
     """
     panel = ExpertPanel()
-    panel.add_expert(Expert(
-        expert_id="quality_expert",
-        name="Quality Expert",
-        domain="game_quality",
-        agreement_score=0.85,
-        tier=ExpertTier.TIER_3,
-    ))
-    panel.add_expert(Expert(
-        expert_id="market_expert",
-        name="Market Expert",
-        domain="market_analysis",
-        agreement_score=0.75,
-        tier=ExpertTier.TIER_2,
-    ))
-    panel.add_expert(Expert(
-        expert_id="technical_expert",
-        name="Technical Expert",
-        domain="technical_health",
-        agreement_score=0.70,
-        tier=ExpertTier.TIER_2,
-    ))
+    panel.add_expert(
+        Expert(
+            expert_id="quality_expert",
+            name="Quality Expert",
+            domain="game_quality",
+            agreement_score=0.85,
+            tier=ExpertTier.TIER_3,
+        )
+    )
+    panel.add_expert(
+        Expert(
+            expert_id="market_expert",
+            name="Market Expert",
+            domain="market_analysis",
+            agreement_score=0.75,
+            tier=ExpertTier.TIER_2,
+        )
+    )
+    panel.add_expert(
+        Expert(
+            expert_id="technical_expert",
+            name="Technical Expert",
+            domain="technical_health",
+            agreement_score=0.70,
+            tier=ExpertTier.TIER_2,
+        )
+    )
     log.info(
         "Created pipeline panel with %d experts: %s",
         len(panel.list_experts()),

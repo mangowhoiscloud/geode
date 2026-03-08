@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Inscryption",
+    "media_type": "game",
+    "release_year": 2021,
+    "studio": "Daniel Mullins Games",
+    "genre": [
+      "card game",
+      "horror",
+      "roguelike"
+    ],
+    "synopsis": "Inscryption — a Card Horror game developed by Daniel Mullins Games, released in 2021 on Steam.",
+    "proof_of_game": "Inscryption (2021, Steam/PC)",
+    "franchise_size": 3,
+    "ip_age_years": 5
+  },
+  "monolake": {
+    "dau_peak": 177600,
+    "dau_current": 48713,
+    "revenue_ltm": 4659669,
+    "revenue_lifetime": 124257840,
+    "retention_d30": 37,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "active_game_count": 1,
+    "last_game_year": 2021,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "M",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 10656000,
+    "reddit_subscribers": 177600,
+    "fan_art_yoy_pct": 30.0,
+    "google_trends_index": 87,
+    "twitter_mentions_monthly": 56832,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "card game",
+      "horror",
+      "roguelike",
+      "puzzle",
+      "deckbuilding"
+    ],
+    "game_sales_data": "~2,220,000 owners (Steam, 2021-present)"
+  },
+  "psm_covariates": {
+    "genre": "card game",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2021,
+    "region": "global",
+    "age_rating": "M",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 3,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "ip_age_years": 5
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 89.9,
+    "cause": "timing_mismatch",
+    "quality_score": 96.3,
+    "momentum_score": 82.0,
+    "developer_track_record": 50,
+    "psm_att_pct": 40.1,
+    "psm_z_value": 3.34,
+    "psm_gamma": 2.4
+  }
+}

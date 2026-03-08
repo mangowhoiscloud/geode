@@ -347,7 +347,7 @@ GEODE에 OpenClaw 패턴을 적용할 때:
 
 ## References
 
-- **OpenClaw 전체 분석**: `ppt-workspace/task2/research/openclaw-analysis-report.md`
-- **자동화 4계층**: `ppt-workspace/task2/research/openclaw-automation-analysis.md`
-- **라우팅 비교**: `ppt-workspace/task2/research/openclaw-routing-analysis.md`
-- **라우팅 다이어그램**: `ppt-workspace/task2/diagrams/openclaw-routing.mmd`
+- **OpenClaw 전체 분석**: `research/openclaw-analysis-report.md`
+- **자동화 4계층**: `research/openclaw-automation-analysis.md`
+- **라우팅 비교**: `research/openclaw-routing-analysis.md`
+- **라우팅 다이어그램**: `diagrams/openclaw-routing.mmd`

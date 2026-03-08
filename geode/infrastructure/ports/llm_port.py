@@ -10,9 +10,13 @@ concrete LLM clients directly.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextvars import ContextVar
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypeVar, runtime_checkable
+
+from pydantic import BaseModel
+
+T = TypeVar("T", bound=BaseModel)
 
 
 @runtime_checkable
@@ -56,6 +60,19 @@ class LLMClientPort(Protocol):
         """Generate a JSON-structured response."""
         ...
 
+    def generate_parsed(
+        self,
+        system: str,
+        user: str,
+        *,
+        output_model: type[T],
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> T:
+        """Generate a structured response validated against a Pydantic model."""
+        ...
+
     def generate_stream(
         self,
         system: str,
@@ -66,6 +83,21 @@ class LLMClientPort(Protocol):
         temperature: float = 0.3,
     ) -> Iterator[str]:
         """Generate a streaming text response."""
+        ...
+
+    def generate_with_tools(
+        self,
+        system: str,
+        user: str,
+        *,
+        tools: list[dict[str, Any]],
+        tool_executor: Callable[..., dict[str, Any]],
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+        max_tool_rounds: int = 5,
+    ) -> Any:
+        """Generate with tool-use loop. Returns ToolUseResult."""
         ...
 
 
@@ -102,21 +134,66 @@ class LLMTextCallable(Protocol):
     ) -> str: ...
 
 
+class LLMParsedCallable(Protocol):
+    """Callable that returns a Pydantic model instance from an LLM."""
+
+    def __call__(
+        self,
+        system: str,
+        user: str,
+        *,
+        output_model: type[T],
+        model: str | None = ...,
+        max_tokens: int = ...,
+        temperature: float = ...,
+    ) -> T: ...
+
+
+# ---------------------------------------------------------------------------
+# Tool-use callable protocol
+# ---------------------------------------------------------------------------
+
+
+class LLMToolCallable(Protocol):
+    """Callable that runs a tool-use loop with an LLM."""
+
+    def __call__(
+        self,
+        system: str,
+        user: str,
+        *,
+        tools: list[dict[str, Any]],
+        tool_executor: Callable[..., dict[str, Any]],
+        model: str | None = ...,
+        max_tokens: int = ...,
+        temperature: float = ...,
+        max_tool_rounds: int = ...,
+    ) -> Any: ...
+
+
 # ---------------------------------------------------------------------------
 # Thread-safe injection via contextvars
 # ---------------------------------------------------------------------------
 
 _llm_json_ctx: ContextVar[LLMJsonCallable | None] = ContextVar("llm_json", default=None)
 _llm_text_ctx: ContextVar[LLMTextCallable | None] = ContextVar("llm_text", default=None)
+_llm_parsed_ctx: ContextVar[LLMParsedCallable | None] = ContextVar("llm_parsed", default=None)
+_llm_tool_ctx: ContextVar[LLMToolCallable | None] = ContextVar("llm_tool", default=None)
 
 
 def set_llm_callable(
     json_fn: LLMJsonCallable,
     text_fn: LLMTextCallable,
+    parsed_fn: LLMParsedCallable | None = None,
+    tool_fn: LLMToolCallable | None = None,
 ) -> None:
     """Inject LLM callables (typically called by GeodeRuntime.create())."""
     _llm_json_ctx.set(json_fn)
     _llm_text_ctx.set(text_fn)
+    if parsed_fn is not None:
+        _llm_parsed_ctx.set(parsed_fn)
+    if tool_fn is not None:
+        _llm_tool_ctx.set(tool_fn)
 
 
 def get_llm_json() -> LLMJsonCallable:
@@ -137,5 +214,27 @@ def get_llm_text() -> LLMTextCallable:
         raise RuntimeError(
             "LLM text callable not injected. "
             "Call set_llm_callable() first (done by GeodeRuntime.create())."
+        )
+    return fn
+
+
+def get_llm_parsed() -> LLMParsedCallable:
+    """Return the injected parsed callable. Raises if not injected."""
+    fn = _llm_parsed_ctx.get()
+    if fn is None:
+        raise RuntimeError(
+            "LLM parsed callable not injected. "
+            "Call set_llm_callable(parsed_fn=...) first (done by GeodeRuntime.create())."
+        )
+    return fn
+
+
+def get_llm_tool() -> LLMToolCallable:
+    """Return the injected tool-use callable. Raises if not injected."""
+    fn = _llm_tool_ctx.get()
+    if fn is None:
+        raise RuntimeError(
+            "LLM tool callable not injected. "
+            "Call set_llm_callable(tool_fn=...) first (done by GeodeRuntime.create())."
         )
     return fn

@@ -16,9 +16,10 @@ import re
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeVar
 
 import anthropic
+from pydantic import BaseModel
 
 from geode.config import settings
 
@@ -33,7 +34,9 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
     "claude-opus-4-6": {"input": 15.0 / 1_000_000, "output": 75.0 / 1_000_000},
     "claude-sonnet-4-5-20250929": {"input": 3.0 / 1_000_000, "output": 15.0 / 1_000_000},
     "claude-haiku-4-5-20251001": {"input": 0.80 / 1_000_000, "output": 4.0 / 1_000_000},
+    "gpt-5.4": {"input": 2.50 / 1_000_000, "output": 15.0 / 1_000_000},
     "gpt-5.3": {"input": 10.0 / 1_000_000, "output": 30.0 / 1_000_000},
+    "gpt-4.1-mini": {"input": 0.40 / 1_000_000, "output": 1.60 / 1_000_000},
 }
 
 
@@ -303,6 +306,63 @@ def call_llm(
     return result
 
 
+T = TypeVar("T", bound=BaseModel)
+
+
+def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
+    system: str,
+    user: str,
+    *,
+    output_model: type[T],
+    model: str | None = None,
+    max_tokens: int = 4096,
+    temperature: float = 0.3,
+) -> T:
+    """Claude call with Anthropic Structured Output (messages.parse).
+
+    Uses the SDK's native Pydantic integration to guarantee valid JSON
+    conforming to the output_model schema. No manual JSON parsing needed.
+    """
+    client = get_anthropic_client()
+    target_model = model or settings.model
+
+    def _do_call(*, model: str) -> T:
+        response = client.messages.parse(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+            output_format=output_model,
+            timeout=90.0,
+        )
+        # Capture token usage
+        if hasattr(response, "usage") and response.usage:
+            in_tok = response.usage.input_tokens
+            out_tok = response.usage.output_tokens
+            cost = calculate_cost(model, in_tok, out_tok)
+            usage = LLMUsage(
+                model=model,
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+                cost_usd=cost,
+            )
+            get_usage_accumulator().record(usage)
+            log.debug(
+                "LLM parsed usage: model=%s in=%d out=%d cost=$%.4f",
+                model,
+                in_tok,
+                out_tok,
+                cost,
+            )
+
+        assert response.parsed_output is not None, "parsed_output was None"
+        return response.parsed_output
+
+    result: T = _retry_with_backoff(_do_call, model=target_model)
+    return result
+
+
 def call_llm_json(
     system: str,
     user: str,
@@ -312,7 +372,11 @@ def call_llm_json(
     temperature: float = 0.3,
     seed: int | None = None,
 ) -> dict[str, Any]:
-    """Claude call that parses JSON from the response. Includes failover."""
+    """Claude call that parses JSON from the response. Includes failover.
+
+    Legacy function — prefer call_llm_parsed() for guaranteed structured output.
+    Kept for backward compatibility with code that expects dict[str, Any].
+    """
     raw = call_llm(
         system, user, model=model, max_tokens=max_tokens, temperature=temperature, seed=seed
     )
@@ -320,12 +384,174 @@ def call_llm_json(
     text = raw.strip()
     text = re.sub(r"^```\w*\s*\n", "", text)
     text = re.sub(r"\n```\s*$", "", text)
+    text = text.strip()
+
+    # Try direct JSON parse
     try:
         result: dict[str, Any] = json.loads(text)
-    except json.JSONDecodeError as exc:
-        log.error("Failed to parse LLM JSON response. Raw text: %s", text[:500])
-        raise ValueError(f"LLM returned invalid JSON: {exc}") from exc
-    return result
+        return result
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: extract JSON object from text (handles markdown-wrapped responses)
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace != -1 and last_brace > first_brace:
+        candidate = text[first_brace : last_brace + 1]
+        try:
+            result = json.loads(candidate)
+            log.info("Extracted JSON from position %d-%d in LLM response", first_brace, last_brace)
+            return result
+        except json.JSONDecodeError:
+            pass
+
+    log.error("Failed to parse LLM JSON response. Raw text: %s", text[:500])
+    raise ValueError("LLM returned invalid JSON: could not extract JSON object from response")
+
+
+@dataclass
+class ToolCallRecord:
+    """Record of a single tool call within a tool-use loop."""
+
+    tool_name: str
+    tool_input: dict[str, Any]
+    tool_result: dict[str, Any]
+    duration_ms: float
+
+
+@dataclass
+class ToolUseResult:
+    """Result from a multi-turn tool-use LLM call."""
+
+    text: str
+    tool_calls: list[ToolCallRecord]
+    usage: list[LLMUsage]
+    rounds: int
+
+
+def call_llm_with_tools(
+    system: str,
+    user: str,
+    *,
+    tools: list[dict[str, Any]],
+    tool_executor: Any,
+    model: str | None = None,
+    max_tokens: int = 4096,
+    temperature: float = 0.3,
+    max_tool_rounds: int = 5,
+) -> ToolUseResult:
+    """Claude call with tool-use loop. Returns final text + tool call records.
+
+    Runs a multi-turn loop: when the model requests tool_use, executes the
+    tool via tool_executor and feeds the result back. On the last round,
+    forces tool_choice=none to guarantee a text response.
+
+    Args:
+        tools: Anthropic-format tool definitions.
+        tool_executor: Callable(name, **kwargs) -> dict[str, Any].
+        max_tool_rounds: Max loop iterations (default 5). Prevents runaway.
+    """
+    client = get_anthropic_client()
+    target_model = model or settings.model
+
+    all_tool_calls: list[ToolCallRecord] = []
+    all_usage: list[LLMUsage] = []
+    messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
+
+    for round_idx in range(max_tool_rounds):
+        is_last_round = round_idx == max_tool_rounds - 1
+        tool_choice: dict[str, str] | None = {"type": "none"} if is_last_round else {"type": "auto"}
+
+        def _do_call(
+            *,
+            model: str,
+            _tc: dict[str, str] | None = tool_choice,
+        ) -> Any:
+            return client.messages.create(  # type: ignore[call-overload]
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system,
+                messages=messages,
+                tools=tools,
+                tool_choice=_tc,
+                timeout=90.0,
+            )
+
+        response = _retry_with_backoff(_do_call, model=target_model)
+
+        # Track usage
+        if hasattr(response, "usage") and response.usage:
+            in_tok = response.usage.input_tokens
+            out_tok = response.usage.output_tokens
+            cost = calculate_cost(target_model, in_tok, out_tok)
+            usage = LLMUsage(
+                model=target_model,
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+                cost_usd=cost,
+            )
+            all_usage.append(usage)
+            get_usage_accumulator().record(usage)
+
+        # Check if model wants to use tools
+        if response.stop_reason != "tool_use":
+            # Extract final text
+            text = ""
+            for block in response.content:
+                if hasattr(block, "text"):
+                    text += block.text
+            return ToolUseResult(
+                text=text,
+                tool_calls=all_tool_calls,
+                usage=all_usage,
+                rounds=round_idx + 1,
+            )
+
+        # Process tool_use blocks
+        assistant_content = response.content
+        tool_result_blocks: list[dict[str, Any]] = []
+
+        for block in assistant_content:
+            if block.type != "tool_use":
+                continue
+            tool_name = block.name
+            tool_input = block.input
+            t0 = time.time()
+            try:
+                result = tool_executor(tool_name, **tool_input)
+            except Exception as exc:
+                log.warning("Tool '%s' execution failed: %s", tool_name, exc)
+                result = {"error": str(exc)}
+            elapsed_ms = (time.time() - t0) * 1000
+
+            all_tool_calls.append(
+                ToolCallRecord(
+                    tool_name=tool_name,
+                    tool_input=tool_input,
+                    tool_result=result,
+                    duration_ms=elapsed_ms,
+                )
+            )
+            tool_result_blocks.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": json.dumps(result),
+                }
+            )
+
+        # Append assistant + tool_result messages for next round
+        messages.append({"role": "assistant", "content": assistant_content})
+        messages.append({"role": "user", "content": tool_result_blocks})
+
+    # Should not reach here, but return last state
+    return ToolUseResult(
+        text="",
+        tool_calls=all_tool_calls,
+        usage=all_usage,
+        rounds=max_tool_rounds,
+    )
 
 
 def call_llm_streaming(
