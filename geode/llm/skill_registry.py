@@ -122,9 +122,9 @@ class SkillRegistry:
 
     def _resolve_skill_dirs(self) -> list[Path]:
         """Return skill directories in 4-priority order."""
-        base = Path(__file__).resolve().parent.parent  # geode/
+        root = Path(__file__).resolve().parent.parent.parent  # project root
         dirs: list[Path] = [
-            base / "skills",  # 1. Bundled
+            root / ".claude" / "skills",  # 1. Bundled (.claude/skills/)
             Path.cwd() / "skills",  # 2. Project
             Path.home() / ".geode" / "skills",  # 3. User
         ]

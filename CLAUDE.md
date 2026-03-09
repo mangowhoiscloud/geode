@@ -4,7 +4,7 @@
 
 저평가 IP를 데이터 기반으로 발굴하는 LangGraph Agent CLI.
 
-- **Version**: 6.0.0
+- **Version**: 0.6.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -100,7 +100,7 @@ geode/
 │   ├── session_key.py   # Hierarchical key builder (ip:name:phase)
 │   └── context.py       # 3-tier context assembler
 ├── orchestration/
-│   ├── hooks.py         # HookSystem (19 events)
+│   ├── hooks.py         # HookSystem (23 events)
 │   ├── bootstrap.py     # Node bootstrap (pre-execution context injection)
 │   ├── planner.py       # Planner (multi-step plan generation)
 │   ├── plan_mode.py     # Plan mode state machine

@@ -29,5 +29,8 @@ build/
 # Checkpoint DB
 geode_checkpoints.db
 
+# Coverage
+.coverage
+
 # Runtime data
-.geode/snapshots/
+.geode/

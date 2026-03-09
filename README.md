@@ -1,4 +1,4 @@
-# GEODE v6.0 — Undervalued IP Discovery Agent
+# GEODE v0.6.0 — Undervalued IP Discovery Agent
 
 LangGraph 기반 저평가 IP 발굴 에이전트.
 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 평가합니다.

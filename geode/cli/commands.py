@@ -449,7 +449,7 @@ def cmd_generate(args: str) -> None:
     /generate 10      → generate 10 IPs
     /generate 3 mecha → generate 3 IPs of specific genre
     """
-    from geode.data.generator import GENRE_PARAMS, generate_batch
+    from geode.fixtures.generator import GENRE_PARAMS, generate_batch
 
     parts = args.strip().split() if args.strip() else []
 

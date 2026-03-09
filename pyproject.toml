@@ -72,7 +72,6 @@ source = ["geode"]
 branch = true
 omit = [
     "geode/ui/*",
-    "geode/templates/*",
 ]
 
 [tool.coverage.report]
