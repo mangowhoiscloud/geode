@@ -3,7 +3,6 @@
 ## Project Overview
 
 저평가 IP를 데이터 기반으로 발굴하는 LangGraph Agent CLI 데모.
-넥슨 네비게이터실 면접 Task 2 구현체.
 
 - **Version**: 6.0.0
 - **Python**: >= 3.12
