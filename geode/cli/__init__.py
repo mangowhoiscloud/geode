@@ -18,10 +18,13 @@ from rich.text import Text
 from geode import __version__
 from geode.cli.commands import (
     cmd_auth,
+    cmd_batch,
     cmd_generate,
     cmd_key,
     cmd_list,
     cmd_model,
+    cmd_schedule,
+    cmd_trigger,
     resolve_action,
     show_help,
 )
@@ -587,6 +590,19 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
                 template=report_args["template"],
                 verbose=verbose,
             )
+    elif action == "batch":
+        readiness = _get_readiness()
+        force_dry = readiness.force_dry_run if readiness else True
+        cmd_batch(
+            args,
+            run_fn=_run_analysis,
+            dry_run=force_dry,
+            verbose=verbose,
+        )
+    elif action == "schedule":
+        cmd_schedule(args)
+    elif action == "trigger":
+        cmd_trigger(args)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")

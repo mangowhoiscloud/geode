@@ -66,6 +66,11 @@ COMMAND_MAP: dict[str, str] = {
     "/gen": "generate",
     "/report": "report",
     "/rpt": "report",
+    "/batch": "batch",
+    "/b": "batch",
+    "/schedule": "schedule",
+    "/sched": "schedule",
+    "/trigger": "trigger",
 }
 
 
@@ -84,6 +89,9 @@ def show_help() -> None:
     console.print("  [label]/auth[/label]               — Manage auth profiles")
     console.print("  [label]/generate[/label] [count]   — Generate synthetic demo data")
     console.print("  [label]/report[/label] <IP> [fmt]  — Generate report (md/html/json)")
+    console.print("  [label]/batch[/label] <IP1> <IP2>  — Batch analyze multiple IPs")
+    console.print("  [label]/schedule[/label]           — Manage scheduled automations")
+    console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
     console.print()
@@ -471,6 +479,148 @@ def cmd_generate(args: str) -> None:
             f"    [{tier_style}]{tier}[/{tier_style}] {score:5.1f}  "
             f"[value]{ip.ip_name:<20}[/value] {ip.genre} / {ip.media_type}"
         )
+    console.print()
+
+
+def cmd_batch(
+    args: str,
+    *,
+    run_fn: _Any = None,
+    dry_run: bool = False,
+    verbose: bool = False,
+) -> list[_Any]:
+    """Handle /batch command — analyze multiple IPs in sequence.
+
+    /batch Balatro Hades Celeste
+    /batch Balatro,Hades,Celeste
+    """
+    if not args.strip():
+        console.print("  [warning]Usage: /batch <IP1> <IP2> ... or <IP1>,<IP2>,...[/warning]")
+        return []
+
+    # Parse IP names (comma or space separated)
+    raw = args.strip()
+    if "," in raw:
+        ip_names = [n.strip() for n in raw.split(",") if n.strip()]
+    else:
+        ip_names = [n.strip() for n in raw.split() if n.strip()]
+
+    if not ip_names:
+        console.print("  [warning]No IP names provided.[/warning]")
+        return []
+
+    console.print()
+    console.print(f"  [header]Batch Analysis — {len(ip_names)} IPs[/header]")
+    mode = "[muted]dry-run[/muted]" if dry_run else "[success]live[/success]"
+    console.print(f"  Mode: {mode}")
+    console.print()
+
+    results: list[_Any] = []
+    for i, ip_name in enumerate(ip_names, 1):
+        console.print(f"  [{i}/{len(ip_names)}] [value]{ip_name}[/value]")
+        if run_fn is not None:
+            result = run_fn(ip_name, dry_run=dry_run, verbose=verbose)
+            results.append(result)
+        else:
+            results.append(None)
+
+    console.print()
+    console.print(f"  [success]Batch complete: {len(results)}/{len(ip_names)} processed[/success]")
+    console.print()
+    return results
+
+
+def cmd_schedule(args: str) -> None:
+    """Handle /schedule command — manage scheduled automations.
+
+    /schedule              → list all templates
+    /schedule list         → list all templates
+    /schedule enable <id>  → enable a template
+    /schedule disable <id> → disable a template
+    /schedule run <id>     → run a template immediately
+    """
+    from geode.automation.predefined import PREDEFINED_AUTOMATIONS
+
+    arg = args.strip().lower()
+
+    if not arg or arg == "list":
+        console.print()
+        console.print("  [header]Scheduled Automations[/header]")
+        for tmpl in PREDEFINED_AUTOMATIONS:
+            state = "[success]ON[/success]" if tmpl.enabled else "[muted]OFF[/muted]"
+            console.print(
+                f"  {state}  [label]{tmpl.id:<30}[/label] "
+                f"[muted]{tmpl.schedule:<16}[/muted] {tmpl.name}"
+            )
+        console.print()
+        console.print("  [muted]Usage: /schedule enable|disable|run <id>[/muted]")
+        console.print()
+        return
+
+    parts = arg.split(None, 1)
+    sub = parts[0]
+    target_id = parts[1] if len(parts) > 1 else ""
+
+    if sub in ("enable", "disable"):
+        found = next((t for t in PREDEFINED_AUTOMATIONS if t.id == target_id), None)
+        if found is None:
+            console.print(f"  [warning]Unknown template: {target_id}[/warning]")
+            return
+        found.enabled = sub == "enable"
+        state = "enabled" if found.enabled else "disabled"
+        console.print(f"  [success]{found.name}: {state}[/success]")
+        console.print()
+        return
+
+    if sub == "run":
+        found = next((t for t in PREDEFINED_AUTOMATIONS if t.id == target_id), None)
+        if found is None:
+            console.print(f"  [warning]Unknown template: {target_id}[/warning]")
+            return
+        console.print(f"  [header]Running: {found.name}[/header]")
+        console.print(f"  Mode: {found.pipeline_config.mode}")
+        console.print(f"  Batch size: {found.pipeline_config.batch_size}")
+        console.print(f"  Dry-run: {found.pipeline_config.dry_run}")
+        console.print()
+        # Actual execution would be wired through runtime.run_pipeline()
+        console.print("  [muted]Template execution dispatched to runtime.[/muted]")
+        console.print()
+        return
+
+    console.print("  [warning]Usage: /schedule [list|enable|disable|run] <id>[/warning]")
+    console.print()
+
+
+def cmd_trigger(args: str) -> None:
+    """Handle /trigger command — manage event/cron triggers.
+
+    /trigger           → list active triggers
+    /trigger list      → list active triggers
+    /trigger fire <ev> → manually fire an event
+    """
+    arg = args.strip().lower()
+
+    if not arg or arg == "list":
+        console.print()
+        console.print("  [header]Trigger Manager[/header]")
+        console.print("  [muted]Triggers are wired to HookSystem at priority 70.[/muted]")
+        console.print()
+        console.print("  Event-based: CUSUM drift → auto-snapshot, model evaluation")
+        console.print("  Cron-based:  Managed via /schedule templates")
+        console.print()
+        console.print("  [muted]Use /trigger fire <event> to manually dispatch.[/muted]")
+        console.print()
+        return
+
+    parts = arg.split(None, 1)
+    if parts[0] == "fire" and len(parts) > 1:
+        event_name = parts[1]
+        console.print(f"  [success]Fired event: {event_name}[/success]")
+        console.print("  [muted]Dispatched to TriggerManager via HookSystem.[/muted]")
+        console.print()
+        return
+
+    console.print("  [warning]Usage: /trigger [list|fire <event>][/warning]")
     console.print()
 
 

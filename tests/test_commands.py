@@ -11,8 +11,11 @@ from geode.cli.commands import (
     _apply_model,
     _mask_key,
     _upsert_env,
+    cmd_batch,
     cmd_key,
     cmd_model,
+    cmd_schedule,
+    cmd_trigger,
     resolve_action,
 )
 
@@ -249,3 +252,72 @@ class TestApplyModel:
 
         # Should not write .env when model unchanged
         _apply_model(next(p for p in MODEL_PROFILES if p.id == settings.model))
+
+
+class TestCmdBatch:
+    def test_batch_command_registered(self):
+        assert resolve_action("/batch") == "batch"
+        assert resolve_action("/b") == "batch"
+
+    def test_batch_no_args(self):
+        result = cmd_batch("")
+        assert result == []
+
+    def test_batch_space_separated(self):
+        calls = []
+
+        def mock_run(ip_name, dry_run=False, verbose=False):
+            calls.append(ip_name)
+            return {"ip_name": ip_name}
+
+        result = cmd_batch("Balatro Hades Celeste", run_fn=mock_run, dry_run=True)
+        assert len(result) == 3
+        assert calls == ["Balatro", "Hades", "Celeste"]
+
+    def test_batch_comma_separated(self):
+        calls = []
+
+        def mock_run(ip_name, dry_run=False, verbose=False):
+            calls.append(ip_name)
+            return {"ip_name": ip_name}
+
+        result = cmd_batch("Balatro, Hades, Celeste", run_fn=mock_run)
+        assert len(result) == 3
+        assert calls == ["Balatro", "Hades", "Celeste"]
+
+    def test_batch_no_run_fn(self):
+        result = cmd_batch("Balatro Hades")
+        assert result == [None, None]
+
+
+class TestCmdSchedule:
+    def test_schedule_command_registered(self):
+        assert resolve_action("/schedule") == "schedule"
+        assert resolve_action("/sched") == "schedule"
+
+    def test_schedule_list(self):
+        """Should not raise."""
+        cmd_schedule("")
+        cmd_schedule("list")
+
+    def test_schedule_enable_unknown(self):
+        """Should not raise for unknown template."""
+        cmd_schedule("enable nonexistent_template")
+
+    def test_schedule_run_unknown(self):
+        """Should not raise for unknown template."""
+        cmd_schedule("run nonexistent_template")
+
+
+class TestCmdTrigger:
+    def test_trigger_command_registered(self):
+        assert resolve_action("/trigger") == "trigger"
+
+    def test_trigger_list(self):
+        """Should not raise."""
+        cmd_trigger("")
+        cmd_trigger("list")
+
+    def test_trigger_fire(self):
+        """Should not raise."""
+        cmd_trigger("fire test_event")
