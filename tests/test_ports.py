@@ -2,76 +2,113 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable, Iterator
+from typing import Any, TypeVar
 
-from geode.state import DataPort, LLMPort
+from pydantic import BaseModel
+
+from geode.infrastructure.ports.llm_port import LLMClientPort
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class MockLLM:
-    """Mock LLM adapter implementing LLMPort protocol."""
+    """Mock LLM adapter implementing LLMClientPort protocol."""
 
     def __init__(self, response: str = '{"key": "value"}'):
         self._response = response
         self.calls: list[tuple[str, str]] = []
 
-    def complete(self, system: str, user: str, *, temperature: float = 0.3) -> str:
+    @property
+    def model_name(self) -> str:
+        return "mock-model"
+
+    def generate(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> str:
         self.calls.append((system, user))
         return self._response
 
-    def complete_json(
-        self, system: str, user: str, *, temperature: float = 0.3
+    def generate_structured(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
     ) -> dict[str, Any]:
         import json
+
         self.calls.append((system, user))
         return json.loads(self._response)
 
+    def generate_parsed(
+        self,
+        system: str,
+        user: str,
+        *,
+        output_model: type[T],
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> T:
+        self.calls.append((system, user))
+        return output_model.model_validate({"result": self._response})
 
-class MockDataSource:
-    """Mock data adapter implementing DataPort protocol."""
+    def generate_stream(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> Iterator[str]:
+        self.calls.append((system, user))
+        yield self._response
 
-    def load_ip_info(self, ip_name: str) -> dict[str, Any]:
-        return {"ip_name": ip_name, "media_type": "anime"}
+    def generate_with_tools(
+        self,
+        system: str,
+        user: str,
+        *,
+        tools: list[dict[str, Any]],
+        tool_executor: Callable[..., dict[str, Any]],
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+        max_tool_rounds: int = 5,
+    ) -> Any:
+        self.calls.append((system, user))
+        return {"text": self._response, "tool_calls": [], "usage": [], "rounds": 1}
 
-    def load_monolake(self, ip_name: str) -> dict[str, Any]:
-        return {"dau_current": 0, "revenue_ltm": 0}
 
-    def load_signals(self, ip_name: str) -> dict[str, Any]:
-        return {"youtube_views": 1000000}
-
-    def load_psm_covariates(self, ip_name: str) -> dict[str, Any]:
-        return {"genre": "action"}
-
-
-class TestLLMPort:
+class TestLLMClientPort:
     def test_mock_implements_protocol(self):
-        """MockLLM satisfies LLMPort protocol (structural typing)."""
-        mock: LLMPort = MockLLM()
-        result = mock.complete("system", "user")
+        """MockLLM satisfies LLMClientPort protocol (structural typing)."""
+        mock: LLMClientPort = MockLLM()
+        result = mock.generate("system", "user")
         assert isinstance(result, str)
 
     def test_mock_json(self):
-        mock: LLMPort = MockLLM('{"score": 4.2}')
-        data = mock.complete_json("system", "user")
+        mock: LLMClientPort = MockLLM('{"score": 4.2}')
+        data = mock.generate_structured("system", "user")
         assert data["score"] == 4.2
 
     def test_call_tracking(self):
         mock = MockLLM()
-        mock.complete("sys1", "usr1")
-        mock.complete("sys2", "usr2")
+        mock.generate("sys1", "usr1")
+        mock.generate("sys2", "usr2")
         assert len(mock.calls) == 2
 
-
-class TestDataPort:
-    def test_mock_implements_protocol(self):
-        """MockDataSource satisfies DataPort protocol (structural typing)."""
-        source: DataPort = MockDataSource()
-        ip = source.load_ip_info("Cowboy Bebop")
-        assert ip["ip_name"] == "Cowboy Bebop"
-
-    def test_load_all_data(self):
-        source: DataPort = MockDataSource()
-        ip = source.load_ip_info("test")
-        ml = source.load_monolake("test")
-        sig = source.load_signals("test")
-        psm = source.load_psm_covariates("test")
-        assert all(isinstance(d, dict) for d in [ip, ml, sig, psm])
+    def test_isinstance_check(self):
+        """LLMClientPort is runtime_checkable."""
+        mock = MockLLM()
+        assert isinstance(mock, LLMClientPort)

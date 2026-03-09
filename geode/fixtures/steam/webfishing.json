@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Webfishing",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "lamedeveloper",
+    "genre": [
+      "multiplayer",
+      "fishing",
+      "casual"
+    ],
+    "synopsis": "Webfishing — a Social Fishing game developed by lamedeveloper, released in 2024 on Steam.",
+    "proof_of_game": "Webfishing (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 79200,
+    "dau_current": 38808,
+    "revenue_ltm": 2075535,
+    "revenue_lifetime": 9132354,
+    "retention_d30": 38,
+    "metacritic_score": 91,
+    "store_page_score": 98,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 4851000,
+    "reddit_subscribers": 80850,
+    "fan_art_yoy_pct": 38.0,
+    "google_trends_index": 81,
+    "twitter_mentions_monthly": 25872,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "multiplayer",
+      "fishing",
+      "casual",
+      "cute",
+      "relaxing"
+    ],
+    "game_sales_data": "~990,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "multiplayer",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 91,
+    "store_page_score": 98,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 85.3,
+    "cause": "undermarketed",
+    "quality_score": 97.9,
+    "momentum_score": 79.2,
+    "developer_track_record": 25,
+    "psm_att_pct": 36.9,
+    "psm_z_value": 3.07,
+    "psm_gamma": 2.5
+  }
+}

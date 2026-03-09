@@ -8,27 +8,27 @@
 def build_graph() -> StateGraph:
     graph = StateGraph(GeodeState)
 
-    # 8 nodes
+    # 7 nodes (router handles data loading + memory assembly)
     graph.add_node("router", router_node)
-    graph.add_node("cortex", cortex_node)
     graph.add_node("signals", signals_node)
     graph.add_node("analyst", analyst_node)
     graph.add_node("evaluators", evaluators_node)
     graph.add_node("scoring", scoring_node)
     graph.add_node("verification", _verification_node)
     graph.add_node("synthesizer", synthesizer_node)
+    graph.add_node("gather", _gather_node)
 
     # Edges
     graph.add_edge(START, "router")
     graph.add_conditional_edges("router", route_after_router,
-        {"cortex": "cortex", "evaluators": "evaluators", "scoring": "scoring"})
-    graph.add_edge("cortex", "signals")
+        {"signals": "signals", "evaluators": "evaluators", "scoring": "scoring"})
     graph.add_conditional_edges("signals", make_analyst_sends, ["analyst"])
-    graph.add_edge("analyst", "evaluators")
-    graph.add_edge("evaluators", "scoring")
+    graph.add_conditional_edges("analyst", make_evaluator_sends, ["evaluator"])
+    graph.add_edge("evaluator", "scoring")
     graph.add_edge("scoring", "verification")
-    graph.add_conditional_edges("verification", _should_synthesize,
-        {"synthesizer": "synthesizer"})
+    graph.add_conditional_edges("verification", _configured_should_continue,
+        {"synthesizer": "synthesizer", "gather": "gather"})
+    graph.add_edge("gather", "signals")
     graph.add_edge("synthesizer", END)
 
     return graph
@@ -38,10 +38,10 @@ def build_graph() -> StateGraph:
 
 | Mode | Destination | Description |
 |------|-------------|-------------|
-| `full_pipeline` | cortex | 전체 분석 |
-| `cortex_only` | cortex | Cortex 데이터만 |
-| `discovery` | cortex | 발굴 모드 |
-| `analysis` | cortex | 분석 모드 |
+| `full_pipeline` | signals | 전체 분석 |
+| `cortex_only` | signals | 데이터 로드 후 전체 분석 |
+| `discovery` | signals | 발굴 모드 |
+| `analysis` | signals | 분석 모드 |
 | `evaluation` | evaluators | 평가만 재실행 |
 | `scoring` | scoring | 점수만 재계산 |
 
@@ -55,7 +55,7 @@ def make_analyst_sends(state: GeodeState) -> list[Send]:
 ```
 
 Private state per analyst:
-- Receives: `ip_info`, `monolake`, `signals`, `_analyst_type`
+- Receives: `ip_info`, `monolake`, `signals`, `memory_context`, `_analyst_type`
 - Does NOT receive: `analyses` (Clean Context)
 - Output merged via: `Annotated[list[AnalysisResult], operator.add]`
 
@@ -72,12 +72,12 @@ for event in graph.stream(initial_state):
                 final_state[k] = v
 ```
 
-## Planned Enhancement: Feedback Loop (GAP-1)
+## Feedback Loop (L3)
 
 ```
 VERIFY → [confidence >= 0.7] → SYNTHESIZER
-       → [confidence < 0.7 AND iteration < 3] → CORTEX (loop back)
-       → [iteration >= 3] → SYNTHESIZER (partial)
+       → [confidence < 0.7 AND iteration < max_iter] → GATHER → SIGNALS (loop back)
+       → [iteration >= max_iter] → SYNTHESIZER (force proceed)
 ```
 
-Requires: `iteration: int`, `max_iterations: int` in GeodeState.
+Gather node injects `_weak_areas` into monolake for adaptive focus.

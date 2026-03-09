@@ -1,0 +1,238 @@
+{
+  "version": "1.2.0",
+  "description": "Ground Truth calibration set for GEODE evaluation pipeline. Expert-annotated reference scores for 14-axis rubric, tier, cause classification, and subscores. Covers all 6 D-E-F decision tree branches.",
+  "annotator_count": 2,
+  "min_kappa": 0.6,
+  "decision_tree_coverage": {
+    "conversion_failure": "berserk (D>=3, E>=3)",
+    "undermarketed": "cowboy bebop (D>=3, E<3)",
+    "monetization_misfit": "dragon quest (D<=2, E>=3)",
+    "niche_gem": "katamari damacy (D<=2, E<=2, F>=3)",
+    "discovery_failure": "ghost in the shell (D<=2, E<=2, F<=2)",
+    "timing_mismatch": "shenmue (D<=2, E<=2, F<=2, temporal market shift)"
+  },
+  "ips": {
+    "berserk": {
+      "tier": "S",
+      "final_score_range": [80.0, 86.0],
+      "cause": "conversion_failure",
+      "action": "marketing_boost",
+      "subscores": {
+        "exposure_lift": [85.0, 95.0],
+        "quality": [72.0, 82.0],
+        "recovery_potential": [80.0, 95.0],
+        "growth": [55.0, 75.0],
+        "community_momentum": [85.0, 95.0],
+        "developer_track": [30.0, 40.0]
+      },
+      "axes": {
+        "quality_judge": {
+          "a_score": [4.0, 5.0],
+          "b_score": [3.8, 4.6],
+          "c_score": [4.0, 4.8],
+          "b1_score": [3.4, 4.2],
+          "c1_score": [3.4, 4.2],
+          "c2_score": [3.2, 4.0],
+          "m_score": [3.4, 4.2],
+          "n_score": [3.6, 4.4]
+        },
+        "hidden_value": {
+          "d_score": [3.5, 4.5],
+          "e_score": [4.0, 5.0],
+          "f_score": [4.0, 5.0]
+        },
+        "community_momentum": {
+          "j_score": [4.3, 5.0],
+          "k_score": [4.1, 5.0],
+          "l_score": [4.0, 5.0]
+        }
+      },
+      "rationale": "Berserk has massive fandom-to-game conversion gap. Previous game (2016) was poor execution, not IP weakness. Souls-like genre demand (Elden Ring) validates dark fantasy action RPG potential. D>=3, E>=3 → conversion_failure."
+    },
+    "cowboy bebop": {
+      "tier": "A",
+      "final_score_range": [63.0, 75.0],
+      "cause": "undermarketed",
+      "action": "marketing_boost",
+      "subscores": {
+        "exposure_lift": [70.0, 85.0],
+        "quality": [70.0, 82.0],
+        "recovery_potential": [45.0, 60.0],
+        "growth": [50.0, 70.0],
+        "community_momentum": [72.0, 85.0],
+        "developer_track": [25.0, 40.0]
+      },
+      "axes": {
+        "quality_judge": {
+          "a_score": [3.8, 4.6],
+          "b_score": [3.6, 4.4],
+          "c_score": [3.9, 4.7],
+          "b1_score": [3.5, 4.3],
+          "c1_score": [3.7, 4.5],
+          "c2_score": [3.6, 4.4],
+          "m_score": [3.4, 4.2],
+          "n_score": [3.8, 4.6]
+        },
+        "hidden_value": {
+          "d_score": [4.5, 5.0],
+          "e_score": [1.5, 2.5],
+          "f_score": [3.5, 4.5]
+        },
+        "community_momentum": {
+          "j_score": [3.9, 4.7],
+          "k_score": [3.7, 4.5],
+          "l_score": [3.5, 4.3]
+        }
+      },
+      "rationale": "Cowboy Bebop has extreme acquisition gap (D=5) with no active marketing despite strong IP. Low monetization gap (E~2) since no game exists. D>=3, E<3 → undermarketed."
+    },
+    "ghost in the shell": {
+      "tier": "B",
+      "final_score_range": [48.0, 60.0],
+      "cause": "discovery_failure",
+      "action": "platform_expansion",
+      "subscores": {
+        "exposure_lift": [55.0, 70.0],
+        "quality": [55.0, 68.0],
+        "recovery_potential": [20.0, 35.0],
+        "growth": [40.0, 55.0],
+        "community_momentum": [50.0, 65.0],
+        "developer_track": [25.0, 40.0]
+      },
+      "axes": {
+        "quality_judge": {
+          "a_score": [3.4, 4.2],
+          "b_score": [3.1, 3.9],
+          "c_score": [3.2, 4.0],
+          "b1_score": [2.9, 3.7],
+          "c1_score": [3.0, 3.8],
+          "c2_score": [2.8, 3.6],
+          "m_score": [3.0, 3.8],
+          "n_score": [3.1, 3.9]
+        },
+        "hidden_value": {
+          "d_score": [1.5, 2.5],
+          "e_score": [1.5, 2.5],
+          "f_score": [1.5, 2.5]
+        },
+        "community_momentum": {
+          "j_score": [3.1, 3.9],
+          "k_score": [2.9, 3.7],
+          "l_score": [2.6, 3.4]
+        }
+      },
+      "rationale": "Ghost in the Shell has no single dominant undervaluation axis. All D/E/F axes <=2 → discovery_failure → platform_expansion."
+    },
+    "dragon quest": {
+      "tier": "A",
+      "final_score_range": [62.0, 72.0],
+      "cause": "monetization_misfit",
+      "action": "monetization_pivot",
+      "subscores": {
+        "exposure_lift": [60.0, 75.0],
+        "quality": [70.0, 82.0],
+        "recovery_potential": [55.0, 70.0],
+        "growth": [50.0, 65.0],
+        "community_momentum": [65.0, 78.0],
+        "developer_track": [55.0, 70.0]
+      },
+      "axes": {
+        "quality_judge": {
+          "a_score": [3.8, 4.6],
+          "b_score": [3.8, 4.6],
+          "c_score": [3.5, 4.3],
+          "b1_score": [3.5, 4.3],
+          "c1_score": [3.8, 4.6],
+          "c2_score": [3.5, 4.3],
+          "m_score": [3.6, 4.4],
+          "n_score": [3.8, 4.6]
+        },
+        "hidden_value": {
+          "d_score": [1.5, 2.5],
+          "e_score": [3.0, 4.5],
+          "f_score": [3.0, 4.0]
+        },
+        "community_momentum": {
+          "j_score": [3.8, 4.6],
+          "k_score": [3.5, 4.3],
+          "l_score": [3.3, 4.1]
+        }
+      },
+      "rationale": "Dragon Quest has strong brand but pricing/monetization model mismatch in Western markets. D<=2 (low acquisition gap — well known), E>=3 (high monetization gap — F2P vs premium friction) → monetization_misfit."
+    },
+    "katamari damacy": {
+      "tier": "B",
+      "final_score_range": [42.0, 55.0],
+      "cause": "niche_gem",
+      "action": "community_activation",
+      "subscores": {
+        "exposure_lift": [40.0, 55.0],
+        "quality": [55.0, 68.0],
+        "recovery_potential": [40.0, 55.0],
+        "growth": [35.0, 50.0],
+        "community_momentum": [55.0, 68.0],
+        "developer_track": [35.0, 50.0]
+      },
+      "axes": {
+        "quality_judge": {
+          "a_score": [3.2, 4.0],
+          "b_score": [3.5, 4.3],
+          "c_score": [2.8, 3.6],
+          "b1_score": [3.0, 3.8],
+          "c1_score": [2.8, 3.6],
+          "c2_score": [3.5, 4.3],
+          "m_score": [3.5, 4.3],
+          "n_score": [3.3, 4.1]
+        },
+        "hidden_value": {
+          "d_score": [1.5, 2.5],
+          "e_score": [1.5, 2.5],
+          "f_score": [3.0, 4.0]
+        },
+        "community_momentum": {
+          "j_score": [3.3, 4.1],
+          "k_score": [3.5, 4.3],
+          "l_score": [3.0, 3.8]
+        }
+      },
+      "rationale": "Katamari Damacy has devoted niche following with high passion but limited mainstream reach. D<=2 (not widely known), E<=2 (no monetization), F>=3 (strong expansion potential through nostalgia + uniqueness) → niche_gem."
+    },
+    "shenmue": {
+      "tier": "B",
+      "final_score_range": [45.0, 58.0],
+      "cause": "timing_mismatch",
+      "action": "timing_optimization",
+      "subscores": {
+        "exposure_lift": [50.0, 65.0],
+        "quality": [60.0, 72.0],
+        "recovery_potential": [30.0, 45.0],
+        "growth": [35.0, 50.0],
+        "community_momentum": [55.0, 68.0],
+        "developer_track": [20.0, 35.0]
+      },
+      "axes": {
+        "quality_judge": {
+          "a_score": [3.5, 4.3],
+          "b_score": [3.3, 4.1],
+          "c_score": [3.0, 3.8],
+          "b1_score": [3.0, 3.8],
+          "c1_score": [3.2, 4.0],
+          "c2_score": [2.8, 3.6],
+          "m_score": [3.2, 4.0],
+          "n_score": [3.4, 4.2]
+        },
+        "hidden_value": {
+          "d_score": [1.5, 2.5],
+          "e_score": [1.5, 2.5],
+          "f_score": [1.5, 2.5]
+        },
+        "community_momentum": {
+          "j_score": [3.2, 4.0],
+          "k_score": [3.0, 3.8],
+          "l_score": [2.8, 3.6]
+        }
+      },
+      "rationale": "Shenmue pioneered open-world gameplay but launched ahead of market readiness. Shenmue III (2019) arrived when open-world fatigue had set in. D<=2, E<=2, F<=2 with strong temporal market-shift signal → timing_mismatch → timing_optimization."
+    }
+  }
+}

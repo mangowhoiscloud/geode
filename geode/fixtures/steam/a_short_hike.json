@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "A Short Hike",
+    "media_type": "game",
+    "release_year": 2019,
+    "studio": "adamgryu",
+    "genre": [
+      "exploration",
+      "relaxing",
+      "short"
+    ],
+    "synopsis": "A Short Hike — a Exploration Adventure game developed by adamgryu, released in 2019 on Steam.",
+    "proof_of_game": "A Short Hike (2019, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 7
+  },
+  "monolake": {
+    "dau_peak": 26400,
+    "dau_current": 5690,
+    "revenue_ltm": 276853,
+    "revenue_lifetime": 7382760,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2019,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 1600500,
+    "reddit_subscribers": 26675,
+    "fan_art_yoy_pct": 29.9,
+    "google_trends_index": 72,
+    "twitter_mentions_monthly": 8536,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "exploration",
+      "relaxing",
+      "short",
+      "casual",
+      "indie"
+    ],
+    "game_sales_data": "~330,000 owners (Steam, 2019-present)"
+  },
+  "psm_covariates": {
+    "genre": "exploration",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2019,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 7
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 81.5,
+    "cause": "undermarketed",
+    "quality_score": 97.1,
+    "momentum_score": 69.6,
+    "developer_track_record": 25,
+    "psm_att_pct": 34.5,
+    "psm_z_value": 2.88,
+    "psm_gamma": 2.4
+  }
+}

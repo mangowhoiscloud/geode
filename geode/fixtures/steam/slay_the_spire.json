@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Slay the Spire",
+    "media_type": "game",
+    "release_year": 2019,
+    "studio": "MegaCrit",
+    "genre": [
+      "roguelike",
+      "deckbuilding",
+      "card game"
+    ],
+    "synopsis": "Slay the Spire — a Roguelike Deckbuilder game developed by MegaCrit, released in 2019 on Steam.",
+    "proof_of_game": "Slay the Spire (2019, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 7
+  },
+  "monolake": {
+    "dau_peak": 276000,
+    "dau_current": 59493,
+    "revenue_ltm": 9052627,
+    "revenue_lifetime": 241403400,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2019,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 16732500,
+    "reddit_subscribers": 278875,
+    "fan_art_yoy_pct": 29.9,
+    "google_trends_index": 91,
+    "twitter_mentions_monthly": 89240,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "roguelike",
+      "deckbuilding",
+      "card game",
+      "strategy",
+      "turn-based"
+    ],
+    "game_sales_data": "~3,450,000 owners (Steam, 2019-present)"
+  },
+  "psm_covariates": {
+    "genre": "roguelike",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2019,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 7
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 92.3,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 84.9,
+    "developer_track_record": 25,
+    "psm_att_pct": 42.1,
+    "psm_z_value": 3.51,
+    "psm_gamma": 2.4
+  }
+}

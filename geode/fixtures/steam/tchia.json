@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Tchia",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Awaceb",
+    "genre": [
+      "adventure",
+      "open world",
+      "exploration"
+    ],
+    "synopsis": "Tchia — a Open World Adventure game developed by Awaceb, released in 2023 on Steam.",
+    "proof_of_game": "Tchia (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 3840,
+    "dau_current": 1397,
+    "revenue_ltm": 151149,
+    "revenue_lifetime": 2821459,
+    "retention_d30": 35,
+    "metacritic_score": 85,
+    "store_page_score": 91,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 218400,
+    "reddit_subscribers": 3640,
+    "fan_art_yoy_pct": 27.7,
+    "google_trends_index": 57,
+    "twitter_mentions_monthly": 1164,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "adventure",
+      "open world",
+      "exploration",
+      "indie",
+      "beautiful"
+    ],
+    "game_sales_data": "~48,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "adventure",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 85,
+    "store_page_score": 91,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 74.0,
+    "cause": "discovery_failure",
+    "quality_score": 91.5,
+    "momentum_score": 56.4,
+    "developer_track_record": 25,
+    "psm_att_pct": 29.6,
+    "psm_z_value": 2.47,
+    "psm_gamma": 2.3
+  }
+}

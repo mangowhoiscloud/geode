@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Oxygen Not Included",
+    "media_type": "game",
+    "release_year": 2019,
+    "studio": "Klei Entertainment",
+    "genre": [
+      "colony sim",
+      "simulation",
+      "strategy"
+    ],
+    "synopsis": "Oxygen Not Included — a Colony Sim game developed by Klei Entertainment, released in 2019 on Steam.",
+    "proof_of_game": "Oxygen Not Included (2019, Steam/PC)",
+    "franchise_size": 7,
+    "ip_age_years": 7
+  },
+  "monolake": {
+    "dau_peak": 122400,
+    "dau_current": 26112,
+    "revenue_ltm": 4014643,
+    "revenue_lifetime": 107057160,
+    "retention_d30": 37,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "active_game_count": 1,
+    "last_game_year": 2019,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "A"
+  },
+  "signals": {
+    "youtube_views": 7344000,
+    "reddit_subscribers": 122400,
+    "fan_art_yoy_pct": 28.9,
+    "google_trends_index": 84,
+    "twitter_mentions_monthly": 39168,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "colony sim",
+      "simulation",
+      "strategy",
+      "survival",
+      "base building"
+    ],
+    "game_sales_data": "~1,530,000 owners (Steam, 2019-present)"
+  },
+  "psm_covariates": {
+    "genre": "colony sim",
+    "dev_tier": "A",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2019,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 7,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "ip_age_years": 7
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 88.1,
+    "cause": "timing_mismatch",
+    "quality_score": 96.3,
+    "momentum_score": 79.3,
+    "developer_track_record": 100,
+    "psm_att_pct": 39.7,
+    "psm_z_value": 3.31,
+    "psm_gamma": 2.4
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Dungreed",
+    "media_type": "game",
+    "release_year": 2018,
+    "studio": "Team Horay",
+    "genre": [
+      "roguelite",
+      "action",
+      "2d"
+    ],
+    "synopsis": "Dungreed — a Action Roguelite game developed by Team Horay, released in 2018 on Steam.",
+    "proof_of_game": "Dungreed (2018, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 8
+  },
+  "monolake": {
+    "dau_peak": 18720,
+    "dau_current": 3369,
+    "revenue_ltm": 319164,
+    "revenue_lifetime": 8511048,
+    "retention_d30": 34,
+    "metacritic_score": 84,
+    "store_page_score": 90,
+    "active_game_count": 1,
+    "last_game_year": 2018,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 1053000,
+    "reddit_subscribers": 17550,
+    "fan_art_yoy_pct": 22.5,
+    "google_trends_index": 70,
+    "twitter_mentions_monthly": 5616,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "roguelite",
+      "action",
+      "2d",
+      "pixel graphics",
+      "rpg"
+    ],
+    "game_sales_data": "~234,000 owners (Steam, 2018-present)"
+  },
+  "psm_covariates": {
+    "genre": "roguelite",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2018,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 84,
+    "store_page_score": 90,
+    "ip_age_years": 8
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 77.9,
+    "cause": "undermarketed",
+    "quality_score": 90.5,
+    "momentum_score": 65.1,
+    "developer_track_record": 25,
+    "psm_att_pct": 30.6,
+    "psm_z_value": 2.55,
+    "psm_gamma": 2.2
+  }
+}

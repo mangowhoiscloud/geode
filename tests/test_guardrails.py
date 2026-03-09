@@ -36,15 +36,24 @@ def _make_full_state(**overrides) -> dict:
         "evaluations": {
             "quality_judge": EvaluatorResult(
                 evaluator_type="quality_judge",
-                axes={"a_score": 4.0, "b_score": 3.5, "c_score": 4.0,
-                       "m_score": 3.8, "n_score": 4.0},
+                axes={
+                    "a_score": 4.0,
+                    "b_score": 3.5,
+                    "c_score": 4.0,
+                    "m_score": 3.8,
+                    "n_score": 4.0,
+                },
                 composite_score=78.0,
                 rationale="test",
             ),
         },
         "psm_result": PSMResult(
-            att_pct=31.2, z_value=2.67, rosenbaum_gamma=1.8,
-            max_smd=0.05, exposure_lift_score=78.0, psm_valid=True,
+            att_pct=31.2,
+            z_value=2.67,
+            rosenbaum_gamma=1.8,
+            max_smd=0.05,
+            exposure_lift_score=78.0,
+            psm_valid=True,
         ),
         "final_score": 76.2,
         "tier": "A",
@@ -115,8 +124,11 @@ class TestG3Grounding:
 
     def test_missing_evidence(self):
         analysis = AnalysisResult(
-            analyst_type="game_mechanics", score=4.0,
-            key_finding="test", reasoning="test", evidence=[],
+            analyst_type="game_mechanics",
+            score=4.0,
+            key_finding="test",
+            reasoning="test",
+            evidence=[],
         )
         state = _make_full_state(analyses=[analysis])
         passed, msg = _g3_grounding(state)

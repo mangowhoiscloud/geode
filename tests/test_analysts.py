@@ -53,15 +53,19 @@ class TestDryRunResult:
 
 def _full_monolake() -> dict:
     return {
-        "dau_current": 0, "revenue_ltm": 0, "active_game_count": 0,
+        "dau_current": 0,
+        "revenue_ltm": 0,
+        "active_game_count": 0,
         "last_game_year": 2005,
     }
 
 
 def _full_signals() -> dict:
     return {
-        "youtube_views": 1000000, "reddit_subscribers": 50000,
-        "fan_art_yoy_pct": 20.0, "google_trends_index": 50,
+        "youtube_views": 1000000,
+        "reddit_subscribers": 50000,
+        "fan_art_yoy_pct": 20.0,
+        "google_trends_index": 50,
         "twitter_mentions_monthly": 10000,
     }
 

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Superliminal",
+    "media_type": "game",
+    "release_year": 2020,
+    "studio": "Pillow Castle",
+    "genre": [
+      "puzzle",
+      "first-person",
+      "surreal"
+    ],
+    "synopsis": "Superliminal — a Puzzle FPS game developed by Pillow Castle, released in 2020 on Steam.",
+    "proof_of_game": "Superliminal (2020, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 6
+  },
+  "monolake": {
+    "dau_peak": 43200,
+    "dau_current": 10044,
+    "revenue_ltm": 1133433,
+    "revenue_lifetime": 30224880,
+    "retention_d30": 36,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "active_game_count": 1,
+    "last_game_year": 2020,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 2511000,
+    "reddit_subscribers": 41850,
+    "fan_art_yoy_pct": 26.3,
+    "google_trends_index": 76,
+    "twitter_mentions_monthly": 13392,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "puzzle",
+      "first-person",
+      "surreal",
+      "short",
+      "atmospheric"
+    ],
+    "game_sales_data": "~540,000 owners (Steam, 2020-present)"
+  },
+  "psm_covariates": {
+    "genre": "puzzle",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2020,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "ip_age_years": 6
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 83.3,
+    "cause": "timing_mismatch",
+    "quality_score": 93.5,
+    "momentum_score": 71.7,
+    "developer_track_record": 25,
+    "psm_att_pct": 35.2,
+    "psm_z_value": 2.93,
+    "psm_gamma": 2.3
+  }
+}

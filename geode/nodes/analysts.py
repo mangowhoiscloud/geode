@@ -6,12 +6,23 @@ to prevent anchoring bias.
 
 from __future__ import annotations
 
-from geode.llm.client import call_llm_json
+import logging
+from typing import Any
+
+from pydantic import ValidationError
+
+from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
 from geode.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_USER
 from geode.state import AnalysisResult, GeodeState
-from geode.ui.console import console
+
+log = logging.getLogger(__name__)
 
 ANALYST_TYPES = ["game_mechanics", "player_experience", "growth_potential", "discovery"]
+
+
+# ---------------------------------------------------------------------------
+# Prompt building
+# ---------------------------------------------------------------------------
 
 
 def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, str]:
@@ -20,8 +31,18 @@ def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, st
     ml = state["monolake"]
     sig = state["signals"]
 
-    system = ANALYST_SYSTEM.format(analyst_type=analyst_type)
-    user = ANALYST_USER.format(
+    # ADR-007 Phase 2 step 16: Check if skill .md exists for this analyst type.
+    # If skill exists -> skill handles specific guidance, ANALYST_SPECIFIC becomes redundant.
+    assembler: Any = state.get("_prompt_assembler")
+    has_skill = False
+    if assembler is not None:
+        has_skill = bool(assembler._skills.get_skills(node="analyst", role_type=analyst_type))
+
+    analyst_specific = "" if has_skill else ANALYST_SPECIFIC[analyst_type]
+
+    # Phase 1: Base template rendering
+    base_system = ANALYST_SYSTEM.format(analyst_type=analyst_type)
+    base_user = ANALYST_USER.format(
         analyst_type=analyst_type,
         ip_name=ip["ip_name"],
         media_type=ip["media_type"],
@@ -38,25 +59,65 @@ def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, st
         fan_art_yoy_pct=sig["fan_art_yoy_pct"],
         google_trends_index=sig["google_trends_index"],
         twitter_mentions_monthly=sig["twitter_mentions_monthly"],
-        analyst_specific_prompt=ANALYST_SPECIFIC[analyst_type],
+        analyst_specific_prompt=analyst_specific,
     )
-    return system, user
+
+    # Phase 2: PromptAssembler injection (ADR-007)
+    if assembler is not None:
+        result = assembler.assemble(
+            base_system=base_system,
+            base_user=base_user,
+            state=dict(state),
+            node="analyst",
+            role_type=analyst_type,
+        )
+        return result.system, result.user
+
+    # Fallback: no assembler
+    return base_system, base_user
 
 
 def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
-    """Run a single analyst via Claude API."""
+    """Run a single analyst via Claude API with structured output."""
     system, user = _build_analyst_prompt(analyst_type, state)
     if state.get("verbose"):
-        console.print(f"    [muted]Running {analyst_type} analyst...[/muted]")
+        log.debug("Running %s analyst...", analyst_type)
 
     if state.get("dry_run"):
-        return _dry_run_result(analyst_type, state.get("ip_name", ""))
+        return get_dry_run_result(analyst_type, state.get("ip_name", ""))
 
-    data = call_llm_json(system, user)
-    return AnalysisResult(**data)
+    # Use Anthropic Structured Output (messages.parse) for guaranteed JSON
+    try:
+        result = get_llm_parsed()(system, user, output_model=AnalysisResult)
+        # Ensure analyst_type matches
+        if result.analyst_type != analyst_type:
+            result = result.model_copy(update={"analyst_type": analyst_type})
+        return result
+    except Exception as exc:
+        log.warning(
+            "Analyst %s structured output failed: %s — falling back to legacy JSON parse",
+            analyst_type,
+            exc,
+        )
+
+    # Fallback: legacy JSON parse
+    try:
+        data = get_llm_json()(system, user)
+        return AnalysisResult(**data)
+    except (ValidationError, ValueError) as ve:
+        log.warning("Analyst %s legacy fallback also failed: %s", analyst_type, ve)
+        return AnalysisResult(
+            analyst_type=analyst_type,
+            score=1.0,
+            key_finding="[DEGRADED] LLM response failed validation",
+            reasoning="Schema validation failed — degraded result",
+            evidence=["validation_error"],
+            confidence=0.0,
+            is_degraded=True,
+        )
 
 
-def _dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
+def get_dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
     """Return IP-specific mock results for dry-run mode."""
     key = ip_name.lower().strip()
 
@@ -237,14 +298,18 @@ def _dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
     return mock.get(analyst_type, mock["game_mechanics"])
 
 
-def analyst_node(state: GeodeState) -> dict:
+def analyst_node(state: GeodeState) -> dict[str, Any]:
     """Run a single analyst. Called via Send API for parallel execution."""
-    analyst_type = state.get("_analyst_type", "narrative")
-    result = _run_analyst(analyst_type, state)
-    return {"analyses": [result]}
+    try:
+        analyst_type = state.get("_analyst_type", "narrative")
+        result = _run_analyst(analyst_type, state)
+        return {"analyses": [result]}
+    except Exception as exc:
+        log.error("Node analyst (%s) failed: %s", state.get("_analyst_type", "?"), exc)
+        return {"analyses": [], "errors": [f"analyst: {exc}"]}
 
 
-def make_analyst_sends(state: GeodeState) -> list:
+def make_analyst_sends(state: GeodeState) -> list[Any]:
     """Create Send objects for all 4 analysts."""
     from langgraph.types import Send
 
@@ -261,6 +326,14 @@ def make_analyst_sends(state: GeodeState) -> list:
             "_analyst_type": atype,
             "analyses": [],
             "errors": [],
+            # ADR-007: bootstrap + memory key propagation
+            "_prompt_overrides": state.get("_prompt_overrides", {}),
+            "_extra_instructions": state.get("_extra_instructions", []),
+            "memory_context": state.get("memory_context"),
         }
         sends.append(Send("analyst", send_state))
     return sends
+
+
+# Backward-compatible alias (prefer get_dry_run_result for new code)
+_dry_run_result = get_dry_run_result

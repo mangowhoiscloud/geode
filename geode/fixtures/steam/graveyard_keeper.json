@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Graveyard Keeper",
+    "media_type": "game",
+    "release_year": 2018,
+    "studio": "Lazy Bear Games",
+    "genre": [
+      "simulation",
+      "management",
+      "crafting"
+    ],
+    "synopsis": "Graveyard Keeper — a Dark Farming Sim game developed by Lazy Bear Games, released in 2018 on Steam.",
+    "proof_of_game": "Graveyard Keeper (2018, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 8
+  },
+  "monolake": {
+    "dau_peak": 43200,
+    "dau_current": 6825,
+    "revenue_ltm": 1133433,
+    "revenue_lifetime": 30224880,
+    "retention_d30": 30,
+    "metacritic_score": 74,
+    "store_page_score": 79,
+    "active_game_count": 1,
+    "last_game_year": 2018,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 2133000,
+    "reddit_subscribers": 35550,
+    "fan_art_yoy_pct": 11.5,
+    "google_trends_index": 76,
+    "twitter_mentions_monthly": 11376,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "simulation",
+      "management",
+      "crafting",
+      "pixel graphics",
+      "dark comedy"
+    ],
+    "game_sales_data": "~540,000 owners (Steam, 2018-present)"
+  },
+  "psm_covariates": {
+    "genre": "simulation",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2018,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 74,
+    "store_page_score": 79,
+    "ip_age_years": 8
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 77.4,
+    "cause": "timing_mismatch",
+    "quality_score": 79.5,
+    "momentum_score": 67.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 26.8,
+    "psm_z_value": 2.23,
+    "psm_gamma": 2.0
+  }
+}

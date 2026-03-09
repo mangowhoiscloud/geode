@@ -2,7 +2,7 @@
 
 > **목적**: 슬라이드 2 "GEODE 시스템 개요도"의 6-Layer 아키텍처를 실제 코드로 구현하기 위한 상세 설계서
 > **작성 방법**: 4개 서브 에이전트(L1+L2, L3, L4+L4.5, L5+Tool)가 병렬 분석 → 통합
-> **기준**: `/ppt-workspace/task2/docs/architecture-v6.md` (SOT)
+> **기준**: `docs/architecture-v6.md` (SOT)
 
 ---
 
