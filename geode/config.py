@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     # L4.5 Automation — Model Registry
     model_registry_dir: str = ".geode/models"
 
+    # MCP Server URLs
+    steam_mcp_url: str = ""
+    brave_mcp_url: str = ""
+    brave_api_key: str = ""
+    kg_memory_mcp_url: str = ""
+
+    # Ensemble — Multi-LLM mode
+    ensemble_mode: str = "single"  # single | cross
+
     # Graph — Feedback Loop
     confidence_threshold: float = 0.7
     max_iterations: int = 5

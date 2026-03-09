@@ -157,13 +157,23 @@ def _make_stuck_hook_handler(
 
 
 def _build_default_policies() -> PolicyChainPort:
-    """Build default PolicyChain with dry_run restrictions."""
+    """Build default PolicyChain with mode-specific restrictions."""
     chain = PolicyChain()
+    # dry_run: block LLM-intensive tools
     chain.add_policy(
         ToolPolicy(
             name="dry_run_block_llm",
             mode="dry_run",
-            denied_tools={"run_analyst", "run_evaluator"},
+            denied_tools={"run_analyst", "run_evaluator", "send_notification"},
+            priority=100,
+        )
+    )
+    # full_pipeline: block notification by default (explicit only)
+    chain.add_policy(
+        ToolPolicy(
+            name="full_block_notification",
+            mode="full_pipeline",
+            denied_tools={"send_notification"},
             priority=100,
         )
     )
@@ -171,11 +181,44 @@ def _build_default_policies() -> PolicyChainPort:
 
 
 def _build_default_registry() -> ToolRegistryPort:
-    """Build ToolRegistry with all analysis tools registered."""
+    """Build ToolRegistry with all 17 tools registered."""
     registry = ToolRegistry()
+    # Analysis (3)
     registry.register(RunAnalystTool())
     registry.register(RunEvaluatorTool())
     registry.register(PSMCalculateTool())
+    # Data (3)
+    from geode.tools.data_tools import CortexAnalystTool, CortexSearchTool, QueryMonoLakeTool
+
+    registry.register(QueryMonoLakeTool())
+    registry.register(CortexAnalystTool())
+    registry.register(CortexSearchTool())
+    # Signals (5)
+    from geode.tools.signal_tools import (
+        GoogleTrendsTool,
+        RedditSentimentTool,
+        SteamInfoTool,
+        TwitchStatsTool,
+        YouTubeSearchTool,
+    )
+
+    registry.register(YouTubeSearchTool())
+    registry.register(RedditSentimentTool())
+    registry.register(TwitchStatsTool())
+    registry.register(SteamInfoTool())
+    registry.register(GoogleTrendsTool())
+    # Memory (3)
+    from geode.tools.memory_tools import MemoryGetTool, MemorySaveTool, MemorySearchTool
+
+    registry.register(MemorySearchTool())
+    registry.register(MemoryGetTool())
+    registry.register(MemorySaveTool())
+    # Output (3)
+    from geode.tools.output_tools import ExportJsonTool, GenerateReportTool, SendNotificationTool
+
+    registry.register(GenerateReportTool())
+    registry.register(ExportJsonTool())
+    registry.register(SendNotificationTool())
     return registry  # type: ignore[return-value]
 
 
@@ -693,6 +736,12 @@ class GeodeRuntime:
             llm_adapter.generate,
             parsed_fn=llm_adapter.generate_parsed,
             tool_fn=tool_fn,
+            secondary_json_fn=(
+                secondary_adapter.generate_structured if secondary_adapter else None
+            ),
+            secondary_parsed_fn=(
+                secondary_adapter.generate_parsed if secondary_adapter else None
+            ),
         )
 
         # Coalescing queue (250ms debounce)
@@ -906,6 +955,36 @@ class GeodeRuntime:
     def get_available_tools(self, *, mode: str = "full_pipeline") -> list[str]:
         """Get tools available under the given pipeline mode."""
         return self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
+
+    def get_tool_state_injection(self, *, mode: str = "full_pipeline") -> dict[str, Any]:
+        """Return tool definitions for injection into GeodeState.
+
+        Nodes that support tool-augmented paths (Synthesizer, BiasBuster) read
+        ``_tool_definitions`` from state and ``get_tool_executor()`` from contextvar.
+        The executor callable is NOT stored in state (functions are not serializable
+        by LangGraph's msgpack checkpointer).
+
+        Returns empty dict if no tools are available (dry_run, etc).
+        Also injects tool executor into contextvar via ``set_tool_executor()``.
+        """
+        from geode.infrastructure.ports.tool_port import set_tool_executor
+
+        available = self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
+        if not available:
+            set_tool_executor(None)
+            return {}
+        tool_defs = self.tool_registry.to_anthropic_tools_with_defer(
+            policy=self.policy_chain, mode=mode,
+        )
+        if not tool_defs:
+            set_tool_executor(None)
+            return {}
+
+        def _executor(name: str, **kwargs: Any) -> dict[str, Any]:
+            return self.tool_registry.execute(name, policy=self.policy_chain, **kwargs)
+
+        set_tool_executor(_executor)
+        return {"_tool_definitions": tool_defs}
 
     def prune_logs(self) -> int:
         """Prune run logs if they exceed size limits."""

@@ -119,21 +119,42 @@ class TestRuntimePolicyChain:
 
         assert "run_analyst" not in dry_tools
         assert "run_evaluator" not in dry_tools
+        assert "send_notification" not in dry_tools
         assert "psm_calculate" in dry_tools
 
-    def test_full_pipeline_allows_all(self, tmp_path: Path):
+    def test_full_pipeline_blocks_notification(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="full_pipeline")
-        assert len(tools) == 3
+        # 17 total minus send_notification = 16
+        assert len(tools) == 16
+        assert "send_notification" not in tools
 
 
 class TestRuntimeToolRegistry:
     def test_registry_has_all_tools(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        assert len(runtime.tool_registry) == 3
+        assert len(runtime.tool_registry) == 17
         assert "run_analyst" in runtime.tool_registry
         assert "run_evaluator" in runtime.tool_registry
         assert "psm_calculate" in runtime.tool_registry
+        # Data tools
+        assert "query_monolake" in runtime.tool_registry
+        assert "cortex_analyst" in runtime.tool_registry
+        assert "cortex_search" in runtime.tool_registry
+        # Signal tools
+        assert "youtube_search" in runtime.tool_registry
+        assert "reddit_sentiment" in runtime.tool_registry
+        assert "twitch_stats" in runtime.tool_registry
+        assert "steam_info" in runtime.tool_registry
+        assert "google_trends" in runtime.tool_registry
+        # Memory tools
+        assert "memory_search" in runtime.tool_registry
+        assert "memory_get" in runtime.tool_registry
+        assert "memory_save" in runtime.tool_registry
+        # Output tools
+        assert "generate_report" in runtime.tool_registry
+        assert "export_json" in runtime.tool_registry
+        assert "send_notification" in runtime.tool_registry
 
 
 class TestRuntimeCompileGraph:
@@ -159,13 +180,18 @@ class TestRunLogPruning:
 class TestDefaultBuilders:
     def test_default_policies(self):
         chain = _build_default_policies()
-        assert len(chain.list_policies()) == 1
+        assert len(chain.list_policies()) == 2
+        # dry_run blocks
         assert chain.is_allowed("psm_calculate", mode="dry_run") is True
         assert chain.is_allowed("run_analyst", mode="dry_run") is False
+        assert chain.is_allowed("send_notification", mode="dry_run") is False
+        # full_pipeline blocks notification only
+        assert chain.is_allowed("run_analyst", mode="full_pipeline") is True
+        assert chain.is_allowed("send_notification", mode="full_pipeline") is False
 
     def test_default_registry(self):
         registry = _build_default_registry()
-        assert len(registry) == 3
+        assert len(registry) == 17
 
     def test_make_run_log_handler(self, tmp_path: Path):
         run_log = RunLog("test_session", log_dir=tmp_path)
