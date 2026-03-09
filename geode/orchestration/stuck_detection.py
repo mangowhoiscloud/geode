@@ -151,6 +151,57 @@ class StuckDetector:
             time.sleep(self._check_interval)
 
 
+    def register_hooks(self, hooks: Any) -> None:
+        """Connect StuckDetector to HookSystem for automatic node tracking.
+
+        Registers NODE_ENTER/EXIT/ERROR handlers so that running nodes
+        are automatically tracked. When a stuck node is detected, a
+        PIPELINE_ERROR event is fired.
+        """
+        from geode.orchestration.hooks import HookEvent
+
+        def _on_enter(_event: Any, data: dict[str, Any]) -> None:
+            node = data.get("node", "")
+            ip = data.get("ip_name", "")
+            key = f"{ip}:{node}"
+            subtype = data.get("_analyst_type") or data.get("_evaluator_type")
+            if subtype:
+                key = f"{ip}:{node}:{subtype}"
+            self.mark_running(key, metadata={"node": node, "ip_name": ip})
+
+        def _on_exit(_event: Any, data: dict[str, Any]) -> None:
+            node = data.get("node", "")
+            ip = data.get("ip_name", "")
+            key = f"{ip}:{node}"
+            subtype = data.get("_analyst_type") or data.get("_evaluator_type")
+            if subtype:
+                key = f"{ip}:{node}:{subtype}"
+            self.mark_completed(key)
+
+        def _on_error(_event: Any, data: dict[str, Any]) -> None:
+            node = data.get("node", "")
+            ip = data.get("ip_name", "")
+            key = f"{ip}:{node}"
+            subtype = data.get("_analyst_type") or data.get("_evaluator_type")
+            if subtype:
+                key = f"{ip}:{node}:{subtype}"
+            self.mark_completed(key)
+
+        def _on_stuck_fire_hook(session_key: str) -> None:
+            """Callback: fire PIPELINE_ERROR when a node is stuck."""
+            hooks.trigger(
+                HookEvent.PIPELINE_ERROR,
+                {"source": "stuck_detector", "session_key": session_key},
+            )
+
+        self._on_stuck = _on_stuck_fire_hook
+
+        hooks.register(HookEvent.NODE_ENTER, _on_enter, name="stuck_detector_enter", priority=90)
+        hooks.register(HookEvent.NODE_EXIT, _on_exit, name="stuck_detector_exit", priority=90)
+        hooks.register(HookEvent.NODE_ERROR, _on_error, name="stuck_detector_error", priority=90)
+        log.debug("StuckDetector registered on HookSystem")
+
+
 class _JobRecord:
     """Internal record for a running job."""
 

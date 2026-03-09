@@ -191,6 +191,34 @@ class TaskGraph:
             )
         return skipped
 
+    def is_blocked(self, task_id: str) -> bool:
+        """Check if a task is blocked by a failed or skipped dependency.
+
+        Returns True if any dependency is in FAILED or SKIPPED state,
+        meaning this task should not execute.
+        """
+        task = self._tasks.get(task_id)
+        if task is None:
+            return False
+        for dep_id in task.dependencies:
+            dep = self._tasks.get(dep_id)
+            if dep is not None and dep.status in (TaskStatus.FAILED, TaskStatus.SKIPPED):
+                return True
+        return False
+
+    def has_failed_dependency(self, node_name: str, prefix: str) -> bool:
+        """Check if any task associated with *node_name* has a failed dependency.
+
+        Convenience wrapper for LangGraph integration — resolves task IDs
+        from a node name prefix pattern and checks each.
+        """
+        for tid, _task in self._tasks.items():
+            if not tid.startswith(prefix):
+                continue
+            if node_name in tid and self.is_blocked(tid):
+                return True
+        return False
+
     def is_complete(self) -> bool:
         """Check if all tasks are in a terminal state."""
         return all(task.is_terminal for task in self._tasks.values())

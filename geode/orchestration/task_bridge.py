@@ -122,6 +122,15 @@ class TaskGraphHookBridge:
             if task is None:
                 log.debug("Bridge: no task for id=%s (node=%s)", tid, node)
                 continue
+            # Phase 4-A: skip node if dependency failed (execution control)
+            if self._graph.is_blocked(tid):
+                log.warning(
+                    "Bridge: skipping node '%s' (task %s blocked by failed dependency)",
+                    node, tid,
+                )
+                self._graph.mark_skipped(tid)
+                data["_skip_node"] = True
+                return
             if task.status in (TaskStatus.PENDING, TaskStatus.READY):
                 self._graph.mark_running(tid)
 
