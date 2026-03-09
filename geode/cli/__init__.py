@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from contextvars import ContextVar
+from enum import Enum
 from typing import Any, cast
 
 import typer
@@ -38,6 +39,7 @@ from geode.cli.startup import (
 )
 from geode.config import settings
 from geode.extensibility.reports import ReportFormat, ReportGenerator, ReportTemplate
+from geode.infrastructure.ports.hook_port import HookSystemPort
 from geode.llm.commentary import (
     build_analyze_context,
     build_compare_context,
@@ -61,9 +63,22 @@ from geode.ui.status import GeodeStatus
 
 log = logging.getLogger(__name__)
 
+# Hook system context for memory event firing (P1.5)
+_hooks_ctx: ContextVar[HookSystemPort | None] = ContextVar("cli_hooks", default=None)
+
+
+def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
+    """Fire a hook event if HookSystem is available in context."""
+    hooks = _hooks_ctx.get()
+    if hooks is not None:
+        try:
+            hooks.trigger(event, data)
+        except Exception:
+            log.debug("Failed to fire hook %s", event, exc_info=True)
+
 app = typer.Typer(
     name="geode",
-    help="GEODE v6.0 — Undervalued IP Discovery Agent",
+    help="GEODE v0.6.0 — Undervalued IP Discovery Agent",
     no_args_is_help=False,
     invoke_without_command=True,
 )
@@ -591,6 +606,7 @@ def _run_analysis(
 
     # Create runtime with all infrastructure wired
     runtime = GeodeRuntime.create(ip_name)
+    _hooks_ctx.set(runtime.hooks)
 
     # Log available tools for current mode
     mode = "dry_run" if dry_run else pipeline_mode
@@ -672,43 +688,6 @@ def _build_initial_state(
         tool_injection = runtime.get_tool_state_injection(mode="full_pipeline")
         initial_state.update(tool_injection)  # type: ignore[typeddict-item]
     return initial_state
-
-
-def _run_analysis_batch(ip_name: str, *, dry_run: bool = True) -> dict[str, Any]:
-    """Run analysis and return summary dict for batch mode (no console output)."""
-    resolved = _resolve_ip_name(ip_name)
-    if resolved is None:
-        return {
-            "ip_name": ip_name,
-            "tier": "ERR",
-            "final_score": 0.0,
-            "cause": f"Unknown IP: {ip_name}",
-            "error": True,
-        }
-
-    ip_name = resolved
-    runtime = GeodeRuntime.create(ip_name)
-    graph = runtime.compile_graph()
-    initial_state = _build_initial_state(ip_name, dry_run=dry_run, runtime=runtime)
-
-    final_state: dict[str, Any] = {}
-    for event in graph.stream(initial_state, config=runtime.thread_config):  # type: ignore[arg-type]
-        for _node_name, node_data in event.items():
-            _merge_event_output(final_state, node_data)
-
-    result: dict[str, Any] = {
-        "ip_name": ip_name,
-        "tier": final_state.get("tier", "?"),
-        "final_score": final_state.get("final_score", 0.0),
-    }
-
-    synthesis = final_state.get("synthesis")
-    if synthesis:
-        result["cause"] = synthesis.undervaluation_cause
-        result["action"] = synthesis.action_type
-
-    runtime.shutdown()
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -842,6 +821,135 @@ def _show_commentary(
         console.print()
 
 
+def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None:
+    """Handle memory-related actions from NL Router (P0-A + P1-B)."""
+    from geode.cli.nl_router import NLIntent
+
+    intent = cast(NLIntent, intent)
+    args = intent.args
+
+    # Determine sub-action from tool routing
+    rule_action = args.get("rule_action")
+    query = args.get("query")
+    key = args.get("key")
+    content = args.get("content")
+
+    if rule_action:
+        # manage_rule tool
+        from geode.memory.project import ProjectMemory
+
+        mem = ProjectMemory()
+        if rule_action == "list":
+            rules = mem.list_rules()
+            console.print()
+            console.print("  [header]Active Analysis Rules[/header]")
+            if not rules:
+                console.print("  [muted]No rules found.[/muted]")
+            for r in rules:
+                paths_str = ", ".join(r.get("paths", []))
+                console.print(f"  - [value]{r['name']}[/value] ({paths_str})")
+                if r.get("preview"):
+                    console.print(f"    [muted]{r['preview'][:80]}...[/muted]")
+            console.print()
+        elif rule_action == "create":
+            name = args.get("name", "")
+            paths = args.get("paths", [])
+            rule_content = content or ""
+            if not name:
+                console.print("  [warning]Rule name is required.[/warning]")
+                return
+            ok = mem.create_rule(name, paths, rule_content)
+            if ok:
+                console.print(f"  [success]Rule '{name}' created.[/success]")
+                from geode.orchestration.hooks import HookEvent
+
+                _fire_hook(HookEvent.RULE_CREATED, {"name": name, "paths": paths})
+            else:
+                console.print(
+                    f"  [warning]Failed to create rule '{name}'"
+                    " (may already exist).[/warning]"
+                )
+            console.print()
+        elif rule_action == "update":
+            name = args.get("name", "")
+            rule_content = content or ""
+            if not name:
+                console.print("  [warning]Rule name is required.[/warning]")
+                return
+            ok = mem.update_rule(name, rule_content)
+            if ok:
+                console.print(f"  [success]Rule '{name}' updated.[/success]")
+                from geode.orchestration.hooks import HookEvent
+
+                _fire_hook(HookEvent.RULE_UPDATED, {"name": name})
+            else:
+                console.print(f"  [warning]Failed to update rule '{name}'.[/warning]")
+            console.print()
+        elif rule_action == "delete":
+            name = args.get("name", "")
+            if not name:
+                console.print("  [warning]Rule name is required.[/warning]")
+                return
+            ok = mem.delete_rule(name)
+            if ok:
+                console.print(f"  [success]Rule '{name}' deleted.[/success]")
+                from geode.orchestration.hooks import HookEvent
+
+                _fire_hook(HookEvent.RULE_DELETED, {"name": name})
+            else:
+                console.print(f"  [warning]Rule '{name}' not found.[/warning]")
+            console.print()
+
+    elif query:
+        # memory_search tool
+        from geode.tools.memory_tools import MemorySearchTool
+
+        search_tool = MemorySearchTool()
+        tier = args.get("tier", "all")
+        search_result = search_tool.execute(query=query, tier=tier)
+        matches = search_result.get("result", {}).get("matches", [])
+        console.print()
+        console.print(f"  [header]Memory Search: '{query}'[/header]")
+        if not matches:
+            console.print("  [muted]No matches found.[/muted]")
+        for m in matches:
+            tier_label = m.get("tier", "?")
+            source = m.get("source", m.get("session_id", ""))
+            console.print(f"  - [{tier_label}] {source}")
+            if "matching_lines" in m:
+                for line in m["matching_lines"][:3]:
+                    console.print(f"    [muted]{line}[/muted]")
+            if "preview" in m:
+                console.print(f"    [muted]{m['preview'][:80]}...[/muted]")
+        console.print()
+
+    elif key and content:
+        # memory_save tool
+        from geode.tools.memory_tools import MemorySaveTool
+
+        save_tool = MemorySaveTool()
+        save_result = save_tool.execute(
+            session_id=key, data={"content": content}, persistent=True,
+        )
+        saved = save_result.get("result", {}).get("saved", False)
+        if saved:
+            console.print(f"  [success]Saved to memory: '{key}'[/success]")
+            from geode.orchestration.hooks import HookEvent
+
+            _fire_hook(HookEvent.MEMORY_SAVED, {"key": key})
+        else:
+            console.print("  [warning]Failed to save to memory.[/warning]")
+        console.print()
+
+    else:
+        console.print()
+        console.print("  [muted]Memory command not recognized. Try:[/muted]")
+        console.print("  [muted]  '이전 분석 결과 검색해' — search memory[/muted]")
+        console.print("  [muted]  '규칙 목록 보여줘' — list rules[/muted]")
+        console.print("  [muted]  '이 결과 기억해' — save to memory[/muted]")
+        console.print()
+
+
 def _handle_natural_language(text: str, verbose: bool) -> None:
     """Route natural language input via NLRouter (hybrid pattern + LLM)."""
     from geode.cli.nl_router import LLM_ROUTER_MODEL
@@ -927,7 +1035,7 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
         )
 
     elif intent.action == "list":
-        from geode.nodes.router import _FIXTURE_MAP
+        from geode.fixtures import FIXTURE_MAP as _FIXTURE_MAP
 
         cmd_list()
         ip_names = [n.title() for n in _FIXTURE_MAP]
@@ -992,6 +1100,9 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
                 console.print("  [muted]/model 명령으로 모델을 선택하세요.[/muted]\n")
         else:
             cmd_model("")
+
+    elif intent.action == "memory":
+        _handle_memory_action(intent, text, is_offline)
 
     elif intent.action == "help":
         error = intent.args.get("_error", "")
@@ -1074,7 +1185,7 @@ def _interactive_loop() -> None:
 
 @app.callback()
 def main(ctx: typer.Context) -> None:
-    """GEODE v6.0 — Undervalued IP Discovery Agent."""
+    """GEODE v0.6.0 — Undervalued IP Discovery Agent."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
         _interactive_loop()
@@ -1144,7 +1255,7 @@ def version() -> None:
 @app.command(name="list")
 def list_ips() -> None:
     """List available IP fixtures."""
-    from geode.nodes.router import _FIXTURE_MAP
+    from geode.fixtures import FIXTURE_MAP as _FIXTURE_MAP
 
     console.print("[header]Available IPs:[/header]")
     for name in _FIXTURE_MAP:
