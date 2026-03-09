@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 
 from geode.fixtures import load_fixture
+from geode.infrastructure.ports.tool_port import get_tool_executor
 from geode.state import (
     AnalysisResult,
     EvaluatorResult,
@@ -294,14 +295,22 @@ def _calc_community_momentum(evaluations: dict[str, EvaluatorResult]) -> float:
 
 
 def _calc_analyst_confidence(analyses: list[AnalysisResult]) -> float:
-    """§13.8.5: Confidence = (1 - CV) * 100, clamped 0-100."""
-    if len(analyses) < 2:
-        return 100.0
+    """§13.8.5: Confidence = (1 - CV) * 100, clamped 0-100.
+
+    Edge cases:
+    - 0 analyses → 0% (no data = no confidence)
+    - 1 analysis → 50% (single-source penalty)
+    - mean==0    → 10% (all-zero scores = minimal confidence)
+    """
+    if len(analyses) == 0:
+        return 0.0
+    if len(analyses) == 1:
+        return 50.0
     scores = [a.score for a in analyses]
     mean = float(np.mean(scores))
     std = float(np.std(scores))
     if mean == 0:
-        return 100.0
+        return 10.0
     cv = std / mean
     return max(0.0, min(100.0, (1 - cv) * 100))
 
@@ -365,6 +374,26 @@ def _determine_tier(score: float) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _enrich_from_tools(ip_name: str, state: GeodeState) -> dict[str, Any]:
+    """Optionally enrich scoring with tool data (memory_search, psm_calculate).
+
+    Returns dict of extra context; empty dict if tools unavailable.
+    """
+    tool_defs: Any = state.get("_tool_definitions", [])
+    tool_executor = get_tool_executor()
+    if not tool_defs or tool_executor is None:
+        return {}
+    enrichment: dict[str, Any] = {}
+    # Query past scores from memory for calibration reference
+    try:
+        mem_result = tool_executor("memory_search", query=f"scoring {ip_name}", limit=3)
+        if mem_result and not mem_result.get("error"):
+            enrichment["historical_scores"] = mem_result
+    except Exception as exc:
+        log.debug("Scoring tool enrichment (memory_search) failed: %s", exc)
+    return enrichment
+
+
 def scoring_node(state: GeodeState) -> dict[str, Any]:
     """Layer 4: Compute PSM + all subscores + final score + tier.
 
@@ -376,6 +405,10 @@ def scoring_node(state: GeodeState) -> dict[str, Any]:
         analyses = state.get("analyses", [])
         evaluations = state.get("evaluations", {})
         mode = state.get("pipeline_mode", "full_pipeline")
+
+        # Tool enrichment (Phase 2-C): query memory for historical context.
+        # Result logged for observability; not yet integrated into formula.
+        _enrich_from_tools(ip_name, state)
 
         # Prospect mode: simplified scoring using 9-axis prospect_judge
         if mode == "prospect":

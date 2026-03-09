@@ -208,7 +208,8 @@ class TestAnalystConfidence:
                 confidence=80.0,
             ),
         ]
-        assert _calc_analyst_confidence(analyses) == 100.0
+        # Single analysis → 50% (single-source penalty, Phase 1-A fix)
+        assert _calc_analyst_confidence(analyses) == 50.0
 
     def test_identical_scores_high_confidence(self):
         """Identical analyst scores should produce high confidence."""

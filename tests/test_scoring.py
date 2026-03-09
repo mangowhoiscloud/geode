@@ -97,7 +97,8 @@ class TestAnalystConfidence:
         analyses = [
             AnalysisResult(analyst_type="a", score=4.0, key_finding="x", reasoning="x"),
         ]
-        assert _calc_analyst_confidence(analyses) == 100.0
+        # Single analysis → 50% (single-source penalty, Phase 1-A fix)
+        assert _calc_analyst_confidence(analyses) == 50.0
 
 
 class TestFinalScore:
