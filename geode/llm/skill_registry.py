@@ -72,7 +72,7 @@ class SkillRegistry:
     """Skill ``.md`` file discovery and management.
 
     Discovery priority (4-priority pattern from OpenClaw):
-      1. Bundled:    geode/skills/          (package-bundled)
+      1. Bundled:    .claude/skills/        (project .claude/ directory)
       2. Project:    ./skills/              (project root)
       3. User:       ~/.geode/skills/       (user global)
       4. Extra:      config-specified paths  (CLI --skills-dir)
