@@ -648,3 +648,125 @@ class TestOfflineFallback:
     def test_error_context_preserved(self) -> None:
         intent = _offline_fallback("anything", error="no_api_key")
         assert intent.args["_error"] == "no_api_key"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "배치 돌려",
+            "전체 IP 분석해줘",
+            "모든 IP 순위",
+            "rank all",
+            "batch",
+            "top 10",
+        ],
+    )
+    def test_batch_patterns(self, text: str) -> None:
+        intent = _offline_fallback(text, error="billing")
+        assert intent.action == "batch"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "상태 확인",
+            "시스템 건강",
+            "health check",
+            "status",
+            "설정 보여줘",
+        ],
+    )
+    def test_status_patterns(self, text: str) -> None:
+        intent = _offline_fallback(text, error="billing")
+        assert intent.action == "status"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "모델 바꿔",
+            "switch model",
+            "앙상블 모드로",
+            "cross 모드 켜줘",
+        ],
+    )
+    def test_model_patterns(self, text: str) -> None:
+        intent = _offline_fallback(text, error="billing")
+        assert intent.action == "model"
+
+
+# ---------------------------------------------------------------------------
+# New tool parsing tests
+# ---------------------------------------------------------------------------
+
+
+class TestNewToolParsing:
+    """Verify new tools (batch, status, model) parse correctly."""
+
+    def test_batch_analyze(self) -> None:
+        resp = _make_tool_use_response(
+            "batch_analyze", {"top": 5, "genre": "Dark Fantasy"}
+        )
+        intent = _parse_tool_use(resp)
+        assert intent.action == "batch"
+        assert intent.args["top"] == 5
+        assert intent.args["genre"] == "Dark Fantasy"
+
+    def test_batch_analyze_no_args(self) -> None:
+        resp = _make_tool_use_response("batch_analyze", {})
+        intent = _parse_tool_use(resp)
+        assert intent.action == "batch"
+        assert intent.args == {}
+
+    def test_check_status(self) -> None:
+        resp = _make_tool_use_response("check_status", {})
+        intent = _parse_tool_use(resp)
+        assert intent.action == "status"
+        assert intent.confidence == 0.95
+
+    def test_switch_model_with_hint(self) -> None:
+        resp = _make_tool_use_response(
+            "switch_model", {"model_hint": "haiku"}
+        )
+        intent = _parse_tool_use(resp)
+        assert intent.action == "model"
+        assert intent.args["model_hint"] == "haiku"
+
+    def test_switch_model_no_hint(self) -> None:
+        resp = _make_tool_use_response("switch_model", {})
+        intent = _parse_tool_use(resp)
+        assert intent.action == "model"
+
+    def test_tool_use_batch_via_router(self, router_llm: NLRouter) -> None:
+        """Full flow: LLM calls batch_analyze."""
+        resp = _make_tool_use_response("batch_analyze", {"top": 10})
+        with (
+            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
+            patch("geode.cli.nl_router.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "sk-ant-test"
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = resp
+
+            intent = router_llm.classify("전체 IP 배치 분석해줘")
+
+        assert intent.action == "batch"
+        assert intent.args["top"] == 10
+
+    def test_tool_use_status_via_router(self, router_llm: NLRouter) -> None:
+        """Full flow: LLM calls check_status."""
+        resp = _make_tool_use_response("check_status", {})
+        with (
+            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
+            patch("geode.cli.nl_router.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "sk-ant-test"
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = resp
+
+            intent = router_llm.classify("시스템 상태 보여줘")
+
+        assert intent.action == "status"
+
+    @pytest.fixture
+    def router_llm(self) -> NLRouter:
+        return NLRouter(llm_enabled=True)

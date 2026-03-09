@@ -876,6 +876,17 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
         elif intent.action == "list":
             status.update("Tool: list_ips")
             summary = "list"
+        elif intent.action == "batch":
+            top = intent.args.get("top", 20)
+            status.update(f"Tool: batch_analyze (top={top})")
+            summary = f"batch · top {top}"
+        elif intent.action == "status":
+            status.update("Tool: check_status")
+            summary = "status"
+        elif intent.action == "model":
+            hint = intent.args.get("model_hint", "")
+            status.update(f"Tool: switch_model ({hint or 'menu'})")
+            summary = f"model · {hint or 'menu'}"
         elif intent.action == "chat":
             summary = "chat"
         elif intent.action == "help":
@@ -939,6 +950,52 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
             console.print()
             console.print("  [muted]응답을 생성하지 못했습니다. /help 를 입력해 보세요.[/muted]")
             console.print()
+
+    elif intent.action == "batch":
+        top = intent.args.get("top", 20)
+        genre = intent.args.get("genre")
+        from geode.cli.batch import render_batch_table, run_batch
+
+        results = run_batch(top=top, genre=genre, dry_run=True)
+        render_batch_table(results)
+
+    elif intent.action == "status":
+        console.print()
+        console.print("  [header]GEODE System Status[/header]")
+        console.print(f"  Model: [bold]{settings.model}[/bold]")
+        console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
+        ant_ok = bool(settings.anthropic_api_key)
+        oai_ok = bool(settings.openai_api_key)
+        ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
+        oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
+        console.print(f"  Anthropic API: {ant_status}")
+        console.print(f"  OpenAI API: {oai_status}")
+        readiness = _get_readiness()
+        if readiness:
+            mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
+            console.print(f"  Mode: [bold]{mode}[/bold]")
+        from geode.fixtures import FIXTURE_MAP
+
+        console.print(f"  Fixtures: [bold]{len(FIXTURE_MAP)} IPs[/bold]")
+        console.print()
+
+    elif intent.action == "model":
+        model_hint = intent.args.get("model_hint", "")
+        if model_hint:
+            # Auto-resolve model hint
+            hint = model_hint.lower()
+            if "cross" in hint or "ensemble" in hint or "앙상블" in hint:
+                console.print()
+                console.print(
+                    "  [info]앙상블 모드는 환경변수로 설정합니다: "
+                    "GEODE_ENSEMBLE_MODE=cross[/info]"
+                )
+                console.print()
+            else:
+                console.print(f"\n  [info]모델 변경 힌트: {model_hint}[/info]")
+                console.print("  [muted]/model 명령으로 모델을 선택하세요.[/muted]\n")
+        else:
+            cmd_model()
 
     elif intent.action == "help":
         error = intent.args.get("_error", "")
