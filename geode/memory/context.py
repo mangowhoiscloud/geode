@@ -69,6 +69,16 @@ class ContextAssembler:
         """
         context: dict[str, Any] = {}
 
+        # Tier 0 (identity): SOUL.md — organization mission & principles
+        if self._org_memory:
+            try:
+                soul = self._org_memory.get_soul()
+                if soul:
+                    context["_soul"] = soul
+                    context["_soul_loaded"] = True
+            except Exception:
+                context["_soul_loaded"] = False
+
         # Tier 1 (base): Organization Memory
         if self._org_memory:
             try:
@@ -139,8 +149,21 @@ class ContextAssembler:
         """Build a pre-formatted LLM-readable summary from assembled context.
 
         Contract (ADR-007): PromptAssembler reads this value directly without parsing.
+
+        Context hierarchy (OpenClaw/Claude Code pattern):
+          SOUL (identity) → Organization (data) → Project (rules) → Session (ephemeral)
         """
         parts: list[str] = []
+
+        # SOUL.md — extract mission line (first non-header, non-empty line)
+        if context.get("_soul_loaded"):
+            soul_text = context.get("_soul", "")
+            if soul_text:
+                for line in soul_text.split("\n"):
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#") and not stripped.startswith(">"):
+                        parts.append(f"Mission: {stripped[:120]}")
+                        break
 
         if context.get("_org_loaded"):
             org_strategy = context.get("organization_strategy", "")

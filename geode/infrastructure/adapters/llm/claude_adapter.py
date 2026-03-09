@@ -44,7 +44,10 @@ class ClaudeAdapter:
         max_tokens: int = 4096,
         temperature: float = 0.3,
     ) -> str:
-        return call_llm(system, user, model=model, max_tokens=max_tokens, temperature=temperature)
+        result: str = call_llm(
+            system, user, model=model, max_tokens=max_tokens, temperature=temperature
+        )
+        return result
 
     def generate_structured(
         self,
@@ -55,9 +58,10 @@ class ClaudeAdapter:
         max_tokens: int = 4096,
         temperature: float = 0.3,
     ) -> dict[str, Any]:
-        return call_llm_json(
+        result: dict[str, Any] = call_llm_json(
             system, user, model=model, max_tokens=max_tokens, temperature=temperature
         )
+        return result
 
     def generate_parsed(
         self,
@@ -69,7 +73,7 @@ class ClaudeAdapter:
         max_tokens: int = 4096,
         temperature: float = 0.3,
     ) -> T:
-        return call_llm_parsed(
+        return call_llm_parsed(  # type: ignore[no-any-return]
             system,
             user,
             output_model=output_model,

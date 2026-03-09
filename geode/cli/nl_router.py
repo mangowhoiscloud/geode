@@ -9,12 +9,19 @@ Graceful degradation (3-stage):
   2. Offline pattern matching (fallback) — when LLM unavailable
   3. Help with error context — when nothing matches
 
-Tools exposed to LLM:
-  1. list_ips    — 사용 가능한 IP 목록 표시
-  2. analyze_ip  — 특정 IP 분석 실행
-  3. search_ips  — 키워드/장르로 IP 검색
-  4. compare_ips — 두 IP 비교 분석
-  5. show_help   — 사용법 안내
+Tools exposed to LLM (12):
+  1. list_ips       — 사용 가능한 IP 목록 표시
+  2. analyze_ip     — 특정 IP 분석 실행
+  3. search_ips     — 키워드/장르로 IP 검색
+  4. compare_ips    — 두 IP 비교 분석
+  5. show_help      — 사용법 안내
+  6. generate_report — 리포트 생성
+  7. batch_analyze  — 배치 분석 (전체/다수 IP 동시)
+  8. check_status   — 시스템 상태 확인
+  9. switch_model   — 모델/앙상블 모드 변경
+  10. memory_search  — 메모리 검색 (인사이트, 규칙, 세션)
+  11. memory_save    — 메모리 저장 (세션 + persistent)
+  12. manage_rule    — 규칙 생성/수정/삭제/조회
 
 If the LLM responds with text (no tool call) → chat intent.
 """
@@ -36,7 +43,19 @@ log = logging.getLogger(__name__)
 # Intent data model
 # ---------------------------------------------------------------------------
 
-VALID_ACTIONS = {"analyze", "search", "list", "help", "compare", "chat", "report"}
+VALID_ACTIONS = {
+    "analyze",
+    "search",
+    "list",
+    "help",
+    "compare",
+    "chat",
+    "report",
+    "batch",
+    "status",
+    "model",
+    "memory",
+}
 
 LLM_ROUTER_MODEL = "claude-opus-4-6"
 
@@ -139,7 +158,7 @@ _NOTABLE_IPS = {
 
 
 def _build_system_prompt() -> str:
-    """Build system prompt with notable IP examples."""
+    """Build system prompt with notable IP examples and memory context (P1-C)."""
     from geode.fixtures import FIXTURE_MAP, load_fixture
 
     name_map = get_ip_name_map()
@@ -155,10 +174,50 @@ def _build_system_prompt() -> str:
             except Exception:
                 examples.append(fk.title())
 
-    return _SYSTEM_PROMPT_TEMPLATE.format(
+    base = _SYSTEM_PROMPT_TEMPLATE.format(
         ip_count=ip_count,
         ip_examples=", ".join(sorted(examples)),
     )
+
+    # P1-C: Inject memory context (recent insights + active rules)
+    memory_ctx = _build_memory_context()
+    if memory_ctx:
+        base += "\n\n" + memory_ctx
+
+    return base
+
+
+def _build_memory_context() -> str:
+    """Build memory context string from ProjectMemory (recent insights + rules)."""
+    try:
+        from geode.memory.project import ProjectMemory
+
+        mem = ProjectMemory()
+        if not mem.exists():
+            return ""
+
+        parts: list[str] = []
+
+        # Recent insights (last 5 lines from MEMORY.md's 최근 인사이트 section)
+        content = mem.load_memory()
+        if "## 최근 인사이트" in content:
+            section = content.split("## 최근 인사이트")[1]
+            lines = [ln.strip() for ln in section.split("\n") if ln.strip().startswith("- ")]
+            if lines:
+                parts.append("Recent insights:\n" + "\n".join(lines[:5]))
+
+        # Active rules summary
+        rules = mem.list_rules()
+        if rules:
+            rule_summaries = [
+                f"- {r['name']} (paths: {', '.join(r.get('paths', []))})" for r in rules[:5]
+            ]
+            parts.append("Active analysis rules:\n" + "\n".join(rule_summaries))
+
+        return "\n\n".join(parts)
+    except Exception:
+        log.debug("Failed to build memory context for system prompt", exc_info=True)
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +335,154 @@ _TOOLS: list[dict[str, Any]] = [
             "required": ["ip_name"],
         },
     },
+    {
+        "name": "batch_analyze",
+        "description": (
+            "여러 IP를 동시에 배치 분석합니다. "
+            "사용자가 전체/다수 IP를 한번에 분석하거나 순위를 보고 싶을 때 사용하세요. "
+            "Examples: '전체 IP 분석해줘', '배치 돌려', 'batch analyze all', "
+            "'모든 IP 점수 보여줘', '순위 보여줘', 'rank all IPs', "
+            "'상위 5개 분석해', 'top 10'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top": {
+                    "type": "integer",
+                    "description": "분석할 최대 IP 수 (기본값: 20)",
+                },
+                "genre": {
+                    "type": "string",
+                    "description": "장르 필터 (e.g. 'Dark Fantasy', 'Cyberpunk'). 없으면 전체.",
+                },
+                "stream": {
+                    "type": "boolean",
+                    "description": "스트리밍 모드 사용 여부 (기본값: false)",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "check_status",
+        "description": (
+            "GEODE 시스템 상태를 확인합니다. "
+            "사용자가 시스템 상태, 건강 체크, 모델 정보, 설정을 물어볼 때 사용하세요. "
+            "Examples: '시스템 상태', 'health check', '지금 모델 뭐야?', "
+            "'상태 확인', 'status', '설정 보여줘', 'what model are you using?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "switch_model",
+        "description": (
+            "LLM 모델이나 앙상블 모드를 변경합니다. "
+            "사용자가 모델 변경, 앙상블 모드 전환을 요청할 때 사용하세요. "
+            "Examples: '모델 바꿔', 'switch to GPT', '앙상블 모드로', "
+            "'cross 모드 켜줘', 'change model', 'use Haiku'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "model_hint": {
+                    "type": "string",
+                    "description": (
+                        "원하는 모델이나 모드 힌트 (e.g. 'opus', 'haiku', 'gpt', "
+                        "'cross', 'ensemble'). 없으면 모델 선택 메뉴 표시."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
+    # --- Memory Tools (P0-A) ---
+    {
+        "name": "memory_search",
+        "description": (
+            "메모리에서 과거 분석 결과, 인사이트, 규칙을 검색합니다. "
+            "사용자가 이전 분석 기록이나 학습된 패턴을 물어볼 때 사용하세요. "
+            "Examples: '지난번 Berserk 결과 알려줘', '다크판타지 관련 규칙 있어?', "
+            "'이전에 분석한 거 뭐 있어?', 'what did we learn about anime IPs?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "검색 키워드 (IP 이름, 장르, 패턴 등)",
+                },
+                "tier": {
+                    "type": "string",
+                    "enum": ["session", "project", "organization", "all"],
+                    "description": "검색할 메모리 계층. 기본값: all",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "memory_save",
+        "description": (
+            "메모리에 정보를 저장합니다. "
+            "사용자가 '이거 기억해', '저장해둬' 같은 요청을 할 때 사용하세요. "
+            "Examples: '이 결과 기억해', 'remember this', "
+            "'다음에 참고할 수 있게 저장해줘'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "저장할 데이터의 식별 키 (e.g. 'berserk_insight')",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "저장할 내용",
+                },
+            },
+            "required": ["key", "content"],
+        },
+    },
+    {
+        "name": "manage_rule",
+        "description": (
+            "분석 규칙을 생성, 수정, 삭제, 조회합니다. "
+            "사용자가 분석 규칙을 관리하거나, 패턴을 학습시키려 할 때 사용하세요. "
+            "Examples: '애니메이션 IP 규칙 만들어', '규칙 목록 보여줘', "
+            "'anime 규칙 수정해', 'create a rule for dark fantasy IPs', "
+            "'delete the old rule', '규칙 삭제해'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "update", "delete", "list"],
+                    "description": "수행할 작업",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "규칙 이름 (create/update/delete 시 필수)",
+                },
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "규칙이 적용될 IP 패턴 (create 시, e.g. ['*anime*', '*cowboy*'])"
+                    ),
+                },
+                "content": {
+                    "type": "string",
+                    "description": "규칙 내용 (create/update 시)",
+                },
+            },
+            "required": ["action"],
+        },
+    },
 ]
 
 # Tool name → NLIntent action mapping
@@ -286,14 +493,30 @@ _TOOL_ACTION_MAP: dict[str, str] = {
     "compare_ips": "compare",
     "show_help": "help",
     "generate_report": "report",
+    "batch_analyze": "batch",
+    "check_status": "status",
+    "switch_model": "model",
+    "memory_search": "memory",
+    "memory_save": "memory",
+    "manage_rule": "memory",
 }
 
-# Tool name → args key mapping
+# Tool name → args key mapping (passthrough all tool input keys)
 _TOOL_ARGS_MAP: dict[str, dict[str, str]] = {
     "analyze_ip": {"ip_name": "ip_name"},
     "search_ips": {"query": "query"},
     "compare_ips": {"ip_a": "ip_a", "ip_b": "ip_b"},
     "generate_report": {"ip_name": "ip_name"},
+    "batch_analyze": {"top": "top", "genre": "genre", "stream": "stream"},
+    "switch_model": {"model_hint": "model_hint"},
+    "memory_search": {"query": "query", "tier": "tier"},
+    "memory_save": {"key": "key", "content": "content"},
+    "manage_rule": {
+        "action": "rule_action",
+        "name": "name",
+        "paths": "paths",
+        "content": "content",
+    },
 }
 
 
@@ -318,6 +541,14 @@ _OFFLINE_SEARCH = re.compile(r"(?:찾아|검색|search|find)", re.IGNORECASE)
 _OFFLINE_COMPARE = re.compile(r"(?:비교|compare|\bvs\b)", re.IGNORECASE)
 _OFFLINE_ANALYZE = re.compile(r"(?:분석|평가|analyze|evaluate)", re.IGNORECASE)
 _OFFLINE_REPORT = re.compile(r"(?:리포트|보고서|report|레포트)", re.IGNORECASE)
+_OFFLINE_BATCH = re.compile(r"(?:배치|전체|모든|순위|rank|batch|all\s*ip|top\s*\d+)", re.IGNORECASE)
+_OFFLINE_STATUS = re.compile(r"(?:상태|건강|health|status|설정|config|모델\s*뭐)", re.IGNORECASE)
+_OFFLINE_MODEL = re.compile(
+    r"(?:모델\s*바꿔|switch\s*model|앙상블|ensemble|cross\s*모드)", re.IGNORECASE
+)
+_OFFLINE_MEMORY = re.compile(
+    r"(?:기억|메모리|memory|규칙|rule|인사이트|insight|저장|save|remember)", re.IGNORECASE
+)
 
 
 def _offline_fallback(text: str, *, error: str = "") -> NLIntent:
@@ -351,6 +582,18 @@ def _offline_fallback(text: str, *, error: str = "") -> NLIntent:
             )
 
     # Pattern checks (ordered by specificity)
+    if _OFFLINE_BATCH.search(lower):
+        return NLIntent(action="batch", args={"_error": error}, confidence=0.7)
+    if _OFFLINE_STATUS.search(lower):
+        return NLIntent(action="status", args={"_error": error}, confidence=0.7)
+    if _OFFLINE_MODEL.search(lower):
+        return NLIntent(action="model", args={"_error": error}, confidence=0.7)
+    if _OFFLINE_MEMORY.search(lower):
+        return NLIntent(
+            action="memory",
+            args={"query": text.strip(), "_error": error},
+            confidence=0.7,
+        )
     if _OFFLINE_LIST.search(lower):
         return NLIntent(action="list", args={"_error": error}, confidence=0.7)
     if _OFFLINE_HELP.search(lower):

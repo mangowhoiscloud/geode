@@ -47,6 +47,10 @@ class AnalysisResult(BaseModel):
     evidence: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0, le=100, default=80.0)
     is_degraded: bool = False
+    model_provider: str | None = Field(
+        default=None,
+        description="LLM provider that produced this result",
+    )
 
 
 class EvaluatorResult(BaseModel):

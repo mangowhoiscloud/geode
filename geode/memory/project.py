@@ -233,6 +233,111 @@ class ProjectMemory:
             log.warning("Failed to write MEMORY.md: %s", e)
             return False
 
+    # ------------------------------------------------------------------
+    # Rule CRUD (P0-B: agent-driven rule management)
+    # ------------------------------------------------------------------
+
+    def create_rule(self, name: str, paths: list[str], content: str) -> bool:
+        """Create a new rule file in .claude/rules/.
+
+        Args:
+            name: Rule name (used as filename, e.g. 'dark-fantasy').
+            paths: Glob patterns for IP matching (e.g. ['*berserk*', '*dark*']).
+            content: Rule body in markdown.
+
+        Returns True if created, False if already exists or write failed.
+        """
+        self._rules_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = re.sub(r"[^\w\-]", "-", name.lower().strip())
+        rule_path = self._rules_dir / f"{safe_name}.md"
+
+        if rule_path.exists():
+            log.warning("Rule '%s' already exists — use update_rule()", safe_name)
+            return False
+
+        paths_yaml = "\n".join(f'  - "{p}"' for p in paths)
+        frontmatter = f"---\nname: {safe_name}\npaths:\n{paths_yaml}\n---\n\n"
+        try:
+            rule_path.write_text(frontmatter + content, encoding="utf-8")
+            log.info("Created rule: %s", rule_path)
+            return True
+        except OSError as e:
+            log.warning("Failed to create rule '%s': %s", safe_name, e)
+            return False
+
+    def update_rule(self, name: str, content: str) -> bool:
+        """Update an existing rule's content (preserves frontmatter).
+
+        Returns True if updated, False if not found or write failed.
+        """
+        safe_name = re.sub(r"[^\w\-]", "-", name.lower().strip())
+        rule_path = self._rules_dir / f"{safe_name}.md"
+
+        if not rule_path.exists():
+            log.warning("Rule '%s' not found — use create_rule()", safe_name)
+            return False
+
+        try:
+            raw = rule_path.read_text(encoding="utf-8")
+        except OSError:
+            return False
+
+        fm_match = _FRONTMATTER_RE.match(raw)
+        frontmatter_block = raw[: fm_match.end()] if fm_match else ""
+
+        try:
+            rule_path.write_text(frontmatter_block + content, encoding="utf-8")
+            log.info("Updated rule: %s", rule_path)
+            return True
+        except OSError as e:
+            log.warning("Failed to update rule '%s': %s", safe_name, e)
+            return False
+
+    def delete_rule(self, name: str) -> bool:
+        """Delete a rule file. Returns True if deleted, False if not found."""
+        safe_name = re.sub(r"[^\w\-]", "-", name.lower().strip())
+        rule_path = self._rules_dir / f"{safe_name}.md"
+
+        if not rule_path.exists():
+            return False
+
+        try:
+            rule_path.unlink()
+            log.info("Deleted rule: %s", safe_name)
+            return True
+        except OSError as e:
+            log.warning("Failed to delete rule '%s': %s", safe_name, e)
+            return False
+
+    def list_rules(self) -> list[dict[str, Any]]:
+        """List all rules with name, paths, and content preview."""
+        if not self._rules_dir.exists():
+            return []
+
+        rules: list[dict[str, Any]] = []
+        for rule_file in sorted(self._rules_dir.glob("*.md")):
+            try:
+                raw = rule_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+
+            fm_match = _FRONTMATTER_RE.match(raw)
+            paths: list[str] = []
+            if fm_match:
+                paths = _extract_paths(fm_match.group(1))
+                body = raw[fm_match.end() :].strip()
+            else:
+                body = raw.strip()
+
+            rules.append(
+                {
+                    "name": rule_file.stem,
+                    "paths": paths,
+                    "preview": body[:200] + ("..." if len(body) > 200 else ""),
+                }
+            )
+        return rules
+
     def get_context_for_ip(self, ip_name: str) -> dict[str, Any]:
         """Get combined memory + rules context for a specific IP.
 

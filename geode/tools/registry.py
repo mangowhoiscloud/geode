@@ -73,6 +73,79 @@ class ToolRegistry:
             if tool.name in allowed_names
         ]
 
+    def to_anthropic_tools_with_defer(
+        self,
+        *,
+        policy: PolicyChain | None = None,
+        mode: str = "full_pipeline",
+        defer_threshold: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Return Anthropic tool definitions with defer_loading for large tool sets.
+
+        When tool count exceeds defer_threshold, adds tool_search meta-tool
+        and marks all other tools with defer_loading=True. This reduces
+        context token usage by ~85%.
+
+        Below threshold, returns standard tool definitions (no defer).
+        """
+        tools = self.to_anthropic_tools(policy=policy, mode=mode)
+
+        if len(tools) <= defer_threshold:
+            return tools
+
+        # Build category descriptions for tool_search
+        categories: set[str] = set()
+        for tool in tools:
+            name = tool.get("name", "")
+            if name in ("run_analyst", "run_evaluator", "psm_calculate"):
+                categories.add("analysis")
+            elif name in ("query_monolake", "cortex_analyst", "cortex_search"):
+                categories.add("data")
+            elif name in (
+                "youtube_search",
+                "reddit_sentiment",
+                "twitch_stats",
+                "steam_info",
+                "google_trends",
+            ):
+                categories.add("signals")
+            elif name in ("memory_search", "memory_get", "memory_save"):
+                categories.add("memory")
+            elif name in ("generate_report", "export_json", "send_notification"):
+                categories.add("output")
+            else:
+                categories.add("other")
+
+        category_str = ", ".join(sorted(categories))
+
+        # Mark all tools as deferred
+        deferred: list[dict[str, Any]] = []
+        for tool in tools:
+            tool_copy = dict(tool)
+            tool_copy["defer_loading"] = True
+            deferred.append(tool_copy)
+
+        # Insert tool_search meta-tool at the beginning
+        tool_search: dict[str, Any] = {
+            "name": "tool_search",
+            "description": (
+                f"Search GEODE analysis tools. Categories: {category_str}. "
+                "Use this to find relevant tools before calling them."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query to find relevant tools",
+                    }
+                },
+                "required": ["query"],
+            },
+        }
+
+        return [tool_search, *deferred]
+
     def to_openai_tools(
         self, *, policy: PolicyChain | None = None, mode: str = "full_pipeline"
     ) -> list[dict[str, Any]]:

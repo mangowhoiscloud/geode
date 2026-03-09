@@ -1,28 +1,55 @@
 """Memory Interaction Tools — LLM-callable tools for 3-tier memory.
 
 Layer 5 tools for memory access:
-- MemorySearchTool: Search across memory tiers
+- MemorySearchTool: Search across memory tiers (session, project, organization)
 - MemoryGetTool: Get specific memory entry by session ID
-- MemorySaveTool: Save data to session memory
+- MemorySaveTool: Save data to session memory (with optional persistent write)
+- RuleCreateTool: Create analysis rules from learned patterns
+- RuleUpdateTool: Update existing analysis rules
+- RuleDeleteTool: Delete analysis rules
+- RuleListTool: List active analysis rules
 """
 
 from __future__ import annotations
 
+import logging
 from contextvars import ContextVar
 from typing import Any
 
-from geode.infrastructure.ports.memory_port import SessionStorePort
+from geode.infrastructure.ports.memory_port import (
+    OrganizationMemoryPort,
+    ProjectMemoryPort,
+    SessionStorePort,
+)
 from geode.memory.session import InMemorySessionStore
 
-# Thread-safe default session store via contextvars
+log = logging.getLogger(__name__)
+
+# Thread-safe default stores via contextvars
 _default_session_store_ctx: ContextVar[SessionStorePort | None] = ContextVar(
     "default_session_store", default=None
+)
+_project_memory_ctx: ContextVar[ProjectMemoryPort | None] = ContextVar(
+    "project_memory_tools", default=None
+)
+_org_memory_ctx: ContextVar[OrganizationMemoryPort | None] = ContextVar(
+    "org_memory_tools", default=None
 )
 
 
 def set_default_session_store(store: SessionStorePort) -> None:
     """Set the context-local default session store for memory tools."""
     _default_session_store_ctx.set(store)
+
+
+def set_project_memory(mem: ProjectMemoryPort | None) -> None:
+    """Set the context-local project memory for memory tools."""
+    _project_memory_ctx.set(mem)
+
+
+def set_org_memory(mem: OrganizationMemoryPort | None) -> None:
+    """Set the context-local organization memory for memory tools."""
+    _org_memory_ctx.set(mem)
 
 
 def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePort:
@@ -38,8 +65,7 @@ def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePor
 class MemorySearchTool:
     """Tool for searching across memory tiers.
 
-    Searches session memory for entries matching a query string.
-    In production, would also search Project and Organization tiers.
+    Searches session, project (MEMORY.md + rules), and organization tiers.
     """
 
     def __init__(self, session_store: SessionStorePort | None = None) -> None:
@@ -53,7 +79,7 @@ class MemorySearchTool:
     def description(self) -> str:
         return (
             "Search across memory tiers (session, project, organization) "
-            "for entries matching a query. Returns matching session data."
+            "for entries matching a query. Returns matching data from all tiers."
         )
 
     @property
@@ -87,14 +113,14 @@ class MemorySearchTool:
 
         store = _get_session_store(self._store)
         matches: list[dict[str, Any]] = []
+        query_lower = query.lower()
 
+        # Session tier
         if tier in ("session", "all"):
-            query_lower = query.lower()
             for session_id in store.list_sessions():
                 data = store.get(session_id)
                 if data is None:
                     continue
-                # Simple string matching against session data values
                 data_str = str(data).lower()
                 if query_lower in data_str:
                     matches.append(
@@ -106,6 +132,58 @@ class MemorySearchTool:
                     )
                     if len(matches) >= limit:
                         break
+
+        # Project tier (MEMORY.md + rules)
+        if tier in ("project", "all") and len(matches) < limit:
+            proj = _project_memory_ctx.get()
+            if proj is not None:
+                # Search MEMORY.md content
+                memory_text = proj.load_memory()
+                if query_lower in memory_text.lower():
+                    # Extract matching lines
+                    matching_lines = [
+                        line.strip()
+                        for line in memory_text.split("\n")
+                        if query_lower in line.lower() and line.strip()
+                    ]
+                    if matching_lines:
+                        matches.append(
+                            {
+                                "tier": "project",
+                                "source": "MEMORY.md",
+                                "matching_lines": matching_lines[:5],
+                            }
+                        )
+
+                # Search rules
+                rules = proj.load_rules(query)
+                for rule in rules:
+                    if len(matches) >= limit:
+                        break
+                    matches.append(
+                        {
+                            "tier": "project",
+                            "source": f"rules/{rule['name']}.md",
+                            "rule_name": rule["name"],
+                            "paths": rule.get("paths", []),
+                            "preview": rule.get("content", "")[:200],
+                        }
+                    )
+
+        # Organization tier (fixtures)
+        if tier in ("organization", "all") and len(matches) < limit:
+            org = _org_memory_ctx.get()
+            if org is not None:
+                ip_ctx = org.get_ip_context(query)
+                if ip_ctx:
+                    matches.append(
+                        {
+                            "tier": "organization",
+                            "source": "fixtures",
+                            "ip_name": query,
+                            "data_keys": list(ip_ctx.keys()),
+                        }
+                    )
 
         return {
             "result": {
@@ -203,6 +281,14 @@ class MemorySaveTool:
                     "description": "If true, merge with existing data. Otherwise replace.",
                     "default": True,
                 },
+                "persistent": {
+                    "type": "boolean",
+                    "description": (
+                        "If true, also write to MEMORY.md via add_insight() "
+                        "for cross-session persistence."
+                    ),
+                    "default": False,
+                },
             },
             "required": ["session_id", "data"],
         }
@@ -211,6 +297,7 @@ class MemorySaveTool:
         session_id: str = kwargs["session_id"]
         data: dict[str, Any] = kwargs["data"]
         merge: bool = kwargs.get("merge", True)
+        persistent: bool = kwargs.get("persistent", False)
 
         store = _get_session_store(self._store)
 
@@ -221,11 +308,225 @@ class MemorySaveTool:
         else:
             store.set(session_id, data)
 
+        # Persistent write to MEMORY.md (P1.5)
+        if persistent:
+            proj = _project_memory_ctx.get()
+            if proj is not None:
+                from geode.memory.project import ProjectMemory
+
+                if isinstance(proj, ProjectMemory):
+                    insight = str(data.get("content", data))
+                    proj.add_insight(insight)
+
         return {
             "result": {
                 "session_id": session_id,
                 "saved": True,
                 "merged": merge,
+                "persistent": persistent,
                 "keys_stored": list(data.keys()),
+            }
+        }
+
+
+class RuleCreateTool:
+    """Tool for creating analysis rules from learned patterns.
+
+    Enables the agent to autonomously create .claude/rules/*.md files
+    when it discovers recurring analysis patterns.
+    """
+
+    @property
+    def name(self) -> str:
+        return "rule_create"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Create a new analysis rule in .claude/rules/. "
+            "Use when you discover a recurring pattern that should be "
+            "applied to future IP analyses matching the given paths."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Rule name (e.g. 'dark-fantasy-recovery')",
+                },
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Glob patterns for matching IPs (e.g. ['*berserk*', '*dark*'])",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Rule content in markdown format",
+                },
+            },
+            "required": ["name", "paths", "content"],
+        }
+
+    def execute(self, **kwargs: Any) -> dict[str, Any]:
+        rule_name: str = kwargs["name"]
+        paths: list[str] = kwargs["paths"]
+        content: str = kwargs["content"]
+
+        proj = _project_memory_ctx.get()
+        if proj is None:
+            return {"result": {"created": False, "error": "Project memory not available"}}
+
+        from geode.memory.project import ProjectMemory
+
+        if not isinstance(proj, ProjectMemory):
+            return {"result": {"created": False, "error": "Project memory type mismatch"}}
+
+        success = proj.create_rule(rule_name, paths, content)
+        return {
+            "result": {
+                "created": success,
+                "name": rule_name,
+                "paths": paths,
+            }
+        }
+
+
+class RuleUpdateTool:
+    """Tool for updating existing analysis rules."""
+
+    @property
+    def name(self) -> str:
+        return "rule_update"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Update an existing analysis rule in .claude/rules/. "
+            "Preserves frontmatter (paths) and replaces the rule body content."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Rule name to update (e.g. 'dark-fantasy-recovery')",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "New rule content in markdown format",
+                },
+            },
+            "required": ["name", "content"],
+        }
+
+    def execute(self, **kwargs: Any) -> dict[str, Any]:
+        rule_name: str = kwargs["name"]
+        content: str = kwargs["content"]
+
+        proj = _project_memory_ctx.get()
+        if proj is None:
+            return {"result": {"updated": False, "error": "Project memory not available"}}
+
+        from geode.memory.project import ProjectMemory
+
+        if not isinstance(proj, ProjectMemory):
+            return {"result": {"updated": False, "error": "Project memory type mismatch"}}
+
+        success = proj.update_rule(rule_name, content)
+        return {
+            "result": {
+                "updated": success,
+                "name": rule_name,
+            }
+        }
+
+
+class RuleDeleteTool:
+    """Tool for deleting analysis rules."""
+
+    @property
+    def name(self) -> str:
+        return "rule_delete"
+
+    @property
+    def description(self) -> str:
+        return "Delete an analysis rule from .claude/rules/ by name."
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Rule name to delete (e.g. 'dark-fantasy-recovery')",
+                },
+            },
+            "required": ["name"],
+        }
+
+    def execute(self, **kwargs: Any) -> dict[str, Any]:
+        rule_name: str = kwargs["name"]
+
+        proj = _project_memory_ctx.get()
+        if proj is None:
+            return {"result": {"deleted": False, "error": "Project memory not available"}}
+
+        from geode.memory.project import ProjectMemory
+
+        if not isinstance(proj, ProjectMemory):
+            return {"result": {"deleted": False, "error": "Project memory type mismatch"}}
+
+        success = proj.delete_rule(rule_name)
+        return {
+            "result": {
+                "deleted": success,
+                "name": rule_name,
+            }
+        }
+
+
+class RuleListTool:
+    """Tool for listing active analysis rules."""
+
+    @property
+    def name(self) -> str:
+        return "rule_list"
+
+    @property
+    def description(self) -> str:
+        return (
+            "List all active analysis rules in .claude/rules/ with their paths and content preview."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        }
+
+    def execute(self, **kwargs: Any) -> dict[str, Any]:
+        proj = _project_memory_ctx.get()
+        if proj is None:
+            return {"result": {"rules": [], "error": "Project memory not available"}}
+
+        from geode.memory.project import ProjectMemory
+
+        if not isinstance(proj, ProjectMemory):
+            return {"result": {"rules": [], "error": "Project memory type mismatch"}}
+
+        rules = proj.list_rules()
+        return {
+            "result": {
+                "rules": rules,
+                "total": len(rules),
             }
         }

@@ -1,21 +1,174 @@
 # GEODE v6.0 — Undervalued IP Discovery Agent
 
-LangGraph 기반 저평가 IP 발굴 에이전트 CLI.
-미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, 14-Axis 루브릭으로 평가합니다.
+LangGraph 기반 저평가 IP 발굴 에이전트.
+미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 평가합니다.
 
 ## Features
 
-- **6-Layer Pipeline** — Router → Cortex → Signals → Analysts → Evaluators → Scoring → Verification → Synthesis
-- **14-Axis Rubric** — PSM(Prospect Scoring Model) 기반 정량 평가
-- **Cross-LLM** — Claude Opus 4.6 + GPT-5.4 듀얼 평가, Failover 지원
-- **자연어 입력** — 한국어/영어 자유 입력으로 IP 검색 및 분석
-- **Report Generation** — HTML/JSON/Markdown 다중 포맷 리포트 출력
-- **Graceful Degradation** — API 키 없이도 dry-run 분석, 검색 가능
-- **Project Memory** — `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지
-- **Checkpoint** — SqliteSaver 기반 파이프라인 상태 영속화
-- **Feedback Loop** — Confidence < 0.7이면 자동 재분석 (최대 3회)
-- **Auth Profile Rotation** — 다중 API 키 관리 및 자동 전환
-- **1615 Tests** — 79 modules, pytest + ruff + mypy strict 전체 통과
+| Feature | Description |
+|---------|-------------|
+| **6-Layer Pipeline** | Router → Signals → Analysts → Evaluators → Scoring → Verification → Synthesis |
+| **14-Axis Rubric** | PSM(Prospect Scoring Model) 기반 정량 평가 |
+| **Cross-LLM Ensemble** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, `cross` / `primary_only` 모드 |
+| **Prompt Caching** | Anthropic `cache_control` 적용, 40-60% 비용 절감 |
+| **17 Tool Protocol** | ToolRegistry + PolicyChain + tool_search 메타 도구 |
+| **MCP Adapters** | Steam, Brave Search, KG Memory 외부 데이터 소스 연결 |
+| **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
+| **Batch Analysis** | 멀티 IP 동시 분석, Rich 테이블 렌더링 |
+| **Streaming Output** | `--stream` 플래그로 실시간 진행 표시 |
+| **자연어 입력** | 한국어/영어 자유 입력 (NL Router intent classification) |
+| **Report Generation** | HTML/JSON/Markdown 다중 포맷 |
+| **Graceful Degradation** | API 키 없이 dry-run 분석, 검색 가능 |
+| **Project Memory** | `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지 |
+| **Checkpoint** | SqliteSaver 기반 파이프라인 상태 영속화 |
+| **Feedback Loop** | Confidence < 0.7이면 자동 재분석 (최대 3회) |
+| **1760 Tests** | 112 modules, pytest + ruff + mypy strict 전체 통과 |
+
+## Architecture
+
+### 6-Layer Architecture
+
+```mermaid
+graph TB
+    subgraph L0["L0 — CLI & NL Router"]
+        CLI["CLI (Typer)"]
+        NLR["NL Router"]
+        Search["IP Search Engine"]
+        Batch["Batch Analysis"]
+    end
+
+    subgraph L1["L1 — Infrastructure"]
+        direction LR
+        Ports["Ports (Protocol)"]
+        Claude["ClaudeAdapter"]
+        OpenAI["OpenAIAdapter"]
+        MCP["MCP Adapters"]
+    end
+
+    subgraph L2["L2 — Memory"]
+        Session["Session Store"]
+        Project["Project Memory"]
+        Checkpoint["SqliteSaver"]
+    end
+
+    subgraph L3["L3 — LangGraph Pipeline"]
+        Graph["StateGraph"]
+        Nodes["Pipeline Nodes"]
+        State["GeodeState"]
+    end
+
+    subgraph L4["L4 — Orchestration"]
+        Hooks["HookSystem"]
+        Lanes["Lane Queue"]
+        RunLog["Run Log"]
+    end
+
+    subgraph L5["L5 — Extensibility"]
+        Tools["Tool Registry (17)"]
+        Reports["Report Generator"]
+        Templates["Prompt Skills"]
+    end
+
+    L0 --> L3
+    L3 --> L1
+    L3 --> L2
+    L3 --> L4
+    L3 --> L5
+
+    style L0 fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style L1 fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style L2 fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
+    style L3 fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style L4 fill:#1e293b,stroke:#ef4444,color:#e2e8f0
+    style L5 fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
+```
+
+### Pipeline Flow
+
+```mermaid
+graph LR
+    START((START)) --> Router
+    Router --> Signals
+    Signals --> A1["Analyst<br/>game_mechanics"]
+    Signals --> A2["Analyst<br/>player_experience"]
+    Signals --> A3["Analyst<br/>growth_potential"]
+    Signals --> A4["Analyst<br/>discovery"]
+    A1 --> Eval["Evaluator ×3<br/>(Cross-LLM)"]
+    A2 --> Eval
+    A3 --> Eval
+    A4 --> Eval
+    Eval --> Scoring["Scoring<br/>PSM 14-Axis"]
+    Scoring --> Verify["Verification<br/>Guardrails + BiasBuster"]
+    Verify -->|"confidence >= 0.7"| Synth["Synthesizer"]
+    Verify -->|"confidence < 0.7<br/>retry (max 3)"| Signals
+    Synth --> END((END))
+
+    style START fill:#10b981,stroke:#10b981,color:#fff
+    style END fill:#ef4444,stroke:#ef4444,color:#fff
+    style Eval fill:#3b82f6,stroke:#3b82f6,color:#fff
+    style Scoring fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Verify fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+    style Synth fill:#06b6d4,stroke:#06b6d4,color:#fff
+```
+
+### Cross-LLM Ensemble
+
+```mermaid
+graph TB
+    subgraph Primary["Claude Opus 4.6"]
+        GM["game_mechanics"]
+        GP["growth_potential"]
+    end
+
+    subgraph Secondary["GPT-5.4"]
+        PE["player_experience"]
+        DI["discovery"]
+    end
+
+    GM --> Merge["Score Merge"]
+    GP --> Merge
+    PE --> Merge
+    DI --> Merge
+    Merge --> Final["Final Analysis"]
+
+    style Primary fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style Secondary fill:#1e293b,stroke:#10b981,color:#e2e8f0
+```
+
+### MCP & Tool Architecture
+
+```mermaid
+graph TB
+    subgraph GEODE["GEODE Pipeline"]
+        Registry["ToolRegistry<br/>17 tools"]
+        Policy["PolicyChain"]
+        TS["tool_search<br/>(meta-tool)"]
+    end
+
+    subgraph MCPAdapters["MCP Adapters (Client)"]
+        Steam["Steam MCP"]
+        Brave["Brave Search"]
+        KGMem["KG Memory"]
+    end
+
+    subgraph MCPServer["MCP Server (FastMCP)"]
+        T1["analyze_ip"]
+        T2["quick_score"]
+        T3["get_ip_signals"]
+        T4["list_fixtures"]
+        T5["query_memory"]
+        T6["get_health"]
+    end
+
+    Registry --> Policy
+    TS --> Registry
+    GEODE --> MCPAdapters
+    MCPServer --> GEODE
+
+    style GEODE fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style MCPAdapters fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style MCPServer fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+```
 
 ## Installation
 
@@ -32,14 +185,17 @@ uv run geode
 # Dry-run 분석 (API 키 불필요)
 uv run geode analyze "Berserk"
 
+# Streaming 분석
+uv run geode analyze "Berserk" --stream
+
+# 배치 분석
+uv run geode batch --top 5
+
 # 리포트 생성
 uv run geode report "Berserk" --format html --output berserk.html
 
-# IP 검색
-uv run geode search "다크 판타지"
-
-# IP 목록
-uv run geode list
+# MCP 서버 실행
+uv run python -m geode.mcp_server
 ```
 
 ## Setup
@@ -104,15 +260,28 @@ uv run geode
 
 ```bash
 geode analyze "Berserk"                          # dry-run
+geode analyze "Berserk" --stream                  # streaming output
 geode analyze "Berserk" --verbose                 # 상세 출력
 geode analyze "Cowboy Bebop" --skip-verification  # 검증 생략
+geode batch --top 5                               # 상위 5개 배치 분석
+geode batch --genre "Dark Fantasy"                # 장르 필터 배치
 geode report "Berserk"                            # Markdown summary
 geode report "Berserk" -f html -o berserk.html    # HTML 파일 저장
-geode report "Berserk" -f json -t detailed        # JSON detailed
 geode search "사이버펑크"                          # 검색
 geode list                                        # 목록
-geode version                                     # 버전
 ```
+
+### MCP Server
+
+GEODE를 MCP 서버로 실행하여 다른 에이전트에서 호출할 수 있습니다:
+
+```bash
+uv run python -m geode.mcp_server
+```
+
+**제공 도구:** `analyze_ip`, `quick_score`, `get_ip_signals`, `list_fixtures`, `query_memory`, `get_health`
+
+**리소스:** `geode://fixtures`, `geode://soul`
 
 ## Available IPs
 
@@ -122,74 +291,55 @@ geode version                                     # 버전
 | Cowboy Bebop | A | 69.4 | SF Noir |
 | Ghost in the Shell | B | 54.0 | Cyberpunk |
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  L0  CLI / NL Router          (cli/, nl_router.py, search.py)  │
-├─────────────────────────────────────────────────────────────────┤
-│  L1  Infrastructure           (ports/, adapters/, llm/, auth/) │
-├─────────────────────────────────────────────────────────────────┤
-│  L2  Memory                   (session, checkpoint, project)   │
-├─────────────────────────────────────────────────────────────────┤
-│  L3  LangGraph Pipeline       (graph.py, state.py, nodes/)     │
-├─────────────────────────────────────────────────────────────────┤
-│  L4  Orchestration            (hooks, run_log, lanes, policies)│
-├─────────────────────────────────────────────────────────────────┤
-│  L5  Extensibility            (reports, tools, data, templates)│
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Pipeline Flow
-
-```
-START → Router → Cortex(Gather) → Signals
-      → Analyst ×4 (Send API, parallel)
-      → Evaluator ×3 (Cross-LLM)
-      → Scoring (PSM 14-Axis)
-      → Verification (Guardrails + BiasBuster)
-      ↺ Feedback Loop (confidence < 0.7 → retry, max 3)
-      → Synthesizer → END
-```
-
 ## Project Structure
 
 ```
 geode/
-├── cli/                    # CLI + NL Router + Search + Startup
-│   ├── __init__.py         # Typer app, REPL, pipeline execution
-│   ├── commands.py         # Slash command dispatch
-│   ├── nl_router.py        # Natural language intent classification
-│   ├── search.py           # IP search engine (synonym expansion)
-│   └── startup.py          # Readiness check, Graceful Degradation
-├── auth/                   # Auth profile management + rotation
-├── automation/             # Feedback loop, confidence gating
-├── config.py               # Settings (pydantic-settings)
-├── data/                   # Synthetic data generation
-├── extensibility/          # Report generation (HTML/JSON/MD)
-├── fixtures/               # Fixture data (Berserk, Cowboy Bebop, GitS)
-├── graph.py                # LangGraph StateGraph definition
+├── cli/                        # CLI + NL Router + Search + Batch
+│   ├── __init__.py             # Typer app, REPL, pipeline execution
+│   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
+│   ├── commands.py             # Slash command dispatch
+│   ├── nl_router.py            # Natural language intent classification
+│   ├── search.py               # IP search engine (synonym expansion)
+│   └── startup.py              # Readiness check, Graceful Degradation
+├── auth/                       # Auth profile management + rotation
+├── automation/                 # Feedback loop, confidence gating
+├── config.py                   # Settings (pydantic-settings)
+├── data/                       # Synthetic data generation
+├── extensibility/              # Report generation (HTML/JSON/MD)
+├── fixtures/                   # Fixture data (Berserk, Cowboy Bebop, GitS)
+├── graph.py                    # LangGraph StateGraph definition
 ├── infrastructure/
-│   ├── ports/              # LLMClientPort (ABC)
-│   └── adapters/llm/       # ClaudeAdapter
-├── llm/                    # LLM client (Anthropic, OpenAI)
+│   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, etc.
+│   └── adapters/
+│       ├── llm/                # ClaudeAdapter, OpenAIAdapter
+│       └── mcp/                # Steam, Brave, KGMemory MCP adapters
+├── llm/                        # LLM client (prompt caching, streaming)
+├── mcp_server.py               # FastMCP server (6 tools, 2 resources)
 ├── memory/
-│   ├── project.py          # ProjectMemory (.claude/MEMORY.md + rules/)
-│   ├── session.py          # InMemorySessionStore (TTL)
-│   └── session_key.py      # Session key builder
-├── nodes/                  # Pipeline nodes (cortex, analyst, evaluator, ...)
+│   ├── project.py              # ProjectMemory (.claude/MEMORY.md + rules/)
+│   ├── session.py              # InMemorySessionStore (TTL)
+│   └── session_key.py          # Session key builder
+├── nodes/                      # Pipeline nodes
+│   ├── router.py               # L0 intent routing
+│   ├── signals.py              # Community signal enrichment
+│   ├── analysts.py             # 4 parallel analysts (Send API)
+│   ├── evaluators.py           # Cross-LLM evaluation
+│   ├── scoring.py              # PSM 14-Axis scoring
+│   └── synthesizer.py          # Final synthesis + narrative
 ├── orchestration/
-│   ├── hooks.py            # HookSystem (11 events)
-│   ├── run_log.py          # JSONL run logging
-│   ├── lane_queue.py       # Concurrency control
-│   ├── coalescing.py       # Request deduplication
-│   ├── hot_reload.py       # Config hot reload
-│   └── stuck_detection.py  # Long-running task detection
-├── runtime.py              # GeodeRuntime (production wiring)
-├── state.py                # GeodeState (TypedDict + Pydantic models)
-├── tools/                  # Tool Protocol + Registry + Policy
-├── ui/                     # Rich console + panels
-└── verification/           # Guardrails + BiasBuster + Rights Risk
+│   ├── hooks.py                # HookSystem (11 events)
+│   ├── run_log.py              # JSONL run logging
+│   ├── lane_queue.py           # Concurrency control
+│   └── stuck_detection.py      # Long-running task detection
+├── runtime.py                  # GeodeRuntime (production wiring)
+├── state.py                    # GeodeState (TypedDict + Pydantic models)
+├── tools/                      # Tool Protocol + Registry + Policy
+│   ├── registry.py             # ToolRegistry (17 tools + tool_search)
+│   ├── policy.py               # PolicyChain (permission enforcement)
+│   └── base.py                 # ToolProtocol ABC
+├── ui/                         # Rich console + panels
+└── verification/               # Guardrails + BiasBuster + Rights Risk
 ```
 
 ## Testing
@@ -203,7 +353,8 @@ uv run pytest -v
 
 # 특정 모듈
 uv run pytest tests/test_graph.py
-uv run pytest tests/test_nl_router.py
+uv run pytest tests/test_batch.py
+uv run pytest tests/test_mcp_server.py
 
 # 품질 검사
 uv run ruff check .
@@ -220,8 +371,13 @@ uv run mypy geode/
 | `ANTHROPIC_API_KEY` | | Claude API 키 |
 | `OPENAI_API_KEY` | | GPT API 키 (Cross-LLM) |
 | `GEODE_MODEL` | `claude-opus-4-6` | 기본 LLM 모델 |
+| `GEODE_ENSEMBLE_MODE` | `primary_only` | 앙상블 모드 (`primary_only` / `cross`) |
 | `GEODE_VERBOSE` | `false` | 상세 출력 |
 | `GEODE_CHECKPOINT_DB` | `geode_checkpoints.db` | Checkpoint DB 경로 |
+| `GEODE_STEAM_MCP_URL` | | Steam MCP 서버 URL |
+| `GEODE_BRAVE_MCP_URL` | | Brave Search MCP 서버 URL |
+| `GEODE_BRAVE_API_KEY` | | Brave Search API 키 |
+| `GEODE_KG_MEMORY_MCP_URL` | | KG Memory MCP 서버 URL |
 
 ## License
 

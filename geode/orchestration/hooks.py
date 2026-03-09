@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (18 events)."""
+    """Pipeline lifecycle events (23 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -45,6 +45,12 @@ class HookEvent(Enum):
     SNAPSHOT_CAPTURED = "snapshot_captured"
     TRIGGER_FIRED = "trigger_fired"
     POST_ANALYSIS = "post_analysis"
+
+    # Memory Autonomy (P0-C → P1.5)
+    MEMORY_SAVED = "memory_saved"
+    RULE_CREATED = "rule_created"
+    RULE_UPDATED = "rule_updated"
+    RULE_DELETED = "rule_deleted"
 
     # Prompt Assembly (ADR-007)
     PROMPT_ASSEMBLED = "prompt_assembled"

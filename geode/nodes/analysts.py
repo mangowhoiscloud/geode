@@ -6,12 +6,21 @@ to prevent anchoring bias.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 from pydantic import ValidationError
 
-from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
+from geode.config import settings
+from geode.infrastructure.ports.llm_port import (
+    get_llm_json,
+    get_llm_parsed,
+    get_secondary_llm_json,
+    get_secondary_llm_parsed,
+)
+from geode.infrastructure.ports.tool_port import get_tool_executor
+from geode.llm.client import call_llm_with_tools
 from geode.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_USER
 from geode.state import AnalysisResult, GeodeState
 
@@ -77,6 +86,18 @@ def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, st
     return base_system, base_user
 
 
+# Analyst types assigned to the secondary LLM in cross-ensemble mode
+_SECONDARY_ANALYSTS = {"player_experience", "discovery"}
+_PRIMARY_ANALYSTS = {"game_mechanics", "growth_potential"}
+
+
+def _should_use_secondary(analyst_type: str) -> bool:
+    """Determine whether this analyst should use the secondary LLM in cross mode."""
+    if settings.ensemble_mode != "cross":
+        return False
+    return analyst_type in _SECONDARY_ANALYSTS
+
+
 def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     """Run a single analyst via Claude API with structured output."""
     system, user = _build_analyst_prompt(analyst_type, state)
@@ -86,35 +107,100 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     if state.get("dry_run"):
         return get_dry_run_result(analyst_type, state.get("ip_name", ""))
 
+    # Tool-augmented path: if _tool_definitions available, analyst can query
+    # memory/monolake for historical context before generating analysis.
+    tool_defs: Any = state.get("_tool_definitions", [])
+    tool_executor = get_tool_executor()
+    if tool_defs and tool_executor is not None:
+        try:
+            enhanced_system = (
+                system + "\n\n## Available Tools\n"
+                "You have access to tools for querying past analyses (memory_search, "
+                "memory_get) and MonoLake data (query_monolake). Use them to enrich "
+                "your analysis with historical context if relevant."
+            )
+            result = call_llm_with_tools(
+                enhanced_system,
+                user,
+                tools=tool_defs,
+                tool_executor=tool_executor,
+                temperature=0.5,
+                max_tool_rounds=2,
+            )
+            if result.text:
+                data = json.loads(result.text)
+                analysis = AnalysisResult(**data)
+                if analysis.analyst_type != analyst_type:
+                    analysis = analysis.model_copy(update={"analyst_type": analyst_type})
+                analysis = analysis.model_copy(update={"model_provider": "primary"})
+                return analysis
+        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            log.warning(
+                "Analyst %s tool-augmented path failed: %s — falling back",
+                analyst_type,
+                exc,
+            )
+        except Exception as exc:
+            log.debug("Analyst %s tool-augmented path unexpected error: %s", analyst_type, exc)
+
+    # Determine which LLM to use based on ensemble mode
+    use_secondary = _should_use_secondary(analyst_type)
+    model_provider: str = "primary"
+
+    if use_secondary:
+        secondary_parsed = get_secondary_llm_parsed()
+        secondary_json = get_secondary_llm_json()
+        if secondary_parsed is not None or secondary_json is not None:
+            model_provider = "secondary"
+            log.debug("Analyst %s using secondary LLM (cross-ensemble mode)", analyst_type)
+        else:
+            log.debug(
+                "Analyst %s: secondary LLM not available, falling back to primary",
+                analyst_type,
+            )
+            use_secondary = False
+
+    # Select the callable pair based on ensemble routing
+    parsed_fn = get_secondary_llm_parsed() if use_secondary else get_llm_parsed()
+    json_fn = get_secondary_llm_json() if use_secondary else get_llm_json()
+
     # Use Anthropic Structured Output (messages.parse) for guaranteed JSON
-    try:
-        result = get_llm_parsed()(system, user, output_model=AnalysisResult)
-        # Ensure analyst_type matches
-        if result.analyst_type != analyst_type:
-            result = result.model_copy(update={"analyst_type": analyst_type})
-        return result
-    except Exception as exc:
-        log.warning(
-            "Analyst %s structured output failed: %s — falling back to legacy JSON parse",
-            analyst_type,
-            exc,
-        )
+    # Analyst temperature 0.5 (higher than default 0.3 for diverse perspectives)
+    if parsed_fn is not None:
+        try:
+            result = parsed_fn(system, user, output_model=AnalysisResult, temperature=0.5)
+            # Ensure analyst_type matches
+            if result.analyst_type != analyst_type:
+                result = result.model_copy(update={"analyst_type": analyst_type})
+            result = result.model_copy(update={"model_provider": model_provider})
+            return result
+        except Exception as exc:
+            log.warning(
+                "Analyst %s structured output failed: %s — falling back to legacy JSON parse",
+                analyst_type,
+                exc,
+            )
 
     # Fallback: legacy JSON parse
-    try:
-        data = get_llm_json()(system, user)
-        return AnalysisResult(**data)
-    except (ValidationError, ValueError) as ve:
-        log.warning("Analyst %s legacy fallback also failed: %s", analyst_type, ve)
-        return AnalysisResult(
-            analyst_type=analyst_type,
-            score=1.0,
-            key_finding="[DEGRADED] LLM response failed validation",
-            reasoning="Schema validation failed — degraded result",
-            evidence=["validation_error"],
-            confidence=0.0,
-            is_degraded=True,
-        )
+    if json_fn is not None:
+        try:
+            data = json_fn(system, user, temperature=0.5)
+            result = AnalysisResult(**data)
+            result = result.model_copy(update={"model_provider": model_provider})
+            return result
+        except (ValidationError, ValueError) as ve:
+            log.warning("Analyst %s legacy fallback also failed: %s", analyst_type, ve)
+
+    return AnalysisResult(
+        analyst_type=analyst_type,
+        score=1.0,
+        key_finding="[DEGRADED] LLM response failed validation",
+        reasoning="Schema validation failed — degraded result",
+        evidence=["validation_error"],
+        confidence=0.0,
+        is_degraded=True,
+        model_provider=model_provider,
+    )
 
 
 def get_dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
@@ -310,11 +396,29 @@ def analyst_node(state: GeodeState) -> dict[str, Any]:
 
 
 def make_analyst_sends(state: GeodeState) -> list[Any]:
-    """Create Send objects for all 4 analysts."""
+    """Create Send objects for analysts.
+
+    Phase 3-B partial retry: on iteration >= 2, only re-run analysts whose
+    previous results were degraded or had zero confidence. Good results are
+    preserved from the prior iteration.
+    """
     from langgraph.types import Send
+
+    iteration = state.get("iteration", 1)
+    existing_analyses: list[AnalysisResult] = state.get("analyses", [])
+
+    # Identify analysts that already have good results (skip on re-iteration)
+    skip_types: set[str] = set()
+    if iteration >= 2 and existing_analyses:
+        for a in existing_analyses:
+            if not getattr(a, "is_degraded", False) and getattr(a, "confidence", 0) > 0:
+                skip_types.add(a.analyst_type)
 
     sends = []
     for atype in ANALYST_TYPES:
+        if atype in skip_types:
+            log.info("Partial retry: skipping %s analyst (good prior result)", atype)
+            continue
         # Clean Context: only pass necessary data, NOT other analysts' results
         send_state = {
             "ip_name": state["ip_name"],
@@ -330,10 +434,8 @@ def make_analyst_sends(state: GeodeState) -> list[Any]:
             "_prompt_overrides": state.get("_prompt_overrides", {}),
             "_extra_instructions": state.get("_extra_instructions", []),
             "memory_context": state.get("memory_context"),
+            # Phase 2: tool definitions propagation for tool-augmented analysts
+            "_tool_definitions": state.get("_tool_definitions", []),
         }
         sends.append(Send("analyst", send_state))
     return sends
-
-
-# Backward-compatible alias (prefer get_dry_run_result for new code)
-_dry_run_result = get_dry_run_result

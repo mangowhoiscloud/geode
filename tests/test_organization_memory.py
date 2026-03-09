@@ -52,3 +52,34 @@ class TestMonoLakeOrganizationMemory:
         ips = org.list_ips()
         ip_names_lower = [ip.lower() for ip in ips]
         assert "berserk" in ip_names_lower
+
+
+class TestSoulMd:
+    def test_get_soul_default(self):
+        org = MonoLakeOrganizationMemory()
+        soul = org.get_soul()
+        # SOUL.md may not exist in CI — only assert if non-empty
+        if soul:
+            assert "GEODE" in soul or "Mission" in soul or "Identity" in soul
+
+    def test_get_soul_cached(self):
+        org = MonoLakeOrganizationMemory()
+        s1 = org.get_soul()
+        s2 = org.get_soul()
+        assert s1 is s2  # Same object (cached)
+
+    def test_get_soul_missing(self, tmp_path: Path):
+        org = MonoLakeOrganizationMemory(
+            fixture_dir=tmp_path,
+            soul_path=tmp_path / "nonexistent.md",
+        )
+        assert org.get_soul() == ""
+
+    def test_get_soul_custom_path(self, tmp_path: Path):
+        soul_file = tmp_path / "SOUL.md"
+        soul_file.write_text("# Test Soul\nTest mission.", encoding="utf-8")
+        org = MonoLakeOrganizationMemory(
+            fixture_dir=tmp_path,
+            soul_path=soul_file,
+        )
+        assert "Test mission" in org.get_soul()

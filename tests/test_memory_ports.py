@@ -34,6 +34,7 @@ class TestOrganizationMemoryPort:
     def test_port_has_required_methods(self):
         assert hasattr(OrganizationMemoryPort, "get_ip_context")
         assert hasattr(OrganizationMemoryPort, "get_common_rubric")
+        assert hasattr(OrganizationMemoryPort, "get_soul")
         assert hasattr(OrganizationMemoryPort, "save_analysis_result")
 
     def test_port_is_runtime_checkable(self):
@@ -43,6 +44,9 @@ class TestOrganizationMemoryPort:
 
             def get_common_rubric(self) -> dict:
                 return {}
+
+            def get_soul(self) -> str:
+                return ""
 
             def save_analysis_result(self, ip_name: str, result: dict) -> bool:
                 return True

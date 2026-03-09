@@ -17,6 +17,8 @@ log = logging.getLogger(__name__)
 
 # Default fixture directory
 DEFAULT_FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
+# SOUL.md lives at the project root (one level above geode/)
+DEFAULT_SOUL_PATH = Path(__file__).parent.parent.parent / "SOUL.md"
 
 
 class MonoLakeOrganizationMemory:
@@ -31,10 +33,16 @@ class MonoLakeOrganizationMemory:
         rubric = org.get_common_rubric()
     """
 
-    def __init__(self, fixture_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        fixture_dir: Path | None = None,
+        soul_path: Path | None = None,
+    ) -> None:
         self._fixture_dir = fixture_dir or DEFAULT_FIXTURE_DIR
+        self._soul_path = soul_path or DEFAULT_SOUL_PATH
         self._cache: dict[str, dict[str, Any]] = {}
         self._analysis_results: dict[str, list[dict[str, Any]]] = {}
+        self._soul_cache: str | None = None
         self._load_fixtures()
 
     def _load_fixtures(self) -> None:
@@ -74,6 +82,28 @@ class MonoLakeOrganizationMemory:
                 "D": {"min_score": 0},
             },
         }
+
+    def get_soul(self) -> str:
+        """Load SOUL.md — organization identity and mission statement.
+
+        Returns empty string if SOUL.md not found (graceful degradation).
+        Cached after first load.
+        """
+        if self._soul_cache is not None:
+            return self._soul_cache
+
+        if not self._soul_path.exists():
+            log.info("SOUL.md not found at %s — using empty soul", self._soul_path)
+            self._soul_cache = ""
+            return ""
+
+        try:
+            self._soul_cache = self._soul_path.read_text(encoding="utf-8")
+            log.info("Loaded SOUL.md (%d chars)", len(self._soul_cache))
+        except OSError as e:
+            log.warning("Failed to read SOUL.md: %s", e)
+            self._soul_cache = ""
+        return self._soul_cache
 
     def save_analysis_result(self, ip_name: str, result: dict[str, Any]) -> bool:
         """Save an analysis result for an IP."""

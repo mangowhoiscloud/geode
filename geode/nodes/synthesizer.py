@@ -14,7 +14,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
+from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed, get_llm_tool
+from geode.infrastructure.ports.tool_port import get_tool_executor
 from geode.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_USER
 from geode.state import (
     ActionLiteral,
@@ -295,8 +296,83 @@ def _build_llm_synthesis(
         )
 
 
+def _build_tool_augmented_synthesis(
+    state: GeodeState,
+    cause: CauseLiteral,
+    action: ActionLiteral,
+    tool_fn: Any,
+) -> SynthesisResult | None:
+    """Generate synthesis using tool-augmented LLM (OpenClaw pattern).
+
+    The LLM can call memory_search, signal_query, data_lookup tools
+    during narrative generation. The tool loop runs inside the adapter.
+    Returns None if tool-use path fails (caller falls back to standard).
+    """
+    tool_defs = state.get("_tool_definitions", [])
+    if not tool_defs:
+        return None
+
+    evaluations = state.get("evaluations", {})
+    analyses = state.get("analyses", [])
+
+    analyst_summary = "\n".join(
+        f"- {a.analyst_type}: {a.score:.1f}/5 — {a.key_finding}" for a in analyses
+    )
+    eval_summary = "\n".join(f"- {k}: {v.composite_score:.0f}/100" for k, v in evaluations.items())
+
+    enhanced_system = (
+        SYNTHESIZER_SYSTEM + "\n\n## Available Tools\n"
+        "You have access to tools for querying memory (past analyses), "
+        "signals (YouTube, Reddit data), and data (IP details). "
+        "Use them if you need additional context for the narrative."
+    )
+
+    user = SYNTHESIZER_USER.format(
+        ip_name=state["ip_name"],
+        cause=cause,
+        action_type=action,
+        tier=state.get("tier", "?"),
+        final_score=state.get("final_score", 0),
+        att_pct=0,
+        z_value=0,
+        gamma=0,
+        quality_score=0,
+        momentum_score=0,
+        recovery_score=0,
+        analyst_summary=analyst_summary,
+        evaluator_summary=eval_summary,
+        signals_summary="(available via tools)",
+    )
+
+    try:
+        result = tool_fn(
+            enhanced_system,
+            user,
+            tools=tool_defs,
+            tool_executor=get_tool_executor(),
+            max_tool_rounds=3,
+        )
+        if result.text:
+            return SynthesisResult(
+                undervaluation_cause=cause,
+                action_type=action,
+                value_narrative=result.text,
+                target_gamer_segment="(tool-augmented)",
+            )
+    except Exception as exc:
+        log.warning("Tool-augmented synthesis failed: %s — falling back to standard", exc)
+
+    return None
+
+
 def synthesizer_node(state: GeodeState) -> dict[str, Any]:
-    """Layer 5: Classify cause + generate narrative via LLM."""
+    """Layer 5: Classify cause + generate narrative via LLM.
+
+    Execution paths (priority order):
+      1. dry_run → fixture-based mock narrative
+      2. tool-augmented → LLM with memory/signal tools (OpenClaw pattern)
+      3. standard → LLM structured output / JSON parse
+    """
     try:
         evaluations = state.get("evaluations", {})
         monolake = state.get("monolake", {})
@@ -313,7 +389,16 @@ def synthesizer_node(state: GeodeState) -> dict[str, Any]:
         if state.get("dry_run"):
             synthesis = _build_dry_run_synthesis(state, cause, action, cause_desc)
         else:
-            synthesis = _build_llm_synthesis(state, cause, action)
+            # Try tool-augmented path first (graceful degradation to standard)
+            synthesis = None
+            try:
+                tool_fn = get_llm_tool()
+                synthesis = _build_tool_augmented_synthesis(state, cause, action, tool_fn)
+            except RuntimeError:
+                pass  # tool callable not injected — skip to standard path
+
+            if synthesis is None:
+                synthesis = _build_llm_synthesis(state, cause, action)
 
         return {"synthesis": synthesis}
     except Exception as exc:

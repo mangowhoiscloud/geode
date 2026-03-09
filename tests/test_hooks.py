@@ -4,8 +4,8 @@ from geode.orchestration.hooks import HookEvent, HookResult, HookSystem
 
 
 class TestHookEvent:
-    def test_all_19_events_exist(self):
-        assert len(HookEvent) == 19
+    def test_all_23_events_exist(self):
+        assert len(HookEvent) == 23
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_START.value == "pipeline_start"

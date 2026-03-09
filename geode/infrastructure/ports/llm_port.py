@@ -180,12 +180,22 @@ _llm_text_ctx: ContextVar[LLMTextCallable | None] = ContextVar("llm_text", defau
 _llm_parsed_ctx: ContextVar[LLMParsedCallable | None] = ContextVar("llm_parsed", default=None)
 _llm_tool_ctx: ContextVar[LLMToolCallable | None] = ContextVar("llm_tool", default=None)
 
+# Secondary LLM contextvars for ensemble/cross-LLM mode
+_secondary_llm_json_ctx: ContextVar[LLMJsonCallable | None] = ContextVar(
+    "secondary_llm_json", default=None
+)
+_secondary_llm_parsed_ctx: ContextVar[LLMParsedCallable | None] = ContextVar(
+    "secondary_llm_parsed", default=None
+)
+
 
 def set_llm_callable(
     json_fn: LLMJsonCallable,
     text_fn: LLMTextCallable,
     parsed_fn: LLMParsedCallable | None = None,
     tool_fn: LLMToolCallable | None = None,
+    secondary_json_fn: LLMJsonCallable | None = None,
+    secondary_parsed_fn: LLMParsedCallable | None = None,
 ) -> None:
     """Inject LLM callables (typically called by GeodeRuntime.create())."""
     _llm_json_ctx.set(json_fn)
@@ -194,6 +204,9 @@ def set_llm_callable(
         _llm_parsed_ctx.set(parsed_fn)
     if tool_fn is not None:
         _llm_tool_ctx.set(tool_fn)
+    # Always update secondary contextvars (set to None to clear if not provided)
+    _secondary_llm_json_ctx.set(secondary_json_fn)
+    _secondary_llm_parsed_ctx.set(secondary_parsed_fn)
 
 
 def get_llm_json() -> LLMJsonCallable:
@@ -238,3 +251,13 @@ def get_llm_tool() -> LLMToolCallable:
             "Call set_llm_callable(tool_fn=...) first (done by GeodeRuntime.create())."
         )
     return fn
+
+
+def get_secondary_llm_json() -> LLMJsonCallable | None:
+    """Return the secondary JSON callable, or None if not configured."""
+    return _secondary_llm_json_ctx.get()
+
+
+def get_secondary_llm_parsed() -> LLMParsedCallable | None:
+    """Return the secondary parsed callable, or None if not configured."""
+    return _secondary_llm_parsed_ctx.get()
