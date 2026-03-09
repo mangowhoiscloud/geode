@@ -131,8 +131,12 @@ class TestCategoryDetection:
 
     def test_analysis_category(self) -> None:
         reg = _make_registry(
-            "run_analyst", "run_evaluator", "psm_calculate",
-            "extra1", "extra2", "extra3",
+            "run_analyst",
+            "run_evaluator",
+            "psm_calculate",
+            "extra1",
+            "extra2",
+            "extra3",
         )
         result = reg.to_anthropic_tools_with_defer(defer_threshold=5)
         desc = result[0]["description"]
@@ -140,8 +144,12 @@ class TestCategoryDetection:
 
     def test_signals_category(self) -> None:
         reg = _make_registry(
-            "youtube_search", "reddit_sentiment", "twitch_stats",
-            "steam_info", "google_trends", "extra",
+            "youtube_search",
+            "reddit_sentiment",
+            "twitch_stats",
+            "steam_info",
+            "google_trends",
+            "extra",
         )
         result = reg.to_anthropic_tools_with_defer(defer_threshold=5)
         desc = result[0]["description"]
@@ -149,8 +157,12 @@ class TestCategoryDetection:
 
     def test_data_category(self) -> None:
         reg = _make_registry(
-            "query_monolake", "cortex_analyst", "cortex_search",
-            "e1", "e2", "e3",
+            "query_monolake",
+            "cortex_analyst",
+            "cortex_search",
+            "e1",
+            "e2",
+            "e3",
         )
         result = reg.to_anthropic_tools_with_defer(defer_threshold=5)
         desc = result[0]["description"]
@@ -158,8 +170,12 @@ class TestCategoryDetection:
 
     def test_memory_category(self) -> None:
         reg = _make_registry(
-            "memory_search", "memory_get", "memory_save",
-            "e1", "e2", "e3",
+            "memory_search",
+            "memory_get",
+            "memory_save",
+            "e1",
+            "e2",
+            "e3",
         )
         result = reg.to_anthropic_tools_with_defer(defer_threshold=5)
         desc = result[0]["description"]
@@ -167,8 +183,12 @@ class TestCategoryDetection:
 
     def test_output_category(self) -> None:
         reg = _make_registry(
-            "generate_report", "export_json", "send_notification",
-            "e1", "e2", "e3",
+            "generate_report",
+            "export_json",
+            "send_notification",
+            "e1",
+            "e2",
+            "e3",
         )
         result = reg.to_anthropic_tools_with_defer(defer_threshold=5)
         desc = result[0]["description"]
@@ -176,8 +196,12 @@ class TestCategoryDetection:
 
     def test_multiple_categories(self) -> None:
         reg = _make_registry(
-            "run_analyst", "youtube_search", "memory_search",
-            "query_monolake", "generate_report", "unknown_tool",
+            "run_analyst",
+            "youtube_search",
+            "memory_search",
+            "query_monolake",
+            "generate_report",
+            "unknown_tool",
         )
         result = reg.to_anthropic_tools_with_defer(defer_threshold=5)
         desc = result[0]["description"]
@@ -206,7 +230,9 @@ class TestPolicyWithDefer:
         )
         # After policy: only e, f → 2 tools, below threshold of 5
         result = reg.to_anthropic_tools_with_defer(
-            policy=chain, mode="dry_run", defer_threshold=5,
+            policy=chain,
+            mode="dry_run",
+            defer_threshold=5,
         )
         assert len(result) == 2
         for tool in result:
@@ -225,7 +251,9 @@ class TestPolicyWithDefer:
         )
         # After policy: 7 tools, above threshold of 5
         result = reg.to_anthropic_tools_with_defer(
-            policy=chain, mode="dry_run", defer_threshold=5,
+            policy=chain,
+            mode="dry_run",
+            defer_threshold=5,
         )
         assert result[0]["name"] == "tool_search"
         assert len(result) == 8  # 7 deferred + 1 tool_search

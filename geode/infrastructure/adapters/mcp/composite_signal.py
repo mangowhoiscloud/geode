@@ -42,9 +42,7 @@ class CompositeSignalAdapter:
                     src = signals.get("_enrichment_source", type(adapter).__name__)
                     sources.append(src)
             except Exception as exc:
-                log.warning(
-                    "Signal adapter %s failed: %s", type(adapter).__name__, exc
-                )
+                log.warning("Signal adapter %s failed: %s", type(adapter).__name__, exc)
         if sources:
             merged["_enrichment_sources"] = sources
         return merged

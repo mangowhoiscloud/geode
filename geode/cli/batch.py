@@ -165,9 +165,7 @@ def run_batch(
         )
 
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
-            futures = {
-                pool.submit(run_single_analysis, ip, dry_run=dry_run): ip for ip in selected
-            }
+            futures = {pool.submit(run_single_analysis, ip, dry_run=dry_run): ip for ip in selected}
             for future in as_completed(futures):
                 ip = futures[future]
                 try:

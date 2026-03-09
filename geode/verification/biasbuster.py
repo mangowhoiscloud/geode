@@ -70,8 +70,7 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
             try:
                 tool_fn = get_llm_tool()
                 enhanced_system = (
-                    BIASBUSTER_SYSTEM
-                    + "\n\n## Available Tools\n"
+                    BIASBUSTER_SYSTEM + "\n\n## Available Tools\n"
                     "You can query memory_search for past bias patterns."
                 )
                 scores = [a.score for a in analyses if isinstance(a, AnalysisResult)]

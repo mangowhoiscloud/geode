@@ -60,7 +60,10 @@ class TestToolAugmentedSynthesis:
         state = _make_state()
         tool_fn = lambda: None  # noqa: E731
         result = _build_tool_augmented_synthesis(
-            state, "undermarketed", "marketing_boost", tool_fn,
+            state,
+            "undermarketed",
+            "marketing_boost",
+            tool_fn,
         )
         assert result is None
 

@@ -20,10 +20,13 @@ class BraveSearchAdapter:
         if not self._client.is_connected():
             return []
         try:
-            result = self._client.call_tool("brave_web_search", {
-                "query": query,
-                "count": count,
-            })
+            result = self._client.call_tool(
+                "brave_web_search",
+                {
+                    "query": query,
+                    "count": count,
+                },
+            )
             results: list[dict[str, Any]] = result.get("results", [])
             return results
         except Exception as exc:

@@ -739,9 +739,7 @@ class GeodeRuntime:
             secondary_json_fn=(
                 secondary_adapter.generate_structured if secondary_adapter else None
             ),
-            secondary_parsed_fn=(
-                secondary_adapter.generate_parsed if secondary_adapter else None
-            ),
+            secondary_parsed_fn=(secondary_adapter.generate_parsed if secondary_adapter else None),
         )
 
         # Coalescing queue (250ms debounce)
@@ -974,7 +972,8 @@ class GeodeRuntime:
             set_tool_executor(None)
             return {}
         tool_defs = self.tool_registry.to_anthropic_tools_with_defer(
-            policy=self.policy_chain, mode=mode,
+            policy=self.policy_chain,
+            mode=mode,
         )
         if not tool_defs:
             set_tool_executor(None)

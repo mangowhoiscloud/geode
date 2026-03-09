@@ -701,9 +701,7 @@ class TestNewToolParsing:
     """Verify new tools (batch, status, model) parse correctly."""
 
     def test_batch_analyze(self) -> None:
-        resp = _make_tool_use_response(
-            "batch_analyze", {"top": 5, "genre": "Dark Fantasy"}
-        )
+        resp = _make_tool_use_response("batch_analyze", {"top": 5, "genre": "Dark Fantasy"})
         intent = _parse_tool_use(resp)
         assert intent.action == "batch"
         assert intent.args["top"] == 5
@@ -722,9 +720,7 @@ class TestNewToolParsing:
         assert intent.confidence == 0.95
 
     def test_switch_model_with_hint(self) -> None:
-        resp = _make_tool_use_response(
-            "switch_model", {"model_hint": "haiku"}
-        )
+        resp = _make_tool_use_response("switch_model", {"model_hint": "haiku"})
         intent = _parse_tool_use(resp)
         assert intent.action == "model"
         assert intent.args["model_hint"] == "haiku"

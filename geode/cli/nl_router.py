@@ -402,12 +402,8 @@ _OFFLINE_SEARCH = re.compile(r"(?:찾아|검색|search|find)", re.IGNORECASE)
 _OFFLINE_COMPARE = re.compile(r"(?:비교|compare|\bvs\b)", re.IGNORECASE)
 _OFFLINE_ANALYZE = re.compile(r"(?:분석|평가|analyze|evaluate)", re.IGNORECASE)
 _OFFLINE_REPORT = re.compile(r"(?:리포트|보고서|report|레포트)", re.IGNORECASE)
-_OFFLINE_BATCH = re.compile(
-    r"(?:배치|전체|모든|순위|rank|batch|all\s*ip|top\s*\d+)", re.IGNORECASE
-)
-_OFFLINE_STATUS = re.compile(
-    r"(?:상태|건강|health|status|설정|config|모델\s*뭐)", re.IGNORECASE
-)
+_OFFLINE_BATCH = re.compile(r"(?:배치|전체|모든|순위|rank|batch|all\s*ip|top\s*\d+)", re.IGNORECASE)
+_OFFLINE_STATUS = re.compile(r"(?:상태|건강|health|status|설정|config|모델\s*뭐)", re.IGNORECASE)
 _OFFLINE_MODEL = re.compile(
     r"(?:모델\s*바꿔|switch\s*model|앙상블|ensemble|cross\s*모드)", re.IGNORECASE
 )

@@ -73,8 +73,13 @@ class TestPolicyChainDryRun:
 
     def test_dry_run_allows_signal_tools(self) -> None:
         chain = _build_default_policies()
-        for tool in ("youtube_search", "reddit_sentiment", "twitch_stats",
-                      "steam_info", "google_trends"):
+        for tool in (
+            "youtube_search",
+            "reddit_sentiment",
+            "twitch_stats",
+            "steam_info",
+            "google_trends",
+        ):
             assert chain.is_allowed(tool, mode="dry_run") is True
 
     def test_dry_run_allows_memory_tools(self) -> None:
@@ -144,7 +149,8 @@ class TestPolicyFilterIntegration:
     def test_anthropic_tool_defs_respect_policy(self, tmp_path: Path) -> None:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         defs = runtime.tool_registry.to_anthropic_tools(
-            policy=runtime.policy_chain, mode="dry_run",
+            policy=runtime.policy_chain,
+            mode="dry_run",
         )
         names = {d["name"] for d in defs}
         assert "run_analyst" not in names

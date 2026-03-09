@@ -386,9 +386,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
                 log.debug("Cache: create=%d read=%d", cache_create, cache_read)
 
         if response.parsed_output is None:
-            raise ValueError(
-                "Structured output parsing returned None"
-            )
+            raise ValueError("Structured output parsing returned None")
         return response.parsed_output
 
     result: T = _retry_with_backoff(_do_call, model=target_model)

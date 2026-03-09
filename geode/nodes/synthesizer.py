@@ -318,13 +318,10 @@ def _build_tool_augmented_synthesis(
     analyst_summary = "\n".join(
         f"- {a.analyst_type}: {a.score:.1f}/5 — {a.key_finding}" for a in analyses
     )
-    eval_summary = "\n".join(
-        f"- {k}: {v.composite_score:.0f}/100" for k, v in evaluations.items()
-    )
+    eval_summary = "\n".join(f"- {k}: {v.composite_score:.0f}/100" for k, v in evaluations.items())
 
     enhanced_system = (
-        SYNTHESIZER_SYSTEM
-        + "\n\n## Available Tools\n"
+        SYNTHESIZER_SYSTEM + "\n\n## Available Tools\n"
         "You have access to tools for querying memory (past analyses), "
         "signals (YouTube, Reddit data), and data (IP details). "
         "Use them if you need additional context for the narrative."

@@ -37,6 +37,7 @@ T = TypeVar("T", bound=BaseModel)
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_state(ip_name: str = "berserk", dry_run: bool = False) -> GeodeState:
     """Build a minimal GeodeState for analyst tests."""
     return GeodeState(
@@ -410,12 +411,18 @@ class TestAgreementScore:
     def test_single_model_perfect_agreement(self) -> None:
         analyses = [
             AnalysisResult(
-                analyst_type="game_mechanics", score=4.0,
-                key_finding="f1", reasoning="r1", model_provider="primary",
+                analyst_type="game_mechanics",
+                score=4.0,
+                key_finding="f1",
+                reasoning="r1",
+                model_provider="primary",
             ),
             AnalysisResult(
-                analyst_type="growth_potential", score=3.5,
-                key_finding="f2", reasoning="r2", model_provider="primary",
+                analyst_type="growth_potential",
+                score=3.5,
+                key_finding="f2",
+                reasoning="r2",
+                model_provider="primary",
             ),
         ]
         assert compute_agreement_score(analyses) == 1.0
@@ -423,12 +430,18 @@ class TestAgreementScore:
     def test_cross_model_perfect_agreement(self) -> None:
         analyses = [
             AnalysisResult(
-                analyst_type="game_mechanics", score=4.0,
-                key_finding="f1", reasoning="r1", model_provider="primary",
+                analyst_type="game_mechanics",
+                score=4.0,
+                key_finding="f1",
+                reasoning="r1",
+                model_provider="primary",
             ),
             AnalysisResult(
-                analyst_type="player_experience", score=4.0,
-                key_finding="f2", reasoning="r2", model_provider="secondary",
+                analyst_type="player_experience",
+                score=4.0,
+                key_finding="f2",
+                reasoning="r2",
+                model_provider="secondary",
             ),
         ]
         assert compute_agreement_score(analyses) == 1.0
@@ -436,12 +449,18 @@ class TestAgreementScore:
     def test_cross_model_disagreement(self) -> None:
         analyses = [
             AnalysisResult(
-                analyst_type="game_mechanics", score=5.0,
-                key_finding="f1", reasoning="r1", model_provider="primary",
+                analyst_type="game_mechanics",
+                score=5.0,
+                key_finding="f1",
+                reasoning="r1",
+                model_provider="primary",
             ),
             AnalysisResult(
-                analyst_type="player_experience", score=1.0,
-                key_finding="f2", reasoning="r2", model_provider="secondary",
+                analyst_type="player_experience",
+                score=1.0,
+                key_finding="f2",
+                reasoning="r2",
+                model_provider="secondary",
             ),
         ]
         # max_diff=4.0, agreement = 1 - 4/4 = 0.0
@@ -450,20 +469,32 @@ class TestAgreementScore:
     def test_cross_model_partial_agreement(self) -> None:
         analyses = [
             AnalysisResult(
-                analyst_type="game_mechanics", score=4.0,
-                key_finding="f1", reasoning="r1", model_provider="primary",
+                analyst_type="game_mechanics",
+                score=4.0,
+                key_finding="f1",
+                reasoning="r1",
+                model_provider="primary",
             ),
             AnalysisResult(
-                analyst_type="growth_potential", score=4.0,
-                key_finding="f2", reasoning="r2", model_provider="primary",
+                analyst_type="growth_potential",
+                score=4.0,
+                key_finding="f2",
+                reasoning="r2",
+                model_provider="primary",
             ),
             AnalysisResult(
-                analyst_type="player_experience", score=3.0,
-                key_finding="f3", reasoning="r3", model_provider="secondary",
+                analyst_type="player_experience",
+                score=3.0,
+                key_finding="f3",
+                reasoning="r3",
+                model_provider="secondary",
             ),
             AnalysisResult(
-                analyst_type="discovery", score=3.0,
-                key_finding="f4", reasoning="r4", model_provider="secondary",
+                analyst_type="discovery",
+                score=3.0,
+                key_finding="f4",
+                reasoning="r4",
+                model_provider="secondary",
             ),
         ]
         # Primary mean=4.0, Secondary mean=3.0, diff=1.0
@@ -473,8 +504,10 @@ class TestAgreementScore:
     def test_no_provider_info(self) -> None:
         analyses = [
             AnalysisResult(
-                analyst_type="game_mechanics", score=4.0,
-                key_finding="f1", reasoning="r1",
+                analyst_type="game_mechanics",
+                score=4.0,
+                key_finding="f1",
+                reasoning="r1",
             ),
         ]
         assert compute_agreement_score(analyses) == 1.0

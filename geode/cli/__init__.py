@@ -357,9 +357,7 @@ def _execute_pipeline(
 def _render_streaming_analyst(analysis: AnalysisResult) -> None:
     """Render a single analyst result row immediately in streaming mode."""
     score_style = (
-        "bold green" if analysis.score >= 4.0
-        else "yellow" if analysis.score >= 3.0
-        else "red"
+        "bold green" if analysis.score >= 4.0 else "yellow" if analysis.score >= 3.0 else "red"
     )
     console.print(
         f"  [label]{analysis.analyst_type.capitalize():14s}[/label] "
@@ -442,8 +440,7 @@ def _execute_pipeline_streaming(
                         tier = output.get("tier", "?")
                         score = output.get("final_score", 0)
                         console.print(
-                            f"  Score: [bold]{score:.1f}[/bold]"
-                            f"  Tier: [bold]{tier}[/bold]"
+                            f"  Score: [bold]{score:.1f}[/bold]  Tier: [bold]{tier}[/bold]"
                         )
 
                 elif node_name == "verification":
@@ -956,8 +953,8 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
         genre = intent.args.get("genre")
         from geode.cli.batch import render_batch_table, run_batch
 
-        results = run_batch(top=top, genre=genre, dry_run=True)
-        render_batch_table(results)
+        batch_results = run_batch(top=top, genre=genre, dry_run=True)
+        render_batch_table(batch_results)
 
     elif intent.action == "status":
         console.print()
@@ -987,15 +984,14 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
             if "cross" in hint or "ensemble" in hint or "앙상블" in hint:
                 console.print()
                 console.print(
-                    "  [info]앙상블 모드는 환경변수로 설정합니다: "
-                    "GEODE_ENSEMBLE_MODE=cross[/info]"
+                    "  [info]앙상블 모드는 환경변수로 설정합니다: GEODE_ENSEMBLE_MODE=cross[/info]"
                 )
                 console.print()
             else:
                 console.print(f"\n  [info]모델 변경 힌트: {model_hint}[/info]")
                 console.print("  [muted]/model 명령으로 모델을 선택하세요.[/muted]\n")
         else:
-            cmd_model()
+            cmd_model("")
 
     elif intent.action == "help":
         error = intent.args.get("_error", "")
