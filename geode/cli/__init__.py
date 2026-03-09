@@ -476,9 +476,15 @@ def _run_analysis(
     available_tools = runtime.get_available_tools(mode=mode)
     log.debug("Available tools for mode=%s: %s", mode, available_tools)
 
+    # Build session key for 3-tier memory assembly (GAP-001 fix)
+    from geode.memory.session_key import build_session_key
+
+    session_id = build_session_key(ip_name, "pipeline")
+
     initial_state: GeodeState = {
         "ip_name": ip_name,
         "pipeline_mode": pipeline_mode,
+        "session_id": session_id,
         "dry_run": dry_run,
         "verbose": verbose,
         "skip_verification": skip_verification,
