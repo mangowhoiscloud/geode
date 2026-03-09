@@ -152,3 +152,76 @@ class PolicyChain:
             evaluations=evaluations,
             user=user,
         )
+
+
+# ---------------------------------------------------------------------------
+# Node-scoped tool allowlists (Phase 2-D)
+# ---------------------------------------------------------------------------
+
+# Default per-node tool allowlists.
+NODE_TOOL_ALLOWLISTS: dict[str, list[str]] = {
+    "analyst": ["memory_search", "memory_get", "query_monolake"],
+    "evaluator": ["memory_search", "memory_get", "steam_info", "reddit_sentiment"],
+    "scoring": ["memory_search", "psm_calculate"],
+}
+
+
+class NodeScopePolicy:
+    """Filter available tools based on the executing node.
+
+    Each node type has a whitelist of tools it may invoke.
+    Tools not in the whitelist are silently excluded.
+    If the node has no explicit allowlist, all tools pass through.
+    """
+
+    def __init__(
+        self,
+        node_allowlists: dict[str, list[str]] | None = None,
+    ) -> None:
+        self._allowlists: dict[str, set[str]] = {
+            k: set(v)
+            for k, v in (node_allowlists or NODE_TOOL_ALLOWLISTS).items()
+        }
+
+    def filter(
+        self,
+        tool_names: list[str],
+        *,
+        node: str | None = None,
+    ) -> list[str]:
+        """Return only tools allowed for *node*.
+
+        Analyst subtypes like ``analyst_game_mechanics`` match the
+        ``analyst`` prefix.  If *node* is ``None`` or has no allowlist
+        entry, all tools pass through unchanged.
+        """
+        if node is None:
+            return tool_names
+        # Match exact key first, then prefix (e.g. "analyst_*" → "analyst")
+        allowlist = self._allowlists.get(node)
+        if allowlist is None:
+            for prefix, allowed in self._allowlists.items():
+                if node.startswith(prefix):
+                    allowlist = allowed
+                    break
+        if allowlist is None:
+            return tool_names
+        filtered = [t for t in tool_names if t in allowlist]
+        if len(filtered) < len(tool_names):
+            blocked = set(tool_names) - set(filtered)
+            log.debug("NodeScopePolicy[%s] blocked: %s", node, blocked)
+        return filtered
+
+    def is_allowed(self, tool_name: str, *, node: str | None = None) -> bool:
+        """Check if a single tool is allowed for *node*."""
+        return tool_name in self.filter([tool_name], node=node)
+
+    def get_allowlist(self, node: str) -> set[str]:
+        """Return the allowlist for *node* (or empty set if unrestricted)."""
+        result = self._allowlists.get(node)
+        if result is not None:
+            return result
+        for prefix, allowed in self._allowlists.items():
+            if node.startswith(prefix):
+                return allowed
+        return set()
