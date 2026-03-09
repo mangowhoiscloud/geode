@@ -30,7 +30,7 @@ from geode.verification.calibration import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-GOLDEN_SET_PATH = Path(__file__).parent.parent / "geode" / "fixtures" / "_golden_set.json"
+GOLDEN_SET_PATH = Path(__file__).parent.parent / "src" / "geode" / "fixtures" / "_golden_set.json"
 
 
 @pytest.fixture

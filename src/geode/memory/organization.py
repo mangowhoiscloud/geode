@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 # Default fixture directory
 DEFAULT_FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
 # SOUL.md lives in .claude/ (project root → .claude/SOUL.md)
-DEFAULT_SOUL_PATH = Path(__file__).parent.parent.parent / ".claude" / "SOUL.md"
+DEFAULT_SOUL_PATH = Path(__file__).parent.parent.parent.parent / ".claude" / "SOUL.md"
 
 
 class MonoLakeOrganizationMemory:

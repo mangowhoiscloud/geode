@@ -25,6 +25,9 @@ geode = "geode.cli:app"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/geode"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --tb=short --strict-markers"
@@ -45,6 +48,7 @@ dev = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "N", "C4", "RUF"]
@@ -68,10 +72,10 @@ exclude_dirs = ["tests"]
 skips = ["B101", "B105", "B110", "B311"]
 
 [tool.coverage.run]
-source = ["geode"]
+source = ["src/geode"]
 branch = true
 omit = [
-    "geode/ui/*",
+    "src/geode/ui/*",
 ]
 
 [tool.coverage.report]

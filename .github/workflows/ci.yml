@@ -23,8 +23,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync
-      - run: uv run ruff check geode/ tests/
-      - run: uv run ruff format --check geode/ tests/
+      - run: uv run ruff check src/geode/ tests/
+      - run: uv run ruff format --check src/geode/ tests/
 
   typecheck:
     name: Type Check
@@ -38,7 +38,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync
-      - run: uv run mypy geode/
+      - run: uv run mypy src/geode/
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -74,7 +74,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync
-      - run: uv run bandit -r geode/ -c pyproject.toml
+      - run: uv run bandit -r src/geode/ -c pyproject.toml
 
   gate:
     name: Gate
