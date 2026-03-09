@@ -542,12 +542,14 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
         console.print(f"  Verbose: {state}")
         console.print()
     elif action in ("analyze", "run"):
-        dry_run = action == "analyze"
-        # Graceful Degradation: force dry-run if no API key
+        # Graceful Degradation: force dry-run only when no API key
         readiness = _get_readiness()
-        if action == "run" and readiness and readiness.force_dry_run:
+        force_dry = readiness.force_dry_run if readiness else True
+        dry_run = force_dry  # both /analyze and /run respect API key availability
+        if force_dry and action == "run":
             console.print("  [warning]API key not configured — forcing dry-run mode[/warning]")
-            dry_run = True
+        elif not force_dry and action == "analyze":
+            dry_run = False  # /analyze uses real LLM when key is available
         label = "/analyze" if dry_run else "/run"
         if not args:
             console.print(f"  [warning]Usage: {label} <IP name>[/warning]")
@@ -660,7 +662,9 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
 
     elif intent.action == "analyze":
         ip_name = intent.args.get("ip_name", text)
-        result = _run_analysis(ip_name, dry_run=True, verbose=verbose)
+        readiness = _get_readiness()
+        force_dry = readiness.force_dry_run if readiness else True
+        result = _run_analysis(ip_name, dry_run=force_dry, verbose=verbose)
         if result:
             _show_commentary(text, "analyze", build_analyze_context(result), is_offline=is_offline)
 
@@ -668,8 +672,10 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
         ip_a = intent.args.get("ip_a", "")
         ip_b = intent.args.get("ip_b", "")
         console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
-        result_a = _run_analysis(ip_a, dry_run=True, verbose=verbose)
-        result_b = _run_analysis(ip_b, dry_run=True, verbose=verbose)
+        readiness = _get_readiness()
+        force_dry = readiness.force_dry_run if readiness else True
+        result_a = _run_analysis(ip_a, dry_run=force_dry, verbose=verbose)
+        result_b = _run_analysis(ip_b, dry_run=force_dry, verbose=verbose)
         _show_commentary(
             text,
             "compare",
