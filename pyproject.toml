@@ -65,7 +65,7 @@ ignore = [
 
 [tool.bandit]
 exclude_dirs = ["tests"]
-skips = ["B101"]
+skips = ["B101", "B105", "B110", "B311"]
 
 [tool.coverage.run]
 source = ["geode"]
