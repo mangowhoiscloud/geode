@@ -125,15 +125,15 @@ class TestRuntimePolicyChain:
     def test_full_pipeline_blocks_notification(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="full_pipeline")
-        # 17 total minus send_notification = 16
-        assert len(tools) == 16
+        # 21 total minus send_notification = 20
+        assert len(tools) == 20
         assert "send_notification" not in tools
 
 
 class TestRuntimeToolRegistry:
     def test_registry_has_all_tools(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        assert len(runtime.tool_registry) == 17
+        assert len(runtime.tool_registry) == 21
         assert "run_analyst" in runtime.tool_registry
         assert "run_evaluator" in runtime.tool_registry
         assert "psm_calculate" in runtime.tool_registry
@@ -151,6 +151,10 @@ class TestRuntimeToolRegistry:
         assert "memory_search" in runtime.tool_registry
         assert "memory_get" in runtime.tool_registry
         assert "memory_save" in runtime.tool_registry
+        assert "rule_create" in runtime.tool_registry
+        assert "rule_update" in runtime.tool_registry
+        assert "rule_delete" in runtime.tool_registry
+        assert "rule_list" in runtime.tool_registry
         # Output tools
         assert "generate_report" in runtime.tool_registry
         assert "export_json" in runtime.tool_registry
@@ -191,7 +195,7 @@ class TestDefaultBuilders:
 
     def test_default_registry(self):
         registry = _build_default_registry()
-        assert len(registry) == 17
+        assert len(registry) == 21
 
     def test_make_run_log_handler(self, tmp_path: Path):
         run_log = RunLog("test_session", log_dir=tmp_path)

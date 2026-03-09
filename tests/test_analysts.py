@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-from geode.nodes.analysts import (
-    ANALYST_TYPES,
-    _build_analyst_prompt,
-    _dry_run_result,
-    _run_analyst,
-)
+from geode.nodes.analysts import ANALYST_TYPES, _build_analyst_prompt, _run_analyst
+from geode.nodes.analysts import get_dry_run_result as _dry_run_result
 
 
 class TestAnalystTypes:

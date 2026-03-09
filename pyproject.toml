@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "6.0.0"
+version = "0.6.0"
 description = "GEODE — Undervalued IP Discovery Agent CLI Demo"
 readme = "README.md"
 requires-python = ">=3.12"

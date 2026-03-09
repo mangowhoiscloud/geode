@@ -181,7 +181,7 @@ def _build_default_policies() -> PolicyChainPort:
 
 
 def _build_default_registry() -> ToolRegistryPort:
-    """Build ToolRegistry with all 17 tools registered."""
+    """Build ToolRegistry with all 21 tools registered."""
     registry = ToolRegistry()
     # Analysis (3)
     registry.register(RunAnalystTool())
@@ -207,12 +207,24 @@ def _build_default_registry() -> ToolRegistryPort:
     registry.register(TwitchStatsTool())
     registry.register(SteamInfoTool())
     registry.register(GoogleTrendsTool())
-    # Memory (3)
-    from geode.tools.memory_tools import MemoryGetTool, MemorySaveTool, MemorySearchTool
+    # Memory (7)
+    from geode.tools.memory_tools import (
+        MemoryGetTool,
+        MemorySaveTool,
+        MemorySearchTool,
+        RuleCreateTool,
+        RuleDeleteTool,
+        RuleListTool,
+        RuleUpdateTool,
+    )
 
     registry.register(MemorySearchTool())
     registry.register(MemoryGetTool())
     registry.register(MemorySaveTool())
+    registry.register(RuleCreateTool())
+    registry.register(RuleUpdateTool())
+    registry.register(RuleDeleteTool())
+    registry.register(RuleListTool())
     # Output (3)
     from geode.tools.output_tools import ExportJsonTool, GenerateReportTool, SendNotificationTool
 
@@ -415,6 +427,12 @@ class GeodeRuntime:
         from geode.nodes.router import set_context_assembler
 
         set_context_assembler(context_assembler)
+
+        # Wire memory into memory tools via contextvars (P1 memory autonomy)
+        from geode.tools.memory_tools import set_org_memory, set_project_memory
+
+        set_project_memory(project_memory)
+        set_org_memory(organization_memory)
 
         return project_memory, organization_memory, context_assembler
 

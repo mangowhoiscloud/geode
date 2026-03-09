@@ -24,7 +24,7 @@ def header_panel(ip_name: str, pipeline_mode: str, model: str) -> None:
     console.print(
         Panel(
             content,
-            title="[header]GEODE v6.0 — Undervalued IP Discovery Agent[/header]",
+            title="[header]GEODE v0.6.0 — Undervalued IP Discovery Agent[/header]",
             border_style="cyan",
         )
     )

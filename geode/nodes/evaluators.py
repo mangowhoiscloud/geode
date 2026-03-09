@@ -5,12 +5,15 @@ Supports Send API pattern for parallel execution (like analysts).
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
 from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
+from geode.infrastructure.ports.tool_port import get_tool_executor
+from geode.llm.client import call_llm_with_tools
 from geode.llm.prompts import (
     EVALUATOR_AXES,
     EVALUATOR_SYSTEM,
@@ -210,6 +213,38 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
     if state.get("verbose"):
         log.debug("Running %s evaluator...", evaluator_type)
 
+    # Tool-augmented path: evaluator can query memory/steam/reddit data
+    tool_defs: Any = state.get("_tool_definitions", [])
+    tool_executor = get_tool_executor()
+    if tool_defs and tool_executor is not None:
+        try:
+            enhanced_system = (
+                system + "\n\n## Available Tools\n"
+                "You have access to tools for querying past evaluations (memory_search, "
+                "memory_get), Steam data (steam_info), and community sentiment "
+                "(reddit_sentiment). Use them to ground your evaluation."
+            )
+            result = call_llm_with_tools(
+                enhanced_system,
+                user,
+                tools=tool_defs,
+                tool_executor=tool_executor,
+                temperature=0.3,
+                max_tool_rounds=2,
+            )
+            if result.text:
+                data = json.loads(result.text)
+                eval_result = EvaluatorResult(**data)
+                if eval_result.evaluator_type != evaluator_type:
+                    eval_result = eval_result.model_copy(update={"evaluator_type": evaluator_type})
+                return eval_result
+        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            log.warning(
+                "Evaluator %s tool-augmented path failed: %s — falling back",
+                evaluator_type,
+                exc,
+            )
+
     # Use Anthropic Structured Output with evaluator-specific typed model.
     # Typed axes models enforce required keys in the JSON schema, preventing
     # the LLM from returning axes: {} (which generic dict[str, float] allows).
@@ -251,23 +286,39 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
         return EvaluatorResult(**data)
     except (ValidationError, ValueError) as ve:
         log.warning("Evaluator %s legacy fallback also failed: %s", evaluator_type, ve)
+        # Fallback neutral (3.0) — matches analyst fallback convention.
+        # Using 1.0 (min) would unfairly penalise; 3.0 = "unknown/neutral".
+        _FALLBACK_NEUTRAL = 3.0
         default_axes: dict[str, dict[str, float]] = {
             "quality_judge": {
-                "a_score": 1.0,
-                "b_score": 1.0,
-                "c_score": 1.0,
-                "b1_score": 1.0,
-                "c1_score": 1.0,
-                "c2_score": 1.0,
-                "m_score": 1.0,
-                "n_score": 1.0,
+                "a_score": _FALLBACK_NEUTRAL,
+                "b_score": _FALLBACK_NEUTRAL,
+                "c_score": _FALLBACK_NEUTRAL,
+                "b1_score": _FALLBACK_NEUTRAL,
+                "c1_score": _FALLBACK_NEUTRAL,
+                "c2_score": _FALLBACK_NEUTRAL,
+                "m_score": _FALLBACK_NEUTRAL,
+                "n_score": _FALLBACK_NEUTRAL,
             },
-            "hidden_value": {"d_score": 1.0, "e_score": 1.0, "f_score": 1.0},
-            "community_momentum": {"j_score": 1.0, "k_score": 1.0, "l_score": 1.0},
+            "hidden_value": {
+                "d_score": _FALLBACK_NEUTRAL,
+                "e_score": _FALLBACK_NEUTRAL,
+                "f_score": _FALLBACK_NEUTRAL,
+            },
+            "community_momentum": {
+                "j_score": _FALLBACK_NEUTRAL,
+                "k_score": _FALLBACK_NEUTRAL,
+                "l_score": _FALLBACK_NEUTRAL,
+            },
+        }
+        _default_hidden = {
+            "d_score": _FALLBACK_NEUTRAL,
+            "e_score": _FALLBACK_NEUTRAL,
+            "f_score": _FALLBACK_NEUTRAL,
         }
         return EvaluatorResult(
             evaluator_type=evaluator_type,
-            axes=default_axes.get(evaluator_type, {"d_score": 1.0, "e_score": 1.0, "f_score": 1.0}),
+            axes=default_axes.get(evaluator_type, _default_hidden),
             composite_score=0.0,
             rationale="LLM response failed validation (degraded)",
             is_degraded=True,
@@ -521,6 +572,8 @@ def make_evaluator_sends(state: GeodeState) -> list[Any]:
             "_prompt_overrides": state.get("_prompt_overrides", {}),
             "_extra_instructions": state.get("_extra_instructions", []),
             "memory_context": state.get("memory_context"),
+            # Phase 2: tool definitions propagation for tool-augmented evaluators
+            "_tool_definitions": state.get("_tool_definitions", []),
         }
         sends.append(Send("evaluator", send_state))
     return sends
