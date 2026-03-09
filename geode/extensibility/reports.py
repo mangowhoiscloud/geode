@@ -90,7 +90,7 @@ _HTML_TEMPLATE = Template("""\
 
   ${details_section}
 
-  <footer>GEODE v6.0 | Undervalued IP Discovery Agent</footer>
+  <footer>GEODE v0.6.0 | Undervalued IP Discovery Agent</footer>
 </div>
 </body>
 </html>""")

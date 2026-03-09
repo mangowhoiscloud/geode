@@ -76,6 +76,7 @@ def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
         except Exception:
             log.debug("Failed to fire hook %s", event, exc_info=True)
 
+
 app = typer.Typer(
     name="geode",
     help="GEODE v0.6.0 — Undervalued IP Discovery Agent",
@@ -866,8 +867,7 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
                 _fire_hook(HookEvent.RULE_CREATED, {"name": name, "paths": paths})
             else:
                 console.print(
-                    f"  [warning]Failed to create rule '{name}'"
-                    " (may already exist).[/warning]"
+                    f"  [warning]Failed to create rule '{name}' (may already exist).[/warning]"
                 )
             console.print()
         elif rule_action == "update":
@@ -929,7 +929,9 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
 
         save_tool = MemorySaveTool()
         save_result = save_tool.execute(
-            session_id=key, data={"content": content}, persistent=True,
+            session_id=key,
+            data={"content": content},
+            persistent=True,
         )
         saved = save_result.get("result", {}).get("saved", False)
         if saved:

@@ -144,8 +144,11 @@ class TestNodeScopePolicy:
 
         policy = NodeScopePolicy()
         all_tools = [
-            "memory_search", "memory_get", "steam_info",
-            "reddit_sentiment", "psm_calculate",
+            "memory_search",
+            "memory_get",
+            "steam_info",
+            "reddit_sentiment",
+            "psm_calculate",
         ]
         filtered = policy.filter(all_tools, node="evaluator")
         assert set(filtered) == {"memory_search", "memory_get", "steam_info", "reddit_sentiment"}
@@ -162,9 +165,7 @@ class TestNodeScopePolicy:
         from geode.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
-        filtered = policy.filter(
-            ["memory_search", "steam_info"], node="analyst_game_mechanics"
-        )
+        filtered = policy.filter(["memory_search", "steam_info"], node="analyst_game_mechanics")
         assert "memory_search" in filtered
         assert "steam_info" not in filtered
 
@@ -306,10 +307,13 @@ class TestTaskGraphBlocked:
         from geode.orchestration.task_system import Task, TaskGraph
 
         graph = TaskGraph()
-        graph.add_task(Task(
-            task_id="test_analyst_gm", name="Analyst GM",
-            dependencies=["test_signals"],
-        ))
+        graph.add_task(
+            Task(
+                task_id="test_analyst_gm",
+                name="Analyst GM",
+                dependencies=["test_signals"],
+            )
+        )
         graph.add_task(Task(task_id="test_signals", name="Signals", dependencies=[]))
 
         graph.mark_running("test_signals")

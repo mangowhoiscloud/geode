@@ -137,7 +137,8 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
         except (json.JSONDecodeError, ValidationError, ValueError) as exc:
             log.warning(
                 "Analyst %s tool-augmented path failed: %s — falling back",
-                analyst_type, exc,
+                analyst_type,
+                exc,
             )
         except Exception as exc:
             log.debug("Analyst %s tool-augmented path unexpected error: %s", analyst_type, exc)

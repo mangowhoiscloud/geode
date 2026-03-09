@@ -117,8 +117,7 @@ def _make_hooked_node(
                 tool_names = [t.get("name", "") for t in tool_defs if isinstance(t, dict)]
                 allowed_set = set(node_scope_policy.filter(tool_names, node=node_name))
                 filtered_defs = [
-                    t for t in tool_defs
-                    if isinstance(t, dict) and t.get("name", "") in allowed_set
+                    t for t in tool_defs if isinstance(t, dict) and t.get("name", "") in allowed_set
                 ]
                 es_dict["_tool_definitions"] = filtered_defs
                 effective_state = es_dict  # type: ignore[assignment]
@@ -173,8 +172,10 @@ def _make_hooked_node(
                     guardrails = result.get("guardrails")
                     biasbuster = result.get("biasbuster")
                     all_ok = (
-                        guardrails and guardrails.all_passed
-                        and biasbuster and biasbuster.overall_pass
+                        guardrails
+                        and guardrails.all_passed
+                        and biasbuster
+                        and biasbuster.overall_pass
                     )
                     if all_ok:
                         hooks.trigger(HookEvent.VERIFICATION_PASS, hook_data)
@@ -187,7 +188,9 @@ def _make_hooked_node(
                     synthesis = result.get("synthesis")
                     if synthesis:
                         hook_data["synthesis_cause"] = getattr(
-                            synthesis, "undervaluation_cause", "",
+                            synthesis,
+                            "undervaluation_cause",
+                            "",
                         )
                         hook_data["synthesis_action"] = getattr(synthesis, "action_type", "")
                     hook_data["final_score"] = effective_state.get("final_score", 0.0)
@@ -203,7 +206,9 @@ def _make_hooked_node(
                     last_exc = exc
                     log.warning(
                         "Node '%s' failed (%s), retrying (%d left)",
-                        node_name, exc, retries_left,
+                        node_name,
+                        exc,
+                        retries_left,
                     )
                     hook_data["retry_reason"] = str(exc)
                     continue
@@ -220,7 +225,8 @@ def _make_hooked_node(
             from langsmith import traceable
 
             _wrapped = traceable(
-                run_type="chain", name=f"node:{node_name}",
+                run_type="chain",
+                name=f"node:{node_name}",
             )(_wrapped)
         except ImportError:
             pass
@@ -342,7 +348,12 @@ def build_graph(
     ) -> Callable[[GeodeState], dict[str, Any]]:
         if hooks is not None:
             return _make_hooked_node(
-                fn, name, hooks, bootstrap_mgr, prompt_assembler, node_scope_policy,
+                fn,
+                name,
+                hooks,
+                bootstrap_mgr,
+                prompt_assembler,
+                node_scope_policy,
             )
         return fn
 

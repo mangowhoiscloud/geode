@@ -179,8 +179,7 @@ class NodeScopePolicy:
         node_allowlists: dict[str, list[str]] | None = None,
     ) -> None:
         self._allowlists: dict[str, set[str]] = {
-            k: set(v)
-            for k, v in (node_allowlists or NODE_TOOL_ALLOWLISTS).items()
+            k: set(v) for k, v in (node_allowlists or NODE_TOOL_ALLOWLISTS).items()
         }
 
     def filter(

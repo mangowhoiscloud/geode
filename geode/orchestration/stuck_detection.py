@@ -150,7 +150,6 @@ class StuckDetector:
             self.check_stuck()
             time.sleep(self._check_interval)
 
-
     def register_hooks(self, hooks: Any) -> None:
         """Connect StuckDetector to HookSystem for automatic node tracking.
 

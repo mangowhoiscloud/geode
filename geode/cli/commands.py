@@ -101,7 +101,7 @@ def show_help() -> None:
 
 def cmd_list() -> None:
     """List available IP fixtures."""
-    from geode.nodes.router import _FIXTURE_MAP
+    from geode.fixtures import FIXTURE_MAP as _FIXTURE_MAP
 
     console.print()
     console.print("  [header]Available IPs[/header]")

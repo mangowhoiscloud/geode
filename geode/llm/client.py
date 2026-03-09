@@ -34,7 +34,9 @@ _langsmith_enabled = False
 
 
 def _maybe_traceable(
-    *, run_type: str = "llm", name: str | None = None,
+    *,
+    run_type: str = "llm",
+    name: str | None = None,
 ) -> Any:
     """Return @traceable decorator if LangSmith is configured, else passthrough.
 
@@ -58,6 +60,7 @@ def _maybe_traceable(
         return fn
 
     return _identity
+
 
 # ---------------------------------------------------------------------------
 # Token usage tracking

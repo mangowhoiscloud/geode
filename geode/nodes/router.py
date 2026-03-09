@@ -12,16 +12,13 @@ import uuid
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
-from geode.fixtures import FIXTURE_MAP, load_fixture
+from geode.fixtures import load_fixture
 from geode.state import GeodeState
 
 if TYPE_CHECKING:
     from geode.memory.context import ContextAssembler
 
 log = logging.getLogger(__name__)
-
-# Re-export for CLI /list command
-_FIXTURE_MAP = FIXTURE_MAP
 
 # Thread-safe context assembler via contextvars (set by runtime wiring)
 _context_assembler_ctx: ContextVar[Any] = ContextVar("context_assembler", default=None)

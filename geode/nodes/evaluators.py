@@ -241,7 +241,8 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
         except (json.JSONDecodeError, ValidationError, ValueError) as exc:
             log.warning(
                 "Evaluator %s tool-augmented path failed: %s — falling back",
-                evaluator_type, exc,
+                evaluator_type,
+                exc,
             )
 
     # Use Anthropic Structured Output with evaluator-specific typed model.

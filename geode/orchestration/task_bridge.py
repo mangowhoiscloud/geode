@@ -126,7 +126,8 @@ class TaskGraphHookBridge:
             if self._graph.is_blocked(tid):
                 log.warning(
                     "Bridge: skipping node '%s' (task %s blocked by failed dependency)",
-                    node, tid,
+                    node,
+                    tid,
                 )
                 self._graph.mark_skipped(tid)
                 data["_skip_node"] = True
