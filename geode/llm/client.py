@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 import anthropic
+from anthropic.types import TextBlockParam
 from pydantic import BaseModel
 
 from geode.config import settings
@@ -178,6 +179,22 @@ def get_anthropic_client() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
 
+def _system_with_cache(system: str) -> list[TextBlockParam]:
+    """Convert a system prompt string to content block format with cache_control.
+
+    Enables Anthropic Prompt Caching so that repeated calls sharing the same
+    system prompt (e.g., 4 analysts or 3 evaluators) get cache hits and
+    reduced latency/cost.
+    """
+    return [
+        TextBlockParam(
+            type="text",
+            text=system,
+            cache_control={"type": "ephemeral"},
+        )
+    ]
+
+
 def _retry_with_backoff(
     fn: Any,
     *,
@@ -268,12 +285,14 @@ def call_llm(
     if seed is not None:
         log.info("Reproducibility seed=%d requested (logged for auditing)", seed)
 
+    system_cached = _system_with_cache(system)
+
     def _do_call(*, model: str) -> str:
         response = client.messages.create(
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
-            system=system,
+            system=system_cached,
             messages=[{"role": "user", "content": user}],
             timeout=90.0,
         )
@@ -296,6 +315,11 @@ def call_llm(
                 out_tok,
                 cost,
             )
+            # Log cache hit/miss if available
+            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0)
+            cache_read = getattr(response.usage, "cache_read_input_tokens", 0)
+            if cache_create or cache_read:
+                log.debug("Cache: create=%d read=%d", cache_create, cache_read)
 
         block = response.content[0]
         if not hasattr(block, "text"):
@@ -325,13 +349,14 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
     """
     client = get_anthropic_client()
     target_model = model or settings.model
+    system_cached = _system_with_cache(system)
 
     def _do_call(*, model: str) -> T:
         response = client.messages.parse(
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
-            system=system,
+            system=system_cached,
             messages=[{"role": "user", "content": user}],
             output_format=output_model,
             timeout=90.0,
@@ -355,8 +380,13 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
                 out_tok,
                 cost,
             )
+            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0)
+            cache_read = getattr(response.usage, "cache_read_input_tokens", 0)
+            if cache_create or cache_read:
+                log.debug("Cache: create=%d read=%d", cache_create, cache_read)
 
-        assert response.parsed_output is not None, "parsed_output was None"
+        if response.parsed_output is None:
+            raise ValueError("Structured output parsing returned None")
         return response.parsed_output
 
     result: T = _retry_with_backoff(_do_call, model=target_model)
@@ -453,6 +483,7 @@ def call_llm_with_tools(
     """
     client = get_anthropic_client()
     target_model = model or settings.model
+    system_cached = _system_with_cache(system)
 
     all_tool_calls: list[ToolCallRecord] = []
     all_usage: list[LLMUsage] = []
@@ -471,7 +502,7 @@ def call_llm_with_tools(
                 model=model,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                system=system,
+                system=system_cached,
                 messages=messages,
                 tools=tools,
                 tool_choice=_tc,
@@ -571,14 +602,18 @@ def call_llm_streaming(
     target_model = model or settings.model
 
     def _do_stream(*, model: str) -> Iterator[str]:
+        system_cached = _system_with_cache(system)
         with client.messages.stream(
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
-            system=system,
+            system=system_cached,
             messages=[{"role": "user", "content": user}],
         ) as stream:
             yield from stream.text_stream
+
+            # Record success AFTER stream completes (not on generator creation)
+            _circuit_breaker.record_success()
 
             # Capture token usage from the stream's final response
             final = stream.get_final_message()
@@ -601,6 +636,16 @@ def call_llm_streaming(
                     cost,
                 )
 
+                # Log cache hit/miss if available
+                cache_create = getattr(final.usage, "cache_creation_input_tokens", 0)
+                cache_read = getattr(final.usage, "cache_read_input_tokens", 0)
+                if cache_create or cache_read:
+                    log.debug(
+                        "Streaming cache: create=%d read=%d",
+                        cache_create,
+                        cache_read,
+                    )
+
     # Circuit breaker check — mirrors call_llm() behavior
     if not _circuit_breaker.can_execute():
         raise RuntimeError(
@@ -616,7 +661,8 @@ def call_llm_streaming(
         for attempt in range(MAX_RETRIES):
             try:
                 result = _do_stream(model=current_model)
-                _circuit_breaker.record_success()
+                # circuit_breaker.record_success() is called inside the generator
+                # after stream completes, not here on generator creation
                 return result
             except _RETRYABLE_ERRORS as exc:
                 last_error = exc

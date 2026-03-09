@@ -1,5 +1,12 @@
 """StateGraph build + compile for the GEODE pipeline.
 
+Design Decision: Plan-and-Execute over ReAct
+    ReAct (Reason+Act) executes tools sequentially without upfront planning,
+    limiting parallelism and structured multi-step analysis. GEODE adopts a
+    fixed-topology DAG with Send API parallelism (analysts×4, evaluators×3)
+    for deterministic execution order. Dynamic Plan-and-Execute for complex
+    requests lives in L4 orchestration (see orchestration/plan_mode.py).
+
 Topology: START → router → signals → analyst×4 (Send)
        → evaluator×3 (Send) → scoring → verification → synthesizer → END
 

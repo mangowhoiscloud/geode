@@ -11,7 +11,13 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
+from geode.config import settings
+from geode.infrastructure.ports.llm_port import (
+    get_llm_json,
+    get_llm_parsed,
+    get_secondary_llm_json,
+    get_secondary_llm_parsed,
+)
 from geode.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_USER
 from geode.state import AnalysisResult, GeodeState
 
@@ -77,6 +83,18 @@ def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, st
     return base_system, base_user
 
 
+# Analyst types assigned to the secondary LLM in cross-ensemble mode
+_SECONDARY_ANALYSTS = {"player_experience", "discovery"}
+_PRIMARY_ANALYSTS = {"game_mechanics", "growth_potential"}
+
+
+def _should_use_secondary(analyst_type: str) -> bool:
+    """Determine whether this analyst should use the secondary LLM in cross mode."""
+    if settings.ensemble_mode != "cross":
+        return False
+    return analyst_type in _SECONDARY_ANALYSTS
+
+
 def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     """Run a single analyst via Claude API with structured output."""
     system, user = _build_analyst_prompt(analyst_type, state)
@@ -86,35 +104,64 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     if state.get("dry_run"):
         return get_dry_run_result(analyst_type, state.get("ip_name", ""))
 
+    # Determine which LLM to use based on ensemble mode
+    use_secondary = _should_use_secondary(analyst_type)
+    model_provider: str = "primary"
+
+    if use_secondary:
+        secondary_parsed = get_secondary_llm_parsed()
+        secondary_json = get_secondary_llm_json()
+        if secondary_parsed is not None or secondary_json is not None:
+            model_provider = "secondary"
+            log.debug("Analyst %s using secondary LLM (cross-ensemble mode)", analyst_type)
+        else:
+            log.debug(
+                "Analyst %s: secondary LLM not available, falling back to primary",
+                analyst_type,
+            )
+            use_secondary = False
+
+    # Select the callable pair based on ensemble routing
+    parsed_fn = get_secondary_llm_parsed() if use_secondary else get_llm_parsed()
+    json_fn = get_secondary_llm_json() if use_secondary else get_llm_json()
+
     # Use Anthropic Structured Output (messages.parse) for guaranteed JSON
-    try:
-        result = get_llm_parsed()(system, user, output_model=AnalysisResult)
-        # Ensure analyst_type matches
-        if result.analyst_type != analyst_type:
-            result = result.model_copy(update={"analyst_type": analyst_type})
-        return result
-    except Exception as exc:
-        log.warning(
-            "Analyst %s structured output failed: %s — falling back to legacy JSON parse",
-            analyst_type,
-            exc,
-        )
+    # Analyst temperature 0.5 (higher than default 0.3 for diverse perspectives)
+    if parsed_fn is not None:
+        try:
+            result = parsed_fn(system, user, output_model=AnalysisResult, temperature=0.5)
+            # Ensure analyst_type matches
+            if result.analyst_type != analyst_type:
+                result = result.model_copy(update={"analyst_type": analyst_type})
+            result = result.model_copy(update={"model_provider": model_provider})
+            return result
+        except Exception as exc:
+            log.warning(
+                "Analyst %s structured output failed: %s — falling back to legacy JSON parse",
+                analyst_type,
+                exc,
+            )
 
     # Fallback: legacy JSON parse
-    try:
-        data = get_llm_json()(system, user)
-        return AnalysisResult(**data)
-    except (ValidationError, ValueError) as ve:
-        log.warning("Analyst %s legacy fallback also failed: %s", analyst_type, ve)
-        return AnalysisResult(
-            analyst_type=analyst_type,
-            score=1.0,
-            key_finding="[DEGRADED] LLM response failed validation",
-            reasoning="Schema validation failed — degraded result",
-            evidence=["validation_error"],
-            confidence=0.0,
-            is_degraded=True,
-        )
+    if json_fn is not None:
+        try:
+            data = json_fn(system, user, temperature=0.5)
+            result = AnalysisResult(**data)
+            result = result.model_copy(update={"model_provider": model_provider})
+            return result
+        except (ValidationError, ValueError) as ve:
+            log.warning("Analyst %s legacy fallback also failed: %s", analyst_type, ve)
+
+    return AnalysisResult(
+        analyst_type=analyst_type,
+        score=1.0,
+        key_finding="[DEGRADED] LLM response failed validation",
+        reasoning="Schema validation failed — degraded result",
+        evidence=["validation_error"],
+        confidence=0.0,
+        is_degraded=True,
+        model_provider=model_provider,
+    )
 
 
 def get_dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:

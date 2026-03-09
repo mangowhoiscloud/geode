@@ -4,6 +4,19 @@ Implements Redis (simulated), PostgreSQL (file-based), and Hybrid (L1→L2)
 session stores following the SessionStorePort protocol.
 
 Architecture-v6 §3 Layer 2: Hybrid Session tier.
+
+Production Upgrade Path:
+    Current: In-memory dict (Redis simulation) + file-based JSON (PostgreSQL simulation).
+    To use real drivers:
+      1. Install: ``uv add redis asyncpg``
+      2. Set env: ``GEODE_REDIS_URL=redis://localhost:6379``
+                  ``GEODE_POSTGRES_URL=postgresql://user:pass@localhost/geode``
+      3. Replace ``RedisSessionStore`` body with ``redis.Redis`` client calls.
+         The interface (get/set/delete/exists/list_sessions/save_checkpoint/load_checkpoint)
+         is identical — only the storage backend changes.
+      4. Replace ``PostgreSQLSessionStore`` body with ``asyncpg`` pool queries.
+         Table: ``sessions (id TEXT PK, data JSONB, created_at TIMESTAMPTZ)``.
+      5. ``HybridSessionStore`` requires no changes — it orchestrates L1→L2 via the port interface.
 """
 
 from __future__ import annotations

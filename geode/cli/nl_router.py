@@ -10,11 +10,15 @@ Graceful degradation (3-stage):
   3. Help with error context — when nothing matches
 
 Tools exposed to LLM:
-  1. list_ips    — 사용 가능한 IP 목록 표시
-  2. analyze_ip  — 특정 IP 분석 실행
-  3. search_ips  — 키워드/장르로 IP 검색
-  4. compare_ips — 두 IP 비교 분석
-  5. show_help   — 사용법 안내
+  1. list_ips       — 사용 가능한 IP 목록 표시
+  2. analyze_ip     — 특정 IP 분석 실행
+  3. search_ips     — 키워드/장르로 IP 검색
+  4. compare_ips    — 두 IP 비교 분석
+  5. show_help      — 사용법 안내
+  6. generate_report — 리포트 생성
+  7. batch_analyze  — 배치 분석 (전체/다수 IP 동시)
+  8. check_status   — 시스템 상태 확인
+  9. switch_model   — 모델/앙상블 모드 변경
 
 If the LLM responds with text (no tool call) → chat intent.
 """
@@ -36,7 +40,18 @@ log = logging.getLogger(__name__)
 # Intent data model
 # ---------------------------------------------------------------------------
 
-VALID_ACTIONS = {"analyze", "search", "list", "help", "compare", "chat", "report"}
+VALID_ACTIONS = {
+    "analyze",
+    "search",
+    "list",
+    "help",
+    "compare",
+    "chat",
+    "report",
+    "batch",
+    "status",
+    "model",
+}
 
 LLM_ROUTER_MODEL = "claude-opus-4-6"
 
@@ -276,6 +291,70 @@ _TOOLS: list[dict[str, Any]] = [
             "required": ["ip_name"],
         },
     },
+    {
+        "name": "batch_analyze",
+        "description": (
+            "여러 IP를 동시에 배치 분석합니다. "
+            "사용자가 전체/다수 IP를 한번에 분석하거나 순위를 보고 싶을 때 사용하세요. "
+            "Examples: '전체 IP 분석해줘', '배치 돌려', 'batch analyze all', "
+            "'모든 IP 점수 보여줘', '순위 보여줘', 'rank all IPs', "
+            "'상위 5개 분석해', 'top 10'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top": {
+                    "type": "integer",
+                    "description": "분석할 최대 IP 수 (기본값: 20)",
+                },
+                "genre": {
+                    "type": "string",
+                    "description": "장르 필터 (e.g. 'Dark Fantasy', 'Cyberpunk'). 없으면 전체.",
+                },
+                "stream": {
+                    "type": "boolean",
+                    "description": "스트리밍 모드 사용 여부 (기본값: false)",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "check_status",
+        "description": (
+            "GEODE 시스템 상태를 확인합니다. "
+            "사용자가 시스템 상태, 건강 체크, 모델 정보, 설정을 물어볼 때 사용하세요. "
+            "Examples: '시스템 상태', 'health check', '지금 모델 뭐야?', "
+            "'상태 확인', 'status', '설정 보여줘', 'what model are you using?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "switch_model",
+        "description": (
+            "LLM 모델이나 앙상블 모드를 변경합니다. "
+            "사용자가 모델 변경, 앙상블 모드 전환을 요청할 때 사용하세요. "
+            "Examples: '모델 바꿔', 'switch to GPT', '앙상블 모드로', "
+            "'cross 모드 켜줘', 'change model', 'use Haiku'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "model_hint": {
+                    "type": "string",
+                    "description": (
+                        "원하는 모델이나 모드 힌트 (e.g. 'opus', 'haiku', 'gpt', "
+                        "'cross', 'ensemble'). 없으면 모델 선택 메뉴 표시."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 # Tool name → NLIntent action mapping
@@ -286,14 +365,19 @@ _TOOL_ACTION_MAP: dict[str, str] = {
     "compare_ips": "compare",
     "show_help": "help",
     "generate_report": "report",
+    "batch_analyze": "batch",
+    "check_status": "status",
+    "switch_model": "model",
 }
 
-# Tool name → args key mapping
+# Tool name → args key mapping (passthrough all tool input keys)
 _TOOL_ARGS_MAP: dict[str, dict[str, str]] = {
     "analyze_ip": {"ip_name": "ip_name"},
     "search_ips": {"query": "query"},
     "compare_ips": {"ip_a": "ip_a", "ip_b": "ip_b"},
     "generate_report": {"ip_name": "ip_name"},
+    "batch_analyze": {"top": "top", "genre": "genre", "stream": "stream"},
+    "switch_model": {"model_hint": "model_hint"},
 }
 
 
@@ -318,6 +402,11 @@ _OFFLINE_SEARCH = re.compile(r"(?:찾아|검색|search|find)", re.IGNORECASE)
 _OFFLINE_COMPARE = re.compile(r"(?:비교|compare|\bvs\b)", re.IGNORECASE)
 _OFFLINE_ANALYZE = re.compile(r"(?:분석|평가|analyze|evaluate)", re.IGNORECASE)
 _OFFLINE_REPORT = re.compile(r"(?:리포트|보고서|report|레포트)", re.IGNORECASE)
+_OFFLINE_BATCH = re.compile(r"(?:배치|전체|모든|순위|rank|batch|all\s*ip|top\s*\d+)", re.IGNORECASE)
+_OFFLINE_STATUS = re.compile(r"(?:상태|건강|health|status|설정|config|모델\s*뭐)", re.IGNORECASE)
+_OFFLINE_MODEL = re.compile(
+    r"(?:모델\s*바꿔|switch\s*model|앙상블|ensemble|cross\s*모드)", re.IGNORECASE
+)
 
 
 def _offline_fallback(text: str, *, error: str = "") -> NLIntent:
@@ -351,6 +440,12 @@ def _offline_fallback(text: str, *, error: str = "") -> NLIntent:
             )
 
     # Pattern checks (ordered by specificity)
+    if _OFFLINE_BATCH.search(lower):
+        return NLIntent(action="batch", args={"_error": error}, confidence=0.7)
+    if _OFFLINE_STATUS.search(lower):
+        return NLIntent(action="status", args={"_error": error}, confidence=0.7)
+    if _OFFLINE_MODEL.search(lower):
+        return NLIntent(action="model", args={"_error": error}, confidence=0.7)
     if _OFFLINE_LIST.search(lower):
         return NLIntent(action="list", args={"_error": error}, confidence=0.7)
     if _OFFLINE_HELP.search(lower):

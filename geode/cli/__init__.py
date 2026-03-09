@@ -46,7 +46,7 @@ from geode.llm.commentary import (
     generate_commentary,
 )
 from geode.runtime import GeodeRuntime
-from geode.state import GeodeState
+from geode.state import AnalysisResult, EvaluatorResult, GeodeState
 from geode.ui.console import console
 from geode.ui.panels import (
     analyst_panel,
@@ -293,6 +293,16 @@ def _progress_line(done: list[str], active: str = "") -> str:
     return " → ".join(parts) if parts else "[bold cyan]Starting...[/bold cyan]"
 
 
+def _merge_event_output(final_state: dict[str, Any], output: dict[str, Any]) -> None:
+    """Merge a single node's output into the accumulated final state."""
+    for k, v in output.items():
+        if k in ("analyses", "errors"):
+            lst = v if isinstance(v, list) else [v]
+            final_state.setdefault(k, []).extend(lst)
+        else:
+            final_state[k] = v
+
+
 def _execute_pipeline(
     initial_state: GeodeState,
     verbose: bool,
@@ -328,13 +338,7 @@ def _execute_pipeline(
                         done.append(f"{label} ✓")
                         status.update(_progress_line(done))
 
-                    # Merge node output into accumulated state
-                    for k, v in output.items():
-                        if k in ("analyses", "errors"):
-                            lst = v if isinstance(v, list) else [v]
-                            final_state.setdefault(k, []).extend(lst)
-                        else:
-                            final_state[k] = v
+                    _merge_event_output(final_state, output)
         except Exception as e:
             console.print(f"[error]Pipeline error: {e}[/error]")
             if verbose:
@@ -347,6 +351,122 @@ def _execute_pipeline(
     # Prune logs if needed
     runtime.prune_logs()
 
+    return final_state
+
+
+def _render_streaming_analyst(analysis: AnalysisResult) -> None:
+    """Render a single analyst result row immediately in streaming mode."""
+    score_style = (
+        "bold green" if analysis.score >= 4.0 else "yellow" if analysis.score >= 3.0 else "red"
+    )
+    console.print(
+        f"  [label]{analysis.analyst_type.capitalize():14s}[/label] "
+        f"[{score_style}]{analysis.score:.1f}[/{score_style}]  "
+        f"{analysis.key_finding}"
+    )
+
+
+def _render_streaming_evaluator(key: str, ev: EvaluatorResult) -> None:
+    """Render a single evaluator result immediately in streaming mode."""
+    labels = {
+        "quality_judge": "Quality",
+        "hidden_value": "Hidden",
+        "community_momentum": "Momentum",
+        "prospect_judge": "Prospect",
+    }
+    label = labels.get(key, key)
+    score = ev.composite_score
+    filled = int(score / 100 * 24)
+    bar = "[green]" + "\u2588" * filled + "[/green][dim]" + "\u2591" * (24 - filled) + "[/dim]"
+    console.print(f"  {label:10s} {bar} {score:.0f}/100")
+
+
+def _execute_pipeline_streaming(
+    initial_state: GeodeState,
+    verbose: bool,
+    *,
+    runtime: GeodeRuntime,
+) -> dict[str, Any] | None:
+    """Execute the pipeline with streaming output — display results as they arrive."""
+    graph = runtime.compile_graph()
+    runtime.store_session_data(dict(initial_state))
+
+    final_state: dict[str, Any] = dict(initial_state)
+    analyst_count = 0
+    analyst_header_shown = False
+    evaluator_header_shown = False
+
+    try:
+        for event in graph.stream(initial_state, config=runtime.thread_config):  # type: ignore[arg-type]
+            for node_name, output in event.items():
+                if node_name == "__end__":
+                    continue
+
+                _merge_event_output(final_state, output)
+
+                # Progressive rendering per node type
+                if node_name == "analyst":
+                    if not analyst_header_shown:
+                        console.print()
+                        console.print("[step]▸ [ANALYZE][/step] Running 4 Analysts (streaming)...")
+                        analyst_header_shown = True
+                    analyst_count += 1
+                    analyses = output.get("analyses", [])
+                    for a in analyses:
+                        _render_streaming_analyst(a)
+
+                elif node_name == "evaluators":
+                    if not evaluator_header_shown:
+                        console.print()
+                        console.print(
+                            "[step]▸ [EVALUATE][/step] 14-Axis Rubric Scoring (streaming)..."
+                        )
+                        evaluator_header_shown = True
+                    evals = output.get("evaluations", {})
+                    for key, ev in evals.items():
+                        _render_streaming_evaluator(key, ev)
+
+                elif node_name == "router":
+                    console.print()
+                    console.print("[step]▸ [ROUTE][/step] Loading IP data...")
+
+                elif node_name == "signals":
+                    console.print("[step]▸ [SIGNALS][/step] Fetching signals...")
+
+                elif node_name == "scoring":
+                    console.print()
+                    console.print("[step]▸ [SCORE][/step] Calculating final score...")
+                    if output.get("final_score") is not None:
+                        tier = output.get("tier", "?")
+                        score = output.get("final_score", 0)
+                        console.print(
+                            f"  Score: [bold]{score:.1f}[/bold]  Tier: [bold]{tier}[/bold]"
+                        )
+
+                elif node_name == "verification":
+                    console.print("[step]▸ [VERIFY][/step] Running guardrails...")
+
+                elif node_name == "synthesizer":
+                    console.print()
+                    console.print("[step]▸ [SYNTHESIZE][/step] Generating narrative...")
+                    synth = output.get("synthesis")
+                    if synth:
+                        console.print(f"  Cause: {synth.undervaluation_cause}")
+                        console.print(f"  Action: {synth.action_type}")
+
+                else:
+                    label = _STEP_LABELS.get(node_name, node_name)
+                    console.print(f"[step]▸ [{label.upper()}][/step] Done.")
+
+    except Exception as e:
+        console.print(f"[error]Pipeline error: {e}[/error]")
+        if verbose:
+            console.print_exception()
+        return None
+
+    console.print()
+    runtime.store_session_data(final_state)
+    runtime.prune_logs()
     return final_state
 
 
@@ -449,6 +569,7 @@ def _run_analysis(
     dry_run: bool = True,
     verbose: bool = False,
     skip_verification: bool = False,
+    stream: bool = False,
 ) -> dict[str, Any] | None:
     """Core analysis logic shared by interactive and CLI modes."""
     from geode.fixtures import FIXTURE_MAP
@@ -476,9 +597,15 @@ def _run_analysis(
     available_tools = runtime.get_available_tools(mode=mode)
     log.debug("Available tools for mode=%s: %s", mode, available_tools)
 
+    # Build session key for 3-tier memory assembly (GAP-001 fix)
+    from geode.memory.session_key import build_session_key
+
+    session_id = build_session_key(ip_name, "pipeline")
+
     initial_state: GeodeState = {
         "ip_name": ip_name,
         "pipeline_mode": pipeline_mode,
+        "session_id": session_id,
         "dry_run": dry_run,
         "verbose": verbose,
         "skip_verification": skip_verification,
@@ -488,10 +615,99 @@ def _run_analysis(
         "max_iterations": 3,
     }
 
-    result = _execute_pipeline(initial_state, verbose, runtime=runtime)
-    if result:
-        _set_last_result(result)
-        _render_result(result, skip_verification=skip_verification, verbose=verbose)
+    # Inject tool definitions for tool-augmented nodes (Synthesizer, BiasBuster)
+    if not dry_run:
+        tool_injection = runtime.get_tool_state_injection(mode=pipeline_mode)
+        initial_state.update(tool_injection)  # type: ignore[typeddict-item]
+
+    if stream:
+        result = _execute_pipeline_streaming(initial_state, verbose, runtime=runtime)
+        if result:
+            _set_last_result(result)
+            # In streaming mode, most panels are already rendered progressively.
+            # Only render verification + synthesis result if not yet shown.
+            if not skip_verification:
+                _render_verification(result, verbose=verbose)
+            if result.get("synthesis"):
+                result_panel(
+                    result.get("tier", "?"), result.get("final_score", 0), result["synthesis"]
+                )
+            errors = result.get("errors", [])
+            if errors:
+                console.print(f"  [warning]Pipeline warnings ({len(errors)}):[/warning]")
+                for err in errors:
+                    console.print(f"    [warning]- {err}[/warning]")
+            console.print()
+    else:
+        result = _execute_pipeline(initial_state, verbose, runtime=runtime)
+        if result:
+            _set_last_result(result)
+            _render_result(result, skip_verification=skip_verification, verbose=verbose)
+    return result
+
+
+def _build_initial_state(
+    ip_name: str,
+    *,
+    dry_run: bool = True,
+    runtime: GeodeRuntime,
+) -> GeodeState:
+    """Build initial pipeline state for batch mode."""
+    from geode.memory.session_key import build_session_key
+
+    session_id = build_session_key(ip_name, "pipeline")
+    initial_state: GeodeState = {
+        "ip_name": ip_name,
+        "pipeline_mode": "full_pipeline",
+        "session_id": session_id,
+        "dry_run": dry_run,
+        "verbose": False,
+        "skip_verification": False,
+        "analyses": [],
+        "errors": [],
+        "iteration": 1,
+        "max_iterations": 3,
+    }
+    if not dry_run:
+        tool_injection = runtime.get_tool_state_injection(mode="full_pipeline")
+        initial_state.update(tool_injection)  # type: ignore[typeddict-item]
+    return initial_state
+
+
+def _run_analysis_batch(ip_name: str, *, dry_run: bool = True) -> dict[str, Any]:
+    """Run analysis and return summary dict for batch mode (no console output)."""
+    resolved = _resolve_ip_name(ip_name)
+    if resolved is None:
+        return {
+            "ip_name": ip_name,
+            "tier": "ERR",
+            "final_score": 0.0,
+            "cause": f"Unknown IP: {ip_name}",
+            "error": True,
+        }
+
+    ip_name = resolved
+    runtime = GeodeRuntime.create(ip_name)
+    graph = runtime.compile_graph()
+    initial_state = _build_initial_state(ip_name, dry_run=dry_run, runtime=runtime)
+
+    final_state: dict[str, Any] = {}
+    for event in graph.stream(initial_state, config=runtime.thread_config):  # type: ignore[arg-type]
+        for _node_name, node_data in event.items():
+            _merge_event_output(final_state, node_data)
+
+    result: dict[str, Any] = {
+        "ip_name": ip_name,
+        "tier": final_state.get("tier", "?"),
+        "final_score": final_state.get("final_score", 0.0),
+    }
+
+    synthesis = final_state.get("synthesis")
+    if synthesis:
+        result["cause"] = synthesis.undervaluation_cause
+        result["action"] = synthesis.action_type
+
+    runtime.shutdown()
     return result
 
 
@@ -657,6 +873,17 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
         elif intent.action == "list":
             status.update("Tool: list_ips")
             summary = "list"
+        elif intent.action == "batch":
+            top = intent.args.get("top", 20)
+            status.update(f"Tool: batch_analyze (top={top})")
+            summary = f"batch · top {top}"
+        elif intent.action == "status":
+            status.update("Tool: check_status")
+            summary = "status"
+        elif intent.action == "model":
+            hint = intent.args.get("model_hint", "")
+            status.update(f"Tool: switch_model ({hint or 'menu'})")
+            summary = f"model · {hint or 'menu'}"
         elif intent.action == "chat":
             summary = "chat"
         elif intent.action == "help":
@@ -720,6 +947,51 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
             console.print()
             console.print("  [muted]응답을 생성하지 못했습니다. /help 를 입력해 보세요.[/muted]")
             console.print()
+
+    elif intent.action == "batch":
+        top = intent.args.get("top", 20)
+        genre = intent.args.get("genre")
+        from geode.cli.batch import render_batch_table, run_batch
+
+        batch_results = run_batch(top=top, genre=genre, dry_run=True)
+        render_batch_table(batch_results)
+
+    elif intent.action == "status":
+        console.print()
+        console.print("  [header]GEODE System Status[/header]")
+        console.print(f"  Model: [bold]{settings.model}[/bold]")
+        console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
+        ant_ok = bool(settings.anthropic_api_key)
+        oai_ok = bool(settings.openai_api_key)
+        ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
+        oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
+        console.print(f"  Anthropic API: {ant_status}")
+        console.print(f"  OpenAI API: {oai_status}")
+        readiness = _get_readiness()
+        if readiness:
+            mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
+            console.print(f"  Mode: [bold]{mode}[/bold]")
+        from geode.fixtures import FIXTURE_MAP
+
+        console.print(f"  Fixtures: [bold]{len(FIXTURE_MAP)} IPs[/bold]")
+        console.print()
+
+    elif intent.action == "model":
+        model_hint = intent.args.get("model_hint", "")
+        if model_hint:
+            # Auto-resolve model hint
+            hint = model_hint.lower()
+            if "cross" in hint or "ensemble" in hint or "앙상블" in hint:
+                console.print()
+                console.print(
+                    "  [info]앙상블 모드는 환경변수로 설정합니다: GEODE_ENSEMBLE_MODE=cross[/info]"
+                )
+                console.print()
+            else:
+                console.print(f"\n  [info]모델 변경 힌트: {model_hint}[/info]")
+                console.print("  [muted]/model 명령으로 모델을 선택하세요.[/muted]\n")
+        else:
+            cmd_model("")
 
     elif intent.action == "help":
         error = intent.args.get("_error", "")
@@ -819,6 +1091,7 @@ def analyze(
         False, "--skip-verification", help="Skip guardrails and BiasBuster"
     ),
     pipeline: str = typer.Option("full_pipeline", "--pipeline", "-p", help="Pipeline mode"),
+    stream: bool = typer.Option(False, "--stream", help="Enable streaming output"),
 ) -> None:
     """Analyze an IP for undervaluation potential."""
     _run_analysis(
@@ -826,6 +1099,7 @@ def analyze(
         dry_run=dry_run,
         verbose=verbose,
         skip_verification=skip_verification,
+        stream=stream,
     )
 
 
@@ -875,6 +1149,21 @@ def list_ips() -> None:
     console.print("[header]Available IPs:[/header]")
     for name in _FIXTURE_MAP:
         console.print(f"  - {name.title()}")
+
+
+@app.command()
+def batch(
+    top: int = typer.Option(10, help="Number of IPs to analyze"),
+    genre: str = typer.Option(None, help="Filter by genre"),
+    concurrency: int = typer.Option(2, help="Parallel workers"),
+    dry_run: bool = typer.Option(True, "--dry-run/--live", help="Use dry-run mode"),
+) -> None:
+    """Run batch analysis on multiple IPs."""
+    from geode.cli.batch import render_batch_table, run_batch
+
+    results = run_batch(top=top, genre=genre, concurrency=concurrency, dry_run=dry_run)
+    if results:
+        render_batch_table(results)
 
 
 if __name__ == "__main__":

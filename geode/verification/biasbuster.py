@@ -8,7 +8,8 @@ from typing import Any
 import numpy as np
 from pydantic import ValidationError
 
-from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
+from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed, get_llm_tool
+from geode.infrastructure.ports.tool_port import get_tool_executor
 from geode.llm.prompts import BIASBUSTER_SYSTEM, BIASBUSTER_USER
 from geode.state import AnalysisResult, BiasBusterResult, GeodeState
 
@@ -62,6 +63,37 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
                     f"(CV={stats['cv']:.2f}). No bias detected."
                 ),
             )
+
+        # Tool-augmented path: LLM can query memory for historical bias patterns
+        raw_tool_defs: Any = state.get("_tool_definitions", [])
+        if raw_tool_defs and not low_variance_flag:
+            try:
+                tool_fn = get_llm_tool()
+                enhanced_system = (
+                    BIASBUSTER_SYSTEM + "\n\n## Available Tools\n"
+                    "You can query memory_search for past bias patterns."
+                )
+                scores = [a.score for a in analyses if isinstance(a, AnalysisResult)]
+                brief_user = (
+                    f"Check {state.get('ip_name', 'Unknown')} for bias. "
+                    f"Analyst scores: {scores}. "
+                    f"CV={stats['cv']:.3f}. JSON BiasBusterResult."
+                )
+                tool_exec: Any = get_tool_executor()
+                result = tool_fn(
+                    enhanced_system,
+                    brief_user,
+                    tools=raw_tool_defs,
+                    tool_executor=tool_exec,
+                    max_tool_rounds=2,
+                )
+                if result.text:
+                    import json
+
+                    data = json.loads(result.text)
+                    return BiasBusterResult(**data)
+            except Exception as exc:
+                log.info("Tool-augmented bias detection skipped: %s", exc)
 
         # LLM-based bias detection
         analyst_details_parts = []
