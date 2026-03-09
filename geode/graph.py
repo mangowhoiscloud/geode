@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import atexit
 import logging
+import os
 import sqlite3
 import time
 from collections.abc import Callable
@@ -48,6 +49,7 @@ from geode.nodes.synthesizer import synthesizer_node
 from geode.orchestration.bootstrap import BootstrapManager
 from geode.orchestration.hooks import HookEvent
 from geode.state import BiasBusterResult, GeodeState, GuardrailResult
+from geode.tools.policy import NodeScopePolicy
 from geode.verification.biasbuster import run_biasbuster
 from geode.verification.calibration import run_calibration_check
 from geode.verification.cross_llm import run_cross_llm_check
@@ -59,6 +61,10 @@ log = logging.getLogger(__name__)
 # Confidence threshold for feedback loop (L3)
 CONFIDENCE_THRESHOLD = 0.7
 DEFAULT_MAX_ITERATIONS = 5
+
+# Nodes eligible for node-level retry on failure (Phase 3-A)
+_RETRYABLE_NODES = frozenset({"analyst", "evaluator", "scoring"})
+_NODE_MAX_RETRIES = 1
 
 # Node → specific hook event mapping
 _NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
@@ -74,6 +80,7 @@ def _make_hooked_node(
     hooks: HookSystemPort,
     bootstrap_mgr: BootstrapManager | None = None,
     prompt_assembler: PromptAssembler | None = None,
+    node_scope_policy: NodeScopePolicy | None = None,
 ) -> Callable[[GeodeState], dict[str, Any]]:
     """Wrap a node function with hook triggers and prompt assembly."""
 
@@ -101,6 +108,21 @@ def _make_hooked_node(
             effective_state = dict(effective_state)  # type: ignore[assignment]
             effective_state["_prompt_assembler"] = prompt_assembler  # type: ignore[typeddict-unknown-key]
 
+        # Phase 2: Node-scoped tool filtering — restrict _tool_definitions per node
+        if node_scope_policy is not None:
+            es_dict: dict[str, Any] = dict(effective_state)
+            raw_defs: Any = es_dict.get("_tool_definitions", [])
+            tool_defs: list[dict[str, Any]] = raw_defs if isinstance(raw_defs, list) else []
+            if tool_defs:
+                tool_names = [t.get("name", "") for t in tool_defs if isinstance(t, dict)]
+                allowed_set = set(node_scope_policy.filter(tool_names, node=node_name))
+                filtered_defs = [
+                    t for t in tool_defs
+                    if isinstance(t, dict) and t.get("name", "") in allowed_set
+                ]
+                es_dict["_tool_definitions"] = filtered_defs
+                effective_state = es_dict  # type: ignore[assignment]
+
         # NODE_ENTER
         hooks.trigger(HookEvent.NODE_ENTER, hook_data)
 
@@ -109,57 +131,100 @@ def _make_hooked_node(
             hooks.trigger(HookEvent.PIPELINE_START, hook_data)
 
         start_time = time.time()
-        try:
-            result: dict[str, Any] = node_fn(effective_state)
 
-            duration_ms = (time.time() - start_time) * 1000
-            hook_data["duration_ms"] = duration_ms
-            hook_data["result_keys"] = list(result.keys())
+        # Phase 3-A: node-level retry for retryable nodes
+        retries_left = _NODE_MAX_RETRIES if node_name in _RETRYABLE_NODES else 0
+        last_exc: Exception | None = None
 
-            # Auto-attach drift scan hint for scoring node
-            if node_name == "scoring":
-                score = result.get("final_score", 0.0)
-                if score > 0:
-                    hook_data["drift_scan_hint"] = True
-                    hook_data["final_score"] = score
+        while True:
+            try:
+                # On retry, lower temperature for more deterministic output
+                if last_exc is not None and isinstance(effective_state, dict):
+                    prev: Any = effective_state.get("_bootstrap_parameters", {})
+                    effective_state["_bootstrap_parameters"] = {  # type: ignore[typeddict-unknown-key]
+                        **(prev or {}),
+                        "temperature": 0.3,
+                    }
 
-            # NODE_EXIT
-            hooks.trigger(HookEvent.NODE_EXIT, hook_data)
+                result: dict[str, Any] = node_fn(effective_state)
 
-            # Node-specific completion events
-            if node_name in _NODE_COMPLETION_EVENTS:
-                hooks.trigger(_NODE_COMPLETION_EVENTS[node_name], hook_data)
+                duration_ms = (time.time() - start_time) * 1000
+                hook_data["duration_ms"] = duration_ms
+                hook_data["result_keys"] = list(result.keys())
+                if last_exc is not None:
+                    hook_data["retried"] = True
 
-            # Verification pass/fail
-            if node_name == "verification":
-                guardrails = result.get("guardrails")
-                biasbuster = result.get("biasbuster")
-                if guardrails and guardrails.all_passed and biasbuster and biasbuster.overall_pass:
-                    hooks.trigger(HookEvent.VERIFICATION_PASS, hook_data)
-                else:
-                    hooks.trigger(HookEvent.VERIFICATION_FAIL, hook_data)
+                # Auto-attach drift scan hint for scoring node
+                if node_name == "scoring":
+                    score = result.get("final_score", 0.0)
+                    if score > 0:
+                        hook_data["drift_scan_hint"] = True
+                        hook_data["final_score"] = score
 
-            # PIPELINE_END (synthesizer is the last real node)
-            if node_name == "synthesizer":
-                # Enrich hook_data for memory write-back
-                synthesis = result.get("synthesis")
-                if synthesis:
-                    hook_data["synthesis_cause"] = getattr(synthesis, "undervaluation_cause", "")
-                    hook_data["synthesis_action"] = getattr(synthesis, "action_type", "")
-                hook_data["final_score"] = effective_state.get("final_score", 0.0)
-                hook_data["tier"] = effective_state.get("tier", "")
-                hook_data["dry_run"] = effective_state.get("dry_run", False)
-                hooks.trigger(HookEvent.PIPELINE_END, hook_data)
+                # NODE_EXIT
+                hooks.trigger(HookEvent.NODE_EXIT, hook_data)
 
-            return result
+                # Node-specific completion events
+                if node_name in _NODE_COMPLETION_EVENTS:
+                    hooks.trigger(_NODE_COMPLETION_EVENTS[node_name], hook_data)
 
-        except Exception as exc:
-            hook_data["error"] = str(exc)
-            hooks.trigger(HookEvent.NODE_ERROR, hook_data)
-            hooks.trigger(HookEvent.PIPELINE_ERROR, hook_data)
-            raise
+                # Verification pass/fail
+                if node_name == "verification":
+                    guardrails = result.get("guardrails")
+                    biasbuster = result.get("biasbuster")
+                    all_ok = (
+                        guardrails and guardrails.all_passed
+                        and biasbuster and biasbuster.overall_pass
+                    )
+                    if all_ok:
+                        hooks.trigger(HookEvent.VERIFICATION_PASS, hook_data)
+                    else:
+                        hooks.trigger(HookEvent.VERIFICATION_FAIL, hook_data)
+
+                # PIPELINE_END (synthesizer is the last real node)
+                if node_name == "synthesizer":
+                    # Enrich hook_data for memory write-back
+                    synthesis = result.get("synthesis")
+                    if synthesis:
+                        hook_data["synthesis_cause"] = getattr(
+                            synthesis, "undervaluation_cause", "",
+                        )
+                        hook_data["synthesis_action"] = getattr(synthesis, "action_type", "")
+                    hook_data["final_score"] = effective_state.get("final_score", 0.0)
+                    hook_data["tier"] = effective_state.get("tier", "")
+                    hook_data["dry_run"] = effective_state.get("dry_run", False)
+                    hooks.trigger(HookEvent.PIPELINE_END, hook_data)
+
+                return result
+
+            except Exception as exc:
+                if retries_left > 0:
+                    retries_left -= 1
+                    last_exc = exc
+                    log.warning(
+                        "Node '%s' failed (%s), retrying (%d left)",
+                        node_name, exc, retries_left,
+                    )
+                    hook_data["retry_reason"] = str(exc)
+                    continue
+                hook_data["error"] = str(exc)
+                hooks.trigger(HookEvent.NODE_ERROR, hook_data)
+                hooks.trigger(HookEvent.PIPELINE_ERROR, hook_data)
+                raise
 
     _wrapped.__name__ = f"hooked_{node_name}"
+
+    # Phase 5-B: Wrap with LangSmith traceable for Run Tree hierarchy
+    if os.environ.get("LANGSMITH_API_KEY"):
+        try:
+            from langsmith import traceable
+
+            _wrapped = traceable(
+                run_type="chain", name=f"node:{node_name}",
+            )(_wrapped)
+        except ImportError:
+            pass
+
     return _wrapped
 
 
@@ -255,6 +320,7 @@ def build_graph(
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     bootstrap_mgr: BootstrapManager | None = None,
     prompt_assembler: PromptAssembler | None = None,
+    node_scope_policy: NodeScopePolicy | None = None,
 ) -> StateGraph[GeodeState]:
     """Build the GEODE LangGraph StateGraph.
 
@@ -275,7 +341,9 @@ def build_graph(
         name: str,
     ) -> Callable[[GeodeState], dict[str, Any]]:
         if hooks is not None:
-            return _make_hooked_node(fn, name, hooks, bootstrap_mgr, prompt_assembler)
+            return _make_hooked_node(
+                fn, name, hooks, bootstrap_mgr, prompt_assembler, node_scope_policy,
+            )
         return fn
 
     # Add nodes (type: ignore needed — LangGraph type stubs don't match runtime)
@@ -404,6 +472,7 @@ def compile_graph(
     enable_drift_scan: bool = False,
     bootstrap_mgr: BootstrapManager | None = None,
     prompt_assembler: PromptAssembler | None = None,
+    node_scope_policy: NodeScopePolicy | None = None,
 ) -> CompiledStateGraph[Any, None, Any, Any]:
     """Compile the graph for execution.
 
@@ -433,6 +502,7 @@ def compile_graph(
         max_iterations=max_iterations,
         bootstrap_mgr=bootstrap_mgr,
         prompt_assembler=prompt_assembler,
+        node_scope_policy=node_scope_policy,
     )
 
     compile_kwargs: dict[str, Any] = {}
