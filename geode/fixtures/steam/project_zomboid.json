@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Project Zomboid",
+    "media_type": "game",
+    "release_year": 2013,
+    "studio": "The Indie Stone",
+    "genre": [
+      "survival",
+      "zombie",
+      "open world"
+    ],
+    "synopsis": "Project Zomboid — a Zombie Survival game developed by The Indie Stone, released in 2013 on Steam.",
+    "proof_of_game": "Project Zomboid (2013, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 13
+  },
+  "monolake": {
+    "dau_peak": 244800,
+    "dau_current": 30355,
+    "revenue_ltm": 4816287,
+    "revenue_lifetime": 128434320,
+    "retention_d30": 36,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "active_game_count": 1,
+    "last_game_year": 2013,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 14229000,
+    "reddit_subscribers": 237150,
+    "fan_art_yoy_pct": 24.5,
+    "google_trends_index": 90,
+    "twitter_mentions_monthly": 75888,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "high",
+    "genre_fit_keywords": [
+      "survival",
+      "zombie",
+      "open world",
+      "crafting",
+      "co-op"
+    ],
+    "game_sales_data": "~3,060,000 owners (Steam, 2013-present)"
+  },
+  "psm_covariates": {
+    "genre": "survival",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2013,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "ip_age_years": 13
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 88.7,
+    "cause": "timing_mismatch",
+    "quality_score": 93.5,
+    "momentum_score": 82.5,
+    "developer_track_record": 25,
+    "psm_att_pct": 38.3,
+    "psm_z_value": 3.19,
+    "psm_gamma": 2.3
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Nine Sols",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Red Candle Games",
+    "genre": [
+      "metroidvania",
+      "souls-like",
+      "action"
+    ],
+    "synopsis": "Nine Sols — a Action Metroidvania game developed by Red Candle Games, released in 2024 on Steam.",
+    "proof_of_game": "Nine Sols (2024, Steam/PC)",
+    "franchise_size": 3,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 36000,
+    "dau_current": 17100,
+    "revenue_ltm": 4723425,
+    "revenue_lifetime": 20783070,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "T",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 2137500,
+    "reddit_subscribers": 35625,
+    "fan_art_yoy_pct": 35.0,
+    "google_trends_index": 75,
+    "twitter_mentions_monthly": 11400,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "metroidvania",
+      "souls-like",
+      "action",
+      "asian",
+      "indie"
+    ],
+    "game_sales_data": "~450,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "metroidvania",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "T",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 3,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 84.1,
+    "cause": "timing_mismatch",
+    "quality_score": 95.5,
+    "momentum_score": 73.1,
+    "developer_track_record": 50,
+    "psm_att_pct": 36.9,
+    "psm_z_value": 3.07,
+    "psm_gamma": 2.4
+  }
+}

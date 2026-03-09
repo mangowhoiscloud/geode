@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Shadows of Doubt",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "ColePowered Games",
+    "genre": [
+      "immersive sim",
+      "detective",
+      "procedural"
+    ],
+    "synopsis": "Shadows of Doubt — a Immersive Sim Detective game developed by ColePowered Games, released in 2023 on Steam.",
+    "proof_of_game": "Shadows of Doubt (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 13920,
+    "dau_current": 4565,
+    "revenue_ltm": 365217,
+    "revenue_lifetime": 6817389,
+    "retention_d30": 31,
+    "metacritic_score": 77,
+    "store_page_score": 82,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 713400,
+    "reddit_subscribers": 11890,
+    "fan_art_yoy_pct": 18.7,
+    "google_trends_index": 67,
+    "twitter_mentions_monthly": 3804,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "immersive sim",
+      "detective",
+      "procedural",
+      "stealth",
+      "open world"
+    ],
+    "game_sales_data": "~174,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "immersive sim",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 77,
+    "store_page_score": 82,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 74.3,
+    "cause": "timing_mismatch",
+    "quality_score": 82.5,
+    "momentum_score": 62.1,
+    "developer_track_record": 25,
+    "psm_att_pct": 26.1,
+    "psm_z_value": 2.18,
+    "psm_gamma": 2.0
+  }
+}

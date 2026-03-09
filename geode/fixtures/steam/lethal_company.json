@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Lethal Company",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Zeekerss",
+    "genre": [
+      "online co-op",
+      "horror",
+      "survival horror"
+    ],
+    "synopsis": "Lethal Company — a Co-op Horror game developed by Zeekerss, released in 2023 on Steam.",
+    "proof_of_game": "Lethal Company (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 652800,
+    "dau_current": 253286,
+    "revenue_ltm": 8559432,
+    "revenue_lifetime": 159776064,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "M",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 39576000,
+    "reddit_subscribers": 659600,
+    "fan_art_yoy_pct": 33.7,
+    "google_trends_index": 97,
+    "twitter_mentions_monthly": 211072,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "online co-op",
+      "horror",
+      "survival horror",
+      "funny",
+      "exploration"
+    ],
+    "game_sales_data": "~8,160,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "online co-op",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "M",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 94.1,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 91.6,
+    "developer_track_record": 25,
+    "psm_att_pct": 42.0,
+    "psm_z_value": 3.5,
+    "psm_gamma": 2.4
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Deep Rock Galactic",
+    "media_type": "game",
+    "release_year": 2020,
+    "studio": "Ghost Ship Games",
+    "genre": [
+      "co-op",
+      "fps",
+      "mining"
+    ],
+    "synopsis": "Deep Rock Galactic — a Co-op FPS game developed by Ghost Ship Games, released in 2020 on Steam.",
+    "proof_of_game": "Deep Rock Galactic (2020, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 6
+  },
+  "monolake": {
+    "dau_peak": 415200,
+    "dau_current": 100686,
+    "revenue_ltm": 16343050,
+    "revenue_lifetime": 435814680,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2020,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 25171500,
+    "reddit_subscribers": 419525,
+    "fan_art_yoy_pct": 30.3,
+    "google_trends_index": 94,
+    "twitter_mentions_monthly": 134248,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "co-op",
+      "fps",
+      "mining",
+      "sci-fi",
+      "multiplayer"
+    ],
+    "game_sales_data": "~5,190,000 owners (Steam, 2020-present)"
+  },
+  "psm_covariates": {
+    "genre": "co-op",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2020,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 6
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 93.4,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 87.7,
+    "developer_track_record": 25,
+    "psm_att_pct": 43.4,
+    "psm_z_value": 3.62,
+    "psm_gamma": 2.4
+  }
+}

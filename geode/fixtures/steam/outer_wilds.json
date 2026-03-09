@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Outer Wilds",
+    "media_type": "game",
+    "release_year": 2020,
+    "studio": "Mobius Digital",
+    "genre": [
+      "exploration",
+      "space",
+      "mystery"
+    ],
+    "synopsis": "Outer Wilds — a Exploration Mystery game developed by Mobius Digital, released in 2020 on Steam.",
+    "proof_of_game": "Outer Wilds (2020, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 6
+  },
+  "monolake": {
+    "dau_peak": 124800,
+    "dau_current": 29952,
+    "revenue_ltm": 4093362,
+    "revenue_lifetime": 109156320,
+    "retention_d30": 37,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "active_game_count": 1,
+    "last_game_year": 2020,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 7488000,
+    "reddit_subscribers": 124800,
+    "fan_art_yoy_pct": 29.3,
+    "google_trends_index": 84,
+    "twitter_mentions_monthly": 39936,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "exploration",
+      "space",
+      "mystery",
+      "open world",
+      "puzzle"
+    ],
+    "game_sales_data": "~1,560,000 owners (Steam, 2020-present)"
+  },
+  "psm_covariates": {
+    "genre": "exploration",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2020,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "ip_age_years": 6
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 88.9,
+    "cause": "timing_mismatch",
+    "quality_score": 96.3,
+    "momentum_score": 79.5,
+    "developer_track_record": 25,
+    "psm_att_pct": 39.8,
+    "psm_z_value": 3.32,
+    "psm_gamma": 2.4
+  }
+}

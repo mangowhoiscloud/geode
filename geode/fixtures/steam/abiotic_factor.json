@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Abiotic Factor",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Deep Field Games",
+    "genre": [
+      "survival",
+      "co-op",
+      "base building"
+    ],
+    "synopsis": "Abiotic Factor — a Survival Co-op game developed by Deep Field Games, released in 2024 on Steam.",
+    "proof_of_game": "Abiotic Factor (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 36000,
+    "dau_current": 16560,
+    "revenue_ltm": 3935925,
+    "revenue_lifetime": 17318070,
+    "retention_d30": 35,
+    "metacritic_score": 85,
+    "store_page_score": 92,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 2070000,
+    "reddit_subscribers": 34500,
+    "fan_art_yoy_pct": 32.0,
+    "google_trends_index": 75,
+    "twitter_mentions_monthly": 11040,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "high",
+    "genre_fit_keywords": [
+      "survival",
+      "co-op",
+      "base building",
+      "sci-fi",
+      "crafting"
+    ],
+    "game_sales_data": "~450,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "survival",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 85,
+    "store_page_score": 92,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 82.2,
+    "cause": "timing_mismatch",
+    "quality_score": 92.5,
+    "momentum_score": 72.2,
+    "developer_track_record": 25,
+    "psm_att_pct": 34.7,
+    "psm_z_value": 2.89,
+    "psm_gamma": 2.3
+  }
+}

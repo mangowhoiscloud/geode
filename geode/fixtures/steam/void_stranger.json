@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Void Stranger",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "System Erasure",
+    "genre": [
+      "puzzle",
+      "sokoban",
+      "retro"
+    ],
+    "synopsis": "Void Stranger — a Puzzle Sokoban game developed by System Erasure, released in 2023 on Steam.",
+    "proof_of_game": "Void Stranger (2023, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 3360,
+    "dau_current": 1290,
+    "revenue_ltm": 66105,
+    "revenue_lifetime": 1233976,
+    "retention_d30": 37,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "T",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 201600,
+    "reddit_subscribers": 3360,
+    "fan_art_yoy_pct": 32.7,
+    "google_trends_index": 56,
+    "twitter_mentions_monthly": 1075,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "puzzle",
+      "sokoban",
+      "retro",
+      "difficult",
+      "pixel graphics"
+    ],
+    "game_sales_data": "~42,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "puzzle",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "T",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 74.3,
+    "cause": "discovery_failure",
+    "quality_score": 96.3,
+    "momentum_score": 57.0,
+    "developer_track_record": 50,
+    "psm_att_pct": 30.8,
+    "psm_z_value": 2.57,
+    "psm_gamma": 2.4
+  }
+}

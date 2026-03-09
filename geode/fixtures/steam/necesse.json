@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Necesse",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "Fair Games",
+    "genre": [
+      "sandbox",
+      "survival",
+      "rpg"
+    ],
+    "synopsis": "Necesse — a Sandbox Survival RPG game developed by Fair Games, released in 2022 on Steam.",
+    "proof_of_game": "Necesse (2022, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 16320,
+    "dau_current": 5059,
+    "revenue_ltm": 213985,
+    "revenue_lifetime": 4850344,
+    "retention_d30": 36,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 948600,
+    "reddit_subscribers": 15810,
+    "fan_art_yoy_pct": 28.0,
+    "google_trends_index": 68,
+    "twitter_mentions_monthly": 5059,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "high",
+    "genre_fit_keywords": [
+      "sandbox",
+      "survival",
+      "rpg",
+      "pixel graphics",
+      "multiplayer"
+    ],
+    "game_sales_data": "~204,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "sandbox",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 77.7,
+    "cause": "undermarketed",
+    "quality_score": 93.5,
+    "momentum_score": 65.9,
+    "developer_track_record": 25,
+    "psm_att_pct": 31.6,
+    "psm_z_value": 2.63,
+    "psm_gamma": 2.3
+  }
+}

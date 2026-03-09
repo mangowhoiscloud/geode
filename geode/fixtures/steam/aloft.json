@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Aloft",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Astrolabe Interactive",
+    "genre": [
+      "survival",
+      "building",
+      "exploration"
+    ],
+    "synopsis": "Aloft — a Sky Survival game developed by Astrolabe Interactive, released in 2024 on Steam.",
+    "proof_of_game": "Aloft (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 1632,
+    "dau_current": 571,
+    "revenue_ltm": 142728,
+    "revenue_lifetime": 628005,
+    "retention_d30": 26,
+    "metacritic_score": 66,
+    "store_page_score": 70,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "C"
+  },
+  "signals": {
+    "youtube_views": 71400,
+    "reddit_subscribers": 1190,
+    "fan_art_yoy_pct": 10.0,
+    "google_trends_index": 50,
+    "twitter_mentions_monthly": 380,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "survival",
+      "building",
+      "exploration",
+      "co-op",
+      "indie"
+    ],
+    "game_sales_data": "~20,400 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "survival",
+    "dev_tier": "C",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 66,
+    "store_page_score": 70,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 60.9,
+    "cause": "timing_mismatch",
+    "quality_score": 70.5,
+    "momentum_score": 45.5,
+    "developer_track_record": 0,
+    "psm_att_pct": 14.3,
+    "psm_z_value": 1.19,
+    "psm_gamma": 1.8
+  }
+}

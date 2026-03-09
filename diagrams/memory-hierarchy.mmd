@@ -1,0 +1,106 @@
+%%{init: {
+  'theme': 'default',
+  'themeVariables': {
+    'fontSize': '13px',
+    'fontFamily': 'arial',
+    'lineColor': '#6366F1',
+    'primaryColor': '#dbeafe',
+    'primaryBorderColor': '#3b82f6',
+    'primaryTextColor': '#1e293b',
+    'secondaryColor': '#fef3c7',
+    'secondaryBorderColor': '#f59e0b',
+    'tertiaryColor': '#dcfce7',
+    'tertiaryBorderColor': '#22c55e',
+    'clusterBkg': '#f8fafc',
+    'clusterBorder': '#cbd5e1'
+  }
+}}%%
+
+graph TB
+    START(["⬤ START"]):::startNode
+
+    START --> RUNTIME
+
+    subgraph RUNTIME ["GeodeRuntime — Memory Orchestration"]
+        direction TB
+
+        subgraph L1_SESSION ["L1 · InMemorySessionStore (Ephemeral)"]
+            direction LR
+            SS_STORE["<b>_store: dict</b><br/>───────────────────<br/>key: session_id (str)<br/>val: SessionEntry<br/>───────────────────<br/><i>TTL: 3600s</i>"]:::axisBlue
+            SS_ENTRY["<b>SessionEntry</b><br/>───────────────────<br/>data: dict[str, Any]<br/>created_at: float<br/>───────────────────<br/><i>auto-evict on TTL</i>"]:::axisBlue
+            SS_STORE --> SS_ENTRY
+        end
+
+        subgraph L2_KEY ["L2 · SessionKey (Hierarchical Naming)"]
+            direction LR
+            SK_FORMAT["<b>Key Format</b><br/>───────────────────<br/>ip:{name}:{phase}<br/>ip:{name}:{phase}:{sub}<br/>───────────────────<br/><i>7 phases defined</i>"]:::axisPurple
+            SK_PHASES["<b>Phases</b><br/>───────────────────<br/>cortex · signals<br/>analysis · evaluation<br/>scoring · verification<br/>synthesis<br/>───────────────────<br/><i>thread_id for LangGraph</i>"]:::axisPurple
+            SK_FORMAT --> SK_PHASES
+        end
+
+        subgraph L3_SQLITE ["L3 · SqliteSaver Checkpoint (Persistent)"]
+            direction TB
+
+            subgraph TABLES ["SQLite Tables (LangGraph)"]
+                direction LR
+                T_CP["<b>checkpoints</b><br/>─────────────────────<br/>thread_id TEXT<br/>checkpoint_ns TEXT<br/>checkpoint_id TEXT<br/>parent_checkpoint_id TEXT<br/>type TEXT<br/>checkpoint BLOB<br/>metadata BLOB<br/>─────────────────────<br/><i>PK: (thread_id,<br/>checkpoint_ns,<br/>checkpoint_id)</i>"]:::axisGreen
+                T_WRITES["<b>checkpoint_writes</b><br/>─────────────────────<br/>thread_id TEXT<br/>checkpoint_ns TEXT<br/>checkpoint_id TEXT<br/>task_id TEXT<br/>idx INTEGER<br/>channel TEXT<br/>type TEXT<br/>blob BLOB<br/>─────────────────────<br/><i>PK: (thread_id,<br/>checkpoint_ns,<br/>checkpoint_id,<br/>task_id, idx)</i>"]:::axisGreen
+                T_BLOBS["<b>checkpoint_blobs</b><br/>─────────────────────<br/>thread_id TEXT<br/>checkpoint_ns TEXT<br/>channel TEXT<br/>version TEXT<br/>type TEXT<br/>blob BLOB<br/>─────────────────────<br/><i>PK: (thread_id,<br/>checkpoint_ns,<br/>channel, version)</i>"]:::axisGreen
+            end
+        end
+
+        subgraph L4_STATE ["L4 · GeodeState (Pipeline Runtime)"]
+            direction TB
+
+            subgraph STATE_SCHEMA ["GeodeState TypedDict Schema"]
+                direction LR
+                S_INPUT["<b>Input</b><br/>──────────<br/>ip_name: str<br/>pipeline_mode: str<br/>dry_run: bool<br/>verbose: bool"]:::scoreNode
+                S_CORTEX["<b>Cortex (L1)</b><br/>──────────<br/>ip_info: dict<br/>monolake: dict"]:::opusNode
+                S_SIGNALS["<b>Signals (L2)</b><br/>──────────<br/>signals: dict"]:::opusNode
+                S_ANALYSIS["<b>Analysis (L3)</b><br/>──────────<br/>analyses: list<br/>[AnalysisResult]<br/><i>operator.add</i>"]:::opusNode
+                S_EVAL["<b>Evaluation (L3)</b><br/>──────────<br/>evaluations:<br/>dict[str,<br/>EvaluatorResult]"]:::opusNode
+                S_SCORE["<b>Scoring (L4)</b><br/>──────────<br/>psm_result: PSM<br/>subscores: dict<br/>analyst_confidence<br/>final_score: float<br/>tier: str"]:::gptNode
+                S_SYNTH["<b>Synthesis (L5)</b><br/>──────────<br/>synthesis:<br/>SynthesisResult"]:::gptNode
+                S_VERIFY["<b>Verification</b><br/>──────────<br/>guardrails<br/>biasbuster<br/>cross_llm"]:::axisRed
+                S_LOOP["<b>Feedback Loop</b><br/>──────────<br/>iteration: int<br/>max_iterations<br/>iteration_history<br/>weak_areas"]:::routeNode
+            end
+        end
+    end
+
+    %% Data Flow Arrows
+    L2_KEY -.->|"thread_id"| L3_SQLITE
+    L1_SESSION -.->|"session data"| L4_STATE
+    L4_STATE -.->|"state snapshot"| L3_SQLITE
+    L4_STATE -.->|"loopback"| S_LOOP
+
+    subgraph MODELS ["Pydantic Domain Models"]
+        direction LR
+        M_AR["<b>AnalysisResult</b><br/>──────────<br/>analyst_type: str<br/>score: 1.0~5.0<br/>key_finding: str<br/>reasoning: str<br/>evidence: list<br/>confidence: 0~100"]:::axisBlue
+        M_ER["<b>EvaluatorResult</b><br/>──────────<br/>evaluator_type: str<br/>axes: dict[str,float]<br/>composite_score: 0~100<br/>rationale: str<br/>──────────<br/><i>quality_judge: 8 axes</i><br/><i>hidden_value: 3 axes</i><br/><i>community: 3 axes</i>"]:::axisPurple
+        M_PSM["<b>PSMResult</b><br/>──────────<br/>att_pct: float<br/>z_value: float<br/>rosenbaum_gamma<br/>max_smd: float<br/>exposure_lift_score<br/>psm_valid: bool"]:::axisGreen
+        M_SR["<b>SynthesisResult</b><br/>──────────<br/>cause: CauseLiteral<br/>action: ActionLiteral<br/>value_narrative: str<br/>target_segment: str"]:::axisOrange
+        M_GR["<b>GuardrailResult</b><br/>──────────<br/>g1_schema: bool<br/>g2_range: bool<br/>g3_grounding: bool<br/>g4_consistency: bool<br/>all_passed: bool"]:::axisRed
+        M_BB["<b>BiasBusterResult</b><br/>──────────<br/>confirmation: bool<br/>recency: bool<br/>anchoring: bool<br/>overall_pass: bool"]:::axisRed
+    end
+
+    S_ANALYSIS -.-> M_AR
+    S_EVAL -.-> M_ER
+    S_SCORE -.-> M_PSM
+    S_SYNTH -.-> M_SR
+    S_VERIFY -.-> M_GR
+    S_VERIFY -.-> M_BB
+
+    L3_SQLITE --> ENDNODE(["⬤ PERSIST"]):::endNode
+
+    %% Styles
+    classDef startNode fill:#1e293b,stroke:#1e293b,color:#fff,font-weight:bold
+    classDef endNode fill:#1e293b,stroke:#1e293b,color:#fff,font-weight:bold
+    classDef opusNode fill:#dbeafe,stroke:#2563eb,color:#1e293b,stroke-width:2px
+    classDef gptNode fill:#fef3c7,stroke:#d97706,color:#1e293b,stroke-width:2px
+    classDef axisBlue fill:#dbeafe,stroke:#2563eb,color:#1e293b,stroke-width:2px
+    classDef axisGreen fill:#dcfce7,stroke:#16a34a,color:#1e293b,stroke-width:2px
+    classDef axisPurple fill:#ede9fe,stroke:#7c3aed,color:#1e293b,stroke-width:2px
+    classDef axisRed fill:#fee2e2,stroke:#dc2626,color:#1e293b,stroke-width:2px
+    classDef axisOrange fill:#ffedd5,stroke:#ea580c,color:#1e293b,stroke-width:2px
+    classDef routeNode fill:#fef3c7,stroke:#d97706,color:#1e293b
+    classDef scoreNode fill:#f1f5f9,stroke:#64748b,color:#1e293b,stroke-width:2px

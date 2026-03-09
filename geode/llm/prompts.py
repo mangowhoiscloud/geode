@@ -2,6 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
+import logging
+from typing import Any
+
+
+def _hash_prompt(text: str) -> str:
+    """Return first 12 chars of SHA-256 hash for template versioning."""
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+
+def hash_rendered_prompt(template: str, **kwargs: Any) -> str:
+    """Hash a rendered prompt (not template) for reproducibility auditing."""
+    rendered = template.format(**kwargs) if kwargs else template
+    return hashlib.sha256(rendered.encode()).hexdigest()[:12]
+
+
 # ---------------------------------------------------------------------------
 # Analyst Prompts (Layer 3) — Clean Context, no cross-analyst data
 # ---------------------------------------------------------------------------
@@ -16,6 +32,13 @@ IMPORTANT:
 - Do NOT reference other analysts or their scores.
 - Be rigorous and data-driven.
 
+Scoring Anchors:
+  1 = Poor (well below genre average, critical weaknesses)
+  2 = Below Average (notable gaps, limited appeal)
+  3 = Good (meets genre expectations, solid baseline)
+  4 = Strong (above average, clear competitive advantages)
+  5 = Outstanding (top-tier, exceptional potential)
+
 Respond in JSON format:
 {{
   "analyst_type": "{analyst_type}",
@@ -24,10 +47,29 @@ Respond in JSON format:
   "reasoning": "<2-3 sentences>",
   "evidence": ["<evidence1>", "<evidence2>"],
   "confidence": <float 0-100>
+}}
+
+Example (game_mechanics analyst for a fighting-game IP):
+{{
+  "analyst_type": "game_mechanics",
+  "score": 4.2,
+  "key_finding": "Deep combat system with strong competitive loop potential",
+  "reasoning": "The IP's martial arts system maps directly to a combo-based fighter with \
+high skill ceiling. Existing fan tournaments prove competitive demand. Mobile port gap \
+represents untapped casual segment.",
+  "evidence": ["Fan tournament viewership 1.2M avg", "No mobile game despite 60% mobile genre TAM"],
+  "confidence": 82.0
 }}"""
 
 ANALYST_USER = """\
-Analyze this IP as a {analyst_type} analyst:
+Analyze this IP as a {analyst_type} analyst.
+
+Think step-by-step:
+1. Review all data points and identify the most relevant evidence.
+2. Compare against genre benchmarks (what would a "3" look like for this genre?).
+3. Identify specific strengths (score drivers ≥4) and weaknesses (≤2).
+4. Assign your score with calibration anchors in mind.
+5. State your confidence based on evidence completeness.
 
 ## IP Information
 - Name: {ip_name}
@@ -91,6 +133,37 @@ Respond in JSON format:
   "axes": {{{axes_schema}}},
   "composite_score": <float 0-100>,
   "rationale": "<2-3 sentences explaining the evaluation>"
+}}
+
+Example (quality_judge):
+{{
+  "evaluator_type": "quality_judge",
+  "axes": {{
+    "a_score": 4.2, "b_score": 3.8, "c_score": 4.0,
+    "b1_score": 3.5, "c1_score": 3.9, "c2_score": 4.1,
+    "m_score": 3.7, "n_score": 4.0
+  }},
+  "composite_score": 78.0,
+  "rationale": "Strong core mechanics and engagement hooks. \\
+IP integration is solid but trailer metrics lag behind."
+}}
+
+Example (hidden_value):
+{{
+  "evaluator_type": "hidden_value",
+  "axes": {{"d_score": 4.5, "e_score": 3.0, "f_score": 4.0}},
+  "composite_score": 62.5,
+  "rationale": "Severe acquisition gap with no active marketing. \\
+Monetization adequate but expansion potential is high."
+}}
+
+Example (community_momentum):
+{{
+  "evaluator_type": "community_momentum",
+  "axes": {{"j_score": 4.0, "k_score": 3.5, "l_score": 3.8}},
+  "composite_score": 69.2,
+  "rationale": "Strong growth velocity and UGC output. \\
+Streaming presence growing but not yet viral."
 }}"""
 
 EVALUATOR_AXES = {
@@ -106,7 +179,65 @@ EVALUATOR_AXES = {
             "m_score": "Polish expectation (technical quality baseline)",
             "n_score": "Fun factor (pure entertainment value)",
         },
-        "composite_formula": "Average of all 8 axes, scaled to 0-100: (sum / 8) * 20",
+        "rubric": {
+            "a_score": {
+                "1": "기본 조작 불량",
+                "2": "장르 이하",
+                "3": "장르 평균",
+                "4": "장르 이상",
+                "5": "혁신적 메카닉",
+            },
+            "b_score": {
+                "1": "IP 무관",
+                "2": "피상적 활용",
+                "3": "적절한 활용",
+                "4": "깊은 활용",
+                "5": "IP 핵심 구현",
+            },
+            "c_score": {
+                "1": "D1 Retention <10%",
+                "2": "D1 10-30%",
+                "3": "D1 30-50%",
+                "4": "D1 50-70%",
+                "5": "D1 >70%",
+            },
+            "b1_score": {
+                "1": "like/view <1%",
+                "2": "1-4%",
+                "3": "4-6%",
+                "4": "6-8%",
+                "5": "≥8%",
+            },
+            "c1_score": {
+                "1": "Store score <50",
+                "2": "50-70",
+                "3": "70-85",
+                "4": "85-90",
+                "5": "≥90",
+            },
+            "c2_score": {
+                "1": "Mixed reviews",
+                "2": "Mostly Negative",
+                "3": "Positive",
+                "4": "Very Positive",
+                "5": "Overwhelmingly Positive",
+            },
+            "m_score": {
+                "1": "버그 다수",
+                "2": "불안정",
+                "3": "안정적",
+                "4": "잘 다듬어짐",
+                "5": "완벽",
+            },
+            "n_score": {
+                "1": "재미없음",
+                "2": "약간 재미",
+                "3": "적당히 재미",
+                "4": "매우 재미",
+                "5": "Flow 달성",
+            },
+        },
+        "composite_formula": "Normalized 8-axis sum to 0-100: (axes_sum - 8) / 32 * 100",
     },
     "hidden_value": {
         "description": "Hidden Value Evaluator — identify underexploited potential",
@@ -114,6 +245,29 @@ EVALUATOR_AXES = {
             "d_score": "Acquisition Gap (marketing/exposure deficiency)",
             "e_score": "Monetization Gap (revenue model underperformance)",
             "f_score": "Expansion Potential (untapped platform/market growth)",
+        },
+        "rubric": {
+            "d_score": {
+                "1": "마케팅 충분",
+                "2": "소폭 부족",
+                "3": "부분 부족",
+                "4": "상당 부족",
+                "5": "심각 부족",
+            },
+            "e_score": {
+                "1": "수익화 양호",
+                "2": "소폭 미달",
+                "3": "부분 미달",
+                "4": "상당 미달",
+                "5": "심각 미달",
+            },
+            "f_score": {
+                "1": "확장 완료",
+                "2": "소폭 가능",
+                "3": "부분 가능",
+                "4": "상당 가능",
+                "5": "큰 기회",
+            },
         },
         "composite_formula": "Recovery potential: ((E + F) - 2) / 8 * 100",
     },
@@ -124,7 +278,115 @@ EVALUATOR_AXES = {
             "k_score": "Social Resonance (UGC, mentions, virality)",
             "l_score": "Platform Momentum (streaming, content creation trend)",
         },
+        "rubric": {
+            "j_score": {
+                "1": "MoM <0%",
+                "2": "MoM 0-2%",
+                "3": "MoM 0-5%",
+                "4": "MoM 5-10%",
+                "5": "MoM >10%",
+            },
+            "k_score": {
+                "1": "UGC 없음",
+                "2": "소수 활동",
+                "3": "적당히 활동",
+                "4": "활발",
+                "5": "바이럴",
+            },
+            "l_score": {
+                "1": "스트리밍 없음",
+                "2": "드물게",
+                "3": "간헐적",
+                "4": "정기적",
+                "5": "활발",
+            },
+        },
         "composite_formula": "((J + K + L) - 3) / 12 * 100",
+    },
+}
+
+PROSPECT_EVALUATOR_AXES = {
+    "prospect_judge": {
+        "description": (
+            "Prospect IP Evaluator — assess non-gamified IP game adaptation potential (9 axes)"
+        ),
+        "axes": {
+            "g_score": "World-Building Depth (lore richness, spatial design potential)",
+            "h_score": "Character Roster (playable character breadth and diversity)",
+            "i_score": "Narrative Arc Adaptability (story-to-quest mapping quality)",
+            "o_score": "Visual Identity Strength (art style distinctiveness for game translation)",
+            "p_score": "Audience Crossover Potential (existing fanbase → gamer overlap)",
+            "q_score": "Merchandise/Transmedia Track Record (proven cross-media monetization)",
+            "r_score": "Competitive Landscape Gap (unoccupied genre niche opportunity)",
+            "s_score": "Technology Readiness (UE5/Unity feasibility of core IP elements)",
+            "t_score": "Licensing Complexity Inverse (simpler rights = higher score)",
+        },
+        "rubric": {
+            "g_score": {
+                "1": "세계관 빈약",
+                "2": "기본적 세계관",
+                "3": "적절한 세계관",
+                "4": "풍부한 세계관",
+                "5": "압도적 세계관",
+            },
+            "h_score": {
+                "1": "캐릭터 1-2명",
+                "2": "3-5명",
+                "3": "6-10명",
+                "4": "11-20명",
+                "5": "20명+",
+            },
+            "i_score": {
+                "1": "단선적 서사",
+                "2": "분기 가능 약간",
+                "3": "적절한 분기",
+                "4": "풍부한 분기",
+                "5": "멀티 엔딩 잠재력",
+            },
+            "o_score": {
+                "1": "비주얼 미약",
+                "2": "일반적 비주얼",
+                "3": "개성적 비주얼",
+                "4": "강한 아이덴티티",
+                "5": "아이코닉 비주얼",
+            },
+            "p_score": {
+                "1": "겹침 <5%",
+                "2": "5-15%",
+                "3": "15-30%",
+                "4": "30-50%",
+                "5": ">50%",
+            },
+            "q_score": {
+                "1": "트랜스미디어 없음",
+                "2": "소규모 상품화",
+                "3": "중간 규모",
+                "4": "활발한 상품화",
+                "5": "글로벌 프랜차이즈",
+            },
+            "r_score": {
+                "1": "레드오션",
+                "2": "경쟁 심화",
+                "3": "적정 경쟁",
+                "4": "블루오션 접근",
+                "5": "블루오션",
+            },
+            "s_score": {
+                "1": "기술적 난제 다수",
+                "2": "일부 난제",
+                "3": "구현 가능",
+                "4": "효율적 구현",
+                "5": "즉시 적용 가능",
+            },
+            "t_score": {
+                "1": "라이선스 극히 복잡",
+                "2": "복잡",
+                "3": "보통",
+                "4": "단순",
+                "5": "단일 권리자",
+            },
+        },
+        "composite_formula": "Prospect Final Score: (axes_sum - 9) / 36 * 100",
     },
 }
 
@@ -139,6 +401,14 @@ Evaluate this IP: {ip_name}
 
 ## External Signals
 {signals_summary}
+
+Think step-by-step for each axis:
+1. Identify the most relevant evidence from the data above.
+2. Map the evidence to the rubric anchors (what does 1, 3, 5 mean for this axis?).
+3. Assign a score with brief justification referencing specific data points.
+4. After scoring all axes, calculate composite_score using the formula.
+
+{rubric_anchors}
 
 Apply the {evaluator_type} rubric. Be specific and evidence-based."""
 
@@ -158,6 +428,15 @@ Respond in JSON format:
 {{
   "value_narrative": "<2-3 sentences connecting data insights to the undervaluation cause>",
   "target_gamer_segment": "<specific gamer segment using Bartle Taxonomy with reasoning>"
+}}
+
+Example:
+{{
+  "value_narrative": "Despite 12M YouTube views and +42% fan art growth, \\
+no active game exists. The bounty-hunter loop maps to action RPG \\
+with zero direct competitors.",
+  "target_gamer_segment": "SF Action RPG users \\
+(25-40, Explorer/Killer hybrid, narrative-driven)"
 }}"""
 
 SYNTHESIZER_USER = """\
@@ -201,21 +480,43 @@ Check for:
 1. Confirmation Bias: Are conclusions overly aligned with initial hypotheses?
 2. Recency Bias: Is recent data weighted disproportionately over historical data?
 3. Anchoring Bias: Were analysts influenced by each other's scores? (Check score variance)
+4. Position Bias: Are scores influenced by the order analysts were presented?
+5. Verbosity Bias: Were longer analyst responses scored higher regardless of quality?
+6. Self-Enhancement Bias: Did the LLM favor its own prior outputs or reasoning patterns?
 
 Respond in JSON:
 {{
   "confirmation_bias": <bool>,
   "recency_bias": <bool>,
   "anchoring_bias": <bool>,
+  "position_bias": <bool>,
+  "verbosity_bias": <bool>,
+  "self_enhancement_bias": <bool>,
   "overall_pass": <bool>,
   "explanation": "<brief explanation>"
+}}
+
+Example:
+{{
+  "confirmation_bias": false,
+  "recency_bias": false,
+  "anchoring_bias": true,
+  "position_bias": false,
+  "verbosity_bias": false,
+  "self_enhancement_bias": false,
+  "overall_pass": false,
+  "explanation": "Analyst scores cluster within 0.2 (CV=0.03), suggesting anchoring."
 }}"""
 
 BIASBUSTER_USER = """\
 Check for biases in this analysis of: {ip_name}
 
-## Analyst Scores
+## Analyst Scores (in execution order, with evidence length)
 {analyst_details}
+
+Note: [N] = execution order. evidence_chars = total character length of evidence list.
+- Position bias: Do scores correlate with execution order?
+- Verbosity bias: Do longer evidence sections correlate with higher scores?
 
 ## Score Statistics
 - Mean: {mean:.2f}, Std: {std:.2f}, CV: {cv:.2f}
@@ -226,3 +527,37 @@ Check for biases in this analysis of: {ip_name}
 
 Were the analysts properly isolated (Clean Context)?
 Is there evidence of confirmation, recency, or anchoring bias?"""
+
+# ---------------------------------------------------------------------------
+# Prompt Versioning — SHA-256 hashes for reproducibility auditing
+# ---------------------------------------------------------------------------
+
+PROMPT_VERSIONS: dict[str, str] = {
+    "ANALYST_SYSTEM": _hash_prompt(ANALYST_SYSTEM),
+    "ANALYST_USER": _hash_prompt(ANALYST_USER),
+    "EVALUATOR_SYSTEM": _hash_prompt(EVALUATOR_SYSTEM),
+    "EVALUATOR_USER": _hash_prompt(EVALUATOR_USER),
+    "SYNTHESIZER_SYSTEM": _hash_prompt(SYNTHESIZER_SYSTEM),
+    "SYNTHESIZER_USER": _hash_prompt(SYNTHESIZER_USER),
+    "BIASBUSTER_SYSTEM": _hash_prompt(BIASBUSTER_SYSTEM),
+    "BIASBUSTER_USER": _hash_prompt(BIASBUSTER_USER),
+}
+
+_log = logging.getLogger(__name__)
+_log.debug("Prompt versions loaded: %s", PROMPT_VERSIONS)
+
+__all__ = [
+    "ANALYST_SPECIFIC",
+    "ANALYST_SYSTEM",
+    "ANALYST_USER",
+    "BIASBUSTER_SYSTEM",
+    "BIASBUSTER_USER",
+    "EVALUATOR_AXES",
+    "EVALUATOR_SYSTEM",
+    "EVALUATOR_USER",
+    "PROMPT_VERSIONS",
+    "PROSPECT_EVALUATOR_AXES",
+    "SYNTHESIZER_SYSTEM",
+    "SYNTHESIZER_USER",
+    "hash_rendered_prompt",
+]

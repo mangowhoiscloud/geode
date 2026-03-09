@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Factorio",
+    "media_type": "game",
+    "release_year": 2020,
+    "studio": "Wube Software",
+    "genre": [
+      "automation",
+      "base building",
+      "strategy"
+    ],
+    "synopsis": "Factorio — a Factory Builder game developed by Wube Software, released in 2020 on Steam.",
+    "proof_of_game": "Factorio (2020, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 6
+  },
+  "monolake": {
+    "dau_peak": 420000,
+    "dau_current": 102900,
+    "revenue_ltm": 19293750,
+    "revenue_lifetime": 514500000,
+    "retention_d30": 38,
+    "metacritic_score": 91,
+    "store_page_score": 98,
+    "active_game_count": 1,
+    "last_game_year": 2020,
+    "platform": "pc",
+    "price_tier": "premium",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 25725000,
+    "reddit_subscribers": 428750,
+    "fan_art_yoy_pct": 31.3,
+    "google_trends_index": 94,
+    "twitter_mentions_monthly": 137200,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "automation",
+      "base building",
+      "strategy",
+      "sandbox",
+      "management"
+    ],
+    "game_sales_data": "~5,250,000 owners (Steam, 2020-present)"
+  },
+  "psm_covariates": {
+    "genre": "automation",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "premium",
+    "release_year": 2020,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 91,
+    "store_page_score": 98,
+    "ip_age_years": 6
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 94.1,
+    "cause": "timing_mismatch",
+    "quality_score": 97.9,
+    "momentum_score": 88.0,
+    "developer_track_record": 25,
+    "psm_att_pct": 44.3,
+    "psm_z_value": 3.69,
+    "psm_gamma": 2.5
+  }
+}

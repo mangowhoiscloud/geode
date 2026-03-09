@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Turbo Overkill",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Trigger Happy Interactive",
+    "genre": [
+      "fps",
+      "retro",
+      "cyberpunk"
+    ],
+    "synopsis": "Turbo Overkill — a Retro FPS game developed by Trigger Happy Interactive, released in 2023 on Steam.",
+    "proof_of_game": "Turbo Overkill (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 8640,
+    "dau_current": 3214,
+    "revenue_ltm": 226686,
+    "revenue_lifetime": 4231483,
+    "retention_d30": 36,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 502200,
+    "reddit_subscribers": 8370,
+    "fan_art_yoy_pct": 29.7,
+    "google_trends_index": 64,
+    "twitter_mentions_monthly": 2678,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "fps",
+      "retro",
+      "cyberpunk",
+      "action",
+      "fast-paced"
+    ],
+    "game_sales_data": "~108,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "fps",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 77.2,
+    "cause": "discovery_failure",
+    "quality_score": 93.5,
+    "momentum_score": 62.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 31.7,
+    "psm_z_value": 2.64,
+    "psm_gamma": 2.3
+  }
+}

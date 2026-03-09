@@ -28,3 +28,6 @@ build/
 
 # Checkpoint DB
 geode_checkpoints.db
+
+# Runtime data
+.geode/snapshots/

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Pseudoregalia",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "rittzler",
+    "genre": [
+      "platformer",
+      "3d",
+      "metroidvania"
+    ],
+    "synopsis": "Pseudoregalia — a 3D Platformer game developed by rittzler, released in 2023 on Steam.",
+    "proof_of_game": "Pseudoregalia (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 5760,
+    "dau_current": 2211,
+    "revenue_ltm": 45284,
+    "revenue_lifetime": 845308,
+    "retention_d30": 37,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 345600,
+    "reddit_subscribers": 5760,
+    "fan_art_yoy_pct": 32.7,
+    "google_trends_index": 60,
+    "twitter_mentions_monthly": 1843,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "platformer",
+      "3d",
+      "metroidvania",
+      "exploration",
+      "movement"
+    ],
+    "game_sales_data": "~72,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "platformer",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 74.9,
+    "cause": "discovery_failure",
+    "quality_score": 96.3,
+    "momentum_score": 60.5,
+    "developer_track_record": 25,
+    "psm_att_pct": 30.0,
+    "psm_z_value": 2.5,
+    "psm_gamma": 2.4
+  }
+}

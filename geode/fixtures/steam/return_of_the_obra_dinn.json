@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Return of the Obra Dinn",
+    "media_type": "game",
+    "release_year": 2018,
+    "studio": "Lucas Pope",
+    "genre": [
+      "mystery",
+      "puzzle",
+      "detective"
+    ],
+    "synopsis": "Return of the Obra Dinn — a Mystery Puzzle game developed by Lucas Pope, released in 2018 on Steam.",
+    "proof_of_game": "Return of the Obra Dinn (2018, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 8
+  },
+  "monolake": {
+    "dau_peak": 57600,
+    "dau_current": 11174,
+    "revenue_ltm": 1511244,
+    "revenue_lifetime": 40299840,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2018,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 3492000,
+    "reddit_subscribers": 58200,
+    "fan_art_yoy_pct": 29.5,
+    "google_trends_index": 78,
+    "twitter_mentions_monthly": 18624,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "mystery",
+      "puzzle",
+      "detective",
+      "indie",
+      "atmospheric"
+    ],
+    "game_sales_data": "~720,000 owners (Steam, 2018-present)"
+  },
+  "psm_covariates": {
+    "genre": "mystery",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2018,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 8
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 86.0,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 74.6,
+    "developer_track_record": 50,
+    "psm_att_pct": 38.2,
+    "psm_z_value": 3.18,
+    "psm_gamma": 2.4
+  }
+}

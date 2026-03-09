@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Astrea: Six-Sided Oracles",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "AKUO",
+    "genre": [
+      "roguelike",
+      "deckbuilding",
+      "turn-based"
+    ],
+    "synopsis": "Astrea: Six-Sided Oracles — a Dice Roguelike game developed by AKUO, released in 2023 on Steam.",
+    "proof_of_game": "Astrea: Six-Sided Oracles (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 2160,
+    "dau_current": 743,
+    "revenue_ltm": 56671,
+    "revenue_lifetime": 1057870,
+    "retention_d30": 33,
+    "metacritic_score": 80,
+    "store_page_score": 86,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 116100,
+    "reddit_subscribers": 1935,
+    "fan_art_yoy_pct": 22.7,
+    "google_trends_index": 53,
+    "twitter_mentions_monthly": 619,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "roguelike",
+      "deckbuilding",
+      "turn-based",
+      "dice",
+      "strategy"
+    ],
+    "game_sales_data": "~27,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "roguelike",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 80,
+    "store_page_score": 86,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 68.8,
+    "cause": "niche_gem",
+    "quality_score": 86.5,
+    "momentum_score": 51.1,
+    "developer_track_record": 25,
+    "psm_att_pct": 24.5,
+    "psm_z_value": 2.04,
+    "psm_gamma": 2.1
+  }
+}

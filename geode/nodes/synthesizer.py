@@ -9,15 +9,23 @@ CAUSE_TO_ACTION: architecture-v6 §13.9.3
 
 from __future__ import annotations
 
-from geode.llm.client import call_llm_json
+import logging
+from typing import Any
+
+from pydantic import ValidationError
+
+from geode.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
 from geode.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_USER
 from geode.state import (
     ActionLiteral,
     CauseLiteral,
+    EvaluatorResult,
     GeodeState,
     SynthesisResult,
 )
-from geode.ui.console import console
+
+log = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # CAUSE_TO_ACTION mapping (architecture-v6 §13.9.3 — 그대로)
@@ -25,7 +33,7 @@ from geode.ui.console import console
 
 CAUSE_TO_ACTION: dict[CauseLiteral, ActionLiteral] = {
     "undermarketed": "marketing_boost",
-    "conversion_failure": "marketing_boost",  # + monetization_pivot
+    "conversion_failure": "marketing_boost",  # §13.9.3: 퍼널+마케팅 동시 개선
     "monetization_misfit": "monetization_pivot",
     "niche_gem": "platform_expansion",
     "timing_mismatch": "timing_optimization",
@@ -100,7 +108,7 @@ def _classify_cause(
     return cause, CAUSE_DESCRIPTIONS[cause]
 
 
-def _detect_timing_issue(monolake: dict) -> bool:
+def _detect_timing_issue(monolake: dict[str, Any]) -> bool:
     """release_timing_issue 판별 휴리스틱.
 
     게임이 존재했으나 오래 전이고 타이밍 관련 실패 징후가 있는 경우.
@@ -118,13 +126,33 @@ def _detect_timing_issue(monolake: dict) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _extract_def_scores(evaluations: dict) -> tuple[int, int, int]:
+def _extract_def_scores(evaluations: dict[str, EvaluatorResult]) -> tuple[int, int, int]:
     """Extract D/E/F scores from evaluations, rounded to int per §13.9.2."""
     hv = evaluations.get("hidden_value")
     d = round(hv.axes.get("d_score", 3.0)) if hv else 3
     e = round(hv.axes.get("e_score", 3.0)) if hv else 3
     f = round(hv.axes.get("f_score", 3.0)) if hv else 3
     return d, e, f
+
+
+# IP-specific narrative hooks for dry-run mode (F-3: differentiated narratives)
+_IP_NARRATIVE_HOOKS: dict[str, dict[str, str]] = {
+    "berserk": {
+        "hook": "Elden Ring의 성공이 입증한 다크 판타지 Souls-like 시장에서",
+        "insight": "Dragonslayer 대검 기반 전투 시스템은 기존 팬과 Souls 유저 동시 공략 가능",
+        "segment": "Dark Fantasy Souls-like 코어 유저 (20-35세, Achiever형, PvE 고난이도 선호)",
+    },
+    "cowboy bebop": {
+        "hook": "90년대 SF 느와르의 독보적 세계관과 유기적 팬덤 성장세로",
+        "insight": "바운티 헌터 루프 기반 Action RPG는 장르 내 직접 경쟁자 부재",
+        "segment": "SF Action RPG 유저 (25-40세, Explorer/Killer 혼합형, 내러티브 중시)",
+    },
+    "ghost in the shell": {
+        "hook": "사이버펑크 장르의 원조 IP임에도 Cyberpunk 2077 이후 경쟁 심화로",
+        "insight": "스텔스/해킹 하이브리드 시스템은 차별화 가능하나 AAA 수준 실행력 필요",
+        "segment": "Cyberpunk Stealth/RPG 유저 (28-42세, Explorer형, 세계관 몰입 중시)",
+    },
+}
 
 
 def _build_dry_run_synthesis(
@@ -135,34 +163,38 @@ def _build_dry_run_synthesis(
 ) -> SynthesisResult:
     """Build a dry-run synthesis with IP-specific insights."""
     ip_name = state.get("ip_name", "Unknown")
+    ip_key = ip_name.lower().strip()
     signals = state.get("signals", {})
-    analyses = state.get("analyses", [])
 
     parts = cause_desc.split("—")
     status = parts[0].strip()
     recommendation = parts[1].strip() if len(parts) > 1 else "종합 전략 수립"
 
-    # Build richer narrative using actual data
+    # Signal formatting
     yt = signals.get("youtube_views", 0)
     rd = signals.get("reddit_subscribers", 0)
     fa = signals.get("fan_art_yoy_pct", 0)
     yt_str = f"{yt / 1_000_000:.0f}M" if yt >= 1_000_000 else f"{yt:,}"
     rd_str = f"{rd / 1000:.0f}K" if rd >= 1000 else f"{rd:,}"
 
-    top_analyst = max(analyses, key=lambda a: a.score) if analyses else None
-    top_insight = f" {top_analyst.key_finding}." if top_analyst else ""
+    # IP-specific hooks (F-2, F-3)
+    hooks = _IP_NARRATIVE_HOOKS.get(ip_key, {})
+    hook = hooks.get("hook", f"YouTube {yt_str}, Reddit {rd_str} 규모의 팬덤에도")
+    insight = hooks.get("insight", f"팬아트 {fa:+.0f}% YoY 성장이 잠재력을 증명")
 
     narrative = (
-        f"{ip_name}은(는) YouTube {yt_str} views, Reddit {rd_str} subscribers, "
-        f"팬아트 {fa:+.0f}% YoY 성장에도 불구하고 {status} 상태입니다.{top_insight} "
-        f"{recommendation}이 권장됩니다."
+        f"{ip_name}: {hook} {status} 상태로 분류됩니다. "
+        f"{insight}. YouTube {yt_str} views, Reddit {rd_str}, 팬아트 {fa:+.0f}% YoY. "
+        f"권장 액션: {recommendation}."
     )
 
-    # Genre-aware segment
-    ip_info = state.get("ip_info", {})
-    genres = ip_info.get("genre", [])
-    genre_str = genres[0] if genres else "action"
-    segment = f"{genre_str.title()} RPG 코어 유저 (25-40세, Achiever/Explorer 혼합형)"
+    # IP-specific segment (F-2)
+    segment = hooks.get("segment", "")
+    if not segment:
+        ip_info = state.get("ip_info", {})
+        genres = ip_info.get("genre", [])
+        genre_str = genres[0] if genres else "action"
+        segment = f"{genre_str.title()} RPG 코어 유저 (25-40세, Achiever/Explorer 혼합형)"
 
     return SynthesisResult(
         undervaluation_cause=cause,
@@ -190,9 +222,7 @@ def _build_llm_synthesis(
         f"- {k}: {v.composite_score:.0f}/100 ({v.rationale[:80]}...)"
         for k, v in evaluations.items()
     )
-    sig_summary = "\n".join(
-        f"- {k}: {v}" for k, v in signals.items() if not k.startswith("_")
-    )
+    sig_summary = "\n".join(f"- {k}: {v}" for k, v in signals.items() if not k.startswith("_"))
 
     qj = evaluations.get("quality_judge")
     cm = evaluations.get("community_momentum")
@@ -214,35 +244,78 @@ def _build_llm_synthesis(
         signals_summary=sig_summary,
     )
 
-    data = call_llm_json(SYNTHESIZER_SYSTEM, user)
-    return SynthesisResult(
-        undervaluation_cause=cause,
-        action_type=action,
-        value_narrative=data.get("value_narrative", ""),
-        target_gamer_segment=data.get("target_gamer_segment", ""),
-    )
+    # ADR-007: PromptAssembler injection
+    system = SYNTHESIZER_SYSTEM
+    assembler: Any = state.get("_prompt_assembler")
+    if assembler is not None:
+        result = assembler.assemble(
+            base_system=SYNTHESIZER_SYSTEM,
+            base_user=user,
+            state=dict(state),
+            node="synthesizer",
+            role_type="synthesis",
+        )
+        system = result.system
+        user = result.user
 
-
-def synthesizer_node(state: GeodeState) -> dict:
-    """Layer 5: Classify cause + generate narrative via LLM."""
-    evaluations = state.get("evaluations", {})
-    monolake = state.get("monolake", {})
-
-    d_score, e_score, f_score = _extract_def_scores(evaluations)
-    release_timing_issue = _detect_timing_issue(monolake)
-
-    cause, cause_desc = _classify_cause(d_score, e_score, f_score, release_timing_issue)
-    action = CAUSE_TO_ACTION[cause]
-
-    if state.get("verbose"):
-        console.print(
-            f"    [muted]Cause: {cause} → Action: {action}"
-            f" ({ACTION_DESCRIPTIONS[action]})[/muted]"
+    # Use Anthropic Structured Output (messages.parse) for guaranteed JSON
+    try:
+        result = get_llm_parsed()(system, user, output_model=SynthesisResult)
+        # Ensure cause/action match (LLM may hallucinate different values)
+        if result.undervaluation_cause != cause or result.action_type != action:
+            result = result.model_copy(
+                update={
+                    "undervaluation_cause": cause,
+                    "action_type": action,
+                }
+            )
+        return result
+    except Exception as exc:
+        log.warning(
+            "Synthesizer structured output failed: %s — falling back to legacy JSON parse",
+            exc,
         )
 
-    if state.get("dry_run"):
-        synthesis = _build_dry_run_synthesis(state, cause, action, cause_desc)
-    else:
-        synthesis = _build_llm_synthesis(state, cause, action)
+    # Fallback: legacy JSON parse
+    try:
+        data = get_llm_json()(system, user)
+        return SynthesisResult(
+            undervaluation_cause=cause,
+            action_type=action,
+            value_narrative=data.get("value_narrative", ""),
+            target_gamer_segment=data.get("target_gamer_segment", ""),
+        )
+    except (ValidationError, ValueError) as ve:
+        log.warning("Synthesizer legacy fallback also failed: %s", ve)
+        return SynthesisResult(
+            undervaluation_cause=cause,
+            action_type=action,
+            value_narrative="Schema validation failed (degraded)",
+            target_gamer_segment="Unknown (degraded)",
+        )
 
-    return {"synthesis": synthesis}
+
+def synthesizer_node(state: GeodeState) -> dict[str, Any]:
+    """Layer 5: Classify cause + generate narrative via LLM."""
+    try:
+        evaluations = state.get("evaluations", {})
+        monolake = state.get("monolake", {})
+
+        d_score, e_score, f_score = _extract_def_scores(evaluations)
+        release_timing_issue = _detect_timing_issue(monolake)
+
+        cause, cause_desc = _classify_cause(d_score, e_score, f_score, release_timing_issue)
+        action = CAUSE_TO_ACTION[cause]
+
+        if state.get("verbose"):
+            log.debug("Cause: %s -> Action: %s (%s)", cause, action, ACTION_DESCRIPTIONS[action])
+
+        if state.get("dry_run"):
+            synthesis = _build_dry_run_synthesis(state, cause, action, cause_desc)
+        else:
+            synthesis = _build_llm_synthesis(state, cause, action)
+
+        return {"synthesis": synthesis}
+    except Exception as exc:
+        log.error("Node synthesizer failed: %s", exc)
+        return {"errors": [f"synthesizer: {exc}"]}

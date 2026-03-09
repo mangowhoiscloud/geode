@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Neva",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Replika Studios",
+    "genre": [
+      "action",
+      "adventure",
+      "beautiful"
+    ],
+    "synopsis": "Neva — a Action Adventure game developed by Replika Studios, released in 2024 on Steam.",
+    "proof_of_game": "Neva (2024, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 12960,
+    "dau_current": 6026,
+    "revenue_ltm": 1133433,
+    "revenue_lifetime": 4987105,
+    "retention_d30": 36,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 753300,
+    "reddit_subscribers": 12555,
+    "fan_art_yoy_pct": 33.0,
+    "google_trends_index": 67,
+    "twitter_mentions_monthly": 4017,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "action",
+      "adventure",
+      "beautiful",
+      "atmospheric",
+      "story rich"
+    ],
+    "game_sales_data": "~162,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 78.7,
+    "cause": "undermarketed",
+    "quality_score": 93.5,
+    "momentum_score": 65.9,
+    "developer_track_record": 50,
+    "psm_att_pct": 32.6,
+    "psm_z_value": 2.72,
+    "psm_gamma": 2.3
+  }
+}

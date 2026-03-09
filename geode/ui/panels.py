@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -29,7 +31,11 @@ def header_panel(ip_name: str, pipeline_mode: str, model: str) -> None:
     console.print()
 
 
-def gather_panel(ip_info: dict, monolake: dict, signals: dict) -> None:
+def gather_panel(
+    ip_info: dict[str, Any],
+    monolake: dict[str, Any],
+    signals: dict[str, Any],
+) -> None:
     console.print("[step]▸ [GATHER][/step] Loading IP data from MonoLake...")
     tree = Tree("", guide_style="dim")
     tree.add(
@@ -103,8 +109,7 @@ def score_panel(
         f"\u0393={psm.rosenbaum_gamma:.1f} ({g_mark}\u22642.0)"
     )
     console.print(
-        "  [muted]ATT=IP 노출 효과, Z>1.645=95% 유의, "
-        "\u0393\u22642.0=인과 강건성 확인[/muted]"
+        "  [muted]ATT=IP 노출 효과, Z>1.645=95% 유의, \u0393\u22642.0=인과 강건성 확인[/muted]"
     )
 
     filled = int(final_score / 100 * 40)
@@ -144,8 +149,7 @@ def result_panel(
     content.append("  ", style="default")
     content.append(f" {tier} ", style=tier_style)
     content.append(
-        f"  |  {final_score:.1f} pts ({tier_range})  "
-        f"|  {synthesis.undervaluation_cause}\n\n"
+        f"  |  {final_score:.1f} pts ({tier_range})  |  {synthesis.undervaluation_cause}\n\n"
     )
     content.append(f"  {synthesis.value_narrative}\n\n")
     content.append("  Target Segment: ", style="label")
