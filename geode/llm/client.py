@@ -27,6 +27,39 @@ from geode.config import settings
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# LangSmith tracing (Phase 5-A): conditional on LANGSMITH_API_KEY
+# ---------------------------------------------------------------------------
+
+_langsmith_enabled = False
+
+
+def _maybe_traceable(
+    *, run_type: str = "llm", name: str | None = None,
+) -> Any:
+    """Return @traceable decorator if LangSmith is configured, else passthrough.
+
+    Returns Callable[[F], F] in both paths, preserving the decorated
+    function's signature.
+    """
+    import os
+
+    global _langsmith_enabled
+    if os.environ.get("LANGSMITH_API_KEY"):
+        try:
+            from langsmith import traceable
+
+            _langsmith_enabled = True
+            return traceable(run_type=run_type, name=name)  # type: ignore[call-overload]
+        except ImportError:
+            pass
+
+    # Passthrough — no tracing
+    def _identity(fn: Any) -> Any:
+        return fn
+
+    return _identity
+
+# ---------------------------------------------------------------------------
 # Token usage tracking
 # ---------------------------------------------------------------------------
 
@@ -264,6 +297,7 @@ def _retry_with_backoff(
     raise last_error
 
 
+@_maybe_traceable(run_type="llm", name="call_llm")  # type: ignore[untyped-decorator]
 def call_llm(
     system: str,
     user: str,
@@ -333,6 +367,7 @@ def call_llm(
 T = TypeVar("T", bound=BaseModel)
 
 
+@_maybe_traceable(run_type="llm", name="call_llm_parsed")  # type: ignore[untyped-decorator]
 def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
     system: str,
     user: str,
@@ -393,6 +428,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
     return result
 
 
+@_maybe_traceable(run_type="llm", name="call_llm_json")  # type: ignore[untyped-decorator]
 def call_llm_json(
     system: str,
     user: str,
@@ -459,6 +495,7 @@ class ToolUseResult:
     rounds: int
 
 
+@_maybe_traceable(run_type="chain", name="call_llm_with_tools")  # type: ignore[untyped-decorator]
 def call_llm_with_tools(
     system: str,
     user: str,
