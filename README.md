@@ -1,6 +1,6 @@
 # GEODE v6.0 — Undervalued IP Discovery Agent
 
-LangGraph-based CLI demo for Task 2 interview.
+LangGraph-based CLI demo for IP Detaction
 
 ## Quick Start
 
@@ -30,7 +30,7 @@ geode analyze "Cowboy Bebop" --verbose          # Detailed output
 geode analyze "Cowboy Bebop" --skip-verification # Skip guardrails
 ```
 
-## Architecture
+## Agent Core Loop
 
 ```
 Router → Cortex → Signals → Analysts ×4 (Send API) → Evaluators ×3 → Scoring → Verification → Synthesizer
