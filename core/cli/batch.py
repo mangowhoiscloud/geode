@@ -64,7 +64,7 @@ def select_ips(
 
 
 def _run_analysis_standalone(ip_name: str, *, dry_run: bool = True) -> dict[str, Any]:
-    """Run analysis pipeline for a single IP (no circular import to geode.cli).
+    """Run analysis pipeline for a single IP (no circular import to core.cli).
 
     This is thread-safe: each call creates its own GeodeRuntime.
     """

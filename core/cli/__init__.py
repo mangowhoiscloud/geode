@@ -741,19 +741,15 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
         console.print(f"  Verbose: {state}")
         console.print()
     elif action in ("analyze", "run"):
-        # Graceful Degradation: force dry-run only when no API key
+        # Default: live LLM. Dry-run only when no API key available.
         readiness = _get_readiness()
         force_dry = readiness.force_dry_run if readiness else True
-        dry_run = force_dry  # both /analyze and /run respect API key availability
-        if force_dry and action == "run":
+        if force_dry:
             console.print("  [warning]API key not configured — forcing dry-run mode[/warning]")
-        elif not force_dry and action == "analyze":
-            dry_run = False  # /analyze uses real LLM when key is available
-        label = "/analyze" if dry_run else "/run"
         if not args:
-            console.print(f"  [warning]Usage: {label} <IP name>[/warning]")
+            console.print(f"  [warning]Usage: /{action} <IP name>[/warning]")
         else:
-            _run_analysis(args, dry_run=dry_run, verbose=verbose)
+            _run_analysis(args, dry_run=force_dry, verbose=verbose)
     elif action == "search":
         if not args:
             console.print("  [warning]Usage: /search <query>[/warning]")
@@ -1225,7 +1221,9 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
             show_help()
 
     else:
-        _run_analysis(text, dry_run=True, verbose=verbose)
+        readiness = _get_readiness()
+        force_dry = readiness.force_dry_run if readiness else True
+        _run_analysis(text, dry_run=force_dry, verbose=verbose)
 
 
 def _interactive_loop() -> None:
@@ -1303,7 +1301,7 @@ def report(
         "summary", "--template", "-t", help="summary, detailed, executive"
     ),
     output: str = typer.Option(None, "--output", "-o", help="Save report to file"),
-    dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Use fixture data (no LLM)"),
+    dry_run: bool = typer.Option(False, "--dry-run/--no-dry-run", help="Use fixture data (no LLM)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ) -> None:
     """Generate a report for an IP analysis."""
@@ -1348,7 +1346,7 @@ def batch(
     top: int = typer.Option(10, help="Number of IPs to analyze"),
     genre: str = typer.Option(None, help="Filter by genre"),
     concurrency: int = typer.Option(2, help="Parallel workers"),
-    dry_run: bool = typer.Option(True, "--dry-run/--live", help="Use dry-run mode"),
+    dry_run: bool = typer.Option(False, "--dry-run/--live", help="Use dry-run mode"),
 ) -> None:
     """Run batch analysis on multiple IPs."""
     from core.cli.batch import render_batch_table, run_batch
