@@ -1,8 +1,7 @@
 """Tests for L4.5 CUSUM Drift Detection."""
 
 import pytest
-
-from geode.automation.drift import (
+from core.automation.drift import (
     DEFAULT_METRIC_CONFIGS,
     CUSUMDetector,
     DriftAlert,

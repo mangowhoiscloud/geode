@@ -3,8 +3,7 @@
 from pathlib import Path
 
 import pytest
-
-from geode.automation.model_registry import (
+from core.automation.model_registry import (
     VALID_TRANSITIONS,
     ModelRegistry,
     ModelVersion,

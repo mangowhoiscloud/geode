@@ -1,8 +1,7 @@
 """Tests for IP Search Engine — keyword-based search."""
 
 import pytest
-
-from geode.cli.search import IPSearchEngine
+from core.cli.search import IPSearchEngine
 
 
 @pytest.fixture

@@ -106,7 +106,7 @@ Memory 도구는 `SessionStorePort`가 필요 → runtime에서 주입:
 
 ```python
 # runtime.py GeodeRuntime.create()
-from geode.tools.memory_tools import set_memory_session_store
+from core.tools.memory_tools import set_memory_session_store
 set_memory_session_store(session_store)
 ```
 

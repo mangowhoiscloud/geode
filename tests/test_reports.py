@@ -6,8 +6,7 @@ import json
 from typing import Any
 
 import pytest
-
-from geode.extensibility.reports import (
+from core.extensibility.reports import (
     ReportFormat,
     ReportGenerator,
     ReportTemplate,

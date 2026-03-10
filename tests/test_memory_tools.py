@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from geode.memory.session import InMemorySessionStore
-from geode.tools.base import Tool
-from geode.tools.memory_tools import (
+from core.memory.session import InMemorySessionStore
+from core.tools.base import Tool
+from core.tools.memory_tools import (
     MemoryGetTool,
     MemorySaveTool,
     MemorySearchTool,
@@ -133,7 +133,7 @@ class TestMemorySaveTool:
         assert store.get("no-proj") == {"content": "test"}
 
     def test_save_persistent_writes_to_memory(self, tmp_path: Path):
-        from geode.memory.project import ProjectMemory
+        from core.memory.project import ProjectMemory
 
         mem = ProjectMemory(project_root=tmp_path)
         mem.ensure_structure()
@@ -157,7 +157,7 @@ class TestMemorySaveTool:
 
 def _make_project_with_rule(tmp_path: Path):
     """Create a ProjectMemory with a test rule."""
-    from geode.memory.project import ProjectMemory
+    from core.memory.project import ProjectMemory
 
     mem = ProjectMemory(project_root=tmp_path)
     mem.ensure_structure()
@@ -195,7 +195,7 @@ class TestRuleUpdateTool:
             set_project_memory(None)
 
     def test_update_nonexistent_rule(self, tmp_path: Path):
-        from geode.memory.project import ProjectMemory
+        from core.memory.project import ProjectMemory
 
         mem = ProjectMemory(project_root=tmp_path)
         mem.ensure_structure()
@@ -237,7 +237,7 @@ class TestRuleDeleteTool:
             set_project_memory(None)
 
     def test_delete_nonexistent_rule(self, tmp_path: Path):
-        from geode.memory.project import ProjectMemory
+        from core.memory.project import ProjectMemory
 
         mem = ProjectMemory(project_root=tmp_path)
         mem.ensure_structure()

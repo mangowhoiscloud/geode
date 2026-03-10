@@ -8,17 +8,17 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from geode.auth.cooldown import CooldownTracker
-from geode.auth.profiles import AuthProfile, CredentialType, ProfileStore
-from geode.auth.rotation import ProfileRotator
-from geode.graph import compile_graph
-from geode.infrastructure.ports.llm_port import LLMClientPort
-from geode.orchestration.hooks import HookEvent, HookSystem
-from geode.state import GeodeState
-from geode.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
-from geode.tools.policy import PolicyChain, ToolPolicy
-from geode.tools.registry import ToolRegistry
-from geode.verification.cross_llm import run_dual_adapter_check
+from core.auth.cooldown import CooldownTracker
+from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
+from core.auth.rotation import ProfileRotator
+from core.graph import compile_graph
+from core.infrastructure.ports.llm_port import LLMClientPort
+from core.orchestration.hooks import HookEvent, HookSystem
+from core.state import GeodeState
+from core.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
+from core.tools.policy import PolicyChain, ToolPolicy
+from core.tools.registry import ToolRegistry
+from core.verification.cross_llm import run_dual_adapter_check
 
 
 class TestFullPipelineDryRun:
@@ -219,7 +219,7 @@ class TestAuthProfileE2E:
 
 class TestCrossLLME2E:
     def test_dual_adapter_with_mock(self):
-        from geode.state import AnalysisResult
+        from core.state import AnalysisResult
 
         state: GeodeState = {
             "ip_name": "berserk",
@@ -258,7 +258,7 @@ class TestCrossLLME2E:
         assert result["secondary_agreement"] == 4
 
     def test_dual_adapter_fallback(self):
-        from geode.state import AnalysisResult
+        from core.state import AnalysisResult
 
         state: GeodeState = {
             "ip_name": "berserk",

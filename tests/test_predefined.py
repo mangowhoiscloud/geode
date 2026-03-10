@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from geode.automation.predefined import (
+from core.automation.predefined import (
     PREDEFINED_AUTOMATIONS,
     AutomationTemplate,
     PipelineConfig,

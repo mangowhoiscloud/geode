@@ -4,7 +4,7 @@
 
 저평가 IP를 데이터 기반으로 발굴하는 LangGraph Agent CLI.
 
-- **Version**: 6.0.0
+- **Version**: 0.6.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -73,7 +73,7 @@ START → router → signals → analyst×4 (Send API)
 ## Project Structure
 
 ```
-geode/
+src/geode/
 ├── cli/                 # Typer CLI + NL router + search
 ├── config.py            # Pydantic Settings (.env)
 ├── state.py             # GeodeState TypedDict + Pydantic models
@@ -100,7 +100,7 @@ geode/
 │   ├── session_key.py   # Hierarchical key builder (ip:name:phase)
 │   └── context.py       # 3-tier context assembler
 ├── orchestration/
-│   ├── hooks.py         # HookSystem (19 events)
+│   ├── hooks.py         # HookSystem (23 events)
 │   ├── bootstrap.py     # Node bootstrap (pre-execution context injection)
 │   ├── planner.py       # Planner (multi-step plan generation)
 │   ├── plan_mode.py     # Plan mode state machine
@@ -137,8 +137,7 @@ geode/
 ├── tools/               # LLM-callable tools (memory, signal, analysis, output, data)
 ├── auth/                # API key rotation, cooldown, profiles
 ├── extensibility/       # Custom agents, plugins, report generators
-├── data/                # Data generation utilities
-├── fixtures/            # JSON test data (3 IPs)
+├── fixtures/            # JSON test data (3 IPs) + data generator
 └── ui/                  # Rich console, panels, streaming, status
 ```
 
@@ -149,10 +148,10 @@ geode/
 uv run python -m pytest tests/ -q
 
 # Lint
-uv run ruff check geode/ tests/
+uv run ruff check src/geode/ tests/
 
 # Type check
-uv run mypy geode/
+uv run mypy src/geode/
 ```
 
 ### Expected Test Results

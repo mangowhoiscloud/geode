@@ -1,12 +1,11 @@
-"""Tests for geode.verification.calibration — Ground Truth comparison."""
+"""Tests for core.verification.calibration — Ground Truth comparison."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
-from geode.state import (
+from core.state import (
     AnalysisResult,
     AxisCalibration,
     CalibrationReport,
@@ -15,7 +14,7 @@ from geode.state import (
     EvaluatorResult,
     SynthesisResult,
 )
-from geode.verification.calibration import (
+from core.verification.calibration import (
     AXIS_TOLERANCE,
     CALIBRATION_PASS_THRESHOLD,
     SCORE_RANGE_PENALTY_MULTIPLIER,
@@ -30,7 +29,7 @@ from geode.verification.calibration import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-GOLDEN_SET_PATH = Path(__file__).parent.parent / "geode" / "fixtures" / "_golden_set.json"
+GOLDEN_SET_PATH = Path(__file__).parent.parent / "core" / "fixtures" / "_golden_set.json"
 
 
 @pytest.fixture

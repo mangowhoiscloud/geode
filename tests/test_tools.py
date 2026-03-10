@@ -5,9 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
-from geode.tools.base import Tool
-from geode.tools.registry import ToolRegistry
+from core.tools.base import Tool
+from core.tools.registry import ToolRegistry
 
 
 class DummyTool:

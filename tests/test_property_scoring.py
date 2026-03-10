@@ -10,8 +10,7 @@ with systematic boundary values to cover the property-based test intent:
 from __future__ import annotations
 
 import pytest
-
-from geode.nodes.scoring import (
+from core.nodes.scoring import (
     _calc_analyst_confidence,
     _calc_final_score,
     _determine_tier,
@@ -197,7 +196,7 @@ class TestAnalystConfidence:
 
     def test_single_analyst_returns_100(self):
         """Single analyst should return maximum confidence."""
-        from geode.state import AnalysisResult
+        from core.state import AnalysisResult
 
         analyses = [
             AnalysisResult(
@@ -213,7 +212,7 @@ class TestAnalystConfidence:
 
     def test_identical_scores_high_confidence(self):
         """Identical analyst scores should produce high confidence."""
-        from geode.state import AnalysisResult
+        from core.state import AnalysisResult
 
         analyses = [
             AnalysisResult(
@@ -230,7 +229,7 @@ class TestAnalystConfidence:
 
     def test_high_variance_lower_confidence(self):
         """High variance in scores should produce lower confidence."""
-        from geode.state import AnalysisResult
+        from core.state import AnalysisResult
 
         analyses = [
             AnalysisResult(

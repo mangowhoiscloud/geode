@@ -719,8 +719,8 @@ PromptAssembler는 `GeodeRuntime`에서 생성한다. `runtime.py`는 모든 인
 ```python
 # geode/runtime.py — _build_prompt_assembler() 추가
 
-from geode.llm.prompt_assembler import PromptAssembler
-from geode.llm.skill_registry import SkillRegistry
+from core.llm.prompt_assembler import PromptAssembler
+from core.llm.skill_registry import SkillRegistry
 
 class GeodeRuntime:
     def __init__(self, *, ..., prompt_assembler: PromptAssembler | None = None) -> None:

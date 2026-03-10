@@ -1,18 +1,17 @@
 """Tests for L4.5 5-Phase RLHF Feedback Loop."""
 
 import pytest
-
-from geode.automation.correlation import CorrelationAnalyzer
-from geode.automation.drift import CUSUMDetector
-from geode.automation.expert_panel import ExpertPanel
-from geode.automation.feedback_loop import (
+from core.automation.correlation import CorrelationAnalyzer
+from core.automation.drift import CUSUMDetector
+from core.automation.expert_panel import ExpertPanel
+from core.automation.feedback_loop import (
     FeedbackCycleInput,
     FeedbackCycleResult,
     FeedbackLoop,
     FeedbackPhase,
     ImprovementCandidate,
 )
-from geode.automation.model_registry import ModelRegistry
+from core.automation.model_registry import ModelRegistry
 
 
 class TestFeedbackPhase:

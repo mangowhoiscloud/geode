@@ -3,7 +3,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from geode.memory.hybrid_session import (
+from core.memory.hybrid_session import (
     HybridSessionStore,
     PostgreSQLSessionStore,
     RedisSessionStore,

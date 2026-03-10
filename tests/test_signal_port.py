@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from geode.infrastructure.adapters.signal_adapter import (
+from core.infrastructure.adapters.signal_adapter import (
     FixtureSignalAdapter,
     LiveSignalAdapter,
     create_signal_adapter,
 )
-from geode.infrastructure.ports.signal_port import SignalEnrichmentPort
-from geode.nodes.signals import set_signal_adapter, signals_node
-from geode.state import GeodeState
+from core.infrastructure.ports.signal_port import SignalEnrichmentPort
+from core.nodes.signals import set_signal_adapter, signals_node
+from core.state import GeodeState
 
 
 class TestSignalEnrichmentPort:

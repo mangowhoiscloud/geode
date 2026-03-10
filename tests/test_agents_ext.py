@@ -5,8 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from geode.extensibility.agents import (
+from core.extensibility.agents import (
     AgentDefinition,
     AgentRegistry,
     SubagentLoader,

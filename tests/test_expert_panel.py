@@ -1,8 +1,7 @@
 """Tests for L4.5 Expert Panel."""
 
 import pytest
-
-from geode.automation.expert_panel import (
+from core.automation.expert_panel import (
     TIER_THRESHOLDS,
     Expert,
     ExpertPanel,

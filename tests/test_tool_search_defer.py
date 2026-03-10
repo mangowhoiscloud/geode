@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from geode.tools.policy import PolicyChain, ToolPolicy
-from geode.tools.registry import ToolRegistry
+from core.tools.policy import PolicyChain, ToolPolicy
+from core.tools.registry import ToolRegistry
 
 # ---------------------------------------------------------------------------
 # Helpers

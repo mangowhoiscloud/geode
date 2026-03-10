@@ -5,9 +5,8 @@ from __future__ import annotations
 import time
 
 import pytest
-
-from geode.automation.nl_scheduler import NLJobNormalizer, NLScheduleParser
-from geode.automation.scheduler import ScheduleKind
+from core.automation.nl_scheduler import NLJobNormalizer, NLScheduleParser
+from core.automation.scheduler import ScheduleKind
 
 # ---------------------------------------------------------------------------
 # Fixtures

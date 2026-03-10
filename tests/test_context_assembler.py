@@ -2,10 +2,10 @@
 
 from unittest.mock import patch
 
-from geode.memory.context import ContextAssembler
-from geode.memory.organization import MonoLakeOrganizationMemory
-from geode.memory.project import ProjectMemory
-from geode.memory.session import InMemorySessionStore
+from core.memory.context import ContextAssembler
+from core.memory.organization import MonoLakeOrganizationMemory
+from core.memory.project import ProjectMemory
+from core.memory.session import InMemorySessionStore
 
 
 class TestContextAssembler:

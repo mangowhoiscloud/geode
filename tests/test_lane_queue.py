@@ -5,8 +5,7 @@ from __future__ import annotations
 import threading
 
 import pytest
-
-from geode.orchestration.lane_queue import Lane, LaneQueue
+from core.orchestration.lane_queue import Lane, LaneQueue
 
 
 class TestLane:

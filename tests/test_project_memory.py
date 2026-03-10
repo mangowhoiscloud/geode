@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from geode.memory.project import MAX_INSIGHTS, MAX_MEMORY_LINES, ProjectMemory
+from core.memory.project import MAX_INSIGHTS, MAX_MEMORY_LINES, ProjectMemory
 
 
 class TestProjectMemoryExists:

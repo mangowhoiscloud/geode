@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from geode.orchestration.hot_reload import ConfigWatcher
+from core.orchestration.hot_reload import ConfigWatcher
 
 
 class TestConfigWatcher:

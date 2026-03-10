@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from geode.infrastructure.ports.tool_port import set_tool_executor
-from geode.llm.client import ToolCallRecord, ToolUseResult
-from geode.nodes.synthesizer import _build_tool_augmented_synthesis, synthesizer_node
-from geode.state import AnalysisResult, EvaluatorResult, GeodeState
+from core.infrastructure.ports.tool_port import set_tool_executor
+from core.llm.client import ToolCallRecord, ToolUseResult
+from core.nodes.synthesizer import _build_tool_augmented_synthesis, synthesizer_node
+from core.state import AnalysisResult, EvaluatorResult, GeodeState
 
 
 def _make_state(*, dry_run: bool = False, with_tools: bool = False) -> GeodeState:
@@ -119,10 +119,10 @@ class TestSynthesizerNodeToolPath:
 
         # Mock both get_llm_tool (raises) and standard path
         with (
-            patch("geode.nodes.synthesizer.get_llm_tool", side_effect=RuntimeError("not injected")),
-            patch("geode.nodes.synthesizer._build_llm_synthesis") as mock_std,
+            patch("core.nodes.synthesizer.get_llm_tool", side_effect=RuntimeError("not injected")),
+            patch("core.nodes.synthesizer._build_llm_synthesis") as mock_std,
         ):
-            from geode.state import SynthesisResult
+            from core.state import SynthesisResult
 
             mock_std.return_value = SynthesisResult(
                 undervaluation_cause="undermarketed",

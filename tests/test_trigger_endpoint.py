@@ -1,13 +1,13 @@
 """Tests for External Trigger Endpoint."""
 
-from geode.automation.trigger_endpoint import (
+from core.automation.trigger_endpoint import (
     PayloadTransformer,
     TriggerEndpoint,
     TriggerMapping,
     TriggerRequest,
     TriggerResponse,
 )
-from geode.automation.triggers import (
+from core.automation.triggers import (
     TriggerConfig,
     TriggerManager,
     TriggerType,

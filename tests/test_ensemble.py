@@ -14,21 +14,20 @@ from typing import Any, TypeVar
 from unittest.mock import patch
 
 import pytest
-from pydantic import BaseModel
-
-from geode.config import Settings
-from geode.infrastructure.ports.llm_port import (
+from core.config import Settings
+from core.infrastructure.ports.llm_port import (
     get_secondary_llm_json,
     get_secondary_llm_parsed,
     set_llm_callable,
 )
-from geode.nodes.analysts import (
+from core.nodes.analysts import (
     _PRIMARY_ANALYSTS,
     _SECONDARY_ANALYSTS,
     _run_analyst,
     _should_use_secondary,
 )
-from geode.state import AnalysisResult, GeodeState
+from core.state import AnalysisResult, GeodeState
+from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -183,19 +182,19 @@ class TestShouldUseSecondary:
     """Test analyst-to-LLM routing logic."""
 
     def test_single_mode_never_secondary(self) -> None:
-        with patch("geode.nodes.analysts.settings") as mock_settings:
+        with patch("core.nodes.analysts.settings") as mock_settings:
             mock_settings.ensemble_mode = "single"
             for atype in ["game_mechanics", "player_experience", "growth_potential", "discovery"]:
                 assert _should_use_secondary(atype) is False
 
     def test_cross_mode_primary_analysts(self) -> None:
-        with patch("geode.nodes.analysts.settings") as mock_settings:
+        with patch("core.nodes.analysts.settings") as mock_settings:
             mock_settings.ensemble_mode = "cross"
             for atype in _PRIMARY_ANALYSTS:
                 assert _should_use_secondary(atype) is False
 
     def test_cross_mode_secondary_analysts(self) -> None:
-        with patch("geode.nodes.analysts.settings") as mock_settings:
+        with patch("core.nodes.analysts.settings") as mock_settings:
             mock_settings.ensemble_mode = "cross"
             for atype in _SECONDARY_ANALYSTS:
                 assert _should_use_secondary(atype) is True
@@ -219,7 +218,7 @@ class TestSingleMode:
         )
 
         state = _make_state(dry_run=False)
-        with patch("geode.nodes.analysts.settings") as mock_settings:
+        with patch("core.nodes.analysts.settings") as mock_settings:
             mock_settings.ensemble_mode = "single"
             result = _run_analyst("game_mechanics", state)
 
@@ -245,7 +244,7 @@ class TestCrossMode:
         )
 
         state = _make_state(dry_run=False)
-        with patch("geode.nodes.analysts.settings") as mock_settings:
+        with patch("core.nodes.analysts.settings") as mock_settings:
             mock_settings.ensemble_mode = "cross"
             result = _run_analyst("game_mechanics", state)
 
@@ -261,7 +260,7 @@ class TestCrossMode:
         )
 
         state = _make_state(dry_run=False)
-        with patch("geode.nodes.analysts.settings") as mock_settings:
+        with patch("core.nodes.analysts.settings") as mock_settings:
             mock_settings.ensemble_mode = "cross"
             result = _run_analyst("player_experience", state)
 
@@ -285,7 +284,7 @@ class TestFallbackToPrimary:
         )
 
         state = _make_state(dry_run=False)
-        with patch("geode.nodes.analysts.settings") as mock_settings:
+        with patch("core.nodes.analysts.settings") as mock_settings:
             mock_settings.ensemble_mode = "cross"
             result = _run_analyst("player_experience", state)
 
