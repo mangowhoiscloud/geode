@@ -421,5 +421,20 @@ Expected:
 | 7-* auth | test_e2e.py | TestAuthProfileE2E | PASS |
 | 8-* cross-LLM | test_e2e.py | TestCrossLLME2E | PASS |
 
-**Total: 39 agentic tests + 12 E2E tests = 51 scenario-mapped tests**
-**Full suite: 1890 tests all pass**
+### Live E2E Tests (test_e2e_orchestration_live.py)
+
+| Scenario | Test Class/Method | Status |
+|----------|-------------------|--------|
+| Doc3 §4 hook lifecycle | TestPipelineHookEventFlow::test_full_event_lifecycle | PASS |
+| Doc3 §4 enter/exit pairing | TestPipelineHookEventFlow::test_node_enter_exit_pairing | PASS |
+| Doc3 §5 task graph topology | TestTaskGraphDAGTracking::test_create_geode_task_graph | PASS |
+| Doc3 §5 task transitions | TestTaskGraphDAGTracking::test_task_lifecycle_transitions | PASS |
+| Doc3 §6 failure propagation | TestTaskGraphDAGTracking::test_failure_propagation | PASS |
+| Doc1 §3 parallel+hooks | TestSubAgentOrchestrationLive::test_parallel_tasks_with_hooks_and_graph | PASS |
+| Doc1 §3-3 coalescing | TestSubAgentOrchestrationLive::test_coalescing_prevents_duplicate_execution | PASS |
+| Doc1 §3 mixed results | TestSubAgentOrchestrationLive::test_mixed_success_and_failure | PASS |
+| Doc3 §6 full flow | TestEndToEndExecutionFlow::test_runtime_to_synthesis | PASS |
+| Doc3 §3 4 analysts | TestEndToEndExecutionFlow::test_analyst_parallel_execution | PASS |
+
+**Total: 39 agentic + 12 E2E + 10 live orchestration = 61 scenario-mapped tests**
+**Full suite: 1899+ tests all pass**
