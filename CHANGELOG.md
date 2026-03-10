@@ -28,7 +28,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+- `AgenticLoop` — `while(tool_use)` multi-round execution loop (max 10 rounds)
+- `ConversationContext` — sliding-window multi-turn history (max 20 turns)
+- `ToolExecutor` — tool dispatch with HITL safety gate (SAFE/STANDARD/DANGEROUS classification)
+- `BashTool` — shell command execution with 9 blocked dangerous patterns + user approval
+- `SubAgentManager` — parallel task delegation via `IsolatedRunner` (MAX_CONCURRENT=5)
+- `delegate_task` tool — LLM-callable parallel sub-task execution
+- Multi-intent support: sequential tool chaining by LLM decision
+- Multi-turn context: pronoun resolution, follow-up queries
+
+### Changed
+- NL Router system prompt updated for multi-tool sequential calling
+- Prompt templates migrated from Python strings (`prompts.py`) to `.md` template files
+- Prompt structured data (axes, rubrics) separated into `core/llm/prompts/axes.py`
+- `core/llm/prompts/` package with `load_prompt()` API and backward-compatible exports
+
+### Architecture
+- Prompt management: `.md` templates + Python loader (content/code separation)
+- 5 prompt templates: `analyst.md`, `evaluator.md`, `synthesizer.md`, `biasbuster.md`, `commentary.md`
 
 ---
 
