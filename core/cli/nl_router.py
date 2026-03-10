@@ -134,6 +134,10 @@ call show_help. This includes questions about yourself, your analysis method, \
 your role, how you work, or opinions about games/IPs.
 - Only call show_help when the user explicitly asks for the command list \
 (e.g. "/help", "도움말", "명령어 목록").
+- When the user explicitly requests dry-run, no-LLM, or fixture-only mode \
+(e.g. "dry-run으로 분석해", "LLM 호출 없이 분석해", "드라이런으로 해줘", \
+"without LLM", "fixture 데이터로만"), set dry_run=true in the tool call. \
+Otherwise do NOT set dry_run — the system will decide based on API key availability.
 
 Keep direct responses concise (2-4 sentences), in the same language as the user.
 
@@ -250,8 +254,10 @@ _TOOLS: list[dict[str, Any]] = [
             "특정 IP를 분석합니다. "
             "사용자가 IP 이름을 말하거나 분석을 요청할 때 사용하세요. "
             "IP 이름만 단독으로 입력한 경우에도 이 도구를 사용하세요. "
+            "사용자가 'dry-run', '드라이런', 'LLM 없이', 'fixture로만' 등을 "
+            "명시하면 반드시 dry_run=true로 설정하세요. "
             "Examples: 'Berserk 분석해', 'analyze Cowboy Bebop', "
-            "'Berserk', '카우보이 비밥'"
+            "'Berserk', 'Berserk dry-run으로 분석해'"
         ),
         "input_schema": {
             "type": "object",
@@ -259,6 +265,14 @@ _TOOLS: list[dict[str, Any]] = [
                 "ip_name": {
                     "type": "string",
                     "description": "IP name in English (e.g. 'Berserk', 'Ghost in the Shell')",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": (
+                        "MUST be true when user says: dry-run, 드라이런, "
+                        "LLM 없이, LLM 호출 없이, fixture로만, without LLM, "
+                        "no-LLM, 간단히. Otherwise omit or set false."
+                    ),
                 },
             },
             "required": ["ip_name"],
@@ -288,8 +302,9 @@ _TOOLS: list[dict[str, Any]] = [
         "description": (
             "두 IP를 비교 분석합니다. "
             "사용자가 두 IP를 비교하고 싶을 때 사용하세요. "
+            "사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true. "
             "Examples: 'Berserk vs Cowboy Bebop', "
-            "'버서크랑 공각기동대 비교해줘'"
+            "'버서크랑 공각기동대 비교해줘', 'dry-run으로 비교해'"
         ),
         "input_schema": {
             "type": "object",
@@ -301,6 +316,14 @@ _TOOLS: list[dict[str, Any]] = [
                 "ip_b": {
                     "type": "string",
                     "description": "두 번째 IP 이름",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": (
+                        "MUST be true when user says: dry-run, 드라이런, "
+                        "LLM 없이, LLM 호출 없이, fixture로만, without LLM, "
+                        "no-LLM, 간단히. Otherwise omit or set false."
+                    ),
                 },
             },
             "required": ["ip_a", "ip_b"],
@@ -326,8 +349,9 @@ _TOOLS: list[dict[str, Any]] = [
         "description": (
             "IP 분석 결과를 리포트로 생성합니다. "
             "사용자가 리포트, 보고서, report 생성을 요청할 때 사용하세요. "
+            "사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true. "
             "Examples: 'Berserk 리포트 생성해', 'generate a report for Cowboy Bebop', "
-            "'보고서 만들어줘', '레포트 생성'"
+            "'보고서 만들어줘', 'dry-run 리포트 생성'"
         ),
         "input_schema": {
             "type": "object",
@@ -335,6 +359,14 @@ _TOOLS: list[dict[str, Any]] = [
                 "ip_name": {
                     "type": "string",
                     "description": "IP name in English (e.g. 'Berserk', 'Ghost in the Shell')",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": (
+                        "MUST be true when user says: dry-run, 드라이런, "
+                        "LLM 없이, LLM 호출 없이, fixture로만, without LLM, "
+                        "no-LLM, 간단히. Otherwise omit or set false."
+                    ),
                 },
             },
             "required": ["ip_name"],
@@ -345,9 +377,9 @@ _TOOLS: list[dict[str, Any]] = [
         "description": (
             "여러 IP를 동시에 배치 분석합니다. "
             "사용자가 전체/다수 IP를 한번에 분석하거나 순위를 보고 싶을 때 사용하세요. "
+            "사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true. "
             "Examples: '전체 IP 분석해줘', '배치 돌려', 'batch analyze all', "
-            "'모든 IP 점수 보여줘', '순위 보여줘', 'rank all IPs', "
-            "'상위 5개 분석해', 'top 10'"
+            "'모든 IP 점수 보여줘', '상위 5개 분석해', 'top 10 dry-run'"
         ),
         "input_schema": {
             "type": "object",
@@ -363,6 +395,14 @@ _TOOLS: list[dict[str, Any]] = [
                 "stream": {
                     "type": "boolean",
                     "description": "스트리밍 모드 사용 여부 (기본값: false)",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": (
+                        "MUST be true when user says: dry-run, 드라이런, "
+                        "LLM 없이, LLM 호출 없이, fixture로만, without LLM, "
+                        "no-LLM, 간단히. Otherwise omit or set false."
+                    ),
                 },
             },
             "required": [],

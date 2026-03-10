@@ -9,6 +9,7 @@ Architecture (OpenClaw-inspired):
 from __future__ import annotations
 
 import logging
+import re as _re
 from contextvars import ContextVar
 from enum import Enum
 from typing import Any, cast
@@ -741,10 +742,16 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
         console.print(f"  Verbose: {state}")
         console.print()
     elif action in ("analyze", "run"):
-        # Default: live LLM. Dry-run only when no API key available.
+        # Default: live LLM. Dry-run only when no API key or explicitly requested.
         readiness = _get_readiness()
         force_dry = readiness.force_dry_run if readiness else True
-        if force_dry:
+        # Support "--dry-run" flag in slash command args
+        if "--dry-run" in args or "--dry_run" in args:
+            force_dry = True
+            args = args.replace("--dry-run", "").replace("--dry_run", "").strip()
+        if force_dry and not readiness.force_dry_run:
+            console.print("  [info]Dry-run mode (explicitly requested)[/info]")
+        elif force_dry:
             console.print("  [warning]API key not configured — forcing dry-run mode[/warning]")
         if not args:
             console.print(f"  [warning]Usage: /{action} <IP name>[/warning]")
@@ -775,16 +782,26 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
                 " [html|json|md] [summary|detailed|executive][/warning]"
             )
         else:
-            report_args = _parse_report_args(args.split())
+            dry_flag = "--dry-run" in args or "--dry_run" in args
+            clean_args = args.replace("--dry-run", "").replace("--dry_run", "").strip()
+            report_args = _parse_report_args(clean_args.split())
+            readiness = _get_readiness()
+            report_dry = readiness.force_dry_run if readiness else True
+            if dry_flag:
+                report_dry = True
             _generate_report(
                 report_args["ip_name"],
                 fmt=report_args["fmt"],
                 template=report_args["template"],
+                dry_run=report_dry,
                 verbose=verbose,
             )
     elif action == "batch":
         readiness = _get_readiness()
         force_dry = readiness.force_dry_run if readiness else True
+        if "--dry-run" in args or "--dry_run" in args:
+            force_dry = True
+            args = args.replace("--dry-run", "").replace("--dry_run", "").strip()
         cmd_batch(
             args,
             run_fn=_run_analysis,
@@ -819,12 +836,19 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
         if len(parts) < 2:
             console.print("  [warning]Usage: /compare <IP_A> <IP_B>[/warning]")
         else:
-            ip_a, ip_b = parts[0], parts[1]
-            console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
-            readiness = _get_readiness()
-            force_dry = readiness.force_dry_run if readiness else True
-            _run_analysis(ip_a, dry_run=force_dry, verbose=verbose)
-            _run_analysis(ip_b, dry_run=force_dry, verbose=verbose)
+            dry_flag = "--dry-run" in args or "--dry_run" in args
+            clean_parts = [p for p in parts if p not in ("--dry-run", "--dry_run")]
+            if len(clean_parts) < 2:
+                console.print("  [warning]Usage: /compare <IP_A> <IP_B>[/warning]")
+            else:
+                ip_a, ip_b = clean_parts[0], clean_parts[1]
+                console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
+                readiness = _get_readiness()
+                force_dry = readiness.force_dry_run if readiness else True
+                if dry_flag:
+                    force_dry = True
+                _run_analysis(ip_a, dry_run=force_dry, verbose=verbose)
+                _run_analysis(ip_b, dry_run=force_dry, verbose=verbose)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -978,6 +1002,17 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
         console.print()
 
 
+_DRY_RUN_PATTERN = _re.compile(
+    r"(?:dry[-_\s]?run|드라이런|LLM\s*(?:호출\s*)?없이|without\s+LLM|no[-_\s]?LLM|fixture로만|간단히)",
+    _re.IGNORECASE,
+)
+
+
+def _text_requests_dry_run(text: str) -> bool:
+    """Detect if user text explicitly requests dry-run mode."""
+    return bool(_DRY_RUN_PATTERN.search(text))
+
+
 def _handle_natural_language(text: str, verbose: bool) -> None:
     """Route natural language input via NLRouter (hybrid pattern + LLM)."""
     from core.cli.nl_router import LLM_ROUTER_MODEL
@@ -1058,6 +1093,9 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
         ip_name = intent.args.get("ip_name", text)
         readiness = _get_readiness()
         force_dry = readiness.force_dry_run if readiness else True
+        # NL dry-run override: LLM arg or text pattern detection
+        if intent.args.get("dry_run") or _text_requests_dry_run(text):
+            force_dry = True
         result = _run_analysis(ip_name, dry_run=force_dry, verbose=verbose)
         if result:
             _show_commentary(text, "analyze", build_analyze_context(result), is_offline=is_offline)
@@ -1068,6 +1106,8 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
         console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
         readiness = _get_readiness()
         force_dry = readiness.force_dry_run if readiness else True
+        if intent.args.get("dry_run") or _text_requests_dry_run(text):
+            force_dry = True
         result_a = _run_analysis(ip_a, dry_run=force_dry, verbose=verbose)
         result_b = _run_analysis(ip_b, dry_run=force_dry, verbose=verbose)
         _show_commentary(
@@ -1086,7 +1126,11 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
 
     elif intent.action == "report":
         ip_name = intent.args.get("ip_name", text)
-        _generate_report(ip_name, verbose=verbose)
+        readiness = _get_readiness()
+        report_dry = readiness.force_dry_run if readiness else True
+        if intent.args.get("dry_run") or _text_requests_dry_run(text):
+            report_dry = True
+        _generate_report(ip_name, dry_run=report_dry, verbose=verbose)
 
     elif intent.action == "chat":
         response_text = intent.args.get("response", "")
@@ -1106,6 +1150,8 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
 
         readiness = _get_readiness()
         force_dry = readiness.force_dry_run if readiness else True
+        if intent.args.get("dry_run") or _text_requests_dry_run(text):
+            force_dry = True
         batch_results = run_batch(top=top, genre=genre, dry_run=force_dry)
         render_batch_table(batch_results)
 
