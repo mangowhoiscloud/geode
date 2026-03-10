@@ -18,6 +18,7 @@ import typer
 from rich.text import Text
 
 from core import __version__
+from core.cli.agentic_loop import AgenticLoop, AgenticResult
 from core.cli.commands import (
     cmd_auth,
     cmd_batch,
@@ -30,6 +31,7 @@ from core.cli.commands import (
     resolve_action,
     show_help,
 )
+from core.cli.conversation import ConversationContext
 from core.cli.nl_router import NLRouter
 from core.cli.search import IPSearchEngine
 from core.cli.startup import (
@@ -38,6 +40,7 @@ from core.cli.startup import (
     render_readiness,
     setup_project_memory,
 )
+from core.cli.tool_executor import ToolExecutor
 from core.config import settings
 from core.extensibility.reports import ReportFormat, ReportGenerator, ReportTemplate
 from core.infrastructure.ports.hook_port import HookSystemPort
@@ -1272,14 +1275,246 @@ def _handle_natural_language(text: str, verbose: bool) -> None:
         _run_analysis(text, dry_run=force_dry, verbose=verbose)
 
 
+def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
+    """Build tool name → handler function mapping for ToolExecutor.
+
+    Each handler receives tool_input kwargs and returns a dict result.
+    """
+    from core.cli.batch import run_batch
+    from core.memory.project import ProjectMemory
+
+    readiness = _get_readiness()
+    force_dry = readiness.force_dry_run if readiness else True
+
+    def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
+        cmd_list()
+        return {"status": "ok", "action": "list"}
+
+    def handle_analyze_ip(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        dry_run = kwargs.get("dry_run", force_dry)
+        if _text_requests_dry_run(ip_name):
+            dry_run = True
+        result = _run_analysis(ip_name, dry_run=dry_run, verbose=verbose)
+        if result is None:
+            return {"error": f"Analysis failed for '{ip_name}'"}
+        return {
+            "status": "ok",
+            "action": "analyze",
+            "ip_name": result.get("ip_name", ip_name),
+            "tier": result.get("tier", "N/A"),
+            "score": result.get("final_score", 0),
+        }
+
+    def handle_search_ips(**kwargs: Any) -> dict[str, Any]:
+        query = kwargs.get("query", "")
+        results = _get_search_engine().search(query)
+        _render_search_results(query, results)
+        return {
+            "status": "ok",
+            "action": "search",
+            "query": query,
+            "count": len(results),
+            "results": [{"name": r.ip_name, "score": r.score} for r in results],
+        }
+
+    def handle_compare_ips(**kwargs: Any) -> dict[str, Any]:
+        ip_a = kwargs.get("ip_a", "")
+        ip_b = kwargs.get("ip_b", "")
+        dry_run = kwargs.get("dry_run", force_dry)
+        console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
+        result_a = _run_analysis(ip_a, dry_run=dry_run, verbose=verbose)
+        result_b = _run_analysis(ip_b, dry_run=dry_run, verbose=verbose)
+        return {
+            "status": "ok",
+            "action": "compare",
+            "ip_a": {"name": ip_a, "tier": (result_a or {}).get("tier", "N/A")},
+            "ip_b": {"name": ip_b, "tier": (result_b or {}).get("tier", "N/A")},
+        }
+
+    def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
+        show_help()
+        return {"status": "ok", "action": "help"}
+
+    def handle_generate_report(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        dry_run = kwargs.get("dry_run", force_dry)
+        _generate_report(ip_name, dry_run=dry_run, verbose=verbose)
+        return {"status": "ok", "action": "report", "ip_name": ip_name}
+
+    def handle_batch_analyze(**kwargs: Any) -> dict[str, Any]:
+        top = kwargs.get("top", 20)
+        genre = kwargs.get("genre")
+        dry_run = kwargs.get("dry_run", force_dry)
+        batch_results = run_batch(top=top, genre=genre, dry_run=dry_run)
+        from core.cli.batch import render_batch_table
+
+        render_batch_table(batch_results)
+        return {"status": "ok", "action": "batch", "count": len(batch_results)}
+
+    def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
+        console.print()
+        console.print("  [header]GEODE System Status[/header]")
+        console.print(f"  Model: [bold]{settings.model}[/bold]")
+        console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
+        ant_ok = bool(settings.anthropic_api_key)
+        oai_ok = bool(settings.openai_api_key)
+        ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
+        oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
+        console.print(f"  Anthropic API: {ant_status}")
+        console.print(f"  OpenAI API: {oai_status}")
+        if readiness:
+            mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
+            console.print(f"  Mode: [bold]{mode}[/bold]")
+        from core.fixtures import FIXTURE_MAP as _FM
+
+        console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
+        console.print()
+        return {"status": "ok", "action": "status"}
+
+    def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
+        model_hint = kwargs.get("model_hint", "")
+        cmd_model(model_hint)
+        return {"status": "ok", "action": "model"}
+
+    def handle_memory_search(**kwargs: Any) -> dict[str, Any]:
+        query = kwargs.get("query", "")
+        try:
+            mem = ProjectMemory()
+            content = mem.search(query) if hasattr(mem, "search") else mem.load_memory()
+            return {"status": "ok", "action": "memory_search", "content": content[:2000]}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def handle_memory_save(**kwargs: Any) -> dict[str, Any]:
+        key = kwargs.get("key", "")
+        content = kwargs.get("content", "")
+        try:
+            mem = ProjectMemory()
+            mem.append_insight(f"{key}: {content}")
+            console.print(f"  [success]Saved to memory: {key}[/success]")
+            return {"status": "ok", "action": "memory_save", "key": key}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def handle_manage_rule(**kwargs: Any) -> dict[str, Any]:
+        # Delegate to existing memory action handler
+        from core.cli.nl_router import NLIntent
+
+        intent = NLIntent(
+            action="memory",
+            args={
+                "rule_action": kwargs.get("action", "list"),
+                "name": kwargs.get("name", ""),
+                "paths": kwargs.get("paths", []),
+                "content": kwargs.get("content", ""),
+            },
+        )
+        _handle_memory_action(intent, "", False)
+        return {"status": "ok", "action": "manage_rule"}
+
+    def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
+        key_value = kwargs.get("key_value", "")
+        changed = cmd_key(key_value)
+        if changed:
+            new_readiness = check_readiness()
+            _set_readiness(new_readiness)
+            render_readiness(new_readiness)
+        return {"status": "ok", "action": "key"}
+
+    def handle_manage_auth(**kwargs: Any) -> dict[str, Any]:
+        sub_action = kwargs.get("sub_action", "")
+        cmd_auth(sub_action)
+        return {"status": "ok", "action": "auth"}
+
+    def handle_generate_data(**kwargs: Any) -> dict[str, Any]:
+        count = kwargs.get("count", 5)
+        genre = kwargs.get("genre", "")
+        gen_args = str(count)
+        if genre:
+            gen_args += f" {genre}"
+        cmd_generate(gen_args)
+        return {"status": "ok", "action": "generate"}
+
+    def handle_schedule_job(**kwargs: Any) -> dict[str, Any]:
+        sub_action = kwargs.get("sub_action", "")
+        target_id = kwargs.get("target_id", "")
+        sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
+        cmd_schedule(sched_args)
+        return {"status": "ok", "action": "schedule"}
+
+    def handle_trigger_event(**kwargs: Any) -> dict[str, Any]:
+        sub_action = kwargs.get("sub_action", "")
+        event_name = kwargs.get("event_name", "")
+        trigger_args = f"{sub_action} {event_name}".strip() if sub_action else ""
+        cmd_trigger(trigger_args)
+        return {"status": "ok", "action": "trigger"}
+
+    return {
+        "list_ips": handle_list_ips,
+        "analyze_ip": handle_analyze_ip,
+        "search_ips": handle_search_ips,
+        "compare_ips": handle_compare_ips,
+        "show_help": handle_show_help,
+        "generate_report": handle_generate_report,
+        "batch_analyze": handle_batch_analyze,
+        "check_status": handle_check_status,
+        "switch_model": handle_switch_model,
+        "memory_search": handle_memory_search,
+        "memory_save": handle_memory_save,
+        "manage_rule": handle_manage_rule,
+        "set_api_key": handle_set_api_key,
+        "manage_auth": handle_manage_auth,
+        "generate_data": handle_generate_data,
+        "schedule_job": handle_schedule_job,
+        "trigger_event": handle_trigger_event,
+    }
+
+
+def _render_agentic_result(result: AgenticResult) -> None:
+    """Render the final result from an agentic loop execution."""
+    if result.error == "llm_call_failed":
+        console.print()
+        console.print("  [warning]LLM call failed — falling back to offline mode.[/warning]")
+        console.print("  [muted]/list, /search are available without LLM. "
+                       "Use /help for more commands.[/muted]")
+        console.print()
+        return
+
+    if result.text:
+        console.print()
+        console.print(f"  {result.text}")
+        console.print()
+
+    if result.tool_calls:
+        tool_names = [tc["tool"] for tc in result.tool_calls]
+        log.debug(
+            "Agentic loop: %d rounds, %d tool calls (%s)",
+            result.rounds,
+            len(result.tool_calls),
+            ", ".join(tool_names),
+        )
+
+
 def _interactive_loop() -> None:
     """Claude Code / OpenClaw-style interactive REPL.
 
-    Two routing paths:
-      /command → deterministic dispatch (commands.py)
-      free-text → NL intent classification (nl_router.py)
+    Three routing paths:
+      /command  → deterministic dispatch (commands.py)
+      free-text → agentic loop (AgenticLoop, multi-turn + multi-intent)
+      fallback  → single-shot NL Router (when agentic unavailable)
     """
     verbose = False
+    conversation = ConversationContext(max_turns=20)
+
+    # Build tool handlers and executor
+    handlers = _build_tool_handlers(verbose=verbose)
+    executor = ToolExecutor(action_handlers=handlers)
+    agentic = AgenticLoop(conversation, executor)
+
+    # Check if agentic mode is possible (needs API key)
+    readiness = _get_readiness()
+    agentic_available = readiness is not None and not readiness.force_dry_run
 
     while True:
         try:
@@ -1298,8 +1533,17 @@ def _interactive_loop() -> None:
             should_break, verbose = _handle_command(cmd, args, verbose)
             if should_break:
                 break
+            # Update handlers if verbose changed
+            if verbose != (handlers.get("_verbose_flag") is True):
+                handlers = _build_tool_handlers(verbose=verbose)
+                executor = ToolExecutor(action_handlers=handlers)
+                agentic = AgenticLoop(conversation, executor)
+        elif agentic_available:
+            # Agentic loop: multi-turn, multi-intent, HITL
+            result = agentic.run(user_input)
+            _render_agentic_result(result)
         else:
-            # Natural language → NL Router (intent classification)
+            # Fallback: single-shot NL Router (offline or no API key)
             _handle_natural_language(user_input, verbose)
 
 

@@ -141,6 +141,10 @@ Otherwise do NOT set dry_run — the system will decide based on API key availab
 
 Keep direct responses concise (2-4 sentences), in the same language as the user.
 
+You can call multiple tools in sequence to fulfill complex requests. \
+For example, "분석하고 비교해줘" can be handled by calling analyze_ip \
+followed by compare_ips.
+
 You are knowledgeable about game publishing, IP licensing, \
 market analysis, and entertainment media.\
 """
