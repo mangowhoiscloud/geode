@@ -6,7 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.cli.agentic_loop import AGENTIC_TOOLS, AgenticLoop
+from core.cli.agentic_loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
 from core.cli.conversation import ConversationContext
 from core.cli.sub_agent import SubAgentManager, SubTask
 from core.cli.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, ToolExecutor
@@ -223,6 +223,104 @@ class TestAgenticLoop:
         assert "analyze_ip" in tool_names
         assert "run_bash" in tool_names
         assert "delegate_task" in tool_names
+
+    def test_offline_mode_help(self, context: ConversationContext, executor: ToolExecutor) -> None:
+        """Test offline mode returns help text for help intent."""
+        loop = AgenticLoop(context, executor, offline_mode=True)
+        result = loop.run("도움말 보여줘")
+        assert result.rounds == 1
+        assert "Offline" in result.text or "/help" in result.text
+
+    def test_offline_mode_tool_execution(self, context: ConversationContext) -> None:
+        """Test offline mode routes to correct tool and executes."""
+        handler = MagicMock(return_value={"status": "ok", "ips": ["Berserk"]})
+        executor = ToolExecutor(action_handlers={"list_ips": handler}, auto_approve=True)
+        loop = AgenticLoop(context, executor, offline_mode=True)
+        result = loop.run("IP 목록 보여줘")
+        assert result.rounds == 1
+        assert len(result.tool_calls) >= 1
+
+    def test_get_agentic_tools_no_registry(self) -> None:
+        """get_agentic_tools without registry returns base tools."""
+        tools = get_agentic_tools(None)
+        assert len(tools) == len(AGENTIC_TOOLS)
+
+    def test_get_agentic_tools_with_registry(self) -> None:
+        """get_agentic_tools with registry merges extra tools."""
+        mock_registry = MagicMock()
+        mock_registry.to_anthropic_tools.return_value = [
+            {"name": "custom_tool", "description": "A custom tool", "input_schema": {}},
+        ]
+        tools = get_agentic_tools(mock_registry)
+        names = {t["name"] for t in tools}
+        assert "custom_tool" in names
+        assert len(tools) == len(AGENTIC_TOOLS) + 1
+
+    def test_get_agentic_tools_no_duplicate(self) -> None:
+        """get_agentic_tools skips registry tools that already exist."""
+        mock_registry = MagicMock()
+        mock_registry.to_anthropic_tools.return_value = [
+            {"name": "list_ips", "description": "Duplicate", "input_schema": {}},
+        ]
+        tools = get_agentic_tools(mock_registry)
+        assert len(tools) == len(AGENTIC_TOOLS)  # no extra
+
+    def test_agentric_result_dataclass(self) -> None:
+        """Test AgenticResult fields."""
+        r = AgenticResult(text="hello", rounds=2, error="test_err")
+        assert r.text == "hello"
+        assert r.rounds == 2
+        assert r.error == "test_err"
+        assert r.tool_calls == []
+
+    def test_build_system_prompt(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Test _build_system_prompt returns non-empty string."""
+        loop = AgenticLoop(context, executor)
+        prompt = loop._build_system_prompt()
+        assert isinstance(prompt, str)
+        assert len(prompt) > 100
+
+    def test_track_usage_records(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Test _track_usage records to accumulator."""
+        from core.llm.client import get_usage_accumulator, reset_usage_accumulator
+
+        reset_usage_accumulator()
+        loop = AgenticLoop(context, executor)
+
+        mock_response = MagicMock()
+        mock_response.usage = MagicMock(input_tokens=500, output_tokens=200)
+
+        with patch("core.llm.client.is_langsmith_enabled", return_value=False):
+            loop._track_usage(mock_response)
+
+        acc = get_usage_accumulator()
+        assert acc.total_input_tokens == 500
+        assert acc.total_output_tokens == 200
+        assert len(acc.calls) == 1
+
+    def test_track_usage_no_usage(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Test _track_usage with no usage data."""
+        loop = AgenticLoop(context, executor)
+        mock_response = MagicMock()
+        mock_response.usage = None
+        loop._track_usage(mock_response)  # should not raise
+
+    def test_track_usage_exception_handled(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Test _track_usage swallows exceptions."""
+        loop = AgenticLoop(context, executor)
+        mock_response = MagicMock()
+        mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        with patch("core.llm.client.calculate_cost", side_effect=RuntimeError("boom")):
+            loop._track_usage(mock_response)  # should not raise
 
 
 # ---------------------------------------------------------------------------
