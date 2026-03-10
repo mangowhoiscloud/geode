@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Satisfactory",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Coffee Stain Studios",
+    "genre": [
+      "base building",
+      "open world",
+      "automation"
+    ],
+    "synopsis": "Satisfactory — a Factory Builder game developed by Coffee Stain Studios, released in 2024 on Steam.",
+    "proof_of_game": "Satisfactory (2024, Steam/PC)",
+    "franchise_size": 3,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 624000,
+    "dau_current": 302640,
+    "revenue_ltm": 109172700,
+    "revenue_lifetime": 480359880,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "premium",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 37830000,
+    "reddit_subscribers": 630500,
+    "fan_art_yoy_pct": 37.0,
+    "google_trends_index": 97,
+    "twitter_mentions_monthly": 201760,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "base building",
+      "open world",
+      "automation",
+      "co-op",
+      "first-person"
+    ],
+    "game_sales_data": "~7,800,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "base building",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "premium",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 3,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 95.4,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 92.3,
+    "developer_track_record": 50,
+    "psm_att_pct": 44.9,
+    "psm_z_value": 3.74,
+    "psm_gamma": 2.4
+  }
+}

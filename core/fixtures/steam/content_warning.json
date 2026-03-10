@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Content Warning",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Landfall",
+    "genre": [
+      "co-op",
+      "horror",
+      "comedy"
+    ],
+    "synopsis": "Content Warning — a Co-op Horror game developed by Landfall, released in 2024 on Steam.",
+    "proof_of_game": "Content Warning (2024, Steam/PC)",
+    "franchise_size": 8,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 148800,
+    "dau_current": 70680,
+    "revenue_ltm": 5201490,
+    "revenue_lifetime": 22886556,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "M",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "A"
+  },
+  "signals": {
+    "youtube_views": 8835000,
+    "reddit_subscribers": 147250,
+    "fan_art_yoy_pct": 35.0,
+    "google_trends_index": 86,
+    "twitter_mentions_monthly": 47120,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "co-op",
+      "horror",
+      "comedy",
+      "multiplayer",
+      "short"
+    ],
+    "game_sales_data": "~1,860,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "co-op",
+    "dev_tier": "A",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "M",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 8,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 87.3,
+    "cause": "timing_mismatch",
+    "quality_score": 95.5,
+    "momentum_score": 82.4,
+    "developer_track_record": 75,
+    "psm_att_pct": 37.1,
+    "psm_z_value": 3.09,
+    "psm_gamma": 2.4
+  }
+}

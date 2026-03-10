@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Palworld",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Pocketpair",
+    "genre": [
+      "open world",
+      "survival",
+      "crafting"
+    ],
+    "synopsis": "Palworld — a Survival Crafting game developed by Pocketpair, released in 2024 on Steam.",
+    "proof_of_game": "Palworld (2024, Steam/PC)",
+    "franchise_size": 3,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 744000,
+    "dau_current": 290160,
+    "revenue_ltm": 97617450,
+    "revenue_lifetime": 429516780,
+    "retention_d30": 29,
+    "metacritic_score": 73,
+    "store_page_score": 78,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 36270000,
+    "reddit_subscribers": 604500,
+    "fan_art_yoy_pct": 18.0,
+    "google_trends_index": 98,
+    "twitter_mentions_monthly": 193440,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "high",
+    "genre_fit_keywords": [
+      "open world",
+      "survival",
+      "crafting",
+      "multiplayer",
+      "creature collector"
+    ],
+    "game_sales_data": "~9,300,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "open world",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 3,
+    "metacritic_score": 73,
+    "store_page_score": 78,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 88.7,
+    "cause": "timing_mismatch",
+    "quality_score": 78.5,
+    "momentum_score": 87.8,
+    "developer_track_record": 50,
+    "psm_att_pct": 33.3,
+    "psm_z_value": 2.77,
+    "psm_gamma": 2.0
+  }
+}

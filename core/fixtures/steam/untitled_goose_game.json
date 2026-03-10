@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Untitled Goose Game",
+    "media_type": "game",
+    "release_year": 2020,
+    "studio": "House House",
+    "genre": [
+      "comedy",
+      "stealth",
+      "casual"
+    ],
+    "synopsis": "Untitled Goose Game — a Stealth Comedy game developed by House House, released in 2020 on Steam.",
+    "proof_of_game": "Untitled Goose Game (2020, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 6
+  },
+  "monolake": {
+    "dau_peak": 57600,
+    "dau_current": 13680,
+    "revenue_ltm": 1511244,
+    "revenue_lifetime": 40299840,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2020,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 3420000,
+    "reddit_subscribers": 57000,
+    "fan_art_yoy_pct": 28.3,
+    "google_trends_index": 78,
+    "twitter_mentions_monthly": 18240,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "comedy",
+      "stealth",
+      "casual",
+      "puzzle",
+      "funny"
+    ],
+    "game_sales_data": "~720,000 owners (Steam, 2020-present)"
+  },
+  "psm_covariates": {
+    "genre": "comedy",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2020,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 6
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 85.2,
+    "cause": "timing_mismatch",
+    "quality_score": 95.5,
+    "momentum_score": 74.2,
+    "developer_track_record": 25,
+    "psm_att_pct": 37.0,
+    "psm_z_value": 3.08,
+    "psm_gamma": 2.4
+  }
+}

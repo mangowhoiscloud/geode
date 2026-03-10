@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Don't Starve Together",
+    "media_type": "game",
+    "release_year": 2016,
+    "studio": "Klei Entertainment",
+    "genre": [
+      "survival",
+      "co-op",
+      "open world"
+    ],
+    "synopsis": "Don't Starve Together — a Survival game developed by Klei Entertainment, released in 2016 on Steam.",
+    "proof_of_game": "Don't Starve Together (2016, Steam/PC)",
+    "franchise_size": 7,
+    "ip_age_years": 10
+  },
+  "monolake": {
+    "dau_peak": 696000,
+    "dau_current": 110200,
+    "revenue_ltm": 13693365,
+    "revenue_lifetime": 365156400,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2016,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "A"
+  },
+  "signals": {
+    "youtube_views": 41325000,
+    "reddit_subscribers": 688750,
+    "fan_art_yoy_pct": 27.0,
+    "google_trends_index": 98,
+    "twitter_mentions_monthly": 220400,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "high",
+    "genre_fit_keywords": [
+      "survival",
+      "co-op",
+      "open world",
+      "crafting",
+      "multiplayer"
+    ],
+    "game_sales_data": "~8,700,000 owners (Steam, 2016-present)"
+  },
+  "psm_covariates": {
+    "genre": "survival",
+    "dev_tier": "A",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2016,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 7,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 10
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 93.5,
+    "cause": "timing_mismatch",
+    "quality_score": 95.5,
+    "momentum_score": 90.0,
+    "developer_track_record": 100,
+    "psm_att_pct": 41.8,
+    "psm_z_value": 3.48,
+    "psm_gamma": 2.4
+  }
+}

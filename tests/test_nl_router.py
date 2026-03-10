@@ -6,8 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import anthropic
 import pytest
-
-from geode.cli.nl_router import (
+from core.cli.nl_router import (
     NLIntent,
     NLRouter,
     _offline_fallback,
@@ -36,7 +35,7 @@ def router_llm() -> NLRouter:
 def _preserve_exceptions(mock_anthropic: MagicMock) -> None:
     """Preserve real exception classes on mocked anthropic module.
 
-    When patching `geode.cli.nl_router.anthropic`, MagicMock replaces
+    When patching `core.cli.nl_router.anthropic`, MagicMock replaces
     exception classes too. The `except` chain needs real BaseException
     subclasses to evaluate, so we restore them on the mock.
     """
@@ -229,8 +228,8 @@ class TestToolUseRouter:
         """LLM calls list_ips tool."""
         resp = _make_tool_use_response("list_ips", {})
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -246,8 +245,8 @@ class TestToolUseRouter:
         """LLM calls analyze_ip tool with ip_name."""
         resp = _make_tool_use_response("analyze_ip", {"ip_name": "Cowboy Bebop"})
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -263,8 +262,8 @@ class TestToolUseRouter:
         """LLM calls search_ips tool."""
         resp = _make_tool_use_response("search_ips", {"query": "소울라이크"})
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -283,8 +282,8 @@ class TestToolUseRouter:
             {"ip_a": "Berserk", "ip_b": "Ghost In The Shell"},
         )
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -301,8 +300,8 @@ class TestToolUseRouter:
         """LLM calls show_help tool."""
         resp = _make_tool_use_response("show_help", {})
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -318,8 +317,8 @@ class TestToolUseRouter:
         """LLM responds with text → chat intent."""
         resp = _make_text_response("게임 퍼블리싱은 계약을 통해 진행됩니다.")
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -343,7 +342,7 @@ class TestGracefulDegradation:
 
     def test_no_api_key(self, router_llm: NLRouter) -> None:
         """Without API key → offline fallback with error context."""
-        with patch("geode.cli.nl_router.settings") as mock_settings:
+        with patch("core.cli.nl_router.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             intent = router_llm.classify("anything")
 
@@ -353,7 +352,7 @@ class TestGracefulDegradation:
 
     def test_no_api_key_with_known_ip(self, router_llm: NLRouter) -> None:
         """Without API key, known IP still routes to analyze."""
-        with patch("geode.cli.nl_router.settings") as mock_settings:
+        with patch("core.cli.nl_router.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             intent = router_llm.classify("Berserk")
 
@@ -364,8 +363,8 @@ class TestGracefulDegradation:
     def test_api_error(self, router_llm: NLRouter) -> None:
         """API exception → offline fallback."""
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             _preserve_exceptions(mock_anthropic)
@@ -380,8 +379,8 @@ class TestGracefulDegradation:
     def test_api_timeout(self, router_llm: NLRouter) -> None:
         """Timeout → offline fallback."""
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             _preserve_exceptions(mock_anthropic)
@@ -398,8 +397,8 @@ class TestGracefulDegradation:
     def test_auth_error(self, router_llm: NLRouter) -> None:
         """Invalid API key → offline fallback with auth_error."""
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-invalid"
             _preserve_exceptions(mock_anthropic)
@@ -419,8 +418,8 @@ class TestGracefulDegradation:
     def test_billing_error(self, router_llm: NLRouter) -> None:
         """Credit balance error → offline fallback with billing error."""
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             _preserve_exceptions(mock_anthropic)
@@ -440,8 +439,8 @@ class TestGracefulDegradation:
     def test_billing_error_unknown_input(self, router_llm: NLRouter) -> None:
         """Billing error on unrecognized input → help with billing."""
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             _preserve_exceptions(mock_anthropic)
@@ -462,8 +461,8 @@ class TestGracefulDegradation:
         """LLM returns empty text → help fallback."""
         resp = _make_text_response("", with_usage=False)
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -488,10 +487,10 @@ class TestTokenUsageTracking:
         """Token usage from tool_use response is tracked."""
         resp = _make_tool_use_response("list_ips", {}, with_usage=True)
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
-            patch("geode.llm.client.calculate_cost", return_value=0.0035) as mock_cost,
-            patch("geode.llm.client.get_usage_accumulator") as mock_acc_fn,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
+            patch("core.llm.client.calculate_cost", return_value=0.0035) as mock_cost,
+            patch("core.llm.client.get_usage_accumulator") as mock_acc_fn,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -510,8 +509,8 @@ class TestTokenUsageTracking:
         """No usage field → no tracking error."""
         resp = _make_tool_use_response("list_ips", {}, with_usage=False)
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -547,7 +546,7 @@ class TestNLIntent:
         assert intent.confidence == 0.95
 
     def test_valid_actions(self) -> None:
-        from geode.cli.nl_router import VALID_ACTIONS
+        from core.cli.nl_router import VALID_ACTIONS
 
         for action in VALID_ACTIONS:
             intent = NLIntent(action=action)
@@ -639,11 +638,12 @@ class TestOfflineFallback:
         assert intent.args["_error"] == "billing"
         assert intent.confidence == 0.3
 
-    def test_compare_falls_back_to_help(self) -> None:
-        """Compare requires LLM for arg parsing — offline returns help."""
+    def test_compare_falls_back_to_compare(self) -> None:
+        """Compare pattern detected offline — returns compare with offline flag."""
         intent = _offline_fallback("Berserk vs Cowboy Bebop", error="billing")
-        # "vs" triggers compare pattern but offline can't parse args
-        assert intent.action == "help"
+        # "vs" triggers compare pattern
+        assert intent.action == "compare"
+        assert intent.args.get("_offline") is True
 
     def test_error_context_preserved(self) -> None:
         intent = _offline_fallback("anything", error="no_api_key")
@@ -734,8 +734,8 @@ class TestNewToolParsing:
         """Full flow: LLM calls batch_analyze."""
         resp = _make_tool_use_response("batch_analyze", {"top": 10})
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
@@ -751,8 +751,8 @@ class TestNewToolParsing:
         """Full flow: LLM calls check_status."""
         resp = _make_tool_use_response("check_status", {})
         with (
-            patch("geode.cli.nl_router.anthropic") as mock_anthropic,
-            patch("geode.cli.nl_router.settings") as mock_settings,
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()

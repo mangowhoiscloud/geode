@@ -1,0 +1,69 @@
+{
+  "ip_info": {
+    "ip_name": "Berserk",
+    "media_type": "manga",
+    "release_year": 1989,
+    "studio": "Hakusensha",
+    "genre": ["dark fantasy", "action", "horror"],
+    "synopsis": "Guts, a lone mercenary with a massive sword, battles demons and apostles in a dark medieval world while seeking revenge against his former friend Griffith.",
+    "proof_of_game": "Berserk and the Band of the Hawk (2016, PS4/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 36
+  },
+  "monolake": {
+    "dau_peak": 1200,
+    "dau_current": 0,
+    "revenue_ltm": 0,
+    "revenue_lifetime": 5200000,
+    "retention_d30": 12,
+    "metacritic_score": 58,
+    "store_page_score": 65,
+    "active_game_count": 0,
+    "last_game_year": 2016,
+    "platform": "ps4_pc",
+    "price_tier": "premium",
+    "region": "global",
+    "age_rating": "M",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 25000000,
+    "reddit_subscribers": 520000,
+    "fan_art_yoy_pct": 65.0,
+    "google_trends_index": 78,
+    "twitter_mentions_monthly": 120000,
+    "cosplay_events_annual": 200,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": ["souls-like", "dark fantasy", "action RPG", "hack-and-slash"],
+    "game_sales_data": "~100K units (PS4/PC, 2016-2017)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "ps4_pc",
+    "price_tier": "premium",
+    "release_year": 1989,
+    "region": "global",
+    "age_rating": "M",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "manga",
+    "ip_franchise_size": 2,
+    "metacritic_score": 58,
+    "store_page_score": 65,
+    "ip_age_years": 36
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 82.2,
+    "cause": "conversion_failure",
+    "quality_score": 80,
+    "momentum_score": 92,
+    "developer_track_record": 35,
+    "psm_att_pct": 40.0,
+    "psm_z_value": 3.20,
+    "psm_gamma": 1.3
+  }
+}

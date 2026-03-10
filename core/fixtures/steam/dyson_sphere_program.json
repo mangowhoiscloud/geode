@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Dyson Sphere Program",
+    "media_type": "game",
+    "release_year": 2021,
+    "studio": "Youthcat Studio",
+    "genre": [
+      "automation",
+      "base building",
+      "space"
+    ],
+    "synopsis": "Dyson Sphere Program — a Factory Builder game developed by Youthcat Studio, released in 2021 on Steam.",
+    "proof_of_game": "Dyson Sphere Program (2021, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 5
+  },
+  "monolake": {
+    "dau_peak": 100800,
+    "dau_current": 27936,
+    "revenue_ltm": 2644677,
+    "revenue_lifetime": 70524720,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2021,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 6111000,
+    "reddit_subscribers": 101850,
+    "fan_art_yoy_pct": 31.0,
+    "google_trends_index": 83,
+    "twitter_mentions_monthly": 32592,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "automation",
+      "base building",
+      "space",
+      "sandbox",
+      "strategy"
+    ],
+    "game_sales_data": "~1,260,000 owners (Steam, 2021-present)"
+  },
+  "psm_covariates": {
+    "genre": "automation",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2021,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 5
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 87.4,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 78.6,
+    "developer_track_record": 25,
+    "psm_att_pct": 39.4,
+    "psm_z_value": 3.28,
+    "psm_gamma": 2.4
+  }
+}

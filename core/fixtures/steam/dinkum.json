@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Dinkum",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "James Bendon",
+    "genre": [
+      "farming sim",
+      "survival",
+      "open world"
+    ],
+    "synopsis": "Dinkum — a Farming Survival game developed by James Bendon, released in 2022 on Steam.",
+    "proof_of_game": "Dinkum (2022, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 27600,
+    "dau_current": 8372,
+    "revenue_ltm": 832812,
+    "revenue_lifetime": 18877089,
+    "retention_d30": 35,
+    "metacritic_score": 85,
+    "store_page_score": 91,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 1569750,
+    "reddit_subscribers": 26162,
+    "fan_art_yoy_pct": 26.0,
+    "google_trends_index": 73,
+    "twitter_mentions_monthly": 8372,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "high",
+    "genre_fit_keywords": [
+      "farming sim",
+      "survival",
+      "open world",
+      "crafting",
+      "exploration"
+    ],
+    "game_sales_data": "~345,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "farming sim",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 85,
+    "store_page_score": 91,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 80.3,
+    "cause": "undermarketed",
+    "quality_score": 91.5,
+    "momentum_score": 68.7,
+    "developer_track_record": 25,
+    "psm_att_pct": 33.3,
+    "psm_z_value": 2.77,
+    "psm_gamma": 2.3
+  }
+}

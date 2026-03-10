@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Dome Keeper",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "Bippinbits",
+    "genre": [
+      "roguelike",
+      "resource management",
+      "tower defense"
+    ],
+    "synopsis": "Dome Keeper — a Roguelike Mining game developed by Bippinbits, released in 2022 on Steam.",
+    "proof_of_game": "Dome Keeper (2022, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 45600,
+    "dau_current": 13984,
+    "revenue_ltm": 1076701,
+    "revenue_lifetime": 24405234,
+    "retention_d30": 35,
+    "metacritic_score": 85,
+    "store_page_score": 92,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 2622000,
+    "reddit_subscribers": 43700,
+    "fan_art_yoy_pct": 27.0,
+    "google_trends_index": 77,
+    "twitter_mentions_monthly": 13984,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "roguelike",
+      "resource management",
+      "tower defense",
+      "sci-fi",
+      "pixel graphics"
+    ],
+    "game_sales_data": "~570,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "roguelike",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 85,
+    "store_page_score": 92,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 82.6,
+    "cause": "timing_mismatch",
+    "quality_score": 92.5,
+    "momentum_score": 72.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 34.5,
+    "psm_z_value": 2.88,
+    "psm_gamma": 2.3
+  }
+}

@@ -1,26 +1,28 @@
-"""Tests for full 21-tool registration and PolicyChain mode filtering."""
+"""Tests for full 24-tool registration and PolicyChain mode filtering."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from geode.runtime import GeodeRuntime, _build_default_policies, _build_default_registry
+from core.runtime import GeodeRuntime, _build_default_policies, _build_default_registry
 
 ALL_TOOL_NAMES = {
-    # Analysis (3)
+    # Analysis (4)
     "run_analyst",
     "run_evaluator",
     "psm_calculate",
+    "explain_score",
     # Data (3)
     "query_monolake",
     "cortex_analyst",
     "cortex_search",
-    # Signals (5)
+    # Signals (6)
     "youtube_search",
     "reddit_sentiment",
     "twitch_stats",
     "steam_info",
     "google_trends",
+    "web_search",
     # Memory (7)
     "memory_search",
     "memory_get",
@@ -33,15 +35,17 @@ ALL_TOOL_NAMES = {
     "generate_report",
     "export_json",
     "send_notification",
+    # Meta (1)
+    "tool_search",
 }
 
 
 class TestFullToolRegistration:
-    """Verify all 21 tools are registered in the default registry."""
+    """Verify all 24 tools are registered in the default registry."""
 
-    def test_registry_contains_21_tools(self) -> None:
+    def test_registry_contains_24_tools(self) -> None:
         registry = _build_default_registry()
-        assert len(registry) == 21
+        assert len(registry) == 24
 
     def test_all_tool_names_present(self) -> None:
         registry = _build_default_registry()
@@ -55,7 +59,7 @@ class TestFullToolRegistration:
 
     def test_runtime_registry_count(self, tmp_path: Path) -> None:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        assert len(runtime.tool_registry) == 21
+        assert len(runtime.tool_registry) == 24
 
 
 class TestPolicyChainDryRun:
@@ -95,8 +99,8 @@ class TestPolicyChainDryRun:
         registry = _build_default_registry()
         chain = _build_default_policies()
         available = registry.list_tools(policy=chain, mode="dry_run")
-        # 21 total minus 3 blocked (run_analyst, run_evaluator, send_notification)
-        assert len(available) == 18
+        # 24 total minus 3 blocked (run_analyst, run_evaluator, send_notification)
+        assert len(available) == 21
 
 
 class TestPolicyChainFullPipeline:
@@ -115,8 +119,8 @@ class TestPolicyChainFullPipeline:
         registry = _build_default_registry()
         chain = _build_default_policies()
         available = registry.list_tools(policy=chain, mode="full_pipeline")
-        # 21 total minus 1 blocked (send_notification)
-        assert len(available) == 20
+        # 24 total minus 1 blocked (send_notification)
+        assert len(available) == 23
 
     def test_full_pipeline_allows_memory_tools(self) -> None:
         chain = _build_default_policies()
@@ -142,13 +146,13 @@ class TestPolicyFilterIntegration:
         full_tools = runtime.get_available_tools(mode="full_pipeline")
         assert "run_analyst" in full_tools
         assert "send_notification" not in full_tools
-        assert len(full_tools) == 20
+        assert len(full_tools) == 23
 
     def test_unknown_mode_allows_all(self, tmp_path: Path) -> None:
         """Modes with no matching policies allow all tools."""
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="custom_mode")
-        assert len(tools) == 21
+        assert len(tools) == 24
 
     def test_anthropic_tool_defs_respect_policy(self, tmp_path: Path) -> None:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)

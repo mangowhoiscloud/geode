@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Turnip Boy Commits Tax Evasion",
+    "media_type": "game",
+    "release_year": 2021,
+    "studio": "Snoozy Kazoo",
+    "genre": [
+      "action",
+      "adventure",
+      "comedy"
+    ],
+    "synopsis": "Turnip Boy Commits Tax Evasion — a Action Adventure game developed by Snoozy Kazoo, released in 2021 on Steam.",
+    "proof_of_game": "Turnip Boy Commits Tax Evasion (2021, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 5
+  },
+  "monolake": {
+    "dau_peak": 17280,
+    "dau_current": 4640,
+    "revenue_ltm": 339973,
+    "revenue_lifetime": 9065952,
+    "retention_d30": 36,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "active_game_count": 1,
+    "last_game_year": 2021,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 1015200,
+    "reddit_subscribers": 16920,
+    "fan_art_yoy_pct": 28.0,
+    "google_trends_index": 69,
+    "twitter_mentions_monthly": 5414,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "action",
+      "adventure",
+      "comedy",
+      "cute",
+      "short"
+    ],
+    "game_sales_data": "~216,000 owners (Steam, 2021-present)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2021,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "ip_age_years": 5
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 79.7,
+    "cause": "undermarketed",
+    "quality_score": 94.5,
+    "momentum_score": 66.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 33.2,
+    "psm_z_value": 2.77,
+    "psm_gamma": 2.3
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Moonlighter",
+    "media_type": "game",
+    "release_year": 2018,
+    "studio": "Digital Sun",
+    "genre": [
+      "action",
+      "rpg",
+      "roguelite"
+    ],
+    "synopsis": "Moonlighter — a Action RPG Shopkeeper game developed by Digital Sun, released in 2018 on Steam.",
+    "proof_of_game": "Moonlighter (2018, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 8
+  },
+  "monolake": {
+    "dau_peak": 50400,
+    "dau_current": 8769,
+    "revenue_ltm": 1322338,
+    "revenue_lifetime": 35262360,
+    "retention_d30": 33,
+    "metacritic_score": 81,
+    "store_page_score": 87,
+    "active_game_count": 1,
+    "last_game_year": 2018,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 2740500,
+    "reddit_subscribers": 45675,
+    "fan_art_yoy_pct": 19.5,
+    "google_trends_index": 77,
+    "twitter_mentions_monthly": 14616,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "action",
+      "rpg",
+      "roguelite",
+      "pixel graphics",
+      "management"
+    ],
+    "game_sales_data": "~630,000 owners (Steam, 2018-present)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2018,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 81,
+    "store_page_score": 87,
+    "ip_age_years": 8
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 81.2,
+    "cause": "timing_mismatch",
+    "quality_score": 87.5,
+    "momentum_score": 70.7,
+    "developer_track_record": 25,
+    "psm_att_pct": 31.9,
+    "psm_z_value": 2.66,
+    "psm_gamma": 2.2
+  }
+}
