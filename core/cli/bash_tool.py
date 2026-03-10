@@ -7,10 +7,12 @@ explicit user approval before execution.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -123,27 +125,19 @@ class BashTool:
         return out
 
 
-# Tool definition exposed to the LLM
-BASH_TOOL_DEFINITION: dict[str, Any] = {
-    "name": "run_bash",
-    "description": (
-        "Execute a shell command on the user's local machine. "
-        "REQUIRES user approval before execution. "
-        "Use for: file operations, system checks, data processing. "
-        "DO NOT use for: destructive operations, privilege escalation."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "description": "Shell command to execute",
-            },
-            "reason": {
-                "type": "string",
-                "description": "Why this command is needed",
-            },
-        },
-        "required": ["command", "reason"],
-    },
-}
+# Tool definition loaded from centralized JSON
+_TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
+
+
+def _load_tool_definition(name: str) -> dict[str, Any]:
+    """Load a single tool definition by name from definitions.json."""
+    all_tools: list[dict[str, Any]] = json.loads(
+        _TOOLS_JSON_PATH.read_text(encoding="utf-8")
+    )
+    for t in all_tools:
+        if t["name"] == name:
+            return t
+    raise KeyError(f"Tool '{name}' not found in {_TOOLS_JSON_PATH}")
+
+
+BASH_TOOL_DEFINITION: dict[str, Any] = _load_tool_definition("run_bash")

@@ -12,40 +12,27 @@ Supports:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import anthropic
 
-from core.cli.bash_tool import BASH_TOOL_DEFINITION
 from core.cli.conversation import ConversationContext
-from core.cli.nl_router import _TOOLS as NL_TOOLS
 from core.cli.nl_router import _build_system_prompt
-from core.cli.sub_agent import DELEGATE_TOOL_DEFINITION
 from core.cli.tool_executor import ToolExecutor
 from core.config import settings
+from core.llm.prompts import AGENTIC_SUFFIX
 
 log = logging.getLogger(__name__)
 
-# Merge existing NL tools + new agentic tools
-AGENTIC_TOOLS: list[dict[str, Any]] = [
-    *NL_TOOLS,
-    BASH_TOOL_DEFINITION,
-    DELEGATE_TOOL_DEFINITION,
-]
-
-# Extended system prompt for agentic mode
-_AGENTIC_SYSTEM_SUFFIX = """
-
-Agentic execution mode:
-- You can call multiple tools in sequence to fulfill complex requests.
-- For multi-part requests (e.g. "분석하고 비교해줘"), call tools one after another.
-- After each tool result, decide: call another tool OR respond with text.
-- If a tool fails, try an alternative approach or explain the issue.
-- For bash commands, always provide a "reason" explaining why the command is needed.
-- Use delegate_task only for truly independent parallel work.
-- Keep your final text response concise and in the user's language."""
+# Load all tool definitions from centralized JSON
+_TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
+AGENTIC_TOOLS: list[dict[str, Any]] = json.loads(
+    _TOOLS_JSON_PATH.read_text(encoding="utf-8")
+)
 
 
 @dataclass
@@ -139,7 +126,7 @@ class AgenticLoop:
     def _build_system_prompt(self) -> str:
         """Build the system prompt with agentic suffix."""
         base = _build_system_prompt()
-        return base + _AGENTIC_SYSTEM_SUFFIX
+        return base + "\n" + AGENTIC_SUFFIX
 
     def _call_llm(
         self, system: str, messages: list[dict[str, Any]]

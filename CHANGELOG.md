@@ -43,10 +43,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Prompt templates migrated from Python strings (`prompts.py`) to `.md` template files
 - Prompt structured data (axes, rubrics) separated into `core/llm/prompts/axes.py`
 - `core/llm/prompts/` package with `load_prompt()` API and backward-compatible exports
+- Tool definitions centralized to `core/tools/definitions.json` (19 tools)
+- NL Router, AgenticLoop, BashTool, SubAgent load tools from JSON
+- Cross-LLM verification prompts extracted to `cross_llm.md` template
+- Report templates extracted to `core/extensibility/templates/` (HTML + 2 Markdown)
+- Analyst/Synthesizer tool-augmented suffixes extracted to `tool_augmented.md`
 
 ### Architecture
 - Prompt management: `.md` templates + Python loader (content/code separation)
-- 5 prompt templates: `analyst.md`, `evaluator.md`, `synthesizer.md`, `biasbuster.md`, `commentary.md`
+- 8 prompt templates: `analyst.md`, `evaluator.md`, `synthesizer.md`, `biasbuster.md`, `commentary.md`, `router.md`, `cross_llm.md`, `tool_augmented.md`
+- Tool definitions: single JSON source (`definitions.json`) with per-module filtering
+- Report templates: external files with `string.Template` rendering
 
 ---
 

@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 from core.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed, get_llm_tool
 from core.infrastructure.ports.tool_port import get_tool_executor
-from core.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_USER
+from core.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_TOOLS_SUFFIX, SYNTHESIZER_USER
 from core.state import (
     ActionLiteral,
     CauseLiteral,
@@ -320,12 +320,7 @@ def _build_tool_augmented_synthesis(
     )
     eval_summary = "\n".join(f"- {k}: {v.composite_score:.0f}/100" for k, v in evaluations.items())
 
-    enhanced_system = (
-        SYNTHESIZER_SYSTEM + "\n\n## Available Tools\n"
-        "You have access to tools for querying memory (past analyses), "
-        "signals (YouTube, Reddit data), and data (IP details). "
-        "Use them if you need additional context for the narrative."
-    )
+    enhanced_system = SYNTHESIZER_SYSTEM + "\n\n" + SYNTHESIZER_TOOLS_SUFFIX
 
     user = SYNTHESIZER_USER.format(
         ip_name=state["ip_name"],

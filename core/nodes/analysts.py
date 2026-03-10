@@ -21,7 +21,7 @@ from core.infrastructure.ports.llm_port import (
 )
 from core.infrastructure.ports.tool_port import get_tool_executor
 from core.llm.client import call_llm_with_tools
-from core.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_USER
+from core.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_TOOLS_SUFFIX, ANALYST_USER
 from core.state import AnalysisResult, GeodeState
 
 log = logging.getLogger(__name__)
@@ -113,12 +113,7 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     tool_executor = get_tool_executor()
     if tool_defs and tool_executor is not None:
         try:
-            enhanced_system = (
-                system + "\n\n## Available Tools\n"
-                "You have access to tools for querying past analyses (memory_search, "
-                "memory_get) and MonoLake data (query_monolake). Use them to enrich "
-                "your analysis with historical context if relevant."
-            )
+            enhanced_system = system + "\n\n" + ANALYST_TOOLS_SUFFIX
             result = call_llm_with_tools(
                 enhanced_system,
                 user,

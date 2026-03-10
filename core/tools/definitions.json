@@ -1,0 +1,329 @@
+[
+  {
+    "name": "list_ips",
+    "description": "사용 가능한 IP 목록을 표시합니다. 사용자가 어떤 IP가 있는지 물어볼 때 사용하세요. Examples: 'IP 목록', '리스트 보여줘', '뭐가 있어?', 'show all', 'list available IPs'",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "analyze_ip",
+    "description": "특정 IP를 분석합니다. 사용자가 IP 이름을 말하거나 분석을 요청할 때 사용하세요. IP 이름만 단독으로 입력한 경우에도 이 도구를 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이', 'fixture로만' 등을 명시하면 반드시 dry_run=true로 설정하세요. Examples: 'Berserk 분석해', 'analyze Cowboy Bebop', 'Berserk', 'Berserk dry-run으로 분석해'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "IP name in English (e.g. 'Berserk', 'Ghost in the Shell')"
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
+        }
+      },
+      "required": ["ip_name"]
+    }
+  },
+  {
+    "name": "search_ips",
+    "description": "키워드나 장르로 IP를 검색합니다. 사용자가 특정 장르나 키워드로 IP를 찾을 때 사용하세요. Examples: '다크 판타지 게임 찾아줘', 'search soulslike', 'SF 장르 있어?', 'find cyberpunk games'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "검색 키워드 또는 장르 (e.g. 'dark fantasy', '소울라이크')"
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  {
+    "name": "compare_ips",
+    "description": "두 IP를 비교 분석합니다. 사용자가 두 IP를 비교하고 싶을 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true. Examples: 'Berserk vs Cowboy Bebop', '버서크랑 공각기동대 비교해줘', 'dry-run으로 비교해'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_a": {
+          "type": "string",
+          "description": "첫 번째 IP 이름"
+        },
+        "ip_b": {
+          "type": "string",
+          "description": "두 번째 IP 이름"
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
+        }
+      },
+      "required": ["ip_a", "ip_b"]
+    }
+  },
+  {
+    "name": "show_help",
+    "description": "슬래시 명령어 목록을 표시합니다. 사용자가 명령어 목록이나 도움말 메뉴를 명시적으로 요청할 때만 사용하세요. 일반적인 질문(분석 방식, 역할, 의견 등)에는 이 도구를 사용하지 마세요 — 그런 경우 텍스트로 직접 응답하세요. Examples: '도움말', 'help', '명령어 목록', 'show commands'",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "generate_report",
+    "description": "IP 분석 결과를 리포트로 생성합니다. 사용자가 리포트, 보고서, report 생성을 요청할 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true. Examples: 'Berserk 리포트 생성해', 'generate a report for Cowboy Bebop', '보고서 만들어줘', 'dry-run 리포트 생성'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "IP name in English (e.g. 'Berserk', 'Ghost in the Shell')"
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
+        }
+      },
+      "required": ["ip_name"]
+    }
+  },
+  {
+    "name": "batch_analyze",
+    "description": "여러 IP를 동시에 배치 분석합니다. 사용자가 전체/다수 IP를 한번에 분석하거나 순위를 보고 싶을 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true. Examples: '전체 IP 분석해줘', '배치 돌려', 'batch analyze all', '모든 IP 점수 보여줘', '상위 5개 분석해', 'top 10 dry-run'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "type": "integer",
+          "description": "분석할 최대 IP 수 (기본값: 20)"
+        },
+        "genre": {
+          "type": "string",
+          "description": "장르 필터 (e.g. 'Dark Fantasy', 'Cyberpunk'). 없으면 전체."
+        },
+        "stream": {
+          "type": "boolean",
+          "description": "스트리밍 모드 사용 여부 (기본값: false)"
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "check_status",
+    "description": "GEODE 시스템 상태를 확인합니다. 사용자가 시스템 상태, 건강 체크, 모델 정보, 설정을 물어볼 때 사용하세요. Examples: '시스템 상태', 'health check', '지금 모델 뭐야?', '상태 확인', 'status', '설정 보여줘', 'what model are you using?'",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "switch_model",
+    "description": "LLM 모델이나 앙상블 모드를 변경합니다. 사용자가 모델 변경, 앙상블 모드 전환을 요청할 때 사용하세요. Examples: '모델 바꿔', 'switch to GPT', '앙상블 모드로', 'cross 모드 켜줘', 'change model', 'use Haiku'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "model_hint": {
+          "type": "string",
+          "description": "원하는 모델이나 모드 힌트 (e.g. 'opus', 'haiku', 'gpt', 'cross', 'ensemble'). 없으면 모델 선택 메뉴 표시."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "memory_search",
+    "description": "메모리에서 과거 분석 결과, 인사이트, 규칙을 검색합니다. 사용자가 이전 분석 기록이나 학습된 패턴을 물어볼 때 사용하세요. Examples: '지난번 Berserk 결과 알려줘', '다크판타지 관련 규칙 있어?', '이전에 분석한 거 뭐 있어?', 'what did we learn about anime IPs?'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "검색 키워드 (IP 이름, 장르, 패턴 등)"
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["session", "project", "organization", "all"],
+          "description": "검색할 메모리 계층. 기본값: all"
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  {
+    "name": "memory_save",
+    "description": "메모리에 정보를 저장합니다. 사용자가 '이거 기억해', '저장해둬' 같은 요청을 할 때 사용하세요. Examples: '이 결과 기억해', 'remember this', '다음에 참고할 수 있게 저장해줘'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "저장할 데이터의 식별 키 (e.g. 'berserk_insight')"
+        },
+        "content": {
+          "type": "string",
+          "description": "저장할 내용"
+        }
+      },
+      "required": ["key", "content"]
+    }
+  },
+  {
+    "name": "manage_rule",
+    "description": "분석 규칙을 생성, 수정, 삭제, 조회합니다. 사용자가 분석 규칙을 관리하거나, 패턴을 학습시키려 할 때 사용하세요. Examples: '애니메이션 IP 규칙 만들어', '규칙 목록 보여줘', 'anime 규칙 수정해', 'create a rule for dark fantasy IPs', 'delete the old rule', '규칙 삭제해'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["create", "update", "delete", "list"],
+          "description": "수행할 작업"
+        },
+        "name": {
+          "type": "string",
+          "description": "규칙 이름 (create/update/delete 시 필수)"
+        },
+        "paths": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "규칙이 적용될 IP 패턴 (create 시, e.g. ['*anime*', '*cowboy*'])"
+        },
+        "content": {
+          "type": "string",
+          "description": "규칙 내용 (create/update 시)"
+        }
+      },
+      "required": ["action"]
+    }
+  },
+  {
+    "name": "set_api_key",
+    "description": "API 키를 설정합니다. 사용자가 API 키 설정, 변경을 요청할 때 사용하세요. Examples: 'API 키 설정해', 'set my API key', '키 바꿔줘', '인증 키 입력'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "key_value": {
+          "type": "string",
+          "description": "API 키 값 (없으면 현재 상태 표시)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "manage_auth",
+    "description": "인증 프로필을 관리합니다. 사용자가 인증, 프로필, 자격증명을 관리하려 할 때 사용하세요. Examples: '인증 프로필 보여줘', 'show auth profiles', '인증 추가해', 'manage credentials'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sub_action": {
+          "type": "string",
+          "description": "수행할 작업 (add, remove, list). 없으면 상태 표시."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "generate_data",
+    "description": "테스트/데모용 합성 IP 데이터를 생성합니다. 사용자가 테스트 데이터, 샘플 데이터, 데모 데이터 생성을 요청할 때 사용하세요. Examples: '테스트 데이터 생성해', 'generate sample data', '데모 데이터 만들어줘', '합성 IP 생성'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "description": "생성할 IP 수 (기본값: 5, 최대: 20)"
+        },
+        "genre": {
+          "type": "string",
+          "description": "장르 필터 (e.g. 'mecha', 'dark_fantasy')"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "schedule_job",
+    "description": "배치 분석 스케줄을 관리합니다. 사용자가 자동 실행, 스케줄, 예약 분석을 요청할 때 사용하세요. Examples: '매주 월요일 배치 스케줄', 'schedule weekly analysis', '스케줄 목록 보여줘', '예약 작업 관리'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sub_action": {
+          "type": "string",
+          "description": "수행할 작업 (list, enable, disable, run). 없으면 목록 표시."
+        },
+        "target_id": {
+          "type": "string",
+          "description": "대상 스케줄 ID (enable/disable/run 시)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "trigger_event",
+    "description": "이벤트 또는 크론 트리거를 관리하거나 수동 실행합니다. 사용자가 트리거, 이벤트 발생, 수동 실행을 요청할 때 사용하세요. Examples: 'drift scan 트리거해', 'fire an event', '트리거 목록 보여줘', '수동으로 이벤트 발생'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sub_action": {
+          "type": "string",
+          "description": "수행할 작업 (list, fire). 없으면 목록 표시."
+        },
+        "event_name": {
+          "type": "string",
+          "description": "발생시킬 이벤트 이름 (fire 시)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "run_bash",
+    "description": "Execute a shell command on the user's local machine. REQUIRES user approval before execution. Use for: file operations, system checks, data processing. DO NOT use for: destructive operations, privilege escalation.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Shell command to execute"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why this command is needed"
+        }
+      },
+      "required": ["command", "reason"]
+    }
+  },
+  {
+    "name": "delegate_task",
+    "description": "Delegate a sub-task for parallel execution. Use when: multiple independent analyses needed, batch operations, or parallel data gathering.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_description": {
+          "type": "string",
+          "description": "Description of the task to execute"
+        },
+        "task_type": {
+          "type": "string",
+          "enum": ["analyze", "search", "compare", "bash"],
+          "description": "Type of task to delegate"
+        },
+        "args": {
+          "type": "object",
+          "description": "Arguments for the delegated task"
+        }
+      },
+      "required": ["task_description", "task_type", "args"]
+    }
+  }
+]

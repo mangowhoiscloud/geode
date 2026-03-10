@@ -111,6 +111,19 @@ _commentary = _load_template("commentary")
 COMMENTARY_SYSTEM: str = _commentary["system"]
 COMMENTARY_USER: str = _commentary["user"]
 
+_router = _load_template("router")
+ROUTER_SYSTEM: str = _router["system"]
+AGENTIC_SUFFIX: str = _router["agentic_suffix"]
+
+_cross_llm = _load_template("cross_llm")
+CROSS_LLM_SYSTEM: str = _cross_llm["system"]
+CROSS_LLM_RESCORE: str = _cross_llm["rescore"]
+CROSS_LLM_DUAL_VERIFY: str = _cross_llm["dual_verify"]
+
+_tool_augmented = _load_template("tool_augmented")
+ANALYST_TOOLS_SUFFIX: str = _tool_augmented["analyst_tools"]
+SYNTHESIZER_TOOLS_SUFFIX: str = _tool_augmented["synthesizer_tools"]
+
 # ---------------------------------------------------------------------------
 # Prompt version hashes
 # ---------------------------------------------------------------------------
@@ -133,19 +146,26 @@ _log.debug("Prompt versions loaded: %s", PROMPT_VERSIONS)
 # ---------------------------------------------------------------------------
 
 __all__ = [
+    "AGENTIC_SUFFIX",
     "ANALYST_SPECIFIC",
     "ANALYST_SYSTEM",
+    "ANALYST_TOOLS_SUFFIX",
     "ANALYST_USER",
     "BIASBUSTER_SYSTEM",
     "BIASBUSTER_USER",
     "COMMENTARY_SYSTEM",
     "COMMENTARY_USER",
+    "CROSS_LLM_DUAL_VERIFY",
+    "CROSS_LLM_RESCORE",
+    "CROSS_LLM_SYSTEM",
     "EVALUATOR_AXES",
     "EVALUATOR_SYSTEM",
     "EVALUATOR_USER",
     "PROMPT_VERSIONS",
     "PROSPECT_EVALUATOR_AXES",
+    "ROUTER_SYSTEM",
     "SYNTHESIZER_SYSTEM",
+    "SYNTHESIZER_TOOLS_SUFFIX",
     "SYNTHESIZER_USER",
     "_hash_prompt",
     "hash_rendered_prompt",

@@ -14,6 +14,7 @@ import numpy as np
 
 from core.automation.expert_panel import calculate_krippendorff_alpha
 from core.infrastructure.ports.llm_port import LLMClientPort
+from core.llm.prompts import CROSS_LLM_DUAL_VERIFY, CROSS_LLM_RESCORE, CROSS_LLM_SYSTEM
 from core.state import AnalysisResult, GeodeState
 
 log = logging.getLogger(__name__)
@@ -128,17 +129,15 @@ def run_cross_llm_check(
         verification_mode = "cross_model"
         first = analyses[0]
         ip_name = state.get("ip_name", "Unknown")
-        rescore_prompt = (
-            f"Re-evaluate this analyst finding for IP '{ip_name}'. "
-            f"Analyst type: {first.analyst_type}. "
-            f"Key finding: {first.key_finding}. "
-            f"Evidence: {', '.join(first.evidence[:3])}. "
-            f"Rate the finding quality 1-5 (1=poor, 5=excellent). "
-            f"Respond with ONLY a single digit."
+        rescore_prompt = CROSS_LLM_RESCORE.format(
+            ip_name=ip_name,
+            analyst_type=first.analyst_type,
+            key_finding=first.key_finding,
+            evidence=", ".join(first.evidence[:3]),
         )
         try:
             response = secondary_adapter.generate(
-                "You are a verification agent. Respond with only a single digit 1-5.",
+                CROSS_LLM_SYSTEM,
                 rescore_prompt,
                 temperature=0.1,
                 max_tokens=10,
@@ -252,15 +251,15 @@ def run_dual_adapter_check(
     tier = state.get("tier", "?")
     score = state.get("final_score", 0.0)
 
-    verification_prompt = (
-        f"Verify this IP analysis result. IP: {ip_name}, Tier: {tier}, Score: {score:.1f}/100. "
-        f"Rate your agreement 1-5 (1=strongly disagree, 5=strongly agree). "
-        f"Respond with ONLY a single digit."
+    verification_prompt = CROSS_LLM_DUAL_VERIFY.format(
+        ip_name=ip_name,
+        tier=tier,
+        score=score,
     )
 
     try:
         response = secondary_adapter.generate(
-            "You are a verification agent. Respond with only a single digit 1-5.",
+            CROSS_LLM_SYSTEM,
             verification_prompt,
             temperature=0.1,
             max_tokens=10,

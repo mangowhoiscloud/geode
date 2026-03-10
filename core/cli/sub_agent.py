@@ -7,9 +7,11 @@ sub-agent delegation.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from core.orchestration.isolated_execution import IsolatedRunner, IsolationConfig, IsolationResult
@@ -162,31 +164,19 @@ class SubAgentManager:
         )
 
 
-# Tool definition exposed to the LLM
-DELEGATE_TOOL_DEFINITION: dict[str, Any] = {
-    "name": "delegate_task",
-    "description": (
-        "Delegate a sub-task for parallel execution. "
-        "Use when: multiple independent analyses needed, "
-        "batch operations, or parallel data gathering."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "task_description": {
-                "type": "string",
-                "description": "Human-readable description of the sub-task",
-            },
-            "task_type": {
-                "type": "string",
-                "enum": ["analyze", "search", "compare", "bash"],
-                "description": "Type of sub-task to execute",
-            },
-            "args": {
-                "type": "object",
-                "description": "Arguments for the sub-task handler",
-            },
-        },
-        "required": ["task_description", "task_type", "args"],
-    },
-}
+# Tool definition loaded from centralized JSON
+_TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
+
+
+def _load_tool_definition(name: str) -> dict[str, Any]:
+    """Load a single tool definition by name from definitions.json."""
+    all_tools: list[dict[str, Any]] = json.loads(
+        _TOOLS_JSON_PATH.read_text(encoding="utf-8")
+    )
+    for t in all_tools:
+        if t["name"] == name:
+            return t
+    raise KeyError(f"Tool '{name}' not found in {_TOOLS_JSON_PATH}")
+
+
+DELEGATE_TOOL_DEFINITION: dict[str, Any] = _load_tool_definition("delegate_task")
