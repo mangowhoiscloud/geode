@@ -78,7 +78,10 @@ class TestParseSessionKey:
 class TestBuildThreadConfig:
     def test_basic_config(self):
         config = build_thread_config("Berserk", ANALYSIS)
-        assert config == {"configurable": {"thread_id": "ip:berserk:analysis"}}
+        assert config["configurable"] == {"thread_id": "ip:berserk:analysis"}
+        assert config["run_name"] == "geode:Berserk:analysis"
+        assert "ip:Berserk" in config["tags"]
+        assert config["metadata"]["ip_name"] == "Berserk"
 
     def test_config_with_sub_context(self):
         config = build_thread_config("Berserk", EVALUATION, "hidden_value")

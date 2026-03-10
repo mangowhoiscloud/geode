@@ -30,6 +30,60 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.7.0] — 2026-03-11
+
+Pipeline flexibility improvements (C2-C5), LangSmith observability, orchestration integration.
+
+### Added
+
+#### Pipeline Flexibility (C2-C5)
+- **C2**: Analyst types dynamically loaded from YAML (`ANALYST_SPECIFIC.keys()`) — add analyst = add YAML key
+- **C3**: `interrupt_before` support via `GEODE_INTERRUPT_NODES` env — pipeline pauses at specified nodes for user review
+- **C4**: Dynamic tool addition via `ToolRegistry` in `AgenticLoop` — plugins register tools at runtime
+- **C5**: `offline_mode` for `AgenticLoop` — regex-based tool routing without LLM (1 deterministic round)
+
+#### LangSmith Observability
+- Token tracking: `track_token_usage()` records input/output tokens + cost per LLM call
+- `_maybe_traceable` decorator on `AgenticLoop.run()` and `_call_llm()` for RunTree tracing
+- Cost calculation with per-model pricing (Opus, Sonnet, Haiku, GPT)
+- `UsageAccumulator` for session-level cost aggregation
+
+#### Orchestration Integration
+- `SubAgentManager` integration with `TaskGraph`, `HookSystem`, `CoalescingQueue`
+- `AgenticLoop` rate limit retry with exponential backoff (3× at 10s/20s/40s)
+- Tool handler enrichment: 17 handlers with structured return data
+
+#### Testing & Verification
+- `tests/test_e2e_live_llm.py` — 13 live E2E scenarios (AgenticLoop, LangSmith, Pipeline, Offline)
+- `tests/_live_audit_runner.py` — 17-tool parallel audit framework
+- 17/17 tool handlers verified via AgenticLoop + Opus 4.6 (live audit PASS)
+- `docs/e2e-orchestration-scenarios.md` — E2E scenario documentation
+
+#### Documentation
+- `docs/as-is-to-be-flexibility.md` — C1-C5 AS-IS → TO-BE analysis
+- `docs/plans/observability-langsmith-plan.md` — LangSmith integration plan
+- `.claude/skills/geode-e2e/SKILL.md` — E2E testing skill guide
+
+### Changed
+- `ANALYST_TYPES`: hardcoded list → `list(ANALYST_SPECIFIC.keys())` (1-line change)
+- `AGENTIC_TOOLS`: module-level constant → `get_agentic_tools(registry)` function
+- `AgenticLoop.__init__()`: added `tool_registry`, `offline_mode` parameters
+- `AgenticLoop._call_llm()`: added retry logic + token tracking
+- `compile_graph()`: `interrupt_before` parameter wired from settings
+- `ProfileStore` access: `.profiles` → `.list_all()` (mypy fix)
+
+### Fixed
+- `ProfileStore.profiles` → `ProfileStore.list_all()` attribute error
+- Null-safe `model_dump()` in analyze handler (union-attr mypy error)
+- Rate limit exhaustion: 3× retry with exponential backoff prevents transient failures
+
+### Infrastructure
+- Test count: 1879 → 1909+ (30 new tests)
+- Module count: 115 → 116
+- `langsmith` added as optional dependency
+
+---
+
 ## [0.6.1] — 2026-03-10
 
 Content/code separation + infrastructure hardening. No new user-facing features.
@@ -168,10 +222,12 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.7.0 | 2026-03-11 | C2-C5 flexibility, LangSmith observability, orchestration integration, 17-tool audit |
 | 0.6.1 | 2026-03-10 | Content/code separation, package rename, pre-commit hooks |
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0

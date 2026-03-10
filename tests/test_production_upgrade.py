@@ -360,8 +360,7 @@ class TestLangSmithConditional:
         from core.llm.client import _maybe_traceable
 
         with patch.dict(os.environ, {}, clear=True):
-            # Remove LANGSMITH_API_KEY if present
-            os.environ.pop("LANGSMITH_API_KEY", None)
+            # No LANGCHAIN_TRACING_V2 or API key → passthrough
             decorator = _maybe_traceable(run_type="llm", name="test")
 
             def dummy():

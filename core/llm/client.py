@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
+import os as _os
 import re
 import time
 from collections.abc import Iterator
@@ -27,10 +28,48 @@ from core.config import settings
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# LangSmith tracing (Phase 5-A): conditional on LANGSMITH_API_KEY
+# LangSmith tracing (Phase 5-A): LangChain standard env vars
+#   LANGCHAIN_TRACING_V2=true  — tracing on/off gate
+#   LANGCHAIN_API_KEY=lsv2_... — LangSmith API key
+#   LANGCHAIN_PROJECT=geode    — project name (optional, default: "default")
+#   Legacy: LANGSMITH_API_KEY  — backward-compatible fallback
 # ---------------------------------------------------------------------------
 
-_langsmith_enabled = False
+
+def is_langsmith_enabled() -> bool:
+    """Check if LangSmith tracing is active (both gate + key required).
+
+    Reads env vars at call time for testability.
+    """
+    tracing = _os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true"
+    api_key = _os.environ.get("LANGCHAIN_API_KEY") or _os.environ.get("LANGSMITH_API_KEY")
+    return tracing and api_key is not None
+
+
+def track_token_usage(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> None:
+    """Record token usage + cost on the current LangSmith RunTree (no-op if disabled)."""
+    if not is_langsmith_enabled():
+        return
+    try:
+        from langsmith.run_helpers import get_current_run_tree
+
+        run_tree = get_current_run_tree()
+        if run_tree:
+            cost = calculate_cost(model, input_tokens, output_tokens)
+            run_tree.extra = run_tree.extra or {}
+            run_tree.extra["metrics"] = {
+                "model": model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+                "cost_usd": cost,
+            }
+    except Exception:
+        log.debug("Failed to track token usage in LangSmith", exc_info=True)
 
 
 def _maybe_traceable(
@@ -38,24 +77,15 @@ def _maybe_traceable(
     run_type: str = "llm",
     name: str | None = None,
 ) -> Any:
-    """Return @traceable decorator if LangSmith is configured, else passthrough.
-
-    Returns Callable[[F], F] in both paths, preserving the decorated
-    function's signature.
-    """
-    import os
-
-    global _langsmith_enabled
-    if os.environ.get("LANGSMITH_API_KEY"):
+    """Return @traceable decorator if LangSmith is configured, else passthrough."""
+    if is_langsmith_enabled():
         try:
             from langsmith import traceable
 
-            _langsmith_enabled = True
             return traceable(run_type=run_type, name=name)  # type: ignore[call-overload]
         except ImportError:
             pass
 
-    # Passthrough — no tracing
     def _identity(fn: Any) -> Any:
         return fn
 
@@ -636,6 +666,7 @@ def call_llm_with_tools(
     )
 
 
+@_maybe_traceable(run_type="llm", name="call_llm_streaming")  # type: ignore[untyped-decorator]
 def call_llm_streaming(
     system: str,
     user: str,
@@ -679,6 +710,7 @@ def call_llm_streaming(
                     cost_usd=cost,
                 )
                 get_usage_accumulator().record(usage)
+                track_token_usage(model, in_tok, out_tok)
                 log.debug(
                     "Streaming usage: model=%s in=%d out=%d cost=$%.4f",
                     model,

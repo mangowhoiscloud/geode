@@ -42,7 +42,9 @@ class TestGeodeRuntimeCreate:
     def test_thread_config(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         config = runtime.thread_config
-        assert config == {"configurable": {"thread_id": "ip:berserk:analysis"}}
+        assert config["configurable"] == {"thread_id": "ip:berserk:analysis"}
+        assert config["run_name"] == "geode:Berserk:analysis"
+        assert "ip:Berserk" in config["tags"]
 
 
 class TestRuntimeHooksRunLog:

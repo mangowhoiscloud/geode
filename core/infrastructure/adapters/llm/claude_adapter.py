@@ -91,7 +91,7 @@ class ClaudeAdapter:
         max_tokens: int = 4096,
         temperature: float = 0.3,
     ) -> Iterator[str]:
-        return call_llm_streaming(
+        return call_llm_streaming(  # type: ignore[no-any-return]
             system, user, model=model, max_tokens=max_tokens, temperature=temperature
         )
 
