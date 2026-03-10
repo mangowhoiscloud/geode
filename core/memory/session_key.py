@@ -79,6 +79,8 @@ def parse_session_key(key: str) -> dict[str, str | None]:
 def build_thread_config(ip_name: str, phase: str, sub_context: str | None = None) -> dict[str, Any]:
     """Build a LangGraph thread config with hierarchical session key.
 
+    Includes LangSmith trace enrichment: run_name, tags, metadata.
+
     Returns:
         Dict suitable for `graph.invoke(state, config=...)`.
 
@@ -87,4 +89,9 @@ def build_thread_config(ip_name: str, phase: str, sub_context: str | None = None
         result = compiled_graph.invoke(state, config=config)
     """
     thread_id = build_session_key(ip_name, phase, sub_context)
-    return {"configurable": {"thread_id": thread_id}}
+    return {
+        "configurable": {"thread_id": thread_id},
+        "run_name": f"geode:{ip_name}:{phase}",
+        "tags": [f"ip:{ip_name}", f"phase:{phase}"],
+        "metadata": {"ip_name": ip_name, "phase": phase},
+    }

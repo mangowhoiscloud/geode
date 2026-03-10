@@ -1,4 +1,4 @@
-# GEODE v0.6.1 — Undervalued IP Discovery Agent
+# GEODE v0.7.0 — Undervalued IP Discovery Agent
 
 LangGraph 기반 저평가 IP 발굴 에이전트.
 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 평가합니다.
@@ -8,7 +8,7 @@ LangGraph 기반 저평가 IP 발굴 에이전트.
 | Feature | Description |
 |---------|-------------|
 | **6-Layer Pipeline** | Router → Signals → Analysts → Evaluators → Scoring → Verification → Synthesis |
-| **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 10 rounds), multi-intent 자동 chaining |
+| **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 10 rounds), multi-intent 자동 chaining, offline mode |
 | **Multi-turn Context** | 슬라이딩 윈도우 대화 기록 (max 20 turns), 대명사 해석 + follow-up |
 | **HITL Bash** | 셸 명령 실행 + 위험 패턴 차단 (9종) + 사용자 승인 게이트 |
 | **Sub-Agent** | 병렬 태스크 위임 (`IsolatedRunner`, MAX_CONCURRENT=5) |
@@ -28,7 +28,10 @@ LangGraph 기반 저평가 IP 발굴 에이전트.
 | **Checkpoint** | SqliteSaver 기반 파이프라인 상태 영속화 |
 | **Feedback Loop** | Confidence < 0.7이면 자동 재분석 (최대 3회) |
 | **Pre-commit Hooks** | ruff lint/format + mypy + bandit + standard hooks |
-| **1879 Tests** | 115 modules, pytest + ruff + mypy strict + bandit 전체 통과 |
+| **LangSmith Observability** | 토큰 추적 + 비용 계산, RunTree 메트릭, 조건부 tracing |
+| **Dynamic Tools** | ToolRegistry 기반 런타임 tool 추가, plugin activate → 즉시 반영 |
+| **Pipeline Flexibility** | Analyst 타입 YAML 동적 로드, interrupt_before 사용자 개입 |
+| **1909+ Tests** | 116 modules, pytest + ruff + mypy strict + bandit 전체 통과 |
 
 ## Architecture
 
@@ -410,6 +413,10 @@ uv run pre-commit run --all-files
 | `GEODE_BRAVE_MCP_URL` | | Brave Search MCP 서버 URL |
 | `GEODE_BRAVE_API_KEY` | | Brave Search API 키 |
 | `GEODE_KG_MEMORY_MCP_URL` | | KG Memory MCP 서버 URL |
+| `GEODE_INTERRUPT_NODES` | | 파이프라인 중간 개입 노드 (쉼표 구분, e.g. `verification,scoring`) |
+| `LANGCHAIN_TRACING_V2` | `false` | LangSmith tracing 활성화 |
+| `LANGCHAIN_API_KEY` | | LangSmith API 키 |
+| `LANGCHAIN_PROJECT` | `geode` | LangSmith 프로젝트명 |
 
 ## License
 

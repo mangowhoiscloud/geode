@@ -917,11 +917,15 @@ class GeodeRuntime:
         from core.graph import compile_graph
 
         checkpoint_db = self.checkpoint_db if enable_checkpoint else None
+        interrupt_list = [
+            n.strip() for n in settings.interrupt_nodes.split(",") if n.strip()
+        ] or None
         compiled = compile_graph(
             hooks=self.hooks,
             checkpoint_db=checkpoint_db,
             confidence_threshold=settings.confidence_threshold,
             max_iterations=settings.max_iterations,
+            interrupt_before=interrupt_list,
             memory_fallback=True,
             prompt_assembler=self.prompt_assembler,
             node_scope_policy=NodeScopePolicy(),

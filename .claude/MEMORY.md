@@ -16,6 +16,18 @@
 - (없음 — 기본 14-axis 루브릭 사용)
 
 ## 최근 인사이트
+- 2026-03-11: [cowboy bebop] tier=A, score=74.76, cause=conversion_failure, action=marketing_boost
+- 2026-03-11: [berserk] tier=S, score=82.73, cause=conversion_failure, action=marketing_boost
+- 2026-03-10: [cowboy bebop] tier=A, score=76.10, cause=conversion_failure, action=marketing_boost
+- 2026-03-10: [berserk] tier=S, score=80.52, cause=conversion_failure, action=marketing_boost
+- 2026-03-10: berserk_tier_assessment: Berserk는 S티어 IP로 평가됨. 게임 퍼블리싱 관점에서 최상위 등급의 IP.
+- 2026-03-10: berserk_tier_assessment: Berserk는 S티어 IP로 평가됨. 게임 퍼블리싱 관점에서 최상위 등급의 IP.
+- 2026-03-10: berserk_tier_assessment: Berserk는 S티어 IP로 평가됨. 게임 퍼블리싱 관점에서 최상위 등급의 IP.
+- 2026-03-10: berserk_tier_assessment: Berserk는 S티어 IP로 평가됨. 게임 퍼블리싱 관점에서 최상위 등급의 IP.
+- 2026-03-10: test: hello
+- 2026-03-10: test: hello
+- 2026-03-10: [Berserk] tier=?, score=0.00
+- 2026-03-10: [unknown] tier=?, score=0.00
 - 2026-03-09: [Berserk] tier=?, score=0.00
 - 2026-03-09: [unknown] tier=?, score=0.00
 - 2026-03-08: [cowboy bebop] tier=B, score=56.32, cause=conversion_failure, action=marketing_boost

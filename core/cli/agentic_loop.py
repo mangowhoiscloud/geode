@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import anthropic
 
@@ -24,13 +25,31 @@ from core.cli.conversation import ConversationContext
 from core.cli.nl_router import _build_system_prompt
 from core.cli.tool_executor import ToolExecutor
 from core.config import settings
+from core.llm.client import _maybe_traceable, track_token_usage
 from core.llm.prompts import AGENTIC_SUFFIX
+
+if TYPE_CHECKING:
+    from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
 
-# Load all tool definitions from centralized JSON
+# Load base tool definitions from centralized JSON
 _TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
-AGENTIC_TOOLS: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
+_BASE_TOOLS: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
+
+# Backward-compatible alias
+AGENTIC_TOOLS: list[dict[str, Any]] = _BASE_TOOLS
+
+
+def get_agentic_tools(registry: ToolRegistry | None = None) -> list[dict[str, Any]]:
+    """Return tool definitions, merging ToolRegistry extras if provided."""
+    tools = list(_BASE_TOOLS)
+    if registry:
+        existing_names = {t["name"] for t in tools}
+        for tool_def in registry.to_anthropic_tools():
+            if tool_def["name"] not in existing_names:
+                tools.append(tool_def)
+    return tools
 
 
 @dataclass
@@ -61,17 +80,26 @@ class AgenticLoop:
         max_rounds: int = DEFAULT_MAX_ROUNDS,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model: str | None = None,
+        tool_registry: ToolRegistry | None = None,
+        offline_mode: bool = False,
     ) -> None:
         self.context = context
         self.executor = tool_executor
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self.model = model or "claude-opus-4-6"
+        self._tools = get_agentic_tools(tool_registry)
+        self._offline = offline_mode
         self._tool_log: list[dict[str, Any]] = []
+        self._client: anthropic.Anthropic | None = None
 
+    @_maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
     def run(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_log = []
+
+        if self._offline:
+            return self._run_offline(user_input)  # type: ignore[no-any-return]
 
         # Add user message to conversation context
         self.context.add_user_message(user_input)
@@ -121,43 +149,87 @@ class AgenticLoop:
             error="max_rounds",
         )
 
+    @_maybe_traceable(run_type="chain", name="AgenticLoop._run_offline")  # type: ignore[untyped-decorator]
+    def _run_offline(self, user_input: str) -> AgenticResult:
+        """Regex-based tool selection without LLM (1 deterministic round)."""
+        from core.cli.nl_router import _offline_fallback
+
+        intent = _offline_fallback(user_input)
+        if intent.action == "help":
+            return AgenticResult(
+                text="Offline mode: use /help for supported commands.",
+                rounds=1,
+            )
+
+        result = self.executor.execute(intent.action, intent.args or {})
+        self._tool_log.append({"tool": intent.action, "input": intent.args or {}, "result": result})
+        return AgenticResult(
+            text=str(result),
+            tool_calls=self._tool_log,
+            rounds=1,
+        )
+
     def _build_system_prompt(self) -> str:
         """Build the system prompt with agentic suffix."""
         base = _build_system_prompt()
         return base + "\n" + AGENTIC_SUFFIX
 
+    @_maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     def _call_llm(
         self, system: str, messages: list[dict[str, Any]]
     ) -> anthropic.types.Message | None:
-        """Call the Anthropic API with tools."""
-        try:
-            api_key = settings.anthropic_api_key
-            if not api_key:
-                log.warning("No Anthropic API key for agentic loop")
+        """Call the Anthropic API with tools.  Retries on rate-limit (3×)."""
+        api_key = settings.anthropic_api_key
+        if not api_key:
+            log.warning("No Anthropic API key for agentic loop")
+            return None
+
+        if self._client is None:
+            self._client = anthropic.Anthropic(api_key=api_key)
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self._client.messages.create(  # type: ignore[call-overload]
+                    model=self.model,
+                    system=system,
+                    messages=messages,
+                    tools=self._tools,
+                    tool_choice={"type": "auto"},
+                    max_tokens=self.max_tokens,
+                    temperature=0.0,
+                    timeout=30.0,
+                )
+                track_token_usage(
+                    self.model,
+                    response.usage.input_tokens,
+                    response.usage.output_tokens,
+                )
+                return response  # type: ignore[no-any-return]
+
+            except anthropic.RateLimitError:
+                wait = 2**attempt * 10  # 10s, 20s, 40s
+                log.warning(
+                    "Rate limited (attempt %d/%d), retrying in %ds",
+                    attempt + 1,
+                    max_retries,
+                    wait,
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(wait)
+                else:
+                    log.error("Rate limit exhausted after %d retries", max_retries)
+                    return None
+            except anthropic.AuthenticationError:
+                log.warning("Anthropic API key is invalid in agentic loop")
                 return None
-
-            client = anthropic.Anthropic(api_key=api_key)
-            response = client.messages.create(  # type: ignore[call-overload]
-                model=self.model,
-                system=system,
-                messages=messages,
-                tools=AGENTIC_TOOLS,
-                tool_choice={"type": "auto"},
-                max_tokens=self.max_tokens,
-                temperature=0.0,
-                timeout=30.0,
-            )
-            return response  # type: ignore[no-any-return]
-
-        except anthropic.AuthenticationError:
-            log.warning("Anthropic API key is invalid in agentic loop")
-            return None
-        except anthropic.BadRequestError as exc:
-            log.warning("Anthropic BadRequest in agentic loop: %s", exc)
-            return None
-        except Exception:
-            log.warning("Agentic LLM call failed", exc_info=True)
-            return None
+            except anthropic.BadRequestError as exc:
+                log.warning("Anthropic BadRequest in agentic loop: %s", exc)
+                return None
+            except Exception:
+                log.warning("Agentic LLM call failed", exc_info=True)
+                return None
+        return None
 
     def _process_tool_calls(self, response: anthropic.types.Message) -> list[dict[str, Any]]:
         """Execute all tool_use blocks and return tool_result messages."""
@@ -223,7 +295,12 @@ class AgenticLoop:
         if not response.usage:
             return
         try:
-            from core.llm.client import LLMUsage, calculate_cost, get_usage_accumulator
+            from core.llm.client import (
+                LLMUsage,
+                calculate_cost,
+                get_usage_accumulator,
+                track_token_usage,
+            )
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
@@ -236,6 +313,7 @@ class AgenticLoop:
                     cost_usd=cost,
                 )
             )
+            track_token_usage(self.model, in_tok, out_tok)
             log.debug(
                 "AgenticLoop: model=%s in=%d out=%d cost=$%.6f",
                 self.model,
