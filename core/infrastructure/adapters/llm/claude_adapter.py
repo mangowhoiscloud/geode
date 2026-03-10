@@ -1,6 +1,6 @@
 """Claude Adapter — Anthropic API implementation of LLMClientPort.
 
-Wraps existing geode.llm.client functions into the LLMClientPort interface,
+Wraps existing core.llm.client functions into the LLMClientPort interface,
 enabling clean dependency injection and testability.
 """
 

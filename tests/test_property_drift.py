@@ -10,8 +10,7 @@ with systematic boundary values to cover the property-based test intent:
 from __future__ import annotations
 
 import pytest
-
-from geode.automation.drift import CUSUMDetector, DriftSeverity
+from core.automation.drift import CUSUMDetector, DriftSeverity
 
 
 class TestCUSUMNonNegativity:

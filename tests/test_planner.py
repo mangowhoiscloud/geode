@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from geode.orchestration.planner import (
+from core.orchestration.planner import (
     ROUTE_PROFILES,
     Planner,
     Route,

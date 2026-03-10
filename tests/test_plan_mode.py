@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from geode.orchestration.plan_mode import (
+from core.orchestration.plan_mode import (
     AnalysisPlan,
     PlanMode,
     PlanStatus,

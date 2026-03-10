@@ -6,8 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-
-from geode.orchestration.run_log import RunLog, RunLogEntry
+from core.orchestration.run_log import RunLog, RunLogEntry
 
 
 @pytest.fixture

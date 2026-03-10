@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from geode.memory.session_key import (
+from core.memory.session_key import (
     ALL_PHASES,
     ANALYSIS,
     EVALUATION,

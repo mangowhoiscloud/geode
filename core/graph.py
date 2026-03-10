@@ -48,7 +48,13 @@ from core.nodes.signals import signals_node
 from core.nodes.synthesizer import synthesizer_node
 from core.orchestration.bootstrap import BootstrapManager
 from core.orchestration.hooks import HookEvent
-from core.state import BiasBusterResult, GeodeState, GuardrailResult
+from core.state import (
+    BiasBusterResult,
+    GeodeState,
+    GuardrailResult,
+    ensure_analysis_results,
+    ensure_evaluator_results,
+)
 from core.tools.policy import NodeScopePolicy
 from core.verification.biasbuster import run_biasbuster
 from core.verification.calibration import run_calibration_check
@@ -144,6 +150,18 @@ def _make_hooked_node(
                         **(prev or {}),
                         "temperature": 0.3,
                     }
+
+                # Rehydrate Pydantic models that LangGraph may have
+                # deserialized to dicts during Send API state merging.
+                if isinstance(effective_state, dict):
+                    raw_a: Any = effective_state.get("analyses")
+                    if raw_a and isinstance(raw_a, list) and isinstance(raw_a[0], dict):
+                        effective_state["analyses"] = ensure_analysis_results(raw_a)
+                    raw_e: Any = effective_state.get("evaluations")
+                    if raw_e and isinstance(raw_e, dict):
+                        first_val = next(iter(raw_e.values()), None)
+                        if isinstance(first_val, dict):
+                            effective_state["evaluations"] = ensure_evaluator_results(raw_e)
 
                 result: dict[str, Any] = node_fn(effective_state)
 

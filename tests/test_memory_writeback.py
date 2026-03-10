@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from geode.memory.project import ProjectMemory
-from geode.orchestration.hooks import HookEvent, HookSystem
-from geode.runtime import GeodeRuntime
+from core.memory.project import ProjectMemory
+from core.orchestration.hooks import HookEvent, HookSystem
+from core.runtime import GeodeRuntime
 
 
 def _make_hooks_and_memory(
@@ -130,7 +130,7 @@ class TestPipelineEndMemoryWrite:
 class TestEnrichedHookData:
     def test_enriched_hook_data_fields(self):
         """Verify hook_data enrichment in _make_hooked_node for synthesizer."""
-        from geode.graph import _make_hooked_node
+        from core.graph import _make_hooked_node
 
         hooks = HookSystem()
         captured: list[dict[str, Any]] = []

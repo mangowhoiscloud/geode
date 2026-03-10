@@ -8,8 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-
-from geode.automation.scheduler import (
+from core.automation.scheduler import (
     ActiveHours,
     JobRunLog,
     Schedule,
@@ -20,7 +19,7 @@ from geode.automation.scheduler import (
     _job_to_dict,
     _parse_hhmm,
 )
-from geode.automation.triggers import TriggerManager
+from core.automation.triggers import TriggerManager
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -698,7 +697,7 @@ class TestHookIntegration:
 
         mock_hooks.trigger.assert_called_once()
         call_args = mock_hooks.trigger.call_args
-        from geode.orchestration.hooks import HookEvent
+        from core.orchestration.hooks import HookEvent
 
         assert call_args[0][0] == HookEvent.TRIGGER_FIRED
         assert call_args[0][1]["job_id"] == "j1"

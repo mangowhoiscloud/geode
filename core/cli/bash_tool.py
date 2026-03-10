@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-import subprocess
+import subprocess  # nosec B404 — intentional: BashTool requires shell execution
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -77,7 +77,7 @@ class BashTool:
             return blocked
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B602 — HITL approval gate + blocked patterns
                 command,
                 shell=True,
                 capture_output=True,
@@ -131,9 +131,7 @@ _TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitio
 
 def _load_tool_definition(name: str) -> dict[str, Any]:
     """Load a single tool definition by name from definitions.json."""
-    all_tools: list[dict[str, Any]] = json.loads(
-        _TOOLS_JSON_PATH.read_text(encoding="utf-8")
-    )
+    all_tools: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
     for t in all_tools:
         if t["name"] == name:
             return t

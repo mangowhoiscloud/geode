@@ -30,9 +30,7 @@ log = logging.getLogger(__name__)
 
 # Load all tool definitions from centralized JSON
 _TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
-AGENTIC_TOOLS: list[dict[str, Any]] = json.loads(
-    _TOOLS_JSON_PATH.read_text(encoding="utf-8")
-)
+AGENTIC_TOOLS: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
 
 
 @dataclass
@@ -161,9 +159,7 @@ class AgenticLoop:
             log.warning("Agentic LLM call failed", exc_info=True)
             return None
 
-    def _process_tool_calls(
-        self, response: anthropic.types.Message
-    ) -> list[dict[str, Any]]:
+    def _process_tool_calls(self, response: anthropic.types.Message) -> list[dict[str, Any]]:
         """Execute all tool_use blocks and return tool_result messages."""
         tool_results: list[dict[str, Any]] = []
 
@@ -179,17 +175,21 @@ class AgenticLoop:
             # Execute via ToolExecutor (handles HITL for dangerous tools)
             result = self.executor.execute(tool_name, tool_input)
 
-            self._tool_log.append({
-                "tool": tool_name,
-                "input": tool_input,
-                "result": result,
-            })
+            self._tool_log.append(
+                {
+                    "tool": tool_name,
+                    "input": tool_input,
+                    "result": result,
+                }
+            )
 
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": block.id,
-                "content": str(result),
-            })
+            tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": str(result),
+                }
+            )
 
         return tool_results
 
@@ -208,12 +208,14 @@ class AgenticLoop:
             if block.type == "text":
                 serialized.append({"type": "text", "text": block.text})
             elif block.type == "tool_use":
-                serialized.append({
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                })
+                serialized.append(
+                    {
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input,
+                    }
+                )
         return serialized
 
     def _track_usage(self, response: anthropic.types.Message) -> None:

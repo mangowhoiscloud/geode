@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from geode.cli.startup import (
+from core.cli.startup import (
     Capability,
     ReadinessReport,
     check_readiness,
@@ -51,7 +51,7 @@ class TestReadinessReport:
 
 class TestCheckReadiness:
     def test_without_api_key(self, tmp_path: Path):
-        with patch("geode.cli.startup.settings") as mock_settings:
+        with patch("core.cli.startup.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             report = check_readiness(tmp_path)
 
@@ -63,7 +63,7 @@ class TestCheckReadiness:
         assert llm_cap.available is False
 
     def test_with_api_key(self, tmp_path: Path):
-        with patch("geode.cli.startup.settings") as mock_settings:
+        with patch("core.cli.startup.settings") as mock_settings:
             mock_settings.anthropic_api_key = "sk-ant-real-key-here"
             report = check_readiness(tmp_path)
 
@@ -74,7 +74,7 @@ class TestCheckReadiness:
         assert llm_cap.available is True
 
     def test_placeholder_key_treated_as_missing(self, tmp_path: Path):
-        with patch("geode.cli.startup.settings") as mock_settings:
+        with patch("core.cli.startup.settings") as mock_settings:
             mock_settings.anthropic_api_key = "sk-ant-..."
             report = check_readiness(tmp_path)
 
@@ -82,7 +82,7 @@ class TestCheckReadiness:
         assert report.force_dry_run is True
 
     def test_env_file_check(self, tmp_path: Path):
-        with patch("geode.cli.startup.settings") as mock_settings:
+        with patch("core.cli.startup.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
 
             # No .env, no .env.example
@@ -103,7 +103,7 @@ class TestCheckReadiness:
             assert report.has_env_file is True
 
     def test_project_memory_check(self, tmp_path: Path):
-        with patch("geode.cli.startup.settings") as mock_settings:
+        with patch("core.cli.startup.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
 
             # No .claude/MEMORY.md → unavailable
@@ -122,7 +122,7 @@ class TestCheckReadiness:
             assert mem_cap.available is True
 
     def test_always_available_capabilities(self, tmp_path: Path):
-        with patch("geode.cli.startup.settings") as mock_settings:
+        with patch("core.cli.startup.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             report = check_readiness(tmp_path)
 

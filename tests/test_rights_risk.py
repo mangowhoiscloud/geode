@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from geode.verification.rights_risk import (
+from core.verification.rights_risk import (
     LicenseInfo,
     RightsRiskResult,
     RightsStatus,

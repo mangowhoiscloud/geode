@@ -9,10 +9,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from geode.llm.prompt_assembler import PromptAssembler
-from geode.llm.skill_registry import SkillRegistry
-from geode.orchestration.hooks import HookEvent, HookSystem
+from core.llm.prompt_assembler import PromptAssembler
+from core.llm.skill_registry import SkillRegistry
+from core.orchestration.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -209,7 +208,7 @@ class TestPromptOverridesWire:
 
 class TestAnalystSendsPropagation:
     def test_sends_contain_adr007_keys(self) -> None:
-        from geode.nodes.analysts import make_analyst_sends
+        from core.nodes.analysts import make_analyst_sends
 
         state: dict[str, Any] = {
             "ip_name": "Berserk",
@@ -236,7 +235,7 @@ class TestAnalystSendsPropagation:
 
 class TestEvaluatorSendsPropagation:
     def test_sends_contain_adr007_keys(self) -> None:
-        from geode.nodes.evaluators import make_evaluator_sends
+        from core.nodes.evaluators import make_evaluator_sends
 
         state: dict[str, Any] = {
             "ip_name": "Berserk",
@@ -264,7 +263,7 @@ class TestEvaluatorSendsPropagation:
 
 class TestHookedNodeAssemblerInjection:
     def test_assembler_injected_into_state(self, hooks: HookSystem) -> None:
-        from geode.graph import _make_hooked_node
+        from core.graph import _make_hooked_node
 
         assembler = PromptAssembler()
         captured_state: list[dict[str, Any]] = []
@@ -286,7 +285,7 @@ class TestHookedNodeAssemblerInjection:
         assert captured_state[0].get("_prompt_assembler") is assembler
 
     def test_no_assembler_when_none(self, hooks: HookSystem) -> None:
-        from geode.graph import _make_hooked_node
+        from core.graph import _make_hooked_node
 
         captured_state: list[dict[str, Any]] = []
 
@@ -348,7 +347,7 @@ class TestPromptAssembledHookEvent:
 
 class TestContextAssemblerLlmSummary:
     def test_builds_summary_from_all_tiers(self) -> None:
-        from geode.memory.context import ContextAssembler
+        from core.memory.context import ContextAssembler
 
         ctx: dict[str, Any] = {
             "_org_loaded": True,
@@ -365,12 +364,12 @@ class TestContextAssemblerLlmSummary:
         assert " | " in summary
 
     def test_empty_context_returns_empty_string(self) -> None:
-        from geode.memory.context import ContextAssembler
+        from core.memory.context import ContextAssembler
 
         assert ContextAssembler._build_llm_summary({}) == ""
 
     def test_partial_context(self) -> None:
-        from geode.memory.context import ContextAssembler
+        from core.memory.context import ContextAssembler
 
         ctx: dict[str, Any] = {
             "_org_loaded": True,
@@ -391,7 +390,7 @@ class TestAnalystSpecificMigration:
 
     def test_analyst_specific_suppressed_when_skill_exists(self) -> None:
         """When skill .md exists, ANALYST_SPECIFIC value should not appear in user prompt."""
-        from geode.llm.skill_registry import SkillDefinition
+        from core.llm.skill_registry import SkillDefinition
 
         skill = SkillDefinition(
             name="analyst-game-mechanics",
@@ -410,8 +409,8 @@ class TestAnalystSpecificMigration:
         assembler = PromptAssembler(skill_registry=registry)
 
         # Build a minimal state that _build_analyst_prompt() expects
-        from geode.llm.prompts import ANALYST_SPECIFIC
-        from geode.nodes.analysts import _build_analyst_prompt
+        from core.llm.prompts import ANALYST_SPECIFIC
+        from core.nodes.analysts import _build_analyst_prompt
 
         state: dict[str, Any] = {
             "ip_info": {
@@ -448,8 +447,8 @@ class TestAnalystSpecificMigration:
 
     def test_analyst_specific_used_when_no_skill(self) -> None:
         """When no skill .md exists, ANALYST_SPECIFIC should appear in user prompt."""
-        from geode.llm.prompts import ANALYST_SPECIFIC
-        from geode.nodes.analysts import _build_analyst_prompt
+        from core.llm.prompts import ANALYST_SPECIFIC
+        from core.nodes.analysts import _build_analyst_prompt
 
         assembler = PromptAssembler(skill_registry=SkillRegistry())
 

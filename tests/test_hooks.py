@@ -1,6 +1,6 @@
 """Tests for L4 HookSystem."""
 
-from geode.orchestration.hooks import HookEvent, HookResult, HookSystem
+from core.orchestration.hooks import HookEvent, HookResult, HookSystem
 
 
 class TestHookEvent:

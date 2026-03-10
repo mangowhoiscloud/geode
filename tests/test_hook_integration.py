@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from geode.graph import _make_hooked_node, build_graph
-from geode.orchestration.hooks import HookEvent, HookSystem
-from geode.state import GeodeState
+from core.graph import _make_hooked_node, build_graph
+from core.orchestration.hooks import HookEvent, HookSystem
+from core.state import GeodeState
 
 
 class TestMakeHookedNode:
@@ -134,7 +134,7 @@ class TestBuildGraphWithHooks:
         assert graph is not None
 
     def test_compile_graph_with_hooks(self):
-        from geode.graph import compile_graph
+        from core.graph import compile_graph
 
         hooks = HookSystem()
         compiled = compile_graph(hooks=hooks)

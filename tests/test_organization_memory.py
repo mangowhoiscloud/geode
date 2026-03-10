@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from geode.memory.organization import MonoLakeOrganizationMemory
+from core.memory.organization import MonoLakeOrganizationMemory
 
 
 class TestMonoLakeOrganizationMemory:

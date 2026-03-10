@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from geode.orchestration.hooks import HookEvent, HookSystem
-from geode.orchestration.task_bridge import TaskGraphHookBridge
-from geode.orchestration.task_system import (
+from core.orchestration.hooks import HookEvent, HookSystem
+from core.orchestration.task_bridge import TaskGraphHookBridge
+from core.orchestration.task_system import (
     TaskStatus,
     create_geode_task_graph,
 )

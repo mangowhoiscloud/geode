@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
-from geode.automation.triggers import (
+from core.automation.triggers import (
     CronParser,
     TriggerConfig,
     TriggerManager,
@@ -302,7 +301,7 @@ class TestDispatch:
         assert result.data["_follow_up"] is False
 
     def test_dispatch_with_snapshot_manager(self):
-        from geode.automation.snapshot import SnapshotManager
+        from core.automation.snapshot import SnapshotManager
 
         snap_mgr = SnapshotManager()
         mgr = TriggerManager(snapshot_manager=snap_mgr)

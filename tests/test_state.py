@@ -1,14 +1,13 @@
 """Tests for GeodeState and Pydantic models."""
 
 import pytest
-from pydantic import ValidationError
-
-from geode.state import (
+from core.state import (
     AnalysisResult,
     EvaluatorResult,
     PSMResult,
     SynthesisResult,
 )
+from pydantic import ValidationError
 
 
 class TestAnalysisResult:

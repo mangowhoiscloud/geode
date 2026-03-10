@@ -298,7 +298,7 @@ class SchedulerService:
     """Advanced scheduler with 3-type scheduling + active hours.
 
     Extends (via composition) the existing :class:`TriggerManager` from
-    ``geode.automation.triggers``.  The scheduler manages its own job store
+    ``core.automation.triggers``.  The scheduler manages its own job store
     (atomic JSON) and per-job JSONL run logs.
     """
 

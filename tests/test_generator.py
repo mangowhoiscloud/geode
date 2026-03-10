@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from geode.fixtures.generator import (
+from core.fixtures.generator import (
     GENRE_PARAMS,
     generate_batch,
     generate_ip,

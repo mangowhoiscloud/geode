@@ -46,7 +46,7 @@ def batch(
 ```python
 def select_ips(*, top: int, genre: str | None) -> list[str]:
     """Fixture에서 분석 대상 IP 선정."""
-    from geode.fixtures import FIXTURE_MAP
+    from core.fixtures import FIXTURE_MAP
 
     candidates = list(FIXTURE_MAP.keys())
     if genre:

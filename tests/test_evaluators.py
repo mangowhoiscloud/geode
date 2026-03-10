@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from geode.nodes.evaluators import (
+from core.nodes.evaluators import (
     _EVALUATOR_OUTPUT_MODELS,
     EVALUATOR_TYPES,
     CommunityMomentumAxes,

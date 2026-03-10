@@ -5,21 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from pydantic import BaseModel
-
-from geode.cli import (
+from core.cli import (
     _generate_report,
     _get_last_result,
     _parse_report_args,
     _set_last_result,
     _state_to_report_dict,
 )
-from geode.cli.commands import COMMAND_MAP, resolve_action
-from geode.cli.nl_router import (
+from core.cli.commands import COMMAND_MAP, resolve_action
+from core.cli.nl_router import (
     _OFFLINE_REPORT,
     VALID_ACTIONS,
     _offline_fallback,
 )
+from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # TestStateToReportDict
@@ -169,7 +168,7 @@ class TestReportCommand:
 
 
 class TestGenerateReport:
-    @patch("geode.cli._run_analysis")
+    @patch("core.cli._run_analysis")
     def test_runs_analysis_when_no_cache(self, mock_run):
         mock_run.return_value = {
             "ip_name": "berserk",
@@ -183,7 +182,7 @@ class TestGenerateReport:
         _generate_report("berserk", verbose=False)
         mock_run.assert_called_once()
 
-    @patch("geode.cli._run_analysis")
+    @patch("core.cli._run_analysis")
     def test_uses_cache_when_matching(self, mock_run):
         cached = {
             "ip_name": "berserk",
@@ -197,7 +196,7 @@ class TestGenerateReport:
         _generate_report("Berserk", verbose=False)
         mock_run.assert_not_called()
 
-    @patch("geode.cli._run_analysis")
+    @patch("core.cli._run_analysis")
     def test_runs_analysis_when_cache_differs(self, mock_run):
         cached = {
             "ip_name": "cowboy bebop",
@@ -213,7 +212,7 @@ class TestGenerateReport:
         _generate_report("Berserk", verbose=False)
         mock_run.assert_called_once()
 
-    @patch("geode.cli._run_analysis")
+    @patch("core.cli._run_analysis")
     def test_file_output(self, mock_run, tmp_path: Path):
         cached = {
             "ip_name": "berserk",
@@ -230,7 +229,7 @@ class TestGenerateReport:
         content = out.read_text()
         assert "Berserk" in content or "berserk" in content
 
-    @patch("geode.cli._run_analysis")
+    @patch("core.cli._run_analysis")
     def test_unknown_format_fallback(self, mock_run):
         cached = {
             "ip_name": "berserk",
@@ -241,7 +240,7 @@ class TestGenerateReport:
         # Should not raise, falls back to markdown
         _generate_report("Berserk", fmt="xml", verbose=False)
 
-    @patch("geode.cli._run_analysis")
+    @patch("core.cli._run_analysis")
     def test_returns_none_when_analysis_fails(self, mock_run):
         mock_run.return_value = None
         _set_last_result(None)  # type: ignore[arg-type]

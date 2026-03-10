@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from geode.tools.policy import PolicyChain, ToolPolicy
+from core.tools.policy import PolicyChain, ToolPolicy
 
 
 class TestToolPolicy:
@@ -139,7 +138,7 @@ class TestPolicyChain:
 
 class TestRegistryWithPolicy:
     def test_registry_list_tools_with_policy(self):
-        from geode.tools.registry import ToolRegistry
+        from core.tools.registry import ToolRegistry
 
         class FakeTool:
             @property
@@ -168,7 +167,7 @@ class TestRegistryWithPolicy:
         assert reg.list_tools(policy=chain, mode="full_pipeline") == ["test_tool"]
 
     def test_registry_execute_blocked_raises(self):
-        from geode.tools.registry import ToolRegistry
+        from core.tools.registry import ToolRegistry
 
         class FakeTool:
             @property

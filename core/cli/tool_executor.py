@@ -17,19 +17,23 @@ from core.ui.console import console
 log = logging.getLogger(__name__)
 
 # Tool safety classifications
-SAFE_TOOLS: frozenset[str] = frozenset({
-    "list_ips",
-    "search_ips",
-    "show_help",
-    "check_status",
-    "switch_model",
-    "memory_search",
-    "manage_rule",
-})
+SAFE_TOOLS: frozenset[str] = frozenset(
+    {
+        "list_ips",
+        "search_ips",
+        "show_help",
+        "check_status",
+        "switch_model",
+        "memory_search",
+        "manage_rule",
+    }
+)
 
-DANGEROUS_TOOLS: frozenset[str] = frozenset({
-    "run_bash",
-})
+DANGEROUS_TOOLS: frozenset[str] = frozenset(
+    {
+        "run_bash",
+    }
+)
 
 # Everything else is STANDARD — executes without special gates
 

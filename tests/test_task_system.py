@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from geode.orchestration.task_system import (
+from core.orchestration.task_system import (
     Task,
     TaskGraph,
     TaskStatus,

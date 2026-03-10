@@ -103,8 +103,10 @@ class TestAgenticLoop:
         text_block.text = "Here are the available IPs."
         mock_response.content = [text_block]
 
-        with patch.object(loop, "_call_llm", return_value=mock_response), \
-             patch.object(loop, "_track_usage"):
+        with (
+            patch.object(loop, "_call_llm", return_value=mock_response),
+            patch.object(loop, "_track_usage"),
+        ):
             result = loop.run("list IPs")
 
         assert result.text == "Here are the available IPs."
@@ -141,8 +143,10 @@ class TestAgenticLoop:
         text_block.text = "Here are 16 available IPs."
         text_response.content = [text_block]
 
-        with patch.object(loop, "_call_llm", side_effect=[tool_response, text_response]), \
-             patch.object(loop, "_track_usage"):
+        with (
+            patch.object(loop, "_call_llm", side_effect=[tool_response, text_response]),
+            patch.object(loop, "_track_usage"),
+        ):
             result = loop.run("IP 목록 보여줘")
 
         assert result.rounds == 2
@@ -168,8 +172,10 @@ class TestAgenticLoop:
         tool_block.id = "toolu_abc"
         tool_response.content = [tool_block]
 
-        with patch.object(loop, "_call_llm", return_value=tool_response), \
-             patch.object(loop, "_track_usage"):
+        with (
+            patch.object(loop, "_call_llm", return_value=tool_response),
+            patch.object(loop, "_track_usage"),
+        ):
             result = loop.run("infinite loop test")
 
         assert result.error == "max_rounds"
@@ -199,8 +205,10 @@ class TestAgenticLoop:
         text_block.text = "Response 1"
         mock_response.content = [text_block]
 
-        with patch.object(loop, "_call_llm", return_value=mock_response), \
-             patch.object(loop, "_track_usage"):
+        with (
+            patch.object(loop, "_call_llm", return_value=mock_response),
+            patch.object(loop, "_track_usage"),
+        ):
             loop.run("first message")
 
         assert context.turn_count >= 1

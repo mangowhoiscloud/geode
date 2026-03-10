@@ -133,7 +133,7 @@ class LLMToolCallable(Protocol):
 
 ```python
 # geode/infrastructure/adapters/llm/claude_adapter.py
-from geode.llm.client import (
+from core.llm.client import (
     call_llm, call_llm_json, call_llm_parsed,
     call_llm_streaming, call_llm_with_tools,
 )

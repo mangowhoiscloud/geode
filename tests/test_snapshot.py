@@ -3,8 +3,7 @@
 from pathlib import Path
 
 import pytest
-
-from geode.automation.snapshot import Snapshot, SnapshotManager
+from core.automation.snapshot import Snapshot, SnapshotManager
 
 
 class TestSnapshot:

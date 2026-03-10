@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import time
 
-from geode.auth.cooldown import CooldownTracker
-from geode.auth.profiles import (
+from core.auth.cooldown import CooldownTracker
+from core.auth.profiles import (
     TYPE_PRIORITY,
     AuthProfile,
     CredentialType,
     ProfileStore,
 )
-from geode.auth.rotation import ProfileRotator, calculate_cooldown_ms
+from core.auth.rotation import ProfileRotator, calculate_cooldown_ms
 
 # ---------------------------------------------------------------------------
 # CredentialType + Priority

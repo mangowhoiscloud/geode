@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 
-from geode.orchestration.coalescing import CoalescingQueue
+from core.orchestration.coalescing import CoalescingQueue
 
 
 class TestCoalescingQueue:

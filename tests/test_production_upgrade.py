@@ -13,8 +13,8 @@ from __future__ import annotations
 import os
 from unittest.mock import MagicMock, patch
 
-from geode.nodes.scoring import _calc_analyst_confidence
-from geode.state import AnalysisResult
+from core.nodes.scoring import _calc_analyst_confidence
+from core.state import AnalysisResult
 
 # ---------------------------------------------------------------------------
 # Phase 1-A: Confidence Calculation Bug Fix
@@ -124,7 +124,7 @@ class TestEvaluatorFallbackDefaults:
 
 class TestNodeScopePolicy:
     def test_default_allowlists(self):
-        from geode.tools.policy import NODE_TOOL_ALLOWLISTS, NodeScopePolicy
+        from core.tools.policy import NODE_TOOL_ALLOWLISTS, NodeScopePolicy
 
         NodeScopePolicy()  # Ensure it can be constructed
         assert "analyst" in NODE_TOOL_ALLOWLISTS
@@ -132,7 +132,7 @@ class TestNodeScopePolicy:
         assert "scoring" in NODE_TOOL_ALLOWLISTS
 
     def test_filter_analyst_tools(self):
-        from geode.tools.policy import NodeScopePolicy
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         all_tools = ["memory_search", "memory_get", "query_monolake", "steam_info", "psm_calculate"]
@@ -140,7 +140,7 @@ class TestNodeScopePolicy:
         assert set(filtered) == {"memory_search", "memory_get", "query_monolake"}
 
     def test_filter_evaluator_tools(self):
-        from geode.tools.policy import NodeScopePolicy
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         all_tools = [
@@ -154,7 +154,7 @@ class TestNodeScopePolicy:
         assert set(filtered) == {"memory_search", "memory_get", "steam_info", "reddit_sentiment"}
 
     def test_filter_scoring_tools(self):
-        from geode.tools.policy import NodeScopePolicy
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         all_tools = ["memory_search", "psm_calculate", "steam_info"]
@@ -162,7 +162,7 @@ class TestNodeScopePolicy:
         assert set(filtered) == {"memory_search", "psm_calculate"}
 
     def test_prefix_matching(self):
-        from geode.tools.policy import NodeScopePolicy
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         filtered = policy.filter(["memory_search", "steam_info"], node="analyst_game_mechanics")
@@ -170,28 +170,28 @@ class TestNodeScopePolicy:
         assert "steam_info" not in filtered
 
     def test_unknown_node_passthrough(self):
-        from geode.tools.policy import NodeScopePolicy
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         all_tools = ["a", "b", "c"]
         assert policy.filter(all_tools, node="unknown_node") == all_tools
 
     def test_none_node_passthrough(self):
-        from geode.tools.policy import NodeScopePolicy
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         all_tools = ["a", "b"]
         assert policy.filter(all_tools, node=None) == all_tools
 
     def test_is_allowed(self):
-        from geode.tools.policy import NodeScopePolicy
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         assert policy.is_allowed("memory_search", node="analyst") is True
         assert policy.is_allowed("steam_info", node="analyst") is False
 
     def test_get_allowlist(self):
-        from geode.tools.policy import NodeScopePolicy
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         allowlist = policy.get_allowlist("analyst")
@@ -199,7 +199,7 @@ class TestNodeScopePolicy:
         assert "steam_info" not in allowlist
 
     def test_custom_allowlists(self):
-        from geode.tools.policy import NodeScopePolicy
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy(node_allowlists={"custom": ["tool_a", "tool_b"]})
         filtered = policy.filter(["tool_a", "tool_b", "tool_c"], node="custom")
@@ -228,14 +228,14 @@ class TestPartialRetry:
         }
 
     def test_first_iteration_sends_all_four(self):
-        from geode.nodes.analysts import make_analyst_sends
+        from core.nodes.analysts import make_analyst_sends
 
         state = self._base_state(iteration=1)
         sends = make_analyst_sends(state)
         assert len(sends) == 4
 
     def test_second_iteration_skips_good_results(self):
-        from geode.nodes.analysts import make_analyst_sends
+        from core.nodes.analysts import make_analyst_sends
 
         good_analysis = AnalysisResult(
             analyst_type="game_mechanics",
@@ -274,7 +274,7 @@ class TestPartialRetry:
 
 class TestTaskGraphBlocked:
     def test_is_blocked_with_failed_dep(self):
-        from geode.orchestration.task_system import Task, TaskGraph
+        from core.orchestration.task_system import Task, TaskGraph
 
         graph = TaskGraph()
         graph.add_task(Task(task_id="a", name="A", dependencies=[]))
@@ -286,7 +286,7 @@ class TestTaskGraphBlocked:
         assert graph.is_blocked("b") is True
 
     def test_is_blocked_no_failed_dep(self):
-        from geode.orchestration.task_system import Task, TaskGraph
+        from core.orchestration.task_system import Task, TaskGraph
 
         graph = TaskGraph()
         graph.add_task(Task(task_id="a", name="A", dependencies=[]))
@@ -298,13 +298,13 @@ class TestTaskGraphBlocked:
         assert graph.is_blocked("b") is False
 
     def test_is_blocked_unknown_task(self):
-        from geode.orchestration.task_system import TaskGraph
+        from core.orchestration.task_system import TaskGraph
 
         graph = TaskGraph()
         assert graph.is_blocked("nonexistent") is False
 
     def test_has_failed_dependency(self):
-        from geode.orchestration.task_system import Task, TaskGraph
+        from core.orchestration.task_system import Task, TaskGraph
 
         graph = TaskGraph()
         graph.add_task(
@@ -329,7 +329,7 @@ class TestTaskGraphBlocked:
 
 class TestStuckDetectorHooks:
     def test_register_hooks(self):
-        from geode.orchestration.stuck_detection import StuckDetector
+        from core.orchestration.stuck_detection import StuckDetector
 
         detector = StuckDetector(timeout_s=10.0)
         hooks = MagicMock()
@@ -337,7 +337,7 @@ class TestStuckDetectorHooks:
         assert hooks.register.call_count == 3
 
     def test_on_stuck_fires_pipeline_error(self):
-        from geode.orchestration.stuck_detection import StuckDetector
+        from core.orchestration.stuck_detection import StuckDetector
 
         detector = StuckDetector(timeout_s=0.0)  # instant timeout
         hooks = MagicMock()
@@ -357,7 +357,7 @@ class TestStuckDetectorHooks:
 
 class TestLangSmithConditional:
     def test_no_api_key_returns_identity(self):
-        from geode.llm.client import _maybe_traceable
+        from core.llm.client import _maybe_traceable
 
         with patch.dict(os.environ, {}, clear=True):
             # Remove LANGSMITH_API_KEY if present
@@ -378,24 +378,24 @@ class TestLangSmithConditional:
 
 class TestGraphWithNodeScopePolicy:
     def test_build_graph_with_policy(self):
-        from geode.graph import build_graph
-        from geode.tools.policy import NodeScopePolicy
+        from core.graph import build_graph
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         graph = build_graph(node_scope_policy=policy)
         assert graph is not None
 
     def test_compile_graph_with_policy(self):
-        from geode.graph import compile_graph
-        from geode.tools.policy import NodeScopePolicy
+        from core.graph import compile_graph
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         compiled = compile_graph(node_scope_policy=policy)
         assert compiled is not None
 
     def test_dry_run_with_policy_still_works(self):
-        from geode.graph import compile_graph
-        from geode.tools.policy import NodeScopePolicy
+        from core.graph import compile_graph
+        from core.tools.policy import NodeScopePolicy
 
         policy = NodeScopePolicy()
         compiled = compile_graph(node_scope_policy=policy)

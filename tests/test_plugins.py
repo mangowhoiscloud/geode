@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from geode.extensibility.plugins import (
+from core.extensibility.plugins import (
     Plugin,
     PluginManager,
     PluginMetadata,

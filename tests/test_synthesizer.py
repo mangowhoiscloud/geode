@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from geode.nodes.synthesizer import (
+from core.nodes.synthesizer import (
     ACTION_DESCRIPTIONS,
     CAUSE_DESCRIPTIONS,
     CAUSE_TO_ACTION,
@@ -10,7 +10,7 @@ from geode.nodes.synthesizer import (
     _detect_timing_issue,
     _extract_def_scores,
 )
-from geode.state import EvaluatorResult
+from core.state import EvaluatorResult
 
 
 class TestExtractDefScores:

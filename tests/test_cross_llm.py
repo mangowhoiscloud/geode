@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from geode.state import AnalysisResult
-from geode.verification.cross_llm import (
+from core.state import AnalysisResult
+from core.verification.cross_llm import (
     AGREEMENT_THRESHOLD,
     _calc_agreement,
     run_cross_llm_check,

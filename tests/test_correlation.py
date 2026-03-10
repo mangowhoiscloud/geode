@@ -1,8 +1,7 @@
 """Tests for L4.5 Correlation Analysis (numpy-only)."""
 
 import pytest
-
-from geode.automation.correlation import (
+from core.automation.correlation import (
     QUARTERLY_TARGETS,
     CorrelationAnalyzer,
     CorrelationResult,

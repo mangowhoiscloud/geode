@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from geode.state import (
+from core.state import (
     AnalysisResult,
     EvaluatorResult,
     GuardrailResult,
     PSMResult,
 )
-from geode.verification.guardrails import (
+from core.verification.guardrails import (
     _g1_schema,
     _g2_range,
     _g3_grounding,
