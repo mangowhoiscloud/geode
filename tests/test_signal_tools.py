@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from geode.tools.base import Tool
-from geode.tools.registry import ToolRegistry
-from geode.tools.signal_tools import (
+from core.tools.base import Tool
+from core.tools.registry import ToolRegistry
+from core.tools.signal_tools import (
     GoogleTrendsTool,
     RedditSentimentTool,
     SteamInfoTool,

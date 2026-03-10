@@ -7,9 +7,8 @@ import time
 from typing import Any
 
 import pytest
-
-from geode.orchestration.hooks import HookEvent, HookSystem
-from geode.orchestration.isolated_execution import (
+from core.orchestration.hooks import HookEvent, HookSystem
+from core.orchestration.isolated_execution import (
     IsolatedRunner,
     IsolationConfig,
     IsolationResult,

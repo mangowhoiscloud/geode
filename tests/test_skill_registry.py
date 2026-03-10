@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from geode.llm.skill_registry import SkillDefinition, SkillRegistry, _parse_frontmatter
+from core.llm.skill_registry import SkillDefinition, SkillRegistry, _parse_frontmatter
 
 # ---------------------------------------------------------------------------
 # Helpers

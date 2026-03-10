@@ -6,10 +6,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from geode.llm.prompt_assembler import AssembledPrompt, PromptAssembler
-from geode.llm.prompts import _hash_prompt
-from geode.llm.skill_registry import SkillDefinition, SkillRegistry
+from core.llm.prompt_assembler import AssembledPrompt, PromptAssembler
+from core.llm.prompts import _hash_prompt
+from core.llm.skill_registry import SkillDefinition, SkillRegistry
 
 # ---------------------------------------------------------------------------
 # Fixtures

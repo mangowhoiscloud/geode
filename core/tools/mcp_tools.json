@@ -1,0 +1,8 @@
+{
+  "analyze_ip": "Run GEODE analysis pipeline on an IP. Returns tier, score, cause, and narrative.",
+  "quick_score": "Run scoring-only mode for fast tier/score estimation without full analysis.",
+  "query_memory": "Search GEODE memory across tiers (session, project, organization).",
+  "get_ip_signals": "Get community signals (YouTube, Reddit, trends) for an IP.",
+  "list_fixtures": "List all available IP fixtures in the GEODE database.",
+  "get_health": "Get GEODE pipeline health status and component stats."
+}

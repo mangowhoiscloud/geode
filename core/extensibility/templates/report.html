@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEODE Report: ${ip_name}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+         sans-serif; line-height: 1.6; color: #1a1a2e; background: #f0f0f5;
+         padding: 2rem; }
+  .container { max-width: 900px; margin: 0 auto; background: #fff;
+               border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+               padding: 2.5rem; }
+  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: #16213e; }
+  h2 { font-size: 1.3rem; margin: 1.5rem 0 0.8rem; color: #0f3460;
+       border-bottom: 2px solid #e2e8f0; padding-bottom: 0.4rem; }
+  .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .score-badge { display: inline-block; padding: 0.3rem 1rem;
+                 border-radius: 20px; font-weight: 600; font-size: 1.1rem; }
+  .tier-high { background: #d4edda; color: #155724; }
+  .tier-mid  { background: #fff3cd; color: #856404; }
+  .tier-low  { background: #f8d7da; color: #721c24; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.6rem 1rem; border-bottom: 1px solid #e2e8f0; }
+  th { background: #f8fafc; font-weight: 600; color: #334155; }
+  .section { margin-bottom: 1.5rem; }
+  .narrative { background: #f8fafc; padding: 1.2rem; border-radius: 8px;
+               border-left: 4px solid #0f3460; margin: 1rem 0; }
+  footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;
+           color: #94a3b8; font-size: 0.8rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>GEODE Analysis: ${ip_name}</h1>
+  <div class="meta">Generated: ${timestamp} | Template: ${template_type}</div>
+
+  <div class="section">
+    <h2>Score</h2>
+    <p>Final Score: <span class="score-badge ${tier_class}">${final_score}</span></p>
+    <p>Tier: <strong>${tier}</strong></p>
+  </div>
+
+  ${subscores_section}
+
+  ${synthesis_section}
+
+  ${analyses_section}
+
+  ${details_section}
+
+  <footer>GEODE v0.6.0 | Undervalued IP Discovery Agent</footer>
+</div>
+</body>
+</html>

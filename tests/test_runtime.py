@@ -4,24 +4,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from geode.memory.session import InMemorySessionStore
-from geode.orchestration.coalescing import CoalescingQueue
-from geode.orchestration.hooks import HookEvent, HookSystem
-from geode.orchestration.hot_reload import ConfigWatcher
-from geode.orchestration.lane_queue import LaneQueue
-from geode.orchestration.run_log import RunLog
-from geode.orchestration.stuck_detection import StuckDetector
-from geode.orchestration.task_bridge import TaskGraphHookBridge
-from geode.orchestration.task_system import TaskGraph
-from geode.runtime import (
+from core.memory.session import InMemorySessionStore
+from core.orchestration.coalescing import CoalescingQueue
+from core.orchestration.hooks import HookEvent, HookSystem
+from core.orchestration.hot_reload import ConfigWatcher
+from core.orchestration.lane_queue import LaneQueue
+from core.orchestration.run_log import RunLog
+from core.orchestration.stuck_detection import StuckDetector
+from core.orchestration.task_bridge import TaskGraphHookBridge
+from core.orchestration.task_system import TaskGraph
+from core.runtime import (
     GeodeRuntime,
     _build_default_lanes,
     _build_default_policies,
     _build_default_registry,
     _make_run_log_handler,
 )
-from geode.tools.policy import PolicyChain
-from geode.tools.registry import ToolRegistry
+from core.tools.policy import PolicyChain
+from core.tools.registry import ToolRegistry
 
 
 class TestGeodeRuntimeCreate:
@@ -125,15 +125,15 @@ class TestRuntimePolicyChain:
     def test_full_pipeline_blocks_notification(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="full_pipeline")
-        # 21 total minus send_notification = 20
-        assert len(tools) == 20
+        # 24 total minus send_notification = 23
+        assert len(tools) == 23
         assert "send_notification" not in tools
 
 
 class TestRuntimeToolRegistry:
     def test_registry_has_all_tools(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        assert len(runtime.tool_registry) == 21
+        assert len(runtime.tool_registry) == 24
         assert "run_analyst" in runtime.tool_registry
         assert "run_evaluator" in runtime.tool_registry
         assert "psm_calculate" in runtime.tool_registry
@@ -195,7 +195,7 @@ class TestDefaultBuilders:
 
     def test_default_registry(self):
         registry = _build_default_registry()
-        assert len(registry) == 21
+        assert len(registry) == 24
 
     def test_make_run_log_handler(self, tmp_path: Path):
         run_log = RunLog("test_session", log_dir=tmp_path)

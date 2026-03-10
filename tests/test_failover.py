@@ -6,8 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import anthropic
 import pytest
-
-from geode.llm.client import (
+from core.llm.client import (
     FALLBACK_MODELS,
     MAX_RETRIES,
     _retry_with_backoff,
@@ -23,7 +22,7 @@ class TestRetryWithBackoff:
         assert result == "hello"
         fn.assert_called_once_with(model="test-model")
 
-    @patch("geode.llm.client.time.sleep")
+    @patch("core.llm.client.time.sleep")
     def test_retry_on_rate_limit(self, mock_sleep):
         fn = MagicMock(
             side_effect=[anthropic.RateLimitError.__new__(anthropic.RateLimitError), "ok"]
@@ -38,7 +37,7 @@ class TestRetryWithBackoff:
         assert fn.call_count == 2
         mock_sleep.assert_called_once()
 
-    @patch("geode.llm.client.time.sleep")
+    @patch("core.llm.client.time.sleep")
     def test_fallback_model_on_persistent_failure(self, mock_sleep):
         """After MAX_RETRIES on primary, should try fallback models."""
         rate_err = anthropic.RateLimitError.__new__(anthropic.RateLimitError)
@@ -64,7 +63,7 @@ class TestRetryWithBackoff:
             _retry_with_backoff(fn, model="test-model")
         fn.assert_called_once()
 
-    @patch("geode.llm.client.time.sleep")
+    @patch("core.llm.client.time.sleep")
     def test_all_models_exhausted_raises(self, mock_sleep):
         """When all models and retries fail, should raise last error."""
         rate_err = anthropic.RateLimitError.__new__(anthropic.RateLimitError)
@@ -78,7 +77,7 @@ class TestRetryWithBackoff:
 
 
 class TestCallLlmFailover:
-    @patch("geode.llm.client.get_anthropic_client")
+    @patch("core.llm.client.get_anthropic_client")
     def test_call_llm_success(self, mock_client_fn):
         mock_response = MagicMock()
         mock_block = MagicMock()
@@ -89,8 +88,8 @@ class TestCallLlmFailover:
         result = call_llm("sys", "usr", model="test")
         assert result == "response text"
 
-    @patch("geode.llm.client.time.sleep")
-    @patch("geode.llm.client.get_anthropic_client")
+    @patch("core.llm.client.time.sleep")
+    @patch("core.llm.client.get_anthropic_client")
     def test_call_llm_retries_on_failure(self, mock_client_fn, mock_sleep):
         rate_err = anthropic.RateLimitError.__new__(anthropic.RateLimitError)
         rate_err.status_code = 429
@@ -118,19 +117,19 @@ class TestFallbackModels:
 class TestCallLlmJsonExtraction:
     """Tests for robust JSON extraction from LLM responses."""
 
-    @patch("geode.llm.client.call_llm")
+    @patch("core.llm.client.call_llm")
     def test_direct_json(self, mock_call):
         mock_call.return_value = '{"key": "value"}'
         result = call_llm_json("sys", "usr")
         assert result == {"key": "value"}
 
-    @patch("geode.llm.client.call_llm")
+    @patch("core.llm.client.call_llm")
     def test_json_with_markdown_fences(self, mock_call):
         mock_call.return_value = '```json\n{"key": "value"}\n```'
         result = call_llm_json("sys", "usr")
         assert result == {"key": "value"}
 
-    @patch("geode.llm.client.call_llm")
+    @patch("core.llm.client.call_llm")
     def test_json_embedded_in_text(self, mock_call):
         """LLM returns prose before/after JSON — extraction finds the object."""
         mock_call.return_value = (
@@ -143,7 +142,7 @@ class TestCallLlmJsonExtraction:
         assert result["evaluator_type"] == "quality_judge"
         assert result["composite_score"] == 72.0
 
-    @patch("geode.llm.client.call_llm")
+    @patch("core.llm.client.call_llm")
     def test_json_with_nested_braces(self, mock_call):
         mock_call.return_value = (
             'Some text\n{"axes": {"d_score": 4.0, "e_score": 3.0}, "rationale": "test"}\nMore text'
@@ -151,13 +150,13 @@ class TestCallLlmJsonExtraction:
         result = call_llm_json("sys", "usr")
         assert result["axes"]["d_score"] == 4.0
 
-    @patch("geode.llm.client.call_llm")
+    @patch("core.llm.client.call_llm")
     def test_no_json_raises_error(self, mock_call):
         mock_call.return_value = "This is a plain text response with no JSON."
         with pytest.raises(ValueError, match="invalid JSON"):
             call_llm_json("sys", "usr")
 
-    @patch("geode.llm.client.call_llm")
+    @patch("core.llm.client.call_llm")
     def test_whitespace_around_json(self, mock_call):
         mock_call.return_value = '  \n  {"key": 42}  \n  '
         result = call_llm_json("sys", "usr")

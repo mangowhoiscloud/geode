@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from geode.tools.base import Tool
-from geode.tools.output_tools import ExportJsonTool, GenerateReportTool, SendNotificationTool
+from core.tools.base import Tool
+from core.tools.output_tools import ExportJsonTool, GenerateReportTool, SendNotificationTool
 
 
 class TestGenerateReportTool:

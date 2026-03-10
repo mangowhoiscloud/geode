@@ -1,4 +1,4 @@
-# GEODE v6.0 — Undervalued IP Discovery Agent
+# GEODE v0.6.0 — Undervalued IP Discovery Agent
 
 LangGraph 기반 저평가 IP 발굴 에이전트.
 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 평가합니다.
@@ -11,18 +11,18 @@ LangGraph 기반 저평가 IP 발굴 에이전트.
 | **14-Axis Rubric** | PSM(Prospect Scoring Model) 기반 정량 평가 |
 | **Cross-LLM Ensemble** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, `cross` / `primary_only` 모드 |
 | **Prompt Caching** | Anthropic `cache_control` 적용, 40-60% 비용 절감 |
-| **17 Tool Protocol** | ToolRegistry + PolicyChain + tool_search 메타 도구 |
+| **24 Tool Protocol** | ToolRegistry + PolicyChain + NodeScopePolicy + tool_search 메타 도구 |
 | **MCP Adapters** | Steam, Brave Search, KG Memory 외부 데이터 소스 연결 |
 | **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
 | **Batch Analysis** | 멀티 IP 동시 분석, Rich 테이블 렌더링 |
 | **Streaming Output** | `--stream` 플래그로 실시간 진행 표시 |
 | **자연어 입력** | 한국어/영어 자유 입력 (NL Router intent classification) |
 | **Report Generation** | HTML/JSON/Markdown 다중 포맷 |
-| **Graceful Degradation** | API 키 없이 dry-run 분석, 검색 가능 |
+| **Graceful Degradation** | API 키 없으면 자동 dry-run, 있으면 LLM 분석 |
 | **Project Memory** | `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지 |
 | **Checkpoint** | SqliteSaver 기반 파이프라인 상태 영속화 |
 | **Feedback Loop** | Confidence < 0.7이면 자동 재분석 (최대 3회) |
-| **1760 Tests** | 112 modules, pytest + ruff + mypy strict 전체 통과 |
+| **1823+ Tests** | 112 modules, pytest + ruff + mypy strict 전체 통과 |
 
 ## Architecture
 
@@ -64,7 +64,7 @@ graph TB
     end
 
     subgraph L5["L5 — Extensibility"]
-        Tools["Tool Registry (17)"]
+        Tools["Tool Registry (24)"]
         Reports["Report Generator"]
         Templates["Prompt Skills"]
     end
@@ -140,7 +140,7 @@ graph TB
 ```mermaid
 graph TB
     subgraph GEODE["GEODE Pipeline"]
-        Registry["ToolRegistry<br/>17 tools"]
+        Registry["ToolRegistry<br/>24 tools"]
         Policy["PolicyChain"]
         TS["tool_search<br/>(meta-tool)"]
     end
@@ -182,8 +182,11 @@ uv sync
 # 인터랙티브 모드 (권장)
 uv run geode
 
-# Dry-run 분석 (API 키 불필요)
+# IP 분석 (API 키 있으면 LLM 호출, 없으면 자동 dry-run)
 uv run geode analyze "Berserk"
+
+# 명시적 dry-run (API 키 있어도 LLM 호출 안 함)
+uv run geode analyze "Berserk" --dry-run
 
 # Streaming 분석
 uv run geode analyze "Berserk" --stream
@@ -211,7 +214,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 uv run geode analyze "Cowboy Bebop"
 ```
 
-API 키 없이 시작하면 자동으로 dry-run 모드로 안내됩니다:
+API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다 (API 키 설정 시 LLM 분석 자동 활성화):
 
 ```
   ✓ Dry-Run Analysis
@@ -233,8 +236,8 @@ uv run geode
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `/analyze <IP>` | `/a` | Dry-run 분석 |
-| `/run <IP>` | `/r` | Full LLM 분석 |
+| `/analyze <IP>` | `/a` | IP 분석 (API 키 유무에 따라 자동 모드 결정) |
+| `/run <IP>` | `/r` | IP 분석 (동일) |
 | `/search <query>` | `/s` | IP 검색 |
 | `/report <IP> [fmt]` | `/rpt` | 리포트 생성 (md/html/json) |
 | `/list` | | IP 목록 |
@@ -242,6 +245,11 @@ uv run geode
 | `/model` | | LLM 모델 선택 |
 | `/key [value]` | | API 키 설정 |
 | `/auth` | | 인증 프로필 관리 |
+| `/batch [--top N]` | `/b` | 배치 분석 |
+| `/status` | | 시스템 상태 (모델, API 키, 메모리) |
+| `/compare <A> <B>` | | 두 IP 비교 분석 |
+| `/schedule <cron>` | | 배치 스케줄 설정 |
+| `/trigger <event>` | | 이벤트 트리거 (drift scan 등) |
 | `/verbose` | | 상세 출력 토글 |
 | `/help` | | 도움말 |
 | `/quit` | `/q` | 종료 |
@@ -249,17 +257,21 @@ uv run geode
 **자연어 입력:**
 
 ```
-> Berserk 분석해           → dry-run 분석
+> Berserk 분석해           → LLM 분석 (API 키 있을 때) / dry-run (없을 때)
 > 소울라이크 찾아줘         → 장르 검색
 > Berserk vs Cowboy Bebop  → 비교 분석
 > Berserk 리포트 생성해     → 리포트 생성
 > 뭐가 있어?               → IP 목록
+> 시스템 상태              → 상태 확인
+> API 키 설정해            → API 키 설정
+> 스케줄 걸어줘            → 배치 스케줄
 ```
 
 ### CLI Mode
 
 ```bash
-geode analyze "Berserk"                          # dry-run
+geode analyze "Berserk"                          # LLM 분석 (API 키 있을 때)
+geode analyze "Berserk" --dry-run                 # 명시적 dry-run
 geode analyze "Berserk" --stream                  # streaming output
 geode analyze "Berserk" --verbose                 # 상세 출력
 geode analyze "Cowboy Bebop" --skip-verification  # 검증 생략
@@ -335,8 +347,10 @@ geode/
 ├── runtime.py                  # GeodeRuntime (production wiring)
 ├── state.py                    # GeodeState (TypedDict + Pydantic models)
 ├── tools/                      # Tool Protocol + Registry + Policy
-│   ├── registry.py             # ToolRegistry (17 tools + tool_search)
-│   ├── policy.py               # PolicyChain (permission enforcement)
+│   ├── registry.py             # ToolRegistry (24 tools + tool_search)
+│   ├── policy.py               # PolicyChain + NodeScopePolicy
+│   ├── analysis.py             # ExplainScoreTool
+│   ├── signal_tools.py         # YouTube, Reddit, Twitch, Steam, Trends, WebSearch
 │   └── base.py                 # ToolProtocol ABC
 ├── ui/                         # Rich console + panels
 └── verification/               # Guardrails + BiasBuster + Rights Risk

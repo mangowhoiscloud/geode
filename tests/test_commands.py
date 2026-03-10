@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from geode.cli.commands import (
+from core.cli.commands import (
     COMMAND_MAP,
     MODEL_PROFILES,
     _apply_model,
@@ -112,7 +112,7 @@ class TestCmdKey:
 
     def test_set_anthropic(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.anthropic_api_key
         try:
@@ -126,7 +126,7 @@ class TestCmdKey:
 
     def test_set_openai(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.openai_api_key
         try:
@@ -148,11 +148,11 @@ class TestCmdModel:
     def test_interactive_picker_select(self, tmp_path: Path, monkeypatch):
         """Arrow-key picker: user selects index 2 (Haiku)."""
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.model
         try:
-            with patch("geode.cli.commands.TerminalMenu") as MockMenu:
+            with patch("core.cli.commands.TerminalMenu") as MockMenu:
                 MockMenu.return_value.show.return_value = 2  # Haiku
                 cmd_model("")
             assert settings.model == MODEL_PROFILES[2].id
@@ -162,17 +162,17 @@ class TestCmdModel:
     def test_interactive_picker_cancel(self, tmp_path: Path, monkeypatch):
         """Arrow-key picker: user presses q/Esc → cancel."""
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.model
-        with patch("geode.cli.commands.TerminalMenu") as MockMenu:
+        with patch("core.cli.commands.TerminalMenu") as MockMenu:
             MockMenu.return_value.show.return_value = None
             cmd_model("")
         assert settings.model == old
 
     def test_select_by_number(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.model
         try:
@@ -185,7 +185,7 @@ class TestCmdModel:
 
     def test_select_by_name(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.model
         try:
@@ -200,7 +200,7 @@ class TestCmdModel:
 
     def test_select_by_partial_name(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.model
         try:
@@ -211,7 +211,7 @@ class TestCmdModel:
 
     def test_invalid_number(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.model
         cmd_model("99")
@@ -219,7 +219,7 @@ class TestCmdModel:
 
     def test_unknown_name(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.model
         cmd_model("nonexistent-model-xyz")
@@ -227,7 +227,7 @@ class TestCmdModel:
 
     def test_same_model_noop(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.model
         cmd_model(old)
@@ -237,7 +237,7 @@ class TestCmdModel:
 class TestApplyModel:
     def test_apply_new_model(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         old = settings.model
         try:
@@ -248,7 +248,7 @@ class TestApplyModel:
 
     def test_apply_same_model(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from geode.config import settings
+        from core.config import settings
 
         # Should not write .env when model unchanged
         _apply_model(next(p for p in MODEL_PROFILES if p.id == settings.model))

@@ -1,13 +1,13 @@
 """Tests for scoring formulas."""
 
-from geode.nodes.scoring import (
+from core.nodes.scoring import (
     _calc_analyst_confidence,
     _calc_community_momentum,
     _calc_final_score,
     _calc_recovery_potential,
     _determine_tier,
 )
-from geode.state import AnalysisResult, EvaluatorResult
+from core.state import AnalysisResult, EvaluatorResult
 
 
 class TestTierDetermination:

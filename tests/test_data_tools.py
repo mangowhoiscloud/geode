@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from geode.tools.base import Tool
-from geode.tools.data_tools import CortexAnalystTool, CortexSearchTool, QueryMonoLakeTool
-from geode.tools.registry import ToolRegistry
+from core.tools.base import Tool
+from core.tools.data_tools import CortexAnalystTool, CortexSearchTool, QueryMonoLakeTool
+from core.tools.registry import ToolRegistry
 
 
 class TestQueryMonoLakeTool:

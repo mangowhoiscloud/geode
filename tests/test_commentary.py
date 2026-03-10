@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from geode.llm.commentary import (
+from core.llm.commentary import (
     build_analyze_context,
     build_compare_context,
     build_list_context,
@@ -21,7 +21,7 @@ from geode.llm.commentary import (
 
 @dataclass
 class FakeSearchResult:
-    """Mimics geode.cli.search.SearchResult for testing."""
+    """Mimics core.cli.search.SearchResult for testing."""
 
     ip_name: str
     score: float
@@ -137,7 +137,7 @@ class TestBuildCompareContext:
 
 
 class TestGenerateCommentary:
-    @patch("geode.llm.commentary.call_llm")
+    @patch("core.llm.commentary.call_llm")
     def test_success_returns_text(self, mock_call: MagicMock):
         mock_call.return_value = "  This is a great IP.  "
         result = generate_commentary(
@@ -148,7 +148,7 @@ class TestGenerateCommentary:
         assert result == "This is a great IP."
         mock_call.assert_called_once()
 
-    @patch("geode.llm.commentary.call_llm")
+    @patch("core.llm.commentary.call_llm")
     def test_api_error_returns_none(self, mock_call: MagicMock):
         mock_call.side_effect = RuntimeError("API down")
         result = generate_commentary(
@@ -158,7 +158,7 @@ class TestGenerateCommentary:
         )
         assert result is None
 
-    @patch("geode.llm.commentary.call_llm")
+    @patch("core.llm.commentary.call_llm")
     def test_empty_response_returns_none(self, mock_call: MagicMock):
         mock_call.return_value = "   "
         result = generate_commentary(
@@ -169,7 +169,7 @@ class TestGenerateCommentary:
         # "   ".strip() == "" which is falsy → None
         assert result is None
 
-    @patch("geode.llm.commentary.call_llm")
+    @patch("core.llm.commentary.call_llm")
     def test_custom_model_passed(self, mock_call: MagicMock):
         mock_call.return_value = "Commentary text"
         generate_commentary(
@@ -185,7 +185,7 @@ class TestGenerateCommentary:
         assert kwargs["max_tokens"] == 128
         assert kwargs["temperature"] == 0.2
 
-    @patch("geode.llm.commentary.call_llm")
+    @patch("core.llm.commentary.call_llm")
     def test_prompt_contains_user_query_and_action(self, mock_call: MagicMock):
         mock_call.return_value = "ok"
         generate_commentary(
@@ -205,25 +205,25 @@ class TestGenerateCommentary:
 
 
 class TestShowCommentary:
-    @patch("geode.cli.generate_commentary")
-    @patch("geode.cli.GeodeStatus")
-    @patch("geode.cli.console")
+    @patch("core.cli.generate_commentary")
+    @patch("core.cli.GeodeStatus")
+    @patch("core.cli.console")
     def test_offline_skips(
         self, mock_console: MagicMock, mock_status: MagicMock, mock_gen: MagicMock
     ):
-        from geode.cli import _show_commentary
+        from core.cli import _show_commentary
 
         _show_commentary("test", "analyze", {}, is_offline=True)
         mock_gen.assert_not_called()
         mock_status.assert_not_called()
 
-    @patch("geode.cli.generate_commentary")
-    @patch("geode.cli.GeodeStatus")
-    @patch("geode.cli.console")
+    @patch("core.cli.generate_commentary")
+    @patch("core.cli.GeodeStatus")
+    @patch("core.cli.console")
     def test_success_prints_text(
         self, mock_console: MagicMock, mock_status_cls: MagicMock, mock_gen: MagicMock
     ):
-        from geode.cli import _show_commentary
+        from core.cli import _show_commentary
 
         mock_gen.return_value = "Great insight here."
         mock_ctx = MagicMock()
@@ -237,13 +237,13 @@ class TestShowCommentary:
         printed = [str(c) for c in mock_console.print.call_args_list]
         assert any("Great insight here." in s for s in printed)
 
-    @patch("geode.cli.generate_commentary")
-    @patch("geode.cli.GeodeStatus")
-    @patch("geode.cli.console")
+    @patch("core.cli.generate_commentary")
+    @patch("core.cli.GeodeStatus")
+    @patch("core.cli.console")
     def test_failure_no_crash(
         self, mock_console: MagicMock, mock_status_cls: MagicMock, mock_gen: MagicMock
     ):
-        from geode.cli import _show_commentary
+        from core.cli import _show_commentary
 
         mock_gen.return_value = None
         mock_ctx = MagicMock()

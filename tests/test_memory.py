@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from geode.memory.session import InMemorySessionStore, SessionEntry
+from core.memory.session import InMemorySessionStore, SessionEntry
 
 
 class TestInMemorySessionStore:

@@ -3,8 +3,7 @@
 import time
 
 import pytest
-
-from geode.automation.outcome_tracking import (
+from core.automation.outcome_tracking import (
     TRACKING_SLA,
     JobStatus,
     OutcomeData,

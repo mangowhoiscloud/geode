@@ -1,6 +1,6 @@
 """Tests for L3 Feedback Loop (VERIFY->GATHER loopback) and Confidence Threshold."""
 
-from geode.graph import (
+from core.graph import (
     CONFIDENCE_THRESHOLD,
     DEFAULT_MAX_ITERATIONS,
     _gather_node,

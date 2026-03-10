@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from geode.infrastructure.adapters.mcp.base import MCPClientBase, MCPTimeoutError
-from geode.infrastructure.adapters.mcp.brave_adapter import BraveSearchAdapter
-from geode.infrastructure.adapters.mcp.composite_signal import CompositeSignalAdapter
-from geode.infrastructure.adapters.mcp.memory_adapter import KGMemoryAdapter
-from geode.infrastructure.adapters.mcp.steam_adapter import SteamMCPSignalAdapter
-from geode.infrastructure.ports.signal_port import KGMemoryPort, SignalEnrichmentPort, WebSearchPort
+from core.infrastructure.adapters.mcp.base import MCPClientBase, MCPTimeoutError
+from core.infrastructure.adapters.mcp.brave_adapter import BraveSearchAdapter
+from core.infrastructure.adapters.mcp.composite_signal import CompositeSignalAdapter
+from core.infrastructure.adapters.mcp.memory_adapter import KGMemoryAdapter
+from core.infrastructure.adapters.mcp.steam_adapter import SteamMCPSignalAdapter
+from core.infrastructure.ports.signal_port import KGMemoryPort, SignalEnrichmentPort, WebSearchPort
 
 # ---------------------------------------------------------------------------
 # MCPClientBase
@@ -226,14 +226,14 @@ class TestCompositeSignalAdapter:
 
 class TestSystemWithCache:
     def test_returns_content_block_list(self) -> None:
-        from geode.llm.client import _system_with_cache
+        from core.llm.client import _system_with_cache
 
         result = _system_with_cache("You are a helpful assistant.")
         assert isinstance(result, list)
         assert len(result) == 1
 
     def test_block_has_cache_control(self) -> None:
-        from geode.llm.client import _system_with_cache
+        from core.llm.client import _system_with_cache
 
         result = _system_with_cache("Test prompt")
         block = result[0]
@@ -242,7 +242,7 @@ class TestSystemWithCache:
         assert block["cache_control"] == {"type": "ephemeral"}
 
     def test_preserves_full_system_text(self) -> None:
-        from geode.llm.client import _system_with_cache
+        from core.llm.client import _system_with_cache
 
         long_system = "A" * 10000
         result = _system_with_cache(long_system)

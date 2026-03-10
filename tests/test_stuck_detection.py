@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from geode.orchestration.stuck_detection import StuckDetector
+from core.orchestration.stuck_detection import StuckDetector
 
 
 class TestStuckDetector:

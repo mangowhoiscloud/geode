@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from geode.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
-from geode.tools.base import Tool
-from geode.tools.registry import ToolRegistry
+from core.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
+from core.tools.base import Tool
+from core.tools.registry import ToolRegistry
 
 
 class TestRunAnalystTool:

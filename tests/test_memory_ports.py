@@ -1,11 +1,11 @@
 """Tests for L1 Memory Ports (Protocol interfaces)."""
 
-from geode.infrastructure.ports.memory_port import (
+from core.infrastructure.ports.memory_port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
     SessionStorePort,
 )
-from geode.memory.session import InMemorySessionStore
+from core.memory.session import InMemorySessionStore
 
 
 class TestSessionStorePort:

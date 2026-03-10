@@ -5,9 +5,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from geode.llm.client import LLMUsage, LLMUsageAccumulator
-from geode.ui.status import GeodeStatus, _snapshot, _UsageSnapshot
+from core.llm.client import LLMUsage, LLMUsageAccumulator
+from core.ui.status import GeodeStatus, _snapshot, _UsageSnapshot
 
 # ---------------------------------------------------------------------------
 # _snapshot / _UsageSnapshot
@@ -46,8 +45,8 @@ class TestUsageSnapshot:
 class TestGeodeStatusContextManager:
     """Enter/exit lifecycle, update, and stop."""
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_enter_exit(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """Context manager enters and exits without error."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -62,8 +61,8 @@ class TestGeodeStatusContextManager:
         # __exit__ called once by stop (or auto-exit)
         mock_status.__exit__.assert_called_once()
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_update_changes_spinner(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """update() calls status.update on the Rich Status object."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -78,8 +77,8 @@ class TestGeodeStatusContextManager:
         call_arg = mock_status.update.call_args[0][0]
         assert "Step 2" in call_arg
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_stop_prints_summary(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """stop() prints a line with checkmark and summary."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -94,8 +93,8 @@ class TestGeodeStatusContextManager:
         summary_found = any("analyze · Berserk" in p for p in printed)
         assert summary_found, f"Summary not found in prints: {printed}"
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_stop_idempotent(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """Calling stop() twice does not double-print."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -112,8 +111,8 @@ class TestGeodeStatusContextManager:
         summary_count = sum(1 for c in print_calls if "result" in str(c))
         assert summary_count == 1
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_auto_exit_summary(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """If stop() is never called, __exit__ prints a generic summary."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -136,8 +135,8 @@ class TestGeodeStatusContextManager:
 class TestTokenDelta:
     """Verify _get_token_delta computes before/after difference."""
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_delta_calculation(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """Token delta = after - before."""
         acc = LLMUsageAccumulator()
@@ -156,8 +155,8 @@ class TestTokenDelta:
         assert delta.output_tokens == 50
         assert delta.cost_usd == pytest.approx(0.010)
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_delta_zero_when_no_calls(
         self, mock_acc_fn: MagicMock, mock_console: MagicMock
     ) -> None:
@@ -184,8 +183,8 @@ class TestTokenDelta:
 class TestSummaryFormatting:
     """Verify the summary line includes token info and elapsed time."""
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_summary_includes_tokens_and_cost(
         self, mock_acc_fn: MagicMock, mock_console: MagicMock
     ) -> None:
@@ -206,8 +205,8 @@ class TestSummaryFormatting:
         assert "↓30" in summary_line
         assert "$0.004" in summary_line
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_summary_no_tokens_still_shows_time(
         self, mock_acc_fn: MagicMock, mock_console: MagicMock
     ) -> None:
@@ -236,8 +235,8 @@ class TestSummaryFormatting:
 class TestModelDisplay:
     """Spinner message includes model name when provided."""
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_model_in_spinner(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         mock_acc_fn.return_value = LLMUsageAccumulator()
         mock_status = MagicMock()
@@ -249,8 +248,8 @@ class TestModelDisplay:
         init_call = mock_console.status.call_args[0][0]
         assert "claude-opus-4-6" in init_call
 
-    @patch("geode.ui.status.console")
-    @patch("geode.ui.status.get_usage_accumulator")
+    @patch("core.ui.status.console")
+    @patch("core.ui.status.get_usage_accumulator")
     def test_no_model(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         mock_acc_fn.return_value = LLMUsageAccumulator()
         mock_status = MagicMock()

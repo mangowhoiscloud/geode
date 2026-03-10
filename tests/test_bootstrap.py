@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from geode.orchestration.bootstrap import BootstrapContext, BootstrapManager
-from geode.orchestration.hooks import HookEvent, HookSystem
+from core.orchestration.bootstrap import BootstrapContext, BootstrapManager
+from core.orchestration.hooks import HookEvent, HookSystem
 
 
 class TestBootstrapContext:
@@ -310,7 +310,7 @@ class TestMakeHookedNodeWithBootstrap:
 
     def test_skip_returns_empty_dict(self) -> None:
         """When bootstrap sets skip=True, node returns {} without executing."""
-        from geode.graph import _make_hooked_node
+        from core.graph import _make_hooked_node
 
         hooks = HookSystem()
         mgr = BootstrapManager(hooks)
@@ -333,7 +333,7 @@ class TestMakeHookedNodeWithBootstrap:
 
     def test_bootstrap_context_applied_to_state(self) -> None:
         """BootstrapManager applies context before node execution."""
-        from geode.graph import _make_hooked_node
+        from core.graph import _make_hooked_node
 
         hooks = HookSystem()
         mgr = BootstrapManager(hooks)
@@ -356,7 +356,7 @@ class TestMakeHookedNodeWithBootstrap:
 
     def test_no_bootstrap_mgr_preserves_original_behavior(self) -> None:
         """Without bootstrap_mgr, behavior is identical to before."""
-        from geode.graph import _make_hooked_node
+        from core.graph import _make_hooked_node
 
         hooks = HookSystem()
         events_fired: list[HookEvent] = []
@@ -382,7 +382,7 @@ class TestMakeHookedNodeWithBootstrap:
 
     def test_bootstrap_fires_before_enter_in_hooked_node(self) -> None:
         """In _make_hooked_node, NODE_BOOTSTRAP fires before NODE_ENTER."""
-        from geode.graph import _make_hooked_node
+        from core.graph import _make_hooked_node
 
         hooks = HookSystem()
         mgr = BootstrapManager(hooks)
