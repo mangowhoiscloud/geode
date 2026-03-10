@@ -11,11 +11,11 @@ LangGraph 기반 저평가 IP 발굴 에이전트.
 | **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 10 rounds), multi-intent 자동 chaining, offline mode |
 | **Multi-turn Context** | 슬라이딩 윈도우 대화 기록 (max 20 turns), 대명사 해석 + follow-up |
 | **HITL Bash** | 셸 명령 실행 + 위험 패턴 차단 (9종) + 사용자 승인 게이트 |
-| **Sub-Agent** | 병렬 태스크 위임 (`IsolatedRunner`, MAX_CONCURRENT=5) |
+| **Sub-Agent** | 병렬 태스크 위임 (`IsolatedRunner`, MAX_CONCURRENT=5), TaskGraph DAG, CoalescingQueue 중복 제거 |
 | **14-Axis Rubric** | PSM(Prospect Scoring Model) 기반 정량 평가 |
 | **Cross-LLM Ensemble** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, `cross` / `primary_only` 모드 |
 | **Prompt Caching** | Anthropic `cache_control` 적용, 40-60% 비용 절감 |
-| **26 Tool Protocol** | ToolRegistry + PolicyChain + NodeScopePolicy + `run_bash` + `delegate_task` |
+| **19 Tool Definitions** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + PolicyChain 접근 제어 |
 | **MCP Adapters** | Steam, Brave Search, KG Memory 외부 데이터 소스 연결 |
 | **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
 | **Prompt Templates** | `.md` 템플릿 8종 + YAML/JSON 설정 분리 (content/code separation) |
@@ -27,11 +27,11 @@ LangGraph 기반 저평가 IP 발굴 에이전트.
 | **Project Memory** | `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지 |
 | **Checkpoint** | SqliteSaver 기반 파이프라인 상태 영속화 |
 | **Feedback Loop** | Confidence < 0.7이면 자동 재분석 (최대 3회) |
-| **Pre-commit Hooks** | ruff lint/format + mypy + bandit + standard hooks |
 | **LangSmith Observability** | 토큰 추적 + 비용 계산, RunTree 메트릭, 조건부 tracing |
 | **Dynamic Tools** | ToolRegistry 기반 런타임 tool 추가, plugin activate → 즉시 반영 |
-| **Pipeline Flexibility** | Analyst 타입 YAML 동적 로드, interrupt_before 사용자 개입 |
-| **1909+ Tests** | 116 modules, pytest + ruff + mypy strict + bandit 전체 통과 |
+| **Pipeline Flexibility** | Analyst 타입 YAML 동적 로드, `interrupt_before` 사용자 개입 |
+| **Pre-commit Hooks** | ruff lint/format + mypy + bandit + standard hooks |
+| **1950 Tests** | 116 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit 전체 통과 |
 
 ## Architecture
 
@@ -39,14 +39,15 @@ LangGraph 기반 저평가 IP 발굴 에이전트.
 
 ```mermaid
 graph TB
-    subgraph L0["L0 — CLI & NL Router"]
+    subgraph L0["L0 — CLI & Agentic Interface"]
         CLI["CLI (Typer)"]
         NLR["NL Router"]
+        AL["AgenticLoop<br/>while(tool_use)"]
         Search["IP Search Engine"]
         Batch["Batch Analysis"]
     end
 
-    subgraph L1["L1 — Infrastructure"]
+    subgraph L1["L1 — Infrastructure (Port/Adapter)"]
         direction LR
         Ports["Ports (Protocol)"]
         Claude["ClaudeAdapter"]
@@ -54,26 +55,31 @@ graph TB
         MCP["MCP Adapters"]
     end
 
-    subgraph L2["L2 — Memory"]
-        Session["Session Store"]
-        Project["Project Memory"]
+    subgraph L2["L2 — Memory (3-Tier)"]
+        Org["Organization<br/>(fixtures, immutable)"]
+        Project["Project Memory<br/>(.claude/MEMORY.md)"]
+        Session["Session Store<br/>(in-memory TTL)"]
         Checkpoint["SqliteSaver"]
     end
 
     subgraph L3["L3 — LangGraph Pipeline"]
         Graph["StateGraph"]
-        Nodes["Pipeline Nodes"]
+        Nodes["Pipeline Nodes (7)"]
         State["GeodeState"]
     end
 
     subgraph L4["L4 — Orchestration"]
-        Hooks["HookSystem"]
+        Hooks["HookSystem (23)"]
+        Tasks["TaskGraph (DAG)"]
+        Plan["PlanMode"]
+        Coal["CoalescingQueue"]
         Lanes["Lane Queue"]
         RunLog["Run Log"]
     end
 
     subgraph L5["L5 — Extensibility"]
-        Tools["Tool Registry (26)"]
+        Tools["ToolRegistry (19)"]
+        Policy["PolicyChain"]
         Reports["Report Generator"]
         Templates["Prompt Skills"]
     end
@@ -83,6 +89,7 @@ graph TB
     L3 --> L2
     L3 --> L4
     L3 --> L5
+    L0 -.->|"offline"| L5
 
     style L0 fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
     style L1 fill:#1e293b,stroke:#10b981,color:#e2e8f0
@@ -97,7 +104,8 @@ graph TB
 ```mermaid
 graph LR
     START((START)) --> Router
-    Router --> Signals
+    Router --> Cortex["Cortex<br/>(memory assembly)"]
+    Cortex --> Signals
     Signals --> A1["Analyst<br/>game_mechanics"]
     Signals --> A2["Analyst<br/>player_experience"]
     Signals --> A3["Analyst<br/>growth_potential"]
@@ -107,17 +115,44 @@ graph LR
     A3 --> Eval
     A4 --> Eval
     Eval --> Scoring["Scoring<br/>PSM 14-Axis"]
-    Scoring --> Verify["Verification<br/>Guardrails + BiasBuster"]
-    Verify -->|"confidence >= 0.7"| Synth["Synthesizer"]
-    Verify -->|"confidence < 0.7<br/>retry (max 3)"| Signals
+    Scoring --> Verify["Verification<br/>G1-G4 + BiasBuster"]
+    Verify -->|"confidence ≥ 0.7"| Synth["Synthesizer"]
+    Verify -->|"confidence < 0.7<br/>retry (max 5)"| Signals
     Synth --> END((END))
 
     style START fill:#10b981,stroke:#10b981,color:#fff
     style END fill:#ef4444,stroke:#ef4444,color:#fff
+    style Cortex fill:#8b5cf6,stroke:#8b5cf6,color:#fff
     style Eval fill:#3b82f6,stroke:#3b82f6,color:#fff
     style Scoring fill:#f59e0b,stroke:#f59e0b,color:#fff
     style Verify fill:#8b5cf6,stroke:#8b5cf6,color:#fff
     style Synth fill:#06b6d4,stroke:#06b6d4,color:#fff
+```
+
+### Agentic Loop
+
+```mermaid
+graph TB
+    Input["User Input<br/>(한국어/영어)"] --> Mode{offline?}
+    Mode -->|Yes| Regex["Regex Pattern<br/>Matching (10 rules)"]
+    Mode -->|No| LLM["Claude Opus 4.6<br/>Tool Use API"]
+    Regex --> Exec
+    LLM --> Decision{stop_reason}
+    Decision -->|tool_use| Exec["ToolExecutor<br/>(17 handlers)"]
+    Exec --> Results["tool_result"]
+    Results --> LLM
+    Decision -->|end_turn| Output["AgenticResult<br/>(text + tool_calls)"]
+    Decision -->|max_rounds| Output
+
+    LLM -.->|"track_token_usage()"| LS["LangSmith<br/>RunTree"]
+    LLM -.->|"rate limit"| Retry["Retry ×3<br/>10s/20s/40s"]
+    Retry -.-> LLM
+
+    style Input fill:#10b981,stroke:#10b981,color:#fff
+    style Output fill:#3b82f6,stroke:#3b82f6,color:#fff
+    style LLM fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Exec fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+    style LS fill:#06b6d4,stroke:#06b6d4,color:#fff
 ```
 
 ### Cross-LLM Ensemble
@@ -134,14 +169,38 @@ graph TB
         DI["discovery"]
     end
 
-    GM --> Merge["Score Merge"]
+    GM --> Merge["Score Merge<br/>agreement ≥ 0.67"]
     GP --> Merge
     PE --> Merge
     DI --> Merge
-    Merge --> Final["Final Analysis"]
+    Merge --> Final["Final Analysis<br/>Krippendorff's α"]
 
     style Primary fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
     style Secondary fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style Merge fill:#3b82f6,stroke:#3b82f6,color:#fff
+```
+
+### Sub-Agent Orchestration
+
+```mermaid
+graph LR
+    Main["AgenticLoop"] --> SAM["SubAgentManager"]
+    SAM --> TG["TaskGraph<br/>(DAG)"]
+    SAM --> CQ["CoalescingQueue<br/>(dedup)"]
+    SAM --> IR["IsolatedRunner<br/>(MAX_CONCURRENT=5)"]
+
+    IR --> W1["Worker 1"]
+    IR --> W2["Worker 2"]
+    IR --> W3["Worker N"]
+
+    SAM -.->|NODE_ENTER| HS["HookSystem"]
+    W1 -.->|NODE_EXIT| HS
+    W2 -.->|NODE_ERROR| HS
+
+    style Main fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style SAM fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style IR fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style HS fill:#1e293b,stroke:#ef4444,color:#e2e8f0
 ```
 
 ### MCP & Tool Architecture
@@ -149,8 +208,8 @@ graph TB
 ```mermaid
 graph TB
     subgraph GEODE["GEODE Pipeline"]
-        Registry["ToolRegistry<br/>26 tools"]
-        Policy["PolicyChain"]
+        Registry["ToolRegistry<br/>19 base tools"]
+        Policy["PolicyChain<br/>+ NodeScopePolicy"]
         TS["tool_search<br/>(meta-tool)"]
     end
 
@@ -177,6 +236,23 @@ graph TB
     style GEODE fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
     style MCPAdapters fill:#1e293b,stroke:#10b981,color:#e2e8f0
     style MCPServer fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+```
+
+### LangSmith Observability
+
+```mermaid
+graph LR
+    LLM["LLM Call"] --> Track["track_token_usage()"]
+    Track --> Cost["calculate_cost()<br/>MODEL_PRICING"]
+    Track --> RT["RunTree.extra.metrics"]
+    Cost --> Acc["UsageAccumulator<br/>(context-local)"]
+
+    Acc --> Summary["Session Summary<br/>total_tokens + cost_usd"]
+
+    style LLM fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Track fill:#3b82f6,stroke:#3b82f6,color:#fff
+    style Acc fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+    style RT fill:#06b6d4,stroke:#06b6d4,color:#fff
 ```
 
 ## Installation
@@ -257,7 +333,7 @@ uv run geode
 | `/batch [--top N]` | `/b` | 배치 분석 |
 | `/status` | | 시스템 상태 (모델, API 키, 메모리) |
 | `/compare <A> <B>` | | 두 IP 비교 분석 |
-| `/schedule <cron>` | | 배치 스케줄 설정 |
+| `/schedule <cron>` | `/sched` | 배치 스케줄 설정 |
 | `/trigger <event>` | | 이벤트 트리거 (drift scan 등) |
 | `/verbose` | | 상세 출력 토글 |
 | `/help` | | 도움말 |
@@ -306,11 +382,15 @@ uv run python -m core.mcp_server
 
 ## Available IPs
 
+**Core Fixtures** (hand-crafted, golden set):
+
 | IP | Tier | Score | Genre |
 |----|------|-------|-------|
 | Berserk | S | 82.2 | Dark Fantasy |
 | Cowboy Bebop | A | 69.4 | SF Noir |
 | Ghost in the Shell | B | 54.0 | Cyberpunk |
+
+**Steam Fixtures**: 201개 추가 게임 데이터 (`core/fixtures/steam/`), `/generate` 명령으로 합성 데이터 생성 가능.
 
 ## Project Structure
 
@@ -321,23 +401,23 @@ core/
 │   ├── agentic_loop.py         # while(tool_use) multi-round execution
 │   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
-│   ├── commands.py             # Slash command dispatch
+│   ├── commands.py             # Slash command dispatch (17 commands)
 │   ├── conversation.py         # Multi-turn sliding-window context
 │   ├── nl_router.py            # Natural language intent classification
 │   ├── search.py               # IP search engine (synonym expansion)
 │   ├── startup.py              # Readiness check, Graceful Degradation
-│   ├── sub_agent.py            # Parallel task delegation
+│   ├── sub_agent.py            # Parallel task delegation (SubAgentManager)
 │   └── tool_executor.py        # Tool dispatch + HITL approval gate
 ├── auth/                       # Auth profile management + rotation
-├── automation/                 # Feedback loop, confidence gating
+├── automation/                 # Feedback loop, drift detection, triggers
 ├── config/                     # Externalized domain config (YAML)
 │   ├── evaluator_axes.yaml     # 14-Axis rubric definitions + anchors
 │   └── cause_actions.yaml      # Cause→Action mappings
-├── config.py                   # Settings (pydantic-settings)
+├── config.py                   # Settings (pydantic-settings, 30+ vars)
 ├── data/                       # Synthetic data generation
 ├── extensibility/              # Report generation + templates
 │   └── templates/              # HTML/Markdown report templates
-├── fixtures/                   # Fixture data (3 core IPs + 200 Steam)
+├── fixtures/                   # Fixture data (3 core IPs + 201 Steam)
 ├── graph.py                    # LangGraph StateGraph definition
 ├── infrastructure/
 │   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, etc.
@@ -345,6 +425,7 @@ core/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
 │       └── mcp/                # Steam, Brave, KGMemory MCP adapters
 ├── llm/                        # LLM client (prompt caching, streaming)
+│   ├── client.py               # Anthropic wrapper + token tracking + cost
 │   └── prompts/                # Prompt templates (.md) + axes config
 │       ├── analyst.md          # Analyst system prompt template
 │       ├── evaluator.md        # Evaluator prompt template
@@ -360,11 +441,15 @@ core/
 │   ├── hook_discovery.py       # Plugin-based hook loading
 │   ├── isolated_execution.py   # Concurrent runner (semaphore)
 │   ├── task_system.py          # DAG-based task graph
-│   └── ...                     # lane_queue, run_log, plan_mode, etc.
+│   ├── coalescing.py           # Duplicate request coalescing
+│   ├── plan_mode.py            # DRAFT → APPROVED → EXECUTING workflow
+│   ├── lane_queue.py           # Concurrency control lanes
+│   ├── run_log.py              # Structured execution logging
+│   └── ...                     # planner, bootstrap, stuck_detection, etc.
 ├── runtime.py                  # GeodeRuntime (production wiring)
 ├── state.py                    # GeodeState (TypedDict + Pydantic models)
 ├── tools/                      # Tool Protocol + Registry + Policy
-│   ├── registry.py             # ToolRegistry (26 tools + tool_search)
+│   ├── registry.py             # ToolRegistry (19 tools + runtime extensions)
 │   ├── definitions.json        # Centralized tool definitions (19 tools)
 │   ├── tool_schemas.json       # Parameter schemas for signal/analysis tools
 │   ├── policy.py               # PolicyChain + NodeScopePolicy
@@ -387,6 +472,12 @@ uv run pytest tests/test_graph.py
 uv run pytest tests/test_batch.py
 uv run pytest tests/test_mcp_server.py
 
+# Live E2E (실제 LLM 호출)
+uv run pytest tests/test_e2e_live_llm.py -v -m live
+
+# 17-Tool Audit (실제 LLM 라우팅 검증)
+uv run python tests/_live_audit_runner.py info
+
 # 품질 검사
 uv run ruff check core/ tests/
 uv run ruff format --check core/ tests/
@@ -399,24 +490,33 @@ uv run pre-commit run --all-files
 
 ## Configuration
 
-`.env` 파일로 설정합니다:
+`.env` 파일로 설정합니다 (전체 목록: `core/config.py`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| **LLM** | | |
 | `ANTHROPIC_API_KEY` | | Claude API 키 |
 | `OPENAI_API_KEY` | | GPT API 키 (Cross-LLM) |
 | `GEODE_MODEL` | `claude-opus-4-6` | 기본 LLM 모델 |
 | `GEODE_ENSEMBLE_MODE` | `primary_only` | 앙상블 모드 (`primary_only` / `cross`) |
-| `GEODE_VERBOSE` | `false` | 상세 출력 |
+| `GEODE_ROUTER_MODEL` | `claude-opus-4-6` | NL Router 모델 |
+| `GEODE_AGREEMENT_THRESHOLD` | `0.67` | Cross-LLM 합의 임계값 |
+| **Pipeline** | | |
+| `GEODE_CONFIDENCE_THRESHOLD` | `0.7` | 신뢰도 게이트 (미달 시 재분석) |
+| `GEODE_MAX_ITERATIONS` | `5` | 최대 재분석 반복 횟수 |
+| `GEODE_INTERRUPT_NODES` | | 중간 개입 노드 (쉼표 구분, e.g. `verification,scoring`) |
 | `GEODE_CHECKPOINT_DB` | `geode_checkpoints.db` | Checkpoint DB 경로 |
+| **MCP** | | |
 | `GEODE_STEAM_MCP_URL` | | Steam MCP 서버 URL |
 | `GEODE_BRAVE_MCP_URL` | | Brave Search MCP 서버 URL |
 | `GEODE_BRAVE_API_KEY` | | Brave Search API 키 |
 | `GEODE_KG_MEMORY_MCP_URL` | | KG Memory MCP 서버 URL |
-| `GEODE_INTERRUPT_NODES` | | 파이프라인 중간 개입 노드 (쉼표 구분, e.g. `verification,scoring`) |
+| **Observability** | | |
 | `LANGCHAIN_TRACING_V2` | `false` | LangSmith tracing 활성화 |
 | `LANGCHAIN_API_KEY` | | LangSmith API 키 |
 | `LANGCHAIN_PROJECT` | `geode` | LangSmith 프로젝트명 |
+| **General** | | |
+| `GEODE_VERBOSE` | `false` | 상세 출력 |
 
 ## License
 
