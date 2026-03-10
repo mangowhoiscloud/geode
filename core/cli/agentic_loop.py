@@ -24,6 +24,7 @@ from core.cli.conversation import ConversationContext
 from core.cli.nl_router import _build_system_prompt
 from core.cli.tool_executor import ToolExecutor
 from core.config import settings
+from core.llm.client import _maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 
 log = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ class AgenticLoop:
         self.model = model or "claude-opus-4-6"
         self._tool_log: list[dict[str, Any]] = []
 
+    @_maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
     def run(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_log = []
@@ -126,6 +128,7 @@ class AgenticLoop:
         base = _build_system_prompt()
         return base + "\n" + AGENTIC_SUFFIX
 
+    @_maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     def _call_llm(
         self, system: str, messages: list[dict[str, Any]]
     ) -> anthropic.types.Message | None:

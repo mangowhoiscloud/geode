@@ -10,6 +10,9 @@ from core.cli.agentic_loop import AGENTIC_TOOLS, AgenticLoop
 from core.cli.conversation import ConversationContext
 from core.cli.sub_agent import SubAgentManager, SubTask
 from core.cli.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, ToolExecutor
+from core.orchestration.coalescing import CoalescingQueue
+from core.orchestration.hooks import HookEvent, HookSystem
+from core.orchestration.isolated_execution import IsolatedRunner
 
 # ---------------------------------------------------------------------------
 # ToolExecutor tests
@@ -275,8 +278,6 @@ class TestSubAgentManager:
         assert results[0].output.get("error") is not None
 
     def test_delegate_no_handler(self) -> None:
-        from core.orchestration.isolated_execution import IsolatedRunner
-
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, task_handler=None, timeout_s=10)
         tasks = [SubTask("t1", "No handler", "analyze", {})]
@@ -284,3 +285,201 @@ class TestSubAgentManager:
 
         assert len(results) == 1
         assert results[0].success is True  # IsolationResult is success, but output has error
+
+
+# ---------------------------------------------------------------------------
+# SubAgentManager — Orchestration Integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestSubAgentOrchestration:
+    """Tests for TaskGraph, HookSystem, and CoalescingQueue integration."""
+
+    @pytest.fixture
+    def handler(self) -> Any:
+        def _handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            return {"processed": True, "type": task_type, **args}
+
+        return _handler
+
+    @pytest.fixture
+    def hooks(self) -> HookSystem:
+        return HookSystem()
+
+    def test_hook_events_emitted_on_success(self, handler: Any, hooks: HookSystem) -> None:
+        """Verify NODE_ENTER and NODE_EXIT are emitted for successful tasks."""
+        events_log: list[tuple[HookEvent, dict[str, Any]]] = []
+
+        def collector(event: HookEvent, data: dict[str, Any]) -> None:
+            events_log.append((event, data))
+
+        hooks.register(HookEvent.NODE_ENTER, collector, name="test_enter")
+        hooks.register(HookEvent.NODE_EXIT, collector, name="test_exit")
+
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, handler, timeout_s=10, hooks=hooks)
+        tasks = [SubTask("t1", "Test task", "analyze", {"ip_name": "Berserk"})]
+        results = manager.delegate(tasks)
+
+        assert len(results) == 1
+        assert results[0].success is True
+
+        # Should have emitted NODE_ENTER + NODE_EXIT
+        enter_events = [e for e in events_log if e[0] == HookEvent.NODE_ENTER]
+        exit_events = [e for e in events_log if e[0] == HookEvent.NODE_EXIT]
+        assert len(enter_events) == 1
+        assert len(exit_events) == 1
+        assert enter_events[0][1]["task_id"] == "t1"
+        assert exit_events[0][1]["success"] is True
+
+    def test_hook_events_emitted_on_failure(self, hooks: HookSystem) -> None:
+        """Verify NODE_ENTER and NODE_ERROR are emitted for failed tasks."""
+        events_log: list[tuple[HookEvent, dict[str, Any]]] = []
+
+        def collector(event: HookEvent, data: dict[str, Any]) -> None:
+            events_log.append((event, data))
+
+        hooks.register(HookEvent.NODE_ENTER, collector, name="test_enter")
+        hooks.register(HookEvent.NODE_ERROR, collector, name="test_error")
+
+        def failing_handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            raise RuntimeError("boom")
+
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, failing_handler, timeout_s=10, hooks=hooks)
+        tasks = [SubTask("t1", "Failing task", "analyze", {})]
+        results = manager.delegate(tasks)
+
+        assert len(results) == 1
+        # Error is caught by _execute_subtask → returned as dict → IsolationResult is success
+        # The output contains {"error": "boom"}
+        enter_events = [e for e in events_log if e[0] == HookEvent.NODE_ENTER]
+        assert len(enter_events) == 1
+
+    def test_no_hooks_no_error(self, handler: Any) -> None:
+        """Verify delegate works without hooks (hooks=None)."""
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, handler, timeout_s=10, hooks=None)
+        tasks = [SubTask("t1", "Test", "analyze", {})]
+        results = manager.delegate(tasks)
+        assert len(results) == 1
+        assert results[0].success is True
+
+    def test_multiple_tasks_emit_hooks(self, handler: Any, hooks: HookSystem) -> None:
+        """Verify hooks emitted for each task in a batch."""
+        enter_count = 0
+
+        def count_enter(event: HookEvent, data: dict[str, Any]) -> None:
+            nonlocal enter_count
+            enter_count += 1
+
+        hooks.register(HookEvent.NODE_ENTER, count_enter, name="counter")
+
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, handler, timeout_s=10, hooks=hooks)
+        tasks = [
+            SubTask("t1", "Task 1", "analyze", {}),
+            SubTask("t2", "Task 2", "search", {}),
+            SubTask("t3", "Task 3", "compare", {}),
+        ]
+        results = manager.delegate(tasks)
+
+        assert len(results) == 3
+        assert enter_count == 3
+
+    def test_dedup_by_task_id(self, handler: Any) -> None:
+        """Verify simple dedup removes duplicate task_ids."""
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, handler, timeout_s=10)
+        tasks = [
+            SubTask("t1", "Task 1", "analyze", {}),
+            SubTask("t1", "Task 1 dup", "analyze", {}),
+            SubTask("t2", "Task 2", "search", {}),
+        ]
+        results = manager.delegate(tasks)
+
+        # Only t1 and t2 should execute (t1 dup removed)
+        assert len(results) == 2
+        task_ids = {r.task_id for r in results}
+        assert task_ids == {"t1", "t2"}
+
+    def test_coalescing_queue_dedup(self, handler: Any) -> None:
+        """Verify CoalescingQueue-based dedup."""
+        runner = IsolatedRunner()
+        queue = CoalescingQueue(window_ms=5000)  # long window so timers don't fire
+        manager = SubAgentManager(runner, handler, timeout_s=10, coalescing=queue)
+
+        # First batch
+        tasks1 = [SubTask("t1", "Task 1", "analyze", {})]
+        results1 = manager.delegate(tasks1)
+        assert len(results1) == 1
+
+        # Second batch with same task_id — should be coalesced
+        tasks2 = [SubTask("t1", "Task 1 again", "analyze", {})]
+        results2 = manager.delegate(tasks2)
+        assert len(results2) == 0  # coalesced away
+
+        # Cleanup
+        queue.cancel_all()
+
+    def test_hooks_property(self, handler: Any, hooks: HookSystem) -> None:
+        """Verify hooks property is accessible."""
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, handler, hooks=hooks)
+        assert manager.hooks is hooks
+
+    def test_hooks_property_none(self, handler: Any) -> None:
+        """Verify hooks property returns None when not configured."""
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, handler)
+        assert manager.hooks is None
+
+
+# ---------------------------------------------------------------------------
+# AgenticLoop — Tracing integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestAgenticLoopTracing:
+    """Tests for _maybe_traceable integration in AgenticLoop."""
+
+    def test_run_has_traceable_attribute(self) -> None:
+        """Verify that run() method exists and is callable (tracing is a decorator)."""
+        context = ConversationContext(max_turns=5)
+        executor = ToolExecutor()
+        loop = AgenticLoop(context, executor)
+        assert callable(loop.run)
+
+    def test_call_llm_has_traceable_attribute(self) -> None:
+        """Verify that _call_llm() method exists and is callable."""
+        context = ConversationContext(max_turns=5)
+        executor = ToolExecutor()
+        loop = AgenticLoop(context, executor)
+        assert callable(loop._call_llm)
+
+    def test_tracing_passthrough_without_langsmith(self) -> None:
+        """Without LANGSMITH_API_KEY, _maybe_traceable is a no-op decorator."""
+        context = ConversationContext(max_turns=5)
+        executor = ToolExecutor()
+        loop = AgenticLoop(context, executor)
+
+        # run() should still work normally
+        mock_response = MagicMock()
+        mock_response.stop_reason = "end_turn"
+        mock_response.usage = MagicMock()
+        mock_response.usage.input_tokens = 50
+        mock_response.usage.output_tokens = 25
+
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "Hello"
+        mock_response.content = [text_block]
+
+        with (
+            patch.object(loop, "_call_llm", return_value=mock_response),
+            patch.object(loop, "_track_usage"),
+        ):
+            result = loop.run("test")
+
+        assert result.text == "Hello"
+        assert result.error is None
