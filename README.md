@@ -1,4 +1,4 @@
-# GEODE v0.6.0 — Undervalued IP Discovery Agent
+# GEODE v0.7.0 — Undervalued IP Discovery Agent
 
 LangGraph 기반 저평가 IP 발굴 에이전트.
 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 평가합니다.
@@ -8,21 +8,27 @@ LangGraph 기반 저평가 IP 발굴 에이전트.
 | Feature | Description |
 |---------|-------------|
 | **6-Layer Pipeline** | Router → Signals → Analysts → Evaluators → Scoring → Verification → Synthesis |
+| **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 10 rounds), multi-intent 자동 chaining |
+| **Multi-turn Context** | 슬라이딩 윈도우 대화 기록 (max 20 turns), 대명사 해석 + follow-up |
+| **HITL Bash** | 셸 명령 실행 + 위험 패턴 차단 (9종) + 사용자 승인 게이트 |
+| **Sub-Agent** | 병렬 태스크 위임 (`IsolatedRunner`, MAX_CONCURRENT=5) |
 | **14-Axis Rubric** | PSM(Prospect Scoring Model) 기반 정량 평가 |
 | **Cross-LLM Ensemble** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, `cross` / `primary_only` 모드 |
 | **Prompt Caching** | Anthropic `cache_control` 적용, 40-60% 비용 절감 |
-| **24 Tool Protocol** | ToolRegistry + PolicyChain + NodeScopePolicy + tool_search 메타 도구 |
+| **26 Tool Protocol** | ToolRegistry + PolicyChain + NodeScopePolicy + `run_bash` + `delegate_task` |
 | **MCP Adapters** | Steam, Brave Search, KG Memory 외부 데이터 소스 연결 |
 | **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
+| **Prompt Templates** | `.md` 템플릿 8종 + YAML/JSON 설정 분리 (content/code separation) |
 | **Batch Analysis** | 멀티 IP 동시 분석, Rich 테이블 렌더링 |
 | **Streaming Output** | `--stream` 플래그로 실시간 진행 표시 |
 | **자연어 입력** | 한국어/영어 자유 입력 (NL Router intent classification) |
-| **Report Generation** | HTML/JSON/Markdown 다중 포맷 |
+| **Report Generation** | HTML/JSON/Markdown 다중 포맷, 외부 템플릿 |
 | **Graceful Degradation** | API 키 없으면 자동 dry-run, 있으면 LLM 분석 |
 | **Project Memory** | `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지 |
 | **Checkpoint** | SqliteSaver 기반 파이프라인 상태 영속화 |
 | **Feedback Loop** | Confidence < 0.7이면 자동 재분석 (최대 3회) |
-| **1823+ Tests** | 112 modules, pytest + ruff + mypy strict 전체 통과 |
+| **Pre-commit Hooks** | ruff lint/format + mypy + bandit + standard hooks |
+| **1879 Tests** | 115 modules, pytest + ruff + mypy strict + bandit 전체 통과 |
 
 ## Architecture
 
@@ -64,7 +70,7 @@ graph TB
     end
 
     subgraph L5["L5 — Extensibility"]
-        Tools["Tool Registry (24)"]
+        Tools["Tool Registry (26)"]
         Reports["Report Generator"]
         Templates["Prompt Skills"]
     end
@@ -140,7 +146,7 @@ graph TB
 ```mermaid
 graph TB
     subgraph GEODE["GEODE Pipeline"]
-        Registry["ToolRegistry<br/>24 tools"]
+        Registry["ToolRegistry<br/>26 tools"]
         Policy["PolicyChain"]
         TS["tool_search<br/>(meta-tool)"]
     end
@@ -198,7 +204,7 @@ uv run geode batch --top 5
 uv run geode report "Berserk" --format html --output berserk.html
 
 # MCP 서버 실행
-uv run python -m geode.mcp_server
+uv run python -m core.mcp_server
 ```
 
 ## Setup
@@ -288,7 +294,7 @@ geode list                                        # 목록
 GEODE를 MCP 서버로 실행하여 다른 에이전트에서 호출할 수 있습니다:
 
 ```bash
-uv run python -m geode.mcp_server
+uv run python -m core.mcp_server
 ```
 
 **제공 도구:** `analyze_ip`, `quick_score`, `get_ip_signals`, `list_fixtures`, `query_memory`, `get_health`
@@ -306,20 +312,29 @@ uv run python -m geode.mcp_server
 ## Project Structure
 
 ```
-geode/
-├── cli/                        # CLI + NL Router + Search + Batch
+core/
+├── cli/                        # CLI + NL Router + Agentic Loop
 │   ├── __init__.py             # Typer app, REPL, pipeline execution
+│   ├── agentic_loop.py         # while(tool_use) multi-round execution
+│   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
 │   ├── commands.py             # Slash command dispatch
+│   ├── conversation.py         # Multi-turn sliding-window context
 │   ├── nl_router.py            # Natural language intent classification
 │   ├── search.py               # IP search engine (synonym expansion)
-│   └── startup.py              # Readiness check, Graceful Degradation
+│   ├── startup.py              # Readiness check, Graceful Degradation
+│   ├── sub_agent.py            # Parallel task delegation
+│   └── tool_executor.py        # Tool dispatch + HITL approval gate
 ├── auth/                       # Auth profile management + rotation
 ├── automation/                 # Feedback loop, confidence gating
+├── config/                     # Externalized domain config (YAML)
+│   ├── evaluator_axes.yaml     # 14-Axis rubric definitions + anchors
+│   └── cause_actions.yaml      # Cause→Action mappings
 ├── config.py                   # Settings (pydantic-settings)
 ├── data/                       # Synthetic data generation
-├── extensibility/              # Report generation (HTML/JSON/MD)
-├── fixtures/                   # Fixture data (Berserk, Cowboy Bebop, GitS)
+├── extensibility/              # Report generation + templates
+│   └── templates/              # HTML/Markdown report templates
+├── fixtures/                   # Fixture data (3 core IPs + 200 Steam)
 ├── graph.py                    # LangGraph StateGraph definition
 ├── infrastructure/
 │   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, etc.
@@ -327,32 +342,31 @@ geode/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
 │       └── mcp/                # Steam, Brave, KGMemory MCP adapters
 ├── llm/                        # LLM client (prompt caching, streaming)
+│   └── prompts/                # Prompt templates (.md) + axes config
+│       ├── analyst.md          # Analyst system prompt template
+│       ├── evaluator.md        # Evaluator prompt template
+│       ├── synthesizer.md      # Synthesizer prompt template
+│       ├── cross_llm.md        # Cross-LLM verification prompts
+│       ├── axes.py             # Axis definitions (loads from YAML)
+│       └── ...                 # biasbuster, commentary, router, tool_augmented
 ├── mcp_server.py               # FastMCP server (6 tools, 2 resources)
-├── memory/
-│   ├── project.py              # ProjectMemory (.claude/MEMORY.md + rules/)
-│   ├── session.py              # InMemorySessionStore (TTL)
-│   └── session_key.py          # Session key builder
-├── nodes/                      # Pipeline nodes
-│   ├── router.py               # L0 intent routing
-│   ├── signals.py              # Community signal enrichment
-│   ├── analysts.py             # 4 parallel analysts (Send API)
-│   ├── evaluators.py           # Cross-LLM evaluation
-│   ├── scoring.py              # PSM 14-Axis scoring
-│   └── synthesizer.py          # Final synthesis + narrative
+├── memory/                     # 3-Tier memory system
+├── nodes/                      # Pipeline nodes (7 stages)
 ├── orchestration/
-│   ├── hooks.py                # HookSystem (11 events)
-│   ├── run_log.py              # JSONL run logging
-│   ├── lane_queue.py           # Concurrency control
-│   └── stuck_detection.py      # Long-running task detection
+│   ├── hooks.py                # HookSystem (23 events)
+│   ├── hook_discovery.py       # Plugin-based hook loading
+│   ├── isolated_execution.py   # Concurrent runner (semaphore)
+│   ├── task_system.py          # DAG-based task graph
+│   └── ...                     # lane_queue, run_log, plan_mode, etc.
 ├── runtime.py                  # GeodeRuntime (production wiring)
 ├── state.py                    # GeodeState (TypedDict + Pydantic models)
 ├── tools/                      # Tool Protocol + Registry + Policy
-│   ├── registry.py             # ToolRegistry (24 tools + tool_search)
+│   ├── registry.py             # ToolRegistry (26 tools + tool_search)
+│   ├── definitions.json        # Centralized tool definitions (19 tools)
+│   ├── tool_schemas.json       # Parameter schemas for signal/analysis tools
 │   ├── policy.py               # PolicyChain + NodeScopePolicy
-│   ├── analysis.py             # ExplainScoreTool
-│   ├── signal_tools.py         # YouTube, Reddit, Twitch, Steam, Trends, WebSearch
-│   └── base.py                 # ToolProtocol ABC
-├── ui/                         # Rich console + panels
+│   └── ...                     # analysis, signal_tools, data_tools, etc.
+├── ui/                         # Rich console + panels + streaming
 └── verification/               # Guardrails + BiasBuster + Rights Risk
 ```
 
@@ -371,9 +385,13 @@ uv run pytest tests/test_batch.py
 uv run pytest tests/test_mcp_server.py
 
 # 품질 검사
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy geode/
+uv run ruff check core/ tests/
+uv run ruff format --check core/ tests/
+uv run mypy core/
+uv run bandit -r core/ -c pyproject.toml
+
+# Pre-commit (전체 검사)
+uv run pre-commit run --all-files
 ```
 
 ## Configuration

@@ -28,6 +28,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.7.0] — 2026-03-10
+
 ### Added
 - `AgenticLoop` — `while(tool_use)` multi-round execution loop (max 10 rounds)
 - `ConversationContext` — sliding-window multi-turn history (max 20 turns)
@@ -37,23 +41,38 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `delegate_task` tool — LLM-callable parallel sub-task execution
 - Multi-intent support: sequential tool chaining by LLM decision
 - Multi-turn context: pronoun resolution, follow-up queries
+- `.pre-commit-config.yaml` — ruff lint/format, mypy, bandit, standard hooks (local hooks via `uv run`)
 
 ### Changed
+- **Package rename**: `src/geode/` → `core/` (315 files removed, all imports updated)
 - NL Router system prompt updated for multi-tool sequential calling
 - Prompt templates migrated from Python strings (`prompts.py`) to `.md` template files
 - Prompt structured data (axes, rubrics) separated into `core/llm/prompts/axes.py`
 - `core/llm/prompts/` package with `load_prompt()` API and backward-compatible exports
 - Tool definitions centralized to `core/tools/definitions.json` (19 tools)
+- Tool parameter schemas externalized to `core/tools/tool_schemas.json` (11 schemas)
 - NL Router, AgenticLoop, BashTool, SubAgent load tools from JSON
 - Cross-LLM verification prompts extracted to `cross_llm.md` template
 - Report templates extracted to `core/extensibility/templates/` (HTML + 2 Markdown)
 - Analyst/Synthesizer tool-augmented suffixes extracted to `tool_augmented.md`
+- Domain data externalized: `evaluator_axes.yaml` (20 axes + rubric anchors), `cause_actions.yaml` (6 cause/action mappings)
+- Constants centralized to `pydantic-settings`: `router_model`, `agreement_threshold`, `primary_analysts`, `secondary_analysts`
+- `VALID_AXES_MAP` derived from canonical YAML (SSOT, eliminates duplication in `state.py`)
+- `EVALUATOR_TYPES` derived from `EVALUATOR_AXES.keys()` (no hardcoded list)
+- Test count: 1823 → 1879 (85 test files updated for `core` imports)
 
 ### Architecture
 - Prompt management: `.md` templates + Python loader (content/code separation)
 - 8 prompt templates: `analyst.md`, `evaluator.md`, `synthesizer.md`, `biasbuster.md`, `commentary.md`, `router.md`, `cross_llm.md`, `tool_augmented.md`
 - Tool definitions: single JSON source (`definitions.json`) with per-module filtering
 - Report templates: external files with `string.Template` rendering
+- Domain config layer: `core/config/` directory for YAML-based domain data
+
+### Infrastructure
+- CI: `--cov=geode` → `--cov=core` coverage target
+- Bandit: `# nosec B404/B602` for intentional subprocess in `bash_tool.py`
+- Fixture EOF: 201 JSON files fixed (missing trailing newline)
+- Pre-commit: `pre-commit` added as dev dependency
 
 ---
 
@@ -170,8 +189,10 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| 0.6.0 | 2026-03-10 | Initial release — full pipeline, 3-tier memory, agentic loop, HITL bash |
+| 0.7.0 | 2026-03-10 | Agentic loop, HITL bash, prompt/data externalization, package rename, pre-commit |
+| 0.6.0 | 2026-03-10 | Initial release — full pipeline, 3-tier memory, 1823 tests |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0
