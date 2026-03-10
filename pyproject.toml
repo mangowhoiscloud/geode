@@ -40,6 +40,7 @@ markers = [
 dev = [
     "bandit>=1.8.0",
     "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
     "pytest>=9.0.2",
     "pytest-cov>=6.0.0",
     "ruff>=0.15.2",
