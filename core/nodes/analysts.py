@@ -26,7 +26,7 @@ from core.state import AnalysisResult, GeodeState
 
 log = logging.getLogger(__name__)
 
-ANALYST_TYPES = ["game_mechanics", "player_experience", "growth_potential", "discovery"]
+ANALYST_TYPES: list[str] = list(ANALYST_SPECIFIC.keys())
 
 
 # ---------------------------------------------------------------------------

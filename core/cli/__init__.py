@@ -323,6 +323,30 @@ def _merge_event_output(final_state: dict[str, Any], output: dict[str, Any]) -> 
             final_state[k] = v
 
 
+def _handle_interrupt(
+    graph: Any,
+    config: dict[str, Any],
+    final_state: dict[str, Any],
+    done: list[str],
+) -> bool:
+    """Handle a graph interrupt_before pause. Returns True to continue, False to abort."""
+    iteration = final_state.get("iteration", 1)
+    confidence = final_state.get("composite_score", {})
+    console.print(
+        f"\n  [bold yellow]⏸ Pipeline paused[/bold yellow] (iter={iteration}, steps={len(done)})"
+    )
+    if confidence:
+        console.print(f"  [dim]Current confidence: {confidence}[/dim]")
+
+    choice = (
+        console.input("  [bold][C]ontinue / [A]bort[/bold] (default: Continue): ").strip().lower()
+    )
+    if choice in ("a", "abort"):
+        console.print("  [dim]Pipeline aborted by user.[/dim]")
+        return False
+    return True
+
+
 def _execute_pipeline(
     initial_state: GeodeState,
     verbose: bool,
@@ -338,27 +362,42 @@ def _execute_pipeline(
     done: list[str] = []
     analyst_count = 0
     final_state: dict[str, Any] = dict(initial_state)
+    config = runtime.thread_config
+    input_state: GeodeState | None = initial_state
 
     with console.status(_progress_line(done)) as status:
         try:
-            for event in graph.stream(initial_state, config=runtime.thread_config):  # type: ignore[arg-type]
-                for node_name, output in event.items():
-                    if node_name == "__end__":
-                        continue
-                    label = _STEP_LABELS.get(node_name, node_name)
+            while True:
+                for event in graph.stream(input_state, config=config):  # type: ignore[arg-type]
+                    for node_name, output in event.items():
+                        if node_name == "__end__":
+                            continue
+                        label = _STEP_LABELS.get(node_name, node_name)
 
-                    if node_name == "analyst":
-                        analyst_count += 1
-                        if analyst_count < 4:
-                            status.update(_progress_line(done, f"Analyze ({analyst_count}/4)"))
+                        if node_name == "analyst":
+                            analyst_count += 1
+                            if analyst_count < 4:
+                                status.update(_progress_line(done, f"Analyze ({analyst_count}/4)"))
+                            else:
+                                done.append("Analyze ✓")
+                                status.update(_progress_line(done))
                         else:
-                            done.append("Analyze ✓")
+                            done.append(f"{label} ✓")
                             status.update(_progress_line(done))
-                    else:
-                        done.append(f"{label} ✓")
-                        status.update(_progress_line(done))
 
-                    _merge_event_output(final_state, output)
+                        _merge_event_output(final_state, output)
+
+                # If stream ended normally (all nodes done), break
+                snapshot = graph.get_state(config)  # type: ignore[arg-type]
+                if not snapshot.next:
+                    break
+
+                # interrupt_before triggered — ask user
+                status.stop()
+                if not _handle_interrupt(graph, config, final_state, done):
+                    return final_state  # abort: return partial results
+                input_state = None  # resume from checkpoint
+                status.start()
         except Exception as e:
             console.print(f"[error]Pipeline error: {e}[/error]")
             if verbose:
@@ -415,68 +454,83 @@ def _execute_pipeline_streaming(
     analyst_count = 0
     analyst_header_shown = False
     evaluator_header_shown = False
+    config = runtime.thread_config
+    input_state: GeodeState | None = initial_state
+    done: list[str] = []
 
     try:
-        for event in graph.stream(initial_state, config=runtime.thread_config):  # type: ignore[arg-type]
-            for node_name, output in event.items():
-                if node_name == "__end__":
-                    continue
+        while True:
+            for event in graph.stream(input_state, config=config):  # type: ignore[arg-type]
+                for node_name, output in event.items():
+                    if node_name == "__end__":
+                        continue
 
-                _merge_event_output(final_state, output)
+                    _merge_event_output(final_state, output)
 
-                # Progressive rendering per node type
-                if node_name == "analyst":
-                    if not analyst_header_shown:
+                    # Progressive rendering per node type
+                    if node_name == "analyst":
+                        if not analyst_header_shown:
+                            console.print()
+                            console.print(
+                                "[step]▸ [ANALYZE][/step] Running 4 Analysts (streaming)..."
+                            )
+                            analyst_header_shown = True
+                        analyst_count += 1
+                        analyses = output.get("analyses", [])
+                        for a in analyses:
+                            _render_streaming_analyst(a)
+
+                    elif node_name == "evaluators":
+                        if not evaluator_header_shown:
+                            console.print()
+                            console.print(
+                                "[step]▸ [EVALUATE][/step] 14-Axis Rubric Scoring (streaming)..."
+                            )
+                            evaluator_header_shown = True
+                        evals = output.get("evaluations", {})
+                        for key, ev in evals.items():
+                            _render_streaming_evaluator(key, ev)
+
+                    elif node_name == "router":
                         console.print()
-                        console.print("[step]▸ [ANALYZE][/step] Running 4 Analysts (streaming)...")
-                        analyst_header_shown = True
-                    analyst_count += 1
-                    analyses = output.get("analyses", [])
-                    for a in analyses:
-                        _render_streaming_analyst(a)
+                        console.print("[step]▸ [ROUTE][/step] Loading IP data...")
 
-                elif node_name == "evaluators":
-                    if not evaluator_header_shown:
+                    elif node_name == "signals":
+                        console.print("[step]▸ [SIGNALS][/step] Fetching signals...")
+
+                    elif node_name == "scoring":
                         console.print()
-                        console.print(
-                            "[step]▸ [EVALUATE][/step] 14-Axis Rubric Scoring (streaming)..."
-                        )
-                        evaluator_header_shown = True
-                    evals = output.get("evaluations", {})
-                    for key, ev in evals.items():
-                        _render_streaming_evaluator(key, ev)
+                        console.print("[step]▸ [SCORE][/step] Calculating final score...")
+                        if output.get("final_score") is not None:
+                            tier = output.get("tier", "?")
+                            score = output.get("final_score", 0)
+                            console.print(
+                                f"  Score: [bold]{score:.1f}[/bold]  Tier: [bold]{tier}[/bold]"
+                            )
 
-                elif node_name == "router":
-                    console.print()
-                    console.print("[step]▸ [ROUTE][/step] Loading IP data...")
+                    elif node_name == "verification":
+                        console.print("[step]▸ [VERIFY][/step] Running guardrails...")
 
-                elif node_name == "signals":
-                    console.print("[step]▸ [SIGNALS][/step] Fetching signals...")
+                    elif node_name == "synthesizer":
+                        console.print()
+                        console.print("[step]▸ [SYNTHESIZE][/step] Generating narrative...")
+                        synth = output.get("synthesis")
+                        if synth:
+                            console.print(f"  Cause: {synth.undervaluation_cause}")
+                            console.print(f"  Action: {synth.action_type}")
 
-                elif node_name == "scoring":
-                    console.print()
-                    console.print("[step]▸ [SCORE][/step] Calculating final score...")
-                    if output.get("final_score") is not None:
-                        tier = output.get("tier", "?")
-                        score = output.get("final_score", 0)
-                        console.print(
-                            f"  Score: [bold]{score:.1f}[/bold]  Tier: [bold]{tier}[/bold]"
-                        )
+                    else:
+                        label = _STEP_LABELS.get(node_name, node_name)
+                        console.print(f"[step]▸ [{label.upper()}][/step] Done.")
 
-                elif node_name == "verification":
-                    console.print("[step]▸ [VERIFY][/step] Running guardrails...")
+            # Check for interrupt_before pause
+            snapshot = graph.get_state(config)  # type: ignore[arg-type]
+            if not snapshot.next:
+                break
 
-                elif node_name == "synthesizer":
-                    console.print()
-                    console.print("[step]▸ [SYNTHESIZE][/step] Generating narrative...")
-                    synth = output.get("synthesis")
-                    if synth:
-                        console.print(f"  Cause: {synth.undervaluation_cause}")
-                        console.print(f"  Action: {synth.action_type}")
-
-                else:
-                    label = _STEP_LABELS.get(node_name, node_name)
-                    console.print(f"[step]▸ [{label.upper()}][/step] Done.")
+            if not _handle_interrupt(graph, config, final_state, done):
+                return final_state
+            input_state = None
 
     except Exception as e:
         console.print(f"[error]Pipeline error: {e}[/error]")
@@ -1287,8 +1341,11 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
     force_dry = readiness.force_dry_run if readiness else True
 
     def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
+        from core.fixtures import FIXTURE_MAP as _FM
+
         cmd_list()
-        return {"status": "ok", "action": "list"}
+        names = [n.title() for n in _FM]
+        return {"status": "ok", "action": "list", "count": len(names), "ips": names}
 
     def handle_analyze_ip(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
@@ -1298,12 +1355,33 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         result = _run_analysis(ip_name, dry_run=dry_run, verbose=verbose)
         if result is None:
             return {"error": f"Analysis failed for '{ip_name}'"}
+        # Extract analyst summaries for LLM context
+        analyses_summary = []
+        for a in result.get("analyses", []):
+            if hasattr(a, "model_dump"):
+                a = a.model_dump()
+            analyses_summary.append(
+                {
+                    "type": a.get("analyst_type", "?"),
+                    "score": a.get("score", 0),
+                    "finding": a.get("key_finding", ""),
+                }
+            )
+        synthesis = result.get("synthesis")
+        if synthesis is not None and hasattr(synthesis, "model_dump"):
+            synthesis = synthesis.model_dump()
         return {
             "status": "ok",
             "action": "analyze",
             "ip_name": result.get("ip_name", ip_name),
             "tier": result.get("tier", "N/A"),
-            "score": result.get("final_score", 0),
+            "score": round(result.get("final_score", 0), 1),
+            "cause": (
+                (synthesis or {}).get("cause", "unknown")
+                if isinstance(synthesis, dict)
+                else "unknown"
+            ),
+            "analyses": analyses_summary,
         }
 
     def handle_search_ips(**kwargs: Any) -> dict[str, Any]:
@@ -1325,22 +1403,52 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
         result_a = _run_analysis(ip_a, dry_run=dry_run, verbose=verbose)
         result_b = _run_analysis(ip_b, dry_run=dry_run, verbose=verbose)
+
+        def _ip_summary(name: str, r: dict[str, Any] | None) -> dict[str, Any]:
+            if not r:
+                return {"name": name, "tier": "N/A", "score": 0}
+            return {
+                "name": name,
+                "tier": r.get("tier", "N/A"),
+                "score": round(r.get("final_score", 0), 1),
+            }
+
         return {
             "status": "ok",
             "action": "compare",
-            "ip_a": {"name": ip_a, "tier": (result_a or {}).get("tier", "N/A")},
-            "ip_b": {"name": ip_b, "tier": (result_b or {}).get("tier", "N/A")},
+            "ip_a": _ip_summary(ip_a, result_a),
+            "ip_b": _ip_summary(ip_b, result_b),
         }
 
     def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
         show_help()
-        return {"status": "ok", "action": "help"}
+        commands = [
+            "/analyze <IP> — Analyze an IP (dry-run)",
+            "/run <IP> — Analyze with real LLM",
+            "/search <query> — Search IPs by keyword",
+            "/list — Show available IPs",
+            "/compare <A> <B> — Compare two IPs",
+            "/report <IP> — Generate analysis report",
+            "/batch — Batch analyze multiple IPs",
+            "/status — Show system status",
+            "/model — Switch LLM model",
+            "/help — Show help",
+        ]
+        return {"status": "ok", "action": "help", "commands": commands}
 
     def handle_generate_report(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
+        fmt = kwargs.get("format", "md")
+        template = kwargs.get("template", "summary")
         dry_run = kwargs.get("dry_run", force_dry)
-        _generate_report(ip_name, dry_run=dry_run, verbose=verbose)
-        return {"status": "ok", "action": "report", "ip_name": ip_name}
+        _generate_report(ip_name, dry_run=dry_run, verbose=verbose, fmt=fmt, template=template)
+        return {
+            "status": "ok",
+            "action": "report",
+            "ip_name": ip_name,
+            "format": fmt,
+            "template": template,
+        }
 
     def handle_batch_analyze(**kwargs: Any) -> dict[str, Any]:
         top = kwargs.get("top", 20)
@@ -1350,32 +1458,61 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         from core.cli.batch import render_batch_table
 
         render_batch_table(batch_results)
-        return {"status": "ok", "action": "batch", "count": len(batch_results)}
+        summary = []
+        for br in batch_results:
+            if br:
+                summary.append(
+                    {
+                        "ip_name": br.get("ip_name", "?"),
+                        "tier": br.get("tier", "?"),
+                        "score": round(br.get("final_score", 0), 1),
+                    }
+                )
+        return {
+            "status": "ok",
+            "action": "batch",
+            "count": len(batch_results),
+            "results": summary[:20],
+        }
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
+        from core.fixtures import FIXTURE_MAP as _FM
+
+        ant_ok = bool(settings.anthropic_api_key)
+        oai_ok = bool(settings.openai_api_key)
+        mode = "full_llm" if (readiness and not readiness.force_dry_run) else "dry_run"
+
         console.print()
         console.print("  [header]GEODE System Status[/header]")
         console.print(f"  Model: [bold]{settings.model}[/bold]")
         console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
-        ant_ok = bool(settings.anthropic_api_key)
-        oai_ok = bool(settings.openai_api_key)
         ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
         oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
         console.print(f"  Anthropic API: {ant_status}")
         console.print(f"  OpenAI API: {oai_status}")
-        if readiness:
-            mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
-            console.print(f"  Mode: [bold]{mode}[/bold]")
-        from core.fixtures import FIXTURE_MAP as _FM
-
+        console.print(f"  Mode: [bold]{mode}[/bold]")
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
         console.print()
-        return {"status": "ok", "action": "status"}
+        return {
+            "status": "ok",
+            "action": "status",
+            "model": settings.model,
+            "ensemble": settings.ensemble_mode,
+            "anthropic_configured": ant_ok,
+            "openai_configured": oai_ok,
+            "mode": mode,
+            "fixture_count": len(_FM),
+        }
 
     def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
         model_hint = kwargs.get("model_hint", "")
         cmd_model(model_hint)
-        return {"status": "ok", "action": "model"}
+        return {
+            "status": "ok",
+            "action": "model",
+            "current_model": settings.model,
+            "ensemble": settings.ensemble_mode,
+        }
 
     def handle_memory_search(**kwargs: Any) -> dict[str, Any]:
         query = kwargs.get("query", "")
@@ -1398,20 +1535,33 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
             return {"error": str(exc)}
 
     def handle_manage_rule(**kwargs: Any) -> dict[str, Any]:
-        # Delegate to existing memory action handler
         from core.cli.nl_router import NLIntent
 
+        rule_action = kwargs.get("action", "list")
+        name = kwargs.get("name", "")
         intent = NLIntent(
             action="memory",
             args={
-                "rule_action": kwargs.get("action", "list"),
-                "name": kwargs.get("name", ""),
+                "rule_action": rule_action,
+                "name": name,
                 "paths": kwargs.get("paths", []),
                 "content": kwargs.get("content", ""),
             },
         )
         _handle_memory_action(intent, "", False)
-        return {"status": "ok", "action": "manage_rule"}
+        # Return rule list for LLM context
+        try:
+            mem = ProjectMemory()
+            rules = mem.list_rules() if hasattr(mem, "list_rules") else []
+            return {
+                "status": "ok",
+                "action": "manage_rule",
+                "sub_action": rule_action,
+                "name": name,
+                "rules": [str(r) for r in rules][:20],
+            }
+        except Exception:
+            return {"status": "ok", "action": "manage_rule", "sub_action": rule_action}
 
     def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
         key_value = kwargs.get("key_value", "")
@@ -1420,12 +1570,33 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
             new_readiness = check_readiness()
             _set_readiness(new_readiness)
             render_readiness(new_readiness)
-        return {"status": "ok", "action": "key"}
+        return {
+            "status": "ok",
+            "action": "key",
+            "changed": changed,
+            "anthropic_configured": bool(settings.anthropic_api_key),
+            "openai_configured": bool(settings.openai_api_key),
+        }
 
     def handle_manage_auth(**kwargs: Any) -> dict[str, Any]:
         sub_action = kwargs.get("sub_action", "")
         cmd_auth(sub_action)
-        return {"status": "ok", "action": "auth"}
+        try:
+            from core.cli.commands import _get_profile_store
+
+            store = _get_profile_store()
+            profiles = [
+                {"name": p.name, "provider": p.provider, "type": p.credential_type.value}
+                for p in store.list_all()
+            ]
+        except Exception:
+            profiles = []
+        return {
+            "status": "ok",
+            "action": "auth",
+            "sub_action": sub_action,
+            "profiles": profiles,
+        }
 
     def handle_generate_data(**kwargs: Any) -> dict[str, Any]:
         count = kwargs.get("count", 5)
@@ -1434,21 +1605,44 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         if genre:
             gen_args += f" {genre}"
         cmd_generate(gen_args)
-        return {"status": "ok", "action": "generate"}
+        return {
+            "status": "ok",
+            "action": "generate",
+            "count": count,
+            "genre": genre or "random",
+        }
 
     def handle_schedule_job(**kwargs: Any) -> dict[str, Any]:
-        sub_action = kwargs.get("sub_action", "")
+        sub_action = kwargs.get("sub_action", "") or "list"
         target_id = kwargs.get("target_id", "")
         sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
         cmd_schedule(sched_args)
-        return {"status": "ok", "action": "schedule"}
+        try:
+            from core.automation.predefined import PREDEFINED_AUTOMATIONS
+
+            templates = [
+                {"id": t.id, "name": t.name, "enabled": t.enabled} for t in PREDEFINED_AUTOMATIONS
+            ]
+        except Exception:
+            templates = []
+        return {
+            "status": "ok",
+            "action": "schedule",
+            "sub_action": sub_action,
+            "templates": templates[:10],
+        }
 
     def handle_trigger_event(**kwargs: Any) -> dict[str, Any]:
-        sub_action = kwargs.get("sub_action", "")
+        sub_action = kwargs.get("sub_action", "") or "list"
         event_name = kwargs.get("event_name", "")
         trigger_args = f"{sub_action} {event_name}".strip() if sub_action else ""
         cmd_trigger(trigger_args)
-        return {"status": "ok", "action": "trigger"}
+        return {
+            "status": "ok",
+            "action": "trigger",
+            "sub_action": sub_action,
+            "event_name": event_name,
+        }
 
     return {
         "list_ips": handle_list_ips,
@@ -1512,11 +1706,12 @@ def _interactive_loop() -> None:
     # Build tool handlers and executor
     handlers = _build_tool_handlers(verbose=verbose)
     executor = ToolExecutor(action_handlers=handlers)
-    agentic = AgenticLoop(conversation, executor)
 
     # Check if agentic mode is possible (needs API key)
     readiness = _get_readiness()
     agentic_available = readiness is not None and not readiness.force_dry_run
+    force_offline = not agentic_available
+    agentic = AgenticLoop(conversation, executor, offline_mode=force_offline)
 
     while True:
         try:
@@ -1539,9 +1734,9 @@ def _interactive_loop() -> None:
             if verbose != (handlers.get("_verbose_flag") is True):
                 handlers = _build_tool_handlers(verbose=verbose)
                 executor = ToolExecutor(action_handlers=handlers)
-                agentic = AgenticLoop(conversation, executor)
-        elif agentic_available:
-            # Agentic loop: multi-turn, multi-intent, HITL
+                agentic = AgenticLoop(conversation, executor, offline_mode=force_offline)
+        elif agentic_available or force_offline:
+            # Agentic loop: multi-turn + multi-intent (online) or offline regex
             result = agentic.run(user_input)
             _render_agentic_result(result)
         else:

@@ -198,6 +198,71 @@ Decision Tree on D-E-F axes:
 - **Port/Adapter**: All infra via Protocol ports + contextvars DI
 - **Hook-driven**: 19 lifecycle events for extensibility
 
+## Implementation Workflow
+
+기능 구현 시 아래 루프를 따른다. 최근 작업 사례(C2-C5 유연성 개선, LangSmith Observability) 기반.
+
+### 1. Research → Plan
+
+```
+1. 기존 코드 탐색 (Explore agent, Grep, Read)
+2. 외부 사례 조사 (Eco², OpenClaw, Claude Code 패턴 참조)
+3. Gap 분석 (AS-IS → TO-BE 정리)
+4. docs/plans/에 계획 문서 작성
+```
+
+**사례**: LangSmith 통합 — Eco² `is_langsmith_enabled()` + `track_token_usage()` 패턴 발견 → 7개 Gap(G1-G7) 식별 → `docs/plans/observability-langsmith-plan.md` 작성
+
+### 2. Implement → Unit Verify (반복)
+
+```
+1. 코드 변경 (최소 단위)
+2. uv run ruff check core/ tests/     # lint
+3. uv run mypy core/                   # type check
+4. uv run pytest tests/ -q             # 전체 regression
+5. 실패 시 → 수정 → 2번으로
+```
+
+**사례**: C2(analyst YAML 동적 로드) — 1줄 변경 → lint/type 통과 → 1909 tests 통과
+
+### 3. E2E Verify
+
+```
+1. Mock E2E: uv run pytest tests/test_agentic_loop.py tests/test_e2e.py tests/test_e2e_orchestration_live.py -v
+2. Live E2E: set -a && source .env && set +a && uv run pytest tests/test_e2e_live_llm.py -v -m live
+3. LangSmith 트레이스 확인: smith.langchain.com → geode 프로젝트
+4. 품질 점검: tool 실행 결과에 error 없음, 올바른 모드(dry-run vs live) 확인
+```
+
+### 4. Document → Skill Update
+
+```
+1. docs/e2e-orchestration-scenarios.md 갱신 (시나리오 추가/변경)
+2. tests/test_e2e_live_llm.py 갱신 (라이브 테스트 추가)
+3. .claude/skills/geode-e2e/SKILL.md 갱신 (시나리오 매핑 테이블)
+4. CHANGELOG.md 갱신 (feature-level)
+```
+
+### E2E 업데이트 규칙 (필수)
+
+**기능 변경 시 반드시 아래 파일을 함께 업데이트:**
+
+| 변경 유형 | 갱신 대상 |
+|----------|----------|
+| 새 tool 추가 | `definitions.json` + `_build_tool_handlers()` + `test_e2e_live_llm.py` + E2E 시나리오 문서 |
+| 파이프라인 노드 변경 | `graph.py` + `test_e2e_orchestration_live.py` + `test_e2e_live_llm.py` (§5) |
+| LLM 어댑터 변경 | `client.py` + `test_e2e_live_llm.py` (§4 LangSmith) |
+| Offline 패턴 추가 | `nl_router.py` regex + `test_e2e_live_llm.py` (§C5) |
+
+### 품질 게이트
+
+| 게이트 | 명령어 | 기준 |
+|--------|--------|------|
+| Lint | `uv run ruff check core/ tests/` | 0 errors |
+| Type | `uv run mypy core/` | 0 errors |
+| Mock | `uv run pytest tests/ -q` | 1909+ pass |
+| Live | `uv run pytest tests/test_e2e_live_llm.py -v -m live` | All pass, tool results valid |
+
 ## Custom Skills
 
 Project-specific skills in `.claude/skills/`:
@@ -208,6 +273,7 @@ Project-specific skills in `.claude/skills/`:
 | `geode-scoring` | score, psm, tier, rubric, formula | Scoring formulas, 14-axis rubric |
 | `geode-analysis` | analyst, evaluator, clean context | Analyst/Evaluator patterns, prompts |
 | `geode-verification` | guardrail, bias, cause, decision tree | G1-G4, BiasBuster, Decision Tree |
+| `geode-e2e` | e2e, live test, 검증, langsmith, tracing | Live E2E 패턴, LangSmith 검증, 품질 점검 |
 | `geode-gitflow` | branch, git, feature, release, hotfix | Gitflow strategy, commit convention |
 
 ## Linked Skills (from parent project)

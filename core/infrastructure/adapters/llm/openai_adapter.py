@@ -23,6 +23,7 @@ from core.llm.client import (
     ToolCallRecord,
     ToolUseResult,
     get_usage_accumulator,
+    track_token_usage,
 )
 
 T = TypeVar("T", bound=BaseModel)
@@ -129,6 +130,7 @@ class OpenAIAdapter:
                     model=model, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost
                 )
                 get_usage_accumulator().record(usage)
+                track_token_usage(model, in_tok, out_tok)
                 log.debug(
                     "OpenAI usage: model=%s in=%d out=%d cost=$%.4f",
                     model,
@@ -203,6 +205,7 @@ class OpenAIAdapter:
                     model=model, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost
                 )
                 get_usage_accumulator().record(usage)
+                track_token_usage(model, in_tok, out_tok)
 
             choice = response.choices[0]
             if choice.message.parsed is None:
@@ -252,6 +255,7 @@ class OpenAIAdapter:
                         cost_usd=cost,
                     )
                     get_usage_accumulator().record(usage)
+                    track_token_usage(model, in_tok, out_tok)
                     log.debug(
                         "OpenAI streaming usage: model=%s in=%d out=%d cost=$%.4f",
                         model,
@@ -313,6 +317,7 @@ class OpenAIAdapter:
                 )
                 all_usage.append(usage)
                 get_usage_accumulator().record(usage)
+                track_token_usage(target, in_tok, out_tok)
 
             choice = response.choices[0]
 

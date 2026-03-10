@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     # Graph — Feedback Loop
     confidence_threshold: float = 0.7
     max_iterations: int = 5
+    interrupt_nodes: str = ""  # comma-separated node names, e.g. "verification,scoring"
 
     # LLM — Router & Verification
     router_model: str = "claude-opus-4-6"

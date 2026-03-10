@@ -458,7 +458,7 @@ class TestAgenticLoopTracing:
         assert callable(loop._call_llm)
 
     def test_tracing_passthrough_without_langsmith(self) -> None:
-        """Without LANGSMITH_API_KEY, _maybe_traceable is a no-op decorator."""
+        """Without LANGCHAIN_TRACING_V2/API_KEY, _maybe_traceable is a no-op."""
         context = ConversationContext(max_turns=5)
         executor = ToolExecutor()
         loop = AgenticLoop(context, executor)
