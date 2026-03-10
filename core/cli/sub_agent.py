@@ -221,28 +221,36 @@ class SubAgentManager:
                 exc_info=True,
             )
 
-    def _execute_subtask(self, task: SubTask) -> dict[str, Any]:
-        """Execute a single sub-task (runs in isolated thread)."""
+    def _execute_subtask(self, task: SubTask) -> str:
+        """Execute a single sub-task (runs in isolated thread).
+
+        Returns JSON string so IsolatedRunner stores a safely parseable output.
+        """
         if self._task_handler is None:
-            return {"error": "No task handler configured"}
+            return json.dumps({"error": "No task handler configured"})
 
         try:
             result: dict[str, Any] = self._task_handler(task.task_type, task.args)
-            return result
+            return json.dumps(result, default=str)
         except Exception as exc:
             log.error("SubTask %s failed: %s", task.task_id, exc, exc_info=True)
-            return {"error": str(exc)}
+            return json.dumps({"error": str(exc)})
 
-    def _wait_for_result(
-        self, session_id: str, poll_interval: float = 0.1
-    ) -> IsolationResult | None:
-        """Poll for result completion."""
+    def _wait_for_result(self, session_id: str) -> IsolationResult | None:
+        """Poll for result completion with exponential backoff.
+
+        Starts at 50ms, caps at 1s. Avoids busy-wait CPU burn on
+        long-running tasks while staying responsive for fast ones.
+        """
         deadline = time.time() + self._timeout_s
+        interval = 0.05  # start 50ms
+        max_interval = 1.0
         while time.time() < deadline:
             result = self._runner.get_result(session_id)
             if result is not None:
                 return result
-            time.sleep(poll_interval)
+            time.sleep(min(interval, max(0, deadline - time.time())))
+            interval = min(interval * 2, max_interval)
 
         log.warning("SubAgent %s: timeout waiting for result", session_id)
         return None
@@ -266,13 +274,12 @@ class SubAgentManager:
                 duration_ms=isolation.duration_ms,
             )
 
-        # Parse output string back to dict if possible
+        # Parse JSON output back to dict
         output: dict[str, Any]
         try:
-            import ast
-
-            output = ast.literal_eval(isolation.output) if isolation.output else {}
-        except (ValueError, SyntaxError):
+            parsed = json.loads(isolation.output) if isolation.output else {}
+            output = parsed if isinstance(parsed, dict) else {"raw": parsed}
+        except (json.JSONDecodeError, RecursionError):
             output = {"raw": isolation.output}
 
         return SubResult(

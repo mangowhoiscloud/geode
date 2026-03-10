@@ -69,6 +69,7 @@ class AgenticLoop:
         self.max_tokens = max_tokens
         self.model = model or "claude-opus-4-6"
         self._tool_log: list[dict[str, Any]] = []
+        self._client: anthropic.Anthropic | None = None
 
     @_maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
     def run(self, user_input: str) -> AgenticResult:
@@ -139,8 +140,9 @@ class AgenticLoop:
                 log.warning("No Anthropic API key for agentic loop")
                 return None
 
-            client = anthropic.Anthropic(api_key=api_key)
-            response = client.messages.create(  # type: ignore[call-overload]
+            if self._client is None:
+                self._client = anthropic.Anthropic(api_key=api_key)
+            response = self._client.messages.create(  # type: ignore[call-overload]
                 model=self.model,
                 system=system,
                 messages=messages,

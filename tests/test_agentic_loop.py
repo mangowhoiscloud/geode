@@ -483,3 +483,205 @@ class TestAgenticLoopTracing:
 
         assert result.text == "Hello"
         assert result.error is None
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests
+# ---------------------------------------------------------------------------
+
+
+class TestAgenticLoopEdgeCases:
+    """Tests covering previously untested paths in AgenticLoop."""
+
+    @pytest.fixture
+    def context(self) -> ConversationContext:
+        return ConversationContext(max_turns=10)
+
+    @pytest.fixture
+    def executor(self) -> ToolExecutor:
+        handler_a = MagicMock(return_value={"status": "ok", "action": "list"})
+        handler_b = MagicMock(return_value={"data": [1, 2, 3]})
+        return ToolExecutor(action_handlers={"list_ips": handler_a, "search_ips": handler_b})
+
+    def test_multiple_tool_calls_in_single_response(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Test response with 2+ tool_use blocks processed in one round."""
+        loop = AgenticLoop(context, executor)
+
+        # Round 1: LLM calls 2 tools simultaneously
+        tool_response = MagicMock()
+        tool_response.stop_reason = "tool_use"
+        tool_response.usage = MagicMock(input_tokens=100, output_tokens=80)
+
+        tool_block_1 = MagicMock()
+        tool_block_1.type = "tool_use"
+        tool_block_1.name = "list_ips"
+        tool_block_1.input = {}
+        tool_block_1.id = "toolu_aaa"
+
+        tool_block_2 = MagicMock()
+        tool_block_2.type = "tool_use"
+        tool_block_2.name = "search_ips"
+        tool_block_2.input = {"query": "soulslike"}
+        tool_block_2.id = "toolu_bbb"
+
+        tool_response.content = [tool_block_1, tool_block_2]
+
+        # Round 2: LLM returns final text
+        text_response = MagicMock()
+        text_response.stop_reason = "end_turn"
+        text_response.usage = MagicMock(input_tokens=200, output_tokens=100)
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "Found results."
+        text_response.content = [text_block]
+
+        with (
+            patch.object(loop, "_call_llm", side_effect=[tool_response, text_response]),
+            patch.object(loop, "_track_usage"),
+        ):
+            result = loop.run("list and search")
+
+        assert result.rounds == 2
+        assert len(result.tool_calls) == 2
+        assert result.tool_calls[0]["tool"] == "list_ips"
+        assert result.tool_calls[1]["tool"] == "search_ips"
+
+    def test_serialize_content_mixed(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Test _serialize_content with mixed text + tool_use blocks."""
+        loop = AgenticLoop(context, executor)
+
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "Let me help."
+
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.id = "toolu_xyz"
+        tool_block.name = "list_ips"
+        tool_block.input = {"filter": "active"}
+
+        serialized = loop._serialize_content([text_block, tool_block])
+
+        assert len(serialized) == 2
+        assert serialized[0] == {"type": "text", "text": "Let me help."}
+        assert serialized[1]["type"] == "tool_use"
+        assert serialized[1]["name"] == "list_ips"
+        assert serialized[1]["id"] == "toolu_xyz"
+
+    def test_extract_text_empty_content(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Test _extract_text with no text blocks (only tool_use blocks)."""
+        loop = AgenticLoop(context, executor)
+
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+
+        response = MagicMock()
+        response.content = [tool_block]
+        assert loop._extract_text(response) == ""
+
+    def test_extract_text_multiple_text_blocks(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Test _extract_text joins multiple text blocks."""
+        loop = AgenticLoop(context, executor)
+
+        block1 = MagicMock()
+        block1.type = "text"
+        block1.text = "Part 1"
+        block2 = MagicMock()
+        block2.type = "text"
+        block2.text = "Part 2"
+
+        response = MagicMock()
+        response.content = [block1, block2]
+        assert loop._extract_text(response) == "Part 1\nPart 2"
+
+    def test_client_cached_across_rounds(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Verify Anthropic client is created once and reused."""
+        loop = AgenticLoop(context, executor)
+        assert loop._client is None  # not yet created
+
+
+class TestSubAgentEdgeCases:
+    """Tests covering previously untested paths in SubAgentManager."""
+
+    def test_timeout_returns_failure(self) -> None:
+        """Test that timeout produces a SubResult with success=False."""
+        import threading
+
+        runner = IsolatedRunner()
+
+        # Handler that blocks longer than timeout
+        block_event = threading.Event()
+
+        def slow_handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            block_event.wait(timeout=10)  # block until signaled
+            return {"done": True}
+
+        manager = SubAgentManager(runner, slow_handler, timeout_s=0.3)
+        tasks = [SubTask("t_slow", "Slow task", "analyze", {})]
+        results = manager.delegate(tasks)
+
+        # Unblock the handler thread to avoid dangling threads
+        block_event.set()
+
+        assert len(results) == 1
+        assert results[0].success is False
+        assert "Timeout" in (results[0].error or "")
+
+    def test_json_serialization_roundtrip(self) -> None:
+        """Verify handler output goes through json.dumps/json.loads cleanly."""
+        runner = IsolatedRunner()
+
+        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            return {"score": 0.85, "tier": "A", "tags": ["action", "rpg"]}
+
+        manager = SubAgentManager(runner, handler, timeout_s=10)
+        tasks = [SubTask("t1", "JSON test", "analyze", {})]
+        results = manager.delegate(tasks)
+
+        assert results[0].success is True
+        assert results[0].output["score"] == 0.85
+        assert results[0].output["tags"] == ["action", "rpg"]
+
+    def test_handler_returns_non_serializable(self) -> None:
+        """Verify json.dumps(default=str) handles non-serializable types."""
+        runner = IsolatedRunner()
+
+        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            from datetime import datetime
+
+            return {"timestamp": datetime(2026, 3, 10), "value": 42}
+
+        manager = SubAgentManager(runner, handler, timeout_s=10)
+        tasks = [SubTask("t1", "Non-serializable test", "analyze", {})]
+        results = manager.delegate(tasks)
+
+        assert results[0].success is True
+        assert "2026" in results[0].output["timestamp"]
+        assert results[0].output["value"] == 42
+
+    def test_malformed_json_output_fallback(self) -> None:
+        """Verify graceful fallback when isolation output is not valid JSON."""
+        manager = SubAgentManager.__new__(SubAgentManager)
+        manager._timeout_s = 10.0
+
+        # Simulate an IsolationResult with non-JSON output
+        isolation = MagicMock()
+        isolation.success = True
+        isolation.output = "not valid json {{"
+        isolation.duration_ms = 50.0
+
+        task = SubTask("t1", "Malformed test", "analyze", {})
+        result = manager._to_sub_result(task, isolation)
+
+        assert result.success is True
+        assert result.output == {"raw": "not valid json {{"}
