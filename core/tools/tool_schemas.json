@@ -1,0 +1,131 @@
+{
+  "YouTubeSearchTool": {
+    "type": "object",
+    "properties": {
+      "ip_name": {
+        "type": "string",
+        "description": "IP name to search on YouTube."
+      },
+      "max_results": {
+        "type": "integer",
+        "description": "Maximum number of video results.",
+        "default": 10
+      }
+    },
+    "required": ["ip_name"]
+  },
+  "RedditSentimentTool": {
+    "type": "object",
+    "properties": {
+      "ip_name": {
+        "type": "string",
+        "description": "IP name to analyze on Reddit."
+      },
+      "subreddit": {
+        "type": "string",
+        "description": "Optional specific subreddit to target."
+      }
+    },
+    "required": ["ip_name"]
+  },
+  "TwitchStatsTool": {
+    "type": "object",
+    "properties": {
+      "ip_name": {
+        "type": "string",
+        "description": "IP name to look up on Twitch."
+      }
+    },
+    "required": ["ip_name"]
+  },
+  "SteamInfoTool": {
+    "type": "object",
+    "properties": {
+      "ip_name": {
+        "type": "string",
+        "description": "IP or game name to look up on Steam."
+      }
+    },
+    "required": ["ip_name"]
+  },
+  "GoogleTrendsTool": {
+    "type": "object",
+    "properties": {
+      "ip_name": {
+        "type": "string",
+        "description": "IP name to look up on Google Trends."
+      },
+      "region": {
+        "type": "string",
+        "description": "Geographic region (e.g., 'US', 'JP', 'global').",
+        "default": "global"
+      }
+    },
+    "required": ["ip_name"]
+  },
+  "WebSearchTool": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Search query (e.g., 'Berserk game adaptation news 2026')."
+      },
+      "max_results": {
+        "type": "integer",
+        "description": "Maximum number of results to return (default: 5)."
+      }
+    },
+    "required": ["query"],
+    "additionalProperties": false
+  },
+  "RunAnalystTool": {
+    "type": "object",
+    "properties": {
+      "analyst_type": {
+        "type": "string",
+        "description": "The analyst type to run."
+      },
+      "ip_name": {
+        "type": "string",
+        "description": "IP name to analyze (e.g., 'Berserk')."
+      }
+    },
+    "required": ["analyst_type", "ip_name"]
+  },
+  "RunEvaluatorTool": {
+    "type": "object",
+    "properties": {
+      "evaluator_type": {
+        "type": "string",
+        "enum": ["quality_judge", "hidden_value", "community_momentum"],
+        "description": "The evaluator type to run."
+      },
+      "ip_name": {
+        "type": "string",
+        "description": "IP name to evaluate."
+      }
+    },
+    "required": ["evaluator_type", "ip_name"]
+  },
+  "PSMCalculateTool": {
+    "type": "object",
+    "properties": {
+      "ip_name": {
+        "type": "string",
+        "description": "IP name to calculate PSM for."
+      }
+    },
+    "required": ["ip_name"]
+  },
+  "ExplainScoreTool": {
+    "type": "object",
+    "properties": {
+      "ip_name": {
+        "type": "string",
+        "description": "IP name to explain scoring for (e.g., 'Berserk')."
+      }
+    },
+    "required": ["ip_name"],
+    "additionalProperties": false
+  }
+}

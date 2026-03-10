@@ -65,7 +65,7 @@ VALID_ACTIONS = {
     "trigger",
 }
 
-LLM_ROUTER_MODEL = "claude-opus-4-6"
+LLM_ROUTER_MODEL = settings.router_model
 
 
 @dataclass
@@ -213,15 +213,26 @@ _TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitio
 
 def _load_tools() -> list[dict[str, Any]]:
     """Load tool definitions from JSON file (NL router tools only, no bash/delegate)."""
-    all_tools: list[dict[str, Any]] = json.loads(
-        _TOOLS_JSON_PATH.read_text(encoding="utf-8")
-    )
+    all_tools: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
     # NL router uses only the first 17 tools (not run_bash, delegate_task)
     nl_tool_names = {
-        "list_ips", "analyze_ip", "search_ips", "compare_ips", "show_help",
-        "generate_report", "batch_analyze", "check_status", "switch_model",
-        "memory_search", "memory_save", "manage_rule", "set_api_key",
-        "manage_auth", "generate_data", "schedule_job", "trigger_event",
+        "list_ips",
+        "analyze_ip",
+        "search_ips",
+        "compare_ips",
+        "show_help",
+        "generate_report",
+        "batch_analyze",
+        "check_status",
+        "switch_model",
+        "memory_search",
+        "memory_save",
+        "manage_rule",
+        "set_api_key",
+        "manage_auth",
+        "generate_data",
+        "schedule_job",
+        "trigger_event",
     }
     return [t for t in all_tools if t["name"] in nl_tool_names]
 

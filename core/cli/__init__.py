@@ -752,7 +752,7 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
         if "--dry-run" in args or "--dry_run" in args:
             force_dry = True
             args = args.replace("--dry-run", "").replace("--dry_run", "").strip()
-        if force_dry and not readiness.force_dry_run:
+        if force_dry and readiness is not None and not readiness.force_dry_run:
             console.print("  [info]Dry-run mode (explicitly requested)[/info]")
         elif force_dry:
             console.print("  [warning]API key not configured — forcing dry-run mode[/warning]")
@@ -1391,7 +1391,7 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         content = kwargs.get("content", "")
         try:
             mem = ProjectMemory()
-            mem.append_insight(f"{key}: {content}")
+            mem.add_insight(f"{key}: {content}")
             console.print(f"  [success]Saved to memory: {key}[/success]")
             return {"status": "ok", "action": "memory_save", "key": key}
         except Exception as exc:
@@ -1476,8 +1476,10 @@ def _render_agentic_result(result: AgenticResult) -> None:
     if result.error == "llm_call_failed":
         console.print()
         console.print("  [warning]LLM call failed — falling back to offline mode.[/warning]")
-        console.print("  [muted]/list, /search are available without LLM. "
-                       "Use /help for more commands.[/muted]")
+        console.print(
+            "  [muted]/list, /search are available without LLM. "
+            "Use /help for more commands.[/muted]"
+        )
         console.print()
         return
 

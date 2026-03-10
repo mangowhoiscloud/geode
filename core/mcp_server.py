@@ -4,21 +4,15 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
 
-# Use lazy imports to avoid circular dependencies
-_TOOL_DESCRIPTIONS = {
-    "analyze_ip": (
-        "Run GEODE analysis pipeline on an IP. Returns tier, score, cause, and narrative."
-    ),
-    "quick_score": "Run scoring-only mode for fast tier/score estimation without full analysis.",
-    "query_memory": "Search GEODE memory across tiers (session, project, organization).",
-    "get_ip_signals": "Get community signals (YouTube, Reddit, trends) for an IP.",
-    "list_fixtures": "List all available IP fixtures in the GEODE database.",
-    "get_health": "Get GEODE pipeline health status and component stats.",
-}
+# Load MCP tool descriptions from centralized JSON
+_MCP_TOOLS_PATH = Path(__file__).resolve().parent / "tools" / "mcp_tools.json"
+with _MCP_TOOLS_PATH.open(encoding="utf-8") as _f:
+    _TOOL_DESCRIPTIONS: dict[str, str] = json.load(_f)
 
 
 def create_mcp_server() -> Any:

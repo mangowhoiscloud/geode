@@ -10,8 +10,10 @@ CAUSE_TO_ACTION: architecture-v6 §13.9.3
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
+import yaml
 from pydantic import ValidationError
 
 from core.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed, get_llm_tool
@@ -29,34 +31,17 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# CAUSE_TO_ACTION mapping (architecture-v6 §13.9.3 — 그대로)
+# Load domain data from YAML (architecture-v6 §13.9.3)
 # ---------------------------------------------------------------------------
 
-CAUSE_TO_ACTION: dict[CauseLiteral, ActionLiteral] = {
-    "undermarketed": "marketing_boost",
-    "conversion_failure": "marketing_boost",  # §13.9.3: 퍼널+마케팅 동시 개선
-    "monetization_misfit": "monetization_pivot",
-    "niche_gem": "platform_expansion",
-    "timing_mismatch": "timing_optimization",
-    "discovery_failure": "community_activation",
-}
+_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "cause_actions.yaml"
 
-CAUSE_DESCRIPTIONS: dict[str, str] = {
-    "undermarketed": "IP 파워 대비 마케팅/노출 절대 부족 — 마케팅 예산 증액",
-    "conversion_failure": "유저 획득 + 수익화 모두 IP 대비 미달 — 퍼널 + 과금 동시 개선",
-    "monetization_misfit": "유저는 잘 오는데 돈이 안 됨 — 과금 모델/가격 전략 재설계",
-    "niche_gem": "품질 좋으나 확장 미진출 상태 — 플랫폼 확장, 타겟 프로모션",
-    "timing_mismatch": "IP 인지도 있었으나 출시 타이밍 실패 — 리런치/리마스터 이벤트 권장",
-    "discovery_failure": "복합 요인에 의한 발견 실패 — 종합 전략 수립 필요",
-}
+with _CONFIG_PATH.open(encoding="utf-8") as _f:
+    _CONFIG_DATA: dict[str, Any] = yaml.safe_load(_f)
 
-ACTION_DESCRIPTIONS: dict[str, str] = {
-    "marketing_boost": "마케팅 예산 증액 및 채널 다양화",
-    "monetization_pivot": "과금 모델 및 가격 전략 재설계",
-    "platform_expansion": "신규 플랫폼 출시 또는 지역 확장",
-    "timing_optimization": "리런치, 리마스터 또는 시즌 이벤트",
-    "community_activation": "커뮤니티 이벤트 및 UGC 활성화",
-}
+CAUSE_TO_ACTION: dict[CauseLiteral, ActionLiteral] = _CONFIG_DATA["cause_to_action"]
+CAUSE_DESCRIPTIONS: dict[str, str] = _CONFIG_DATA["cause_descriptions"]
+ACTION_DESCRIPTIONS: dict[str, str] = _CONFIG_DATA["action_descriptions"]
 
 
 # ---------------------------------------------------------------------------
@@ -137,23 +122,7 @@ def _extract_def_scores(evaluations: dict[str, EvaluatorResult]) -> tuple[int, i
 
 
 # IP-specific narrative hooks for dry-run mode (F-3: differentiated narratives)
-_IP_NARRATIVE_HOOKS: dict[str, dict[str, str]] = {
-    "berserk": {
-        "hook": "Elden Ring의 성공이 입증한 다크 판타지 Souls-like 시장에서",
-        "insight": "Dragonslayer 대검 기반 전투 시스템은 기존 팬과 Souls 유저 동시 공략 가능",
-        "segment": "Dark Fantasy Souls-like 코어 유저 (20-35세, Achiever형, PvE 고난이도 선호)",
-    },
-    "cowboy bebop": {
-        "hook": "90년대 SF 느와르의 독보적 세계관과 유기적 팬덤 성장세로",
-        "insight": "바운티 헌터 루프 기반 Action RPG는 장르 내 직접 경쟁자 부재",
-        "segment": "SF Action RPG 유저 (25-40세, Explorer/Killer 혼합형, 내러티브 중시)",
-    },
-    "ghost in the shell": {
-        "hook": "사이버펑크 장르의 원조 IP임에도 Cyberpunk 2077 이후 경쟁 심화로",
-        "insight": "스텔스/해킹 하이브리드 시스템은 차별화 가능하나 AAA 수준 실행력 필요",
-        "segment": "Cyberpunk Stealth/RPG 유저 (28-42세, Explorer형, 세계관 몰입 중시)",
-    },
-}
+_IP_NARRATIVE_HOOKS: dict[str, dict[str, str]] = _CONFIG_DATA["ip_narrative_hooks"]
 
 
 def _build_dry_run_synthesis(

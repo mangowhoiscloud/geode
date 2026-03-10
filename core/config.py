@@ -65,10 +65,17 @@ class Settings(BaseSettings):
 
     # Ensemble — Multi-LLM mode
     ensemble_mode: str = "single"  # single | cross
+    secondary_analysts: str = "player_experience,discovery"
+    primary_analysts: str = "game_mechanics,growth_potential"
 
     # Graph — Feedback Loop
     confidence_threshold: float = 0.7
     max_iterations: int = 5
+
+    # LLM — Router & Verification
+    router_model: str = "claude-opus-4-6"
+    default_secondary_model: str = "gpt-5.4"
+    agreement_threshold: float = 0.67
 
 
 _settings_instance: Settings | None = None

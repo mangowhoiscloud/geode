@@ -14,9 +14,16 @@ stub data for unknown IPs.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from core.fixtures import load_fixture
+
+# Load parameter schemas from centralized JSON
+_SCHEMAS_PATH = Path(__file__).resolve().parent / "tool_schemas.json"
+with _SCHEMAS_PATH.open(encoding="utf-8") as _f:
+    _TOOL_SCHEMAS: dict[str, dict[str, Any]] = json.load(_f)
 
 
 def _load_signal(ip_name: str, key: str, default: Any = None) -> Any:
@@ -44,21 +51,7 @@ class YouTubeSearchTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "ip_name": {
-                    "type": "string",
-                    "description": "IP name to search on YouTube.",
-                },
-                "max_results": {
-                    "type": "integer",
-                    "description": "Maximum number of video results.",
-                    "default": 10,
-                },
-            },
-            "required": ["ip_name"],
-        }
+        return _TOOL_SCHEMAS["YouTubeSearchTool"]
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         ip_name: str = kwargs["ip_name"]
@@ -91,20 +84,7 @@ class RedditSentimentTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "ip_name": {
-                    "type": "string",
-                    "description": "IP name to analyze on Reddit.",
-                },
-                "subreddit": {
-                    "type": "string",
-                    "description": "Optional specific subreddit to target.",
-                },
-            },
-            "required": ["ip_name"],
-        }
+        return _TOOL_SCHEMAS["RedditSentimentTool"]
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         ip_name: str = kwargs["ip_name"]
@@ -137,16 +117,7 @@ class TwitchStatsTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "ip_name": {
-                    "type": "string",
-                    "description": "IP name to look up on Twitch.",
-                },
-            },
-            "required": ["ip_name"],
-        }
+        return _TOOL_SCHEMAS["TwitchStatsTool"]
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         ip_name: str = kwargs["ip_name"]
@@ -181,16 +152,7 @@ class SteamInfoTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "ip_name": {
-                    "type": "string",
-                    "description": "IP or game name to look up on Steam.",
-                },
-            },
-            "required": ["ip_name"],
-        }
+        return _TOOL_SCHEMAS["SteamInfoTool"]
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         ip_name: str = kwargs["ip_name"]
@@ -241,21 +203,7 @@ class GoogleTrendsTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "ip_name": {
-                    "type": "string",
-                    "description": "IP name to look up on Google Trends.",
-                },
-                "region": {
-                    "type": "string",
-                    "description": "Geographic region (e.g., 'US', 'JP', 'global').",
-                    "default": "global",
-                },
-            },
-            "required": ["ip_name"],
-        }
+        return _TOOL_SCHEMAS["GoogleTrendsTool"]
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         ip_name: str = kwargs["ip_name"]
@@ -296,21 +244,7 @@ class WebSearchTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query (e.g., 'Berserk game adaptation news 2026').",
-                },
-                "max_results": {
-                    "type": "integer",
-                    "description": "Maximum number of results to return (default: 5).",
-                },
-            },
-            "required": ["query"],
-            "additionalProperties": False,
-        }
+        return _TOOL_SCHEMAS["WebSearchTool"]
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]

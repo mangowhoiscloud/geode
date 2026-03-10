@@ -87,8 +87,8 @@ def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, st
 
 
 # Analyst types assigned to the secondary LLM in cross-ensemble mode
-_SECONDARY_ANALYSTS = {"player_experience", "discovery"}
-_PRIMARY_ANALYSTS = {"game_mechanics", "growth_potential"}
+_SECONDARY_ANALYSTS = set(settings.secondary_analysts.split(","))
+_PRIMARY_ANALYSTS = set(settings.primary_analysts.split(","))
 
 
 def _should_use_secondary(analyst_type: str) -> bool:

@@ -24,8 +24,8 @@ from core.state import AnalysisResult, EvaluatorResult, GeodeState
 
 log = logging.getLogger(__name__)
 
-EVALUATOR_TYPES = ["quality_judge", "hidden_value", "community_momentum"]
-PROSPECT_EVALUATOR_TYPES = ["prospect_judge"]
+EVALUATOR_TYPES: list[str] = list(EVALUATOR_AXES.keys())
+PROSPECT_EVALUATOR_TYPES: list[str] = list(PROSPECT_EVALUATOR_AXES.keys())
 
 
 # ---------------------------------------------------------------------------

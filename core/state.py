@@ -63,37 +63,13 @@ class EvaluatorResult(BaseModel):
     @model_validator(mode="after")
     def validate_axes(self) -> EvaluatorResult:
         """Validate that axes keys match evaluator_type and values are in [1.0, 5.0]."""
-        valid_axes_map = {
-            "quality_judge": {
-                "a_score",
-                "b_score",
-                "c_score",
-                "b1_score",
-                "c1_score",
-                "c2_score",
-                "m_score",
-                "n_score",
-            },
-            "hidden_value": {"d_score", "e_score", "f_score"},
-            "community_momentum": {"j_score", "k_score", "l_score"},
-            "prospect_judge": {
-                "g_score",
-                "h_score",
-                "i_score",
-                "o_score",
-                "p_score",
-                "q_score",
-                "r_score",
-                "s_score",
-                "t_score",
-            },
-        }
+        from core.llm.prompts.axes import VALID_AXES_MAP
 
-        expected_keys = valid_axes_map.get(self.evaluator_type)
+        expected_keys = VALID_AXES_MAP.get(self.evaluator_type)
         if expected_keys is None:
             raise ValueError(
                 f"Unknown evaluator_type: {self.evaluator_type}. "
-                f"Valid types: {list(valid_axes_map.keys())}"
+                f"Valid types: {list(VALID_AXES_MAP.keys())}"
             )
 
         actual_keys = set(self.axes.keys())
@@ -215,6 +191,28 @@ class CalibrationReport(BaseModel):
 def _merge_dicts(a: dict, b: dict) -> dict:  # type: ignore[type-arg]
     """Merge two dicts (LangGraph reducer for parallel Send results)."""
     return {**a, **b}
+
+
+def ensure_analysis_results(raw: list[Any]) -> list[AnalysisResult]:
+    """Rehydrate analyses that may have been deserialized to dicts by LangGraph."""
+    out: list[AnalysisResult] = []
+    for item in raw:
+        if isinstance(item, AnalysisResult):
+            out.append(item)
+        elif isinstance(item, dict):
+            out.append(AnalysisResult(**item))
+    return out
+
+
+def ensure_evaluator_results(raw: dict[str, Any]) -> dict[str, EvaluatorResult]:
+    """Rehydrate evaluations that may have been deserialized to dicts by LangGraph."""
+    out: dict[str, EvaluatorResult] = {}
+    for key, item in raw.items():
+        if isinstance(item, EvaluatorResult):
+            out[key] = item
+        elif isinstance(item, dict):
+            out[key] = EvaluatorResult(**item)
+    return out
 
 
 # ---------------------------------------------------------------------------

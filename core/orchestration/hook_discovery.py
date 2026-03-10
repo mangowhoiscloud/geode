@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from core.orchestration.hooks import HookEvent, HookSystem
 
@@ -172,7 +172,7 @@ def _load_yaml_plugin(plugin_dir: Path) -> _YAMLPlugin | None:
         return None
 
     # Load the handler module
-    mod_name = f"geode_hook_plugin_{name.replace('-', '_')}_handler"
+    mod_name = f"core_hook_plugin_{name.replace('-', '_')}_handler"
     handler_module = _load_module_from_path(mod_name, handler_path)
     handler_fn = getattr(handler_module, "handle", None)
     if handler_fn is None:
@@ -204,7 +204,7 @@ def _load_yaml_plugin(plugin_dir: Path) -> _YAMLPlugin | None:
 def _load_class_plugin(plugin_dir: Path) -> Any | None:
     """Load a class-based plugin from ``hook.py`` inside *plugin_dir*."""
     hook_py = plugin_dir / "hook.py"
-    mod_name = f"geode_hook_plugin_{plugin_dir.name.replace('-', '_')}"
+    mod_name = f"core_hook_plugin_{plugin_dir.name.replace('-', '_')}"
     module = _load_module_from_path(mod_name, hook_py)
 
     cls = _find_plugin_class(module)
@@ -281,7 +281,7 @@ def discover_hooks(dirs: list[Path]) -> list[HookPluginMetadata]:
                     log.warning("Failed to read hook.yaml in %s", child, exc_info=True)
             elif hook_py.exists():
                 try:
-                    mod_name = f"geode_hook_discover_{child.name.replace('-', '_')}"
+                    mod_name = f"core_hook_discover_{child.name.replace('-', '_')}"
                     module = _load_module_from_path(mod_name, hook_py)
                     cls = _find_plugin_class(module)
                     if cls is None:

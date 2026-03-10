@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 
 from core.automation.expert_panel import calculate_krippendorff_alpha
+from core.config import settings
 from core.infrastructure.ports.llm_port import LLMClientPort
 from core.llm.prompts import CROSS_LLM_DUAL_VERIFY, CROSS_LLM_RESCORE, CROSS_LLM_SYSTEM
 from core.state import AnalysisResult, GeodeState
@@ -20,7 +21,7 @@ from core.state import AnalysisResult, GeodeState
 log = logging.getLogger(__name__)
 
 # Agreement threshold: >= 0.67 acceptable, >= 0.80 good
-AGREEMENT_THRESHOLD = 0.67
+AGREEMENT_THRESHOLD = settings.agreement_threshold
 
 # Scale parameters for agreement normalization
 _SCALE_MIN = 1.0
@@ -28,8 +29,8 @@ _SCALE_MAX = 5.0
 _MAX_VARIANCE = ((_SCALE_MAX - _SCALE_MIN) / 2) ** 2  # 4.0 — max possible variance
 
 # Default model name when adapter info is unavailable
-_DEFAULT_PRIMARY_MODEL = "claude-opus-4-6"
-_DEFAULT_SECONDARY_MODEL = "gpt-5.4"
+_DEFAULT_PRIMARY_MODEL = settings.model
+_DEFAULT_SECONDARY_MODEL = settings.default_secondary_model
 
 
 def _derive_model_names(

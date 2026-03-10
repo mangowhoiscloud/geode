@@ -9,11 +9,18 @@ Layer 5 tools that enable agentic access to:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from core.fixtures import load_fixture
 from core.nodes.analysts import ANALYST_TYPES, get_dry_run_result
 from core.state import PSMResult
+
+# Load parameter schemas from centralized JSON
+_SCHEMAS_PATH = Path(__file__).resolve().parent / "tool_schemas.json"
+with _SCHEMAS_PATH.open(encoding="utf-8") as _f:
+    _TOOL_SCHEMAS: dict[str, dict[str, Any]] = json.load(_f)
 
 
 def _compute_psm_from_fixture(ip_name: str) -> PSMResult:
@@ -58,21 +65,11 @@ class RunAnalystTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "analyst_type": {
-                    "type": "string",
-                    "enum": ANALYST_TYPES,
-                    "description": "The analyst type to run.",
-                },
-                "ip_name": {
-                    "type": "string",
-                    "description": "IP name to analyze (e.g., 'Berserk').",
-                },
-            },
-            "required": ["analyst_type", "ip_name"],
-        }
+        schema = _TOOL_SCHEMAS["RunAnalystTool"].copy()
+        schema["properties"] = dict(schema["properties"])
+        schema["properties"]["analyst_type"] = dict(schema["properties"]["analyst_type"])
+        schema["properties"]["analyst_type"]["enum"] = ANALYST_TYPES
+        return schema
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         analyst_type = kwargs["analyst_type"]
@@ -108,21 +105,7 @@ class RunEvaluatorTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "evaluator_type": {
-                    "type": "string",
-                    "enum": ["quality_judge", "hidden_value", "community_momentum"],
-                    "description": "The evaluator type to run.",
-                },
-                "ip_name": {
-                    "type": "string",
-                    "description": "IP name to evaluate.",
-                },
-            },
-            "required": ["evaluator_type", "ip_name"],
-        }
+        return _TOOL_SCHEMAS["RunEvaluatorTool"]
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         evaluator_type = kwargs["evaluator_type"]
@@ -181,16 +164,7 @@ class PSMCalculateTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "ip_name": {
-                    "type": "string",
-                    "description": "IP name to calculate PSM for.",
-                },
-            },
-            "required": ["ip_name"],
-        }
+        return _TOOL_SCHEMAS["PSMCalculateTool"]
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs["ip_name"]
@@ -225,17 +199,7 @@ class ExplainScoreTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "ip_name": {
-                    "type": "string",
-                    "description": "IP name to explain scoring for (e.g., 'Berserk').",
-                },
-            },
-            "required": ["ip_name"],
-            "additionalProperties": False,
-        }
+        return _TOOL_SCHEMAS["ExplainScoreTool"]
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs["ip_name"]
