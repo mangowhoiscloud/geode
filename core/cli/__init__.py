@@ -444,13 +444,43 @@ def _merge_event_output(final_state: dict[str, Any], output: dict[str, Any]) -> 
             final_state[k] = v
 
 
+def _inspect_pipeline_state(state: dict[str, Any]) -> None:
+    """Display current pipeline state for user inspection."""
+    console.print("  [header]Pipeline State[/header]")
+    console.print(f"    IP: {state.get('ip_name', '?')}")
+    console.print(f"    Iteration: {state.get('iteration', 1)}")
+
+    analyses = state.get("analyses", [])
+    if analyses:
+        console.print(f"    Analyses: {len(analyses)} completed")
+        for a in analyses[-4:]:
+            if hasattr(a, "model_dump"):
+                a = a.model_dump()
+            atype = a.get("analyst_type", "?")
+            score = a.get("score", 0)
+            console.print(f"      - {atype}: {score}")
+
+    comp = state.get("composite_score", {})
+    if comp:
+        console.print(f"    Score: {comp}")
+
+    tier = state.get("tier")
+    if tier:
+        console.print(f"    Tier: {tier}")
+    console.print()
+
+
 def _handle_interrupt(
     graph: Any,
     config: dict[str, Any],
     final_state: dict[str, Any],
     done: list[str],
 ) -> bool:
-    """Handle a graph interrupt_before pause. Returns True to continue, False to abort."""
+    """Handle a graph interrupt_before pause.
+
+    Options: [C]ontinue / [I]nspect / [S]kip / [A]bort.
+    Returns True to continue, False to abort.
+    """
     iteration = final_state.get("iteration", 1)
     confidence = final_state.get("composite_score", {})
     console.print(
@@ -459,13 +489,31 @@ def _handle_interrupt(
     if confidence:
         console.print(f"  [dim]Current confidence: {confidence}[/dim]")
 
-    choice = (
-        console.input("  [bold][C]ontinue / [A]bort[/bold] (default: Continue): ").strip().lower()
-    )
-    if choice in ("a", "abort"):
-        console.print("  [dim]Pipeline aborted by user.[/dim]")
-        return False
-    return True
+    while True:
+        try:
+            choice = (
+                console.input(
+                    "  [bold][C]ontinue / [I]nspect / [S]kip / [A]bort[/bold] (default: Continue): "
+                )
+                .strip()
+                .lower()
+            )
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            return False
+
+        if choice in ("", "c", "continue"):
+            return True
+        if choice in ("a", "abort"):
+            console.print("  [dim]Pipeline aborted by user.[/dim]")
+            return False
+        if choice in ("i", "inspect"):
+            _inspect_pipeline_state(final_state)
+            continue
+        if choice in ("s", "skip"):
+            console.print("  [dim]Skipping current step...[/dim]")
+            return True
+        console.print("  [dim]Unknown option. Use C/I/S/A.[/dim]")
 
 
 def _execute_pipeline(
@@ -786,6 +834,14 @@ def _run_analysis(
 
     # Create runtime with all infrastructure wired
     runtime = GeodeRuntime.create(ip_name)
+
+    # Subagent session isolation: force MemorySaver fallback (G7 fix)
+    from core.cli.sub_agent import get_subagent_context
+
+    is_subagent, _child_key = get_subagent_context()
+    if is_subagent:
+        runtime.is_subagent = True
+
     _hooks_ctx.set(runtime.hooks)
 
     # Log available tools for current mode
@@ -1207,6 +1263,42 @@ def _text_requests_dry_run(text: str) -> bool:
     return bool(_DRY_RUN_PATTERN.search(text))
 
 
+def _build_sub_agent_manager(verbose: bool = False) -> Any:
+    """Build a SubAgentManager wired to real pipeline functions."""
+    from core.cli.sub_agent import (
+        SubAgentManager,
+        make_pipeline_handler,
+    )
+    from core.extensibility.agents import AgentRegistry
+    from core.orchestration.isolated_execution import IsolatedRunner
+
+    readiness = _get_readiness()
+    force_dry = readiness.force_dry_run if readiness else True
+
+    handler = make_pipeline_handler(
+        run_analysis_fn=lambda ip_name, dry_run=force_dry, **_kw: _run_analysis(
+            ip_name, dry_run=dry_run, verbose=verbose
+        ),
+        search_fn=lambda query="", **_kw: {
+            "status": "ok",
+            "action": "search",
+            "query": query,
+            "results": [
+                {"name": r.ip_name, "score": r.score} for r in _get_search_engine().search(query)
+            ],
+        },
+    )
+    runner = IsolatedRunner()
+    registry = AgentRegistry()
+    registry.load_defaults()
+    return SubAgentManager(
+        runner,
+        handler,
+        timeout_s=300.0,
+        agent_registry=registry,
+    )
+
+
 def _build_tool_handlers(
     verbose: bool = False,
     *,
@@ -1620,9 +1712,27 @@ def _build_tool_handlers(
             "event_name": event_name,
         }
 
-    # --- Plan mode handlers ---
+    # --- Plan mode handlers (multi-plan cache keyed by plan_id) ---
 
-    _plan_cache: dict[str, Any] = {}
+    _plan_cache: dict[str, tuple[Any, Any]] = {}
+    _human_ratings: dict[str, dict[str, Any]] = {}
+    _result_feedback: dict[str, str] = {}
+
+    def _resolve_plan(
+        plan_id: str,
+    ) -> tuple[Any, Any] | None:
+        """Resolve plan from cache by ID, falling back to most recent."""
+        cached = _plan_cache.get(plan_id)
+        if not cached and _plan_cache:
+            last_key = list(_plan_cache.keys())[-1]
+            cached = _plan_cache.get(last_key)
+            if cached:
+                log.debug(
+                    "Plan ID '%s' not found, using latest '%s'",
+                    plan_id,
+                    last_key,
+                )
+        return cached
 
     def handle_create_plan(**kwargs: Any) -> dict[str, Any]:
         from core.orchestration.plan_mode import PlanMode
@@ -1632,17 +1742,24 @@ def _build_tool_handlers(
         planner = PlanMode()
         plan = planner.create_plan(ip_name, template=template)
         summary = planner.present_plan(plan)
-        _plan_cache["last"] = (planner, plan)
+        _plan_cache[plan.plan_id] = (planner, plan)
 
         console.print()
         console.print(f"  [header]● Plan: {ip_name} 분석 계획[/header]")
         for i, step in enumerate(plan.steps, 1):
             console.print(f"    {i}. {step.description}")
         console.print(
-            f"  [muted]예상 시간: {plan.total_estimated_time_s:.0f}s "
+            f"  [muted]예상 시간: "
+            f"{plan.total_estimated_time_s:.0f}s "
             f"| 단계: {plan.step_count}개[/muted]"
         )
         console.print()
+        log.info(
+            "Plan '%s' created for '%s' (%d steps)",
+            plan.plan_id,
+            ip_name,
+            plan.step_count,
+        )
         return {
             "status": "ok",
             "action": "plan",
@@ -1652,31 +1769,181 @@ def _build_tool_handlers(
             "step_count": plan.step_count,
             "steps": [s.description for s in plan.steps],
             "summary": summary,
-            "hint": "Use approve_plan to execute this plan.",
+            "hint": ("Use approve_plan, reject_plan, or modify_plan to proceed."),
         }
 
     def handle_approve_plan(**kwargs: Any) -> dict[str, Any]:
         plan_id = kwargs.get("plan_id", "")
-        cached = _plan_cache.get("last")
+        cached = _resolve_plan(plan_id)
         if not cached:
             return {"error": "No plan to approve. Use create_plan first."}
 
         planner, plan = cached
         if plan_id and plan.plan_id != plan_id:
-            return {"error": f"Plan ID mismatch: expected {plan.plan_id}, got {plan_id}"}
+            return {"error": (f"Plan ID mismatch: expected {plan.plan_id}, got {plan_id}")}
 
         planner.approve_plan(plan)
         result = planner.execute_plan(plan)
-        _plan_cache.pop("last", None)
+        _plan_cache.pop(plan.plan_id, None)
 
-        console.print(f"  [success]✓ Plan executed: {plan.ip_name}[/success]")
+        ip = plan.ip_name
+        console.print(f"  [success]✓ Plan approved: {ip}[/success]")
         console.print()
+        log.info("Plan '%s' approved for '%s'", plan.plan_id, ip)
         return {
             "status": "ok",
             "action": "approve_plan",
             "plan_id": plan.plan_id,
             "executed": True,
             "result": str(result)[:500],
+            "hint": (f"Plan approved. Call analyze_ip with ip_name='{ip}' to run the analysis."),
+        }
+
+    def handle_reject_plan(**kwargs: Any) -> dict[str, Any]:
+        plan_id = kwargs.get("plan_id", "")
+        reason = kwargs.get("reason", "")
+        cached = _resolve_plan(plan_id)
+        if not cached:
+            return {"error": "No plan to reject."}
+
+        planner, plan = cached
+        planner.reject_plan(plan, reason=reason)
+        _plan_cache.pop(plan.plan_id, None)
+        console.print(f"  [warning]✗ Plan rejected: {plan.ip_name}[/warning]")
+        log.info(
+            "Plan '%s' rejected (reason=%s)",
+            plan.plan_id,
+            reason or "(none)",
+        )
+        return {
+            "status": "ok",
+            "action": "reject_plan",
+            "plan_id": plan.plan_id,
+            "reason": reason,
+        }
+
+    def handle_modify_plan(**kwargs: Any) -> dict[str, Any]:
+        plan_id = kwargs.get("plan_id", "")
+        cached = _resolve_plan(plan_id)
+        if not cached:
+            return {"error": "No plan to modify."}
+
+        planner, plan = cached
+        template = kwargs.get("template")
+        remove = kwargs.get("remove_steps")
+        planner.modify_plan(
+            plan,
+            template=template,
+            remove_steps=remove,
+        )
+        _plan_cache[plan.plan_id] = (planner, plan)
+        console.print(f"  [header]● Plan modified: {plan.ip_name}[/header]")
+        for i, step in enumerate(plan.steps, 1):
+            console.print(f"    {i}. {step.description}")
+        console.print()
+        log.info(
+            "Plan '%s' modified (%d steps)",
+            plan.plan_id,
+            plan.step_count,
+        )
+        return {
+            "status": "ok",
+            "action": "modify_plan",
+            "plan_id": plan.plan_id,
+            "step_count": plan.step_count,
+            "steps": [s.description for s in plan.steps],
+        }
+
+    def handle_list_plans(**kwargs: Any) -> dict[str, Any]:
+        plans = []
+        for pid, (_, plan) in _plan_cache.items():
+            plans.append(
+                {
+                    "plan_id": pid,
+                    "ip_name": plan.ip_name,
+                    "status": plan.status.value,
+                    "steps": plan.step_count,
+                }
+            )
+        return {
+            "status": "ok",
+            "action": "list_plans",
+            "count": len(plans),
+            "plans": plans,
+        }
+
+    def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        rating = kwargs.get("rating", 0)
+        if not (1 <= rating <= 5):
+            return {"error": f"Rating must be 1-5, got {rating}"}
+        comment = kwargs.get("comment", "")
+        _human_ratings[ip_name] = {
+            "rating": rating,
+            "comment": comment,
+        }
+        console.print(f"  [success]✓ Rating saved for {ip_name}: {rating}/5[/success]")
+        log.info(
+            "HITL rating: %s = %d/5",
+            ip_name,
+            rating,
+        )
+        return {
+            "status": "ok",
+            "action": "rate_result",
+            "ip_name": ip_name,
+            "rating": rating,
+        }
+
+    def handle_accept_result(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        _result_feedback[ip_name] = "accepted"
+        console.print(f"  [success]✓ Result accepted: {ip_name}[/success]")
+        log.info("HITL accept: %s", ip_name)
+        return {
+            "status": "ok",
+            "action": "accept_result",
+            "ip_name": ip_name,
+        }
+
+    def handle_reject_result(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        reason = kwargs.get("reason", "")
+        _result_feedback[ip_name] = "rejected"
+        console.print(f"  [warning]✗ Result rejected: {ip_name}[/warning]")
+        log.info(
+            "HITL reject: %s (reason=%s)",
+            ip_name,
+            reason or "(none)",
+        )
+        return {
+            "status": "ok",
+            "action": "reject_result",
+            "ip_name": ip_name,
+            "reason": reason,
+            "hint": ("Use rerun_node to re-execute specific pipeline steps."),
+        }
+
+    def handle_rerun_node(**kwargs: Any) -> dict[str, Any]:
+        node_name = kwargs.get("node_name", "")
+        ip_name = kwargs.get("ip_name", "")
+        allowed = {"scoring", "verification", "synthesizer"}
+        if node_name not in allowed:
+            return {
+                "error": (f"Cannot rerun '{node_name}'. Allowed: {sorted(allowed)}"),
+            }
+        console.print(f"  [header]▸ Rerunning {node_name} for {ip_name}[/header]")
+        log.info(
+            "HITL rerun: %s for %s",
+            node_name,
+            ip_name,
+        )
+        return {
+            "status": "ok",
+            "action": "rerun_node",
+            "node_name": node_name,
+            "ip_name": ip_name,
+            "hint": ("Node re-execution queued. Results will update in-place."),
         }
 
     # --- New tools: web, document, note, signal ---
@@ -1803,6 +2070,13 @@ def _build_tool_handlers(
         "trigger_event": handle_trigger_event,
         "create_plan": handle_create_plan,
         "approve_plan": handle_approve_plan,
+        "reject_plan": handle_reject_plan,
+        "modify_plan": handle_modify_plan,
+        "list_plans": handle_list_plans,
+        "rate_result": handle_rate_result,
+        "accept_result": handle_accept_result,
+        "reject_result": handle_reject_result,
+        "rerun_node": handle_rerun_node,
         # New tools
         "web_fetch": handle_web_fetch,
         "general_web_search": handle_general_web_search,
@@ -1903,7 +2177,12 @@ def _interactive_loop() -> None:
     handlers = _build_tool_handlers(
         verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref, skill_registry=skill_registry
     )
-    executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
+    sub_mgr = _build_sub_agent_manager(verbose=verbose)
+    executor = ToolExecutor(
+        action_handlers=handlers,
+        mcp_manager=mcp_mgr,
+        sub_agent_manager=sub_mgr,
+    )
     agentic = AgenticLoop(
         conversation, executor, mcp_manager=mcp_mgr, skill_registry=skill_registry
     )
@@ -1940,7 +2219,14 @@ def _interactive_loop() -> None:
                     agentic_ref=agentic_ref,
                     skill_registry=skill_registry,
                 )
-                executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
+                sub_mgr = _build_sub_agent_manager(
+                    verbose=verbose,
+                )
+                executor = ToolExecutor(
+                    action_handlers=handlers,
+                    mcp_manager=mcp_mgr,
+                    sub_agent_manager=sub_mgr,
+                )
                 agentic = AgenticLoop(
                     conversation,
                     executor,

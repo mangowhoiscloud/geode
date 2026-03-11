@@ -26,6 +26,51 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.10.0] — 2026-03-12
+
+SubAgent 병렬 실행 완성 — GAP 8개 전수 해결, OpenClaw 세션 키 격리, Live E2E 7/7 통과.
+
+### Added
+
+#### SubAgent Manager Wiring (G1-G6)
+- `make_pipeline_handler()` — analyze/search/compare 라우팅 팩토리
+- `_build_sub_agent_manager()` — CLI → ToolExecutor 연결 팩토리
+- `_resolve_agent()` + `AgentRegistry` 주입 — 에이전트 정의 → 실행 연결
+- `delegate_task` 배치 스키마 — `tasks` 배열 필드 + `_execute_delegate` 배치 지원
+- `on_progress` 콜백 — 병렬 실행 중 진행 표시
+- `SUBAGENT_STARTED/COMPLETED/FAILED` 전용 훅 이벤트 (HookEvent 23 → 26)
+
+#### OpenClaw 세션 키 격리 (G7)
+- `build_subagent_session_key()` — `ip:X:Y:subagent:Z` 5-part 세션 키
+- `build_subagent_thread_config()` — LangGraph config + LangSmith metadata
+- `_subagent_context` 스레드 로컬 + `get_subagent_context()` — 부모-자식 컨텍스트 전파
+- `SubagentRunRecord` — 부모-자식 관계 추적 (run_id, session_key, outcome)
+- `GeodeRuntime.is_subagent` — 서브에이전트 시 MemorySaver 자동 전환 (SQLite 경합 제거)
+
+#### Live E2E 테스트
+- `TestSubAgentLive` 7개 시나리오 (E1-E7): delegate 단건/배치, wiring, 훅, registry, 비회귀
+- `TestSubAgentSessionIsolation` 3개 테스트 (스레드 로컬, 세션 키, 런타임 플래그)
+- `TestSubAgentSessionIsolationE2E` — 병렬 SQLite 비경합 검증
+
+### Changed
+- `delegate_task` 스키마: `bash` 타입 제거, `required: []`로 변경 (단건/배치 공존)
+- `_execute_delegate()`: 단건 flat dict / 다건 `{results, total, succeeded}` 반환
+- `parse_session_key()`: 5-part 서브에이전트 키 인식
+- `SubTask` dataclass: `agent: str | None` 필드 추가
+
+### Fixed
+- `delegate_task` 도구가 `SubAgentManager not configured` 에러만 반환하던 문제 (G1+G2)
+- 병렬 서브에이전트 실행 시 SQLite `database disk image is malformed` 에러 (G7)
+- `NODE_ENTER/EXIT/ERROR` 훅이 서브에이전트와 파이프라인 노드를 구분하지 못하던 문제 (G6)
+
+### Infrastructure
+- Test count: 2033+ → 2008+ (batch/runtime 제외 시, 전수 통과)
+- Module count: 121 → 124
+- `docs/plans/P1-subagent-parallel-execution.md` — GAP 분석 + 구현 플랜
+- `docs/blogs/20-subagent-parallel-execution-e2e.md` — 기술 블로그 (네러티브)
+
+---
+
 ## [0.9.0] — 2026-03-11
 
 General Assistant Transformation, Skills 시스템, MCP 자동설치, Clarification 파이프라인, 마스코트 브랜딩.
@@ -347,6 +392,7 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.10.0 | 2026-03-12 | SubAgent 병렬 실행 완성, OpenClaw 세션 격리, G1-G8 전수 해결 |
 | 0.9.0 | 2026-03-11 | General Assistant, Skills, MCP 자동설치, Clarification, 마스코트 |
 | 0.8.0 | 2026-03-11 | Plan/Sub-agent NL, Claude Code UI, response quality, verification tracing |
 | 0.7.0 | 2026-03-11 | C2-C5 flexibility, LangSmith observability, orchestration integration, 17-tool audit |
@@ -354,7 +400,8 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/mangowhoiscloud/geode/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mangowhoiscloud/geode/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mangowhoiscloud/geode/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0

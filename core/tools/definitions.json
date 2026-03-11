@@ -347,28 +347,36 @@
       "properties": {
         "task_description": {
           "type": "string",
-          "description": "Description of the task to execute"
+          "description": "Description of the task to execute (single task mode)"
         },
         "task_type": {
           "type": "string",
           "enum": [
             "analyze",
             "search",
-            "compare",
-            "bash"
+            "compare"
           ],
           "description": "Type of task to delegate"
         },
         "args": {
           "type": "object",
           "description": "Arguments for the delegated task"
+        },
+        "tasks": {
+          "type": "array",
+          "description": "Batch mode: array of tasks to run in parallel",
+          "items": {
+            "type": "object",
+            "properties": {
+              "task_description": {"type": "string"},
+              "task_type": {"type": "string", "enum": ["analyze", "search", "compare"]},
+              "args": {"type": "object"}
+            },
+            "required": ["task_description", "task_type", "args"]
+          }
         }
       },
-      "required": [
-        "task_description",
-        "task_type",
-        "args"
-      ]
+      "required": []
     }
   },
   {

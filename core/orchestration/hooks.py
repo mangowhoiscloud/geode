@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (23 events)."""
+    """Pipeline lifecycle events (26 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -55,6 +55,11 @@ class HookEvent(Enum):
 
     # Prompt Assembly (ADR-007)
     PROMPT_ASSEMBLED = "prompt_assembled"
+
+    # SubAgent lifecycle
+    SUBAGENT_STARTED = "subagent_started"
+    SUBAGENT_COMPLETED = "subagent_completed"
+    SUBAGENT_FAILED = "subagent_failed"
 
 
 @dataclass

@@ -363,6 +363,7 @@ class GeodeRuntime:
         self.session_key = session_key
         self.ip_name = ip_name
         self.run_id = ""
+        self.is_subagent: bool = False
         self._compiled_graph: CompiledStateGraph[Any, None, Any, Any] | None = None
         # L4.5 Automation
         self.drift_detector = drift_detector
@@ -955,7 +956,11 @@ class GeodeRuntime:
 
         from core.graph import compile_graph
 
-        checkpoint_db = self.checkpoint_db if enable_checkpoint else None
+        # Subagents use MemorySaver for thread safety (G7 fix)
+        if self.is_subagent:
+            checkpoint_db = None  # forces MemorySaver fallback
+        else:
+            checkpoint_db = self.checkpoint_db if enable_checkpoint else None
         interrupt_list = [
             n.strip() for n in settings.interrupt_nodes.split(",") if n.strip()
         ] or None
