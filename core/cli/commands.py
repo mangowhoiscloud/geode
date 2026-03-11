@@ -76,6 +76,7 @@ COMMAND_MAP: dict[str, str] = {
     "/compare": "compare",
     "/mcp": "mcp",
     "/skills": "skills",
+    "/cost": "cost",
 }
 
 

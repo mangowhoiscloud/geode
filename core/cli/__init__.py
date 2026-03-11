@@ -970,11 +970,18 @@ def _handle_command(
     action = resolve_action(cmd)
 
     if action == "quit":
+        from core.ui.agentic_ui import render_session_cost_summary
+
+        render_session_cost_summary()
         console.print("  [muted]Goodbye.[/muted]\n")
         return True, verbose
 
     if action == "help":
         show_help()
+    elif action == "cost":
+        from core.ui.agentic_ui import render_session_cost_summary
+
+        render_session_cost_summary()
     elif action == "list":
         cmd_list()
     elif action == "verbose":
@@ -1318,6 +1325,34 @@ def _build_tool_handlers(
     readiness = _get_readiness()
     force_dry = readiness.force_dry_run if readiness else True
 
+    def _clarify(
+        tool: str,
+        missing: list[str],
+        hint: str,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        """Standard clarification response for missing required params."""
+        return {
+            "error": f"{tool} requires: {', '.join(missing)}",
+            "clarification_needed": True,
+            "missing": missing,
+            "hint": hint,
+            **extra,
+        }
+
+    def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Wrap delegated tool execution — catch KeyError as clarification."""
+        try:
+            result: dict[str, Any] = tool_class().execute(**kwargs)
+            return result
+        except (KeyError, TypeError) as exc:
+            param = str(exc).strip("'\"")
+            return _clarify(
+                tool_class.__name__,
+                [param],
+                f"'{param}' 값을 알려주세요.",
+            )
+
     def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
         from core.fixtures import FIXTURE_MAP as _FM
 
@@ -1328,12 +1363,7 @@ def _build_tool_handlers(
     def handle_analyze_ip(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
         if not ip_name:
-            return {
-                "error": "analyze_ip requires an IP name",
-                "clarification_needed": True,
-                "missing": ["ip_name"],
-                "hint": "어떤 IP를 분석할까요?",
-            }
+            return _clarify("analyze_ip", ["ip_name"], "어떤 IP를 분석할까요?")
         dry_run = kwargs.get("dry_run", force_dry)
         if _text_requests_dry_run(ip_name):
             dry_run = True
@@ -1371,6 +1401,8 @@ def _build_tool_handlers(
 
     def handle_search_ips(**kwargs: Any) -> dict[str, Any]:
         query = kwargs.get("query", "")
+        if not query:
+            return _clarify("search_ips", ["query"], "무엇을 검색할까요?")
         results = _get_search_engine().search(query)
         _render_search_results(query, results)
         return {
@@ -1388,18 +1420,9 @@ def _build_tool_handlers(
 
         # Clarification: both IPs required
         if not ip_a or not ip_b:
-            missing = []
-            if not ip_a:
-                missing.append("ip_a")
-            if not ip_b:
-                missing.append("ip_b")
-            return {
-                "error": "compare_ips requires two IPs to compare",
-                "clarification_needed": True,
-                "provided": {"ip_a": ip_a, "ip_b": ip_b},
-                "missing": missing,
-                "hint": "어떤 IP와 비교할까요?" if ip_a else "비교할 두 IP를 알려주세요.",
-            }
+            missing = [k for k, v in {"ip_a": ip_a, "ip_b": ip_b}.items() if not v]
+            hint = "어떤 IP와 비교할까요?" if ip_a else "비교할 두 IP를 알려주세요."
+            return _clarify("compare_ips", missing, hint, provided={"ip_a": ip_a, "ip_b": ip_b})
 
         console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
         result_a = _run_analysis(ip_a, dry_run=dry_run, verbose=verbose)
@@ -1440,12 +1463,7 @@ def _build_tool_handlers(
     def handle_generate_report(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
         if not ip_name:
-            return {
-                "error": "generate_report requires an IP name",
-                "clarification_needed": True,
-                "missing": ["ip_name"],
-                "hint": "어떤 IP의 리포트를 생성할까요?",
-            }
+            return _clarify("generate_report", ["ip_name"], "어떤 IP의 리포트를 생성할까요?")
         fmt = kwargs.get("format", "markdown")
         if fmt == "md":
             fmt = "markdown"
@@ -1539,6 +1557,8 @@ def _build_tool_handlers(
 
     def handle_memory_search(**kwargs: Any) -> dict[str, Any]:
         query = kwargs.get("query", "")
+        if not query:
+            return _clarify("memory_search", ["query"], "무엇을 검색할까요?")
         try:
             mem = ProjectMemory()
             content = mem.search(query) if hasattr(mem, "search") else mem.load_memory()
@@ -1549,6 +1569,9 @@ def _build_tool_handlers(
     def handle_memory_save(**kwargs: Any) -> dict[str, Any]:
         key = kwargs.get("key", "")
         content = kwargs.get("content", "")
+        if not key or not content:
+            missing = [k for k, v in {"key": key, "content": content}.items() if not v]
+            return _clarify("memory_save", missing, "저장할 키와 내용을 알려주세요.")
         try:
             mem = ProjectMemory()
             mem.add_insight(f"{key}: {content}")
@@ -1562,6 +1585,8 @@ def _build_tool_handlers(
 
         rule_action = kwargs.get("action", "list")
         name = kwargs.get("name", "")
+        if rule_action in ("add", "delete") and not name:
+            return _clarify("manage_rule", ["name"], "규칙 이름을 알려주세요.")
         intent = NLIntent(
             action="memory",
             args={
@@ -1738,6 +1763,8 @@ def _build_tool_handlers(
         from core.orchestration.plan_mode import PlanMode
 
         ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("create_plan", ["ip_name"], "어떤 IP의 분석 계획을 세울까요?")
         template = kwargs.get("template", "full_pipeline")
         planner = PlanMode()
         plan = planner.create_plan(ip_name, template=template)
@@ -1875,8 +1902,10 @@ def _build_tool_handlers(
     def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
         rating = kwargs.get("rating", 0)
+        if not ip_name:
+            return _clarify("rate_result", ["ip_name"], "어떤 IP에 평점을 매길까요?")
         if not (1 <= rating <= 5):
-            return {"error": f"Rating must be 1-5, got {rating}"}
+            return _clarify("rate_result", ["rating"], "평점은 1-5 사이로 입력해주세요.")
         comment = kwargs.get("comment", "")
         _human_ratings[ip_name] = {
             "rating": rating,
@@ -1897,6 +1926,8 @@ def _build_tool_handlers(
 
     def handle_accept_result(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("accept_result", ["ip_name"], "어떤 IP 결과를 수락할까요?")
         _result_feedback[ip_name] = "accepted"
         console.print(f"  [success]✓ Result accepted: {ip_name}[/success]")
         log.info("HITL accept: %s", ip_name)
@@ -1908,6 +1939,8 @@ def _build_tool_handlers(
 
     def handle_reject_result(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("reject_result", ["ip_name"], "어떤 IP 결과를 거부할까요?")
         reason = kwargs.get("reason", "")
         _result_feedback[ip_name] = "rejected"
         console.print(f"  [warning]✗ Result rejected: {ip_name}[/warning]")
@@ -1927,6 +1960,9 @@ def _build_tool_handlers(
     def handle_rerun_node(**kwargs: Any) -> dict[str, Any]:
         node_name = kwargs.get("node_name", "")
         ip_name = kwargs.get("ip_name", "")
+        if not node_name or not ip_name:
+            missing = [k for k, v in {"node_name": node_name, "ip_name": ip_name}.items() if not v]
+            return _clarify("rerun_node", missing, "재실행할 노드와 IP를 알려주세요.")
         allowed = {"scoring", "verification", "synthesizer"}
         if node_name not in allowed:
             return {
@@ -1947,51 +1983,52 @@ def _build_tool_handlers(
         }
 
     # --- New tools: web, document, note, signal ---
+    # All delegated tools wrapped with _safe_delegate for KeyError → clarification
 
     def handle_web_fetch(**kwargs: Any) -> dict[str, Any]:
         from core.tools.web_tools import WebFetchTool
 
-        return WebFetchTool().execute(**kwargs)
+        return _safe_delegate(WebFetchTool, kwargs)
 
     def handle_general_web_search(**kwargs: Any) -> dict[str, Any]:
         from core.tools.web_tools import GeneralWebSearchTool
 
-        return GeneralWebSearchTool().execute(**kwargs)
+        return _safe_delegate(GeneralWebSearchTool, kwargs)
 
     def handle_read_document(**kwargs: Any) -> dict[str, Any]:
         from core.tools.document_tools import ReadDocumentTool
 
-        return ReadDocumentTool().execute(**kwargs)
+        return _safe_delegate(ReadDocumentTool, kwargs)
 
     def handle_note_save(**kwargs: Any) -> dict[str, Any]:
         from core.tools.memory_tools import NoteSaveTool
 
-        return NoteSaveTool().execute(**kwargs)
+        return _safe_delegate(NoteSaveTool, kwargs)
 
     def handle_note_read(**kwargs: Any) -> dict[str, Any]:
         from core.tools.memory_tools import NoteReadTool
 
-        return NoteReadTool().execute(**kwargs)
+        return _safe_delegate(NoteReadTool, kwargs)
 
     def handle_youtube_search(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import YouTubeSearchTool
 
-        return YouTubeSearchTool().execute(**kwargs)
+        return _safe_delegate(YouTubeSearchTool, kwargs)
 
     def handle_reddit_sentiment(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import RedditSentimentTool
 
-        return RedditSentimentTool().execute(**kwargs)
+        return _safe_delegate(RedditSentimentTool, kwargs)
 
     def handle_steam_info(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import SteamInfoTool
 
-        return SteamInfoTool().execute(**kwargs)
+        return _safe_delegate(SteamInfoTool, kwargs)
 
     def handle_google_trends(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import GoogleTrendsTool
 
-        return GoogleTrendsTool().execute(**kwargs)
+        return _safe_delegate(GoogleTrendsTool, kwargs)
 
     def handle_install_mcp_server(**kwargs: Any) -> dict[str, Any]:
         import os as _os
@@ -2192,6 +2229,9 @@ def _interactive_loop() -> None:
         try:
             user_input = console.input("[bold cyan]>[/bold cyan] ").strip()
         except (KeyboardInterrupt, EOFError):
+            from core.ui.agentic_ui import render_session_cost_summary
+
+            render_session_cost_summary()
             console.print("\n  [muted]Goodbye.[/muted]\n")
             break
 

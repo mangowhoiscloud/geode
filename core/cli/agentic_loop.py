@@ -77,6 +77,7 @@ class AgenticLoop:
 
     DEFAULT_MAX_ROUNDS = 10
     DEFAULT_MAX_TOKENS = 4096
+    MAX_CLARIFICATION_ROUNDS = 3
 
     def __init__(
         self,
@@ -128,6 +129,7 @@ class AgenticLoop:
     def run(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_log = []
+        self._clarification_count = 0
 
         # Add user message to conversation context
         self.context.add_user_message(user_input)
@@ -263,6 +265,18 @@ class AgenticLoop:
             # Execute via ToolExecutor (handles HITL for dangerous tools)
             result = self.executor.execute(tool_name, tool_input)
 
+            # Track clarification rounds to prevent infinite loops
+            if isinstance(result, dict) and result.get("clarification_needed"):
+                self._clarification_count += 1
+                if self._clarification_count > self.MAX_CLARIFICATION_ROUNDS:
+                    result = {
+                        "error": (
+                            "Too many clarification attempts. "
+                            "Please provide all required parameters."
+                        ),
+                        "max_clarifications_exceeded": True,
+                    }
+
             # Claude Code-style: show tool result summary
             if isinstance(result, dict):
                 render_tool_result(tool_name, result)
@@ -327,6 +341,7 @@ class AgenticLoop:
                 get_usage_accumulator,
                 track_token_usage,
             )
+            from core.ui.agentic_ui import render_tokens
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
@@ -340,8 +355,9 @@ class AgenticLoop:
                 )
             )
             track_token_usage(self.model, in_tok, out_tok)
-            log.debug(
-                "AgenticLoop: model=%s in=%d out=%d cost=$%.6f",
+            render_tokens(self.model, in_tok, out_tok, cost_usd=cost)
+            log.info(
+                "LLM call: model=%s in=%d out=%d cost=$%.4f",
                 self.model,
                 in_tok,
                 out_tok,

@@ -393,8 +393,8 @@ def call_llm(
             )
             get_usage_accumulator().record(usage)
             track_token_usage(model, in_tok, out_tok)
-            log.debug(
-                "LLM usage: model=%s in=%d out=%d cost=$%.4f",
+            log.info(
+                "LLM call: model=%s in=%d out=%d cost=$%.4f",
                 model,
                 in_tok,
                 out_tok,
@@ -460,8 +460,8 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
             )
             get_usage_accumulator().record(usage)
             track_token_usage(model, in_tok, out_tok)
-            log.debug(
-                "LLM parsed usage: model=%s in=%d out=%d cost=$%.4f",
+            log.info(
+                "LLM call (parsed): model=%s in=%d out=%d cost=$%.4f",
                 model,
                 in_tok,
                 out_tok,
@@ -731,8 +731,8 @@ def call_llm_streaming(
                 )
                 get_usage_accumulator().record(usage)
                 track_token_usage(model, in_tok, out_tok)
-                log.debug(
-                    "Streaming usage: model=%s in=%d out=%d cost=$%.4f",
+                log.info(
+                    "LLM call (stream): model=%s in=%d out=%d cost=$%.4f",
                     model,
                     in_tok,
                     out_tok,

@@ -202,8 +202,8 @@ class TestSummaryFormatting:
         # Inspect the printed line
         print_args = [str(c) for c in mock_console.print.call_args_list]
         summary_line = next((p for p in print_args if "analyze" in p), "")
-        assert "↑150" in summary_line
-        assert "↓30" in summary_line
+        assert "↓150" in summary_line  # ↓ = input tokens
+        assert "↑30" in summary_line  # ↑ = output tokens
         assert "$0.004" in summary_line
 
     @patch("core.ui.status.console")
