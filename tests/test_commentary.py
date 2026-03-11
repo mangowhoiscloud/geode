@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from core.config import ANTHROPIC_BUDGET
 from core.llm.commentary import (
     build_analyze_context,
     build_compare_context,
@@ -176,12 +177,12 @@ class TestGenerateCommentary:
             user_query="test",
             action="search",
             context={},
-            model="claude-haiku-4-5-20251001",
+            model=ANTHROPIC_BUDGET,
             max_tokens=128,
             temperature=0.2,
         )
         _, kwargs = mock_call.call_args
-        assert kwargs["model"] == "claude-haiku-4-5-20251001"
+        assert kwargs["model"] == ANTHROPIC_BUDGET
         assert kwargs["max_tokens"] == 128
         assert kwargs["temperature"] == 0.2
 

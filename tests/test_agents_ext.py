@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from core.config import ANTHROPIC_SECONDARY
 from core.extensibility.agents import (
     AgentDefinition,
     AgentRegistry,
@@ -19,7 +20,7 @@ class TestAgentDefinition:
         assert agent.name == "test"
         assert agent.role == "Tester"
         assert agent.tools == []
-        assert agent.model == "claude-sonnet-4-20250514"
+        assert agent.model == ANTHROPIC_SECONDARY
 
     def test_create_with_all_fields(self):
         agent = AgentDefinition(

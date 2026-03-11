@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from core.config import ANTHROPIC_BUDGET
 from core.fixtures import load_fixture
 
 # Load parameter schemas from centralized JSON
@@ -261,7 +262,7 @@ class WebSearchTool:
 
             client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=ANTHROPIC_BUDGET,
                 max_tokens=1024,
                 tools=[{"type": "web_search_20250305"}],  # type: ignore[list-item]
                 messages=[
