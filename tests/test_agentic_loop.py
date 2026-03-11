@@ -796,3 +796,90 @@ class TestSubAgentEdgeCases:
 
         assert result.success is True
         assert result.output == {"raw": "not valid json {{"}
+
+
+# ---------------------------------------------------------------------------
+# Plan + Delegate tool definitions
+# ---------------------------------------------------------------------------
+
+
+class TestPlanDelegateTools:
+    """Verify create_plan and approve_plan are in tool definitions."""
+
+    def test_create_plan_in_tools(self) -> None:
+        names = {t["name"] for t in AGENTIC_TOOLS}
+        assert "create_plan" in names
+
+    def test_approve_plan_in_tools(self) -> None:
+        names = {t["name"] for t in AGENTIC_TOOLS}
+        assert "approve_plan" in names
+
+    def test_delegate_task_in_tools(self) -> None:
+        names = {t["name"] for t in AGENTIC_TOOLS}
+        assert "delegate_task" in names
+
+    def test_create_plan_schema(self) -> None:
+        tool = next(t for t in AGENTIC_TOOLS if t["name"] == "create_plan")
+        schema = tool["input_schema"]
+        assert "ip_name" in schema["properties"]
+        assert "ip_name" in schema["required"]
+
+    def test_approve_plan_schema(self) -> None:
+        tool = next(t for t in AGENTIC_TOOLS if t["name"] == "approve_plan")
+        schema = tool["input_schema"]
+        assert "plan_id" in schema["properties"]
+        assert "plan_id" in schema["required"]
+
+    def test_get_agentic_tools_includes_plan(self) -> None:
+        tools = get_agentic_tools()
+        names = {t["name"] for t in tools}
+        assert "create_plan" in names
+        assert "approve_plan" in names
+
+
+class TestAgenticLoopToolCallRendering:
+    """Verify tool call rendering is invoked during execution."""
+
+    def test_tool_call_renders(self) -> None:
+        """Tool calls should trigger render_tool_call."""
+        ctx = ConversationContext()
+        handler = MagicMock(return_value={"status": "ok", "tier": "S", "score": 81.3})
+        executor = ToolExecutor(action_handlers={"analyze_ip": handler})
+        loop = AgenticLoop(ctx, executor)
+
+        # Build a response with tool_use
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.name = "analyze_ip"
+        tool_block.input = {"ip_name": "Berserk"}
+        tool_block.id = "tool_123"
+
+        mock_response = MagicMock()
+        mock_response.content = [tool_block]
+
+        with patch("core.cli.agentic_loop.render_tool_call") as mock_render:
+            loop._process_tool_calls(mock_response)
+            mock_render.assert_called_once_with("analyze_ip", {"ip_name": "Berserk"})
+
+    def test_tool_result_renders_dict(self) -> None:
+        """Dict results should trigger render_tool_result."""
+        ctx = ConversationContext()
+        handler = MagicMock(return_value={"tier": "S", "score": 81.3})
+        executor = ToolExecutor(action_handlers={"analyze_ip": handler})
+        loop = AgenticLoop(ctx, executor)
+
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.name = "analyze_ip"
+        tool_block.input = {"ip_name": "Berserk"}
+        tool_block.id = "tool_123"
+
+        mock_response = MagicMock()
+        mock_response.content = [tool_block]
+
+        with (
+            patch("core.cli.agentic_loop.render_tool_call"),
+            patch("core.cli.agentic_loop.render_tool_result") as mock_render,
+        ):
+            loop._process_tool_calls(mock_response)
+            mock_render.assert_called_once_with("analyze_ip", {"tier": "S", "score": 81.3})
