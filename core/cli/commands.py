@@ -99,8 +99,8 @@ def show_help() -> None:
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
     console.print("  [label]/status[/label]             — Show system status")
     console.print("  [label]/compare[/label] <A> <B>    — Compare two IPs")
-    console.print("  [label]/mcp[/label]                — MCP server status/tools")
-    console.print("  [label]/skills[/label]             — List loaded skills")
+    console.print("  [label]/mcp[/label]                — MCP server status/tools/add")
+    console.print("  [label]/skills[/label]             — List/add/reload skills")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
     console.print()
@@ -694,8 +694,40 @@ def cmd_mcp(arg: str, *, mcp_manager: _Any | None = None) -> None:
         console.print()
         return
 
+    if sub.startswith("add"):
+        _mcp_add(mgr, sub[3:].strip())
+        return
+
     console.print(f"  [muted]MCP subcommand not recognized: {arg}[/muted]")
-    console.print("  [muted]Usage: /mcp [status|tools|reload][/muted]")
+    console.print("  [muted]Usage: /mcp [status|tools|reload|add][/muted]")
+    console.print()
+
+
+def _mcp_add(mgr: _Any, raw: str) -> None:
+    """Handle /mcp add <name> <command> [args...].
+
+    Example: /mcp add brave-search npx -y @anthropic/mcp-server-brave-search
+    """
+    parts = raw.split() if raw else []
+    if len(parts) < 2:
+        console.print("  [warning]Usage: /mcp add <name> <command> [args...][/warning]")
+        console.print(
+            "  [muted]Example: /mcp add brave-search npx"
+            " -y @anthropic/mcp-server-brave-search[/muted]"
+        )
+        console.print()
+        return
+
+    name = parts[0]
+    command = parts[1]
+    cmd_args = parts[2:] if len(parts) > 2 else []
+
+    if mgr.add_server(name, command, args=cmd_args):
+        console.print(f"  [success]Added MCP server: {name}[/success]")
+        console.print(f"  [muted]Command: {command} {' '.join(cmd_args)}[/muted]")
+        console.print("  [muted]Saved to .claude/mcp_servers.json[/muted]")
+    else:
+        console.print(f"  [warning]Failed to add MCP server: {name}[/warning]")
     console.print()
 
 
@@ -745,6 +777,10 @@ def cmd_skills(skill_registry: _Any, arg: str) -> None:
         console.print()
         return
 
+    if sub.startswith("add"):
+        _skills_add(reg, sub[3:].strip())
+        return
+
     # Show specific skill detail
     skill = reg.get(sub)
     if skill is None:
@@ -762,6 +798,57 @@ def cmd_skills(skill_registry: _Any, arg: str) -> None:
         console.print(f"  [label]Tools:[/label]       {', '.join(skill.tools)}")
     console.print(f"  [label]Risk:[/label]        {skill.risk}")
     console.print(f"  [label]Body:[/label]        {len(skill.body)} chars")
+    console.print()
+
+
+def _skills_add(reg: _Any, raw: str) -> None:
+    """Handle /skills add <path> — register an external SKILL.md file.
+
+    Copies the SKILL.md into .claude/skills/<name>/ and registers it.
+    Example: /skills add /path/to/my-skill/SKILL.md
+    """
+    import shutil
+
+    from core.extensibility.skills import SkillLoader
+
+    path_str = raw.strip()
+    if not path_str:
+        console.print("  [warning]Usage: /skills add <path-to-SKILL.md>[/warning]")
+        console.print("  [muted]Example: /skills add ./my-skill/SKILL.md[/muted]")
+        console.print()
+        return
+
+    src = Path(path_str).expanduser().resolve()
+    if not src.exists():
+        console.print(f"  [warning]File not found: {src}[/warning]")
+        console.print()
+        return
+
+    if not src.name.upper().startswith("SKILL"):
+        console.print(f"  [warning]Expected a SKILL.md file, got: {src.name}[/warning]")
+        console.print()
+        return
+
+    # Determine skill name from parent directory or filename
+    skill_name = src.parent.name
+    if skill_name in (".", ""):
+        skill_name = src.stem.lower().replace(" ", "-")
+
+    # Copy to .claude/skills/<name>/SKILL.md
+    loader = SkillLoader()
+    dest_dir = loader.skills_dir / skill_name
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "SKILL.md"
+    shutil.copy2(src, dest)
+
+    # Load and register
+    skill = loader.load_file(dest)
+    reg.register(skill)
+
+    console.print(f"  [success]Added skill: {skill.name}[/success]")
+    console.print(f"  [muted]Copied to {dest}[/muted]")
+    if skill.triggers:
+        console.print(f"  [muted]Triggers: {', '.join(skill.triggers)}[/muted]")
     console.print()
 
 

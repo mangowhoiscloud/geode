@@ -139,6 +139,38 @@ class MCPServerManager:
             result[name] = client.is_connected() if client else False
         return result
 
+    def add_server(
+        self,
+        name: str,
+        command: str,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+    ) -> bool:
+        """Add a new MCP server and persist to config file.
+
+        Returns True if successfully added and saved.
+        """
+        entry: dict[str, Any] = {"command": command}
+        if args:
+            entry["args"] = args
+        if env:
+            entry["env"] = env
+
+        self._servers[name] = entry
+
+        # Persist to config file
+        try:
+            self._config_path.parent.mkdir(parents=True, exist_ok=True)
+            self._config_path.write_text(
+                json.dumps(self._servers, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            log.info("Added MCP server '%s' and saved config", name)
+            return True
+        except OSError as exc:
+            log.error("Failed to save MCP config after adding '%s': %s", name, exc)
+            return False
+
     def reload_config(self) -> int:
         """Close all connections, reload config, and return new server count."""
         self.close_all()
