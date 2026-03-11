@@ -32,11 +32,11 @@ from core.cli.commands import (
     show_help,
 )
 from core.cli.conversation import ConversationContext
-from core.cli.nl_router import NLRouter
 from core.cli.search import IPSearchEngine
 from core.cli.startup import (
     ReadinessReport,
     check_readiness,
+    key_registration_gate,
     render_readiness,
     setup_project_memory,
 )
@@ -45,10 +45,6 @@ from core.config import settings
 from core.extensibility.reports import ReportFormat, ReportGenerator, ReportTemplate
 from core.infrastructure.ports.hook_port import HookSystemPort
 from core.llm.commentary import (
-    build_analyze_context,
-    build_compare_context,
-    build_list_context,
-    build_search_context,
     generate_commentary,
 )
 from core.runtime import GeodeRuntime
@@ -89,19 +85,9 @@ app = typer.Typer(
 )
 
 # Thread-safe singletons for REPL session via contextvars
-_nl_router_ctx: ContextVar[Any] = ContextVar("nl_router", default=None)
 _search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
 _readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
 _last_result_ctx: ContextVar[Any] = ContextVar("last_result", default=None)
-
-
-def _get_nl_router() -> NLRouter:
-    """Get or create the context-local NLRouter."""
-    router = _nl_router_ctx.get()
-    if router is None:
-        router = NLRouter()
-        _nl_router_ctx.set(router)
-    return cast(NLRouter, router)
 
 
 def _get_search_engine() -> IPSearchEngine:
@@ -906,6 +892,10 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
                     force_dry = True
                 _run_analysis(ip_a, dry_run=force_dry, verbose=verbose)
                 _run_analysis(ip_b, dry_run=force_dry, verbose=verbose)
+    elif action == "mcp":
+        from core.cli.commands import cmd_mcp
+
+        cmd_mcp(args)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -1068,265 +1058,6 @@ _DRY_RUN_PATTERN = _re.compile(
 def _text_requests_dry_run(text: str) -> bool:
     """Detect if user text explicitly requests dry-run mode."""
     return bool(_DRY_RUN_PATTERN.search(text))
-
-
-def _handle_natural_language(text: str, verbose: bool) -> None:
-    """Route natural language input via NLRouter (hybrid pattern + LLM)."""
-    from core.cli.nl_router import LLM_ROUTER_MODEL
-
-    with GeodeStatus("Classifying intent...", model=LLM_ROUTER_MODEL) as status:
-        intent = _get_nl_router().classify(text)
-
-        # Build summary for the permanent line
-        is_offline = bool(intent.args.get("_error"))
-        if is_offline:
-            summary = f"{intent.action} (offline)"
-        elif intent.action == "analyze":
-            ip_name = intent.args.get("ip_name", text)
-            status.update(f"Tool: analyze_ip ({ip_name})")
-            summary = f"analyze · {ip_name}"
-        elif intent.action == "search":
-            query = intent.args.get("query", text)
-            status.update(f"Tool: search_ips ({query})")
-            summary = f"search · {query}"
-        elif intent.action == "compare":
-            ip_a = intent.args.get("ip_a", "")
-            ip_b = intent.args.get("ip_b", "")
-            status.update(f"Tool: compare_ips ({ip_a}, {ip_b})")
-            summary = f"compare · {ip_a} vs {ip_b}"
-        elif intent.action == "report":
-            ip_name = intent.args.get("ip_name", text)
-            status.update(f"Tool: generate_report ({ip_name})")
-            summary = f"report · {ip_name}"
-        elif intent.action == "list":
-            status.update("Tool: list_ips")
-            summary = "list"
-        elif intent.action == "batch":
-            top = intent.args.get("top", 20)
-            status.update(f"Tool: batch_analyze (top={top})")
-            summary = f"batch · top {top}"
-        elif intent.action == "status":
-            status.update("Tool: check_status")
-            summary = "status"
-        elif intent.action == "model":
-            hint = intent.args.get("model_hint", "")
-            status.update(f"Tool: switch_model ({hint or 'menu'})")
-            summary = f"model · {hint or 'menu'}"
-        elif intent.action == "chat":
-            summary = "chat"
-        elif intent.action == "help":
-            summary = "help"
-        elif intent.action == "key":
-            status.update("Tool: set_api_key")
-            summary = "key"
-        elif intent.action == "auth":
-            status.update("Tool: manage_auth")
-            summary = "auth"
-        elif intent.action == "generate":
-            status.update("Tool: generate_data")
-            summary = "generate"
-        elif intent.action == "schedule":
-            status.update("Tool: schedule_job")
-            summary = "schedule"
-        elif intent.action == "trigger":
-            status.update("Tool: trigger_event")
-            summary = "trigger"
-        else:
-            summary = intent.action
-
-        status.stop(summary)
-
-    # --- Execute the routed action (unchanged logic) ---
-
-    if intent.action == "search":
-        query = intent.args.get("query", text)
-        results = _get_search_engine().search(query)
-        _render_search_results(query, results)
-        _show_commentary(
-            text, "search", build_search_context(query, results), is_offline=is_offline
-        )
-
-    elif intent.action == "analyze":
-        ip_name = intent.args.get("ip_name", text)
-        readiness = _get_readiness()
-        force_dry = readiness.force_dry_run if readiness else True
-        # NL dry-run override: LLM arg or text pattern detection
-        if intent.args.get("dry_run") or _text_requests_dry_run(text):
-            force_dry = True
-        result = _run_analysis(ip_name, dry_run=force_dry, verbose=verbose)
-        if result:
-            _show_commentary(text, "analyze", build_analyze_context(result), is_offline=is_offline)
-
-    elif intent.action == "compare":
-        ip_a = intent.args.get("ip_a", "")
-        ip_b = intent.args.get("ip_b", "")
-        console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
-        readiness = _get_readiness()
-        force_dry = readiness.force_dry_run if readiness else True
-        if intent.args.get("dry_run") or _text_requests_dry_run(text):
-            force_dry = True
-        result_a = _run_analysis(ip_a, dry_run=force_dry, verbose=verbose)
-        result_b = _run_analysis(ip_b, dry_run=force_dry, verbose=verbose)
-        _show_commentary(
-            text,
-            "compare",
-            build_compare_context(ip_a, result_a, ip_b, result_b),
-            is_offline=is_offline,
-        )
-
-    elif intent.action == "list":
-        from core.fixtures import FIXTURE_MAP as _FIXTURE_MAP
-
-        cmd_list()
-        ip_names = [n.title() for n in _FIXTURE_MAP]
-        _show_commentary(text, "list", build_list_context(ip_names), is_offline=is_offline)
-
-    elif intent.action == "report":
-        ip_name = intent.args.get("ip_name", text)
-        readiness = _get_readiness()
-        report_dry = readiness.force_dry_run if readiness else True
-        if intent.args.get("dry_run") or _text_requests_dry_run(text):
-            report_dry = True
-        _generate_report(ip_name, dry_run=report_dry, verbose=verbose)
-
-    elif intent.action == "chat":
-        response_text = intent.args.get("response", "")
-        if response_text:
-            console.print()
-            console.print(f"  {response_text}")
-            console.print()
-        else:
-            console.print()
-            console.print("  [muted]응답을 생성하지 못했습니다. /help 를 입력해 보세요.[/muted]")
-            console.print()
-
-    elif intent.action == "batch":
-        top = intent.args.get("top", 20)
-        genre = intent.args.get("genre")
-        from core.cli.batch import render_batch_table, run_batch
-
-        readiness = _get_readiness()
-        force_dry = readiness.force_dry_run if readiness else True
-        if intent.args.get("dry_run") or _text_requests_dry_run(text):
-            force_dry = True
-        batch_results = run_batch(top=top, genre=genre, dry_run=force_dry)
-        render_batch_table(batch_results)
-
-    elif intent.action == "status":
-        console.print()
-        console.print("  [header]GEODE System Status[/header]")
-        console.print(f"  Model: [bold]{settings.model}[/bold]")
-        console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
-        ant_ok = bool(settings.anthropic_api_key)
-        oai_ok = bool(settings.openai_api_key)
-        ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
-        oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
-        console.print(f"  Anthropic API: {ant_status}")
-        console.print(f"  OpenAI API: {oai_status}")
-        readiness = _get_readiness()
-        if readiness:
-            mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
-            console.print(f"  Mode: [bold]{mode}[/bold]")
-        from core.fixtures import FIXTURE_MAP
-
-        console.print(f"  Fixtures: [bold]{len(FIXTURE_MAP)} IPs[/bold]")
-        console.print()
-
-    elif intent.action == "model":
-        model_hint = intent.args.get("model_hint", "")
-        if model_hint:
-            # Auto-resolve model hint
-            hint = model_hint.lower()
-            if "cross" in hint or "ensemble" in hint or "앙상블" in hint:
-                console.print()
-                console.print(
-                    "  [info]앙상블 모드는 환경변수로 설정합니다: GEODE_ENSEMBLE_MODE=cross[/info]"
-                )
-                console.print()
-            else:
-                # Try to resolve hint to actual model
-                cmd_model(model_hint)
-        else:
-            cmd_model("")
-
-    elif intent.action == "memory":
-        _handle_memory_action(intent, text, is_offline)
-
-    elif intent.action == "key":
-        key_value = intent.args.get("key_value", "")
-        changed = cmd_key(key_value)
-        if changed:
-            new_readiness = check_readiness()
-            _set_readiness(new_readiness)
-            render_readiness(new_readiness)
-
-    elif intent.action == "auth":
-        sub_action = intent.args.get("sub_action", "")
-        cmd_auth(sub_action)
-
-    elif intent.action == "generate":
-        count = intent.args.get("count", 5)
-        genre = intent.args.get("genre", "")
-        gen_args = str(count)
-        if genre:
-            gen_args += f" {genre}"
-        cmd_generate(gen_args)
-
-    elif intent.action == "schedule":
-        sub_action = intent.args.get("sub_action", "")
-        target_id = intent.args.get("target_id", "")
-        sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
-        cmd_schedule(sched_args)
-
-    elif intent.action == "trigger":
-        sub_action = intent.args.get("sub_action", "")
-        event_name = intent.args.get("event_name", "")
-        trigger_args = f"{sub_action} {event_name}".strip() if sub_action else ""
-        cmd_trigger(trigger_args)
-
-    elif intent.action == "help":
-        error = intent.args.get("_error", "")
-        if error == "billing":
-            console.print()
-            console.print("  [warning]Anthropic API 크레딧이 부족합니다.[/warning]")
-            console.print(
-                "  [muted]https://console.anthropic.com/settings/billing 에서 충전하세요.[/muted]"
-            )
-            console.print(
-                "  [muted]/list, /search 는 LLM 없이 사용 가능합니다."
-                " /analyze 는 dry-run 모드로 제한됩니다.[/muted]"
-            )
-            console.print()
-        elif error == "auth_error":
-            console.print()
-            console.print("  [warning]Anthropic API 키가 유효하지 않습니다.[/warning]")
-            console.print("  [muted]/key <API_KEY> 로 올바른 키를 설정하세요.[/muted]")
-            console.print()
-        elif error == "no_api_key":
-            console.print()
-            console.print("  [warning]Anthropic API 키가 설정되지 않았습니다.[/warning]")
-            console.print("  [muted]/key <API_KEY> 로 설정하세요.[/muted]")
-            console.print()
-        elif error == "api_error":
-            console.print()
-            console.print("  [warning]Anthropic API 호출에 실패했습니다.[/warning]")
-            console.print("  [muted]/list, /search 는 LLM 없이 사용 가능합니다.[/muted]")
-            console.print()
-        elif is_offline and intent.confidence < 1.0:
-            console.print()
-            console.print("  [muted]입력을 이해하지 못했습니다. 다음을 시도해 보세요:[/muted]")
-            console.print("  [muted]  /list          — IP 목록 보기[/muted]")
-            console.print("  [muted]  /analyze <IP>  — IP 분석[/muted]")
-            console.print("  [muted]  /search <키워드> — IP 검색[/muted]")
-            console.print("  [muted]  /help          — 전체 도움말[/muted]")
-            console.print()
-        else:
-            show_help()
-
-    else:
-        readiness = _get_readiness()
-        force_dry = readiness.force_dry_run if readiness else True
-        _run_analysis(text, dry_run=force_dry, verbose=verbose)
 
 
 def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
@@ -1703,6 +1434,53 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
             "result": str(result)[:500],
         }
 
+    # --- New tools: web, document, note, signal ---
+
+    def handle_web_fetch(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.web_tools import WebFetchTool
+
+        return WebFetchTool().execute(**kwargs)
+
+    def handle_general_web_search(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.web_tools import GeneralWebSearchTool
+
+        return GeneralWebSearchTool().execute(**kwargs)
+
+    def handle_read_document(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.document_tools import ReadDocumentTool
+
+        return ReadDocumentTool().execute(**kwargs)
+
+    def handle_note_save(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.memory_tools import NoteSaveTool
+
+        return NoteSaveTool().execute(**kwargs)
+
+    def handle_note_read(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.memory_tools import NoteReadTool
+
+        return NoteReadTool().execute(**kwargs)
+
+    def handle_youtube_search(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.signal_tools import YouTubeSearchTool
+
+        return YouTubeSearchTool().execute(**kwargs)
+
+    def handle_reddit_sentiment(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.signal_tools import RedditSentimentTool
+
+        return RedditSentimentTool().execute(**kwargs)
+
+    def handle_steam_info(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.signal_tools import SteamInfoTool
+
+        return SteamInfoTool().execute(**kwargs)
+
+    def handle_google_trends(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.signal_tools import GoogleTrendsTool
+
+        return GoogleTrendsTool().execute(**kwargs)
+
     return {
         "list_ips": handle_list_ips,
         "analyze_ip": handle_analyze_ip,
@@ -1723,6 +1501,17 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         "trigger_event": handle_trigger_event,
         "create_plan": handle_create_plan,
         "approve_plan": handle_approve_plan,
+        # New tools
+        "web_fetch": handle_web_fetch,
+        "general_web_search": handle_general_web_search,
+        "read_document": handle_read_document,
+        "note_save": handle_note_save,
+        "note_read": handle_note_read,
+        # Signal tools
+        "youtube_search": handle_youtube_search,
+        "reddit_sentiment": handle_reddit_sentiment,
+        "steam_info": handle_steam_info,
+        "google_trends": handle_google_trends,
     }
 
 
@@ -1730,11 +1519,8 @@ def _render_agentic_result(result: AgenticResult) -> None:
     """Render the final result from an agentic loop execution."""
     if result.error == "llm_call_failed":
         console.print()
-        console.print("  [warning]LLM call failed — falling back to offline mode.[/warning]")
-        console.print(
-            "  [muted]/list, /search are available without LLM. "
-            "Use /help for more commands.[/muted]"
-        )
+        console.print("  [warning]LLM call failed. Try again or check your API key.[/warning]")
+        console.print("  [muted]Use /help for available commands.[/muted]")
         console.print()
         return
 
@@ -1764,15 +1550,31 @@ def _interactive_loop() -> None:
     verbose = False
     conversation = ConversationContext(max_turns=20)
 
+    # Key gate: block until API key provided or user quits
+    readiness = _get_readiness()
+    if readiness is None or readiness.blocked:
+        key = key_registration_gate()
+        if key is None:
+            return  # user quit
+        # Re-check readiness after key registration
+        readiness = check_readiness()
+        _set_readiness(readiness)
+
+    # Initialize MCP server manager (optional, fails silently)
+    from core.infrastructure.adapters.mcp.manager import MCPServerManager
+
+    mcp_mgr: MCPServerManager | None = None
+    try:
+        _mgr = MCPServerManager()
+        if _mgr.load_config() > 0:
+            mcp_mgr = _mgr
+    except Exception:
+        log.debug("MCP initialization skipped", exc_info=True)
+
     # Build tool handlers and executor
     handlers = _build_tool_handlers(verbose=verbose)
-    executor = ToolExecutor(action_handlers=handlers)
-
-    # Check if agentic mode is possible (needs API key)
-    readiness = _get_readiness()
-    agentic_available = readiness is not None and not readiness.force_dry_run
-    force_offline = not agentic_available
-    agentic = AgenticLoop(conversation, executor, offline_mode=force_offline)
+    executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
+    agentic = AgenticLoop(conversation, executor, mcp_manager=mcp_mgr)
 
     while True:
         try:
@@ -1794,15 +1596,12 @@ def _interactive_loop() -> None:
             # Update handlers if verbose changed
             if verbose != (handlers.get("_verbose_flag") is True):
                 handlers = _build_tool_handlers(verbose=verbose)
-                executor = ToolExecutor(action_handlers=handlers)
-                agentic = AgenticLoop(conversation, executor, offline_mode=force_offline)
-        elif agentic_available or force_offline:
+                executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
+                agentic = AgenticLoop(conversation, executor, mcp_manager=mcp_mgr)
+        else:
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
             result = agentic.run(user_input)
             _render_agentic_result(result)
-        else:
-            # Fallback: single-shot NL Router (offline or no API key)
-            _handle_natural_language(user_input, verbose)
 
 
 # ---------------------------------------------------------------------------

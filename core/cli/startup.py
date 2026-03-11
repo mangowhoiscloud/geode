@@ -1,8 +1,8 @@
 """Startup checks — OpenClaw gateway:startup + hook eligibility pattern.
 
-Detects environment readiness and applies Graceful Degradation:
+Detects environment readiness:
   API key present  → full mode (LLM calls enabled)
-  API key absent   → dry-run mode (fixture data only)
+  API key absent   → blocked (key registration gate)
   .env missing     → guide user to create from .env.example
 
 Reports capability status like OpenClaw's `hooks check --json`.
@@ -19,6 +19,67 @@ from core.memory.project import ProjectMemory
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
+
+
+def _mask_key(key: str) -> str:
+    """Mask an API key for display."""
+    if len(key) <= 14:
+        return "***"
+    return key[:10] + "..." + key[-4:]
+
+
+def _upsert_env(var_name: str, value: str) -> None:
+    """Insert or update a variable in .env file. Creates .env if absent."""
+    import re
+
+    env_path = Path(".env")
+    lines: list[str] = []
+    found = False
+
+    if env_path.exists():
+        raw = env_path.read_text(encoding="utf-8")
+        for line in raw.splitlines():
+            if re.match(rf"^{re.escape(var_name)}\s*=", line):
+                lines.append(f"{var_name}={value}")
+                found = True
+            else:
+                lines.append(line)
+
+    if not found:
+        lines.append(f"{var_name}={value}")
+
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def key_registration_gate() -> str | None:
+    """Block until user provides API key or quits. Returns key or None."""
+    from rich.panel import Panel
+
+    console.print(
+        Panel(
+            "[bold]GEODE requires an Anthropic API key to operate.[/bold]\n\n"
+            "  [cyan]/key <YOUR_API_KEY>[/cyan]  — set key and continue\n"
+            "  [cyan]/quit[/cyan]               — exit\n\n"
+            "[muted]Get a key at: https://console.anthropic.com/settings/keys[/muted]",
+            title="API Key Required",
+            border_style="yellow",
+        )
+    )
+    while True:
+        try:
+            user_input = console.input("[bold cyan]>[/bold cyan] ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return None
+        if user_input.lower() in ("/quit", "quit", "exit"):
+            return None
+        if user_input.startswith("/key "):
+            key = user_input[5:].strip()
+            if key:
+                _upsert_env("ANTHROPIC_API_KEY", key)
+                settings.anthropic_api_key = key
+                console.print(f"  [success]API key set[/success]  {_mask_key(key)}")
+                return key
+        console.print("  [muted]Use /key <API_KEY> to set your key[/muted]")
 
 
 @dataclass
@@ -38,7 +99,8 @@ class ReadinessReport:
     has_api_key: bool = False
     has_env_file: bool = False
     has_memory: bool = False
-    force_dry_run: bool = False
+    blocked: bool = False
+    force_dry_run: bool = False  # backward-compat alias
 
     @property
     def all_ready(self) -> bool:
@@ -92,8 +154,9 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
     report.capabilities.append(Capability(name="Dry-Run Analysis", available=True))
     report.capabilities.append(Capability(name="IP Search", available=True))
 
-    # 5. Force dry-run if no API key
-    report.force_dry_run = not has_key
+    # 5. Block if no API key (was force_dry_run)
+    report.blocked = not has_key
+    report.force_dry_run = not has_key  # backward-compat
 
     return report
 
@@ -109,16 +172,8 @@ def render_readiness(report: ReadinessReport) -> None:
 
     console.print()
 
-    if report.force_dry_run:
-        console.print("  [warning]API key not configured — dry-run mode only[/warning]")
-        console.print("  [muted]To enable LLM analysis:[/muted]")
-
-        if not report.has_env_file:
-            console.print("    [muted]1. cp .env.example .env[/muted]")
-            console.print("    [muted]2. Edit .env with your ANTHROPIC_API_KEY[/muted]")
-        else:
-            console.print("    [muted]Set ANTHROPIC_API_KEY in .env[/muted]")
-
+    if report.blocked:
+        console.print("  [warning]API key not configured — key registration required[/warning]")
         console.print()
 
 

@@ -530,3 +530,81 @@ class RuleListTool:
                 "total": len(rules),
             }
         }
+
+
+class NoteSaveTool:
+    """Save a user note to project memory (## User Notes section)."""
+
+    @property
+    def name(self) -> str:
+        return "note_save"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Save a user note or preference to persistent memory. "
+            "Use when user says 'remember this', 'save this', '이거 기억해'."
+        )
+
+    def execute(self, **kwargs: Any) -> dict[str, Any]:
+        key: str = kwargs["key"]
+        content: str = kwargs["content"]
+
+        proj = _project_memory_ctx.get()
+        if proj is None:
+            return {"error": "Project memory not available"}
+
+        from core.memory.project import ProjectMemory
+
+        if not isinstance(proj, ProjectMemory):
+            return {"error": "Project memory type mismatch"}
+
+        note_text = f"**{key}**: {content}"
+        proj.add_insight(note_text)
+        return {
+            "result": {
+                "saved": True,
+                "key": key,
+            }
+        }
+
+
+class NoteReadTool:
+    """Read user notes from project memory."""
+
+    @property
+    def name(self) -> str:
+        return "note_read"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Read previously saved user notes from persistent memory. "
+            "Use when user asks about something they previously saved."
+        )
+
+    def execute(self, **kwargs: Any) -> dict[str, Any]:
+        query: str = kwargs.get("query", "")
+
+        proj = _project_memory_ctx.get()
+        if proj is None:
+            return {"error": "Project memory not available"}
+
+        memory_text = proj.load_memory()
+        if not query:
+            return {"result": {"notes": memory_text}}
+
+        # Filter matching lines
+        query_lower = query.lower()
+        matching_lines = [
+            line.strip()
+            for line in memory_text.split("\n")
+            if query_lower in line.lower() and line.strip()
+        ]
+        return {
+            "result": {
+                "query": query,
+                "matching_lines": matching_lines[:20],
+                "total_found": len(matching_lines),
+            }
+        }

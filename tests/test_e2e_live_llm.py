@@ -31,7 +31,6 @@ pytestmark = [
 def _make_loop(
     *,
     max_rounds: int = 10,
-    offline_mode: bool = False,
     tool_registry: object | None = None,
     force_dry_run: bool = False,
 ) -> tuple:
@@ -51,6 +50,7 @@ def _make_loop(
     if not force_dry_run:
         # Override: allow real LLM calls even in test
         readiness.force_dry_run = False
+        readiness.blocked = False
         readiness.has_api_key = True
     _set_readiness(readiness)
 
@@ -61,7 +61,6 @@ def _make_loop(
         context,
         executor,
         max_rounds=max_rounds,
-        offline_mode=offline_mode,
         tool_registry=tool_registry,  # type: ignore[arg-type]
     )
     return loop, context, executor
@@ -292,33 +291,19 @@ class TestFullPipelineLive:
 
 
 # ===========================================================================
-# §C5  Offline Mode (no LLM)
+# §C5  Key Registration Gate
 # ===========================================================================
 
 
-class TestOfflineModeLive:
-    """C5 implementation — AgenticLoop without LLM API calls."""
+class TestKeyRegistrationGateLive:
+    """C5 — key_registration_gate replaces offline mode."""
 
-    def test_offline_list_ips(self) -> None:
-        """Offline mode: regex routes '목록 보여줘' → list action."""
-        loop, *_ = _make_loop(offline_mode=True)
-        result = loop.run("IP 목록 보여줘")
-        assert result.rounds == 1
-        assert result.error is None
-        tool_names = [tc["tool"] for tc in result.tool_calls]
-        assert "list" in tool_names
+    def test_key_gate_quit(self) -> None:
+        """Key gate returns None on /quit."""
+        from unittest.mock import patch
 
-    def test_offline_analyze(self) -> None:
-        """Offline mode: regex routes 'Berserk 분석해' → analyze."""
-        loop, *_ = _make_loop(offline_mode=True)
-        result = loop.run("Berserk 분석해")
-        assert result.rounds == 1
-        assert result.error is None
-        assert len(result.tool_calls) >= 1
+        from core.cli.startup import key_registration_gate
 
-    def test_offline_help_fallback(self) -> None:
-        """Offline mode: unrecognized input → help fallback."""
-        loop, *_ = _make_loop(offline_mode=True)
-        result = loop.run("점심 뭐 먹지?")
-        assert result.rounds == 1
-        assert "Offline" in result.text or "help" in result.text.lower()
+        with patch("core.cli.startup.console") as mock_console:
+            mock_console.input.return_value = "/quit"
+            assert key_registration_gate() is None

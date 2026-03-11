@@ -30,6 +30,10 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "switch_model",
         "memory_search",
         "manage_rule",
+        "web_fetch",
+        "general_web_search",
+        "note_read",
+        "read_document",
     }
 )
 
@@ -58,11 +62,13 @@ class ToolExecutor:
         bash_tool: BashTool | None = None,
         auto_approve: bool = False,
         sub_agent_manager: SubAgentManager | None = None,
+        mcp_manager: Any | None = None,
     ) -> None:
         self._handlers: dict[str, Callable[..., dict[str, Any]]] = action_handlers or {}
         self._bash = bash_tool or BashTool()
         self._auto_approve = auto_approve  # for testing only
         self._sub_agent_manager = sub_agent_manager
+        self._mcp_manager = mcp_manager
 
     def register(self, tool_name: str, handler: Callable[..., dict[str, Any]]) -> None:
         """Register a tool handler."""
@@ -83,6 +89,15 @@ class ToolExecutor:
         # Delegate to registered handler
         handler = self._handlers.get(tool_name)
         if handler is None:
+            # MCP fallback: try MCP servers
+            if self._mcp_manager is not None:
+                server = self._mcp_manager.find_server_for_tool(tool_name)
+                if server is not None:
+                    log.info("MCP fallback: %s → %s", tool_name, server)
+                    result: dict[str, Any] = self._mcp_manager.call_tool(
+                        server, tool_name, tool_input
+                    )
+                    return result
             log.warning("No handler for tool: %s", tool_name)
             return {"error": f"Unknown tool: {tool_name}"}
 

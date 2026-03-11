@@ -358,5 +358,159 @@
       },
       "required": ["plan_id"]
     }
+  },
+  {
+    "name": "youtube_search",
+    "description": "YouTube에서 IP 관련 영상과 참여 지표를 검색합니다. IP의 YouTube 인기도를 확인할 때 사용하세요. Examples: 'Berserk YouTube 인기도', 'YouTube views for Cowboy Bebop'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "IP name to search on YouTube"
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Maximum number of video results (default: 10)"
+        }
+      },
+      "required": ["ip_name"]
+    }
+  },
+  {
+    "name": "reddit_sentiment",
+    "description": "Reddit에서 IP 관련 커뮤니티 감성을 분석합니다. IP의 Reddit 커뮤니티 반응을 확인할 때 사용하세요. Examples: 'Berserk Reddit 반응', 'Reddit sentiment for Ghost in the Shell'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "IP name to analyze on Reddit"
+        },
+        "subreddit": {
+          "type": "string",
+          "description": "Optional specific subreddit to target"
+        }
+      },
+      "required": ["ip_name"]
+    }
+  },
+  {
+    "name": "steam_info",
+    "description": "Steam 상점에서 IP 관련 게임 정보와 리뷰를 조회합니다. IP의 Steam 데이터를 확인할 때 사용하세요. Examples: 'Berserk Steam 정보', 'Steam reviews for Hollow Knight'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "IP or game name to look up on Steam"
+        }
+      },
+      "required": ["ip_name"]
+    }
+  },
+  {
+    "name": "google_trends",
+    "description": "Google Trends에서 IP의 검색 관심도를 조회합니다. IP의 트렌드를 확인할 때 사용하세요. Examples: 'Berserk Google 트렌드', 'Google Trends for Cowboy Bebop'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "IP name to look up on Google Trends"
+        },
+        "region": {
+          "type": "string",
+          "description": "Geographic region (e.g., 'US', 'JP', 'global'). Default: global"
+        }
+      },
+      "required": ["ip_name"]
+    }
+  },
+  {
+    "name": "web_fetch",
+    "description": "URL에서 텍스트 콘텐츠를 가져옵니다. 사용자가 URL을 제공하거나 웹 페이지 내용을 요청할 때 사용하세요. Examples: 'https://example.com 내용 알려줘', 'fetch this URL', '이 링크 읽어봐'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "URL to fetch content from"
+        },
+        "max_chars": {
+          "type": "integer",
+          "description": "Maximum characters to return (default: 8000)"
+        }
+      },
+      "required": ["url"]
+    }
+  },
+  {
+    "name": "general_web_search",
+    "description": "웹에서 최신 정보를 검색합니다. 사용자가 현재 정보, 뉴스, 트렌드를 물어볼 때 사용하세요. Examples: '오늘 날씨', 'latest news about...', '최신 정보 찾아줘'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search query"
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Maximum number of results (default: 5)"
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  {
+    "name": "read_document",
+    "description": "로컬 파일을 읽습니다 (markdown, text, JSON). 사용자가 파일 내용을 보고 싶을 때 사용하세요. Examples: '이 파일 읽어줘', 'read this file', '문서 내용 보여줘'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "Path to the file to read"
+        },
+        "max_lines": {
+          "type": "integer",
+          "description": "Maximum lines to read (default: 200)"
+        }
+      },
+      "required": ["file_path"]
+    }
+  },
+  {
+    "name": "note_save",
+    "description": "사용자 메모를 영구 저장합니다. 사용자가 '기억해', '저장해', 'remember this' 등을 요청할 때 사용하세요. Examples: '이거 기억해: 다음 미팅은 금요일', 'remember my preference', '메모 저장해'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Note identifier (e.g. 'meeting_schedule', 'preference')"
+        },
+        "content": {
+          "type": "string",
+          "description": "Note content to save"
+        }
+      },
+      "required": ["key", "content"]
+    }
+  },
+  {
+    "name": "note_read",
+    "description": "저장된 메모를 읽습니다. 사용자가 이전에 저장한 정보를 물어볼 때 사용하세요. Examples: '이전에 저장한 거 뭐 있어?', 'what did I save?', '메모 보여줘'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Optional search query to filter notes"
+        }
+      },
+      "required": []
+    }
   }
 ]
