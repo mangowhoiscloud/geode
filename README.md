@@ -157,6 +157,8 @@ graph TB
     style LS fill:#06b6d4,stroke:#06b6d4,color:#fff
 ```
 
+> **Note:** 위 다이어그램의 Retry 10s/20s/40s는 AgenticLoop 레벨의 rate limit 재시도입니다. 파이프라인 내부 LLM 호출(`core/llm/client.py`)은 별도의 1s/2s/4s exponential backoff를 사용합니다.
+
 ### Cross-LLM Ensemble
 
 ```mermaid
@@ -392,8 +394,8 @@ uv run geode analyze "Berserk" --dry-run
 # Streaming 분석
 uv run geode analyze "Berserk" --stream
 
-# 배치 분석
-uv run geode batch --top 5
+# 배치 분석 (--dry-run 권장, batch는 기본 --live 모드)
+uv run geode batch --top 5 --dry-run
 
 # 리포트 생성
 uv run geode report "Berserk" --format html --output berserk.html
@@ -448,7 +450,7 @@ uv run geode
 | `/auth` | | 인증 프로필 관리 |
 | `/batch [--top N]` | `/b` | 배치 분석 |
 | `/status` | | 시스템 상태 (모델, API 키, 메모리) |
-| `/compare <A> <B>` | | 두 IP 비교 분석 |
+| `/compare <A> <B>` | | 두 IP 비교 분석 (Interactive) |
 | `/schedule <cron>` | `/sched` | 배치 스케줄 설정 |
 | `/trigger <event>` | | 이벤트 트리거 (drift scan 등) |
 | `/verbose` | | 상세 출력 토글 |

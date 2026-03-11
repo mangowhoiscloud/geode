@@ -1,3 +1,3 @@
-"""GEODE v0.6.0 — Undervalued IP Discovery Agent."""
+"""GEODE v0.7.0 — Undervalued IP Discovery Agent."""
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
