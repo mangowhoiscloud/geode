@@ -104,6 +104,7 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-5.4": {"input": 2.50 / 1_000_000, "output": 15.0 / 1_000_000},
     "gpt-5.3": {"input": 10.0 / 1_000_000, "output": 30.0 / 1_000_000},
     "gpt-4.1-mini": {"input": 0.40 / 1_000_000, "output": 1.60 / 1_000_000},
+    "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
 }
 
 
@@ -155,10 +156,31 @@ class LLMUsageAccumulator:
         }
 
 
-def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    """Calculate cost in USD for a given model and token counts."""
+def calculate_cost(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_creation_tokens: int = 0,
+    cache_read_tokens: int = 0,
+) -> float:
+    """Calculate cost in USD for a given model and token counts.
+
+    For Anthropic models, cache tokens have different pricing:
+    - cache_creation: input_price * 1.25
+    - cache_read: input_price * 0.1
+    """
     prices = MODEL_PRICING.get(model, {})
-    return input_tokens * prices.get("input", 0) + output_tokens * prices.get("output", 0)
+    input_price = prices.get("input", 0)
+    output_price = prices.get("output", 0)
+    base_cost = input_tokens * input_price + output_tokens * output_price
+
+    # Anthropic cache token pricing
+    if cache_creation_tokens or cache_read_tokens:
+        cache_create_cost = cache_creation_tokens * input_price * 1.25
+        cache_read_cost = cache_read_tokens * input_price * 0.1
+        base_cost += cache_create_cost + cache_read_cost
+
+    return base_cost
 
 
 # Thread-safe usage accumulator via contextvars
@@ -215,10 +237,18 @@ class CircuitBreaker:
         self._last_failure = time.time()
         if self._failures >= self._threshold:
             self._state = "open"
+            log.warning(
+                "Circuit breaker OPEN after %d failures (threshold=%d)",
+                self._failures,
+                self._threshold,
+            )
 
     def record_success(self) -> None:
+        prev_state = self._state
         self._failures = 0
         self._state = "closed"
+        if prev_state == "half-open":
+            log.info("Circuit breaker CLOSED (recovered from half-open)")
 
     def can_execute(self) -> bool:
         if self._state == "closed":
@@ -226,6 +256,7 @@ class CircuitBreaker:
         if self._state == "open":
             if time.time() - self._last_failure > self._recovery_timeout:
                 self._state = "half-open"
+                log.info("Circuit breaker HALF-OPEN (cooldown expired, testing)")
                 return True
             return False
         return True  # half-open: allow one attempt
@@ -375,6 +406,7 @@ def call_llm(
                 cost_usd=cost,
             )
             get_usage_accumulator().record(usage)
+            track_token_usage(model, in_tok, out_tok)
             log.debug(
                 "LLM usage: model=%s in=%d out=%d cost=$%.4f",
                 model,
@@ -441,6 +473,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
                 cost_usd=cost,
             )
             get_usage_accumulator().record(usage)
+            track_token_usage(model, in_tok, out_tok)
             log.debug(
                 "LLM parsed usage: model=%s in=%d out=%d cost=$%.4f",
                 model,
@@ -605,6 +638,7 @@ def call_llm_with_tools(
             )
             all_usage.append(usage)
             get_usage_accumulator().record(usage)
+            track_token_usage(target_model, in_tok, out_tok)
 
         # Check if model wants to use tools
         if response.stop_reason != "tool_use":

@@ -8,8 +8,12 @@ behind user approval.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.cli.sub_agent import SubAgentManager
 
 from core.cli.bash_tool import BashTool
 from core.ui.console import console
@@ -53,10 +57,12 @@ class ToolExecutor:
         action_handlers: dict[str, Callable[..., dict[str, Any]]] | None = None,
         bash_tool: BashTool | None = None,
         auto_approve: bool = False,
+        sub_agent_manager: SubAgentManager | None = None,
     ) -> None:
         self._handlers: dict[str, Callable[..., dict[str, Any]]] = action_handlers or {}
         self._bash = bash_tool or BashTool()
         self._auto_approve = auto_approve  # for testing only
+        self._sub_agent_manager = sub_agent_manager
 
     def register(self, tool_name: str, handler: Callable[..., dict[str, Any]]) -> None:
         """Register a tool handler."""
@@ -70,6 +76,10 @@ class ToolExecutor:
         if tool_name in DANGEROUS_TOOLS:
             return self._execute_dangerous(tool_name, tool_input)
 
+        # Sub-agent delegation
+        if tool_name == "delegate_task":
+            return self._execute_delegate(tool_input)
+
         # Delegate to registered handler
         handler = self._handlers.get(tool_name)
         if handler is None:
@@ -81,6 +91,23 @@ class ToolExecutor:
         except Exception as exc:
             log.error("Tool %s failed: %s", tool_name, exc, exc_info=True)
             return {"error": str(exc)}
+
+    def _execute_delegate(self, tool_input: dict[str, Any]) -> dict[str, Any]:
+        """Delegate task to sub-agent."""
+        from core.cli.sub_agent import SubTask
+
+        task = SubTask(
+            task_id=f"delegate_{int(time.time())}",
+            description=tool_input.get("task_description", ""),
+            task_type=tool_input.get("task_type", "analyze"),
+            args=tool_input.get("args", {}),
+        )
+        if not self._sub_agent_manager:
+            return {"error": "SubAgentManager not configured"}
+        results = self._sub_agent_manager.delegate([task])
+        if results and results[0].success:
+            return {"result": results[0].output, "task_id": task.task_id}
+        return {"error": results[0].error if results else "No result"}
 
     def _execute_dangerous(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
         """Execute a dangerous tool with user approval."""

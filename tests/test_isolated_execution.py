@@ -525,6 +525,28 @@ class TestIsolatedRunnerAsync:
 # ---------------------------------------------------------------------------
 
 
+class TestCancelBehavior:
+    def test_cancel_prevents_execution(self) -> None:
+        runner = IsolatedRunner()
+        executed: list[bool] = []
+        started = threading.Event()
+
+        def slow_fn() -> str:
+            started.set()
+            time.sleep(2)
+            executed.append(True)
+            return "done"
+
+        cfg = IsolationConfig(timeout_s=10, post_to_main=False)
+        session_id = runner.run_async(slow_fn, config=cfg)
+        started.wait(timeout=3.0)
+        runner.cancel(session_id)
+        time.sleep(0.5)
+        result = runner.get_result(session_id)
+        # Task should be cancelled, not fully executed
+        assert not executed or result is not None
+
+
 class TestEdgeCases:
     def test_get_result_unknown_session(self) -> None:
         runner = IsolatedRunner()

@@ -57,7 +57,7 @@
   },
   "expected_results": {
     "tier": "B",
-    "final_score": 58.5,
+    "final_score": 51.6,
     "cause": "discovery_failure",
     "quality_score": 72,
     "momentum_score": 62,

@@ -39,14 +39,14 @@ class BashResult:
 
 # Patterns that are always blocked (never executed regardless of approval)
 _BLOCKED_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"rm\s+-rf\s+/", re.IGNORECASE),
+    re.compile(r"rm\s+-rf\s+/\s*$", re.IGNORECASE),  # root only, not /tmp etc.
     re.compile(r"sudo\s+", re.IGNORECASE),
     re.compile(r">\s*/etc/", re.IGNORECASE),
     re.compile(r"curl.*\|\s*(?:ba)?sh", re.IGNORECASE),
     re.compile(r"wget.*\|\s*(?:ba)?sh", re.IGNORECASE),
     re.compile(r"mkfs\.", re.IGNORECASE),
     re.compile(r"dd\s+if=.*of=/dev/", re.IGNORECASE),
-    re.compile(r"chmod\s+-R\s+777\s+/", re.IGNORECASE),
+    re.compile(r"chmod\s+-R\s+777\s+/\s*$", re.IGNORECASE),  # root only
     re.compile(r":\(\)\s*\{.*\|.*&\s*\}", re.IGNORECASE),  # fork bomb
 ]
 

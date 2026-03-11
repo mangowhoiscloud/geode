@@ -151,6 +151,8 @@ class TaskGraph:
     def mark_failed(self, task_id: str, *, error: str = "") -> None:
         """Mark a task as failed."""
         task = self._require_task(task_id)
+        if task.status in (TaskStatus.COMPLETED, TaskStatus.SKIPPED):
+            raise ValueError(f"Cannot fail task '{task_id}' in status '{task.status.value}'")
         task.status = TaskStatus.FAILED
         task.error = error
         task.completed_at = time.time()

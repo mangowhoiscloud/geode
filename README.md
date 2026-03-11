@@ -642,9 +642,9 @@ uv run python -m core.mcp_server
 
 | IP | Tier | Score | Genre |
 |----|------|-------|-------|
-| Berserk | S | 82.2 | Dark Fantasy |
-| Cowboy Bebop | A | 69.4 | SF Noir |
-| Ghost in the Shell | B | 54.0 | Cyberpunk |
+| Berserk | S | 81.3 | Dark Fantasy |
+| Cowboy Bebop | A | 68.4 | SF Noir |
+| Ghost in the Shell | B | 51.6 | Cyberpunk |
 
 **Steam Fixtures**: 201개 추가 게임 데이터 (`core/fixtures/steam/`), `/generate` 명령으로 합성 데이터 생성 가능.
 

@@ -157,9 +157,9 @@ uv run mypy core/
 ### Expected Test Results
 
 1950+ tests pass. 3 IP fixtures produce tier spread:
-- Berserk: **S** (82.2) — conversion_failure
-- Cowboy Bebop: **A** (69.4) — undermarketed
-- Ghost in the Shell: **B** (54.0) — discovery_failure
+- Berserk: **S** (81.3) — conversion_failure
+- Cowboy Bebop: **A** (68.4) — undermarketed
+- Ghost in the Shell: **B** (51.6) — discovery_failure
 
 ## Scoring Formula (§13.8.1)
 

@@ -45,6 +45,7 @@ OPENAI_FALLBACK_MODELS = ["gpt-5.4", "gpt-5.3", "gpt-4o"]
 _MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-5.4": {"input": 2.50 / 1_000_000, "output": 15.0 / 1_000_000},
     "gpt-5.3": {"input": 10.0 / 1_000_000, "output": 30.0 / 1_000_000},
+    "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
 }
 
 
