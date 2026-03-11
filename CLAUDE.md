@@ -1,4 +1,4 @@
-# GEODE — Undervalued IP Discovery Agent
+# GEODE — 게임화 IP 도메인 자율 실행 하네스
 
 ## Project Overview
 

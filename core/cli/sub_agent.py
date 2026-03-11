@@ -12,6 +12,7 @@ Orchestration integration:
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import time
@@ -47,6 +48,10 @@ class SubResult:
     output: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     duration_ms: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict, omitting None-valued fields."""
+        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
 class SubAgentManager:

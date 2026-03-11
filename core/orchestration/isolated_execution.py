@@ -9,6 +9,7 @@ Inspired by OpenClaw's isolated session pattern, this module provides:
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import threading
 import time
@@ -57,6 +58,10 @@ class IsolationResult:
     started_at: float = 0.0
     completed_at: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict, omitting None-valued fields."""
+        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
 class IsolatedRunner:

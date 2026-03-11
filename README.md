@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/geode-social-preview.png" alt="GEODE — Undervalued IP Discovery Agent" width="720" />
+  <img src="assets/geode-social-preview.png" alt="GEODE — 게임화 IP 도메인 자율 실행 하네스" width="720" />
 </p>
 
-# GEODE v0.9.0 — Undervalued IP Discovery Agent
+# GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스
 
 LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기능은 아래와 같습니다.
 - 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 분석/평가 루프와 리포트 생성을 지원합니다.

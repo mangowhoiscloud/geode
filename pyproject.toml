@@ -1,7 +1,7 @@
 [project]
 name = "geode"
 version = "0.9.0"
-description = "GEODE — Undervalued IP Discovery Agent CLI Demo"
+description = "GEODE — 게임화 IP 도메인 자율 실행 하네스 CLI Demo"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

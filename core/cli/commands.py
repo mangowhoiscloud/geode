@@ -539,7 +539,7 @@ def cmd_batch(
     return results
 
 
-def cmd_schedule(args: str) -> None:
+def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
     """Handle /schedule command — manage scheduled automations.
 
     /schedule              → list all templates

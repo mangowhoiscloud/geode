@@ -6,6 +6,7 @@ for pipeline events (pre/post node execution, errors, etc.).
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -65,6 +66,10 @@ class HookResult:
     handler_name: str
     data: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict, omitting None-valued fields."""
+        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
 # Type alias for hook handlers

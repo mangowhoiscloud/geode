@@ -12,6 +12,7 @@ Supports:
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import time
@@ -61,6 +62,10 @@ class AgenticResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     rounds: int = 0
     error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict, omitting None-valued fields."""
+        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
 class AgenticLoop:

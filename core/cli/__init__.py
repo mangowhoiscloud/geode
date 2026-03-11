@@ -12,6 +12,7 @@ import logging
 import re as _re
 from contextvars import ContextVar
 from enum import Enum
+from pathlib import Path
 from typing import Any, cast
 
 import typer
@@ -81,7 +82,7 @@ def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
 
 app = typer.Typer(
     name="geode",
-    help="GEODE v0.9.0 — Undervalued IP Discovery Agent",
+    help="GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스",
     no_args_is_help=False,
     invoke_without_command=True,
 )
@@ -90,6 +91,7 @@ app = typer.Typer(
 _search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
 _readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
 _last_result_ctx: ContextVar[Any] = ContextVar("last_result", default=None)
+_scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", default=None)
 
 
 def _get_search_engine() -> IPSearchEngine:
@@ -187,6 +189,87 @@ def _parse_report_args(parts: list[str]) -> dict[str, str]:
     }
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_REPORT_DIR = _PROJECT_ROOT / ".geode" / "reports"
+
+# Skills relevant for report quality enhancement
+_REPORT_SKILL_NAMES = ["geode-scoring", "geode-analysis", "geode-verification"]
+
+
+def _build_skill_narrative(
+    report_dict: dict[str, Any],
+    skill_registry: Any,
+) -> str:
+    """Generate an expert narrative using skills context and LLM.
+
+    Injects scoring/analysis/verification skills into the prompt so the LLM
+    produces a domain-aware evaluation narrative.  Returns empty string on
+    failure or when API key is unavailable.
+    """
+    from core.config import settings as _settings
+
+    if not _settings.anthropic_api_key:
+        return ""
+
+    # Collect skill bodies
+    skill_blocks: list[str] = []
+    for name in _REPORT_SKILL_NAMES:
+        skill = skill_registry.get(name)
+        if skill and skill.body:
+            skill_blocks.append(f"### {skill.name}\n{skill.body[:2000]}")
+
+    if not skill_blocks:
+        return ""
+
+    skills_context = "\n\n".join(skill_blocks)
+
+    ip_name = report_dict.get("ip_name", "Unknown")
+    score = report_dict.get("final_score", 0)
+    tier = report_dict.get("tier", "N/A")
+    subscores = report_dict.get("subscores", {})
+    synthesis = report_dict.get("synthesis", {})
+    analyses = report_dict.get("analyses", [])
+
+    analyst_summary = ""
+    for a in analyses[:4]:
+        if isinstance(a, dict):
+            analyst_summary += (
+                f"- {a.get('analyst_type', '?')}: score={a.get('score', '?')}, "
+                f"finding={a.get('key_finding', '')[:120]}\n"
+            )
+
+    system_prompt = f"""You are a GEODE IP valuation expert. Write an expert analysis
+section for a report on the IP below. Use the domain knowledge provided.
+
+## Domain Knowledge (GEODE Skills)
+{skills_context}
+
+## Rules
+- Write 3-5 paragraphs of expert analysis in Korean.
+- Reference specific scoring dimensions and formulas from the skills context.
+- Explain WHY this IP received its tier/score using PSM, subscore weights, cause classification.
+- Provide actionable investment insights.
+- Do NOT repeat raw data — interpret and synthesize it."""
+
+    user_prompt = f"""## IP: {ip_name}
+- Final Score: {score:.1f} / 100
+- Tier: {tier}
+- Subscores: {subscores}
+- Synthesis: {synthesis}
+- Analyst Findings:
+{analyst_summary}
+
+Write the Expert Analysis section."""
+
+    try:
+        from core.llm.client import call_llm
+
+        return str(call_llm(system_prompt, user_prompt, max_tokens=2048, temperature=0.4))
+    except Exception as exc:
+        log.warning("Skill-enhanced narrative generation failed: %s", exc)
+        return ""
+
+
 def _generate_report(
     ip_name: str,
     *,
@@ -195,11 +278,13 @@ def _generate_report(
     output: str | None = None,
     dry_run: bool = True,
     verbose: bool = False,
-) -> None:
+    skill_registry: Any = None,
+) -> tuple[str, str] | None:
     """Generate a report for the given IP.
 
     Reuses cached pipeline result if available for the same IP,
-    otherwise runs analysis first.
+    otherwise runs analysis first.  Always saves to ``.geode/reports/``
+    and returns ``(file_path, content)``.
     """
     # Resolve format/template enums
     try:
@@ -221,24 +306,43 @@ def _generate_report(
     else:
         fresh = _run_analysis(ip_name, dry_run=dry_run, verbose=verbose)
         if fresh is None:
-            return
+            return None
         result = fresh
 
     report_dict = _state_to_report_dict(result)
+
+    # Skill-enhanced narrative (skip in dry-run to avoid LLM call)
+    enhanced_narrative = ""
+    if skill_registry is not None and not dry_run:
+        console.print("  [muted]Generating expert analysis with skills context...[/muted]")
+        enhanced_narrative = _build_skill_narrative(report_dict, skill_registry)
+
     generator = ReportGenerator()
-    content = generator.generate(report_dict, fmt=report_fmt, template=report_tpl)
+    content = generator.generate(
+        report_dict, fmt=report_fmt, template=report_tpl, enhanced_narrative=enhanced_narrative
+    )
+
+    # Determine save path
+    ext_map = {ReportFormat.HTML: "html", ReportFormat.JSON: "json", ReportFormat.MARKDOWN: "md"}
+    ext = ext_map.get(report_fmt, "md")
+    safe_name = ip_name.lower().replace(" ", "-")
 
     if output:
-        from pathlib import Path
-
-        path = Path(output)
-        path.write_text(content, encoding="utf-8")
-        console.print(f"  [success]Report saved to {path}[/success]")
-        console.print()
+        save_path = Path(output)
     else:
-        console.print()
-        console.print(content)
-        console.print()
+        _REPORT_DIR.mkdir(parents=True, exist_ok=True)
+        save_path = _REPORT_DIR / f"{safe_name}-{template}.{ext}"
+
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    save_path.write_text(content, encoding="utf-8")
+    console.print(f"\n  [success]Report saved → {save_path}[/success]")
+
+    # Also print to console
+    console.print()
+    console.print(content)
+    console.print()
+
+    return str(save_path), content
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +392,7 @@ def _welcome_screen() -> None:
     logo = Text(_LOGO, style="bold cyan")
     console.print(logo)
     console.print(
-        f"  [bold]GEODE v{__version__}[/bold]  [muted]— Undervalued IP Discovery Agent[/muted]"
+        f"  [bold]GEODE v{__version__}[/bold]  [muted]— 게임화 IP 도메인 자율 실행 하네스[/muted]"
     )
     console.print(f"  [muted]Model: {settings.model}[/muted]")
     console.print("  [dim]Wiring tools. Scanning worlds.[/dim]")
@@ -876,6 +980,7 @@ def _handle_command(
                 template=report_args["template"],
                 dry_run=report_dry,
                 verbose=verbose,
+                skill_registry=skill_registry,
             )
     elif action == "batch":
         readiness = _get_readiness()
@@ -890,7 +995,7 @@ def _handle_command(
             verbose=verbose,
         )
     elif action == "schedule":
-        cmd_schedule(args)
+        cmd_schedule(args, scheduler_service=_scheduler_service_ctx.get(None))
     elif action == "trigger":
         cmd_trigger(args)
     elif action == "status":
@@ -1107,11 +1212,13 @@ def _build_tool_handlers(
     *,
     mcp_manager: Any = None,
     agentic_ref: list[Any] | None = None,
+    skill_registry: Any = None,
 ) -> dict[str, Any]:
     """Build tool name → handler function mapping for ToolExecutor.
 
     Each handler receives tool_input kwargs and returns a dict result.
     ``mcp_manager`` and ``agentic_ref`` are used by install_mcp_server.
+    ``skill_registry`` is used by generate_report for skill-enhanced narrative.
     """
     from core.cli.batch import run_batch
     from core.memory.project import ProjectMemory
@@ -1247,16 +1354,31 @@ def _build_tool_handlers(
                 "missing": ["ip_name"],
                 "hint": "어떤 IP의 리포트를 생성할까요?",
             }
-        fmt = kwargs.get("format", "md")
+        fmt = kwargs.get("format", "markdown")
+        if fmt == "md":
+            fmt = "markdown"
         template = kwargs.get("template", "summary")
         dry_run = kwargs.get("dry_run", force_dry)
-        _generate_report(ip_name, dry_run=dry_run, verbose=verbose, fmt=fmt, template=template)
+        report_result = _generate_report(
+            ip_name,
+            dry_run=dry_run,
+            verbose=verbose,
+            fmt=fmt,
+            template=template,
+            skill_registry=skill_registry,
+        )
+        if report_result is None:
+            return {"error": f"Report generation failed for '{ip_name}'"}
+        file_path, content = report_result
         return {
             "status": "ok",
             "action": "report",
             "ip_name": ip_name,
             "format": fmt,
             "template": template,
+            "file_path": file_path,
+            "content_preview": content[:500] if len(content) > 500 else content,
+            "content_length": len(content),
         }
 
     def handle_batch_analyze(**kwargs: Any) -> dict[str, Any]:
@@ -1424,8 +1546,42 @@ def _build_tool_handlers(
     def handle_schedule_job(**kwargs: Any) -> dict[str, Any]:
         sub_action = kwargs.get("sub_action", "") or "list"
         target_id = kwargs.get("target_id", "")
+        expression = kwargs.get("expression", "")
+        svc = _scheduler_service_ctx.get(None)
+
+        if sub_action == "create" and expression:
+            cmd_schedule(f"create {expression}", scheduler_service=svc)
+            try:
+                from core.automation.nl_scheduler import NLScheduleParser
+
+                result = NLScheduleParser().parse(expression)
+                if result.success and result.job:
+                    return {
+                        "status": "ok",
+                        "action": "schedule",
+                        "sub_action": "create",
+                        "job_id": result.job.job_id,
+                        "schedule_kind": (
+                            result.inferred_kind.value if result.inferred_kind else ""
+                        ),
+                        "expression": expression,
+                    }
+                return {
+                    "status": "error",
+                    "action": "schedule",
+                    "sub_action": "create",
+                    "error": result.error or "parse failed",
+                }
+            except Exception as exc:
+                return {
+                    "status": "error",
+                    "action": "schedule",
+                    "sub_action": "create",
+                    "error": str(exc),
+                }
+
         sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
-        cmd_schedule(sched_args)
+        cmd_schedule(sched_args, scheduler_service=svc)
         try:
             from core.automation.predefined import PREDEFINED_AUTOMATIONS
 
@@ -1434,12 +1590,23 @@ def _build_tool_handlers(
             ]
         except Exception:
             templates = []
-        return {
+        result_dict: dict[str, Any] = {
             "status": "ok",
             "action": "schedule",
             "sub_action": sub_action,
             "templates": templates[:10],
         }
+        if svc is not None:
+            try:
+                dynamic = [
+                    {"id": j.job_id, "name": j.name, "enabled": j.enabled}
+                    for j in svc.list_jobs(include_disabled=True)
+                    if not j.job_id.startswith("predefined:")
+                ]
+                result_dict["dynamic_jobs"] = dynamic
+            except Exception:
+                log.debug("Failed to list dynamic jobs", exc_info=True)
+        return result_dict
 
     def handle_trigger_event(**kwargs: Any) -> dict[str, Any]:
         sub_action = kwargs.get("sub_action", "") or "list"
@@ -1719,9 +1886,23 @@ def _interactive_loop() -> None:
     except Exception:
         log.debug("Skill loading skipped", exc_info=True)
 
+    # Initialize SchedulerService (optional, fails silently)
+    try:
+        from core.automation.scheduler import SchedulerService
+
+        _sched_svc = SchedulerService()
+        _sched_svc.load()
+        _sched_svc.start()
+        _scheduler_service_ctx.set(_sched_svc)
+        log.info("SchedulerService started")
+    except Exception:
+        log.debug("SchedulerService initialization skipped", exc_info=True)
+
     # Build tool handlers and executor
     agentic_ref: list[Any] = [None]  # mutable ref for handler closure
-    handlers = _build_tool_handlers(verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref)
+    handlers = _build_tool_handlers(
+        verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref, skill_registry=skill_registry
+    )
     executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
     agentic = AgenticLoop(
         conversation, executor, mcp_manager=mcp_mgr, skill_registry=skill_registry
@@ -1754,7 +1935,10 @@ def _interactive_loop() -> None:
             # Update handlers if verbose changed
             if verbose != (handlers.get("_verbose_flag") is True):
                 handlers = _build_tool_handlers(
-                    verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref
+                    verbose=verbose,
+                    mcp_manager=mcp_mgr,
+                    agentic_ref=agentic_ref,
+                    skill_registry=skill_registry,
                 )
                 executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
                 agentic = AgenticLoop(
@@ -1769,6 +1953,15 @@ def _interactive_loop() -> None:
             result = agentic.run(user_input)
             _render_agentic_result(result)
 
+    # Clean shutdown of SchedulerService
+    _sched = _scheduler_service_ctx.get(None)
+    if _sched is not None:
+        try:
+            _sched.save()
+            _sched.stop()
+        except Exception:
+            log.debug("SchedulerService shutdown error", exc_info=True)
+
 
 # ---------------------------------------------------------------------------
 # Typer commands
@@ -1777,7 +1970,7 @@ def _interactive_loop() -> None:
 
 @app.callback()
 def main(ctx: typer.Context) -> None:
-    """GEODE v0.9.0 — Undervalued IP Discovery Agent."""
+    """GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
         _interactive_loop()
