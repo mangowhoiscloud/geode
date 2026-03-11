@@ -20,7 +20,7 @@ feature/xxx ──PR──→ develop ──PR──→ main
 git push origin feature/<name>
 
 # 2. feature → develop PR 생성 (한글, assignee 자신)
-gh pr create --base develop --assignees mangowhoiscloud \
+gh pr create --base develop --assignee mangowhoiscloud \
   --title "<type>: <한글 설명>" \
   --body "$(cat <<'EOF'
 ## 요약
@@ -46,7 +46,7 @@ gh pr checks <PR#> --watch
 gh pr merge <PR#> --merge
 
 # 5. develop → main PR 생성 (동일 형식)
-gh pr create --base main --head develop --assignees mangowhoiscloud \
+gh pr create --base main --head develop --assignee mangowhoiscloud \
   --title "<type>: <동일 한글 설명>" \
   --body "$(cat <<'EOF'
 ## 요약
@@ -91,7 +91,7 @@ PR 생성 → CI 실행 → 실패?
 |------|------|
 | **언어** | **한글** (제목 + 본문) |
 | **제목** | `<type>: <한글 설명>` (70자 이내) |
-| **Assignee** | `--assignees mangowhoiscloud` (항상) |
+| **Assignee** | `--assignee mangowhoiscloud` (항상) |
 | **본문** | `## 요약` → `## 변경 사항` → `## 테스트` |
 | **Base** | feature → `develop`, develop → `main` |
 
