@@ -21,7 +21,13 @@ GEODE_THEME = Theme(
         "success": "bold green",
         "muted": "dim",
         "status.spinner": "cyan",
+        # Claude Code-style agentic UI
+        "tool_name": "bold magenta",
+        "tool_args": "dim cyan",
+        "token_info": "dim",
+        "plan_step": "cyan",
+        "subagent": "bold blue",
     }
 )
 
-console = Console(theme=GEODE_THEME, width=80)
+console = Console(theme=GEODE_THEME, width=120)

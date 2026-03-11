@@ -766,3 +766,108 @@ class TestNewToolParsing:
     @pytest.fixture
     def router_llm(self) -> NLRouter:
         return NLRouter(llm_enabled=True)
+
+
+# ---------------------------------------------------------------------------
+# Plan + Delegate NL integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestPlanDelegateNL:
+    """Verify plan/delegate tools parse and route correctly."""
+
+    def test_create_plan_parse(self) -> None:
+        resp = _make_tool_use_response("create_plan", {"ip_name": "Berserk"})
+        intent = _parse_tool_use(resp)
+        assert intent.action == "plan"
+        assert intent.args["ip_name"] == "Berserk"
+
+    def test_create_plan_with_template(self) -> None:
+        resp = _make_tool_use_response(
+            "create_plan", {"ip_name": "Berserk", "template": "prospect"}
+        )
+        intent = _parse_tool_use(resp)
+        assert intent.action == "plan"
+        assert intent.args["template"] == "prospect"
+
+    def test_approve_plan_parse(self) -> None:
+        resp = _make_tool_use_response("approve_plan", {"plan_id": "abc123"})
+        intent = _parse_tool_use(resp)
+        assert intent.action == "plan"
+        assert intent.args["plan_id"] == "abc123"
+
+    def test_delegate_task_parse(self) -> None:
+        resp = _make_tool_use_response(
+            "delegate_task",
+            {"tasks": [{"type": "analyze", "ip_name": "Berserk"}]},
+        )
+        intent = _parse_tool_use(resp)
+        assert intent.action == "delegate"
+
+    def test_plan_via_router(self, router_llm: NLRouter) -> None:
+        """Full flow: LLM calls create_plan."""
+        resp = _make_tool_use_response("create_plan", {"ip_name": "Berserk"})
+        with (
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "sk-ant-test"
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = resp
+
+            intent = router_llm.classify("Berserk 분석 계획 세워줘")
+
+        assert intent.action == "plan"
+        assert intent.args["ip_name"] == "Berserk"
+
+    def test_delegate_via_router(self, router_llm: NLRouter) -> None:
+        """Full flow: LLM calls delegate_task."""
+        resp = _make_tool_use_response(
+            "delegate_task",
+            {"tasks": [{"type": "analyze", "ip_name": "Berserk"}]},
+        )
+        with (
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "sk-ant-test"
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = resp
+
+            intent = router_llm.classify("병렬로 Berserk 분석해줘")
+
+        assert intent.action == "delegate"
+
+    @pytest.fixture
+    def router_llm(self) -> NLRouter:
+        return NLRouter(llm_enabled=True)
+
+
+class TestOfflinePlanDelegate:
+    """Offline fallback patterns for plan/delegate."""
+
+    def test_plan_korean(self) -> None:
+        intent = _offline_fallback("Berserk 분석 계획 세워줘")
+        assert intent.action == "plan"
+
+    def test_plan_english(self) -> None:
+        intent = _offline_fallback("plan the analysis for Berserk")
+        assert intent.action == "plan"
+
+    def test_plan_review(self) -> None:
+        intent = _offline_fallback("사전 검토 먼저 해줘")
+        assert intent.action == "plan"
+
+    def test_delegate_korean(self) -> None:
+        intent = _offline_fallback("병렬로 분석 실행해줘")
+        assert intent.action == "delegate"
+
+    def test_delegate_english(self) -> None:
+        intent = _offline_fallback("run in parallel using sub agents")
+        assert intent.action == "delegate"
+
+    def test_delegate_concurrent(self) -> None:
+        intent = _offline_fallback("동시에 처리해")
+        assert intent.action == "delegate"

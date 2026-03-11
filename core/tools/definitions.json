@@ -305,7 +305,7 @@
   },
   {
     "name": "delegate_task",
-    "description": "Delegate a sub-task for parallel execution. Use when: multiple independent analyses needed, batch operations, or parallel data gathering.",
+    "description": "서브에이전트에게 작업을 위임하여 병렬로 실행합니다. 사용자가 여러 IP를 동시에 분석하거나, 병렬 작업을 요청할 때 사용하세요. Examples: '3개 IP 동시 분석해', 'Berserk, Cowboy Bebop 병렬로 분석', 'parallel analysis', '서브에이전트 돌려'",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -324,6 +324,39 @@
         }
       },
       "required": ["task_description", "task_type", "args"]
+    }
+  },
+  {
+    "name": "create_plan",
+    "description": "분석 실행 계획을 생성합니다. 사용자가 계획을 세우거나 사전 검토를 요청할 때 사용하세요. Examples: '계획 세워줘', 'plan this', 'Berserk 분석 계획', '먼저 계획부터', 'plan before executing', '어떤 순서로 분석할지 보여줘'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "IP name to plan analysis for (e.g. 'Berserk')"
+        },
+        "template": {
+          "type": "string",
+          "enum": ["full_pipeline", "prospect"],
+          "description": "Plan template: full_pipeline (전체 9단계) or prospect (간소화 6단계). Default: full_pipeline"
+        }
+      },
+      "required": ["ip_name"]
+    }
+  },
+  {
+    "name": "approve_plan",
+    "description": "생성된 분석 계획을 승인하고 실행합니다. create_plan으로 계획을 먼저 생성한 후 사용하세요. Examples: '승인', 'approve', '계획 실행해', 'go ahead', '진행해'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "description": "ID of the plan to approve (from create_plan result)"
+        }
+      },
+      "required": ["plan_id"]
     }
   }
 ]
