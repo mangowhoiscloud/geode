@@ -74,9 +74,14 @@ SubAgent 병렬 실행 완성 + SchedulerService 프로덕션 와이어링 + NL 
 - `NODE_ENTER/EXIT/ERROR` 훅이 서브에이전트와 파이프라인 노드를 구분하지 못하던 문제 (G6)
 - `CronParser.matches()` — `*/30` 등 step syntax 미지원으로 predefined cron 파싱 실패하던 문제
 
+### Architecture
+- `core/llm/token_tracker.py` — TokenTracker 단일주입 패턴 (`get_tracker().record()`) 으로 토큰 비용 계산 일원화
+- 24개 모델 가격 검증 및 수정 (Opus 4.6: $15/$75 → $5/$25, Haiku 4.5: $0.80/$4 → $1/$5)
+- client.py, nl_router.py, agentic_loop.py, openai_adapter.py 중복 비용 계산 코드 제거 (~250줄 삭감)
+
 ### Infrastructure
 - Test count: 2033+ → 2077+
-- Module count: 121 → 124
+- Module count: 121 → 125
 - `docs/plans/P1-subagent-parallel-execution.md` — GAP 분석 + 구현 플랜
 - `docs/blogs/20-subagent-parallel-execution-e2e.md` — 기술 블로그 (네러티브)
 
