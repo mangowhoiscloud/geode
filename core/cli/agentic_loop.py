@@ -27,6 +27,7 @@ from core.cli.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY, settings
 from core.llm.client import _maybe_traceable, track_token_usage
 from core.llm.prompts import AGENTIC_SUFFIX
+from core.ui.agentic_ui import render_tool_call, render_tool_result
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
@@ -116,7 +117,7 @@ class AgenticLoop:
                     error="llm_call_failed",
                 )
 
-            # Track usage
+            # Track usage + Claude Code-style token display
             self._track_usage(response)
 
             if response.stop_reason != "tool_use":
@@ -244,8 +245,15 @@ class AgenticLoop:
 
             log.info("AgenticLoop: tool_use %s(%s)", tool_name, tool_input)
 
+            # Claude Code-style: show tool call before execution
+            render_tool_call(tool_name, tool_input)
+
             # Execute via ToolExecutor (handles HITL for dangerous tools)
             result = self.executor.execute(tool_name, tool_input)
+
+            # Claude Code-style: show tool result summary
+            if isinstance(result, dict):
+                render_tool_result(tool_name, result)
 
             self._tool_log.append(
                 {

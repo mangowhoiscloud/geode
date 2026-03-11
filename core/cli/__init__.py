@@ -1644,6 +1644,65 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
             "event_name": event_name,
         }
 
+    # --- Plan mode handlers ---
+
+    _plan_cache: dict[str, Any] = {}
+
+    def handle_create_plan(**kwargs: Any) -> dict[str, Any]:
+        from core.orchestration.plan_mode import PlanMode
+
+        ip_name = kwargs.get("ip_name", "")
+        template = kwargs.get("template", "full_pipeline")
+        planner = PlanMode()
+        plan = planner.create_plan(ip_name, template=template)
+        summary = planner.present_plan(plan)
+        _plan_cache["last"] = (planner, plan)
+
+        console.print()
+        console.print(f"  [header]● Plan: {ip_name} 분석 계획[/header]")
+        for i, step in enumerate(plan.steps, 1):
+            console.print(f"    {i}. {step.description}")
+        console.print(
+            f"  [muted]예상 시간: {plan.total_estimated_time_s:.0f}s "
+            f"| 단계: {plan.step_count}개[/muted]"
+        )
+        console.print()
+        return {
+            "status": "ok",
+            "action": "plan",
+            "plan_id": plan.plan_id,
+            "ip_name": ip_name,
+            "template": template,
+            "step_count": plan.step_count,
+            "steps": [s.description for s in plan.steps],
+            "summary": summary,
+            "hint": "Use approve_plan to execute this plan.",
+        }
+
+    def handle_approve_plan(**kwargs: Any) -> dict[str, Any]:
+        plan_id = kwargs.get("plan_id", "")
+        cached = _plan_cache.get("last")
+        if not cached:
+            return {"error": "No plan to approve. Use create_plan first."}
+
+        planner, plan = cached
+        if plan_id and plan.plan_id != plan_id:
+            return {"error": f"Plan ID mismatch: expected {plan.plan_id}, got {plan_id}"}
+
+        planner.approve_plan(plan)
+        result = planner.execute_plan(plan)
+        _plan_cache.pop("last", None)
+
+        console.print(f"  [success]✓ Plan executed: {plan.ip_name}[/success]")
+        console.print()
+        return {
+            "status": "ok",
+            "action": "approve_plan",
+            "plan_id": plan.plan_id,
+            "executed": True,
+            "result": str(result)[:500],
+        }
+
     return {
         "list_ips": handle_list_ips,
         "analyze_ip": handle_analyze_ip,
@@ -1662,6 +1721,8 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         "generate_data": handle_generate_data,
         "schedule_job": handle_schedule_job,
         "trigger_event": handle_trigger_event,
+        "create_plan": handle_create_plan,
+        "approve_plan": handle_approve_plan,
     }
 
 

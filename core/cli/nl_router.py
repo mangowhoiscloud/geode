@@ -9,19 +9,14 @@ Graceful degradation (3-stage):
   2. Offline pattern matching (fallback) — when LLM unavailable
   3. Help with error context — when nothing matches
 
-Tools exposed to LLM (12):
-  1. list_ips       — 사용 가능한 IP 목록 표시
-  2. analyze_ip     — 특정 IP 분석 실행
-  3. search_ips     — 키워드/장르로 IP 검색
-  4. compare_ips    — 두 IP 비교 분석
-  5. show_help      — 사용법 안내
-  6. generate_report — 리포트 생성
-  7. batch_analyze  — 배치 분석 (전체/다수 IP 동시)
-  8. check_status   — 시스템 상태 확인
-  9. switch_model   — 모델/앙상블 모드 변경
-  10. memory_search  — 메모리 검색 (인사이트, 규칙, 세션)
-  11. memory_save    — 메모리 저장 (세션 + persistent)
-  12. manage_rule    — 규칙 생성/수정/삭제/조회
+Tools exposed to LLM (20):
+  1-17. Core tools (list, analyze, search, compare, help, report, batch,
+        status, model, memory_search/save, rule, key, auth, data, schedule, trigger)
+  18. delegate_task  — 서브에이전트 병렬 실행
+  19. create_plan    — 분석 계획 생성
+  20. approve_plan   — 계획 승인 및 실행
+
+Excluded: run_bash (requires explicit HITL gate, not exposed to NL router)
 
 If the LLM responds with text (no tool call) → chat intent.
 """
@@ -63,6 +58,8 @@ VALID_ACTIONS = {
     "generate",
     "schedule",
     "trigger",
+    "plan",
+    "delegate",
 }
 
 LLM_ROUTER_MODEL = settings.router_model
@@ -212,29 +209,11 @@ _TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitio
 
 
 def _load_tools() -> list[dict[str, Any]]:
-    """Load tool definitions from JSON file (NL router tools only, no bash/delegate)."""
+    """Load tool definitions from JSON file (NL router tools, excluding run_bash)."""
     all_tools: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
-    # NL router uses only the first 17 tools (not run_bash, delegate_task)
-    nl_tool_names = {
-        "list_ips",
-        "analyze_ip",
-        "search_ips",
-        "compare_ips",
-        "show_help",
-        "generate_report",
-        "batch_analyze",
-        "check_status",
-        "switch_model",
-        "memory_search",
-        "memory_save",
-        "manage_rule",
-        "set_api_key",
-        "manage_auth",
-        "generate_data",
-        "schedule_job",
-        "trigger_event",
-    }
-    return [t for t in all_tools if t["name"] in nl_tool_names]
+    # NL router exposes all tools except run_bash (requires explicit HITL)
+    excluded = {"run_bash"}
+    return [t for t in all_tools if t["name"] not in excluded]
 
 
 _TOOLS: list[dict[str, Any]] = _load_tools()
@@ -262,6 +241,9 @@ _TOOL_ACTION_MAP: dict[str, str] = {
     "generate_data": "generate",
     "schedule_job": "schedule",
     "trigger_event": "trigger",
+    "create_plan": "plan",
+    "approve_plan": "plan",
+    "delegate_task": "delegate",
 }
 
 # Tool name → args key mapping (passthrough all tool input keys)
@@ -285,6 +267,9 @@ _TOOL_ARGS_MAP: dict[str, dict[str, str]] = {
     "generate_data": {"count": "count", "genre": "genre"},
     "schedule_job": {"sub_action": "sub_action", "target_id": "target_id"},
     "trigger_event": {"sub_action": "sub_action", "event_name": "event_name"},
+    "create_plan": {"ip_name": "ip_name", "template": "template"},
+    "approve_plan": {"plan_id": "plan_id"},
+    "delegate_task": {"tasks": "tasks"},
 }
 
 
@@ -317,6 +302,12 @@ _OFFLINE_MODEL = re.compile(
 _OFFLINE_MEMORY = re.compile(
     r"(?:기억|메모리|memory|규칙|rule|인사이트|insight|저장|save|remember)", re.IGNORECASE
 )
+_OFFLINE_PLAN = re.compile(
+    r"(?:계획|플랜|plan|먼저|before\s*execut|사전\s*검토|순서)", re.IGNORECASE
+)
+_OFFLINE_DELEGATE = re.compile(
+    r"(?:병렬|동시|parallel|서브\s*에이전트|sub\s*agent|delegate|concurrent)", re.IGNORECASE
+)
 
 
 def _offline_fallback(text: str, *, error: str = "") -> NLIntent:
@@ -339,6 +330,20 @@ def _offline_fallback(text: str, *, error: str = "") -> NLIntent:
             action="report",
             args={"ip_name": text.strip(), "_error": error},
             confidence=0.7,
+        )
+    # Plan mode check (before known IP — more specific intent)
+    if _OFFLINE_PLAN.search(lower):
+        return NLIntent(
+            action="plan",
+            args={"ip_name": text.strip(), "_error": error},
+            confidence=0.7,
+        )
+    # Delegate check (parallel sub-agent dispatch)
+    if _OFFLINE_DELEGATE.search(lower):
+        return NLIntent(
+            action="delegate",
+            args={"_offline": True, "_error": error},
+            confidence=0.5,
         )
     # Known IP names → analyze
     for ip in _get_known_ips():
