@@ -81,7 +81,7 @@ def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
 
 app = typer.Typer(
     name="geode",
-    help="GEODE v0.7.0 — Undervalued IP Discovery Agent",
+    help="GEODE v0.9.0 — Undervalued IP Discovery Agent",
     no_args_is_help=False,
     invoke_without_command=True,
 )
@@ -1102,10 +1102,16 @@ def _text_requests_dry_run(text: str) -> bool:
     return bool(_DRY_RUN_PATTERN.search(text))
 
 
-def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
+def _build_tool_handlers(
+    verbose: bool = False,
+    *,
+    mcp_manager: Any = None,
+    agentic_ref: list[Any] | None = None,
+) -> dict[str, Any]:
     """Build tool name → handler function mapping for ToolExecutor.
 
     Each handler receives tool_input kwargs and returns a dict result.
+    ``mcp_manager`` and ``agentic_ref`` are used by install_mcp_server.
     """
     from core.cli.batch import run_batch
     from core.memory.project import ProjectMemory
@@ -1122,6 +1128,13 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
 
     def handle_analyze_ip(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return {
+                "error": "analyze_ip requires an IP name",
+                "clarification_needed": True,
+                "missing": ["ip_name"],
+                "hint": "어떤 IP를 분석할까요?",
+            }
         dry_run = kwargs.get("dry_run", force_dry)
         if _text_requests_dry_run(ip_name):
             dry_run = True
@@ -1173,6 +1186,22 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         ip_a = kwargs.get("ip_a", "")
         ip_b = kwargs.get("ip_b", "")
         dry_run = kwargs.get("dry_run", force_dry)
+
+        # Clarification: both IPs required
+        if not ip_a or not ip_b:
+            missing = []
+            if not ip_a:
+                missing.append("ip_a")
+            if not ip_b:
+                missing.append("ip_b")
+            return {
+                "error": "compare_ips requires two IPs to compare",
+                "clarification_needed": True,
+                "provided": {"ip_a": ip_a, "ip_b": ip_b},
+                "missing": missing,
+                "hint": "어떤 IP와 비교할까요?" if ip_a else "비교할 두 IP를 알려주세요.",
+            }
+
         console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
         result_a = _run_analysis(ip_a, dry_run=dry_run, verbose=verbose)
         result_b = _run_analysis(ip_b, dry_run=dry_run, verbose=verbose)
@@ -1211,6 +1240,13 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
 
     def handle_generate_report(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return {
+                "error": "generate_report requires an IP name",
+                "clarification_needed": True,
+                "missing": ["ip_name"],
+                "hint": "어떤 IP의 리포트를 생성할까요?",
+            }
         fmt = kwargs.get("format", "md")
         template = kwargs.get("template", "summary")
         dry_run = kwargs.get("dry_run", force_dry)
@@ -1523,6 +1559,63 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
 
         return GoogleTrendsTool().execute(**kwargs)
 
+    def handle_install_mcp_server(**kwargs: Any) -> dict[str, Any]:
+        import os as _os
+
+        from core.infrastructure.adapters.mcp.catalog import search_catalog
+
+        query = kwargs.get("query", "")
+        matches = search_catalog(query)
+        if not matches:
+            return {
+                "status": "not_found",
+                "message": f"'{query}'에 맞는 MCP 서버를 찾지 못했습니다.",
+            }
+
+        best = matches[0]
+
+        # Already installed?
+        if mcp_manager is not None:
+            existing = {s["name"] for s in mcp_manager.list_servers()}
+            if best.name in existing:
+                return {
+                    "status": "already_installed",
+                    "server": best.name,
+                    "message": f"{best.name}은 이미 설치되어 있습니다.",
+                }
+
+        if mcp_manager is None:
+            return {"status": "error", "message": "MCP manager not available"}
+
+        # Register server
+        args = ["-y", best.package, *best.extra_args]
+        env_map = {k: f"${{{k}}}" for k in best.env_keys} or None
+        ok = mcp_manager.add_server(best.name, best.command, args=args, env=env_map)
+        if not ok:
+            return {"status": "error", "message": f"Failed to save {best.name}"}
+
+        # Hot-reload tools into running AgenticLoop
+        added = 0
+        if agentic_ref and agentic_ref[0] is not None:
+            added = agentic_ref[0].refresh_tools()
+
+        # Check for missing env vars
+        missing = [k for k in best.env_keys if not _os.environ.get(k)]
+
+        msg = f"{best.name} 설치 완료. {added}개 도구 추가됨."
+        if missing:
+            msg += f" 환경변수 필요: {', '.join(missing)}"
+
+        return {
+            "status": "installed",
+            "server": best.name,
+            "package": best.package,
+            "tools_added": added,
+            "env_required": list(best.env_keys),
+            "env_missing": missing,
+            "message": msg,
+        }
+
     return {
         "list_ips": handle_list_ips,
         "analyze_ip": handle_analyze_ip,
@@ -1554,6 +1647,8 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         "reddit_sentiment": handle_reddit_sentiment,
         "steam_info": handle_steam_info,
         "google_trends": handle_google_trends,
+        # MCP auto-install
+        "install_mcp_server": handle_install_mcp_server,
     }
 
 
@@ -1625,11 +1720,13 @@ def _interactive_loop() -> None:
         log.debug("Skill loading skipped", exc_info=True)
 
     # Build tool handlers and executor
-    handlers = _build_tool_handlers(verbose=verbose)
+    agentic_ref: list[Any] = [None]  # mutable ref for handler closure
+    handlers = _build_tool_handlers(verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref)
     executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
     agentic = AgenticLoop(
         conversation, executor, mcp_manager=mcp_mgr, skill_registry=skill_registry
     )
+    agentic_ref[0] = agentic
 
     while True:
         try:
@@ -1656,7 +1753,9 @@ def _interactive_loop() -> None:
                 break
             # Update handlers if verbose changed
             if verbose != (handlers.get("_verbose_flag") is True):
-                handlers = _build_tool_handlers(verbose=verbose)
+                handlers = _build_tool_handlers(
+                    verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref
+                )
                 executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
                 agentic = AgenticLoop(
                     conversation,
@@ -1664,6 +1763,7 @@ def _interactive_loop() -> None:
                     mcp_manager=mcp_mgr,
                     skill_registry=skill_registry,
                 )
+                agentic_ref[0] = agentic
         else:
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
             result = agentic.run(user_input)
@@ -1677,7 +1777,7 @@ def _interactive_loop() -> None:
 
 @app.callback()
 def main(ctx: typer.Context) -> None:
-    """GEODE v0.7.0 — Undervalued IP Discovery Agent."""
+    """GEODE v0.9.0 — Undervalued IP Discovery Agent."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
         _interactive_loop()

@@ -512,5 +512,19 @@
       },
       "required": []
     }
+  },
+  {
+    "name": "install_mcp_server",
+    "description": "MCP 서버를 검색하고 설치합니다. 외부 도구/서비스 연결 요청 시 사용. Examples: 'LinkedIn MCP 달아줘', 'Steam MCP 설치해', 'web search 추가해', 'Reddit MCP 연결해'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "설치할 MCP 서버 검색어 (예: 'linkedin', 'steam', 'web search', 'memory')"
+        }
+      },
+      "required": ["query"]
+    }
   }
 ]

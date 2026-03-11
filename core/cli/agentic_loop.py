@@ -102,6 +102,23 @@ class AgenticLoop:
         self._tool_log: list[dict[str, Any]] = []
         self._client: anthropic.Anthropic | None = None
 
+    def refresh_tools(self) -> int:
+        """Reload MCP tools into the tool list without reconstructing the loop.
+
+        Called after install_mcp_server to make new tools available immediately.
+        Returns number of newly added tools.
+        """
+        if self._mcp_manager is None:
+            return 0
+        existing = {t["name"] for t in self._tools}
+        added = 0
+        for tool in self._mcp_manager.get_all_tools():
+            if tool.get("name") not in existing:
+                self._tools.append(tool)
+                existing.add(tool["name"])
+                added += 1
+        return added
+
     @_maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
     def run(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""

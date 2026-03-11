@@ -36,7 +36,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy type check
-        entry: uv run mypy core/
+        entry: uv run mypy --cache-dir /tmp/.mypy_cache_geode core/
         language: system
         pass_filenames: false
         types: [python]

@@ -26,6 +26,81 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.9.0] — 2026-03-11
+
+General Assistant Transformation, Skills 시스템, MCP 자동설치, Clarification 파이프라인, 마스코트 브랜딩.
+
+### Added
+
+#### General Assistant Transformation (PR #32)
+- Offline mode 제거 — AgenticLoop always-online (API 키 없으면 자동 dry-run)
+- `key_registration_gate()` — Claude Code 스타일 API 키 등록 게이트
+- 9개 신규 도구: `web_fetch`, `general_web_search`, `read_document`, `note_save`, `note_read`, `youtube_search`, `reddit_sentiment`, `steam_info`, `google_trends`
+- `StdioMCPClient` — JSON-RPC stdio 기반 MCP 서버 클라이언트
+- `MCPServerManager` — MCP 서버 설정 로딩 + 연결 관리 + 도구 디스커버리
+- `/mcp` CLI 커맨드 — MCP 서버 상태/도구/재로딩
+- `ToolExecutor` MCP fallback — 미등록 도구를 MCP 서버로 자동 라우팅
+
+#### NL Router 개선 (PR #32)
+- Scored matching — `_OfflinePattern` dataclass + priority-based 5-phase matching
+- Fuzzy IP matching — `difflib.get_close_matches` ("Bersek" → "Berserk")
+- Multi-intent — compound splitting ("하고", "and", 쉼표) → 복수 NLIntent 반환
+- Disambiguation — `NLIntent.ambiguous` + `alternatives` 필드
+- Context injection — 대화 히스토리 (최근 3턴) → LLM 라우터에 전달
+
+#### Skills 시스템 (PR #33)
+- `core/extensibility/skills.py` — SkillDefinition + SkillLoader + SkillRegistry
+- `core/extensibility/_frontmatter.py` — 공유 YAML frontmatter 파서 (agents.py에서 추출)
+- `.claude/skills/*/SKILL.md` 자동 발견 + 시스템 프롬프트 `{skill_context}` 주입
+- `/skills` CLI 커맨드 — 목록/상세/reload/add 서브커맨드
+- `/skills add <path>` — 외부 스킬 동적 등록 + .claude/skills/ 복사
+
+#### MCP 강화 (PR #33)
+- `MCPServerManager.add_server()` — 런타임 서버 등록 + JSON 영속화
+- `MCPServerManager.check_health()` / `reload_config()` — 헬스체크 + 설정 재로딩
+- `/mcp status|tools|reload|add` 서브커맨드 확장
+- `/mcp add <name> <cmd> [args]` — 동적 MCP 서버 추가
+
+#### MCP 자동설치 파이프라인 (PR #33)
+- `core/infrastructure/adapters/mcp/catalog.py` — 31개 빌트인 MCP 서버 카탈로그
+- `install_mcp_server` 도구 — NL로 MCP 서버 검색/설치 ("LinkedIn MCP 달아줘")
+- `search_catalog()` — 키워드 기반 가중 매칭 (name > tags > description > package)
+- `AgenticLoop.refresh_tools()` — MCP 도구 핫 리로드 (세션 재시작 불필요)
+- `_build_tool_handlers()` 시그니처 확장 — `mcp_manager`, `agentic_ref` 클로저 패턴
+
+#### Clarification 파이프라인 (PR #33)
+- Tool parameter validation — `handle_compare_ips`, `handle_analyze_ip`, `handle_generate_report`에 필수 파라미터 검증
+- `clarification_needed` 응답 프로토콜 — `missing`, `hint` 필드 포함
+- AGENTIC_SUFFIX clarification rules — slot filling, disambiguation, missing parameter 처리 지침
+- "Berserk 분석하고 비교하고 리포트" → max_rounds 미도달, 되묻기 정상 동작
+
+#### 마스코트 브랜딩 (PR #33)
+- `assets/geode-mascot.png` — GEODE 마스코트 (파란 구체 두구 우파루파)
+- `assets/geode-avatar-{128,256,512}.png` — 원형 얼굴 아바타 (RGBA 투명)
+- `assets/geode-social-preview.png` — GitHub Social Preview (1280×640)
+- `_render_mascot()` — Harness GEODE ASCII art CLI splash (6-color Rich 마크업)
+
+### Changed
+- Tool count: 21 → 31 (definitions.json)
+- Handler count: 17 → 30
+- System prompt: IP 분석 전문 → General AI Assistant + IP 전문성
+- `_build_tool_handlers()`: `verbose` only → `verbose`, `mcp_manager`, `agentic_ref`
+- `AgenticLoop.__init__()`: `skill_registry`, `mcp_manager` 파라미터 추가
+- `agents.py`: inline frontmatter parser → `_frontmatter.py` 공유 모듈 위임
+
+### Fixed
+- "Berserk 분석하고 비교하고 리포트" max_rounds 도달 → clarification 되묻기로 해결
+- `{skill_context}` KeyError — `router.md`에서 `{{skill_context}}` 이스케이프
+- `_render_mascot()` E501 — Rich 마크업 변수 리팩토링
+
+### Infrastructure
+- Test count: 2000+ → 2033+
+- Module count: 118 → 121
+- `docs/plans/clarification-pipeline.md` — Clarification 설계 문서
+- `docs/plans/tool-mcp-catalog.md` — MCP 카탈로그 리서치
+
+---
+
 ## [0.8.0] — 2026-03-11
 
 Plan/Sub-agent NL integration, Claude Code-style UI, response quality hardening.
@@ -257,13 +332,15 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.9.0 | 2026-03-11 | General Assistant, Skills, MCP 자동설치, Clarification, 마스코트 |
 | 0.8.0 | 2026-03-11 | Plan/Sub-agent NL, Claude Code UI, response quality, verification tracing |
 | 0.7.0 | 2026-03-11 | C2-C5 flexibility, LangSmith observability, orchestration integration, 17-tool audit |
 | 0.6.1 | 2026-03-10 | Content/code separation, package rename, pre-commit hooks |
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/mangowhoiscloud/geode/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mangowhoiscloud/geode/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
