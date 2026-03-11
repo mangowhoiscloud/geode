@@ -83,7 +83,7 @@ def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
 
 app = typer.Typer(
     name="geode",
-    help="GEODE v0.6.0 — Undervalued IP Discovery Agent",
+    help="GEODE v0.7.0 — Undervalued IP Discovery Agent",
     no_args_is_help=False,
     invoke_without_command=True,
 )
@@ -480,7 +480,7 @@ def _execute_pipeline_streaming(
                         for a in analyses:
                             _render_streaming_analyst(a)
 
-                    elif node_name == "evaluators":
+                    elif node_name == "evaluator":
                         if not evaluator_header_shown:
                             console.print()
                             console.print(
@@ -1751,7 +1751,7 @@ def _interactive_loop() -> None:
 
 @app.callback()
 def main(ctx: typer.Context) -> None:
-    """GEODE v0.6.0 — Undervalued IP Discovery Agent."""
+    """GEODE v0.7.0 — Undervalued IP Discovery Agent."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
         _interactive_loop()
