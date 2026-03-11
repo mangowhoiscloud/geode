@@ -5,6 +5,7 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 - Runtime Orchestration, Tool-Registry/Tool-Use, Bash, Hook-System으로 Agentic Loop(Gather->Action->Verify)를 구성, 자율 행동이 가능합니다.
 - 사용자의 의도와 맥락을 파악하기 위한 NL Router(Multi-turn, Multi-intent), 메모리 시스템이 내장되어 있습니다.
 - Observability는 LangSmith, Evaluation은 CUSUM Drift 감지를 지원합니다.
+- 에이전틱 엔지니어링으로 제작되며 코딩 에이전트가 E2E를 진행, Observability/Eval/CI 가드레일을 기반으로 재귀 개선 루프를 형성합니다.
 - 다음 업데이트는 Swiss Cheese Model based Eval Pipeline 구축으로 예정되어 있습니다.
 
 ## Features
