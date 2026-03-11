@@ -490,24 +490,21 @@ class TestTokenUsageTracking:
     def test_usage_recorded(self, router_llm: NLRouter) -> None:
         """Token usage from tool_use response is tracked."""
         resp = _make_tool_use_response("list_ips", {}, with_usage=True)
+        mock_tracker = MagicMock()
+        mock_tracker.record.return_value = MagicMock(cost_usd=0.0035)
         with (
             patch("core.cli.nl_router.anthropic") as mock_anthropic,
             patch("core.cli.nl_router.settings") as mock_settings,
-            patch("core.llm.client.calculate_cost", return_value=0.0035) as mock_cost,
-            patch("core.llm.client.get_usage_accumulator") as mock_acc_fn,
+            patch("core.llm.token_tracker.get_tracker", return_value=mock_tracker),
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
             mock_anthropic.Anthropic.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
-            mock_acc = MagicMock()
-            mock_acc_fn.return_value = mock_acc
-
             router_llm.classify("목록")
 
-        mock_cost.assert_called_once()
-        mock_acc.record.assert_called_once()
+        mock_tracker.record.assert_called_once()
 
     def test_no_usage(self, router_llm: NLRouter) -> None:
         """No usage field → no tracking error."""

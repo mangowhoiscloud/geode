@@ -26,7 +26,7 @@ from core.cli.conversation import ConversationContext
 from core.cli.nl_router import _build_system_prompt
 from core.cli.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY, settings
-from core.llm.client import _maybe_traceable, track_token_usage
+from core.llm.client import _maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.ui.agentic_ui import render_tool_call, render_tool_result
 
@@ -215,11 +215,6 @@ class AgenticLoop:
                     temperature=0.0,
                     timeout=30.0,
                 )
-                track_token_usage(
-                    self.model,
-                    response.usage.input_tokens,
-                    response.usage.output_tokens,
-                )
                 return response  # type: ignore[no-any-return]
 
             except anthropic.RateLimitError:
@@ -335,33 +330,19 @@ class AgenticLoop:
         if not response.usage:
             return
         try:
-            from core.llm.client import (
-                LLMUsage,
-                calculate_cost,
-                get_usage_accumulator,
-                track_token_usage,
-            )
+            from core.llm.token_tracker import get_tracker
             from core.ui.agentic_ui import render_tokens
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            cost = calculate_cost(self.model, in_tok, out_tok)
-            get_usage_accumulator().record(
-                LLMUsage(
-                    model=self.model,
-                    input_tokens=in_tok,
-                    output_tokens=out_tok,
-                    cost_usd=cost,
-                )
-            )
-            track_token_usage(self.model, in_tok, out_tok)
-            render_tokens(self.model, in_tok, out_tok, cost_usd=cost)
+            usage = get_tracker().record(self.model, in_tok, out_tok)
+            render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
             log.info(
                 "LLM call: model=%s in=%d out=%d cost=$%.4f",
                 self.model,
                 in_tok,
                 out_tok,
-                cost,
+                usage.cost_usd,
             )
         except Exception:
             log.debug("Failed to track usage", exc_info=True)

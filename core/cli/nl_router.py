@@ -571,29 +571,17 @@ def _call_tool_use_router(
 
         # Track token usage
         if response.usage:
-            from core.llm.client import (
-                LLMUsage,
-                calculate_cost,
-                get_usage_accumulator,
-            )
+            from core.llm.token_tracker import get_tracker
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            cost = calculate_cost(LLM_ROUTER_MODEL, in_tok, out_tok)
-            get_usage_accumulator().record(
-                LLMUsage(
-                    model=LLM_ROUTER_MODEL,
-                    input_tokens=in_tok,
-                    output_tokens=out_tok,
-                    cost_usd=cost,
-                )
-            )
+            usage = get_tracker().record(LLM_ROUTER_MODEL, in_tok, out_tok)
             log.debug(
                 "NLRouter tool_use: model=%s in=%d out=%d cost=$%.6f",
                 LLM_ROUTER_MODEL,
                 in_tok,
                 out_tok,
-                cost,
+                usage.cost_usd,
             )
 
         # Parse response: tool_use or text

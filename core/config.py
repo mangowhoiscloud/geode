@@ -115,26 +115,6 @@ ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY]
 OPENAI_PRIMARY = "gpt-5.4"
 OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.4", "gpt-5.2", "gpt-4.1"]
 
-# Pricing (USD per 1M tokens) — updated 2026-03
-# Source: https://developers.openai.com/api/docs/pricing/
-MODEL_PRICING: dict[str, dict[str, float]] = {
-    # Anthropic
-    ANTHROPIC_PRIMARY: {"input": 15.0 / 1_000_000, "output": 75.0 / 1_000_000},
-    ANTHROPIC_SECONDARY: {"input": 3.0 / 1_000_000, "output": 15.0 / 1_000_000},
-    ANTHROPIC_BUDGET: {"input": 0.80 / 1_000_000, "output": 4.0 / 1_000_000},
-    # OpenAI — GPT-5 family
-    "gpt-5.4": {"input": 2.50 / 1_000_000, "output": 15.0 / 1_000_000},
-    "gpt-5.2": {"input": 1.75 / 1_000_000, "output": 14.0 / 1_000_000},
-    "gpt-5.1": {"input": 1.25 / 1_000_000, "output": 10.0 / 1_000_000},
-    "gpt-5": {"input": 1.25 / 1_000_000, "output": 10.0 / 1_000_000},
-    # OpenAI — GPT-4 family
-    "gpt-4.1": {"input": 2.00 / 1_000_000, "output": 8.0 / 1_000_000},
-    "gpt-4.1-mini": {"input": 0.40 / 1_000_000, "output": 1.60 / 1_000_000},
-    "gpt-4.1-nano": {"input": 0.10 / 1_000_000, "output": 0.40 / 1_000_000},
-    "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
-    "gpt-4o-mini": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
-    # OpenAI — Reasoning
-    "o3": {"input": 2.00 / 1_000_000, "output": 8.0 / 1_000_000},
-    "o3-mini": {"input": 1.10 / 1_000_000, "output": 4.40 / 1_000_000},
-    "o4-mini": {"input": 1.10 / 1_000_000, "output": 4.40 / 1_000_000},
-}
+# Pricing — canonical source: core.llm.token_tracker.MODEL_PRICING
+# Re-exported here for backward compatibility.
+from core.llm.token_tracker import MODEL_PRICING as MODEL_PRICING  # noqa: E402

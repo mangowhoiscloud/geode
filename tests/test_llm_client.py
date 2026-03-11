@@ -68,12 +68,12 @@ class TestStripFences:
 class TestCalculateCost:
     def test_known_model_opus(self):
         cost = calculate_cost(ANTHROPIC_PRIMARY, 1000, 500)
-        expected = 1000 * (15.0 / 1_000_000) + 500 * (75.0 / 1_000_000)
+        expected = 1000 * (5.0 / 1_000_000) + 500 * (25.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
     def test_known_model_haiku(self):
         cost = calculate_cost(ANTHROPIC_BUDGET, 10_000, 2_000)
-        expected = 10_000 * (0.80 / 1_000_000) + 2_000 * (4.0 / 1_000_000)
+        expected = 10_000 * (1.0 / 1_000_000) + 2_000 * (5.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
     def test_unknown_model_returns_zero(self):

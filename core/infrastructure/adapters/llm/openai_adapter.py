@@ -16,15 +16,13 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
-from core.config import MODEL_PRICING, OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY, settings
+from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY, settings
 from core.llm.client import (
     CircuitBreaker,
-    LLMUsage,
     ToolCallRecord,
     ToolUseResult,
-    get_usage_accumulator,
-    track_token_usage,
 )
+from core.llm.token_tracker import LLMUsage, get_tracker
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -40,12 +38,6 @@ DEFAULT_OPENAI_MODEL = OPENAI_PRIMARY
 
 # OpenAI fallback chain — from config.py single source of truth
 OPENAI_FALLBACK_MODELS = OPENAI_FALLBACK_CHAIN
-
-
-def _calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    """Calculate cost in USD for OpenAI models."""
-    prices = MODEL_PRICING.get(model, {})
-    return input_tokens * prices.get("input", 0) + output_tokens * prices.get("output", 0)
 
 
 _openai_client: Any = None  # openai.OpenAI | None — lazy import
@@ -119,19 +111,7 @@ class OpenAIAdapter:
             if response.usage:
                 in_tok = response.usage.prompt_tokens
                 out_tok = response.usage.completion_tokens or 0
-                cost = _calculate_cost(model, in_tok, out_tok)
-                usage = LLMUsage(
-                    model=model, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost
-                )
-                get_usage_accumulator().record(usage)
-                track_token_usage(model, in_tok, out_tok)
-                log.debug(
-                    "OpenAI usage: model=%s in=%d out=%d cost=$%.4f",
-                    model,
-                    in_tok,
-                    out_tok,
-                    cost,
-                )
+                get_tracker().record(model, in_tok, out_tok)
 
             choice = response.choices[0]
             return choice.message.content or ""
@@ -194,12 +174,7 @@ class OpenAIAdapter:
             if response.usage:
                 in_tok = response.usage.prompt_tokens
                 out_tok = response.usage.completion_tokens or 0
-                cost = _calculate_cost(model, in_tok, out_tok)
-                usage = LLMUsage(
-                    model=model, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost
-                )
-                get_usage_accumulator().record(usage)
-                track_token_usage(model, in_tok, out_tok)
+                get_tracker().record(model, in_tok, out_tok)
 
             choice = response.choices[0]
             if choice.message.parsed is None:
@@ -241,22 +216,7 @@ class OpenAIAdapter:
                 if hasattr(chunk, "usage") and chunk.usage is not None:
                     in_tok = chunk.usage.prompt_tokens or 0
                     out_tok = chunk.usage.completion_tokens or 0
-                    cost = _calculate_cost(model, in_tok, out_tok)
-                    usage = LLMUsage(
-                        model=model,
-                        input_tokens=in_tok,
-                        output_tokens=out_tok,
-                        cost_usd=cost,
-                    )
-                    get_usage_accumulator().record(usage)
-                    track_token_usage(model, in_tok, out_tok)
-                    log.debug(
-                        "OpenAI streaming usage: model=%s in=%d out=%d cost=$%.4f",
-                        model,
-                        in_tok,
-                        out_tok,
-                        cost,
-                    )
+                    get_tracker().record(model, in_tok, out_tok)
 
         result: Iterator[str] = self._retry_with_backoff(_do_stream, model=target_model)
         return result
@@ -305,13 +265,8 @@ class OpenAIAdapter:
             if response.usage:
                 in_tok = response.usage.prompt_tokens
                 out_tok = response.usage.completion_tokens or 0
-                cost = _calculate_cost(target, in_tok, out_tok)
-                usage = LLMUsage(
-                    model=target, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost
-                )
+                usage = get_tracker().record(target, in_tok, out_tok)
                 all_usage.append(usage)
-                get_usage_accumulator().record(usage)
-                track_token_usage(target, in_tok, out_tok)
 
             choice = response.choices[0]
 

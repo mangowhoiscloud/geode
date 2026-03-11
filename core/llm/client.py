@@ -9,21 +9,28 @@ Failover strategy (OpenClaw-inspired 4-stage):
 
 from __future__ import annotations
 
-import contextvars
 import json
 import logging
 import os as _os
 import re
 import time
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 import anthropic
 from anthropic.types import TextBlockParam
 from pydantic import BaseModel
 
-from core.config import ANTHROPIC_FALLBACK_CHAIN, MODEL_PRICING, settings
+from core.config import ANTHROPIC_FALLBACK_CHAIN, settings
+from core.llm.token_tracker import MODEL_PRICING as MODEL_PRICING
+from core.llm.token_tracker import LLMUsage as LLMUsage
+from core.llm.token_tracker import LLMUsageAccumulator as LLMUsageAccumulator
+from core.llm.token_tracker import calculate_cost as calculate_cost
+from core.llm.token_tracker import get_tracker
+from core.llm.token_tracker import get_usage_accumulator as get_usage_accumulator
+from core.llm.token_tracker import reset_usage_accumulator as reset_usage_accumulator
+from core.llm.token_tracker import track_token_usage as track_token_usage
 
 log = logging.getLogger(__name__)
 
@@ -44,32 +51,6 @@ def is_langsmith_enabled() -> bool:
     tracing = _os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true"
     api_key = _os.environ.get("LANGCHAIN_API_KEY") or _os.environ.get("LANGSMITH_API_KEY")
     return tracing and api_key is not None
-
-
-def track_token_usage(
-    model: str,
-    input_tokens: int,
-    output_tokens: int,
-) -> None:
-    """Record token usage + cost on the current LangSmith RunTree (no-op if disabled)."""
-    if not is_langsmith_enabled():
-        return
-    try:
-        from langsmith.run_helpers import get_current_run_tree
-
-        run_tree = get_current_run_tree()
-        if run_tree:
-            cost = calculate_cost(model, input_tokens, output_tokens)
-            run_tree.extra = run_tree.extra or {}
-            run_tree.extra["metrics"] = {
-                "model": model,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-                "cost_usd": cost,
-            }
-    except Exception:
-        log.debug("Failed to track token usage in LangSmith", exc_info=True)
 
 
 def _maybe_traceable(
@@ -93,107 +74,11 @@ def _maybe_traceable(
 
 
 # ---------------------------------------------------------------------------
-# Token usage tracking
+# Token tracking — canonical module: core.llm.token_tracker
+# Re-exports (LLMUsage, LLMUsageAccumulator, calculate_cost,
+# get_usage_accumulator, reset_usage_accumulator, track_token_usage,
+# get_tracker, MODEL_PRICING) are imported at the top of this file.
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class LLMUsage:
-    """Token usage and cost tracking for a single LLM call."""
-
-    model: str = ""
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cost_usd: float = 0.0
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "model": self.model,
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
-            "cost_usd": self.cost_usd,
-        }
-
-
-@dataclass
-class LLMUsageAccumulator:
-    """Accumulates token usage across multiple LLM calls."""
-
-    calls: list[LLMUsage] = field(default_factory=list)
-
-    @property
-    def total_input_tokens(self) -> int:
-        return sum(u.input_tokens for u in self.calls)
-
-    @property
-    def total_output_tokens(self) -> int:
-        return sum(u.output_tokens for u in self.calls)
-
-    @property
-    def total_cost_usd(self) -> float:
-        return sum(u.cost_usd for u in self.calls)
-
-    def record(self, usage: LLMUsage) -> None:
-        self.calls.append(usage)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "total_input_tokens": self.total_input_tokens,
-            "total_output_tokens": self.total_output_tokens,
-            "total_cost_usd": self.total_cost_usd,
-            "call_count": len(self.calls),
-        }
-
-
-def calculate_cost(
-    model: str,
-    input_tokens: int,
-    output_tokens: int,
-    cache_creation_tokens: int = 0,
-    cache_read_tokens: int = 0,
-) -> float:
-    """Calculate cost in USD for a given model and token counts.
-
-    For Anthropic models, cache tokens have different pricing:
-    - cache_creation: input_price * 1.25
-    - cache_read: input_price * 0.1
-    """
-    prices = MODEL_PRICING.get(model, {})
-    input_price = prices.get("input", 0)
-    output_price = prices.get("output", 0)
-    base_cost = input_tokens * input_price + output_tokens * output_price
-
-    # Anthropic cache token pricing
-    if cache_creation_tokens or cache_read_tokens:
-        cache_create_cost = cache_creation_tokens * input_price * 1.25
-        cache_read_cost = cache_read_tokens * input_price * 0.1
-        base_cost += cache_create_cost + cache_read_cost
-
-    return base_cost
-
-
-# Thread-safe usage accumulator via contextvars
-# Note: No default= argument — avoids sharing a single mutable instance across contexts.
-_usage_ctx: contextvars.ContextVar[LLMUsageAccumulator] = contextvars.ContextVar("llm_usage")
-
-
-def get_usage_accumulator() -> LLMUsageAccumulator:
-    """Get the context-local usage accumulator (thread-safe).
-
-    Creates a fresh accumulator on first access per context to avoid
-    the shared-mutable-default pitfall.
-    """
-    try:
-        return _usage_ctx.get()
-    except LookupError:
-        acc = LLMUsageAccumulator()
-        _usage_ctx.set(acc)
-        return acc
-
-
-def reset_usage_accumulator() -> None:
-    """Reset the context-local usage accumulator."""
-    _usage_ctx.set(LLMUsageAccumulator())
 
 
 # Failover configuration
@@ -384,21 +269,13 @@ def call_llm(
         if hasattr(response, "usage") and response.usage:
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            cost = calculate_cost(model, in_tok, out_tok)
-            usage = LLMUsage(
-                model=model,
-                input_tokens=in_tok,
-                output_tokens=out_tok,
-                cost_usd=cost,
-            )
-            get_usage_accumulator().record(usage)
-            track_token_usage(model, in_tok, out_tok)
+            usage = get_tracker().record(model, in_tok, out_tok)
             log.info(
                 "LLM call: model=%s in=%d out=%d cost=$%.4f",
                 model,
                 in_tok,
                 out_tok,
-                cost,
+                usage.cost_usd,
             )
             # Log cache hit/miss if available
             cache_create = getattr(response.usage, "cache_creation_input_tokens", 0)
@@ -451,21 +328,13 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
         if hasattr(response, "usage") and response.usage:
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            cost = calculate_cost(model, in_tok, out_tok)
-            usage = LLMUsage(
-                model=model,
-                input_tokens=in_tok,
-                output_tokens=out_tok,
-                cost_usd=cost,
-            )
-            get_usage_accumulator().record(usage)
-            track_token_usage(model, in_tok, out_tok)
+            usage = get_tracker().record(model, in_tok, out_tok)
             log.info(
                 "LLM call (parsed): model=%s in=%d out=%d cost=$%.4f",
                 model,
                 in_tok,
                 out_tok,
-                cost,
+                usage.cost_usd,
             )
             cache_create = getattr(response.usage, "cache_creation_input_tokens", 0)
             cache_read = getattr(response.usage, "cache_read_input_tokens", 0)
@@ -615,16 +484,8 @@ def call_llm_with_tools(
         if hasattr(response, "usage") and response.usage:
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            cost = calculate_cost(target_model, in_tok, out_tok)
-            usage = LLMUsage(
-                model=target_model,
-                input_tokens=in_tok,
-                output_tokens=out_tok,
-                cost_usd=cost,
-            )
+            usage = get_tracker().record(target_model, in_tok, out_tok)
             all_usage.append(usage)
-            get_usage_accumulator().record(usage)
-            track_token_usage(target_model, in_tok, out_tok)
 
         # Check if model wants to use tools
         if response.stop_reason != "tool_use":
@@ -722,21 +583,13 @@ def call_llm_streaming(
             if final and hasattr(final, "usage") and final.usage:
                 in_tok = final.usage.input_tokens
                 out_tok = final.usage.output_tokens
-                cost = calculate_cost(model, in_tok, out_tok)
-                usage = LLMUsage(
-                    model=model,
-                    input_tokens=in_tok,
-                    output_tokens=out_tok,
-                    cost_usd=cost,
-                )
-                get_usage_accumulator().record(usage)
-                track_token_usage(model, in_tok, out_tok)
+                usage = get_tracker().record(model, in_tok, out_tok)
                 log.info(
                     "LLM call (stream): model=%s in=%d out=%d cost=$%.4f",
                     model,
                     in_tok,
                     out_tok,
-                    cost,
+                    usage.cost_usd,
                 )
 
                 # Log cache hit/miss if available
