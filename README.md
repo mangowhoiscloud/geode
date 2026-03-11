@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/geode-social-preview.png" alt="GEODE — Undervalued IP Discovery Agent" width="720" />
+</p>
+
 # GEODE v0.7.0 — Undervalued IP Discovery Agent
 
 LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기능은 아래와 같습니다.

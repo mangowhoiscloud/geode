@@ -254,8 +254,36 @@ _LOGO = r"""
 """
 
 
+def _render_mascot() -> None:
+    """Render the Harness GEODE mascot with Rich markup."""
+    # Harness GEODE: axolotl operator + orbiting tools
+    # 6-color: white body, magenta gills, yellow lamp, cyan accent
+    _M = "magenta"  # gills
+    _Y = "bold yellow"  # headlamp
+    _C = "dim cyan"  # orbiting tools
+    _D = "dim"  # outlines
+    _W = "white"  # body
+    art = (
+        f"  [{_C}]    ◇                    ◆[/{_C}]\n"
+        f"                [{_Y}]_⦿_[/{_Y}]\n"
+        f"        [{_M}]╲╲╲[/{_M}] [{_W}]( ◕ [{_D}]w[/{_D}] ◕ )[/{_W}]"
+        f" [{_M}]╱╱╱[/{_M}]\n"
+        f"         [{_M}]╲╲[/{_M}] [{_W}]([/{_W}]"
+        f" [{_D}]━━━[/{_D}] [{_W}])[/{_W}] [{_M}]╱╱[/{_M}]\n"
+        f"  [{_C}]🔍[/{_C}]   [{_W}]╭─┤[/{_W}]"
+        f"[cyan]♦[/cyan][{_W}]├────╮[/{_W}]   [{_C}]💎[/{_C}]\n"
+        f"         [{_W}]│[/{_W}] [{_D}]\\\\__//[/{_D}]"
+        f" [{_W}]│[/{_W}]\n"
+        f"         [{_W}]╰─[/{_W}]"
+        f"[dim magenta]~~~~~[/dim magenta][{_W}]─╯[/{_W}]"
+    )
+    console.print(art, highlight=False)
+
+
 def _welcome_screen() -> None:
     """Show Claude Code-style welcome screen with readiness check."""
+    console.print()
+    _render_mascot()
     console.print()
     logo = Text(_LOGO, style="bold cyan")
     console.print(logo)
@@ -263,6 +291,7 @@ def _welcome_screen() -> None:
         f"  [bold]GEODE v{__version__}[/bold]  [muted]— Undervalued IP Discovery Agent[/muted]"
     )
     console.print(f"  [muted]Model: {settings.model}[/muted]")
+    console.print("  [dim]Wiring tools. Scanning worlds.[/dim]")
     console.print()
 
     # OpenClaw gateway:startup — readiness check
