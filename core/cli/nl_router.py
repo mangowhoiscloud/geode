@@ -287,7 +287,11 @@ _TOOL_ARGS_MAP: dict[str, dict[str, str]] = {
     "set_api_key": {"key_value": "key_value"},
     "manage_auth": {"sub_action": "sub_action"},
     "generate_data": {"count": "count", "genre": "genre"},
-    "schedule_job": {"sub_action": "sub_action", "target_id": "target_id"},
+    "schedule_job": {
+        "sub_action": "sub_action",
+        "target_id": "target_id",
+        "expression": "expression",
+    },
     "trigger_event": {"sub_action": "sub_action", "event_name": "event_name"},
     "create_plan": {"ip_name": "ip_name", "template": "template"},
     "approve_plan": {"plan_id": "plan_id"},

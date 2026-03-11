@@ -23,7 +23,9 @@
           "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
         }
       },
-      "required": ["ip_name"]
+      "required": [
+        "ip_name"
+      ]
     }
   },
   {
@@ -37,7 +39,9 @@
           "description": "검색 키워드 또는 장르 (e.g. 'dark fantasy', '소울라이크')"
         }
       },
-      "required": ["query"]
+      "required": [
+        "query"
+      ]
     }
   },
   {
@@ -59,7 +63,10 @@
           "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
         }
       },
-      "required": ["ip_a", "ip_b"]
+      "required": [
+        "ip_a",
+        "ip_b"
+      ]
     }
   },
   {
@@ -86,7 +93,9 @@
           "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
         }
       },
-      "required": ["ip_name"]
+      "required": [
+        "ip_name"
+      ]
     }
   },
   {
@@ -150,11 +159,18 @@
         },
         "tier": {
           "type": "string",
-          "enum": ["session", "project", "organization", "all"],
+          "enum": [
+            "session",
+            "project",
+            "organization",
+            "all"
+          ],
           "description": "검색할 메모리 계층. 기본값: all"
         }
       },
-      "required": ["query"]
+      "required": [
+        "query"
+      ]
     }
   },
   {
@@ -172,7 +188,10 @@
           "description": "저장할 내용"
         }
       },
-      "required": ["key", "content"]
+      "required": [
+        "key",
+        "content"
+      ]
     }
   },
   {
@@ -183,7 +202,12 @@
       "properties": {
         "action": {
           "type": "string",
-          "enum": ["create", "update", "delete", "list"],
+          "enum": [
+            "create",
+            "update",
+            "delete",
+            "list"
+          ],
           "description": "수행할 작업"
         },
         "name": {
@@ -192,7 +216,9 @@
         },
         "paths": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": {
+            "type": "string"
+          },
           "description": "규칙이 적용될 IP 패턴 (create 시, e.g. ['*anime*', '*cowboy*'])"
         },
         "content": {
@@ -200,7 +226,9 @@
           "description": "규칙 내용 (create/update 시)"
         }
       },
-      "required": ["action"]
+      "required": [
+        "action"
+      ]
     }
   },
   {
@@ -251,17 +279,22 @@
   },
   {
     "name": "schedule_job",
-    "description": "배치 분석 스케줄을 관리합니다. 사용자가 자동 실행, 스케줄, 예약 분석을 요청할 때 사용하세요. Examples: '매주 월요일 배치 스케줄', 'schedule weekly analysis', '스케줄 목록 보여줘', '예약 작업 관리'",
+    "description": "배치 분석 스케줄을 관리합니다. 자연어로 스케줄 생성/삭제/상태조회가 가능합니다. Examples: '5분마다 분석 스케줄 만들어', 'every 10 minutes 스케줄 생성', '스케줄 목록', '예약 작업 삭제해줘', 'schedule status'",
     "input_schema": {
       "type": "object",
       "properties": {
         "sub_action": {
           "type": "string",
-          "description": "수행할 작업 (list, enable, disable, run). 없으면 목록 표시."
+          "enum": ["list", "create", "delete", "status", "enable", "disable", "run"],
+          "description": "수행할 작업. create: 새 스케줄 생성, delete: 삭제, status: 상태 조회, list: 목록."
         },
         "target_id": {
           "type": "string",
-          "description": "대상 스케줄 ID (enable/disable/run 시)"
+          "description": "대상 스케줄/작업 ID (enable/disable/run/delete/status 시)"
+        },
+        "expression": {
+          "type": "string",
+          "description": "자연어 스케줄 표현식 (create 시). Examples: 'every 5 minutes', 'daily at 9:00', 'in 30 minutes', 'every 2 hours during 09:00-18:00'"
         }
       },
       "required": []
@@ -300,7 +333,10 @@
           "description": "Why this command is needed"
         }
       },
-      "required": ["command", "reason"]
+      "required": [
+        "command",
+        "reason"
+      ]
     }
   },
   {
@@ -315,7 +351,12 @@
         },
         "task_type": {
           "type": "string",
-          "enum": ["analyze", "search", "compare", "bash"],
+          "enum": [
+            "analyze",
+            "search",
+            "compare",
+            "bash"
+          ],
           "description": "Type of task to delegate"
         },
         "args": {
@@ -323,7 +364,11 @@
           "description": "Arguments for the delegated task"
         }
       },
-      "required": ["task_description", "task_type", "args"]
+      "required": [
+        "task_description",
+        "task_type",
+        "args"
+      ]
     }
   },
   {
@@ -338,11 +383,16 @@
         },
         "template": {
           "type": "string",
-          "enum": ["full_pipeline", "prospect"],
+          "enum": [
+            "full_pipeline",
+            "prospect"
+          ],
           "description": "Plan template: full_pipeline (전체 9단계) or prospect (간소화 6단계). Default: full_pipeline"
         }
       },
-      "required": ["ip_name"]
+      "required": [
+        "ip_name"
+      ]
     }
   },
   {
@@ -356,7 +406,9 @@
           "description": "ID of the plan to approve (from create_plan result)"
         }
       },
-      "required": ["plan_id"]
+      "required": [
+        "plan_id"
+      ]
     }
   },
   {
@@ -374,7 +426,9 @@
           "description": "Maximum number of video results (default: 10)"
         }
       },
-      "required": ["ip_name"]
+      "required": [
+        "ip_name"
+      ]
     }
   },
   {
@@ -392,7 +446,9 @@
           "description": "Optional specific subreddit to target"
         }
       },
-      "required": ["ip_name"]
+      "required": [
+        "ip_name"
+      ]
     }
   },
   {
@@ -406,7 +462,9 @@
           "description": "IP or game name to look up on Steam"
         }
       },
-      "required": ["ip_name"]
+      "required": [
+        "ip_name"
+      ]
     }
   },
   {
@@ -424,7 +482,9 @@
           "description": "Geographic region (e.g., 'US', 'JP', 'global'). Default: global"
         }
       },
-      "required": ["ip_name"]
+      "required": [
+        "ip_name"
+      ]
     }
   },
   {
@@ -442,7 +502,9 @@
           "description": "Maximum characters to return (default: 8000)"
         }
       },
-      "required": ["url"]
+      "required": [
+        "url"
+      ]
     }
   },
   {
@@ -460,7 +522,9 @@
           "description": "Maximum number of results (default: 5)"
         }
       },
-      "required": ["query"]
+      "required": [
+        "query"
+      ]
     }
   },
   {
@@ -478,7 +542,9 @@
           "description": "Maximum lines to read (default: 200)"
         }
       },
-      "required": ["file_path"]
+      "required": [
+        "file_path"
+      ]
     }
   },
   {
@@ -496,7 +562,10 @@
           "description": "Note content to save"
         }
       },
-      "required": ["key", "content"]
+      "required": [
+        "key",
+        "content"
+      ]
     }
   },
   {
@@ -514,6 +583,149 @@
     }
   },
   {
+    "name": "reject_plan",
+    "description": "생성된 분석 계획을 거부합니다. 계획이 마음에 들지 않을 때 사용하세요. Examples: '계획 거부', 'reject plan', '이 계획 안 할래'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "description": "거부할 계획 ID"
+        },
+        "reason": {
+          "type": "string",
+          "description": "거부 사유 (선택)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "modify_plan",
+    "description": "생성된 분석 계획을 수정합니다. 템플릿 변경, 단계 제거 가능. Examples: '계획 수정해', 'modify plan', '이 단계 빼줘'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "description": "수정할 계획 ID"
+        },
+        "template": {
+          "type": "string",
+          "enum": [
+            "full_pipeline",
+            "prospect"
+          ],
+          "description": "변경할 템플릿"
+        },
+        "remove_steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "제거할 단계 ID 목록"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "list_plans",
+    "description": "생성된 분석 계획 목록을 조회합니다. Examples: '계획 목록', 'list plans', '어떤 계획들이 있어?'",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "rate_result",
+    "description": "분석 결과에 대해 평점을 매깁니다. 사용자 피드백 수집용. Examples: '이 결과 4점', 'rate 5 stars', '평가해줄게'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "평가할 IP 이름"
+        },
+        "rating": {
+          "type": "integer",
+          "description": "평점 (1-5)"
+        },
+        "comment": {
+          "type": "string",
+          "description": "평가 코멘트 (선택)"
+        }
+      },
+      "required": [
+        "ip_name",
+        "rating"
+      ]
+    }
+  },
+  {
+    "name": "accept_result",
+    "description": "분석 결과를 수락합니다. Examples: '결과 수락', 'accept', '이 결과 괜찮아'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "수락할 IP 이름"
+        }
+      },
+      "required": [
+        "ip_name"
+      ]
+    }
+  },
+  {
+    "name": "reject_result",
+    "description": "분석 결과를 거부합니다. 재분석이 필요할 때. Examples: '결과 거부', 'reject result', '이건 다시 해줘'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "ip_name": {
+          "type": "string",
+          "description": "거부할 IP 이름"
+        },
+        "reason": {
+          "type": "string",
+          "description": "거부 사유"
+        }
+      },
+      "required": [
+        "ip_name"
+      ]
+    }
+  },
+  {
+    "name": "rerun_node",
+    "description": "파이프라인의 특정 노드를 재실행합니다. scoring, verification, synthesizer만 가능. Examples: '스코어링 다시 해', 'rerun scoring', '검증 재실행'",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "node_name": {
+          "type": "string",
+          "enum": [
+            "scoring",
+            "verification",
+            "synthesizer"
+          ],
+          "description": "재실행할 노드 이름"
+        },
+        "ip_name": {
+          "type": "string",
+          "description": "대상 IP 이름"
+        }
+      },
+      "required": [
+        "node_name",
+        "ip_name"
+      ]
+    }
+  },
+  {
     "name": "install_mcp_server",
     "description": "MCP 서버를 검색하고 설치합니다. 외부 도구/서비스 연결 요청 시 사용. Examples: 'LinkedIn MCP 달아줘', 'Steam MCP 설치해', 'web search 추가해', 'Reddit MCP 연결해'",
     "input_schema": {
@@ -524,7 +736,9 @@
           "description": "설치할 MCP 서버 검색어 (예: 'linkedin', 'steam', 'web search', 'memory')"
         }
       },
-      "required": ["query"]
+      "required": [
+        "query"
+      ]
     }
   }
 ]

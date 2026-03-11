@@ -35,7 +35,7 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 | **Batch Analysis** | 멀티 IP 동시 분석, Rich 테이블 렌더링 |
 | **Streaming Output** | `--stream` 플래그로 실시간 진행 표시 |
 | **자연어 입력** | 한국어/영어 자유 입력 (NL Router intent classification) |
-| **Report Generation** | HTML/JSON/Markdown 다중 포맷, 외부 템플릿 |
+| **Report Generation** | HTML/JSON/Markdown 다중 포맷, 스킬 기반 전문 분석 내러티브 주입, `.geode/reports/` 자동 저장 |
 | **Graceful Degradation** | API 키 없으면 자동 dry-run, 있으면 LLM 분석 |
 | **Project Memory** | `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지 |
 | **Checkpoint** | SqliteSaver 기반 파이프라인 상태 영속화 |
@@ -103,8 +103,6 @@ graph TB
     L3 --> L2
     L3 --> L4
     L3 --> L5
-    L0 -.->|"offline"| L5
-
     style L0 fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
     style L1 fill:#1e293b,stroke:#10b981,color:#e2e8f0
     style L2 fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
@@ -485,7 +483,7 @@ graph LR
 ```mermaid
 graph LR
     Plugin["Plugin"] -->|"activate()"| Reg["ToolRegistry"]
-    Reg -->|"register(tool)"| Tools["21 base + N extra"]
+    Reg -->|"register(tool)"| Tools["31 base + N extra"]
     Tools --> AL["AgenticLoop<br/>get_agentic_tools()"]
     Reg --> Policy["PolicyChain<br/>+ NodeScopePolicy"]
 

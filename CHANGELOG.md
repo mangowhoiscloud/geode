@@ -68,6 +68,11 @@ General Assistant Transformation, Skills 시스템, MCP 자동설치, Clarificat
 - `AgenticLoop.refresh_tools()` — MCP 도구 핫 리로드 (세션 재시작 불필요)
 - `_build_tool_handlers()` 시그니처 확장 — `mcp_manager`, `agentic_ref` 클로저 패턴
 
+#### Report Generation 강화 (PR #33)
+- `_build_skill_narrative()` — geode-scoring/analysis/verification 스킬 주입 → LLM 전문 분석 내러티브 생성
+- 리포트 자동 저장 — `.geode/reports/{ip}-{template}.{ext}` 경로로 파일 생성
+- `generate_report` → `read_document` 체이닝 — 리포트 생성 후 즉시 열기 가능
+
 #### Clarification 파이프라인 (PR #33)
 - Tool parameter validation — `handle_compare_ips`, `handle_analyze_ip`, `handle_generate_report`에 필수 파라미터 검증
 - `clarification_needed` 응답 프로토콜 — `missing`, `hint` 필드 포함
@@ -87,17 +92,27 @@ General Assistant Transformation, Skills 시스템, MCP 자동설치, Clarificat
 - `_build_tool_handlers()`: `verbose` only → `verbose`, `mcp_manager`, `agentic_ref`
 - `AgenticLoop.__init__()`: `skill_registry`, `mcp_manager` 파라미터 추가
 - `agents.py`: inline frontmatter parser → `_frontmatter.py` 공유 모듈 위임
+- CLI 브랜딩: "Undervalued IP Discovery Agent" → "게임화 IP 도메인 자율 실행 하네스"
+- 7개 Response dataclass에 `to_dict()` 추가 — None 필드 직렬화 시 자동 제외
+  (AgenticResult, SubResult, IsolationResult, HookResult, TriggerResponse, ParseResult)
+- `ReportGenerator.generate()`: `enhanced_narrative` 파라미터 추가 (스킬 기반 전문 분석 주입)
+- `generate_report` 핸들러: `file_path` + `content_preview` 반환, `.geode/reports/` 자동 저장
+- `definitions.json` `generate_report`: `format`/`template` enum 파라미터 추가, `read_document` 체이닝 안내
+- `cmd_schedule()`: `scheduler_service` 파라미터 추가
 
 ### Fixed
 - "Berserk 분석하고 비교하고 리포트" max_rounds 도달 → clarification 되묻기로 해결
 - `{skill_context}` KeyError — `router.md`에서 `{{skill_context}}` 이스케이프
 - `_render_mascot()` E501 — Rich 마크업 변수 리팩토링
+- `report.html` 버전 0.7.0 → 0.9.0 정합성 수정
+- mypy strict: `call_llm()` Any 반환 → `str()` 래핑, 3개 함수 시그니처 정합성 수정
 
 ### Infrastructure
 - Test count: 2000+ → 2033+
 - Module count: 118 → 121
 - `docs/plans/clarification-pipeline.md` — Clarification 설계 문서
 - `docs/plans/tool-mcp-catalog.md` — MCP 카탈로그 리서치
+- pre-commit: mypy cache → `/tmp` 이동 (hook conflict 방지)
 
 ---
 

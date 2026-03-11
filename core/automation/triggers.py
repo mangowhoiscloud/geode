@@ -98,13 +98,30 @@ class CronParser:
         if len(parts) != 5:
             raise ValueError(f"Invalid cron expression: '{cron_expr}' (need 5 fields)")
 
-        for field_val, cron_field in zip(dt_tuple, parts, strict=True):
+        # Max values for each field: minute(0-59), hour(0-23), day(1-31),
+        # month(1-12), weekday(0-6)
+        field_ranges = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 6)]
+
+        for field_val, cron_field, (lo_bound, hi_bound) in zip(
+            dt_tuple, parts, field_ranges, strict=True
+        ):
             if cron_field == "*":
                 continue
             allowed: set[int] = set()
             for token in cron_field.split(","):
                 token = token.strip()
-                if "-" in token:
+                if "/" in token:
+                    # Step syntax: */N or M-N/S
+                    base, step_str = token.split("/", 1)
+                    step = int(step_str)
+                    if base == "*":
+                        allowed.update(range(lo_bound, hi_bound + 1, step))
+                    elif "-" in base:
+                        r_lo, r_hi = base.split("-", 1)
+                        allowed.update(range(int(r_lo), int(r_hi) + 1, step))
+                    else:
+                        allowed.update(range(int(base), hi_bound + 1, step))
+                elif "-" in token:
                     lo, hi = token.split("-", 1)
                     allowed.update(range(int(lo), int(hi) + 1))
                 else:
