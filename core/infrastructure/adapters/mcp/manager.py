@@ -131,6 +131,20 @@ class MCPServerManager:
             )
         return result
 
+    def check_health(self) -> dict[str, bool]:
+        """Return connection health status for each configured server."""
+        result: dict[str, bool] = {}
+        for name in self._servers:
+            client = self._clients.get(name)
+            result[name] = client.is_connected() if client else False
+        return result
+
+    def reload_config(self) -> int:
+        """Close all connections, reload config, and return new server count."""
+        self.close_all()
+        self._servers.clear()
+        return self.load_config()
+
     def close_all(self) -> None:
         """Close all MCP server connections."""
         for client in self._clients.values():

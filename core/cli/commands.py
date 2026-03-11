@@ -75,6 +75,7 @@ COMMAND_MAP: dict[str, str] = {
     "/status": "status",
     "/compare": "compare",
     "/mcp": "mcp",
+    "/skills": "skills",
 }
 
 
@@ -98,6 +99,8 @@ def show_help() -> None:
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
     console.print("  [label]/status[/label]             — Show system status")
     console.print("  [label]/compare[/label] <A> <B>    — Compare two IPs")
+    console.print("  [label]/mcp[/label]                — MCP server status/tools")
+    console.print("  [label]/skills[/label]             — List loaded skills")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
     console.print()
@@ -630,21 +633,32 @@ def cmd_trigger(args: str) -> None:
     console.print()
 
 
-def cmd_mcp(arg: str) -> None:
-    """Handle /mcp command — list/manage MCP servers."""
+def cmd_mcp(arg: str, *, mcp_manager: _Any | None = None) -> None:
+    """Handle /mcp command — list/manage MCP servers.
+
+    /mcp or /mcp status  → server connection status + tool counts
+    /mcp tools           → list all MCP tool names
+    /mcp reload          → reload config and reconnect
+    """
     from core.infrastructure.adapters.mcp.manager import MCPServerManager
 
-    mgr = MCPServerManager()
-    loaded = mgr.load_config()
+    mgr: MCPServerManager
+    if mcp_manager is not None:
+        mgr = mcp_manager
+    else:
+        mgr = MCPServerManager()
+        mgr.load_config()
 
-    if not arg or arg == "list":
-        if loaded == 0:
+    sub = arg.strip().lower() if arg else ""
+
+    if not sub or sub in ("status", "list"):
+        servers = mgr.list_servers()
+        if not servers:
             console.print("  [muted]No MCP servers configured.[/muted]")
             console.print("  [muted]Add servers to .claude/mcp_servers.json[/muted]")
             console.print()
             return
 
-        servers = mgr.list_servers()
         console.print()
         console.print("  [header]MCP Servers[/header]")
         for s in servers:
@@ -657,8 +671,97 @@ def cmd_mcp(arg: str) -> None:
         console.print()
         return
 
+    if sub == "tools":
+        all_tools = mgr.get_all_tools()
+        if not all_tools:
+            console.print("  [muted]No MCP tools available.[/muted]")
+            console.print()
+            return
+
+        console.print()
+        console.print("  [header]MCP Tools[/header]")
+        for tool in all_tools:
+            server = tool.get("_mcp_server", "unknown")
+            name = tool.get("name", "?")
+            desc = tool.get("description", "")[:60]
+            console.print(f"  [label]{name:30s}[/label] [muted]{server}[/muted]  {desc}")
+        console.print()
+        return
+
+    if sub == "reload":
+        count = mgr.reload_config()
+        console.print(f"  [success]MCP config reloaded: {count} server(s)[/success]")
+        console.print()
+        return
+
     console.print(f"  [muted]MCP subcommand not recognized: {arg}[/muted]")
-    console.print("  [muted]Usage: /mcp [list][/muted]")
+    console.print("  [muted]Usage: /mcp [status|tools|reload][/muted]")
+    console.print()
+
+
+def cmd_skills(skill_registry: _Any, arg: str) -> None:
+    """Handle /skills command — list/inspect loaded skills.
+
+    /skills           → list loaded skills
+    /skills reload    → reload from disk
+    /skills <name>    → show skill detail
+    """
+    from core.extensibility.skills import SkillLoader, SkillRegistry
+
+    reg: SkillRegistry = skill_registry
+    sub = arg.strip() if arg else ""
+
+    if not sub:
+        names = reg.list_skills()
+        if not names:
+            console.print("  [muted]No skills loaded.[/muted]")
+            console.print("  [muted]Add skills to .claude/skills/<name>/SKILL.md[/muted]")
+            console.print()
+            return
+
+        console.print()
+        console.print(f"  [header]Skills ({len(names)})[/header]")
+        for name in names:
+            skill = reg.get(name)
+            if skill is None:
+                continue
+            tools_str = f" [muted]({len(skill.tools)} tools)[/muted]" if skill.tools else ""
+            desc = skill.description[:70]
+            if len(skill.description) > 70:
+                desc += "..."
+            console.print(f"  [label]{name:25s}[/label]{tools_str}  {desc}")
+        console.print()
+        return
+
+    if sub == "reload":
+        # Clear and reload
+        new_reg = SkillRegistry()
+        loaded = SkillLoader().load_all(registry=new_reg)
+        # Replace contents in existing registry
+        reg._skills.clear()
+        for skill in loaded:
+            reg.register(skill)
+        console.print(f"  [success]Reloaded {len(loaded)} skills[/success]")
+        console.print()
+        return
+
+    # Show specific skill detail
+    skill = reg.get(sub)
+    if skill is None:
+        console.print(f"  [warning]Skill not found: {sub}[/warning]")
+        console.print(f"  [muted]Available: {', '.join(reg.list_skills())}[/muted]")
+        console.print()
+        return
+
+    console.print()
+    console.print(f"  [header]{skill.name}[/header]")
+    console.print(f"  [label]Description:[/label] {skill.description}")
+    if skill.triggers:
+        console.print(f"  [label]Triggers:[/label]    {', '.join(skill.triggers)}")
+    if skill.tools:
+        console.print(f"  [label]Tools:[/label]       {', '.join(skill.tools)}")
+    console.print(f"  [label]Risk:[/label]        {skill.risk}")
+    console.print(f"  [label]Body:[/label]        {len(skill.body)} chars")
     console.print()
 
 

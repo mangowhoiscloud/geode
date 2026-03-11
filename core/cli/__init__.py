@@ -25,8 +25,10 @@ from core.cli.commands import (
     cmd_generate,
     cmd_key,
     cmd_list,
+    cmd_mcp,
     cmd_model,
     cmd_schedule,
+    cmd_skills,
     cmd_trigger,
     resolve_action,
     show_help,
@@ -767,7 +769,14 @@ def _render_search_results(query: str, results: list[Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
+def _handle_command(
+    cmd: str,
+    args: str,
+    verbose: bool,
+    *,
+    skill_registry: Any = None,
+    mcp_manager: Any = None,
+) -> tuple[bool, bool]:
     """Handle a slash command. Returns (should_break, new_verbose)."""
     action = resolve_action(cmd)
 
@@ -893,9 +902,13 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
                 _run_analysis(ip_a, dry_run=force_dry, verbose=verbose)
                 _run_analysis(ip_b, dry_run=force_dry, verbose=verbose)
     elif action == "mcp":
-        from core.cli.commands import cmd_mcp
-
-        cmd_mcp(args)
+        cmd_mcp(args, mcp_manager=mcp_manager)
+    elif action == "skills":
+        if skill_registry is not None:
+            cmd_skills(skill_registry, args)
+        else:
+            console.print("  [muted]Skills not loaded.[/muted]")
+            console.print()
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -1571,10 +1584,23 @@ def _interactive_loop() -> None:
     except Exception:
         log.debug("MCP initialization skipped", exc_info=True)
 
+    # Initialize skill registry (optional, fails silently)
+    from core.extensibility.skills import SkillLoader, SkillRegistry
+
+    skill_registry = SkillRegistry()
+    try:
+        loaded_skills = SkillLoader().load_all(registry=skill_registry)
+        if loaded_skills:
+            log.info("Loaded %d skills", len(loaded_skills))
+    except Exception:
+        log.debug("Skill loading skipped", exc_info=True)
+
     # Build tool handlers and executor
     handlers = _build_tool_handlers(verbose=verbose)
     executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
-    agentic = AgenticLoop(conversation, executor, mcp_manager=mcp_mgr)
+    agentic = AgenticLoop(
+        conversation, executor, mcp_manager=mcp_mgr, skill_registry=skill_registry
+    )
 
     while True:
         try:
@@ -1590,14 +1616,25 @@ def _interactive_loop() -> None:
             # Slash command → deterministic routing (OpenClaw Binding)
             cmd = user_input.split()[0].lower()
             args = user_input[len(cmd) :].strip()
-            should_break, verbose = _handle_command(cmd, args, verbose)
+            should_break, verbose = _handle_command(
+                cmd,
+                args,
+                verbose,
+                skill_registry=skill_registry,
+                mcp_manager=mcp_mgr,
+            )
             if should_break:
                 break
             # Update handlers if verbose changed
             if verbose != (handlers.get("_verbose_flag") is True):
                 handlers = _build_tool_handlers(verbose=verbose)
                 executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
-                agentic = AgenticLoop(conversation, executor, mcp_manager=mcp_mgr)
+                agentic = AgenticLoop(
+                    conversation,
+                    executor,
+                    mcp_manager=mcp_mgr,
+                    skill_registry=skill_registry,
+                )
         else:
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
             result = agentic.run(user_input)

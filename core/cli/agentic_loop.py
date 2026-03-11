@@ -83,6 +83,7 @@ class AgenticLoop:
         model: str | None = None,
         tool_registry: ToolRegistry | None = None,
         mcp_manager: Any | None = None,
+        skill_registry: Any | None = None,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -91,6 +92,7 @@ class AgenticLoop:
         self.model = model or ANTHROPIC_PRIMARY
         self._tools = get_agentic_tools(tool_registry)
         self._mcp_manager = mcp_manager
+        self._skill_registry = skill_registry
         # Merge MCP tools if available
         if mcp_manager is not None:
             existing_names = {t["name"] for t in self._tools}
@@ -154,8 +156,13 @@ class AgenticLoop:
         )
 
     def _build_system_prompt(self) -> str:
-        """Build the system prompt with agentic suffix."""
+        """Build the system prompt with skill context and agentic suffix."""
         base = _build_system_prompt()
+        # Inject skill context into placeholder
+        skill_ctx = ""
+        if self._skill_registry is not None:
+            skill_ctx = self._skill_registry.get_context_block()
+        base = base.replace("{skill_context}", skill_ctx or "No skills loaded.")
         return base + "\n" + AGENTIC_SUFFIX
 
     @_maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
