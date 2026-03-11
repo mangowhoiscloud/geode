@@ -279,13 +279,13 @@ PR 생성 → CI 실행 → 실패?
 | 언어 | **한글** (제목 + 본문 모두) |
 | 제목 | `<type>: <한글 설명>` (70자 이내) |
 | 본문 | `## 요약` + `## 변경 사항` + `## 테스트` |
-| Assignee | `--assignees mangowhoiscloud` (항상) |
+| Assignee | `--assignee mangowhoiscloud` (항상) |
 | Base | feature → `develop`, develop → `main` |
 
 **PR 생성 커맨드:**
 
 ```bash
-gh pr create --base develop --assignees mangowhoiscloud \
+gh pr create --base develop --assignee mangowhoiscloud \
   --title "<type>: <한글 설명>" \
   --body "$(cat <<'EOF'
 ## 요약
