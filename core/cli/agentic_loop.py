@@ -150,6 +150,27 @@ class AgenticLoop:
             error="max_rounds",
         )
 
+    # Reverse map: action → tool_name for offline mode
+    _ACTION_TO_TOOL: dict[str, str] = {
+        "list": "list_ips",
+        "analyze": "analyze_ip",
+        "search": "search_ips",
+        "compare": "compare_ips",
+        "help": "show_help",
+        "report": "generate_report",
+        "batch": "batch_analyze",
+        "status": "check_status",
+        "model": "switch_model",
+        "memory": "memory_search",
+        "key": "set_api_key",
+        "auth": "manage_auth",
+        "generate": "generate_data",
+        "schedule": "schedule_job",
+        "trigger": "trigger_event",
+        "plan": "create_plan",
+        "delegate": "delegate_task",
+    }
+
     @_maybe_traceable(run_type="chain", name="AgenticLoop._run_offline")  # type: ignore[untyped-decorator]
     def _run_offline(self, user_input: str) -> AgenticResult:
         """Regex-based tool selection without LLM (1 deterministic round)."""
@@ -162,8 +183,9 @@ class AgenticLoop:
                 rounds=1,
             )
 
-        result = self.executor.execute(intent.action, intent.args or {})
-        self._tool_log.append({"tool": intent.action, "input": intent.args or {}, "result": result})
+        tool_name = self._ACTION_TO_TOOL.get(intent.action, intent.action)
+        result = self.executor.execute(tool_name, intent.args or {})
+        self._tool_log.append({"tool": tool_name, "input": intent.args or {}, "result": result})
         return AgenticResult(
             text=str(result),
             tool_calls=self._tool_log,
