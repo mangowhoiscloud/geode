@@ -26,7 +26,42 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.8.0] — 2026-03-11
+
+Plan/Sub-agent NL integration, Claude Code-style UI, response quality hardening.
+
+### Added
+
+#### Plan & Sub-agent NL Integration
+- `create_plan` tool — NL로 분석 계획 생성 ("Berserk 분석 계획 세워줘")
+- `approve_plan` tool — 계획 승인 및 실행 ("계획 승인해")
+- `delegate_task` tool — 서브에이전트 병렬 위임 ("병렬로 처리해")
+- NL Router tool count: 17 → 20 (plan/delegate 3개 추가)
+- Offline fallback: plan/delegate regex 패턴 추가 (LLM 없이 동작)
+
+#### Claude Code-style UI
+- `core/ui/agentic_ui.py` — tool call/result/error/token/plan 렌더러
+- `core/ui/console.py` — Rich Console 싱글톤 (width=120, GEODE 테마)
+- Marker system: `▸` tool call, `✓` success, `✗` error, `✢` tokens, `●` plan
+
+#### LangSmith Trace Coverage
+- `@_maybe_traceable` added to verification layer: `run_guardrails`, `run_biasbuster`, `run_cross_llm_check`, `check_rights_risk`
+- Full pipeline tracing coverage: router → signals → analysts → evaluators → scoring → verification → synthesizer
+
+### Changed
+- `AgenticLoop._process_tool_calls()`: `str(result)` → `json.dumps(result, ensure_ascii=False, default=str)` — LLM이 파싱 가능한 JSON 형식으로 tool 결과 전달
+- `snapshot._persist_snapshot()`: `json.dumps(..., default=str)` — non-serializable 필드 안전 처리
+- `snapshot.capture()`: `_sanitize_state()` 추가 — `_`-prefixed 내부 필드 필터링
+- NL Router offline fallback 순서: plan/delegate 패턴을 known IP 매칭보다 먼저 검사
+
+### Fixed
+- Offline mode `_run_offline()`: action name("list") → tool name("list_ips") 매핑 누락 수정 (`_ACTION_TO_TOOL` dict 추가)
+- `_TOOL_ACTION_MAP` 누락: `create_plan`, `approve_plan`, `delegate_task` 미등록 → 추가
+
+### Infrastructure
+- Test count: 1909+ → 2000+
+- Module count: 116 → 118
+- `tests/test_agentic_ui.py` (20 tests), plan/delegate NL tests (20 tests)
 
 ---
 
@@ -222,12 +257,14 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.8.0 | 2026-03-11 | Plan/Sub-agent NL, Claude Code UI, response quality, verification tracing |
 | 0.7.0 | 2026-03-11 | C2-C5 flexibility, LangSmith observability, orchestration integration, 17-tool audit |
 | 0.6.1 | 2026-03-10 | Content/code separation, package rename, pre-commit hooks |
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mangowhoiscloud/geode/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0

@@ -1,6 +1,6 @@
 # GEODE v0.7.0 — Undervalued IP Discovery Agent
 
-LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기능은 아래와 같습니다. 
+LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기능은 아래와 같습니다.
 - 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 분석/평가 루프와 리포트 생성을 지원합니다.
 - Runtime Orchestration, Tool-Registry/Tool-Use, Bash, Hook-System으로 Agentic Loop(Gather->Action->Verify)를 구성, 자율 행동이 가능합니다.
 - 사용자의 의도와 맥락을 파악하기 위한 NL Router(Multi-turn, Multi-intent), 메모리 시스템, HITL이 내장되어 있습니다.
@@ -21,7 +21,7 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 | **14-Axis Rubric** | PSM(Prospect Scoring Model) 기반 정량 평가 |
 | **Cross-LLM Ensemble** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, `cross` / `primary_only` 모드 |
 | **Prompt Caching** | Anthropic `cache_control` 적용, 40-60% 비용 절감 |
-| **19 Tool Definitions** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + PolicyChain 접근 제어 |
+| **21 Tool Definitions** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + PolicyChain 접근 제어 |
 | **MCP Adapters** | Steam, Brave Search, KG Memory 외부 데이터 소스 연결 |
 | **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
 | **Prompt Templates** | `.md` 템플릿 8종 + YAML/JSON 설정 분리 (content/code separation) |
@@ -37,7 +37,7 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 | **Dynamic Tools** | ToolRegistry 기반 런타임 tool 추가, plugin activate → 즉시 반영 |
 | **Pipeline Flexibility** | Analyst 타입 YAML 동적 로드, `interrupt_before` 사용자 개입 |
 | **Pre-commit Hooks** | ruff lint/format + mypy + bandit + standard hooks |
-| **1950 Tests** | 116 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit 전체 통과 |
+| **2000+ Tests** | 118 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit 전체 통과 |
 
 ## Architecture
 
@@ -84,7 +84,7 @@ graph TB
     end
 
     subgraph L5["L5 — Extensibility"]
-        Tools["ToolRegistry (19)"]
+        Tools["ToolRegistry (21)"]
         Policy["PolicyChain"]
         Reports["Report Generator"]
         Templates["Prompt Skills"]
@@ -112,7 +112,7 @@ graph TB
 | **L2** Memory | Organization (fixture), Project (.claude/MEMORY.md), Session (TTL), SqliteSaver | 3-Tier 메모리 + LangGraph 체크포인트 영속화 |
 | **L3** Pipeline | StateGraph, 8 Pipeline Nodes, GeodeState (TypedDict) | LangGraph `graph.stream()` 단계별 실행, Send API 병렬 분석 |
 | **L4** Orchestration | HookSystem (23 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
-| **L5** Extensibility | ToolRegistry (19), PolicyChain, Report Generator, Prompt Skills | 런타임 tool 확장, 노드별 접근 제어, HTML/JSON/MD 리포트 |
+| **L5** Extensibility | ToolRegistry (21), PolicyChain, Report Generator, Prompt Skills | 런타임 tool 확장, 노드별 접근 제어, HTML/JSON/MD 리포트 |
 
 ### Pipeline Flow
 
@@ -166,7 +166,7 @@ graph TB
     Mode -->|No| LLM["Claude Opus 4.6<br/>Tool Use API"]
     Regex --> Exec
     LLM --> Decision{stop_reason}
-    Decision -->|tool_use| Exec["ToolExecutor<br/>(19 tools)"]
+    Decision -->|tool_use| Exec["ToolExecutor<br/>(21 tools)"]
     Exec --> Results["tool_result"]
     Results --> LLM
     Decision -->|end_turn| Output["AgenticResult<br/>(text + tool_calls)"]
@@ -188,7 +188,7 @@ graph TB
 | 구성 요소 | 설명 |
 |----------|------|
 | **offline mode** | `_offline_fallback()` — 10개 regex 패턴 기반 intent 매칭, LLM 호출 없이 1-round 결정론적 실행 |
-| **LLM Tool Use** | Claude Opus 4.6 `tool_use` API — `definitions.json` 19개 tool 정의 전달, `stop_reason` 기반 루프 제어 |
+| **LLM Tool Use** | Claude Opus 4.6 `tool_use` API — `definitions.json` 21개 tool 정의 전달, `stop_reason` 기반 루프 제어 |
 | **ToolExecutor** | 3-tier safety: SAFE (7종, 무조건 실행) / STANDARD (일반) / DANGEROUS (bash, 사용자 승인 필수) |
 | **max_rounds** | 기본 10 라운드 — `end_turn` 또는 라운드 초과 시 종료 |
 | **LangSmith** | `track_token_usage()` — 토큰 수/비용을 RunTree.extra.metrics에 기록, `LLMUsageAccumulator`로 세션 합산 |
@@ -267,7 +267,7 @@ graph LR
 ```mermaid
 graph TB
     subgraph GEODE["GEODE Pipeline"]
-        Registry["ToolRegistry<br/>19 base tools"]
+        Registry["ToolRegistry<br/>21 base tools"]
         Policy["PolicyChain<br/>+ NodeScopePolicy"]
         TS["tool_search<br/>(meta-tool)"]
     end
@@ -474,7 +474,7 @@ graph LR
 ```mermaid
 graph LR
     Plugin["Plugin"] -->|"activate()"| Reg["ToolRegistry"]
-    Reg -->|"register(tool)"| Tools["19 base + N extra"]
+    Reg -->|"register(tool)"| Tools["21 base + N extra"]
     Tools --> AL["AgenticLoop<br/>get_agentic_tools()"]
     Reg --> Policy["PolicyChain<br/>+ NodeScopePolicy"]
 
@@ -482,7 +482,7 @@ graph LR
     style Policy fill:#f59e0b,stroke:#f59e0b,color:#fff
 ```
 
-> `definitions.json` 19개 기본 도구 + `ToolRegistry.register()` 런타임 확장. `get_agentic_tools(registry)` 호출 시 base + plugin 도구 병합. `PolicyChain`으로 노드별 도구 접근 제어.
+> `definitions.json` 21개 기본 도구 + `ToolRegistry.register()` 런타임 확장. `get_agentic_tools(registry)` 호출 시 base + plugin 도구 병합. `PolicyChain`으로 노드별 도구 접근 제어.
 
 **기본 Tool 목록 (19종):**
 
@@ -507,6 +507,8 @@ graph LR
 | 17 | `trigger_event` | 이벤트 트리거 | STANDARD |
 | 18 | `run_bash` | 셸 명령 실행 | DANGEROUS |
 | 19 | `delegate_task` | 서브에이전트 위임 | STANDARD |
+| 20 | `create_plan` | 분석 계획 생성 | STANDARD |
+| 21 | `approve_plan` | 계획 승인/실행 | STANDARD |
 
 ### Pipeline Flexibility (C2-C5)
 
@@ -711,12 +713,14 @@ core/
 ├── runtime.py                  # GeodeRuntime (production wiring)
 ├── state.py                    # GeodeState (TypedDict + Pydantic models)
 ├── tools/                      # Tool Protocol + Registry + Policy
-│   ├── registry.py             # ToolRegistry (19 tools + runtime extensions)
-│   ├── definitions.json        # Centralized tool definitions (19 tools)
+│   ├── registry.py             # ToolRegistry (21 tools + runtime extensions)
+│   ├── definitions.json        # Centralized tool definitions (21 tools)
 │   ├── tool_schemas.json       # Parameter schemas for signal/analysis tools
 │   ├── policy.py               # PolicyChain + NodeScopePolicy
 │   └── ...                     # analysis, signal_tools, data_tools, etc.
-├── ui/                         # Rich console + panels + streaming
+├── ui/                         # Rich console + Claude Code-style agentic UI
+│   ├── agentic_ui.py           # ▸/✓/✗/✢/● markers (tool call/result/token rendering)
+│   └── console.py              # Rich Console singleton (width=120, GEODE theme)
 └── verification/               # Guardrails + BiasBuster + Rights Risk
 ```
 

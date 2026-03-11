@@ -4,12 +4,13 @@
 
 저평가 IP를 데이터 기반으로 발굴하는 LangGraph Agent CLI.
 
-- **Version**: 0.7.0
+- **Version**: 0.8.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
 - **Modules**: 118
 - **Tests**: 2000+
+- **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
 
@@ -161,7 +162,7 @@ uv run mypy core/
 
 ### Expected Test Results
 
-1950+ tests pass. 3 IP fixtures produce tier spread:
+2000+ tests pass. 3 IP fixtures produce tier spread:
 - Berserk: **S** (81.3) — conversion_failure
 - Cowboy Bebop: **A** (68.4) — undermarketed
 - Ghost in the Shell: **B** (51.6) — discovery_failure
@@ -323,6 +324,51 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
 2. tests/test_e2e_live_llm.py 갱신 (라이브 테스트 추가)
 3. .claude/skills/geode-e2e/SKILL.md 갱신 (시나리오 매핑 테이블)
 4. CLAUDE.md 갱신 (기능/테스트 수/NL 도구 수)
+5. README.md 정합성 검증 (아래 §4a 참조)
+6. CHANGELOG.md 버전업 판단 (아래 §4b 참조)
+```
+
+#### 4a. README.md 정합성 검증 (PR 전 필수)
+
+PR 생성 전 README.md가 코드와 일치하는지 검증한다.
+
+| 검증 항목 | 확인 방법 |
+|----------|----------|
+| 테스트 수 | `uv run pytest tests/ -q` 결과와 README 기재 수 일치 |
+| 모듈 수 | `find core/ -name "*.py" \| wc -l` 결과와 일치 |
+| Tool 수 | `definitions.json` 항목 수 = README tool 테이블 행 수 |
+| 프로젝트 구조 | 신규 파일/디렉토리가 README 트리에 반영됨 |
+| 다이어그램 | 파이프라인 노드/엣지 변경 시 아키텍처 다이어그램 갱신 |
+| Tier/Score | fixture 결과(Berserk S/81.3 등)가 변경 시 README 업데이트 |
+
+불일치 발견 시 README를 수정하고 동일 커밋에 포함한다.
+
+#### 4b. CHANGELOG.md 버전업 절차
+
+변경 규모에 따라 버전업 여부를 판단하고, 필요 시 아래 절차를 수행한다.
+
+**버전업 판단 기준 (SemVer):**
+
+| 변경 규모 | 버전 | 예시 |
+|----------|------|------|
+| 호환 깨짐 (API/State 변경) | MAJOR (x.0.0) | GeodeState 필드 삭제, CLI 명령어 변경 |
+| 새 기능 추가 | MINOR (0.x.0) | 새 tool, 새 노드, 새 검증 레이어 |
+| 버그 수정/개선 | PATCH (0.0.x) | 직렬화 수정, 트레이싱 추가 |
+| 문서/리팩터만 | 버전업 안 함 | README 수정, 내부 리팩터 |
+
+**절차:**
+
+```
+1. CHANGELOG.md [Unreleased] 섹션에 변경 사항 기록
+   - Added / Changed / Fixed / Removed / Infrastructure / Architecture 카테고리 사용
+   - Feature-level 단위 (커밋 단위 X)
+2. 버전업 필요 시:
+   a. [Unreleased] → [x.y.z] — YYYY-MM-DD 로 변환
+   b. CLAUDE.md Version 필드 업데이트
+   c. pyproject.toml version 필드 업데이트 (있는 경우)
+   d. 하단 Version History 테이블에 행 추가
+   e. 비교 링크 업데이트 ([Unreleased] compare URL)
+3. 동일 커밋에 CHANGELOG.md + CLAUDE.md + pyproject.toml 포함
 ```
 
 ### 5. PR & Merge
@@ -360,9 +406,39 @@ PR 생성 → CI 실행 → 실패?
 |------|------|
 | 언어 | **한글** (제목 + 본문 모두) |
 | 제목 | `<type>: <한글 설명>` (70자 이내) |
-| 본문 | `## 요약` + `## 변경 사항` + `## 테스트` |
+| 본문 | 아래 상세 템플릿 참조 |
 | Assignee | `--assignee mangowhoiscloud` (항상) |
 | Base | feature → `develop`, develop → `main` |
+
+**PR 본문 상세 템플릿:**
+
+```markdown
+## 요약
+<1-3줄. 무엇을 왜 변경했는지 핵심만>
+
+## 변경 사항
+### 코드 변경
+- `파일경로`: 변경 내용 (AS-IS → TO-BE 간략 설명)
+- `파일경로`: 변경 내용
+
+### 문서/설정 변경
+- `CLAUDE.md`: 갱신 항목
+- `README.md`: 갱신 항목 (정합성 검증 포함)
+- `CHANGELOG.md`: 버전/기록 변경 (해당 시)
+
+## 영향 범위
+- 영향받는 모듈/기능: <목록>
+- 하위 호환성: 유지 / 깨짐 (깨짐 시 상세 기술)
+
+## 테스트
+- [ ] `uv run ruff check core/ tests/` — 0 errors
+- [ ] `uv run mypy core/` — 0 errors
+- [ ] `uv run pytest tests/ -q` — XXXX+ pass
+- [ ] CLI dry-run 정상: `uv run geode analyze "Berserk" --dry-run`
+- [ ] 신규 테스트 추가: X개 (해당 시)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
 
 **PR 생성 커맨드:**
 
@@ -370,19 +446,7 @@ PR 생성 → CI 실행 → 실패?
 gh pr create --base develop --assignee mangowhoiscloud \
   --title "<type>: <한글 설명>" \
   --body "$(cat <<'EOF'
-## 요약
-<1-3줄 요약>
-
-## 변경 사항
-- 항목 1
-- 항목 2
-
-## 테스트
-- [ ] `uv run pytest tests/ -q` 통과
-- [ ] `uv run ruff check core/ tests/` 통과
-- [ ] `uv run mypy core/` 통과
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+<위 템플릿 내용>
 EOF
 )"
 ```

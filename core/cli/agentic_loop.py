@@ -285,11 +285,17 @@ class AgenticLoop:
                 }
             )
 
+            # Serialize result as JSON for LLM (not Python repr)
+            try:
+                content = json.dumps(result, ensure_ascii=False, default=str)
+            except (TypeError, ValueError):
+                content = str(result)
+
             tool_results.append(
                 {
                     "type": "tool_result",
                     "tool_use_id": block.id,
-                    "content": str(result),
+                    "content": content,
                 }
             )
 

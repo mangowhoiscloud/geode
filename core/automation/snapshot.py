@@ -24,6 +24,17 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 DEFAULT_MAX_RECENT = 30
+
+
+def _sanitize_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Filter internal (``_``-prefixed) fields that may not be JSON-serializable.
+
+    Objects like PromptAssembler, ToolDefinitions, and bootstrap parameters are
+    injected into the state at graph compile time but should not be persisted.
+    """
+    return {k: v for k, v in state.items() if not k.startswith("_")}
+
+
 DEFAULT_PRUNE_KEEP_WEEKLY = True
 
 
@@ -101,15 +112,21 @@ class SnapshotManager:
         rubric_hash: str = "",
         config_hash: str = "",
     ) -> Snapshot:
-        """Capture a new snapshot."""
+        """Capture a new snapshot.
+
+        Internal fields (prefixed with ``_``) are filtered out to avoid
+        serialization errors from non-JSON-serializable objects like
+        PromptAssembler or ToolDefinitions.
+        """
         snapshot_id = f"snap-{uuid.uuid4().hex[:12]}"
+        clean_state = _sanitize_state(pipeline_state or {})
         snap = Snapshot(
             snapshot_id=snapshot_id,
             session_id=session_id,
             prompt_hash=prompt_hash,
             rubric_hash=rubric_hash,
             config_hash=config_hash,
-            pipeline_state=pipeline_state or {},
+            pipeline_state=clean_state,
             context=context or {},
         )
         with self._lock:
@@ -206,7 +223,10 @@ class SnapshotManager:
             return
         f = self._storage_dir / f"{snap.snapshot_id}.json"
         tmp = f.with_suffix(".tmp")
-        tmp.write_text(json.dumps(snap.to_dict(), indent=2), encoding="utf-8")
+        tmp.write_text(
+            json.dumps(snap.to_dict(), indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
         os.replace(str(tmp), str(f))
 
     def _remove_from_disk(self, snapshot_id: str) -> None:
