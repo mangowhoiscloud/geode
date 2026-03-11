@@ -26,7 +26,7 @@ LangGraph 기반 저평가 IP 발굴 에이전트.
 | **Graceful Degradation** | API 키 없으면 자동 dry-run, 있으면 LLM 분석 |
 | **Project Memory** | `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지 |
 | **Checkpoint** | SqliteSaver 기반 파이프라인 상태 영속화 |
-| **Feedback Loop** | Confidence < 0.7이면 자동 재분석 (최대 3회) |
+| **Feedback Loop** | Confidence < 0.7이면 자동 재분석 (최대 5회, `GEODE_MAX_ITERATIONS`) |
 | **LangSmith Observability** | 토큰 추적 + 비용 계산, RunTree 메트릭, 조건부 tracing |
 | **Dynamic Tools** | ToolRegistry 기반 런타임 tool 추가, plugin activate → 즉시 반영 |
 | **Pipeline Flexibility** | Analyst 타입 YAML 동적 로드, `interrupt_before` 사용자 개입 |
@@ -99,6 +99,15 @@ graph TB
     style L5 fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
 ```
 
+| Layer | 구성 요소 | 설명 |
+|-------|----------|------|
+| **L0** CLI | Typer CLI, NL Router, AgenticLoop, IP Search, Batch | 사용자 인터페이스 — 슬래시 커맨드 17종, 자연어 intent 분류, while(tool_use) 멀티라운드 |
+| **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입, LLM 클라이언트 교체 가능 |
+| **L2** Memory | Organization (fixture), Project (.claude/MEMORY.md), Session (TTL), SqliteSaver | 3-Tier 메모리 + LangGraph 체크포인트 영속화 |
+| **L3** Pipeline | StateGraph, 8 Pipeline Nodes, GeodeState (TypedDict) | LangGraph `graph.stream()` 단계별 실행, Send API 병렬 분석 |
+| **L4** Orchestration | HookSystem (23 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
+| **L5** Extensibility | ToolRegistry (19), PolicyChain, Report Generator, Prompt Skills | 런타임 tool 확장, 노드별 접근 제어, HTML/JSON/MD 리포트 |
+
 ### Pipeline Flow
 
 ```mermaid
@@ -131,6 +140,17 @@ graph LR
     style Synth fill:#06b6d4,stroke:#06b6d4,color:#fff
 ```
 
+| Node | 역할 | 입출력 |
+|------|------|--------|
+| **Router** | 파이프라인 모드 결정 (6종), fixture 로딩, 메모리 조합 | `→ pipeline_mode`, `signals`/`evaluators`/`scoring` 라우팅 |
+| **Signals** | 외부 시그널 데이터 fixture 주입 | `→ external_signals` |
+| **Analyst ×4** | Send API 병렬 실행 — `game_mechanics`, `player_experience`, `growth_potential`, `discovery` | `→ analyses[]` (Clean Context: `analyses` 필드 제외) |
+| **Evaluator ×3** | 14-Axis 루브릭 평가 — `quality_judge` (8축), `hidden_value` (3축), `community_momentum` (3축) | `→ evaluations[]` (Typed Pydantic Output) |
+| **Scoring** | PSM 6-Weighted Composite + Confidence Multiplier → Tier S/A/B/C | `→ final_score`, `tier`, `cause` |
+| **Verification** | Guardrails G1-G4 + BiasBuster (6 bias) + Confidence Gate | `→ confidence ≥ 0.7` 통과 or loopback |
+| **Gather** | 재분석 상태 수집 (confidence < 0.7, max 5 iterations) | `→ signals` loopback |
+| **Synthesizer** | Decision Tree 분류 + 내러티브 생성 | `→ recommendation`, `narrative` |
+
 ### Agentic Loop
 
 ```mermaid
@@ -140,7 +160,7 @@ graph TB
     Mode -->|No| LLM["Claude Opus 4.6<br/>Tool Use API"]
     Regex --> Exec
     LLM --> Decision{stop_reason}
-    Decision -->|tool_use| Exec["ToolExecutor<br/>(17 handlers)"]
+    Decision -->|tool_use| Exec["ToolExecutor<br/>(19 tools)"]
     Exec --> Results["tool_result"]
     Results --> LLM
     Decision -->|end_turn| Output["AgenticResult<br/>(text + tool_calls)"]
@@ -158,6 +178,15 @@ graph TB
 ```
 
 > **Note:** 위 다이어그램의 Retry 10s/20s/40s는 AgenticLoop 레벨의 rate limit 재시도입니다. 파이프라인 내부 LLM 호출(`core/llm/client.py`)은 별도의 1s/2s/4s exponential backoff를 사용합니다.
+
+| 구성 요소 | 설명 |
+|----------|------|
+| **offline mode** | `_offline_fallback()` — 10개 regex 패턴 기반 intent 매칭, LLM 호출 없이 1-round 결정론적 실행 |
+| **LLM Tool Use** | Claude Opus 4.6 `tool_use` API — `definitions.json` 19개 tool 정의 전달, `stop_reason` 기반 루프 제어 |
+| **ToolExecutor** | 3-tier safety: SAFE (7종, 무조건 실행) / STANDARD (일반) / DANGEROUS (bash, 사용자 승인 필수) |
+| **max_rounds** | 기본 10 라운드 — `end_turn` 또는 라운드 초과 시 종료 |
+| **LangSmith** | `track_token_usage()` — 토큰 수/비용을 RunTree.extra.metrics에 기록, `LLMUsageAccumulator`로 세션 합산 |
+| **Retry** | AgenticLoop: `2^attempt × 10`s (10/20/40s) — Pipeline: `min(1.0 × 2^attempt, 30.0)`s (1/2/4s) |
 
 ### Cross-LLM Ensemble
 
@@ -186,6 +215,16 @@ graph TB
 
 > `ensemble_mode=cross` 시 `primary_analysts`/`secondary_analysts` 설정으로 모델 분배 결정. `primary_only` 모드에서는 모든 analyst가 Claude 사용.
 
+| 항목 | 값 |
+|------|-----|
+| **Primary model** | Claude Opus 4.6 (`ClaudeAdapter`) |
+| **Secondary model** | GPT-5.4 (`OpenAIAdapter`) |
+| **Primary analysts** | `game_mechanics`, `growth_potential` (설정: `GEODE_PRIMARY_ANALYSTS`) |
+| **Secondary analysts** | `player_experience`, `discovery` (설정: `GEODE_SECONDARY_ANALYSTS`) |
+| **합의 임계값** | `agreement ≥ 0.67` (`GEODE_AGREEMENT_THRESHOLD`) |
+| **신뢰도 지표** | Krippendorff's α (순서형 데이터 기반 평가자 간 일치도) |
+| **모드 전환** | `GEODE_ENSEMBLE_MODE`: `cross` (듀얼) / `primary_only` (Claude 단독) |
+
 ### Sub-Agent Orchestration
 
 ```mermaid
@@ -208,6 +247,14 @@ graph LR
     style IR fill:#1e293b,stroke:#10b981,color:#e2e8f0
     style HS fill:#1e293b,stroke:#ef4444,color:#e2e8f0
 ```
+
+| 구성 요소 | 설명 |
+|----------|------|
+| **SubAgentManager** | 태스크 위임 + 결과 수집 — `delegate_task` tool로 AgenticLoop에서 호출 |
+| **TaskGraph (DAG)** | 의존 관계 기반 실행 순서 결정, 순환 감지, 완료 상태 추적 |
+| **CoalescingQueue** | 동일 IP 중복 분석 요청 병합 (dedup key: IP name + mode) |
+| **IsolatedRunner** | `asyncio.Semaphore(MAX_CONCURRENT=5)` — 최대 5개 워커 병렬 실행 |
+| **HookSystem** | 23개 라이프사이클 이벤트 — `NODE_ENTER`/`NODE_EXIT`/`NODE_ERROR` 등 실시간 모니터링 |
 
 ### MCP & Tool Architecture
 
@@ -246,6 +293,29 @@ graph TB
     style MCPServer fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
 ```
 
+**MCP Adapters (Client)** — 외부 데이터 소스 연결:
+
+| Adapter | 용도 | Port |
+|---------|------|------|
+| Steam MCP | Steam API 게임 데이터 (가격, 리뷰, 태그) | `SignalEnrichmentPort` |
+| Brave Search | 웹 검색 기반 시그널 수집 | `SignalEnrichmentPort` |
+| KG Memory | Knowledge Graph 기반 IP 관계 검색 | `MemoryPort` |
+| CompositeSignal | 다중 소스 시그널 통합 | `SignalEnrichmentPort` |
+| FixtureSignal | 로컬 fixture JSON 기반 시그널 (dry-run) | `SignalEnrichmentPort` |
+
+**MCP Server (FastMCP)** — GEODE를 외부 에이전트에서 호출:
+
+| Tool | 설명 |
+|------|------|
+| `analyze_ip` | IP 전체 분석 실행 |
+| `quick_score` | 빠른 점수 산출 (scoring only) |
+| `get_ip_signals` | 외부 시그널 데이터 조회 |
+| `list_fixtures` | 사용 가능한 IP fixture 목록 |
+| `query_memory` | 프로젝트 메모리 검색 |
+| `get_health` | 시스템 상태 점검 |
+
+**Resources**: `geode://fixtures` (IP 목록), `geode://soul` (시스템 영혼 프롬프트)
+
 ### LangSmith Observability
 
 ```mermaid
@@ -262,6 +332,14 @@ graph LR
     style Acc fill:#8b5cf6,stroke:#8b5cf6,color:#fff
     style RT fill:#06b6d4,stroke:#06b6d4,color:#fff
 ```
+
+| 항목 | 설명 |
+|------|------|
+| **track_token_usage()** | 각 LLM 호출 후 input/output 토큰 수 + cache hit 기록 |
+| **calculate_cost()** | `MODEL_PRICING` dict 기반 비용 산출 (input/output/cache 단가 × 토큰) |
+| **LLMUsageAccumulator** | `contextvars` 기반 — 세션 내 전체 토큰/비용 누적, context-local 격리 |
+| **RunTree.extra.metrics** | LangSmith 트레이스에 토큰 수/비용 메타데이터 첨부 |
+| **조건부 활성화** | `LANGCHAIN_TRACING_V2=true` + `LANGCHAIN_API_KEY` 설정 시만 tracing 활성 |
 
 ### 14-Axis Rubric (PSM Engine)
 
@@ -290,6 +368,18 @@ graph TB
 ```
 
 > 각 축은 1-5점 한국어 루브릭 앵커 사용. `evaluator_axes.yaml`에서 SSOT 관리. Prospect IP용 9-axis 확장 루브릭도 지원.
+
+**Evaluator별 축 배분:**
+
+| Evaluator | 축 | 평가 영역 |
+|-----------|-----|----------|
+| `quality_judge` | A (Narrative Depth), B (Visual Adaptation), C (Gameplay Potential), B1 (Character Appeal), C1 (World Building), C2 (Lore Consistency), M (Market Fit), N (Innovation Score) | 품질 8축 |
+| `hidden_value` | D (Discovery Gap), E (Exploitation Gap), F (Fandom Resilience) | 숨겨진 가치 3축 |
+| `community_momentum` | J (Community Activity), K (Content Creation), L (Cross-media Traction) | 커뮤니티 모멘텀 3축 |
+
+**Scoring Formula**: `Final = (0.25×PSM + 0.20×Quality + 0.18×Recovery + 0.12×Growth + 0.20×Momentum + 0.05×Dev) × (0.7 + 0.3 × Confidence/100)`
+
+**Tier 기준**: S ≥ 80, A ≥ 60, B ≥ 40, C < 40
 
 ### Multi-turn Context
 
@@ -323,7 +413,23 @@ graph LR
     style Skip fill:#f59e0b,stroke:#f59e0b,color:#fff
 ```
 
-> `BashTool` — 9개 위험 패턴 사전 차단 (`rm -rf /`, `sudo`, `curl|sh`, `mkfs`, `dd`, `chmod 777 /`, fork bomb 등). 나머지 명령은 사용자 승인 후 실행.
+> `BashTool` — 9개 위험 패턴 사전 차단, 나머지 명령은 사용자 승인 후 실행.
+
+**차단 패턴 (9종):**
+
+| # | 패턴 | 위험 |
+|---|------|------|
+| 1 | `rm -rf /` | 루트 파일시스템 삭제 |
+| 2 | `sudo` | 권한 상승 |
+| 3 | `> /etc/` | 시스템 설정 덮어쓰기 |
+| 4 | `curl \| sh` | 원격 코드 실행 |
+| 5 | `wget \| sh` | 원격 코드 실행 |
+| 6 | `mkfs.` | 디스크 포맷 |
+| 7 | `dd if=... of=/dev/` | 디스크 직접 쓰기 |
+| 8 | `chmod -R 777 /` | 전역 권한 개방 |
+| 9 | Fork bomb `:(){ :\|:& };:` | 시스템 리소스 고갈 |
+
+**실행 제약**: timeout 30초, stdout 최대 10K / stderr 최대 5K chars 제한.
 
 ### Feedback Loop
 
@@ -340,6 +446,14 @@ graph LR
 ```
 
 > Confidence < 0.7이면 `gather` 노드가 상태를 수집하고 `signals`로 loopback. `GEODE_MAX_ITERATIONS` (기본 5)회까지 재시도 후 강제 진행.
+
+| 항목 | 값 |
+|------|-----|
+| **Confidence 임계값** | 0.7 (`GEODE_CONFIDENCE_THRESHOLD`) |
+| **최대 반복** | 5회 (`GEODE_MAX_ITERATIONS`) |
+| **Loopback 경로** | `verification → gather → signals → analyst → evaluator → scoring → verification` |
+| **강제 진행** | 최대 반복 도달 시 현재 점수로 Synthesizer 진행 |
+| **Confidence Multiplier** | `final = base × (0.7 + 0.3 × confidence/100)` — 신뢰도에 따라 최종 점수 30% 범위 내 조정 |
 
 ### Prompt Caching
 
@@ -363,6 +477,30 @@ graph LR
 ```
 
 > `definitions.json` 19개 기본 도구 + `ToolRegistry.register()` 런타임 확장. `get_agentic_tools(registry)` 호출 시 base + plugin 도구 병합. `PolicyChain`으로 노드별 도구 접근 제어.
+
+**기본 Tool 목록 (19종):**
+
+| # | Tool | 용도 | Safety |
+|---|------|------|--------|
+| 1 | `list_ips` | IP 목록 조회 | SAFE |
+| 2 | `analyze_ip` | IP 분석 실행 | STANDARD |
+| 3 | `search_ips` | IP 검색 | SAFE |
+| 4 | `compare_ips` | 두 IP 비교 | STANDARD |
+| 5 | `show_help` | 도움말 표시 | SAFE |
+| 6 | `generate_report` | 리포트 생성 | STANDARD |
+| 7 | `batch_analyze` | 배치 분석 | STANDARD |
+| 8 | `check_status` | 시스템 상태 | SAFE |
+| 9 | `switch_model` | LLM 모델 전환 | SAFE |
+| 10 | `memory_search` | 메모리 검색 | SAFE |
+| 11 | `memory_save` | 메모리 저장 | STANDARD |
+| 12 | `manage_rule` | 룰 관리 | SAFE |
+| 13 | `set_api_key` | API 키 설정 | STANDARD |
+| 14 | `manage_auth` | 인증 프로필 관리 | STANDARD |
+| 15 | `generate_data` | 합성 데이터 생성 | STANDARD |
+| 16 | `schedule_job` | 스케줄 등록 | STANDARD |
+| 17 | `trigger_event` | 이벤트 트리거 | STANDARD |
+| 18 | `run_bash` | 셸 명령 실행 | DANGEROUS |
+| 19 | `delegate_task` | 서브에이전트 위임 | STANDARD |
 
 ### Pipeline Flexibility (C2-C5)
 
