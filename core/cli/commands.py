@@ -15,6 +15,7 @@ from typing import cast
 from simple_term_menu import TerminalMenu
 
 from core.auth.profiles import ProfileStore
+from core.config import ANTHROPIC_BUDGET, ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY, OPENAI_PRIMARY
 from core.ui.console import console
 
 # ---------------------------------------------------------------------------
@@ -33,10 +34,10 @@ class ModelProfile:
 
 
 MODEL_PROFILES: list[ModelProfile] = [
-    ModelProfile("claude-opus-4-6", "Anthropic", "Opus 4.6", "$$$"),
-    ModelProfile("claude-sonnet-4-5-20250929", "Anthropic", "Sonnet 4.5", "$$"),
-    ModelProfile("claude-haiku-4-5-20251001", "Anthropic", "Haiku 4.5", "$"),
-    ModelProfile("gpt-5.4", "OpenAI", "GPT-5.4", "$$"),
+    ModelProfile(ANTHROPIC_PRIMARY, "Anthropic", "Opus 4.6", "$$$"),
+    ModelProfile(ANTHROPIC_SECONDARY, "Anthropic", "Sonnet 4.5", "$$"),
+    ModelProfile(ANTHROPIC_BUDGET, "Anthropic", "Haiku 4.5", "$"),
+    ModelProfile(OPENAI_PRIMARY, "OpenAI", "GPT-5.4", "$$"),
 ]
 
 _MODEL_INDEX: dict[str, ModelProfile] = {m.id: m for m in MODEL_PROFILES}

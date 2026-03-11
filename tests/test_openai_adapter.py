@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from core.config import OPENAI_PRIMARY
 from core.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
 from core.infrastructure.ports.llm_port import LLMClientPort
 
@@ -15,7 +16,7 @@ class TestOpenAIAdapterInterface:
 
     def test_default_model(self):
         adapter = OpenAIAdapter()
-        assert adapter._default_model == "gpt-5.4"
+        assert adapter._default_model == OPENAI_PRIMARY
 
     def test_custom_model(self):
         adapter = OpenAIAdapter(default_model="gpt-4o")

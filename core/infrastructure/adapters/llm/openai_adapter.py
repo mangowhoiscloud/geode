@@ -16,7 +16,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
-from core.config import settings
+from core.config import MODEL_PRICING, OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY, settings
 from core.llm.client import (
     CircuitBreaker,
     LLMUsage,
@@ -35,22 +35,16 @@ _MAX_RETRIES = 3
 _RETRY_BASE_DELAY = 1.0
 _RETRY_MAX_DELAY = 30.0
 
-# Default OpenAI model
-DEFAULT_OPENAI_MODEL = "gpt-5.4"
+# Default OpenAI model — from config.py single source of truth
+DEFAULT_OPENAI_MODEL = OPENAI_PRIMARY
 
-# OpenAI fallback chain
-OPENAI_FALLBACK_MODELS = ["gpt-5.4", "gpt-5.3", "gpt-4o"]
-
-# Model pricing (USD per token) — local copy to avoid coupling to Anthropic client internals
-_MODEL_PRICING: dict[str, dict[str, float]] = {
-    "gpt-5.4": {"input": 2.50 / 1_000_000, "output": 15.0 / 1_000_000},
-    "gpt-5.3": {"input": 10.0 / 1_000_000, "output": 30.0 / 1_000_000},
-}
+# OpenAI fallback chain — from config.py single source of truth
+OPENAI_FALLBACK_MODELS = OPENAI_FALLBACK_CHAIN
 
 
 def _calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Calculate cost in USD for OpenAI models."""
-    prices = _MODEL_PRICING.get(model, {})
+    prices = MODEL_PRICING.get(model, {})
     return input_tokens * prices.get("input", 0) + output_tokens * prices.get("output", 0)
 
 

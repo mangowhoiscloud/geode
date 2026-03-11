@@ -18,6 +18,7 @@ from core.cli.commands import (
     cmd_trigger,
     resolve_action,
 )
+from core.config import ANTHROPIC_BUDGET, ANTHROPIC_PRIMARY, OPENAI_PRIMARY
 
 
 class TestCommandMap:
@@ -190,11 +191,11 @@ class TestCmdModel:
         old = settings.model
         try:
             # Ensure starting model differs from target
-            settings.model = "claude-opus-4-6"
-            cmd_model("gpt-5.4")
-            assert settings.model == "gpt-5.4"
+            settings.model = ANTHROPIC_PRIMARY
+            cmd_model(OPENAI_PRIMARY)
+            assert settings.model == OPENAI_PRIMARY
             content = (tmp_path / ".env").read_text()
-            assert "GEODE_MODEL=gpt-5.4" in content
+            assert f"GEODE_MODEL={OPENAI_PRIMARY}" in content
         finally:
             settings.model = old
 
@@ -205,7 +206,7 @@ class TestCmdModel:
         old = settings.model
         try:
             cmd_model("haiku")
-            assert settings.model == "claude-haiku-4-5-20251001"
+            assert settings.model == ANTHROPIC_BUDGET
         finally:
             settings.model = old
 
@@ -242,7 +243,7 @@ class TestApplyModel:
         old = settings.model
         try:
             _apply_model(MODEL_PROFILES[3])  # GPT-5.4
-            assert settings.model == "gpt-5.4"
+            assert settings.model == OPENAI_PRIMARY
         finally:
             settings.model = old
 

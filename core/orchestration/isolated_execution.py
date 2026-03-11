@@ -194,6 +194,11 @@ class IsolatedRunner:
 
         def _target() -> None:
             try:
+                # Check cancel flag before execution
+                cancel_event = self._cancel_flags.get(config.session_id)
+                if cancel_event and cancel_event.is_set():
+                    error_holder.append("Cancelled before execution")
+                    return
                 raw = fn(*args, **kwargs)
                 output = str(raw) if raw is not None else ""
                 result_holder.append(

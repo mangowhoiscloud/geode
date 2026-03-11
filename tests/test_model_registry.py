@@ -10,6 +10,7 @@ from core.automation.model_registry import (
     PromotionStage,
     _compute_hash,
 )
+from core.config import ANTHROPIC_PRIMARY
 
 
 class TestPromotionStage:
@@ -43,7 +44,7 @@ class TestModelVersion:
             version_id="v2.0",
             parent="v1.0",
             prompt_hash="hash1",
-            configs={"model": "claude-opus-4-6"},
+            configs={"model": ANTHROPIC_PRIMARY},
             metrics={"accuracy": 0.95},
         )
         d = v.to_dict()

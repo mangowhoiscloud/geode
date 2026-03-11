@@ -211,6 +211,22 @@ class TestTaskGraph:
         with pytest.raises(KeyError):
             graph.mark_running("nope")
 
+    def test_validate_cycle_detection(self):
+        graph = TaskGraph()
+        graph.add_task(Task(task_id="a", name="Task A", dependencies=["b"]))
+        graph.add_task(Task(task_id="b", name="Task B", dependencies=["a"]))
+        errors = graph.validate()
+        assert any("cycle" in e.lower() for e in errors)
+
+    def test_mark_failed_rejects_completed(self):
+        graph = TaskGraph()
+        graph.add_task(Task(task_id="a", name="Task A"))
+        graph.get_ready_tasks()
+        graph.mark_running("a")
+        graph.mark_completed("a")
+        with pytest.raises(ValueError):
+            graph.mark_failed("a", error="late failure")
+
     def test_stats_to_dict(self):
         graph = TaskGraph()
         d = graph.stats.to_dict()

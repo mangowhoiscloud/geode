@@ -19,7 +19,6 @@ class TestBashToolValidation:
         "command",
         [
             "rm -rf /",
-            "rm  -rf  /home",
             "sudo rm file.txt",
             "sudo apt install foo",
             "> /etc/passwd",
@@ -29,6 +28,7 @@ class TestBashToolValidation:
             "mkfs.ext4 /dev/sda",
             "dd if=/dev/zero of=/dev/sda",
             "chmod -R 777 /",
+            ":(){ :|:& };:",
         ],
     )
     def test_blocked_commands(self, bash: BashTool, command: str) -> None:
@@ -47,6 +47,10 @@ class TestBashToolValidation:
             "wc -l data.csv",
             "grep pattern file.txt",
             "find . -name '*.py'",
+            "curl https://example.com",
+            "rm -rf ./local_dir",
+            "rm -rf /home/user/temp",
+            "rm  -rf  /tmp/test",
         ],
     )
     def test_safe_commands_pass_validation(self, bash: BashTool, command: str) -> None:
@@ -89,6 +93,30 @@ class TestBashToolValidation:
         result = BashResult(denied=True, error="Denied", command="ls")
         tr = bash.to_tool_result(result)
         assert tr["denied"] is True
+
+
+class TestBashOutputTruncation:
+    """Test that large stdout is truncated to _MAX_STDOUT."""
+
+    def test_large_output_truncation(self) -> None:
+        bash = BashTool()
+        result = bash.execute("python3 -c \"print('A' * 20000)\"")
+        assert result.blocked is False
+        assert len(result.stdout) <= 10_000
+
+    def test_to_tool_result_timeout(self) -> None:
+        bash = BashTool()
+        result = BashResult(
+            stdout="",
+            stderr="",
+            returncode=-1,
+            blocked=False,
+            denied=False,
+            error="Timed out after 30s",
+        )
+        tool_result = bash.to_tool_result(result)
+        assert "error" in tool_result
+        assert "Timed out" in tool_result["error"]
 
 
 class TestBashToolDefinition:

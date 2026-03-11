@@ -24,7 +24,7 @@ import anthropic
 from core.cli.conversation import ConversationContext
 from core.cli.nl_router import _build_system_prompt
 from core.cli.tool_executor import ToolExecutor
-from core.config import settings
+from core.config import ANTHROPIC_PRIMARY, settings
 from core.llm.client import _maybe_traceable, track_token_usage
 from core.llm.prompts import AGENTIC_SUFFIX
 
@@ -87,7 +87,7 @@ class AgenticLoop:
         self.executor = tool_executor
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
-        self.model = model or "claude-opus-4-6"
+        self.model = model or ANTHROPIC_PRIMARY
         self._tools = get_agentic_tools(tool_registry)
         self._offline = offline_mode
         self._tool_log: list[dict[str, Any]] = []
