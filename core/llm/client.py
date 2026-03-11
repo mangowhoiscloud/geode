@@ -96,15 +96,27 @@ def _maybe_traceable(
 # Token usage tracking
 # ---------------------------------------------------------------------------
 
-# Model pricing (USD per token) — updated 2026-02
+# Model pricing (USD per token) — updated 2026-03
 MODEL_PRICING: dict[str, dict[str, float]] = {
+    # Anthropic
     "claude-opus-4-6": {"input": 15.0 / 1_000_000, "output": 75.0 / 1_000_000},
     "claude-sonnet-4-5-20250929": {"input": 3.0 / 1_000_000, "output": 15.0 / 1_000_000},
     "claude-haiku-4-5-20251001": {"input": 0.80 / 1_000_000, "output": 4.0 / 1_000_000},
+    # OpenAI — GPT-5 family
     "gpt-5.4": {"input": 2.50 / 1_000_000, "output": 15.0 / 1_000_000},
-    "gpt-5.3": {"input": 10.0 / 1_000_000, "output": 30.0 / 1_000_000},
+    "gpt-5.2": {"input": 1.75 / 1_000_000, "output": 14.0 / 1_000_000},
+    "gpt-5.1": {"input": 1.25 / 1_000_000, "output": 10.0 / 1_000_000},
+    "gpt-5": {"input": 1.25 / 1_000_000, "output": 10.0 / 1_000_000},
+    # OpenAI — GPT-4 family
+    "gpt-4.1": {"input": 2.00 / 1_000_000, "output": 8.0 / 1_000_000},
     "gpt-4.1-mini": {"input": 0.40 / 1_000_000, "output": 1.60 / 1_000_000},
+    "gpt-4.1-nano": {"input": 0.10 / 1_000_000, "output": 0.40 / 1_000_000},
     "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
+    "gpt-4o-mini": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
+    # OpenAI — Reasoning
+    "o3": {"input": 2.00 / 1_000_000, "output": 8.0 / 1_000_000},
+    "o3-mini": {"input": 1.10 / 1_000_000, "output": 4.40 / 1_000_000},
+    "o4-mini": {"input": 1.10 / 1_000_000, "output": 4.40 / 1_000_000},
 }
 
 

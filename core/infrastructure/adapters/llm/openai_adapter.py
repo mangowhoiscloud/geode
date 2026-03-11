@@ -39,12 +39,16 @@ _RETRY_MAX_DELAY = 30.0
 DEFAULT_OPENAI_MODEL = "gpt-5.4"
 
 # OpenAI fallback chain
-OPENAI_FALLBACK_MODELS = ["gpt-5.4", "gpt-5.3", "gpt-4o"]
+OPENAI_FALLBACK_MODELS = ["gpt-5.4", "gpt-5.2", "gpt-4.1"]
 
-# Model pricing (USD per token) — local copy to avoid coupling to Anthropic client internals
+# Model pricing (USD per token) — updated 2026-03
 _MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-5.4": {"input": 2.50 / 1_000_000, "output": 15.0 / 1_000_000},
-    "gpt-5.3": {"input": 10.0 / 1_000_000, "output": 30.0 / 1_000_000},
+    "gpt-5.2": {"input": 1.75 / 1_000_000, "output": 14.0 / 1_000_000},
+    "gpt-5.1": {"input": 1.25 / 1_000_000, "output": 10.0 / 1_000_000},
+    "gpt-5": {"input": 1.25 / 1_000_000, "output": 10.0 / 1_000_000},
+    "gpt-4.1": {"input": 2.00 / 1_000_000, "output": 8.0 / 1_000_000},
+    "gpt-4.1-mini": {"input": 0.40 / 1_000_000, "output": 1.60 / 1_000_000},
     "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
 }
 

@@ -187,6 +187,24 @@ Decision Tree on D-E-F axes:
 4. **Confidence Gate**: ≥ 0.7 → proceed, else loopback (max 5 iter)
 5. **Rights Risk**: CLEAR/NEGOTIABLE/RESTRICTED/EXPIRED/UNKNOWN
 
+## LLM Models (2026-03)
+
+| Provider | Model | Input $/M | Output $/M | 용도 |
+|----------|-------|-----------|------------|------|
+| **Anthropic** | `claude-opus-4-6` | $15.00 | $75.00 | Primary (Pipeline + Agentic) |
+| Anthropic | `claude-sonnet-4-5-20250929` | $3.00 | $15.00 | Fallback |
+| Anthropic | `claude-haiku-4-5-20251001` | $0.80 | $4.00 | Lightweight |
+| **OpenAI** | `gpt-5.4` | $2.50 | $15.00 | Cross-LLM Secondary (default) |
+| OpenAI | `gpt-5.2` | $1.75 | $14.00 | Fallback 1 |
+| OpenAI | `gpt-4.1` | $2.00 | $8.00 | Fallback 2 |
+| OpenAI | `gpt-4.1-mini` | $0.40 | $1.60 | Budget |
+| OpenAI | `o3` | $2.00 | $8.00 | Reasoning |
+| OpenAI | `o4-mini` | $1.10 | $4.40 | Reasoning (budget) |
+
+- **Fallback chain** (OpenAI): `gpt-5.4` → `gpt-5.2` → `gpt-4.1`
+- **Pricing source**: [OpenAI API Pricing](https://developers.openai.com/api/docs/pricing/)
+- **Cache pricing** (Anthropic): creation = input × 1.25, read = input × 0.1
+
 ## Conventions
 
 - **Structured Output**: Anthropic `messages.parse()` with typed Pydantic models
