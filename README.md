@@ -3,7 +3,8 @@
 LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기능은 아래와 같습니다. 
 - 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 평가 및 리포트를 생성합니다.
 - 분석 루프 외에도 Runtime Orchestration, Tool-Registry/Tool-Use, Bash, Hook-System으로 Agentic Loop(Gather->Action->Verify)를 구성, 자율 행동이 가능합니다.
-- 사용자의 의도와 맥락을 파악하기 위한 메모리 시스템, Multi-turn, Multi-intent도 내장되어 있습니다. Observability는 LangSmith, Evaluation은 CUSUM Drift 감지를 지원합니다.
+- 사용자의 의도와 맥락을 파악하기 위한 메모리 시스템, Multi-turn, Multi-intent도 내장되어 있습니다.
+- Observability는 LangSmith, Evaluation은 CUSUM Drift 감지를 지원합니다.
 - 다음 업데이트는 Swiss Cheese Model based Eval Pipeline 구축으로 예정되어 있습니다.
 
 ## Features
