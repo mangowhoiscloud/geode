@@ -15,6 +15,7 @@ import numpy as np
 from core.automation.expert_panel import calculate_krippendorff_alpha
 from core.config import settings
 from core.infrastructure.ports.llm_port import LLMClientPort
+from core.llm.client import _maybe_traceable
 from core.llm.prompts import CROSS_LLM_DUAL_VERIFY, CROSS_LLM_RESCORE, CROSS_LLM_SYSTEM
 from core.state import AnalysisResult, GeodeState
 
@@ -79,6 +80,7 @@ def _calc_agreement(scores: list[float], scale_max_var: float = _MAX_VARIANCE) -
     return max(0.0, min(1.0, agreement))
 
 
+@_maybe_traceable(run_type="chain", name="run_cross_llm_check")  # type: ignore[untyped-decorator]
 def run_cross_llm_check(
     state: GeodeState,
     *,
@@ -240,12 +242,12 @@ def run_dual_adapter_check(
     """
     # If no adapters, fall back to standard check
     if primary_adapter is None or secondary_adapter is None:
-        result = run_cross_llm_check(state)
-        result["verification_mode"] = "agreement_only"
-        return result
+        fallback: dict[str, Any] = run_cross_llm_check(state)
+        fallback["verification_mode"] = "agreement_only"
+        return fallback
 
     # Standard agreement check first
-    base_result = run_cross_llm_check(state)
+    base_result: dict[str, Any] = run_cross_llm_check(state)
 
     # Dual-adapter verification: ask secondary model for a quick sanity check
     ip_name = state.get("ip_name", "Unknown")
