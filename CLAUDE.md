@@ -8,8 +8,8 @@
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 116
-- **Tests**: 1950+
+- **Modules**: 118
+- **Tests**: 2000+
 
 ## Quick Start
 
@@ -138,7 +138,12 @@ core/
 ├── auth/                # API key rotation, cooldown, profiles
 ├── extensibility/       # Custom agents, plugins, report generators
 ├── fixtures/            # JSON test data (3 IPs) + data generator
-└── ui/                  # Rich console, panels, streaming, status
+└── ui/
+    ├── console.py       # Rich Console singleton (width=120, GEODE theme)
+    ├── agentic_ui.py    # Claude Code-style renderer (▸/✓/✗/✢/● markers)
+    ├── panels.py        # Rich Panel builders
+    ├── streaming.py     # Streaming output handler
+    └── status.py        # Status bar + spinner
 ```
 
 ## Development
@@ -205,6 +210,45 @@ Decision Tree on D-E-F axes:
 - **Pricing source**: [OpenAI API Pricing](https://developers.openai.com/api/docs/pricing/)
 - **Cache pricing** (Anthropic): creation = input × 1.25, read = input × 0.1
 
+## NL Router (20 Tools)
+
+NLRouter는 Claude Opus 4.6 Tool Use로 자연어 → 도구 호출을 매핑한다. 3단계 fallback: LLM → regex → help.
+
+| Tool | Action | 설명 |
+|------|--------|------|
+| `list_ips` | list | IP 목록 조회 |
+| `analyze_ip` | analyze | IP 분석 실행 |
+| `search_ips` | search | IP 검색 |
+| `compare_ips` | compare | IP 비교 |
+| `show_help` | help | 도움말 |
+| `generate_report` | report | 리포트 생성 |
+| `batch_analyze` | batch | 배치 분석 |
+| `check_status` | status | 시스템 상태 |
+| `switch_model` | model | 모델 전환 |
+| `memory_search` | memory | 메모리 검색 |
+| `memory_save` | memory | 메모리 저장 |
+| `manage_rule` | memory | 규칙 관리 |
+| `set_api_key` | key | API 키 설정 |
+| `manage_auth` | auth | 인증 관리 |
+| `generate_data` | generate | 데이터 생성 |
+| `schedule_job` | schedule | 작업 스케줄링 |
+| `trigger_event` | trigger | 이벤트 트리거 |
+| `create_plan` | plan | 분석 계획 생성 |
+| `approve_plan` | plan | 계획 승인/실행 |
+| `delegate_task` | delegate | 서브에이전트 병렬 위임 |
+
+### Claude Code-style UI (agentic_ui.py)
+
+```
+▸ analyze_ip(ip_name="Berserk")        # tool call
+✓ analyze_ip → S · 81.3               # tool result
+✗ analyze_ip — Not found              # error
+✢ claude-opus-4-6 · ↓1.2k ↑350 · 2.1s  # token usage
+● Plan: Berserk                        # plan steps
+  1. Signal collection
+  2. Multi-analyst evaluation
+```
+
 ## Conventions
 
 - **Structured Output**: Anthropic `messages.parse()` with typed Pydantic models
@@ -218,7 +262,7 @@ Decision Tree on D-E-F axes:
 
 ## Implementation Workflow
 
-기능 구현 시 아래 루프를 따른다. 최근 작업 사례(C2-C5 유연성 개선, LangSmith Observability) 기반.
+기능 구현 시 아래 재귀개선 루프를 따른다. 각 단계에서 실패/품질 저하 발견 시 이전 단계로 돌아간다.
 
 ### 1. Research → Plan
 
@@ -228,8 +272,6 @@ Decision Tree on D-E-F axes:
 3. Gap 분석 (AS-IS → TO-BE 정리)
 4. docs/plans/에 계획 문서 작성
 ```
-
-**사례**: LangSmith 통합 — Eco² `is_langsmith_enabled()` + `track_token_usage()` 패턴 발견 → 7개 Gap(G1-G7) 식별 → `docs/plans/observability-langsmith-plan.md` 작성
 
 ### 2. Implement → Unit Verify (반복)
 
@@ -241,16 +283,38 @@ Decision Tree on D-E-F axes:
 5. 실패 시 → 수정 → 2번으로
 ```
 
-**사례**: C2(analyst YAML 동적 로드) — 1줄 변경 → lint/type 통과 → 1909 tests 통과
+### 3. E2E Verify (재귀 핵심)
 
-### 3. E2E Verify
+Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각 단계에서 오류/품질 저하 발견 시 **2번으로 즉시 복귀**.
 
 ```
-1. Mock E2E: uv run pytest tests/test_agentic_loop.py tests/test_e2e.py tests/test_e2e_orchestration_live.py -v
-2. Live E2E: set -a && source .env && set +a && uv run pytest tests/test_e2e_live_llm.py -v -m live
-3. LangSmith 트레이스 확인: smith.langchain.com → geode 프로젝트
-4. 품질 점검: tool 실행 결과에 error 없음, 올바른 모드(dry-run vs live) 확인
+3a. Mock E2E: uv run pytest tests/test_agentic_loop.py tests/test_e2e.py tests/test_e2e_orchestration_live.py -v
+3b. CLI dry-run: uv run geode analyze "Berserk" --dry-run  (실제 CLI 동작 확인)
+3c. NL 의도→행동 점검:
+    - "목록 보여줘" → list_ips 호출 확인
+    - "Berserk 분석 계획 세워줘" → create_plan 호출 확인
+    - "병렬로 처리해" → delegate_task 호출 확인
+3d. Live E2E (API 키 필요): set -a && source .env && set +a && uv run pytest tests/test_e2e_live_llm.py -v -m live
+3e. LangSmith 트레이스 확인: smith.langchain.com → geode 프로젝트
+    - AgenticLoop 트레이스 존재
+    - tool call 성공률 확인
+    - 비용(cost_usd) 확인
+3f. 품질 판정:
+    - tool 실행 결과에 error 없음
+    - 올바른 모드(dry-run vs live) 확인
+    - UI 출력 형식 (▸/✓/✗/✢) 정상
 ```
+
+**재귀 판정 기준:**
+
+| 발견 | 조치 |
+|------|------|
+| 테스트 실패 | → 2번(코드 수정) |
+| CLI 오류/crash | → 2번(코드 수정) |
+| NL 의도 불일치 | → nl_router 패턴/매핑 수정 → 2번 |
+| LangSmith 트레이스 누락 | → tracing 데코레이터 확인 → 2번 |
+| 품질 저하 (score 이상) | → 해당 노드 로직 점검 → 2번 |
+| 모두 통과 | → 4번 진행 |
 
 ### 4. Document → Skill Update
 
@@ -258,7 +322,7 @@ Decision Tree on D-E-F axes:
 1. docs/e2e-orchestration-scenarios.md 갱신 (시나리오 추가/변경)
 2. tests/test_e2e_live_llm.py 갱신 (라이브 테스트 추가)
 3. .claude/skills/geode-e2e/SKILL.md 갱신 (시나리오 매핑 테이블)
-4. CHANGELOG.md 갱신 (feature-level)
+4. CLAUDE.md 갱신 (기능/테스트 수/NL 도구 수)
 ```
 
 ### 5. PR & Merge
@@ -350,7 +414,7 @@ gh pr merge <PR#> --merge
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Mock | `uv run pytest tests/ -q` | 1950+ pass |
+| Mock | `uv run pytest tests/ -q` | 2000+ pass |
 | Live | `uv run pytest tests/test_e2e_live_llm.py -v -m live` | All pass, tool results valid |
 
 ## Custom Skills

@@ -52,6 +52,16 @@ uv run pytest tests/test_e2e_live_llm.py::TestOfflineModeLive -v
 | 5-2 | 3 IP 스모크 | 3개 모두 유효한 tier + score |
 | 5-3 | 피드백 루프 | synthesizer 방문, high confidence → gather 미방문 |
 
+### §6 Plan/Sub-agent NL Integration
+
+| ID | 시나리오 | 검증 포인트 |
+|----|---------|-----------|
+| 6-1 | Plan NL ("계획 세워줘") | create_plan tool 호출, plan_id 반환 |
+| 6-2 | Plan Approve NL ("승인해") | approve_plan tool 호출 |
+| 6-3 | Delegate NL ("병렬로 처리해") | delegate_task tool 호출 |
+| 6-4 | Plan Offline | regex → plan action |
+| 6-5 | Delegate Offline | regex → delegate action |
+
 ### §C5 Offline Mode
 
 | ID | 검증 포인트 |
@@ -59,6 +69,8 @@ uv run pytest tests/test_e2e_live_llm.py::TestOfflineModeLive -v
 | offline-list | regex → list action, rounds=1 |
 | offline-analyze | regex → analyze action |
 | offline-help | 미인식 → help fallback |
+| offline-plan | regex → plan action ("계획", "plan") |
+| offline-delegate | regex → delegate action ("병렬", "parallel") |
 
 ## 핵심 패턴
 
@@ -67,7 +79,7 @@ uv run pytest tests/test_e2e_live_llm.py::TestOfflineModeLive -v
 ```python
 def _make_loop(*, force_dry_run=False):
     # 1. ReadinessReport 설정 (force_dry_run 제어)
-    # 2. _build_tool_handlers() → 17개 핸들러 등록
+    # 2. _build_tool_handlers() → 20개 핸들러 등록 (plan/delegate 포함)
     # 3. ToolExecutor(action_handlers=handlers)
     # 4. AgenticLoop(context, executor)
 ```
@@ -107,6 +119,8 @@ assert any("AgenticLoop" in (r.name or "") for r in runs)
 - [ ] **토큰 비용**: LangSmith metrics에서 cost_usd 확인
 - [ ] **파이프라인 모드**: `dry-run (no LLM)` vs 실제 모델명 확인
 - [ ] **LangSmith 트레이스**: pending 상태 run이 없는지 확인
+- [ ] **Claude Code UI**: tool call 시 `▸`/`✓`/`✗` 마커 출력 확인
+- [ ] **Plan/Delegate NL**: "계획 세워줘"→plan, "병렬로"→delegate 매핑 확인
 
 ## 환경 변수
 
