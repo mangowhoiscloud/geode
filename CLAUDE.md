@@ -4,12 +4,12 @@
 
 저평가 IP를 데이터 기반으로 발굴하는 LangGraph Agent CLI.
 
-- **Version**: 0.6.0
+- **Version**: 0.7.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 102
-- **Tests**: 1541+
+- **Modules**: 116
+- **Tests**: 1950+
 
 ## Quick Start
 
@@ -73,7 +73,7 @@ START → router → signals → analyst×4 (Send API)
 ## Project Structure
 
 ```
-src/geode/
+core/
 ├── cli/                 # Typer CLI + NL router + search
 ├── config.py            # Pydantic Settings (.env)
 ├── state.py             # GeodeState TypedDict + Pydantic models
@@ -148,15 +148,15 @@ src/geode/
 uv run python -m pytest tests/ -q
 
 # Lint
-uv run ruff check src/geode/ tests/
+uv run ruff check core/ tests/
 
 # Type check
-uv run mypy src/geode/
+uv run mypy core/
 ```
 
 ### Expected Test Results
 
-1541+ tests pass. 3 IP fixtures produce tier spread:
+1950+ tests pass. 3 IP fixtures produce tier spread:
 - Berserk: **S** (82.2) — conversion_failure
 - Cowboy Bebop: **A** (69.4) — undermarketed
 - Ghost in the Shell: **B** (54.0) — discovery_failure
@@ -243,6 +243,78 @@ Decision Tree on D-E-F axes:
 4. CHANGELOG.md 갱신 (feature-level)
 ```
 
+### 5. PR & Merge
+
+feature → develop → main 순서로 머지한다. **직접 로컬 머지 금지** — 반드시 PR 생성 → CI 통과 → merge 순서.
+
+```
+1. feature 브랜치에서 커밋 + 푸시
+2. feature → develop PR 생성 (한글, assignee: mangowhoiscloud)
+3. CI 통과 대기 → 실패 시 수정 루프 (아래 참조)
+4. CI 통과 → gh pr merge
+5. develop → main PR 생성 (동일 형식)
+6. CI 통과 → gh pr merge
+```
+
+**CI 실패 시 수정 루프:**
+
+```
+PR 생성 → CI 실행 → 실패?
+  ├─ Yes → 로그 확인 (gh pr checks / gh run view)
+  │        → 원인 수정 (lint/type/test/coverage)
+  │        → 커밋 + 푸시 → CI 재실행 → 실패? (반복)
+  └─ No  → gh pr merge --merge
+```
+
+주의사항:
+- `coverage fail_under=75` 미달 시: 커버리지 부족 모듈에 테스트 추가
+- `ruff` 실패 시: `uv run ruff check --fix core/ tests/` 후 포맷 확인
+- `mypy` 실패 시: 타입 에러 수정, `# type: ignore` 최소화
+- pre-commit stash 충돌 시: `git stash` → 커밋 → `git stash pop`
+
+**PR 작성 규칙:**
+
+| 항목 | 규칙 |
+|------|------|
+| 언어 | **한글** (제목 + 본문 모두) |
+| 제목 | `<type>: <한글 설명>` (70자 이내) |
+| 본문 | `## 요약` + `## 변경 사항` + `## 테스트` |
+| Assignee | `--assignees mangowhoiscloud` (항상) |
+| Base | feature → `develop`, develop → `main` |
+
+**PR 생성 커맨드:**
+
+```bash
+gh pr create --base develop --assignees mangowhoiscloud \
+  --title "<type>: <한글 설명>" \
+  --body "$(cat <<'EOF'
+## 요약
+<1-3줄 요약>
+
+## 변경 사항
+- 항목 1
+- 항목 2
+
+## 테스트
+- [ ] `uv run pytest tests/ -q` 통과
+- [ ] `uv run ruff check core/ tests/` 통과
+- [ ] `uv run mypy core/` 통과
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+**PR 머지 커맨드:**
+
+```bash
+# CI 통과 확인
+gh pr checks <PR#> --watch
+
+# 머지
+gh pr merge <PR#> --merge
+```
+
 ### E2E 업데이트 규칙 (필수)
 
 **기능 변경 시 반드시 아래 파일을 함께 업데이트:**
@@ -260,7 +332,7 @@ Decision Tree on D-E-F axes:
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Mock | `uv run pytest tests/ -q` | 1909+ pass |
+| Mock | `uv run pytest tests/ -q` | 1950+ pass |
 | Live | `uv run pytest tests/test_e2e_live_llm.py -v -m live` | All pass, tool results valid |
 
 ## Custom Skills
