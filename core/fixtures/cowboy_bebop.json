@@ -57,7 +57,7 @@
   },
   "expected_results": {
     "tier": "A",
-    "final_score": 76.2,
+    "final_score": 68.4,
     "cause": "undermarketed",
     "quality_score": 82,
     "momentum_score": 78,

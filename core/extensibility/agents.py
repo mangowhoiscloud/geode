@@ -12,6 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from core.config import ANTHROPIC_SECONDARY
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -24,7 +26,7 @@ class AgentDefinition(BaseModel):
     role: str
     system_prompt: str
     tools: list[str] = Field(default_factory=list)
-    model: str = "claude-sonnet-4-20250514"
+    model: str = ANTHROPIC_SECONDARY
 
     def to_system_message(self) -> str:
         """Format as a system message combining role and prompt."""
@@ -45,7 +47,7 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
             "and cross-media adaptation viability."
         ),
         "tools": ["web_search", "trend_analysis"],
-        "model": "claude-sonnet-4-20250514",
+        "model": ANTHROPIC_SECONDARY,
     },
     {
         "name": "game_analyst",
@@ -56,7 +58,7 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
             "Evaluate IPs for gaming potential and market fit."
         ),
         "tools": ["web_search", "market_data"],
-        "model": "claude-sonnet-4-20250514",
+        "model": ANTHROPIC_SECONDARY,
     },
     {
         "name": "market_researcher",
@@ -67,7 +69,7 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
             "of IP commercial potential."
         ),
         "tools": ["web_search", "market_data", "trend_analysis"],
-        "model": "claude-sonnet-4-20250514",
+        "model": ANTHROPIC_SECONDARY,
     },
 ]
 
@@ -180,7 +182,7 @@ class SubagentLoader:
         name: anime_expert
         role: Anime & Manga IP Specialist
         tools: [web_search, trend_analysis]
-        model: claude-sonnet-4-20250514
+        model: claude-sonnet-4-5-20250929
         ---
         You are an expert in anime and manga intellectual properties...
     """
@@ -230,7 +232,7 @@ class SubagentLoader:
         else:
             tools = list(tools_raw)
 
-        model = metadata.get("model", "claude-sonnet-4-20250514")
+        model = metadata.get("model", ANTHROPIC_SECONDARY)
 
         return AgentDefinition(
             name=name,

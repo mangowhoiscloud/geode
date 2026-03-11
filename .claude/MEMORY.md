@@ -16,6 +16,8 @@
 - (없음 — 기본 14-axis 루브릭 사용)
 
 ## 최근 인사이트
+- 2026-03-11: [Berserk] tier=?, score=0.00
+- 2026-03-11: [unknown] tier=?, score=0.00
 - 2026-03-11: [cowboy bebop] tier=A, score=74.76, cause=conversion_failure, action=marketing_boost
 - 2026-03-11: [berserk] tier=S, score=82.73, cause=conversion_failure, action=marketing_boost
 - 2026-03-10: [cowboy bebop] tier=A, score=76.10, cause=conversion_failure, action=marketing_boost

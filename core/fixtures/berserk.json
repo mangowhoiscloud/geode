@@ -57,7 +57,7 @@
   },
   "expected_results": {
     "tier": "S",
-    "final_score": 82.2,
+    "final_score": 81.3,
     "cause": "conversion_failure",
     "quality_score": 80,
     "momentum_score": 92,

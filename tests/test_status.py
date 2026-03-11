@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from core.config import ANTHROPIC_PRIMARY
 from core.llm.client import LLMUsage, LLMUsageAccumulator
 from core.ui.status import GeodeStatus, _snapshot, _UsageSnapshot
 
@@ -242,11 +243,11 @@ class TestModelDisplay:
         mock_status = MagicMock()
         mock_console.status.return_value = mock_status
 
-        with GeodeStatus("Classifying...", model="claude-opus-4-6") as status:
+        with GeodeStatus("Classifying...", model=ANTHROPIC_PRIMARY) as status:
             status.stop("done")
 
         init_call = mock_console.status.call_args[0][0]
-        assert "claude-opus-4-6" in init_call
+        assert ANTHROPIC_PRIMARY in init_call
 
     @patch("core.ui.status.console")
     @patch("core.ui.status.get_usage_accumulator")

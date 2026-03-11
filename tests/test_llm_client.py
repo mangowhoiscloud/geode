@@ -8,6 +8,7 @@ import re
 from unittest.mock import MagicMock, patch
 
 import pytest
+from core.config import ANTHROPIC_BUDGET, ANTHROPIC_PRIMARY, OPENAI_PRIMARY
 from core.llm.client import (
     LLMUsage,
     LLMUsageAccumulator,
@@ -66,12 +67,12 @@ class TestStripFences:
 
 class TestCalculateCost:
     def test_known_model_opus(self):
-        cost = calculate_cost("claude-opus-4-6", 1000, 500)
+        cost = calculate_cost(ANTHROPIC_PRIMARY, 1000, 500)
         expected = 1000 * (15.0 / 1_000_000) + 500 * (75.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
     def test_known_model_haiku(self):
-        cost = calculate_cost("claude-haiku-4-5-20251001", 10_000, 2_000)
+        cost = calculate_cost(ANTHROPIC_BUDGET, 10_000, 2_000)
         expected = 10_000 * (0.80 / 1_000_000) + 2_000 * (4.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
@@ -79,10 +80,10 @@ class TestCalculateCost:
         assert calculate_cost("unknown-model", 5000, 1000) == 0.0
 
     def test_zero_tokens(self):
-        assert calculate_cost("claude-opus-4-6", 0, 0) == 0.0
+        assert calculate_cost(ANTHROPIC_PRIMARY, 0, 0) == 0.0
 
     def test_gpt_model(self):
-        cost = calculate_cost("gpt-5.4", 1000, 1000)
+        cost = calculate_cost(OPENAI_PRIMARY, 1000, 1000)
         expected = 1000 * (2.50 / 1_000_000) + 1000 * (15.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
@@ -214,7 +215,7 @@ class TestTrackTokenUsage:
             patch("core.llm.client.is_langsmith_enabled", return_value=True),
             patch("langsmith.run_helpers.get_current_run_tree", return_value=mock_run_tree),
         ):
-            track_token_usage("claude-opus-4-6", 1000, 500)
+            track_token_usage(ANTHROPIC_PRIMARY, 1000, 500)
             assert "metrics" in mock_run_tree.extra
             assert mock_run_tree.extra["metrics"]["input_tokens"] == 1000
             assert mock_run_tree.extra["metrics"]["output_tokens"] == 500
@@ -264,7 +265,7 @@ class TestCallLLMParsed:
                 system="test system",
                 user="test user",
                 output_model=DummyOutput,
-                model="claude-opus-4-6",
+                model=ANTHROPIC_PRIMARY,
             )
         assert result.score == 4.2
 
@@ -295,7 +296,7 @@ class TestCallLLMParsed:
                 system="test",
                 user="test",
                 output_model=DummyOutput,
-                model="claude-opus-4-6",
+                model=ANTHROPIC_PRIMARY,
             )
 
     def test_parsed_output_with_cache(self):
@@ -322,7 +323,7 @@ class TestCallLLMParsed:
                 system="test",
                 user="test",
                 output_model=DummyOutput,
-                model="claude-opus-4-6",
+                model=ANTHROPIC_PRIMARY,
             )
         assert result.ok is True
 

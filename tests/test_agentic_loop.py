@@ -70,6 +70,19 @@ class TestToolExecutor:
         assert "run_bash" in DANGEROUS_TOOLS
         assert "list_ips" not in DANGEROUS_TOOLS
 
+    def test_delegate_task_no_manager(self) -> None:
+        executor = ToolExecutor(auto_approve=True)
+        result = executor.execute(
+            "delegate_task",
+            {
+                "task_description": "Test task",
+                "task_type": "analyze",
+                "args": {"ip_name": "Berserk"},
+            },
+        )
+        assert "error" in result
+        assert "SubAgentManager" in result["error"]
+
 
 # ---------------------------------------------------------------------------
 # AgenticLoop tests

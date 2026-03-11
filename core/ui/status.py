@@ -5,7 +5,7 @@ permanent summary line including action, token counts, cost and elapsed time.
 
 Usage::
 
-    with GeodeStatus("Classifying intent...", model="claude-opus-4-6") as status:
+    with GeodeStatus("Classifying intent...", model=ANTHROPIC_PRIMARY) as status:
         intent = router.classify(text)
         status.update(f"Tool: {intent.action}")
     # prints: ✓ analyze · Berserk  ↑200 ↓50  $0.004  1.2s
