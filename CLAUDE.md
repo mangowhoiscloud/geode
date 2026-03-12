@@ -1,15 +1,15 @@
-# GEODE — Undervalued IP Discovery Agent
+# GEODE — 게임화 IP 도메인 자율 실행 하네스
 
 ## Project Overview
 
 저평가 IP를 데이터 기반으로 발굴하는 LangGraph Agent CLI.
 
-- **Version**: 0.8.0
+- **Version**: 0.10.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 118
-- **Tests**: 2000+
+- **Modules**: 124
+- **Tests**: 2077+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -493,6 +493,7 @@ Project-specific skills in `.claude/skills/`:
 | `geode-verification` | guardrail, bias, cause, decision tree | G1-G4, BiasBuster, Decision Tree |
 | `geode-e2e` | e2e, live test, 검증, langsmith, tracing | Live E2E 패턴, LangSmith 검증, 품질 점검 |
 | `geode-gitflow` | branch, git, feature, release, hotfix | Gitflow strategy, commit convention |
+| `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget, dumb platform | 자율 에이전트 10대 설계 원칙 (P1-P10) |
 
 ## Linked Skills (from parent project)
 

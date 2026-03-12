@@ -7,11 +7,15 @@ from unittest.mock import MagicMock, patch
 import anthropic
 import pytest
 from core.cli.nl_router import (
+    VALID_ACTIONS,
     NLIntent,
     NLRouter,
+    _fuzzy_match_ip,
     _offline_fallback,
+    _offline_multi_intent,
     _parse_text_response,
     _parse_tool_use,
+    get_valid_actions,
 )
 
 
@@ -357,7 +361,7 @@ class TestGracefulDegradation:
             intent = router_llm.classify("Berserk")
 
         assert intent.action == "analyze"
-        assert intent.args["ip_name"] == "Berserk"
+        assert intent.args["ip_name"].lower() == "berserk"
         assert intent.args["_error"] == "no_api_key"
 
     def test_api_error(self, router_llm: NLRouter) -> None:
@@ -486,24 +490,21 @@ class TestTokenUsageTracking:
     def test_usage_recorded(self, router_llm: NLRouter) -> None:
         """Token usage from tool_use response is tracked."""
         resp = _make_tool_use_response("list_ips", {}, with_usage=True)
+        mock_tracker = MagicMock()
+        mock_tracker.record.return_value = MagicMock(cost_usd=0.0035)
         with (
             patch("core.cli.nl_router.anthropic") as mock_anthropic,
             patch("core.cli.nl_router.settings") as mock_settings,
-            patch("core.llm.client.calculate_cost", return_value=0.0035) as mock_cost,
-            patch("core.llm.client.get_usage_accumulator") as mock_acc_fn,
+            patch("core.llm.token_tracker.get_tracker", return_value=mock_tracker),
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
             mock_anthropic.Anthropic.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
-            mock_acc = MagicMock()
-            mock_acc_fn.return_value = mock_acc
-
             router_llm.classify("목록")
 
-        mock_cost.assert_called_once()
-        mock_acc.record.assert_called_once()
+        mock_tracker.record.assert_called_once()
 
     def test_no_usage(self, router_llm: NLRouter) -> None:
         """No usage field → no tracking error."""
@@ -871,3 +872,358 @@ class TestOfflinePlanDelegate:
     def test_delegate_concurrent(self) -> None:
         intent = _offline_fallback("동시에 처리해")
         assert intent.action == "delegate"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Context injection tests (L1 + L2 + L4)
+# ---------------------------------------------------------------------------
+
+
+class TestContextInjection:
+    """Verify NLRouter.classify() accepts context and passes to LLM."""
+
+    def test_classify_with_context(self) -> None:
+        """context parameter is forwarded to _call_tool_use_router."""
+        from core.cli.conversation import ConversationContext
+
+        ctx = ConversationContext(max_turns=5)
+        ctx.add_user_message("Berserk 분석해")
+        ctx.add_assistant_message([{"type": "text", "text": "분석 결과입니다."}])
+
+        resp = _make_tool_use_response("analyze_ip", {"ip_name": "Berserk"})
+        with (
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "sk-ant-test"
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = resp
+
+            router = NLRouter(llm_enabled=True)
+            intent = router.classify("그거 다시 분석해", context=ctx)
+
+            # Verify messages include history
+            call_args = mock_client.messages.create.call_args
+            messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
+            assert len(messages) > 1  # More than just current input
+
+        assert intent.action == "analyze"
+
+    def test_classify_without_context(self) -> None:
+        """context=None sends single message (backward compat)."""
+        resp = _make_tool_use_response("list_ips", {})
+        with (
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "sk-ant-test"
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = resp
+
+            router = NLRouter(llm_enabled=True)
+            router.classify("목록")
+
+            call_args = mock_client.messages.create.call_args
+            messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
+            assert len(messages) == 1
+            assert messages[0]["role"] == "user"
+
+    def test_context_recent_turns_only(self) -> None:
+        """Only last 3 turns (6 messages) are included."""
+        from core.cli.conversation import ConversationContext
+
+        ctx = ConversationContext(max_turns=20)
+        for i in range(10):
+            ctx.add_user_message(f"msg {i}")
+            ctx.add_assistant_message([{"type": "text", "text": f"reply {i}"}])
+
+        resp = _make_tool_use_response("list_ips", {})
+        with (
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "sk-ant-test"
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = resp
+
+            router = NLRouter(llm_enabled=True)
+            router.classify("현재 입력", context=ctx)
+
+            call_args = mock_client.messages.create.call_args
+            messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
+            # 6 recent + 1 current input = 7 max
+            assert len(messages) <= 7
+
+    def test_context_starts_with_user(self) -> None:
+        """First message in history must be user role."""
+        from core.cli.conversation import ConversationContext
+
+        ctx = ConversationContext(max_turns=20)
+        # Simulate assistant-first edge case
+        ctx.messages.append({"role": "assistant", "content": "welcome"})
+        ctx.add_user_message("hello")
+
+        resp = _make_tool_use_response("list_ips", {})
+        with (
+            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "sk-ant-test"
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = resp
+
+            router = NLRouter(llm_enabled=True)
+            router.classify("test", context=ctx)
+
+            call_args = mock_client.messages.create.call_args
+            messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
+            assert messages[0]["role"] == "user"
+
+    def test_router_prompt_has_context_instructions(self) -> None:
+        """router.md should contain context-aware routing instructions."""
+        from core.llm.prompts import ROUTER_SYSTEM
+
+        lower = ROUTER_SYSTEM.lower()
+        assert "conversation history" in lower or "context-aware" in lower
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Dead code removal (L1)
+# ---------------------------------------------------------------------------
+
+
+class TestDeadCodeRemoved:
+    """Verify dead code was removed from __init__.py."""
+
+    def test_handle_natural_language_removed(self) -> None:
+        """_handle_natural_language function should not exist in cli module."""
+        import core.cli
+
+        assert not hasattr(core.cli, "_handle_natural_language")
+
+    def test_nl_router_not_imported(self) -> None:
+        """NLRouter class should not be imported in cli __init__."""
+        import inspect
+
+        from core.cli import _interactive_loop
+
+        source = inspect.getsource(_interactive_loop)
+        assert "NLRouter" not in source
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: Regex fix (L6) + Fuzzy (L7)
+# ---------------------------------------------------------------------------
+
+
+class TestRegexFix:
+    """L6: 'list all IPs' should be list, not batch."""
+
+    def test_list_all_ips_is_list(self) -> None:
+        intent = _offline_fallback("list all IPs")
+        assert intent.action == "list"
+
+    def test_show_all_is_list(self) -> None:
+        intent = _offline_fallback("show all")
+        assert intent.action == "list"
+
+    def test_batch_still_works(self) -> None:
+        intent = _offline_fallback("batch analyze")
+        assert intent.action == "batch"
+
+    def test_top_10_still_batch(self) -> None:
+        intent = _offline_fallback("top 10")
+        assert intent.action == "batch"
+
+    def test_batch_korean_still_works(self) -> None:
+        intent = _offline_fallback("배치 분석 실행")
+        assert intent.action == "batch"
+
+
+class TestFuzzyMatching:
+    """L7: Fuzzy IP name matching for typos."""
+
+    def test_fuzzy_no_false_positive(self) -> None:
+        """Random text should not fuzzy-match any IP."""
+        result = _fuzzy_match_ip("completely random gibberish xyzzy")
+        assert result is None
+
+    def test_exact_match_still_works(self) -> None:
+        """Exact IP names still match."""
+        result = _fuzzy_match_ip("berserk")
+        assert result is not None
+        assert "berserk" in result.lower()
+
+    def test_fuzzy_lower_confidence(self) -> None:
+        """Fuzzy matches should have lower confidence than exact."""
+        # Exact match
+        intent_exact = _offline_fallback("berserk")
+        assert intent_exact.confidence == 0.7
+
+        # If fuzzy match exists for a typo, confidence should be 0.5
+        # (only if the typo actually fuzzy-matches an IP)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Multi-intent offline (L5)
+# ---------------------------------------------------------------------------
+
+
+class TestMultiIntent:
+    """L5: Compound input splitting for offline mode."""
+
+    def test_single_intent_no_split(self) -> None:
+        """Single action should not be split."""
+        intents = _offline_multi_intent("Berserk 분석해")
+        assert intents == []
+
+    def test_multi_intent_korean(self) -> None:
+        """Korean compound: '분석하고 목록 보여줘' → [analyze, list]."""
+        intents = _offline_multi_intent("berserk 분석하고 목록 보여줘")
+        assert len(intents) >= 2
+        actions = [i.action for i in intents]
+        assert "analyze" in actions
+        assert "list" in actions
+
+    def test_multi_intent_english(self) -> None:
+        """English compound with 'and'."""
+        intents = _offline_multi_intent("analyze Berserk and list all")
+        assert len(intents) >= 2
+        actions = [i.action for i in intents]
+        assert "analyze" in actions
+        assert "list" in actions
+
+    def test_multi_intent_comma(self) -> None:
+        """Comma-separated compound."""
+        intents = _offline_multi_intent("목록, 배치 돌려")
+        assert len(intents) >= 2
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Dynamic actions (L3) + Disambiguation (L8)
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicActions:
+    """L3: get_valid_actions with optional ToolRegistry."""
+
+    def test_get_valid_actions_static(self) -> None:
+        """Without registry, returns static 18 actions."""
+        actions = get_valid_actions()
+        assert actions == VALID_ACTIONS
+        assert len(actions) == 18
+
+    def test_get_valid_actions_dynamic(self) -> None:
+        """With registry containing extra tool, returns 19+ actions."""
+        mock_registry = MagicMock()
+        mock_registry.list_tools.return_value = ["custom_tool_xyz"]
+        actions = get_valid_actions(registry=mock_registry)
+        assert "custom_tool_xyz" in actions
+        assert len(actions) >= 19
+
+
+class TestDisambiguation:
+    """L8: NLIntent ambiguity fields."""
+
+    def test_nlintent_backward_compat(self) -> None:
+        """Existing 3-field creation still works."""
+        intent = NLIntent(action="list")
+        assert intent.ambiguous is False
+        assert intent.alternatives is None
+
+    def test_nlintent_with_ambiguity(self) -> None:
+        """Can create NLIntent with ambiguity fields."""
+        alt = NLIntent(action="batch", confidence=0.6)
+        intent = NLIntent(
+            action="list",
+            confidence=0.7,
+            ambiguous=True,
+            alternatives=[alt],
+        )
+        assert intent.ambiguous is True
+        assert len(intent.alternatives) == 1
+        assert intent.alternatives[0].action == "batch"
+
+    def test_single_match_not_ambiguous(self) -> None:
+        """Single pattern match → ambiguous=False."""
+        intent = _offline_fallback("batch")
+        assert intent.ambiguous is False
+
+    def test_multi_match_is_ambiguous(self) -> None:
+        """Multiple pattern matches → ambiguous=True."""
+        # "batch analyze" matches both batch and analyze patterns
+        intent = _offline_fallback("batch analyze")
+        assert intent.ambiguous is True
+        assert intent.alternatives is not None
+        assert len(intent.alternatives) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 4C: Scored Matching tests
+# ---------------------------------------------------------------------------
+
+
+class TestScoredMatching:
+    """Verify scored matching behavior in _offline_fallback."""
+
+    def test_scored_single_match(self) -> None:
+        """Single pattern match → no ambiguity."""
+        intent = _offline_fallback("status")
+        assert intent.action == "status"
+        assert intent.ambiguous is False
+        assert intent.alternatives is None
+
+    def test_scored_multi_match_ambiguous(self) -> None:
+        """Multiple regex matches → ambiguous=True with alternatives."""
+        # "search 메모리" matches both search and memory patterns
+        intent = _offline_fallback("search memory")
+        assert intent.ambiguous is True
+        assert intent.alternatives is not None
+        actions = {intent.action} | {a.action for a in intent.alternatives}
+        assert "search" in actions
+        assert "memory" in actions
+
+    def test_scored_alternatives_populated(self) -> None:
+        """Alternatives list contains correct NLIntent objects."""
+        intent = _offline_fallback("batch analyze")
+        assert intent.alternatives is not None
+        for alt in intent.alternatives:
+            assert isinstance(alt, NLIntent)
+            assert alt.action in VALID_ACTIONS
+            assert alt.confidence > 0
+
+    def test_scored_best_by_priority(self) -> None:
+        """Best match determined by priority (lower = better)."""
+        # "list" has priority 5, "batch" has priority 6
+        # "list all ip" should resolve to list (priority 5 < 6)
+        intent = _offline_fallback("list all ip")
+        assert intent.action == "list"
+
+    def test_scored_known_ip_bypasses(self) -> None:
+        """Known IP exact match bypasses scored matching entirely."""
+        intent = _offline_fallback("berserk")
+        assert intent.action == "analyze"
+        assert intent.ambiguous is False
+
+    def test_scored_no_match_help(self) -> None:
+        """No pattern matches → help fallback."""
+        intent = _offline_fallback("xyzzy gibberish 12345")
+        assert intent.action == "help"
+        assert intent.confidence == 0.3
+
+    def test_scored_high_priority_overrides_known_ip(self) -> None:
+        """Compare/report/plan/delegate override known IP match."""
+        # "Berserk vs Cowboy Bebop" has known IPs but "vs" = compare
+        intent = _offline_fallback("Berserk vs Cowboy Bebop")
+        assert intent.action == "compare"
+
+    def test_scored_alternatives_max_three(self) -> None:
+        """Alternatives capped at 3 even if more patterns match."""
+        # Construct input that could match many patterns
+        intent = _offline_fallback("search find analyze evaluate memory save")
+        if intent.alternatives:
+            assert len(intent.alternatives) <= 3

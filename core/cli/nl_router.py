@@ -23,17 +23,23 @@ If the LLM responds with text (no tool call) → chat intent.
 
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import anthropic
 
 from core.config import settings
 from core.llm.prompts import ROUTER_SYSTEM
+
+if TYPE_CHECKING:
+    from core.cli.conversation import ConversationContext
+    from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +47,7 @@ log = logging.getLogger(__name__)
 # Intent data model
 # ---------------------------------------------------------------------------
 
-VALID_ACTIONS = {
+_STATIC_VALID_ACTIONS = {
     "analyze",
     "search",
     "list",
@@ -62,6 +68,20 @@ VALID_ACTIONS = {
     "delegate",
 }
 
+# Backward-compatible alias
+VALID_ACTIONS = _STATIC_VALID_ACTIONS
+
+
+def get_valid_actions(registry: ToolRegistry | None = None) -> set[str]:
+    """Static actions + dynamic from ToolRegistry."""
+    actions = set(_STATIC_VALID_ACTIONS)
+    if registry:
+        for tool_name in registry.list_tools():
+            action = _TOOL_ACTION_MAP.get(tool_name, tool_name)
+            actions.add(action)
+    return actions
+
+
 LLM_ROUTER_MODEL = settings.router_model
 
 
@@ -72,6 +92,8 @@ class NLIntent:
     action: str  # analyze, search, list, help, compare, chat
     args: dict[str, Any] = field(default_factory=dict)
     confidence: float = 1.0  # 1.0 = exact match, <1.0 = fuzzy
+    ambiguous: bool = False
+    alternatives: list[NLIntent] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +287,11 @@ _TOOL_ARGS_MAP: dict[str, dict[str, str]] = {
     "set_api_key": {"key_value": "key_value"},
     "manage_auth": {"sub_action": "sub_action"},
     "generate_data": {"count": "count", "genre": "genre"},
-    "schedule_job": {"sub_action": "sub_action", "target_id": "target_id"},
+    "schedule_job": {
+        "sub_action": "sub_action",
+        "target_id": "target_id",
+        "expression": "expression",
+    },
     "trigger_event": {"sub_action": "sub_action", "event_name": "event_name"},
     "create_plan": {"ip_name": "ip_name", "template": "template"},
     "approve_plan": {"plan_id": "plan_id"},
@@ -294,7 +320,10 @@ _OFFLINE_SEARCH = re.compile(r"(?:찾아|검색|search|find)", re.IGNORECASE)
 _OFFLINE_COMPARE = re.compile(r"(?:비교|compare|\bvs\b)", re.IGNORECASE)
 _OFFLINE_ANALYZE = re.compile(r"(?:분석|평가|analyze|evaluate)", re.IGNORECASE)
 _OFFLINE_REPORT = re.compile(r"(?:리포트|보고서|report|레포트)", re.IGNORECASE)
-_OFFLINE_BATCH = re.compile(r"(?:배치|전체|모든|순위|rank|batch|all\s*ip|top\s*\d+)", re.IGNORECASE)
+_OFFLINE_BATCH = re.compile(
+    r"(?:배치|전체\s*(?:ip\s*)?분석|모든\s*(?:ip\s*)?분석|순위|rank|batch|all\s*ip|top\s*\d+)",
+    re.IGNORECASE,
+)
 _OFFLINE_STATUS = re.compile(r"(?:상태|건강|health|status|설정|config|모델\s*뭐)", re.IGNORECASE)
 _OFFLINE_MODEL = re.compile(
     r"(?:모델\s*바꿔|switch\s*model|앙상블|ensemble|cross\s*모드)", re.IGNORECASE
@@ -310,81 +339,186 @@ _OFFLINE_DELEGATE = re.compile(
 )
 
 
-def _offline_fallback(text: str, *, error: str = "") -> NLIntent:
-    """Minimal pattern matching when LLM is unavailable.
+def _fuzzy_match_ip(text: str, cutoff: float = 0.7) -> str | None:
+    """Fuzzy-match user input against known IP names."""
+    known = list(_get_known_ips())
+    lower = text.lower()
 
-    Only activated on API failure — not part of the normal routing path.
+    # 1. Exact substring (existing behavior)
+    for ip in known:
+        if ip in lower:
+            return ip
+
+    # 2. Fuzzy: n-gram phrases against known IPs
+    words = lower.split()
+    for n in range(min(len(words), 4), 0, -1):
+        for i in range(len(words) - n + 1):
+            phrase = " ".join(words[i : i + n])
+            matches = difflib.get_close_matches(phrase, known, n=1, cutoff=cutoff)
+            if matches:
+                return matches[0]
+
+    return None
+
+
+_COMPOUND_SPLITTERS = re.compile(r"(?:\s+(?:그리고|and|then|다음에|후에)\s+|하고\s+|\s*[,;]\s*)")
+
+
+def _offline_multi_intent(text: str, *, error: str = "") -> list[NLIntent]:
+    """Split compound input into multiple intents for offline mode."""
+    parts = _COMPOUND_SPLITTERS.split(text)
+    parts = [p.strip() for p in parts if p.strip()]
+
+    if len(parts) <= 1:
+        return []
+
+    intents = []
+    for part in parts:
+        intent = _offline_fallback(part, error=error)
+        if intent.action != "help":
+            intents.append(intent)
+
+    return intents if len(intents) > 1 else []
+
+
+# ---------------------------------------------------------------------------
+# Args builders for scored matching
+# ---------------------------------------------------------------------------
+
+
+def _args_compare(text: str, error: str) -> dict[str, Any]:
+    return {"_offline": True, "_error": error}
+
+
+def _args_delegate(text: str, error: str) -> dict[str, Any]:
+    return {"_offline": True, "_error": error}
+
+
+def _args_ip_name(text: str, error: str) -> dict[str, Any]:
+    return {"ip_name": text.strip(), "_error": error}
+
+
+def _args_query(text: str, error: str) -> dict[str, Any]:
+    return {"query": text.strip(), "_error": error}
+
+
+def _args_error_only(_text: str, error: str) -> dict[str, Any]:
+    return {"_error": error}
+
+
+# ---------------------------------------------------------------------------
+# Offline pattern registry — scored matching (Phase 4C)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _OfflinePattern:
+    """Single offline pattern with priority for scored matching."""
+
+    action: str
+    regex: re.Pattern[str]
+    confidence: float
+    priority: int  # lower = higher priority (tie-breaker)
+    args_builder: Callable[[str, str], dict[str, Any]]
+
+
+_OFFLINE_PATTERNS: list[_OfflinePattern] = [
+    _OfflinePattern("compare", _OFFLINE_COMPARE, 0.8, 1, _args_compare),
+    _OfflinePattern("report", _OFFLINE_REPORT, 0.7, 2, _args_ip_name),
+    _OfflinePattern("plan", _OFFLINE_PLAN, 0.7, 3, _args_ip_name),
+    _OfflinePattern("delegate", _OFFLINE_DELEGATE, 0.5, 4, _args_delegate),
+    _OfflinePattern("list", _OFFLINE_LIST, 0.7, 5, _args_error_only),
+    _OfflinePattern("batch", _OFFLINE_BATCH, 0.7, 6, _args_error_only),
+    _OfflinePattern("status", _OFFLINE_STATUS, 0.7, 7, _args_error_only),
+    _OfflinePattern("model", _OFFLINE_MODEL, 0.7, 8, _args_error_only),
+    _OfflinePattern("memory", _OFFLINE_MEMORY, 0.7, 9, _args_query),
+    _OfflinePattern("help", _OFFLINE_HELP, 1.0, 10, _args_error_only),
+    _OfflinePattern("analyze", _OFFLINE_ANALYZE, 0.7, 11, _args_ip_name),
+    _OfflinePattern("search", _OFFLINE_SEARCH, 0.7, 12, _args_query),
+]
+
+
+def _offline_fallback(text: str, *, error: str = "") -> NLIntent:
+    """Scored pattern matching when LLM is unavailable.
+
+    Uses a pattern registry with priority-based scoring:
+    1. Known IP exact match → analyze (bypasses scored matching)
+    2. All regex patterns evaluated → collect matches
+    3. Single match → return directly
+    4. Multiple matches → best by priority + ambiguous=True with alternatives
+    5. No match → fuzzy IP → help fallback
     """
     lower = text.lower().strip()
 
-    # Compare check first (more specific — "vs", "비교" are unambiguous)
-    if _OFFLINE_COMPARE.search(lower):
-        return NLIntent(
-            action="compare",
-            args={"_offline": True, "_error": error},
-            confidence=0.3,
-        )
-    # Report check before known IP names (more specific — "리포트", "report")
-    if _OFFLINE_REPORT.search(lower):
-        return NLIntent(
-            action="report",
-            args={"ip_name": text.strip(), "_error": error},
-            confidence=0.7,
-        )
-    # Plan mode check (before known IP — more specific intent)
-    if _OFFLINE_PLAN.search(lower):
-        return NLIntent(
-            action="plan",
-            args={"ip_name": text.strip(), "_error": error},
-            confidence=0.7,
-        )
-    # Delegate check (parallel sub-agent dispatch)
-    if _OFFLINE_DELEGATE.search(lower):
-        return NLIntent(
-            action="delegate",
-            args={"_offline": True, "_error": error},
-            confidence=0.5,
-        )
-    # Known IP names → analyze
+    # Phase 1: High-specificity patterns first (compare, report, plan, delegate)
+    # These override known IP because "Berserk vs X" = compare, not analyze.
+    _HIGH_PRIORITY_ACTIONS = {"compare", "report", "plan", "delegate"}
+    for pat in _OFFLINE_PATTERNS:
+        if pat.action in _HIGH_PRIORITY_ACTIONS and pat.regex.search(lower):
+            return NLIntent(
+                action=pat.action,
+                args=pat.args_builder(text, error),
+                confidence=pat.confidence,
+            )
+
+    # Phase 2: Known IP exact match — before scored matching
     for ip in _get_known_ips():
         if ip in lower:
+            name_map = get_ip_name_map()
+            canonical = name_map.get(ip, ip)
             return NLIntent(
                 action="analyze",
-                args={"ip_name": text.strip(), "_error": error},
+                args={"ip_name": canonical, "_error": error},
                 confidence=0.7,
             )
 
-    # Pattern checks (ordered by specificity)
-    if _OFFLINE_BATCH.search(lower):
-        return NLIntent(action="batch", args={"_error": error}, confidence=0.7)
-    if _OFFLINE_STATUS.search(lower):
-        return NLIntent(action="status", args={"_error": error}, confidence=0.7)
-    if _OFFLINE_MODEL.search(lower):
-        return NLIntent(action="model", args={"_error": error}, confidence=0.7)
-    if _OFFLINE_MEMORY.search(lower):
+    # Phase 3: Scored matching — evaluate remaining patterns
+    matched: list[_OfflinePattern] = [
+        pat
+        for pat in _OFFLINE_PATTERNS
+        if pat.action not in _HIGH_PRIORITY_ACTIONS and pat.regex.search(lower)
+    ]
+
+    if matched:
+        matched.sort(key=lambda p: p.priority)
+        best = matched[0]
+
+        if len(matched) == 1:
+            return NLIntent(
+                action=best.action,
+                args=best.args_builder(text, error),
+                confidence=best.confidence,
+            )
+
+        # Multiple matches → ambiguous
+        alternatives = [
+            NLIntent(
+                action=p.action,
+                args=p.args_builder(text, error),
+                confidence=p.confidence,
+            )
+            for p in matched[1:4]  # up to 3 alternatives
+        ]
         return NLIntent(
-            action="memory",
-            args={"query": text.strip(), "_error": error},
-            confidence=0.7,
-        )
-    if _OFFLINE_LIST.search(lower):
-        return NLIntent(action="list", args={"_error": error}, confidence=0.7)
-    if _OFFLINE_HELP.search(lower):
-        return NLIntent(action="help", args={"_error": error})
-    if _OFFLINE_ANALYZE.search(lower):
-        return NLIntent(
-            action="analyze",
-            args={"ip_name": text.strip(), "_error": error},
-            confidence=0.7,
-        )
-    if _OFFLINE_SEARCH.search(lower):
-        return NLIntent(
-            action="search",
-            args={"query": text.strip(), "_error": error},
-            confidence=0.7,
+            action=best.action,
+            args=best.args_builder(text, error),
+            confidence=best.confidence,
+            ambiguous=True,
+            alternatives=alternatives,
         )
 
-    # Nothing matched — help with error context
+    # Phase 4: Fuzzy IP name matching
+    ip_match = _fuzzy_match_ip(lower)
+    if ip_match:
+        name_map = get_ip_name_map()
+        canonical = name_map.get(ip_match, ip_match)
+        return NLIntent(
+            action="analyze",
+            args={"ip_name": canonical, "_error": error},
+            confidence=0.5,
+        )
+
+    # Phase 5: Nothing matched — help with error context
     return NLIntent(action="help", args={"_error": error}, confidence=0.3)
 
 
@@ -393,7 +527,11 @@ def _offline_fallback(text: str, *, error: str = "") -> NLIntent:
 # ---------------------------------------------------------------------------
 
 
-def _call_tool_use_router(text: str) -> NLIntent:
+def _call_tool_use_router(
+    text: str,
+    *,
+    context: ConversationContext | None = None,
+) -> NLIntent:
     """Route user input via Claude Opus 4.6 Tool Use.
 
     The LLM sees tool definitions and autonomously decides:
@@ -407,10 +545,23 @@ def _call_tool_use_router(text: str) -> NLIntent:
 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
+        # Build messages with conversation history for context-aware routing
+        if context is not None and not context.is_empty:
+            recent = context.get_messages()[-6:]  # last 3 turns
+            # Ensure first message is user role
+            while recent and recent[0]["role"] != "user":
+                recent.pop(0)
+            # Append current input if not already last
+            if not recent or recent[-1].get("content") != text:
+                recent.append({"role": "user", "content": text})
+            messages: list[dict[str, Any]] = recent
+        else:
+            messages = [{"role": "user", "content": text}]
+
         response = client.messages.create(  # type: ignore[call-overload]
             model=LLM_ROUTER_MODEL,
             system=_build_system_prompt(),
-            messages=[{"role": "user", "content": text}],
+            messages=messages,
             tools=_TOOLS,
             tool_choice={"type": "auto"},
             max_tokens=1024,
@@ -420,29 +571,17 @@ def _call_tool_use_router(text: str) -> NLIntent:
 
         # Track token usage
         if response.usage:
-            from core.llm.client import (
-                LLMUsage,
-                calculate_cost,
-                get_usage_accumulator,
-            )
+            from core.llm.token_tracker import get_tracker
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            cost = calculate_cost(LLM_ROUTER_MODEL, in_tok, out_tok)
-            get_usage_accumulator().record(
-                LLMUsage(
-                    model=LLM_ROUTER_MODEL,
-                    input_tokens=in_tok,
-                    output_tokens=out_tok,
-                    cost_usd=cost,
-                )
-            )
+            usage = get_tracker().record(LLM_ROUTER_MODEL, in_tok, out_tok)
             log.debug(
                 "NLRouter tool_use: model=%s in=%d out=%d cost=$%.6f",
                 LLM_ROUTER_MODEL,
                 in_tok,
                 out_tok,
-                cost,
+                usage.cost_usd,
             )
 
         # Parse response: tool_use or text
@@ -524,14 +663,19 @@ class NLRouter:
     def __init__(self, *, llm_enabled: bool = True) -> None:
         self._llm_enabled = llm_enabled
 
-    def classify(self, text: str) -> NLIntent:
+    def classify(
+        self,
+        text: str,
+        *,
+        context: ConversationContext | None = None,
+    ) -> NLIntent:
         """Classify user input via LLM Tool Use."""
         text = text.strip()
         if not text:
             return NLIntent(action="help")
 
         if self._llm_enabled:
-            return _call_tool_use_router(text)
+            return _call_tool_use_router(text, context=context)
 
         # LLM disabled — fallback
         return NLIntent(action="help", confidence=0.3)

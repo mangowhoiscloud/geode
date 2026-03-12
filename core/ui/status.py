@@ -38,6 +38,13 @@ def _snapshot(acc: LLMUsageAccumulator) -> _UsageSnapshot:
     )
 
 
+def _fmt(n: int) -> str:
+    """Format token count: 1200 → 1.2k."""
+    if n >= 1000:
+        return f"{n / 1000:.1f}k"
+    return str(n)
+
+
 class GeodeStatus:
     """Context manager that shows a Rich spinner during LLM calls.
 
@@ -87,12 +94,12 @@ class GeodeStatus:
 
         parts = [f"  [bold green]✓[/bold green] {summary}"]
         if delta.input_tokens > 0 or delta.output_tokens > 0:
-            parts.append(f"[dim]↑{delta.input_tokens} ↓{delta.output_tokens}[/dim]")
+            parts.append(f"[dim]↓{_fmt(delta.input_tokens)} ↑{_fmt(delta.output_tokens)}[/dim]")
         if delta.cost_usd > 0:
-            parts.append(f"[dim]${delta.cost_usd:.3f}[/dim]")
+            parts.append(f"[dim]${delta.cost_usd:.4f}[/dim]")
         parts.append(f"[dim]{elapsed:.1f}s[/dim]")
 
-        console.print("  ".join(parts))
+        console.print(" · ".join(parts))
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         if not self._stopped:
@@ -105,21 +112,35 @@ class GeodeStatus:
             delta = self._get_token_delta()
             parts = ["  [bold green]✓[/bold green] done"]
             if delta.input_tokens > 0 or delta.output_tokens > 0:
-                parts.append(f"[dim]↑{delta.input_tokens} ↓{delta.output_tokens}[/dim]")
+                parts.append(f"[dim]↓{_fmt(delta.input_tokens)} ↑{_fmt(delta.output_tokens)}[/dim]")
             if delta.cost_usd > 0:
-                parts.append(f"[dim]${delta.cost_usd:.3f}[/dim]")
+                parts.append(f"[dim]${delta.cost_usd:.4f}[/dim]")
             parts.append(f"[dim]{elapsed:.1f}s[/dim]")
-            console.print("  ".join(parts))
+            console.print(" · ".join(parts))
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _format_spinner(self, message: str) -> str:
-        """Build the spinner line with optional model name."""
+        """Build the spinner line with optional model name + live cost."""
+        elapsed = time.monotonic() - self._start_time if self._start_time else 0
+        delta = self._get_token_delta()
+
+        parts = [f"  ✢ {message}"]
         if self._model:
-            return f"  {message}  [dim]{self._model}[/dim]"
-        return f"  {message}"
+            parts.append(f"[dim]{self._model}[/dim]")
+        if delta.input_tokens > 0:
+            parts.append(f"[dim]↑{delta.input_tokens}[/dim]")
+        if delta.cost_usd > 0:
+            parts.append(f"[dim]${delta.cost_usd:.3f}[/dim]")
+        if elapsed > 0.5:
+            mins, secs = divmod(int(elapsed), 60)
+            if mins:
+                parts.append(f"[dim]{mins}m {secs}s[/dim]")
+            else:
+                parts.append(f"[dim]{secs}s[/dim]")
+        return " · ".join(parts)
 
     def _get_token_delta(self) -> _UsageSnapshot:
         """Compute the token/cost delta since ``__enter__``."""

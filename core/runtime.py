@@ -337,6 +337,7 @@ class GeodeRuntime:
         outcome_tracker: OutcomeTrackerPort | None = None,
         snapshot_manager: SnapshotManagerPort | None = None,
         trigger_manager: TriggerManagerPort | None = None,
+        scheduler_service: Any | None = None,
         feedback_loop: FeedbackLoopPort | None = None,
         # L2 Memory components
         organization_memory: OrganizationMemoryPort | None = None,
@@ -362,6 +363,7 @@ class GeodeRuntime:
         self.session_key = session_key
         self.ip_name = ip_name
         self.run_id = ""
+        self.is_subagent: bool = False
         self._compiled_graph: CompiledStateGraph[Any, None, Any, Any] | None = None
         # L4.5 Automation
         self.drift_detector = drift_detector
@@ -371,6 +373,7 @@ class GeodeRuntime:
         self.outcome_tracker = outcome_tracker
         self.snapshot_manager = snapshot_manager
         self.trigger_manager = trigger_manager
+        self.scheduler_service = scheduler_service
         self.feedback_loop = feedback_loop
         # L2 Memory
         self.organization_memory = organization_memory
@@ -484,6 +487,42 @@ class GeodeRuntime:
             hooks=hooks,
         )
         trigger_manager.start_scheduler()
+
+        # Advanced scheduler service (3-type: AT/EVERY/CRON + active hours)
+        import contextlib
+
+        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+
+        scheduler_service = SchedulerService(
+            trigger_manager=trigger_manager,
+            hooks=hooks,
+        )
+        scheduler_service.load()
+
+        from core.automation.predefined import PREDEFINED_AUTOMATIONS
+
+        for tmpl in PREDEFINED_AUTOMATIONS:
+            if tmpl.enabled and not tmpl.schedule.startswith("event:"):
+                job = ScheduledJob(
+                    job_id=f"predefined:{tmpl.id}",
+                    name=tmpl.name,
+                    schedule=Schedule(
+                        kind=ScheduleKind.CRON,
+                        cron_expr=tmpl.schedule,
+                    ),
+                    enabled=tmpl.enabled,
+                    metadata={
+                        "source": "predefined",
+                        "template_id": tmpl.id,
+                    },
+                )
+                with contextlib.suppress(ValueError):
+                    scheduler_service.add_job(job)
+
+        if settings.scheduler_auto_start:
+            scheduler_service.start(
+                interval_s=settings.scheduler_interval_s,
+            )
 
         # Feedback loop (wires all L4.5 components + hooks)
         feedback_loop = FeedbackLoop(
@@ -620,6 +659,7 @@ class GeodeRuntime:
             "outcome_tracker": outcome_tracker,
             "snapshot_manager": snapshot_manager,
             "trigger_manager": trigger_manager,
+            "scheduler_service": scheduler_service,
             "feedback_loop": feedback_loop,
         }
 
@@ -916,7 +956,11 @@ class GeodeRuntime:
 
         from core.graph import compile_graph
 
-        checkpoint_db = self.checkpoint_db if enable_checkpoint else None
+        # Subagents use MemorySaver for thread safety (G7 fix)
+        if self.is_subagent:
+            checkpoint_db = None  # forces MemorySaver fallback
+        else:
+            checkpoint_db = self.checkpoint_db if enable_checkpoint else None
         interrupt_list = [
             n.strip() for n in settings.interrupt_nodes.split(",") if n.strip()
         ] or None
@@ -1037,6 +1081,11 @@ class GeodeRuntime:
         if self.trigger_manager:
             health["triggers"] = self.trigger_manager.stats.to_dict()
             health["scheduler_running"] = self.trigger_manager.is_scheduler_running
+        if self.scheduler_service:
+            health["advanced_scheduler"] = {
+                "running": self.scheduler_service.is_running,
+                "job_count": len(self.scheduler_service.list_jobs(include_disabled=True)),
+            }
         if self.feedback_loop:
             health["feedback_loop"] = self.feedback_loop.stats.to_dict()
 
@@ -1058,6 +1107,9 @@ class GeodeRuntime:
         self.coalescing.cancel_all()
         self.config_watcher.stop()
         self.stuck_detector.stop_monitor()
+        if self.scheduler_service:
+            self.scheduler_service.save()
+            self.scheduler_service.stop()
         if self.trigger_manager:
             self.trigger_manager.stop_scheduler()
         if self._task_bridge:

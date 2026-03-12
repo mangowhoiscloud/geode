@@ -290,6 +290,55 @@ class PlanMode:
         self._stats.approved += 1
         log.info("Plan '%s' approved", plan.plan_id)
 
+    def modify_plan(
+        self,
+        plan: AnalysisPlan,
+        *,
+        template: str | None = None,
+        remove_steps: list[str] | None = None,
+        add_steps: list[PlanStep] | None = None,
+    ) -> AnalysisPlan:
+        """Modify an existing plan: change template, add/remove steps."""
+        if plan.status not in (PlanStatus.DRAFT, PlanStatus.PRESENTED):
+            raise ValueError(
+                f"Cannot modify plan in status '{plan.status.value}'. "
+                "Plan must be in DRAFT or PRESENTED status."
+            )
+
+        if template is not None:
+            factory = _PLAN_TEMPLATES.get(template)
+            if factory is None:
+                raise ValueError(
+                    f"Unknown template: '{template}'. Available: {list(_PLAN_TEMPLATES.keys())}"
+                )
+            rebuilt = factory(plan.plan_id, plan.ip_name)
+            plan.steps = rebuilt.steps
+            plan.total_estimated_cost = rebuilt.total_estimated_cost
+            plan.metadata["template"] = template
+
+        if remove_steps:
+            remove_set = set(remove_steps)
+            plan.steps = [s for s in plan.steps if s.step_id not in remove_set]
+            for idx, step in enumerate(plan.steps):
+                new_deps = [d for d in step.dependencies if d not in remove_set]
+                if new_deps != step.dependencies:
+                    plan.steps[idx] = PlanStep(
+                        step_id=step.step_id,
+                        description=step.description,
+                        node_name=step.node_name,
+                        estimated_time_s=step.estimated_time_s,
+                        dependencies=new_deps,
+                        metadata=step.metadata,
+                    )
+
+        if add_steps:
+            plan.steps.extend(add_steps)
+
+        plan.total_estimated_time_s = sum(s.estimated_time_s for s in plan.steps)
+        plan.status = PlanStatus.DRAFT
+        log.info("Plan '%s' modified", plan.plan_id)
+        return plan
+
     def reject_plan(self, plan: AnalysisPlan, *, reason: str = "") -> None:
         """Mark a plan as rejected."""
         plan.status = PlanStatus.REJECTED

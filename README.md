@@ -1,33 +1,41 @@
-# GEODE v0.7.0 — Undervalued IP Discovery Agent
+<p align="center">
+  <img src="assets/geode-social-preview.png" alt="GEODE — 게임화 IP 도메인 자율 실행 하네스" width="720" />
+</p>
+
+# GEODE v0.10.0 — 게임화 IP 도메인 자율 실행 하네스
 
 LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기능은 아래와 같습니다.
 - 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 분석/평가 루프와 리포트 생성을 지원합니다.
 - Runtime Orchestration, Tool-Registry/Tool-Use, Bash, Hook-System으로 Agentic Loop(Gather->Action->Verify)를 구성, 자율 행동이 가능합니다.
-- 사용자의 의도와 맥락을 파악하기 위한 NL Router(Multi-turn, Multi-intent), 메모리 시스템, HITL이 내장되어 있습니다.
+- NL Router(Multi-turn, Multi-intent, Clarification), 메모리 시스템, HITL로 사용자 의도를 정확히 파악합니다.
+- Skills 시스템(`.claude/skills/`)과 MCP 자동설치로 외부 도구를 자연어로 검색/설치/즉시 사용할 수 있습니다.
 - Sub-Agent Manager(pre-release)로 병렬 작업을 지원합니다.
 - Observability는 LangSmith, Evaluation은 루브릭 기반 LLM-as-Judge, CUSUM Drift 감지를 지원합니다.
 - 에이전틱 엔지니어링으로 제작되며 코딩 에이전트가 E2E를 진행, Context/Observability/Eval/CI 가드레일을 기반으로 재귀 개선 루프를 형성합니다.
-  
+
 ## Features
 
 | Feature | Description |
 |---------|-------------|
 | **6-Layer Pipeline** | Router → Signals → Analysts → Evaluators → Scoring → Verification → Gather/Synthesizer (8 nodes) |
-| **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 10 rounds), multi-intent 자동 chaining, offline mode |
+| **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 10 rounds), multi-intent 자동 chaining, clarification |
 | **Multi-turn Context** | 슬라이딩 윈도우 대화 기록 (max 20 turns), 대명사 해석 + follow-up |
 | **HITL Bash** | 셸 명령 실행 + 위험 패턴 차단 (9종) + 사용자 승인 게이트 |
 | **Sub-Agent** | 병렬 태스크 위임 (`IsolatedRunner`, MAX_CONCURRENT=5), TaskGraph DAG, CoalescingQueue 중복 제거 |
 | **14-Axis Rubric** | PSM(Prospect Scoring Model) 기반 정량 평가 |
 | **Cross-LLM Ensemble** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, `cross` / `primary_only` 모드 |
 | **Prompt Caching** | Anthropic `cache_control` 적용, 40-60% 비용 절감 |
-| **21 Tool Definitions** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + PolicyChain 접근 제어 |
+| **38 Tool Definitions** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + PolicyChain 접근 제어 |
+| **Skills 시스템** | `.claude/skills/*/SKILL.md` 자동 발견, 시스템 프롬프트 주입, NL 트리거 매칭 |
+| **MCP 자동설치** | "LinkedIn MCP 달아줘" → 31개 빌트인 카탈로그 검색 → 설치 → 도구 핫 리로드 |
+| **Clarification** | 필수 파라미터 누락 시 되묻기 (slot filling, disambiguation), max_rounds 방지 |
 | **MCP Adapters** | Steam, Brave Search, KG Memory 외부 데이터 소스 연결 |
 | **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
 | **Prompt Templates** | `.md` 템플릿 8종 + YAML/JSON 설정 분리 (content/code separation) |
 | **Batch Analysis** | 멀티 IP 동시 분석, Rich 테이블 렌더링 |
 | **Streaming Output** | `--stream` 플래그로 실시간 진행 표시 |
 | **자연어 입력** | 한국어/영어 자유 입력 (NL Router intent classification) |
-| **Report Generation** | HTML/JSON/Markdown 다중 포맷, 외부 템플릿 |
+| **Report Generation** | HTML/JSON/Markdown 다중 포맷, 스킬 기반 전문 분석 내러티브 주입, `.geode/reports/` 자동 저장 |
 | **Graceful Degradation** | API 키 없으면 자동 dry-run, 있으면 LLM 분석 |
 | **Project Memory** | `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지 |
 | **Checkpoint** | SqliteSaver 기반 파이프라인 상태 영속화 |
@@ -36,7 +44,8 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 | **Dynamic Tools** | ToolRegistry 기반 런타임 tool 추가, plugin activate → 즉시 반영 |
 | **Pipeline Flexibility** | Analyst 타입 YAML 동적 로드, `interrupt_before` 사용자 개입 |
 | **Pre-commit Hooks** | ruff lint/format + mypy + bandit + standard hooks |
-| **2000+ Tests** | 118 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit 전체 통과 |
+| **Scheduler NL** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON 3-type + active hours + JSONL 로그) |
+| **2077+ Tests** | 124 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit 전체 통과 |
 
 ## Architecture
 
@@ -74,7 +83,7 @@ graph TB
     end
 
     subgraph L4["L4 — Orchestration"]
-        Hooks["HookSystem (23)"]
+        Hooks["HookSystem (26)"]
         Tasks["TaskGraph (DAG)"]
         Plan["PlanMode"]
         Coal["CoalescingQueue"]
@@ -83,10 +92,11 @@ graph TB
     end
 
     subgraph L5["L5 — Extensibility"]
-        Tools["ToolRegistry (21)"]
+        Tools["ToolRegistry (38)"]
         Policy["PolicyChain"]
         Reports["Report Generator"]
-        Templates["Prompt Skills"]
+        Skills["Skills System"]
+        MCPCat["MCP Catalog (31)"]
     end
 
     L0 --> L3
@@ -94,8 +104,6 @@ graph TB
     L3 --> L2
     L3 --> L4
     L3 --> L5
-    L0 -.->|"offline"| L5
-
     style L0 fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
     style L1 fill:#1e293b,stroke:#10b981,color:#e2e8f0
     style L2 fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
@@ -110,8 +118,8 @@ graph TB
 | **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입, LLM 클라이언트 교체 가능 |
 | **L2** Memory | Organization (fixture), Project (.claude/MEMORY.md), Session (TTL), SqliteSaver | 3-Tier 메모리 + LangGraph 체크포인트 영속화 |
 | **L3** Pipeline | StateGraph, 8 Pipeline Nodes, GeodeState (TypedDict) | LangGraph `graph.stream()` 단계별 실행, Send API 병렬 분석 |
-| **L4** Orchestration | HookSystem (23 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
-| **L5** Extensibility | ToolRegistry (21), PolicyChain, Report Generator, Prompt Skills | 런타임 tool 확장, 노드별 접근 제어, HTML/JSON/MD 리포트 |
+| **L4** Orchestration | HookSystem (26 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
+| **L5** Extensibility | ToolRegistry (38), PolicyChain, Report Generator, Skills System, MCP Catalog (31) | 런타임 tool 확장, 노드별 접근 제어, 스킬 자동 주입, MCP 자동설치 |
 
 ### Pipeline Flow
 
@@ -160,13 +168,13 @@ graph LR
 
 ```mermaid
 graph TB
-    Input["User Input<br/>(한국어/영어)"] --> Mode{offline?}
-    Mode -->|Yes| Regex["Regex Pattern<br/>Matching (10 rules)"]
-    Mode -->|No| LLM["Claude Opus 4.6<br/>Tool Use API"]
-    Regex --> Exec
+    Input["User Input<br/>(한국어/영어)"] --> LLM["Claude Opus 4.6<br/>Tool Use API"]
     LLM --> Decision{stop_reason}
-    Decision -->|tool_use| Exec["ToolExecutor<br/>(21 tools)"]
-    Exec --> Results["tool_result"]
+    Decision -->|tool_use| Exec["ToolExecutor<br/>(38 tools)"]
+    Exec --> Check{clarification<br/>needed?}
+    Check -->|Yes| Clarify["LLM asks<br/>clarifying question"]
+    Clarify --> Output
+    Check -->|No| Results["tool_result"]
     Results --> LLM
     Decision -->|end_turn| Output["AgenticResult<br/>(text + tool_calls)"]
     Decision -->|max_rounds| Output
@@ -180,15 +188,16 @@ graph TB
     style LLM fill:#f59e0b,stroke:#f59e0b,color:#fff
     style Exec fill:#8b5cf6,stroke:#8b5cf6,color:#fff
     style LS fill:#06b6d4,stroke:#06b6d4,color:#fff
+    style Clarify fill:#ef4444,stroke:#ef4444,color:#fff
 ```
 
-> **Note:** 위 다이어그램의 Retry 10s/20s/40s는 AgenticLoop 레벨의 rate limit 재시도입니다. 파이프라인 내부 LLM 호출(`core/llm/client.py`)은 별도의 1s/2s/4s exponential backoff를 사용합니다.
+> **Note:** Retry 10s/20s/40s는 AgenticLoop 레벨의 rate limit 재시도입니다. 파이프라인 내부 LLM 호출(`core/llm/client.py`)은 별도의 1s/2s/4s exponential backoff를 사용합니다.
 
 | 구성 요소 | 설명 |
 |----------|------|
-| **offline mode** | `_offline_fallback()` — 10개 regex 패턴 기반 intent 매칭, LLM 호출 없이 1-round 결정론적 실행 |
-| **LLM Tool Use** | Claude Opus 4.6 `tool_use` API — `definitions.json` 21개 tool 정의 전달, `stop_reason` 기반 루프 제어 |
+| **LLM Tool Use** | Claude Opus 4.6 `tool_use` API — `definitions.json` 38개 tool 정의 전달, `stop_reason` 기반 루프 제어 |
 | **ToolExecutor** | 3-tier safety: SAFE (7종, 무조건 실행) / STANDARD (일반) / DANGEROUS (bash, 사용자 승인 필수) |
+| **Clarification** | 필수 파라미터 누락 시 `clarification_needed` 반환 → LLM이 사용자에게 되묻기 |
 | **max_rounds** | 기본 10 라운드 — `end_turn` 또는 라운드 초과 시 종료 |
 | **LangSmith** | `track_token_usage()` — 토큰 수/비용을 RunTree.extra.metrics에 기록, `LLMUsageAccumulator`로 세션 합산 |
 | **Retry** | AgenticLoop: `2^attempt × 10`s (10/20/40s) — Pipeline: `min(1.0 × 2^attempt, 30.0)`s (1/2/4s) |
@@ -259,16 +268,17 @@ graph LR
 | **TaskGraph (DAG)** | 의존 관계 기반 실행 순서 결정, 순환 감지, 완료 상태 추적 |
 | **CoalescingQueue** | 동일 IP 중복 분석 요청 병합 (dedup key: IP name + mode) |
 | **IsolatedRunner** | `asyncio.Semaphore(MAX_CONCURRENT=5)` — 최대 5개 워커 병렬 실행 |
-| **HookSystem** | 23개 라이프사이클 이벤트 — `NODE_ENTER`/`NODE_EXIT`/`NODE_ERROR` 등 실시간 모니터링 |
+| **HookSystem** | 26개 라이프사이클 이벤트 — `NODE_ENTER`/`NODE_EXIT`/`NODE_ERROR` 등 실시간 모니터링 |
 
 ### MCP & Tool Architecture
 
 ```mermaid
 graph TB
     subgraph GEODE["GEODE Pipeline"]
-        Registry["ToolRegistry<br/>21 base tools"]
+        Registry["ToolRegistry<br/>38 base tools"]
         Policy["PolicyChain<br/>+ NodeScopePolicy"]
-        TS["tool_search<br/>(meta-tool)"]
+        SkillReg["SkillRegistry<br/>(auto-inject)"]
+        MCPInstall["MCP Auto-Install<br/>(31 catalog)"]
     end
 
     subgraph MCPAdapters["MCP Adapters (Client)"]
@@ -289,7 +299,8 @@ graph TB
     end
 
     Registry --> Policy
-    TS --> Registry
+    SkillReg --> Registry
+    MCPInstall --> MCPAdapters
     GEODE --> MCPAdapters
     MCPServer --> GEODE
 
@@ -473,7 +484,7 @@ graph LR
 ```mermaid
 graph LR
     Plugin["Plugin"] -->|"activate()"| Reg["ToolRegistry"]
-    Reg -->|"register(tool)"| Tools["21 base + N extra"]
+    Reg -->|"register(tool)"| Tools["38 base + N extra"]
     Tools --> AL["AgenticLoop<br/>get_agentic_tools()"]
     Reg --> Policy["PolicyChain<br/>+ NodeScopePolicy"]
 
@@ -481,18 +492,18 @@ graph LR
     style Policy fill:#f59e0b,stroke:#f59e0b,color:#fff
 ```
 
-> `definitions.json` 21개 기본 도구 + `ToolRegistry.register()` 런타임 확장. `get_agentic_tools(registry)` 호출 시 base + plugin 도구 병합. `PolicyChain`으로 노드별 도구 접근 제어.
+> `definitions.json` 38개 기본 도구 + `ToolRegistry.register()` 런타임 확장. `get_agentic_tools(registry)` 호출 시 base + plugin 도구 병합. `PolicyChain`으로 노드별 도구 접근 제어. `install_mcp_server`로 MCP 도구 핫 리로드.
 
-**기본 Tool 목록 (19종):**
+**Tool 목록 (38종):**
 
 | # | Tool | 용도 | Safety |
 |---|------|------|--------|
 | 1 | `list_ips` | IP 목록 조회 | SAFE |
 | 2 | `analyze_ip` | IP 분석 실행 | STANDARD |
 | 3 | `search_ips` | IP 검색 | SAFE |
-| 4 | `compare_ips` | 두 IP 비교 | STANDARD |
+| 4 | `compare_ips` | 두 IP 비교 (clarification) | STANDARD |
 | 5 | `show_help` | 도움말 표시 | SAFE |
-| 6 | `generate_report` | 리포트 생성 | STANDARD |
+| 6 | `generate_report` | 리포트 생성 (clarification) | STANDARD |
 | 7 | `batch_analyze` | 배치 분석 | STANDARD |
 | 8 | `check_status` | 시스템 상태 | SAFE |
 | 9 | `switch_model` | LLM 모델 전환 | SAFE |
@@ -502,12 +513,29 @@ graph LR
 | 13 | `set_api_key` | API 키 설정 | STANDARD |
 | 14 | `manage_auth` | 인증 프로필 관리 | STANDARD |
 | 15 | `generate_data` | 합성 데이터 생성 | STANDARD |
-| 16 | `schedule_job` | 스케줄 등록 | STANDARD |
+| 16 | `schedule_job` | 스케줄 관리 (NL 생성/삭제/상태) | STANDARD |
 | 17 | `trigger_event` | 이벤트 트리거 | STANDARD |
 | 18 | `run_bash` | 셸 명령 실행 | DANGEROUS |
 | 19 | `delegate_task` | 서브에이전트 위임 | STANDARD |
 | 20 | `create_plan` | 분석 계획 생성 | STANDARD |
 | 21 | `approve_plan` | 계획 승인/실행 | STANDARD |
+| 22 | `youtube_search` | YouTube 시그널 | STANDARD |
+| 23 | `reddit_sentiment` | Reddit 감성 분석 | STANDARD |
+| 24 | `steam_info` | Steam 게임 정보 | STANDARD |
+| 25 | `google_trends` | Google 트렌드 | STANDARD |
+| 26 | `web_fetch` | URL 콘텐츠 수집 | SAFE |
+| 27 | `general_web_search` | 웹 검색 | SAFE |
+| 28 | `read_document` | 로컬 파일 읽기 | SAFE |
+| 29 | `note_save` | 사용자 메모 저장 | STANDARD |
+| 30 | `note_read` | 저장된 메모 조회 | SAFE |
+| 31 | `reject_plan` | 계획 거부 | STANDARD |
+| 32 | `modify_plan` | 계획 수정 | STANDARD |
+| 33 | `list_plans` | 계획 목록 조회 | SAFE |
+| 34 | `rate_result` | 분석 결과 평가 | STANDARD |
+| 35 | `accept_result` | 결과 수락 | STANDARD |
+| 36 | `reject_result` | 결과 거부 | STANDARD |
+| 37 | `rerun_node` | 파이프라인 노드 재실행 | STANDARD |
+| 38 | `install_mcp_server` | MCP 서버 자동설치 | STANDARD |
 
 ### Pipeline Flexibility (C2-C5)
 
@@ -516,7 +544,7 @@ graph LR
 | **Analyst 타입** | `evaluator_axes.yaml` → `ANALYST_TYPES = list(ANALYST_SPECIFIC.keys())` — YAML에 키 추가만으로 analyst 확장 |
 | **중간 개입** | `GEODE_INTERRUPT_NODES=verification,scoring` → 해당 노드 전에 파이프라인 일시 중단 |
 | **동적 Tool** | `ToolRegistry` + `get_agentic_tools()` — 플러그인 런타임 등록 |
-| **오프라인 모드** | `AgenticLoop(offline_mode=True)` → regex 기반 10-패턴 라우팅, LLM 불필요 |
+| **MCP 자동설치** | `install_mcp_server` tool → 31개 카탈로그 검색 + 설치 + `refresh_tools()` 핫 리로드 |
 
 ## Installation
 
@@ -598,6 +626,11 @@ uv run geode
 | `/compare <A> <B>` | | 두 IP 비교 분석 (Interactive) |
 | `/schedule <cron>` | `/sched` | 배치 스케줄 설정 |
 | `/trigger <event>` | | 이벤트 트리거 (drift scan 등) |
+| `/skills` | | 스킬 목록/상세/reload/add |
+| `/mcp status` | | MCP 서버 상태 |
+| `/mcp tools` | | MCP 도구 목록 |
+| `/mcp reload` | | MCP 설정 재로딩 |
+| `/mcp add <name> <cmd>` | | MCP 서버 동적 추가 |
 | `/verbose` | | 상세 출력 토글 |
 | `/help` | | 도움말 |
 | `/quit` | `/q` | 종료 |
@@ -612,6 +645,7 @@ uv run geode
 > 뭐가 있어?               → IP 목록
 > 시스템 상태              → 상태 확인
 > API 키 설정해            → API 키 설정
+> LinkedIn MCP 달아줘      → MCP 자동설치
 > 스케줄 걸어줘            → 배치 스케줄
 ```
 
@@ -678,7 +712,10 @@ core/
 │   └── cause_actions.yaml      # Cause→Action mappings
 ├── config.py                   # Settings (pydantic-settings, 30+ vars)
 ├── data/                       # Synthetic data generation
-├── extensibility/              # Report generation + templates
+├── extensibility/              # Report generation + Skills + templates
+│   ├── skills.py               # SkillLoader + SkillRegistry + SkillDefinition
+│   ├── _frontmatter.py         # Shared YAML frontmatter parser
+│   ├── agents.py               # SubagentLoader (frontmatter → _frontmatter.py)
 │   └── templates/              # HTML/Markdown report templates
 ├── fixtures/                   # Fixture data (3 core IPs + 201 Steam)
 ├── graph.py                    # LangGraph StateGraph definition
@@ -686,7 +723,7 @@ core/
 │   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, etc.
 │   └── adapters/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/                # Steam, Brave, KGMemory MCP adapters
+│       └── mcp/                # Steam, Brave, KGMemory MCP adapters + catalog (31 entries)
 ├── llm/                        # LLM client (prompt caching, streaming)
 │   ├── client.py               # Anthropic wrapper + token tracking + cost
 │   └── prompts/                # Prompt templates (.md) + axes config
@@ -700,7 +737,7 @@ core/
 ├── memory/                     # 3-Tier memory system
 ├── nodes/                      # Pipeline nodes (8: router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
 ├── orchestration/
-│   ├── hooks.py                # HookSystem (23 events)
+│   ├── hooks.py                # HookSystem (26 events)
 │   ├── hook_discovery.py       # Plugin-based hook loading
 │   ├── isolated_execution.py   # Concurrent runner (semaphore)
 │   ├── task_system.py          # DAG-based task graph
@@ -712,8 +749,8 @@ core/
 ├── runtime.py                  # GeodeRuntime (production wiring)
 ├── state.py                    # GeodeState (TypedDict + Pydantic models)
 ├── tools/                      # Tool Protocol + Registry + Policy
-│   ├── registry.py             # ToolRegistry (21 tools + runtime extensions)
-│   ├── definitions.json        # Centralized tool definitions (21 tools)
+│   ├── registry.py             # ToolRegistry (38 tools + runtime extensions)
+│   ├── definitions.json        # Centralized tool definitions (38 tools)
 │   ├── tool_schemas.json       # Parameter schemas for signal/analysis tools
 │   ├── policy.py               # PolicyChain + NodeScopePolicy
 │   └── ...                     # analysis, signal_tools, data_tools, etc.

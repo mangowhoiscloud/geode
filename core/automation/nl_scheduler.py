@@ -10,11 +10,13 @@ Architecture-v6 SS4.5: Automation Layer -- NL Scheduler (P6).
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 import time
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from core.automation.scheduler import (
     ActiveHours,
@@ -40,6 +42,10 @@ class ParseResult:
     inferred_kind: ScheduleKind | None = None
     original_text: str = ""
     normalized_text: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict, omitting None-valued fields."""
+        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -158,12 +159,14 @@ class FeedbackLoop:
         correlation_analyzer: CorrelationAnalyzer | None = None,
         drift_detector: CUSUMDetector | None = None,
         hooks: HookSystemPort | None = None,
+        improvement_approver: (Callable[[ImprovementCandidate], bool] | None) = None,
     ) -> None:
         self._model_registry = model_registry
         self._expert_panel = expert_panel
         self._correlation_analyzer = correlation_analyzer
         self._drift_detector = drift_detector
         self._hooks = hooks
+        self._improvement_approver = improvement_approver
         self._history: list[FeedbackCycleResult] = []
         self._stats = _FeedbackStats()
 
@@ -506,9 +509,13 @@ class FeedbackLoop:
             success=validation.get("all_passed", False),
         )
 
-        # Apply improvements
+        # Apply improvements (gate through approver if configured)
         for candidate in candidates:
-            self.apply_improvement(candidate)
+            should_apply = True
+            if self._improvement_approver is not None:
+                should_apply = self._improvement_approver(candidate)
+            if should_apply:
+                self.apply_improvement(candidate)
 
         self._history.append(result)
 

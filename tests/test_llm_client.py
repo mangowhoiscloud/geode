@@ -68,12 +68,12 @@ class TestStripFences:
 class TestCalculateCost:
     def test_known_model_opus(self):
         cost = calculate_cost(ANTHROPIC_PRIMARY, 1000, 500)
-        expected = 1000 * (15.0 / 1_000_000) + 500 * (75.0 / 1_000_000)
+        expected = 1000 * (5.0 / 1_000_000) + 500 * (25.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
     def test_known_model_haiku(self):
         cost = calculate_cost(ANTHROPIC_BUDGET, 10_000, 2_000)
-        expected = 10_000 * (0.80 / 1_000_000) + 2_000 * (4.0 / 1_000_000)
+        expected = 10_000 * (1.0 / 1_000_000) + 2_000 * (5.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
     def test_unknown_model_returns_zero(self):
@@ -205,34 +205,58 @@ class TestIsLangsmithEnabled:
 
 class TestTrackTokenUsage:
     def test_noop_when_disabled(self):
-        with patch("core.llm.client.is_langsmith_enabled", return_value=False):
+        with patch.dict("os.environ", {"LANGCHAIN_TRACING_V2": "false"}, clear=False):
             track_token_usage("opus", 100, 50)
 
     def test_records_when_enabled(self):
+        """Verify _inject_langsmith writes metrics to RunTree."""
+        from core.llm.token_tracker import TokenTracker
+
         mock_run_tree = MagicMock()
         mock_run_tree.extra = {}
         with (
-            patch("core.llm.client.is_langsmith_enabled", return_value=True),
-            patch("langsmith.run_helpers.get_current_run_tree", return_value=mock_run_tree),
+            patch.dict(
+                "os.environ",
+                {"LANGCHAIN_TRACING_V2": "true", "LANGCHAIN_API_KEY": "lsv2_test"},
+                clear=False,
+            ),
+            patch(
+                "langsmith.run_helpers.get_current_run_tree",
+                return_value=mock_run_tree,
+            ),
         ):
-            track_token_usage(ANTHROPIC_PRIMARY, 1000, 500)
-            assert "metrics" in mock_run_tree.extra
-            assert mock_run_tree.extra["metrics"]["input_tokens"] == 1000
-            assert mock_run_tree.extra["metrics"]["output_tokens"] == 500
+            TokenTracker._inject_langsmith(ANTHROPIC_PRIMARY, 1000, 500, 0.03)
+        assert "metrics" in mock_run_tree.extra
+        assert mock_run_tree.extra["metrics"]["input_tokens"] == 1000
+        assert mock_run_tree.extra["metrics"]["output_tokens"] == 500
 
     def test_handles_no_run_tree(self):
+        from core.llm.token_tracker import TokenTracker
+
         with (
-            patch("core.llm.client.is_langsmith_enabled", return_value=True),
+            patch.dict(
+                "os.environ",
+                {"LANGCHAIN_TRACING_V2": "true", "LANGCHAIN_API_KEY": "lsv2_test"},
+                clear=False,
+            ),
             patch("langsmith.run_helpers.get_current_run_tree", return_value=None),
         ):
-            track_token_usage("opus", 100, 50)
+            # Should not raise when run_tree is None
+            TokenTracker._inject_langsmith("opus", 100, 50, 0.01)
 
     def test_handles_import_error(self):
+        from core.llm.token_tracker import TokenTracker
+
         with (
-            patch("core.llm.client.is_langsmith_enabled", return_value=True),
+            patch.dict(
+                "os.environ",
+                {"LANGCHAIN_TRACING_V2": "true", "LANGCHAIN_API_KEY": "lsv2_test"},
+                clear=False,
+            ),
             patch.dict("sys.modules", {"langsmith.run_helpers": None}),
         ):
-            track_token_usage("opus", 100, 50)
+            # Should not raise when langsmith is unavailable
+            TokenTracker._inject_langsmith("opus", 100, 50, 0.01)
 
 
 # ---------------------------------------------------------------------------

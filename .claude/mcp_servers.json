@@ -1,0 +1,9 @@
+{
+  "brave-search": {
+    "command": "npx",
+    "args": ["-y", "@anthropic/mcp-server-brave-search"],
+    "env": {
+      "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+    }
+  }
+}

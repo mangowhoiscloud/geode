@@ -216,8 +216,8 @@ class TestSubAgentOrchestrationLive:
         def on_event(event: HookEvent, data: dict[str, Any]) -> None:
             event_log.append((event.value, data.get("task_id", "")))
 
-        hooks.register(HookEvent.NODE_ENTER, on_event, name="log_enter")
-        hooks.register(HookEvent.NODE_EXIT, on_event, name="log_exit")
+        hooks.register(HookEvent.SUBAGENT_STARTED, on_event, name="log_enter")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, on_event, name="log_exit")
 
         runner = IsolatedRunner()
 
@@ -239,8 +239,8 @@ class TestSubAgentOrchestrationLive:
         assert all(r.success for r in results)
 
         # Verify hook events
-        enter_ids = [tid for ev, tid in event_log if ev == "node_enter"]
-        exit_ids = [tid for ev, tid in event_log if ev == "node_exit"]
+        enter_ids = [tid for ev, tid in event_log if ev == "subagent_started"]
+        exit_ids = [tid for ev, tid in event_log if ev == "subagent_completed"]
         assert set(enter_ids) == {"t1", "t2", "t3"}
         assert set(exit_ids) == {"t1", "t2", "t3"}
 
@@ -287,8 +287,8 @@ class TestSubAgentOrchestrationLive:
         def on_error(event: HookEvent, data: dict[str, Any]) -> None:
             errors.append(data["task_id"])
 
-        hooks.register(HookEvent.NODE_EXIT, on_exit, name="success_log")
-        hooks.register(HookEvent.NODE_ERROR, on_error, name="error_log")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, on_exit, name="success_log")
+        hooks.register(HookEvent.SUBAGENT_FAILED, on_error, name="error_log")
 
         runner = IsolatedRunner()
 
@@ -399,3 +399,43 @@ class TestEndToEndExecutionFlow:
         assert len(analyst_nodes) == 4, f"Expected 4 analysts, got {analyst_nodes}"
         expected = {"game_mechanics", "player_experience", "growth_potential", "discovery"}
         assert set(analyst_nodes) == expected
+
+
+# ---------------------------------------------------------------------------
+# G7 Fix: Parallel SubAgent Session Isolation
+# ---------------------------------------------------------------------------
+
+
+class TestSubAgentSessionIsolationE2E:
+    """G7 fix: Verify parallel subagents don't contend on SQLite."""
+
+    def test_parallel_subagent_no_sqlite_contention(self) -> None:
+        """Start 3 tasks in parallel and verify all succeed without errors."""
+        import time
+
+        runner = IsolatedRunner()
+
+        def slow_handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            time.sleep(0.1)
+            return {"ip_name": args.get("ip_name", ""), "done": True}
+
+        manager = SubAgentManager(runner, slow_handler, timeout_s=30)
+
+        tasks = [
+            SubTask("p1", "Parallel 1", "analyze", {"ip_name": "Berserk"}),
+            SubTask("p2", "Parallel 2", "analyze", {"ip_name": "Cowboy Bebop"}),
+            SubTask("p3", "Parallel 3", "analyze", {"ip_name": "Ghost in the Shell"}),
+        ]
+
+        results = manager.delegate(tasks)
+
+        assert len(results) == 3
+        assert all(r.success for r in results), (
+            f"Some tasks failed: {[(r.task_id, r.error) for r in results if not r.success]}"
+        )
+
+        # Verify each result has correct output
+        ip_names = {r.output.get("ip_name") for r in results}
+        assert "Berserk" in ip_names
+        assert "Cowboy Bebop" in ip_names
+        assert "Ghost in the Shell" in ip_names

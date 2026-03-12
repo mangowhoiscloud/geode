@@ -26,6 +26,189 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+Clarification 시스템 확장 + HITL Cost Tracking + AgenticLoop 안전장치 + 테스트 정합성 수정.
+
+### Added
+
+#### Clarification 시스템 확장 (3/33 → 25/33 핸들러)
+- `_clarify()` 표준 응답 헬퍼 — `{error, clarification_needed, missing, hint}` 프로토콜
+- `_safe_delegate()` 래퍼 — 9개 위임 도구(web_fetch, youtube_search 등) KeyError → clarification 자동 변환
+- 13개 핸들러에 직접 clarification 검증 추가 (search_ips, memory_search, create_plan 등)
+- `AgenticLoop.MAX_CLARIFICATION_ROUNDS = 3` — 무한 clarification 루프 방지
+
+#### LLM Cost Tracking (3계층)
+- Real-time UI: `render_tokens()` — `✢ claude-opus-4-6 · ↓1.2k ↑350 · $0.0930` 출력
+- Session summary: `render_session_cost_summary()` — `/quit` 시 누적 비용 자동 표시
+- `/cost` 명령어 — 세션 중 비용 확인
+
+#### Whisking UI
+- `GeodeStatus._format_spinner()` — Claude Code 스타일 `✢ Whisking… · ↑3.7k · $0.093 · 2m 35s` 라이브 스피너
+
+### Fixed
+- `test_hooks_write_to_run_log` — cascading hook 이벤트로 인한 count 불일치 수정 (정확 count → 필터 기반)
+- `test_error_events_logged_with_error_status` — 동일 원인 수정
+- `test_status.py` — 화살표 방향 정합성 (`↓input ↑output`)
+- `TestTrackTokenUsage` — `token_tracker` 리팩터링 후 `is_langsmith_enabled` → `os.environ` 패치로 변경
+
+### Infrastructure
+- Test count: 2077+ → 2061+ (라이브 테스트 제외 기준)
+- `docs/blogs/21-clarification-hitl-cost-tracking.md` — Clarification + HITL + Cost Tracking 기술 블로그
+
+---
+
+## [0.10.0] — 2026-03-12
+
+SubAgent 병렬 실행 완성 + SchedulerService 프로덕션 와이어링 + NL 자연어 스케줄 E2E 통합.
+
+### Added
+
+#### SchedulerService 프로덕션 와이어링
+- `SchedulerServicePort` Protocol — Clean Architecture DI 포트 (`automation_port.py`)
+- `GeodeRuntime._build_automation()` — SchedulerService 인스턴스 생성 + predefined cron 자동 등록
+- `config.py` — `scheduler_interval_s`, `scheduler_auto_start` 설정 추가
+- `cmd_schedule()` 7-sub-command 확장 — list/create/delete/status/enable/disable/run
+- `CronParser` step syntax 지원 — `*/N`, `M-N/S` 파싱 (기존 `*/30` 파싱 실패 버그 수정)
+- `NLScheduleParser` → `SchedulerService` E2E 연결 — 자연어 "매일 오전 9시 분석" → ScheduledJob 생성
+- `_TOOL_ARGS_MAP` + `definitions.json` — `schedule_job` expression 필드 + 7-enum sub_action
+- `tests/test_scheduler_integration.py` — 22 tests (NL→Scheduler, Predefined, CLI, Port)
+
+#### SubAgent Manager Wiring (G1-G6)
+- `make_pipeline_handler()` — analyze/search/compare 라우팅 팩토리
+- `_build_sub_agent_manager()` — CLI → ToolExecutor 연결 팩토리
+- `_resolve_agent()` + `AgentRegistry` 주입 — 에이전트 정의 → 실행 연결
+- `delegate_task` 배치 스키마 — `tasks` 배열 필드 + `_execute_delegate` 배치 지원
+- `on_progress` 콜백 — 병렬 실행 중 진행 표시
+- `SUBAGENT_STARTED/COMPLETED/FAILED` 전용 훅 이벤트 (HookEvent 23 → 26)
+
+#### OpenClaw 세션 키 격리 (G7)
+- `build_subagent_session_key()` — `ip:X:Y:subagent:Z` 5-part 세션 키
+- `build_subagent_thread_config()` — LangGraph config + LangSmith metadata
+- `_subagent_context` 스레드 로컬 + `get_subagent_context()` — 부모-자식 컨텍스트 전파
+- `SubagentRunRecord` — 부모-자식 관계 추적 (run_id, session_key, outcome)
+- `GeodeRuntime.is_subagent` — 서브에이전트 시 MemorySaver 자동 전환 (SQLite 경합 제거)
+
+#### Live E2E 테스트
+- `TestSubAgentLive` 7개 시나리오 (E1-E7): delegate 단건/배치, wiring, 훅, registry, 비회귀
+- `TestSubAgentSessionIsolation` 3개 테스트 (스레드 로컬, 세션 키, 런타임 플래그)
+- `TestSubAgentSessionIsolationE2E` — 병렬 SQLite 비경합 검증
+
+### Changed
+- `delegate_task` 스키마: `bash` 타입 제거, `required: []`로 변경 (단건/배치 공존)
+- `_execute_delegate()`: 단건 flat dict / 다건 `{results, total, succeeded}` 반환
+- `parse_session_key()`: 5-part 서브에이전트 키 인식
+- `SubTask` dataclass: `agent: str | None` 필드 추가
+
+### Fixed
+- `delegate_task` 도구가 `SubAgentManager not configured` 에러만 반환하던 문제 (G1+G2)
+- 병렬 서브에이전트 실행 시 SQLite `database disk image is malformed` 에러 (G7)
+- `NODE_ENTER/EXIT/ERROR` 훅이 서브에이전트와 파이프라인 노드를 구분하지 못하던 문제 (G6)
+- `CronParser.matches()` — `*/30` 등 step syntax 미지원으로 predefined cron 파싱 실패하던 문제
+
+### Architecture
+- `core/llm/token_tracker.py` — TokenTracker 단일주입 패턴 (`get_tracker().record()`) 으로 토큰 비용 계산 일원화
+- 24개 모델 가격 검증 및 수정 (Opus 4.6: $15/$75 → $5/$25, Haiku 4.5: $0.80/$4 → $1/$5)
+- client.py, nl_router.py, agentic_loop.py, openai_adapter.py 중복 비용 계산 코드 제거 (~250줄 삭감)
+
+### Infrastructure
+- Test count: 2033+ → 2077+
+- Module count: 121 → 125
+- `docs/plans/P1-subagent-parallel-execution.md` — GAP 분석 + 구현 플랜
+- `docs/blogs/20-subagent-parallel-execution-e2e.md` — 기술 블로그 (네러티브)
+
+---
+
+## [0.9.0] — 2026-03-11
+
+General Assistant Transformation, Skills 시스템, MCP 자동설치, Clarification 파이프라인, 마스코트 브랜딩.
+
+### Added
+
+#### General Assistant Transformation (PR #32)
+- Offline mode 제거 — AgenticLoop always-online (API 키 없으면 자동 dry-run)
+- `key_registration_gate()` — Claude Code 스타일 API 키 등록 게이트
+- 9개 신규 도구: `web_fetch`, `general_web_search`, `read_document`, `note_save`, `note_read`, `youtube_search`, `reddit_sentiment`, `steam_info`, `google_trends`
+- `StdioMCPClient` — JSON-RPC stdio 기반 MCP 서버 클라이언트
+- `MCPServerManager` — MCP 서버 설정 로딩 + 연결 관리 + 도구 디스커버리
+- `/mcp` CLI 커맨드 — MCP 서버 상태/도구/재로딩
+- `ToolExecutor` MCP fallback — 미등록 도구를 MCP 서버로 자동 라우팅
+
+#### NL Router 개선 (PR #32)
+- Scored matching — `_OfflinePattern` dataclass + priority-based 5-phase matching
+- Fuzzy IP matching — `difflib.get_close_matches` ("Bersek" → "Berserk")
+- Multi-intent — compound splitting ("하고", "and", 쉼표) → 복수 NLIntent 반환
+- Disambiguation — `NLIntent.ambiguous` + `alternatives` 필드
+- Context injection — 대화 히스토리 (최근 3턴) → LLM 라우터에 전달
+
+#### Skills 시스템 (PR #33)
+- `core/extensibility/skills.py` — SkillDefinition + SkillLoader + SkillRegistry
+- `core/extensibility/_frontmatter.py` — 공유 YAML frontmatter 파서 (agents.py에서 추출)
+- `.claude/skills/*/SKILL.md` 자동 발견 + 시스템 프롬프트 `{skill_context}` 주입
+- `/skills` CLI 커맨드 — 목록/상세/reload/add 서브커맨드
+- `/skills add <path>` — 외부 스킬 동적 등록 + .claude/skills/ 복사
+
+#### MCP 강화 (PR #33)
+- `MCPServerManager.add_server()` — 런타임 서버 등록 + JSON 영속화
+- `MCPServerManager.check_health()` / `reload_config()` — 헬스체크 + 설정 재로딩
+- `/mcp status|tools|reload|add` 서브커맨드 확장
+- `/mcp add <name> <cmd> [args]` — 동적 MCP 서버 추가
+
+#### MCP 자동설치 파이프라인 (PR #33)
+- `core/infrastructure/adapters/mcp/catalog.py` — 31개 빌트인 MCP 서버 카탈로그
+- `install_mcp_server` 도구 — NL로 MCP 서버 검색/설치 ("LinkedIn MCP 달아줘")
+- `search_catalog()` — 키워드 기반 가중 매칭 (name > tags > description > package)
+- `AgenticLoop.refresh_tools()` — MCP 도구 핫 리로드 (세션 재시작 불필요)
+- `_build_tool_handlers()` 시그니처 확장 — `mcp_manager`, `agentic_ref` 클로저 패턴
+
+#### Report Generation 강화 (PR #33)
+- `_build_skill_narrative()` — geode-scoring/analysis/verification 스킬 주입 → LLM 전문 분석 내러티브 생성
+- 리포트 자동 저장 — `.geode/reports/{ip}-{template}.{ext}` 경로로 파일 생성
+- `generate_report` → `read_document` 체이닝 — 리포트 생성 후 즉시 열기 가능
+
+#### Clarification 파이프라인 (PR #33)
+- Tool parameter validation — `handle_compare_ips`, `handle_analyze_ip`, `handle_generate_report`에 필수 파라미터 검증
+- `clarification_needed` 응답 프로토콜 — `missing`, `hint` 필드 포함
+- AGENTIC_SUFFIX clarification rules — slot filling, disambiguation, missing parameter 처리 지침
+- "Berserk 분석하고 비교하고 리포트" → max_rounds 미도달, 되묻기 정상 동작
+
+#### 마스코트 브랜딩 (PR #33)
+- `assets/geode-mascot.png` — GEODE 마스코트 (파란 구체 두구 우파루파)
+- `assets/geode-avatar-{128,256,512}.png` — 원형 얼굴 아바타 (RGBA 투명)
+- `assets/geode-social-preview.png` — GitHub Social Preview (1280×640)
+- `_render_mascot()` — Harness GEODE ASCII art CLI splash (6-color Rich 마크업)
+
+### Changed
+- Tool count: 21 → 31 (definitions.json)
+- Handler count: 17 → 30
+- System prompt: IP 분석 전문 → General AI Assistant + IP 전문성
+- `_build_tool_handlers()`: `verbose` only → `verbose`, `mcp_manager`, `agentic_ref`
+- `AgenticLoop.__init__()`: `skill_registry`, `mcp_manager` 파라미터 추가
+- `agents.py`: inline frontmatter parser → `_frontmatter.py` 공유 모듈 위임
+- CLI 브랜딩: "Undervalued IP Discovery Agent" → "게임화 IP 도메인 자율 실행 하네스"
+- 7개 Response dataclass에 `to_dict()` 추가 — None 필드 직렬화 시 자동 제외
+  (AgenticResult, SubResult, IsolationResult, HookResult, TriggerResponse, ParseResult)
+- `ReportGenerator.generate()`: `enhanced_narrative` 파라미터 추가 (스킬 기반 전문 분석 주입)
+- `generate_report` 핸들러: `file_path` + `content_preview` 반환, `.geode/reports/` 자동 저장
+- `definitions.json` `generate_report`: `format`/`template` enum 파라미터 추가, `read_document` 체이닝 안내
+- `cmd_schedule()`: `scheduler_service` 파라미터 추가
+
+### Fixed
+- "Berserk 분석하고 비교하고 리포트" max_rounds 도달 → clarification 되묻기로 해결
+- `{skill_context}` KeyError — `router.md`에서 `{{skill_context}}` 이스케이프
+- `_render_mascot()` E501 — Rich 마크업 변수 리팩토링
+- `report.html` 버전 0.7.0 → 0.9.0 정합성 수정
+- mypy strict: `call_llm()` Any 반환 → `str()` 래핑, 3개 함수 시그니처 정합성 수정
+
+### Infrastructure
+- Test count: 2000+ → 2033+
+- Module count: 118 → 121
+- `docs/plans/clarification-pipeline.md` — Clarification 설계 문서
+- `docs/plans/tool-mcp-catalog.md` — MCP 카탈로그 리서치
+- pre-commit: mypy cache → `/tmp` 이동 (hook conflict 방지)
+
+---
+
 ## [0.8.0] — 2026-03-11
 
 Plan/Sub-agent NL integration, Claude Code-style UI, response quality hardening.
@@ -257,13 +440,17 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.10.0 | 2026-03-12 | SubAgent 병렬 실행, SchedulerService 와이어링, NL 스케줄, OpenClaw 세션 격리 |
+| 0.9.0 | 2026-03-11 | General Assistant, Skills, MCP 자동설치, Clarification, 마스코트 |
 | 0.8.0 | 2026-03-11 | Plan/Sub-agent NL, Claude Code UI, response quality, verification tracing |
 | 0.7.0 | 2026-03-11 | C2-C5 flexibility, LangSmith observability, orchestration integration, 17-tool audit |
 | 0.6.1 | 2026-03-10 | Content/code separation, package rename, pre-commit hooks |
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/mangowhoiscloud/geode/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/mangowhoiscloud/geode/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mangowhoiscloud/geode/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1

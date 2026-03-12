@@ -36,7 +36,7 @@ $ uv run geode
 
 **Expected output:**
 ```
-╭─── GEODE v0.6.0 — Undervalued IP Discovery Agent ───╮
+╭─── GEODE v0.6.0 — 게임화 IP 도메인 자율 실행 하네스 ───╮
 │                                                       │
 ╰───────────────────────────────────────────────────────╯
 
@@ -276,7 +276,7 @@ $ uv run geode analyze "Berserk" --dry-run
 
 **Expected output:**
 ```
-╭─── GEODE v0.6.0 — Undervalued IP Discovery Agent ───╮
+╭─── GEODE v0.6.0 — 게임화 IP 도메인 자율 실행 하네스 ───╮
 │   Analyzing: berserk                                  │
 │   Pipeline: full_pipeline | Model: dry-run (no LLM)   │  ← No LLM calls
 ╰───────────────────────────────────────────────────────╯

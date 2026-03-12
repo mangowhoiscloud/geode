@@ -128,6 +128,7 @@ class TestAgenticLoop:
         assert result.text == "Here are the available IPs."
         assert result.rounds == 1
         assert result.error is None
+        assert result.termination_reason == "natural"
 
     def test_run_with_tool_use(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test tool_use → tool_result → text response flow."""
@@ -169,6 +170,7 @@ class TestAgenticLoop:
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0]["tool"] == "list_ips"
         assert result.error is None
+        assert result.termination_reason == "natural"
 
     def test_run_max_rounds(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test max rounds limit."""
@@ -196,6 +198,7 @@ class TestAgenticLoop:
 
         assert result.error == "max_rounds"
         assert result.rounds == 2
+        assert result.termination_reason == "max_rounds"
 
     def test_run_llm_failure(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test graceful handling of LLM call failure."""
@@ -205,6 +208,7 @@ class TestAgenticLoop:
             result = loop.run("test")
 
         assert result.error == "llm_call_failed"
+        assert result.termination_reason == "llm_error"
 
     def test_context_preserved(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test that conversation context is maintained across runs."""
@@ -229,6 +233,56 @@ class TestAgenticLoop:
 
         assert context.turn_count >= 1
 
+    def test_default_max_rounds(self) -> None:
+        """Verify DEFAULT_MAX_ROUNDS is 7."""
+        assert AgenticLoop.DEFAULT_MAX_ROUNDS == 7
+
+    def test_forced_text_on_last_round(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """On the last round, tool_choice=none forces text output."""
+        loop = AgenticLoop(context, executor, max_rounds=3)
+
+        call_kwargs: list[dict[str, Any]] = []
+
+        def mock_call_llm(
+            system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
+        ) -> MagicMock:
+            call_kwargs.append({"round_idx": round_idx})
+            # Round 0, 1: return tool_use; Round 2 (last): return text
+            if round_idx < 2:
+                resp = MagicMock()
+                resp.stop_reason = "tool_use"
+                resp.usage = MagicMock(input_tokens=100, output_tokens=50)
+                block = MagicMock()
+                block.type = "tool_use"
+                block.name = "list_ips"
+                block.input = {}
+                block.id = f"toolu_{round_idx}"
+                resp.content = [block]
+                return resp
+            else:
+                resp = MagicMock()
+                resp.stop_reason = "end_turn"
+                resp.usage = MagicMock(input_tokens=100, output_tokens=50)
+                block = MagicMock()
+                block.type = "text"
+                block.text = "Forced text on last round."
+                resp.content = [block]
+                return resp
+
+        with (
+            patch.object(loop, "_call_llm", side_effect=mock_call_llm),
+            patch.object(loop, "_track_usage"),
+        ):
+            result = loop.run("test forced text")
+
+        assert result.rounds == 3
+        assert result.termination_reason == "forced_text"
+        assert result.text == "Forced text on last round."
+        # Verify all 3 rounds were called with correct round_idx
+        assert [kw["round_idx"] for kw in call_kwargs] == [0, 1, 2]
+
     def test_agentic_tools_include_all(self) -> None:
         """Verify AGENTIC_TOOLS includes base tools + bash + delegate."""
         tool_names = {t["name"] for t in AGENTIC_TOOLS}
@@ -237,21 +291,32 @@ class TestAgenticLoop:
         assert "run_bash" in tool_names
         assert "delegate_task" in tool_names
 
-    def test_offline_mode_help(self, context: ConversationContext, executor: ToolExecutor) -> None:
-        """Test offline mode returns help text for help intent."""
-        loop = AgenticLoop(context, executor, offline_mode=True)
-        result = loop.run("도움말 보여줘")
-        assert result.rounds == 1
-        assert "Offline" in result.text or "/help" in result.text
+    def test_key_gate_blocks_without_key(self) -> None:
+        """Test key_registration_gate returns None on /quit."""
+        from unittest.mock import patch as _patch
 
-    def test_offline_mode_tool_execution(self, context: ConversationContext) -> None:
-        """Test offline mode routes to correct tool and executes."""
-        handler = MagicMock(return_value={"status": "ok", "ips": ["Berserk"]})
-        executor = ToolExecutor(action_handlers={"list_ips": handler}, auto_approve=True)
-        loop = AgenticLoop(context, executor, offline_mode=True)
-        result = loop.run("IP 목록 보여줘")
-        assert result.rounds == 1
-        assert len(result.tool_calls) >= 1
+        from core.cli.startup import key_registration_gate
+
+        with _patch("core.cli.startup.console") as mock_console:
+            mock_console.input.return_value = "/quit"
+            result = key_registration_gate()
+            assert result is None
+
+    def test_key_gate_accepts_valid_key(self) -> None:
+        """Test key_registration_gate accepts /key command."""
+        from unittest.mock import patch as _patch
+
+        from core.cli.startup import key_registration_gate
+
+        with (
+            _patch("core.cli.startup.console") as mock_console,
+            _patch("core.cli.startup._upsert_env"),
+            _patch("core.cli.startup.settings") as mock_settings,
+        ):
+            mock_console.input.return_value = "/key sk-ant-test-key-12345678"
+            result = key_registration_gate()
+            assert result == "sk-ant-test-key-12345678"
+            assert mock_settings.anthropic_api_key == "sk-ant-test-key-12345678"
 
     def test_get_agentic_tools_no_registry(self) -> None:
         """get_agentic_tools without registry returns base tools."""
@@ -280,11 +345,17 @@ class TestAgenticLoop:
 
     def test_agentric_result_dataclass(self) -> None:
         """Test AgenticResult fields."""
-        r = AgenticResult(text="hello", rounds=2, error="test_err")
+        r = AgenticResult(text="hello", rounds=2, error="test_err", termination_reason="natural")
         assert r.text == "hello"
         assert r.rounds == 2
         assert r.error == "test_err"
         assert r.tool_calls == []
+        assert r.termination_reason == "natural"
+
+    def test_agentric_result_default_termination_reason(self) -> None:
+        """Test AgenticResult default termination_reason is 'unknown'."""
+        r = AgenticResult(text="test")
+        assert r.termination_reason == "unknown"
 
     def test_build_system_prompt(
         self, context: ConversationContext, executor: ToolExecutor
@@ -418,14 +489,14 @@ class TestSubAgentOrchestration:
         return HookSystem()
 
     def test_hook_events_emitted_on_success(self, handler: Any, hooks: HookSystem) -> None:
-        """Verify NODE_ENTER and NODE_EXIT are emitted for successful tasks."""
+        """Verify SUBAGENT_STARTED and SUBAGENT_COMPLETED are emitted for successful tasks."""
         events_log: list[tuple[HookEvent, dict[str, Any]]] = []
 
         def collector(event: HookEvent, data: dict[str, Any]) -> None:
             events_log.append((event, data))
 
-        hooks.register(HookEvent.NODE_ENTER, collector, name="test_enter")
-        hooks.register(HookEvent.NODE_EXIT, collector, name="test_exit")
+        hooks.register(HookEvent.SUBAGENT_STARTED, collector, name="test_enter")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, collector, name="test_exit")
 
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler, timeout_s=10, hooks=hooks)
@@ -435,23 +506,23 @@ class TestSubAgentOrchestration:
         assert len(results) == 1
         assert results[0].success is True
 
-        # Should have emitted NODE_ENTER + NODE_EXIT
-        enter_events = [e for e in events_log if e[0] == HookEvent.NODE_ENTER]
-        exit_events = [e for e in events_log if e[0] == HookEvent.NODE_EXIT]
+        # Should have emitted SUBAGENT_STARTED + SUBAGENT_COMPLETED
+        enter_events = [e for e in events_log if e[0] == HookEvent.SUBAGENT_STARTED]
+        exit_events = [e for e in events_log if e[0] == HookEvent.SUBAGENT_COMPLETED]
         assert len(enter_events) == 1
         assert len(exit_events) == 1
         assert enter_events[0][1]["task_id"] == "t1"
         assert exit_events[0][1]["success"] is True
 
     def test_hook_events_emitted_on_failure(self, hooks: HookSystem) -> None:
-        """Verify NODE_ENTER and NODE_ERROR are emitted for failed tasks."""
+        """Verify SUBAGENT_STARTED and SUBAGENT_FAILED are emitted for failed tasks."""
         events_log: list[tuple[HookEvent, dict[str, Any]]] = []
 
         def collector(event: HookEvent, data: dict[str, Any]) -> None:
             events_log.append((event, data))
 
-        hooks.register(HookEvent.NODE_ENTER, collector, name="test_enter")
-        hooks.register(HookEvent.NODE_ERROR, collector, name="test_error")
+        hooks.register(HookEvent.SUBAGENT_STARTED, collector, name="test_enter")
+        hooks.register(HookEvent.SUBAGENT_FAILED, collector, name="test_error")
 
         def failing_handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
             raise RuntimeError("boom")
@@ -464,7 +535,7 @@ class TestSubAgentOrchestration:
         assert len(results) == 1
         # Error is caught by _execute_subtask → returned as dict → IsolationResult is success
         # The output contains {"error": "boom"}
-        enter_events = [e for e in events_log if e[0] == HookEvent.NODE_ENTER]
+        enter_events = [e for e in events_log if e[0] == HookEvent.SUBAGENT_STARTED]
         assert len(enter_events) == 1
 
     def test_no_hooks_no_error(self, handler: Any) -> None:
@@ -484,7 +555,7 @@ class TestSubAgentOrchestration:
             nonlocal enter_count
             enter_count += 1
 
-        hooks.register(HookEvent.NODE_ENTER, count_enter, name="counter")
+        hooks.register(HookEvent.SUBAGENT_STARTED, count_enter, name="counter")
 
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler, timeout_s=10, hooks=hooks)
@@ -844,7 +915,7 @@ class TestAgenticLoopToolCallRendering:
         """Tool calls should trigger render_tool_call."""
         ctx = ConversationContext()
         handler = MagicMock(return_value={"status": "ok", "tier": "S", "score": 81.3})
-        executor = ToolExecutor(action_handlers={"analyze_ip": handler})
+        executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
         loop = AgenticLoop(ctx, executor)
 
         # Build a response with tool_use
@@ -865,7 +936,7 @@ class TestAgenticLoopToolCallRendering:
         """Dict results should trigger render_tool_result."""
         ctx = ConversationContext()
         handler = MagicMock(return_value={"tier": "S", "score": 81.3})
-        executor = ToolExecutor(action_handlers={"analyze_ip": handler})
+        executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
         loop = AgenticLoop(ctx, executor)
 
         tool_block = MagicMock()
@@ -883,3 +954,72 @@ class TestAgenticLoopToolCallRendering:
         ):
             loop._process_tool_calls(mock_response)
             mock_render.assert_called_once_with("analyze_ip", {"tier": "S", "score": 81.3})
+
+
+# ---------------------------------------------------------------------------
+# SubAgent Session Isolation tests (G7 fix)
+# ---------------------------------------------------------------------------
+
+
+class TestSubAgentSessionIsolation:
+    """Tests for OpenClaw-style session key isolation in SubAgent parallel execution."""
+
+    def test_subagent_session_key_format(self) -> None:
+        """Verify build_subagent_session_key produces correct format."""
+        from core.memory.session_key import build_subagent_session_key
+
+        key = build_subagent_session_key("Berserk", "t1")
+        assert key == "ip:berserk:pipeline:subagent:t1"
+
+    def test_subagent_context_threadlocal(self) -> None:
+        """Verify thread-local context is set during handler execution and cleared after."""
+        from core.cli.sub_agent import SubAgentManager, SubTask, get_subagent_context
+
+        captured: list[tuple[bool, str]] = []
+
+        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            captured.append(get_subagent_context())
+            return {"ok": True}
+
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, handler, timeout_s=10)
+        tasks = [SubTask("t1", "Test task", "analyze", {"ip_name": "Berserk"})]
+        manager.delegate(tasks)
+
+        # Handler should have received (True, child_key)
+        assert len(captured) == 1
+        is_sub, child_key = captured[0]
+        assert is_sub is True
+        assert "subagent" in child_key
+        assert "berserk" in child_key
+
+        # Main thread should get (False, "")
+        main_is_sub, main_key = get_subagent_context()
+        assert main_is_sub is False
+        assert main_key == ""
+
+    def test_subagent_run_records(self) -> None:
+        """Verify run records are created and updated for delegated tasks."""
+        from core.cli.sub_agent import SubAgentManager, SubTask
+
+        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            return {"result": "done"}
+
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, handler, timeout_s=10)
+        tasks = [
+            SubTask("t1", "Task 1", "analyze", {"ip_name": "Berserk"}),
+            SubTask("t2", "Task 2", "search", {"ip_name": "Cowboy Bebop"}),
+        ]
+        manager.delegate(tasks)
+
+        records = manager.get_run_records()
+        assert len(records) == 2
+        assert "t1" in records
+        assert "t2" in records
+
+        for _tid, rec in records.items():
+            assert rec.child_session_key != ""
+            assert "subagent" in rec.child_session_key
+            assert rec.outcome in ("ok", "error")
+            assert rec.completed_at > 0

@@ -9,6 +9,7 @@ Architecture-v6 SS4.5: Automation Layer — External Trigger Gateway.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 import uuid
@@ -48,6 +49,10 @@ class TriggerResponse:
     message: str
     run_id: str | None = None
     error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict, omitting None-valued fields."""
+        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
 # ---------------------------------------------------------------------------
