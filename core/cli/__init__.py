@@ -12,6 +12,7 @@ import logging
 import re as _re
 from contextvars import ContextVar
 from enum import Enum
+from pathlib import Path
 from typing import Any, cast
 
 import typer
@@ -25,8 +26,10 @@ from core.cli.commands import (
     cmd_generate,
     cmd_key,
     cmd_list,
+    cmd_mcp,
     cmd_model,
     cmd_schedule,
+    cmd_skills,
     cmd_trigger,
     resolve_action,
     show_help,
@@ -79,7 +82,7 @@ def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
 
 app = typer.Typer(
     name="geode",
-    help="GEODE v0.7.0 — Undervalued IP Discovery Agent",
+    help="GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스",
     no_args_is_help=False,
     invoke_without_command=True,
 )
@@ -88,6 +91,7 @@ app = typer.Typer(
 _search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
 _readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
 _last_result_ctx: ContextVar[Any] = ContextVar("last_result", default=None)
+_scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", default=None)
 
 
 def _get_search_engine() -> IPSearchEngine:
@@ -185,6 +189,87 @@ def _parse_report_args(parts: list[str]) -> dict[str, str]:
     }
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_REPORT_DIR = _PROJECT_ROOT / ".geode" / "reports"
+
+# Skills relevant for report quality enhancement
+_REPORT_SKILL_NAMES = ["geode-scoring", "geode-analysis", "geode-verification"]
+
+
+def _build_skill_narrative(
+    report_dict: dict[str, Any],
+    skill_registry: Any,
+) -> str:
+    """Generate an expert narrative using skills context and LLM.
+
+    Injects scoring/analysis/verification skills into the prompt so the LLM
+    produces a domain-aware evaluation narrative.  Returns empty string on
+    failure or when API key is unavailable.
+    """
+    from core.config import settings as _settings
+
+    if not _settings.anthropic_api_key:
+        return ""
+
+    # Collect skill bodies
+    skill_blocks: list[str] = []
+    for name in _REPORT_SKILL_NAMES:
+        skill = skill_registry.get(name)
+        if skill and skill.body:
+            skill_blocks.append(f"### {skill.name}\n{skill.body[:2000]}")
+
+    if not skill_blocks:
+        return ""
+
+    skills_context = "\n\n".join(skill_blocks)
+
+    ip_name = report_dict.get("ip_name", "Unknown")
+    score = report_dict.get("final_score", 0)
+    tier = report_dict.get("tier", "N/A")
+    subscores = report_dict.get("subscores", {})
+    synthesis = report_dict.get("synthesis", {})
+    analyses = report_dict.get("analyses", [])
+
+    analyst_summary = ""
+    for a in analyses[:4]:
+        if isinstance(a, dict):
+            analyst_summary += (
+                f"- {a.get('analyst_type', '?')}: score={a.get('score', '?')}, "
+                f"finding={a.get('key_finding', '')[:120]}\n"
+            )
+
+    system_prompt = f"""You are a GEODE IP valuation expert. Write an expert analysis
+section for a report on the IP below. Use the domain knowledge provided.
+
+## Domain Knowledge (GEODE Skills)
+{skills_context}
+
+## Rules
+- Write 3-5 paragraphs of expert analysis in Korean.
+- Reference specific scoring dimensions and formulas from the skills context.
+- Explain WHY this IP received its tier/score using PSM, subscore weights, cause classification.
+- Provide actionable investment insights.
+- Do NOT repeat raw data — interpret and synthesize it."""
+
+    user_prompt = f"""## IP: {ip_name}
+- Final Score: {score:.1f} / 100
+- Tier: {tier}
+- Subscores: {subscores}
+- Synthesis: {synthesis}
+- Analyst Findings:
+{analyst_summary}
+
+Write the Expert Analysis section."""
+
+    try:
+        from core.llm.client import call_llm
+
+        return str(call_llm(system_prompt, user_prompt, max_tokens=2048, temperature=0.4))
+    except Exception as exc:
+        log.warning("Skill-enhanced narrative generation failed: %s", exc)
+        return ""
+
+
 def _generate_report(
     ip_name: str,
     *,
@@ -193,11 +278,13 @@ def _generate_report(
     output: str | None = None,
     dry_run: bool = True,
     verbose: bool = False,
-) -> None:
+    skill_registry: Any = None,
+) -> tuple[str, str] | None:
     """Generate a report for the given IP.
 
     Reuses cached pipeline result if available for the same IP,
-    otherwise runs analysis first.
+    otherwise runs analysis first.  Always saves to ``.geode/reports/``
+    and returns ``(file_path, content)``.
     """
     # Resolve format/template enums
     try:
@@ -219,24 +306,43 @@ def _generate_report(
     else:
         fresh = _run_analysis(ip_name, dry_run=dry_run, verbose=verbose)
         if fresh is None:
-            return
+            return None
         result = fresh
 
     report_dict = _state_to_report_dict(result)
+
+    # Skill-enhanced narrative (skip in dry-run to avoid LLM call)
+    enhanced_narrative = ""
+    if skill_registry is not None and not dry_run:
+        console.print("  [muted]Generating expert analysis with skills context...[/muted]")
+        enhanced_narrative = _build_skill_narrative(report_dict, skill_registry)
+
     generator = ReportGenerator()
-    content = generator.generate(report_dict, fmt=report_fmt, template=report_tpl)
+    content = generator.generate(
+        report_dict, fmt=report_fmt, template=report_tpl, enhanced_narrative=enhanced_narrative
+    )
+
+    # Determine save path
+    ext_map = {ReportFormat.HTML: "html", ReportFormat.JSON: "json", ReportFormat.MARKDOWN: "md"}
+    ext = ext_map.get(report_fmt, "md")
+    safe_name = ip_name.lower().replace(" ", "-")
 
     if output:
-        from pathlib import Path
-
-        path = Path(output)
-        path.write_text(content, encoding="utf-8")
-        console.print(f"  [success]Report saved to {path}[/success]")
-        console.print()
+        save_path = Path(output)
     else:
-        console.print()
-        console.print(content)
-        console.print()
+        _REPORT_DIR.mkdir(parents=True, exist_ok=True)
+        save_path = _REPORT_DIR / f"{safe_name}-{template}.{ext}"
+
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    save_path.write_text(content, encoding="utf-8")
+    console.print(f"\n  [success]Report saved → {save_path}[/success]")
+
+    # Also print to console
+    console.print()
+    console.print(content)
+    console.print()
+
+    return str(save_path), content
 
 
 # ---------------------------------------------------------------------------
@@ -252,15 +358,44 @@ _LOGO = r"""
 """
 
 
+def _render_mascot() -> None:
+    """Render the Harness GEODE mascot with Rich markup."""
+    # Harness GEODE: axolotl operator + orbiting tools
+    # 6-color: white body, magenta gills, yellow lamp, cyan accent
+    _M = "magenta"  # gills
+    _Y = "bold yellow"  # headlamp
+    _C = "dim cyan"  # orbiting tools
+    _D = "dim"  # outlines
+    _W = "white"  # body
+    art = (
+        f"  [{_C}]    ◇                    ◆[/{_C}]\n"
+        f"                [{_Y}]_⦿_[/{_Y}]\n"
+        f"        [{_M}]╲╲╲[/{_M}] [{_W}]( ◕ [{_D}]w[/{_D}] ◕ )[/{_W}]"
+        f" [{_M}]╱╱╱[/{_M}]\n"
+        f"         [{_M}]╲╲[/{_M}] [{_W}]([/{_W}]"
+        f" [{_D}]━━━[/{_D}] [{_W}])[/{_W}] [{_M}]╱╱[/{_M}]\n"
+        f"  [{_C}]🔍[/{_C}]   [{_W}]╭─┤[/{_W}]"
+        f"[cyan]♦[/cyan][{_W}]├────╮[/{_W}]   [{_C}]💎[/{_C}]\n"
+        f"         [{_W}]│[/{_W}] [{_D}]\\\\__//[/{_D}]"
+        f" [{_W}]│[/{_W}]\n"
+        f"         [{_W}]╰─[/{_W}]"
+        f"[dim magenta]~~~~~[/dim magenta][{_W}]─╯[/{_W}]"
+    )
+    console.print(art, highlight=False)
+
+
 def _welcome_screen() -> None:
     """Show Claude Code-style welcome screen with readiness check."""
+    console.print()
+    _render_mascot()
     console.print()
     logo = Text(_LOGO, style="bold cyan")
     console.print(logo)
     console.print(
-        f"  [bold]GEODE v{__version__}[/bold]  [muted]— Undervalued IP Discovery Agent[/muted]"
+        f"  [bold]GEODE v{__version__}[/bold]  [muted]— 게임화 IP 도메인 자율 실행 하네스[/muted]"
     )
     console.print(f"  [muted]Model: {settings.model}[/muted]")
+    console.print("  [dim]Wiring tools. Scanning worlds.[/dim]")
     console.print()
 
     # OpenClaw gateway:startup — readiness check
@@ -309,13 +444,43 @@ def _merge_event_output(final_state: dict[str, Any], output: dict[str, Any]) -> 
             final_state[k] = v
 
 
+def _inspect_pipeline_state(state: dict[str, Any]) -> None:
+    """Display current pipeline state for user inspection."""
+    console.print("  [header]Pipeline State[/header]")
+    console.print(f"    IP: {state.get('ip_name', '?')}")
+    console.print(f"    Iteration: {state.get('iteration', 1)}")
+
+    analyses = state.get("analyses", [])
+    if analyses:
+        console.print(f"    Analyses: {len(analyses)} completed")
+        for a in analyses[-4:]:
+            if hasattr(a, "model_dump"):
+                a = a.model_dump()
+            atype = a.get("analyst_type", "?")
+            score = a.get("score", 0)
+            console.print(f"      - {atype}: {score}")
+
+    comp = state.get("composite_score", {})
+    if comp:
+        console.print(f"    Score: {comp}")
+
+    tier = state.get("tier")
+    if tier:
+        console.print(f"    Tier: {tier}")
+    console.print()
+
+
 def _handle_interrupt(
     graph: Any,
     config: dict[str, Any],
     final_state: dict[str, Any],
     done: list[str],
 ) -> bool:
-    """Handle a graph interrupt_before pause. Returns True to continue, False to abort."""
+    """Handle a graph interrupt_before pause.
+
+    Options: [C]ontinue / [I]nspect / [S]kip / [A]bort.
+    Returns True to continue, False to abort.
+    """
     iteration = final_state.get("iteration", 1)
     confidence = final_state.get("composite_score", {})
     console.print(
@@ -324,13 +489,31 @@ def _handle_interrupt(
     if confidence:
         console.print(f"  [dim]Current confidence: {confidence}[/dim]")
 
-    choice = (
-        console.input("  [bold][C]ontinue / [A]bort[/bold] (default: Continue): ").strip().lower()
-    )
-    if choice in ("a", "abort"):
-        console.print("  [dim]Pipeline aborted by user.[/dim]")
-        return False
-    return True
+    while True:
+        try:
+            choice = (
+                console.input(
+                    "  [bold][C]ontinue / [I]nspect / [S]kip / [A]bort[/bold] (default: Continue): "
+                )
+                .strip()
+                .lower()
+            )
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            return False
+
+        if choice in ("", "c", "continue"):
+            return True
+        if choice in ("a", "abort"):
+            console.print("  [dim]Pipeline aborted by user.[/dim]")
+            return False
+        if choice in ("i", "inspect"):
+            _inspect_pipeline_state(final_state)
+            continue
+        if choice in ("s", "skip"):
+            console.print("  [dim]Skipping current step...[/dim]")
+            return True
+        console.print("  [dim]Unknown option. Use C/I/S/A.[/dim]")
 
 
 def _execute_pipeline(
@@ -651,6 +834,14 @@ def _run_analysis(
 
     # Create runtime with all infrastructure wired
     runtime = GeodeRuntime.create(ip_name)
+
+    # Subagent session isolation: force MemorySaver fallback (G7 fix)
+    from core.cli.sub_agent import get_subagent_context
+
+    is_subagent, _child_key = get_subagent_context()
+    if is_subagent:
+        runtime.is_subagent = True
+
     _hooks_ctx.set(runtime.hooks)
 
     # Log available tools for current mode
@@ -767,16 +958,30 @@ def _render_search_results(query: str, results: list[Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
+def _handle_command(
+    cmd: str,
+    args: str,
+    verbose: bool,
+    *,
+    skill_registry: Any = None,
+    mcp_manager: Any = None,
+) -> tuple[bool, bool]:
     """Handle a slash command. Returns (should_break, new_verbose)."""
     action = resolve_action(cmd)
 
     if action == "quit":
+        from core.ui.agentic_ui import render_session_cost_summary
+
+        render_session_cost_summary()
         console.print("  [muted]Goodbye.[/muted]\n")
         return True, verbose
 
     if action == "help":
         show_help()
+    elif action == "cost":
+        from core.ui.agentic_ui import render_session_cost_summary
+
+        render_session_cost_summary()
     elif action == "list":
         cmd_list()
     elif action == "verbose":
@@ -838,6 +1043,7 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
                 template=report_args["template"],
                 dry_run=report_dry,
                 verbose=verbose,
+                skill_registry=skill_registry,
             )
     elif action == "batch":
         readiness = _get_readiness()
@@ -852,7 +1058,7 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
             verbose=verbose,
         )
     elif action == "schedule":
-        cmd_schedule(args)
+        cmd_schedule(args, scheduler_service=_scheduler_service_ctx.get(None))
     elif action == "trigger":
         cmd_trigger(args)
     elif action == "status":
@@ -893,9 +1099,13 @@ def _handle_command(cmd: str, args: str, verbose: bool) -> tuple[bool, bool]:
                 _run_analysis(ip_a, dry_run=force_dry, verbose=verbose)
                 _run_analysis(ip_b, dry_run=force_dry, verbose=verbose)
     elif action == "mcp":
-        from core.cli.commands import cmd_mcp
-
-        cmd_mcp(args)
+        cmd_mcp(args, mcp_manager=mcp_manager)
+    elif action == "skills":
+        if skill_registry is not None:
+            cmd_skills(skill_registry, args)
+        else:
+            console.print("  [muted]Skills not loaded.[/muted]")
+            console.print()
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -1060,16 +1270,88 @@ def _text_requests_dry_run(text: str) -> bool:
     return bool(_DRY_RUN_PATTERN.search(text))
 
 
-def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
+def _build_sub_agent_manager(verbose: bool = False) -> Any:
+    """Build a SubAgentManager wired to real pipeline functions."""
+    from core.cli.sub_agent import (
+        SubAgentManager,
+        make_pipeline_handler,
+    )
+    from core.extensibility.agents import AgentRegistry
+    from core.orchestration.isolated_execution import IsolatedRunner
+
+    readiness = _get_readiness()
+    force_dry = readiness.force_dry_run if readiness else True
+
+    handler = make_pipeline_handler(
+        run_analysis_fn=lambda ip_name, dry_run=force_dry, **_kw: _run_analysis(
+            ip_name, dry_run=dry_run, verbose=verbose
+        ),
+        search_fn=lambda query="", **_kw: {
+            "status": "ok",
+            "action": "search",
+            "query": query,
+            "results": [
+                {"name": r.ip_name, "score": r.score} for r in _get_search_engine().search(query)
+            ],
+        },
+    )
+    runner = IsolatedRunner()
+    registry = AgentRegistry()
+    registry.load_defaults()
+    return SubAgentManager(
+        runner,
+        handler,
+        timeout_s=300.0,
+        agent_registry=registry,
+    )
+
+
+def _build_tool_handlers(
+    verbose: bool = False,
+    *,
+    mcp_manager: Any = None,
+    agentic_ref: list[Any] | None = None,
+    skill_registry: Any = None,
+) -> dict[str, Any]:
     """Build tool name → handler function mapping for ToolExecutor.
 
     Each handler receives tool_input kwargs and returns a dict result.
+    ``mcp_manager`` and ``agentic_ref`` are used by install_mcp_server.
+    ``skill_registry`` is used by generate_report for skill-enhanced narrative.
     """
     from core.cli.batch import run_batch
     from core.memory.project import ProjectMemory
 
     readiness = _get_readiness()
     force_dry = readiness.force_dry_run if readiness else True
+
+    def _clarify(
+        tool: str,
+        missing: list[str],
+        hint: str,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        """Standard clarification response for missing required params."""
+        return {
+            "error": f"{tool} requires: {', '.join(missing)}",
+            "clarification_needed": True,
+            "missing": missing,
+            "hint": hint,
+            **extra,
+        }
+
+    def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Wrap delegated tool execution — catch KeyError as clarification."""
+        try:
+            result: dict[str, Any] = tool_class().execute(**kwargs)
+            return result
+        except (KeyError, TypeError) as exc:
+            param = str(exc).strip("'\"")
+            return _clarify(
+                tool_class.__name__,
+                [param],
+                f"'{param}' 값을 알려주세요.",
+            )
 
     def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
         from core.fixtures import FIXTURE_MAP as _FM
@@ -1080,6 +1362,8 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
 
     def handle_analyze_ip(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("analyze_ip", ["ip_name"], "어떤 IP를 분석할까요?")
         dry_run = kwargs.get("dry_run", force_dry)
         if _text_requests_dry_run(ip_name):
             dry_run = True
@@ -1117,6 +1401,8 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
 
     def handle_search_ips(**kwargs: Any) -> dict[str, Any]:
         query = kwargs.get("query", "")
+        if not query:
+            return _clarify("search_ips", ["query"], "무엇을 검색할까요?")
         results = _get_search_engine().search(query)
         _render_search_results(query, results)
         return {
@@ -1131,6 +1417,13 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         ip_a = kwargs.get("ip_a", "")
         ip_b = kwargs.get("ip_b", "")
         dry_run = kwargs.get("dry_run", force_dry)
+
+        # Clarification: both IPs required
+        if not ip_a or not ip_b:
+            missing = [k for k, v in {"ip_a": ip_a, "ip_b": ip_b}.items() if not v]
+            hint = "어떤 IP와 비교할까요?" if ip_a else "비교할 두 IP를 알려주세요."
+            return _clarify("compare_ips", missing, hint, provided={"ip_a": ip_a, "ip_b": ip_b})
+
         console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
         result_a = _run_analysis(ip_a, dry_run=dry_run, verbose=verbose)
         result_b = _run_analysis(ip_b, dry_run=dry_run, verbose=verbose)
@@ -1169,16 +1462,33 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
 
     def handle_generate_report(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
-        fmt = kwargs.get("format", "md")
+        if not ip_name:
+            return _clarify("generate_report", ["ip_name"], "어떤 IP의 리포트를 생성할까요?")
+        fmt = kwargs.get("format", "markdown")
+        if fmt == "md":
+            fmt = "markdown"
         template = kwargs.get("template", "summary")
         dry_run = kwargs.get("dry_run", force_dry)
-        _generate_report(ip_name, dry_run=dry_run, verbose=verbose, fmt=fmt, template=template)
+        report_result = _generate_report(
+            ip_name,
+            dry_run=dry_run,
+            verbose=verbose,
+            fmt=fmt,
+            template=template,
+            skill_registry=skill_registry,
+        )
+        if report_result is None:
+            return {"error": f"Report generation failed for '{ip_name}'"}
+        file_path, content = report_result
         return {
             "status": "ok",
             "action": "report",
             "ip_name": ip_name,
             "format": fmt,
             "template": template,
+            "file_path": file_path,
+            "content_preview": content[:500] if len(content) > 500 else content,
+            "content_length": len(content),
         }
 
     def handle_batch_analyze(**kwargs: Any) -> dict[str, Any]:
@@ -1247,6 +1557,8 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
 
     def handle_memory_search(**kwargs: Any) -> dict[str, Any]:
         query = kwargs.get("query", "")
+        if not query:
+            return _clarify("memory_search", ["query"], "무엇을 검색할까요?")
         try:
             mem = ProjectMemory()
             content = mem.search(query) if hasattr(mem, "search") else mem.load_memory()
@@ -1257,6 +1569,9 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
     def handle_memory_save(**kwargs: Any) -> dict[str, Any]:
         key = kwargs.get("key", "")
         content = kwargs.get("content", "")
+        if not key or not content:
+            missing = [k for k, v in {"key": key, "content": content}.items() if not v]
+            return _clarify("memory_save", missing, "저장할 키와 내용을 알려주세요.")
         try:
             mem = ProjectMemory()
             mem.add_insight(f"{key}: {content}")
@@ -1270,6 +1585,8 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
 
         rule_action = kwargs.get("action", "list")
         name = kwargs.get("name", "")
+        if rule_action in ("add", "delete") and not name:
+            return _clarify("manage_rule", ["name"], "규칙 이름을 알려주세요.")
         intent = NLIntent(
             action="memory",
             args={
@@ -1346,8 +1663,42 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
     def handle_schedule_job(**kwargs: Any) -> dict[str, Any]:
         sub_action = kwargs.get("sub_action", "") or "list"
         target_id = kwargs.get("target_id", "")
+        expression = kwargs.get("expression", "")
+        svc = _scheduler_service_ctx.get(None)
+
+        if sub_action == "create" and expression:
+            cmd_schedule(f"create {expression}", scheduler_service=svc)
+            try:
+                from core.automation.nl_scheduler import NLScheduleParser
+
+                result = NLScheduleParser().parse(expression)
+                if result.success and result.job:
+                    return {
+                        "status": "ok",
+                        "action": "schedule",
+                        "sub_action": "create",
+                        "job_id": result.job.job_id,
+                        "schedule_kind": (
+                            result.inferred_kind.value if result.inferred_kind else ""
+                        ),
+                        "expression": expression,
+                    }
+                return {
+                    "status": "error",
+                    "action": "schedule",
+                    "sub_action": "create",
+                    "error": result.error or "parse failed",
+                }
+            except Exception as exc:
+                return {
+                    "status": "error",
+                    "action": "schedule",
+                    "sub_action": "create",
+                    "error": str(exc),
+                }
+
         sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
-        cmd_schedule(sched_args)
+        cmd_schedule(sched_args, scheduler_service=svc)
         try:
             from core.automation.predefined import PREDEFINED_AUTOMATIONS
 
@@ -1356,12 +1707,23 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
             ]
         except Exception:
             templates = []
-        return {
+        result_dict: dict[str, Any] = {
             "status": "ok",
             "action": "schedule",
             "sub_action": sub_action,
             "templates": templates[:10],
         }
+        if svc is not None:
+            try:
+                dynamic = [
+                    {"id": j.job_id, "name": j.name, "enabled": j.enabled}
+                    for j in svc.list_jobs(include_disabled=True)
+                    if not j.job_id.startswith("predefined:")
+                ]
+                result_dict["dynamic_jobs"] = dynamic
+            except Exception:
+                log.debug("Failed to list dynamic jobs", exc_info=True)
+        return result_dict
 
     def handle_trigger_event(**kwargs: Any) -> dict[str, Any]:
         sub_action = kwargs.get("sub_action", "") or "list"
@@ -1375,29 +1737,56 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
             "event_name": event_name,
         }
 
-    # --- Plan mode handlers ---
+    # --- Plan mode handlers (multi-plan cache keyed by plan_id) ---
 
-    _plan_cache: dict[str, Any] = {}
+    _plan_cache: dict[str, tuple[Any, Any]] = {}
+    _human_ratings: dict[str, dict[str, Any]] = {}
+    _result_feedback: dict[str, str] = {}
+
+    def _resolve_plan(
+        plan_id: str,
+    ) -> tuple[Any, Any] | None:
+        """Resolve plan from cache by ID, falling back to most recent."""
+        cached = _plan_cache.get(plan_id)
+        if not cached and _plan_cache:
+            last_key = list(_plan_cache.keys())[-1]
+            cached = _plan_cache.get(last_key)
+            if cached:
+                log.debug(
+                    "Plan ID '%s' not found, using latest '%s'",
+                    plan_id,
+                    last_key,
+                )
+        return cached
 
     def handle_create_plan(**kwargs: Any) -> dict[str, Any]:
         from core.orchestration.plan_mode import PlanMode
 
         ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("create_plan", ["ip_name"], "어떤 IP의 분석 계획을 세울까요?")
         template = kwargs.get("template", "full_pipeline")
         planner = PlanMode()
         plan = planner.create_plan(ip_name, template=template)
         summary = planner.present_plan(plan)
-        _plan_cache["last"] = (planner, plan)
+        _plan_cache[plan.plan_id] = (planner, plan)
 
         console.print()
         console.print(f"  [header]● Plan: {ip_name} 분석 계획[/header]")
         for i, step in enumerate(plan.steps, 1):
             console.print(f"    {i}. {step.description}")
         console.print(
-            f"  [muted]예상 시간: {plan.total_estimated_time_s:.0f}s "
+            f"  [muted]예상 시간: "
+            f"{plan.total_estimated_time_s:.0f}s "
             f"| 단계: {plan.step_count}개[/muted]"
         )
         console.print()
+        log.info(
+            "Plan '%s' created for '%s' (%d steps)",
+            plan.plan_id,
+            ip_name,
+            plan.step_count,
+        )
         return {
             "status": "ok",
             "action": "plan",
@@ -1407,79 +1796,296 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
             "step_count": plan.step_count,
             "steps": [s.description for s in plan.steps],
             "summary": summary,
-            "hint": "Use approve_plan to execute this plan.",
+            "hint": ("Use approve_plan, reject_plan, or modify_plan to proceed."),
         }
 
     def handle_approve_plan(**kwargs: Any) -> dict[str, Any]:
         plan_id = kwargs.get("plan_id", "")
-        cached = _plan_cache.get("last")
+        cached = _resolve_plan(plan_id)
         if not cached:
             return {"error": "No plan to approve. Use create_plan first."}
 
         planner, plan = cached
         if plan_id and plan.plan_id != plan_id:
-            return {"error": f"Plan ID mismatch: expected {plan.plan_id}, got {plan_id}"}
+            return {"error": (f"Plan ID mismatch: expected {plan.plan_id}, got {plan_id}")}
 
         planner.approve_plan(plan)
         result = planner.execute_plan(plan)
-        _plan_cache.pop("last", None)
+        _plan_cache.pop(plan.plan_id, None)
 
-        console.print(f"  [success]✓ Plan executed: {plan.ip_name}[/success]")
+        ip = plan.ip_name
+        console.print(f"  [success]✓ Plan approved: {ip}[/success]")
         console.print()
+        log.info("Plan '%s' approved for '%s'", plan.plan_id, ip)
         return {
             "status": "ok",
             "action": "approve_plan",
             "plan_id": plan.plan_id,
             "executed": True,
             "result": str(result)[:500],
+            "hint": (f"Plan approved. Call analyze_ip with ip_name='{ip}' to run the analysis."),
+        }
+
+    def handle_reject_plan(**kwargs: Any) -> dict[str, Any]:
+        plan_id = kwargs.get("plan_id", "")
+        reason = kwargs.get("reason", "")
+        cached = _resolve_plan(plan_id)
+        if not cached:
+            return {"error": "No plan to reject."}
+
+        planner, plan = cached
+        planner.reject_plan(plan, reason=reason)
+        _plan_cache.pop(plan.plan_id, None)
+        console.print(f"  [warning]✗ Plan rejected: {plan.ip_name}[/warning]")
+        log.info(
+            "Plan '%s' rejected (reason=%s)",
+            plan.plan_id,
+            reason or "(none)",
+        )
+        return {
+            "status": "ok",
+            "action": "reject_plan",
+            "plan_id": plan.plan_id,
+            "reason": reason,
+        }
+
+    def handle_modify_plan(**kwargs: Any) -> dict[str, Any]:
+        plan_id = kwargs.get("plan_id", "")
+        cached = _resolve_plan(plan_id)
+        if not cached:
+            return {"error": "No plan to modify."}
+
+        planner, plan = cached
+        template = kwargs.get("template")
+        remove = kwargs.get("remove_steps")
+        planner.modify_plan(
+            plan,
+            template=template,
+            remove_steps=remove,
+        )
+        _plan_cache[plan.plan_id] = (planner, plan)
+        console.print(f"  [header]● Plan modified: {plan.ip_name}[/header]")
+        for i, step in enumerate(plan.steps, 1):
+            console.print(f"    {i}. {step.description}")
+        console.print()
+        log.info(
+            "Plan '%s' modified (%d steps)",
+            plan.plan_id,
+            plan.step_count,
+        )
+        return {
+            "status": "ok",
+            "action": "modify_plan",
+            "plan_id": plan.plan_id,
+            "step_count": plan.step_count,
+            "steps": [s.description for s in plan.steps],
+        }
+
+    def handle_list_plans(**kwargs: Any) -> dict[str, Any]:
+        plans = []
+        for pid, (_, plan) in _plan_cache.items():
+            plans.append(
+                {
+                    "plan_id": pid,
+                    "ip_name": plan.ip_name,
+                    "status": plan.status.value,
+                    "steps": plan.step_count,
+                }
+            )
+        return {
+            "status": "ok",
+            "action": "list_plans",
+            "count": len(plans),
+            "plans": plans,
+        }
+
+    def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        rating = kwargs.get("rating", 0)
+        if not ip_name:
+            return _clarify("rate_result", ["ip_name"], "어떤 IP에 평점을 매길까요?")
+        if not (1 <= rating <= 5):
+            return _clarify("rate_result", ["rating"], "평점은 1-5 사이로 입력해주세요.")
+        comment = kwargs.get("comment", "")
+        _human_ratings[ip_name] = {
+            "rating": rating,
+            "comment": comment,
+        }
+        console.print(f"  [success]✓ Rating saved for {ip_name}: {rating}/5[/success]")
+        log.info(
+            "HITL rating: %s = %d/5",
+            ip_name,
+            rating,
+        )
+        return {
+            "status": "ok",
+            "action": "rate_result",
+            "ip_name": ip_name,
+            "rating": rating,
+        }
+
+    def handle_accept_result(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("accept_result", ["ip_name"], "어떤 IP 결과를 수락할까요?")
+        _result_feedback[ip_name] = "accepted"
+        console.print(f"  [success]✓ Result accepted: {ip_name}[/success]")
+        log.info("HITL accept: %s", ip_name)
+        return {
+            "status": "ok",
+            "action": "accept_result",
+            "ip_name": ip_name,
+        }
+
+    def handle_reject_result(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("reject_result", ["ip_name"], "어떤 IP 결과를 거부할까요?")
+        reason = kwargs.get("reason", "")
+        _result_feedback[ip_name] = "rejected"
+        console.print(f"  [warning]✗ Result rejected: {ip_name}[/warning]")
+        log.info(
+            "HITL reject: %s (reason=%s)",
+            ip_name,
+            reason or "(none)",
+        )
+        return {
+            "status": "ok",
+            "action": "reject_result",
+            "ip_name": ip_name,
+            "reason": reason,
+            "hint": ("Use rerun_node to re-execute specific pipeline steps."),
+        }
+
+    def handle_rerun_node(**kwargs: Any) -> dict[str, Any]:
+        node_name = kwargs.get("node_name", "")
+        ip_name = kwargs.get("ip_name", "")
+        if not node_name or not ip_name:
+            missing = [k for k, v in {"node_name": node_name, "ip_name": ip_name}.items() if not v]
+            return _clarify("rerun_node", missing, "재실행할 노드와 IP를 알려주세요.")
+        allowed = {"scoring", "verification", "synthesizer"}
+        if node_name not in allowed:
+            return {
+                "error": (f"Cannot rerun '{node_name}'. Allowed: {sorted(allowed)}"),
+            }
+        console.print(f"  [header]▸ Rerunning {node_name} for {ip_name}[/header]")
+        log.info(
+            "HITL rerun: %s for %s",
+            node_name,
+            ip_name,
+        )
+        return {
+            "status": "ok",
+            "action": "rerun_node",
+            "node_name": node_name,
+            "ip_name": ip_name,
+            "hint": ("Node re-execution queued. Results will update in-place."),
         }
 
     # --- New tools: web, document, note, signal ---
+    # All delegated tools wrapped with _safe_delegate for KeyError → clarification
 
     def handle_web_fetch(**kwargs: Any) -> dict[str, Any]:
         from core.tools.web_tools import WebFetchTool
 
-        return WebFetchTool().execute(**kwargs)
+        return _safe_delegate(WebFetchTool, kwargs)
 
     def handle_general_web_search(**kwargs: Any) -> dict[str, Any]:
         from core.tools.web_tools import GeneralWebSearchTool
 
-        return GeneralWebSearchTool().execute(**kwargs)
+        return _safe_delegate(GeneralWebSearchTool, kwargs)
 
     def handle_read_document(**kwargs: Any) -> dict[str, Any]:
         from core.tools.document_tools import ReadDocumentTool
 
-        return ReadDocumentTool().execute(**kwargs)
+        return _safe_delegate(ReadDocumentTool, kwargs)
 
     def handle_note_save(**kwargs: Any) -> dict[str, Any]:
         from core.tools.memory_tools import NoteSaveTool
 
-        return NoteSaveTool().execute(**kwargs)
+        return _safe_delegate(NoteSaveTool, kwargs)
 
     def handle_note_read(**kwargs: Any) -> dict[str, Any]:
         from core.tools.memory_tools import NoteReadTool
 
-        return NoteReadTool().execute(**kwargs)
+        return _safe_delegate(NoteReadTool, kwargs)
 
     def handle_youtube_search(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import YouTubeSearchTool
 
-        return YouTubeSearchTool().execute(**kwargs)
+        return _safe_delegate(YouTubeSearchTool, kwargs)
 
     def handle_reddit_sentiment(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import RedditSentimentTool
 
-        return RedditSentimentTool().execute(**kwargs)
+        return _safe_delegate(RedditSentimentTool, kwargs)
 
     def handle_steam_info(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import SteamInfoTool
 
-        return SteamInfoTool().execute(**kwargs)
+        return _safe_delegate(SteamInfoTool, kwargs)
 
     def handle_google_trends(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import GoogleTrendsTool
 
-        return GoogleTrendsTool().execute(**kwargs)
+        return _safe_delegate(GoogleTrendsTool, kwargs)
+
+    def handle_install_mcp_server(**kwargs: Any) -> dict[str, Any]:
+        import os as _os
+
+        from core.infrastructure.adapters.mcp.catalog import search_catalog
+
+        query = kwargs.get("query", "")
+        matches = search_catalog(query)
+        if not matches:
+            return {
+                "status": "not_found",
+                "message": f"'{query}'에 맞는 MCP 서버를 찾지 못했습니다.",
+            }
+
+        best = matches[0]
+
+        # Already installed?
+        if mcp_manager is not None:
+            existing = {s["name"] for s in mcp_manager.list_servers()}
+            if best.name in existing:
+                return {
+                    "status": "already_installed",
+                    "server": best.name,
+                    "message": f"{best.name}은 이미 설치되어 있습니다.",
+                }
+
+        if mcp_manager is None:
+            return {"status": "error", "message": "MCP manager not available"}
+
+        # Register server
+        args = ["-y", best.package, *best.extra_args]
+        env_map = {k: f"${{{k}}}" for k in best.env_keys} or None
+        ok = mcp_manager.add_server(best.name, best.command, args=args, env=env_map)
+        if not ok:
+            return {"status": "error", "message": f"Failed to save {best.name}"}
+
+        # Hot-reload tools into running AgenticLoop
+        added = 0
+        if agentic_ref and agentic_ref[0] is not None:
+            added = agentic_ref[0].refresh_tools()
+
+        # Check for missing env vars
+        missing = [k for k in best.env_keys if not _os.environ.get(k)]
+
+        msg = f"{best.name} 설치 완료. {added}개 도구 추가됨."
+        if missing:
+            msg += f" 환경변수 필요: {', '.join(missing)}"
+
+        return {
+            "status": "installed",
+            "server": best.name,
+            "package": best.package,
+            "tools_added": added,
+            "env_required": list(best.env_keys),
+            "env_missing": missing,
+            "message": msg,
+        }
 
     return {
         "list_ips": handle_list_ips,
@@ -1501,6 +2107,13 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         "trigger_event": handle_trigger_event,
         "create_plan": handle_create_plan,
         "approve_plan": handle_approve_plan,
+        "reject_plan": handle_reject_plan,
+        "modify_plan": handle_modify_plan,
+        "list_plans": handle_list_plans,
+        "rate_result": handle_rate_result,
+        "accept_result": handle_accept_result,
+        "reject_result": handle_reject_result,
+        "rerun_node": handle_rerun_node,
         # New tools
         "web_fetch": handle_web_fetch,
         "general_web_search": handle_general_web_search,
@@ -1512,6 +2125,8 @@ def _build_tool_handlers(verbose: bool = False) -> dict[str, Any]:
         "reddit_sentiment": handle_reddit_sentiment,
         "steam_info": handle_steam_info,
         "google_trends": handle_google_trends,
+        # MCP auto-install
+        "install_mcp_server": handle_install_mcp_server,
     }
 
 
@@ -1571,15 +2186,52 @@ def _interactive_loop() -> None:
     except Exception:
         log.debug("MCP initialization skipped", exc_info=True)
 
+    # Initialize skill registry (optional, fails silently)
+    from core.extensibility.skills import SkillLoader, SkillRegistry
+
+    skill_registry = SkillRegistry()
+    try:
+        loaded_skills = SkillLoader().load_all(registry=skill_registry)
+        if loaded_skills:
+            log.info("Loaded %d skills", len(loaded_skills))
+    except Exception:
+        log.debug("Skill loading skipped", exc_info=True)
+
+    # Initialize SchedulerService (optional, fails silently)
+    try:
+        from core.automation.scheduler import SchedulerService
+
+        _sched_svc = SchedulerService()
+        _sched_svc.load()
+        _sched_svc.start()
+        _scheduler_service_ctx.set(_sched_svc)
+        log.info("SchedulerService started")
+    except Exception:
+        log.debug("SchedulerService initialization skipped", exc_info=True)
+
     # Build tool handlers and executor
-    handlers = _build_tool_handlers(verbose=verbose)
-    executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
-    agentic = AgenticLoop(conversation, executor, mcp_manager=mcp_mgr)
+    agentic_ref: list[Any] = [None]  # mutable ref for handler closure
+    handlers = _build_tool_handlers(
+        verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref, skill_registry=skill_registry
+    )
+    sub_mgr = _build_sub_agent_manager(verbose=verbose)
+    executor = ToolExecutor(
+        action_handlers=handlers,
+        mcp_manager=mcp_mgr,
+        sub_agent_manager=sub_mgr,
+    )
+    agentic = AgenticLoop(
+        conversation, executor, mcp_manager=mcp_mgr, skill_registry=skill_registry
+    )
+    agentic_ref[0] = agentic
 
     while True:
         try:
             user_input = console.input("[bold cyan]>[/bold cyan] ").strip()
         except (KeyboardInterrupt, EOFError):
+            from core.ui.agentic_ui import render_session_cost_summary
+
+            render_session_cost_summary()
             console.print("\n  [muted]Goodbye.[/muted]\n")
             break
 
@@ -1590,18 +2242,51 @@ def _interactive_loop() -> None:
             # Slash command → deterministic routing (OpenClaw Binding)
             cmd = user_input.split()[0].lower()
             args = user_input[len(cmd) :].strip()
-            should_break, verbose = _handle_command(cmd, args, verbose)
+            should_break, verbose = _handle_command(
+                cmd,
+                args,
+                verbose,
+                skill_registry=skill_registry,
+                mcp_manager=mcp_mgr,
+            )
             if should_break:
                 break
             # Update handlers if verbose changed
             if verbose != (handlers.get("_verbose_flag") is True):
-                handlers = _build_tool_handlers(verbose=verbose)
-                executor = ToolExecutor(action_handlers=handlers, mcp_manager=mcp_mgr)
-                agentic = AgenticLoop(conversation, executor, mcp_manager=mcp_mgr)
+                handlers = _build_tool_handlers(
+                    verbose=verbose,
+                    mcp_manager=mcp_mgr,
+                    agentic_ref=agentic_ref,
+                    skill_registry=skill_registry,
+                )
+                sub_mgr = _build_sub_agent_manager(
+                    verbose=verbose,
+                )
+                executor = ToolExecutor(
+                    action_handlers=handlers,
+                    mcp_manager=mcp_mgr,
+                    sub_agent_manager=sub_mgr,
+                )
+                agentic = AgenticLoop(
+                    conversation,
+                    executor,
+                    mcp_manager=mcp_mgr,
+                    skill_registry=skill_registry,
+                )
+                agentic_ref[0] = agentic
         else:
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
             result = agentic.run(user_input)
             _render_agentic_result(result)
+
+    # Clean shutdown of SchedulerService
+    _sched = _scheduler_service_ctx.get(None)
+    if _sched is not None:
+        try:
+            _sched.save()
+            _sched.stop()
+        except Exception:
+            log.debug("SchedulerService shutdown error", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1611,7 +2296,7 @@ def _interactive_loop() -> None:
 
 @app.callback()
 def main(ctx: typer.Context) -> None:
-    """GEODE v0.7.0 — Undervalued IP Discovery Agent."""
+    """GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
         _interactive_loop()

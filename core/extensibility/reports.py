@@ -187,6 +187,7 @@ class ReportGenerator:
         *,
         fmt: ReportFormat = ReportFormat.MARKDOWN,
         template: ReportTemplate = ReportTemplate.SUMMARY,
+        enhanced_narrative: str = "",
     ) -> str:
         """Generate a formatted report.
 
@@ -195,10 +196,13 @@ class ReportGenerator:
                     tier, subscores, synthesis, analyses, etc.
             fmt: Output format (HTML, JSON, MARKDOWN).
             template: Detail level (SUMMARY, DETAILED, EXECUTIVE).
+            enhanced_narrative: Optional skill-enhanced expert analysis text.
 
         Returns:
             Formatted report string.
         """
+        if enhanced_narrative:
+            result = {**result, "enhanced_narrative": enhanced_narrative}
         if fmt == ReportFormat.JSON:
             return self._generate_json(result, template)
         if fmt == ReportFormat.HTML:

@@ -55,11 +55,51 @@ def build_session_key(ip_name: str, phase: str, sub_context: str | None = None) 
     return key
 
 
-def parse_session_key(key: str) -> dict[str, str | None]:
+def build_subagent_session_key(ip_name: str, task_id: str, phase: str = "pipeline") -> str:
+    """Build a session key for a sub-agent execution.
+
+    Returns a key with format: ip:{normalized_name}:{phase}:subagent:{normalized_task_id}
+
+    Args:
+        ip_name: IP name (e.g. "Berserk").
+        task_id: Unique task identifier for the sub-agent.
+        phase: Pipeline phase (default "pipeline").
+    """
+    normalized_name = _normalize_name(ip_name)
+    normalized_task_id = _normalize_name(task_id)
+    return f"ip:{normalized_name}:{phase}:subagent:{normalized_task_id}"
+
+
+def build_subagent_thread_config(
+    ip_name: str, task_id: str, phase: str = "pipeline"
+) -> dict[str, Any]:
+    """Build a LangGraph thread config for a sub-agent execution.
+
+    Includes LangSmith trace enrichment with subagent-specific metadata.
+
+    Returns:
+        Dict suitable for ``graph.invoke(state, config=...)``.
+    """
+    thread_id = build_subagent_session_key(ip_name, task_id, phase)
+    return {
+        "configurable": {"thread_id": thread_id},
+        "run_name": f"geode:subagent:{ip_name}:{task_id}",
+        "tags": [f"ip:{ip_name}", f"phase:{phase}", "subagent"],
+        "metadata": {
+            "ip_name": ip_name,
+            "phase": phase,
+            "task_id": task_id,
+            "is_subagent": True,
+        },
+    }
+
+
+def parse_session_key(key: str) -> dict[str, str | None | bool]:
     """Parse a session key back into components.
 
     Returns:
-        Dict with keys: prefix, ip_name, phase, sub_context (may be None).
+        Dict with keys: prefix, ip_name, phase, sub_context (may be None),
+        task_id (None for non-subagent keys), is_subagent (bool).
 
     Raises:
         ValueError: If key format is invalid.
@@ -68,11 +108,24 @@ def parse_session_key(key: str) -> dict[str, str | None]:
     if len(parts) < 3 or parts[0] != "ip":
         raise ValueError(f"Invalid session key format: '{key}'. Expected 'ip:{{name}}:{{phase}}'")
 
+    # 5-part subagent key: ip:X:Y:subagent:Z
+    if len(parts) == 5 and parts[3] == "subagent":
+        return {
+            "prefix": parts[0],
+            "ip_name": parts[1],
+            "phase": parts[2],
+            "sub_context": parts[3],
+            "task_id": parts[4],
+            "is_subagent": True,
+        }
+
     return {
         "prefix": parts[0],
         "ip_name": parts[1],
         "phase": parts[2],
         "sub_context": parts[3] if len(parts) > 3 else None,
+        "task_id": None,
+        "is_subagent": False,
     }
 
 

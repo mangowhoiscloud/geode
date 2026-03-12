@@ -67,12 +67,45 @@ def render_tokens(
     input_tokens: int,
     output_tokens: int,
     elapsed_s: float | None = None,
+    cost_usd: float | None = None,
 ) -> None:
     """Render token usage line (Claude Code ✢ style)."""
     in_str = _fmt_tokens(input_tokens)
     out_str = _fmt_tokens(output_tokens)
     time_str = f" · {elapsed_s:.1f}s" if elapsed_s else ""
-    console.print(f"  [token_info]✢ {model} · ↓{in_str} ↑{out_str}{time_str}[/token_info]")
+    cost_str = f" · ${cost_usd:.4f}" if cost_usd and cost_usd > 0 else ""
+    line = f"  [token_info]✢ {model} · ↓{in_str} ↑{out_str}"
+    line += f"{cost_str}{time_str}[/token_info]"
+    console.print(line)
+
+
+def render_session_cost_summary() -> None:
+    """Render cumulative session cost summary."""
+    try:
+        from core.llm.client import get_usage_accumulator
+
+        acc = get_usage_accumulator()
+        if not acc.calls:
+            return
+        console.print()
+        console.print("  [bold]Session Cost Summary[/bold]")
+        console.print(f"  [dim]Calls:[/dim] {len(acc.calls)}")
+        in_str = _fmt_tokens(acc.total_input_tokens)
+        out_str = _fmt_tokens(acc.total_output_tokens)
+        console.print(f"  [dim]Tokens:[/dim] ↓{in_str} ↑{out_str}")
+        console.print(f"  [bold yellow]Total: ${acc.total_cost_usd:.4f}[/bold yellow]")
+        # Per-model breakdown
+        model_costs: dict[str, float] = {}
+        model_calls: dict[str, int] = {}
+        for u in acc.calls:
+            model_costs[u.model] = model_costs.get(u.model, 0) + u.cost_usd
+            model_calls[u.model] = model_calls.get(u.model, 0) + 1
+        if len(model_costs) > 1:
+            for m, c in sorted(model_costs.items(), key=lambda x: -x[1]):
+                console.print(f"    [dim]{m}:[/dim] ${c:.4f} ({model_calls[m]} calls)")
+        console.print()
+    except Exception:
+        return  # accumulator not available yet
 
 
 def render_plan_steps(ip_name: str, steps: list[str]) -> None:

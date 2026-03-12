@@ -61,7 +61,7 @@ class StdioMCPClient:
                 {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {},
-                    "clientInfo": {"name": "geode", "version": "0.7.0"},
+                    "clientInfo": {"name": "geode", "version": "0.9.0"},
                 },
             )
 

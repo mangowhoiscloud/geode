@@ -75,6 +75,8 @@ COMMAND_MAP: dict[str, str] = {
     "/status": "status",
     "/compare": "compare",
     "/mcp": "mcp",
+    "/skills": "skills",
+    "/cost": "cost",
 }
 
 
@@ -98,6 +100,8 @@ def show_help() -> None:
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
     console.print("  [label]/status[/label]             — Show system status")
     console.print("  [label]/compare[/label] <A> <B>    — Compare two IPs")
+    console.print("  [label]/mcp[/label]                — MCP server status/tools/add")
+    console.print("  [label]/skills[/label]             — List/add/reload skills")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
     console.print()
@@ -536,64 +540,223 @@ def cmd_batch(
     return results
 
 
-def cmd_schedule(args: str) -> None:
+def _format_schedule_desc(job: _Any) -> str:
+    """Format a ScheduledJob's schedule as human-readable string."""
+    sched = job.schedule
+    kind = sched.kind.value if hasattr(sched.kind, "value") else str(sched.kind)
+    if kind == "every" and sched.every_ms:
+        secs = sched.every_ms / 1000
+        if secs >= 3600:
+            return f"every {secs / 3600:.0f}h"
+        if secs >= 60:
+            return f"every {secs / 60:.0f}m"
+        return f"every {secs:.0f}s"
+    if kind == "cron" and sched.cron_expr:
+        return f"cron: {sched.cron_expr}"
+    if kind == "at":
+        return "one-shot (at)"
+    return kind
+
+
+def _print_job_status(job: _Any) -> None:
+    """Print detailed status for a dynamic ScheduledJob."""
+    console.print(f"  Name: {job.name}")
+    console.print(f"  Schedule: {_format_schedule_desc(job)}")
+    state = "enabled" if job.enabled else "disabled"
+    console.print(f"  State: {state}")
+    if job.last_status:
+        console.print(f"  Last status: {job.last_status}")
+    if job.last_duration_ms is not None:
+        console.print(f"  Last duration: {job.last_duration_ms:.1f}ms")
+    if job.active_hours:
+        console.print(f"  Active hours: {job.active_hours.start}-{job.active_hours.end}")
+
+
+def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
     """Handle /schedule command — manage scheduled automations.
 
-    /schedule              → list all templates
-    /schedule list         → list all templates
-    /schedule enable <id>  → enable a template
-    /schedule disable <id> → disable a template
-    /schedule run <id>     → run a template immediately
+    /schedule                    → list predefined templates + dynamic jobs
+    /schedule list               → same as above
+    /schedule create <expr>      → create job from NL expression
+    /schedule delete <id>        → delete a dynamic job
+    /schedule status <id>        → show job/template status
+    /schedule enable <id>        → enable a job/template
+    /schedule disable <id>       → disable a job/template
+    /schedule run <id>           → run a job/template immediately
     """
     from core.automation.predefined import PREDEFINED_AUTOMATIONS
 
-    arg = args.strip().lower()
+    arg = args.strip()
+    arg_lower = arg.lower()
 
-    if not arg or arg == "list":
+    # --- list -----------------------------------------------------------
+    if not arg_lower or arg_lower == "list":
         console.print()
-        console.print("  [header]Scheduled Automations[/header]")
+        console.print("  [header]Predefined Automations[/header]")
         for tmpl in PREDEFINED_AUTOMATIONS:
             state = "[success]ON[/success]" if tmpl.enabled else "[muted]OFF[/muted]"
             console.print(
                 f"  {state}  [label]{tmpl.id:<30}[/label] "
                 f"[muted]{tmpl.schedule:<16}[/muted] {tmpl.name}"
             )
+
+        # Dynamic jobs from scheduler_service
+        if scheduler_service is not None:
+            jobs = scheduler_service.list_jobs(include_disabled=True)
+            if jobs:
+                console.print()
+                console.print("  [header]Dynamic Jobs[/header]")
+                for job in jobs:
+                    state = "[success]ON[/success]" if job.enabled else "[muted]OFF[/muted]"
+                    desc = _format_schedule_desc(job)
+                    console.print(
+                        f"  {state}  [label]{job.job_id:<30}[/label] "
+                        f"[muted]{desc:<16}[/muted] {job.name}"
+                    )
+
         console.print()
-        console.print("  [muted]Usage: /schedule enable|disable|run <id>[/muted]")
+        console.print(
+            "  [muted]Usage: /schedule [create|delete|status|enable|disable|run] <id>[/muted]"
+        )
         console.print()
         return
 
     parts = arg.split(None, 1)
-    sub = parts[0]
-    target_id = parts[1] if len(parts) > 1 else ""
+    sub = parts[0].lower()
+    rest = parts[1] if len(parts) > 1 else ""
+    target_id = rest.strip()
 
+    # --- create ---------------------------------------------------------
+    if sub == "create":
+        if not target_id:
+            console.print("  [warning]Usage: /schedule create <expression>[/warning]")
+            console.print()
+            return
+        if scheduler_service is None:
+            console.print("  [warning]Scheduler not available[/warning]")
+            console.print()
+            return
+        from core.automation.nl_scheduler import NLScheduleParser
+
+        parser = NLScheduleParser()
+        result = parser.parse(target_id)
+        if not result.success or result.job is None:
+            console.print(f"  [warning]Failed to parse: {target_id}[/warning]")
+            console.print()
+            return
+        scheduler_service.add_job(result.job)
+        console.print(f"  [success]Created: {result.job.job_id}[/success]")
+        console.print(f"  Schedule: {_format_schedule_desc(result.job)}")
+        console.print()
+        return
+
+    # --- delete ---------------------------------------------------------
+    if sub == "delete":
+        if scheduler_service is None:
+            console.print("  [warning]Scheduler not available[/warning]")
+            console.print()
+            return
+        removed = scheduler_service.remove_job(target_id)
+        if removed:
+            console.print(f"  [success]Deleted: {target_id}[/success]")
+        else:
+            console.print(f"  [warning]Job not found: {target_id}[/warning]")
+        console.print()
+        return
+
+    # --- status ---------------------------------------------------------
+    if sub == "status":
+        # Check predefined templates first
+        found_tmpl = next(
+            (t for t in PREDEFINED_AUTOMATIONS if t.id == target_id),
+            None,
+        )
+        if found_tmpl is not None:
+            console.print()
+            console.print(f"  Template: {found_tmpl.name}")
+            console.print(f"  Schedule: {found_tmpl.schedule}")
+            state = "enabled" if found_tmpl.enabled else "disabled"
+            console.print(f"  State: {state}")
+            console.print()
+            return
+
+        # Check dynamic jobs
+        if scheduler_service is not None:
+            job = scheduler_service.get_job(target_id)
+            if job is not None:
+                console.print()
+                _print_job_status(job)
+                console.print()
+                return
+
+        console.print(f"  [warning]Not found: {target_id}[/warning]")
+        console.print()
+        return
+
+    # --- enable / disable -----------------------------------------------
     if sub in ("enable", "disable"):
-        found = next((t for t in PREDEFINED_AUTOMATIONS if t.id == target_id), None)
-        if found is None:
-            console.print(f"  [warning]Unknown template: {target_id}[/warning]")
+        new_state = sub == "enable"
+
+        # Check predefined templates
+        found_tmpl = next(
+            (t for t in PREDEFINED_AUTOMATIONS if t.id == target_id),
+            None,
+        )
+        if found_tmpl is not None:
+            found_tmpl.enabled = new_state
+            label = "enabled" if new_state else "disabled"
+            console.print(f"  [success]{found_tmpl.name}: {label}[/success]")
+            console.print()
             return
-        found.enabled = sub == "enable"
-        state = "enabled" if found.enabled else "disabled"
-        console.print(f"  [success]{found.name}: {state}[/success]")
+
+        # Check dynamic jobs
+        if scheduler_service is not None:
+            updated = scheduler_service.update_job(target_id, enabled=new_state)
+            if updated:
+                label = "enabled" if new_state else "disabled"
+                console.print(f"  [success]{target_id}: {label}[/success]")
+                console.print()
+                return
+
+        console.print(f"  [warning]Unknown template: {target_id}[/warning]")
         console.print()
         return
 
+    # --- run ------------------------------------------------------------
     if sub == "run":
-        found = next((t for t in PREDEFINED_AUTOMATIONS if t.id == target_id), None)
-        if found is None:
-            console.print(f"  [warning]Unknown template: {target_id}[/warning]")
+        # Check predefined templates
+        found_tmpl = next(
+            (t for t in PREDEFINED_AUTOMATIONS if t.id == target_id),
+            None,
+        )
+        if found_tmpl is not None:
+            console.print(f"  [header]Running: {found_tmpl.name}[/header]")
+            console.print(f"  Mode: {found_tmpl.pipeline_config.mode}")
+            console.print(f"  Batch size: {found_tmpl.pipeline_config.batch_size}")
+            console.print(f"  Dry-run: {found_tmpl.pipeline_config.dry_run}")
+            console.print()
+            console.print("  [muted]Template execution dispatched to runtime.[/muted]")
+            console.print()
             return
-        console.print(f"  [header]Running: {found.name}[/header]")
-        console.print(f"  Mode: {found.pipeline_config.mode}")
-        console.print(f"  Batch size: {found.pipeline_config.batch_size}")
-        console.print(f"  Dry-run: {found.pipeline_config.dry_run}")
-        console.print()
-        # Actual execution would be wired through runtime.run_pipeline()
-        console.print("  [muted]Template execution dispatched to runtime.[/muted]")
+
+        # Check dynamic jobs
+        if scheduler_service is not None:
+            result = scheduler_service.run_now(target_id)
+            if result.get("status") == "error":
+                console.print(f"  [warning]{result.get('error', 'Unknown error')}[/warning]")
+            else:
+                console.print(f"  [success]Executed: {target_id}[/success]")
+            console.print()
+            return
+
+        console.print(f"  [warning]Unknown template: {target_id}[/warning]")
         console.print()
         return
 
-    console.print("  [warning]Usage: /schedule [list|enable|disable|run] <id>[/warning]")
+    # --- fallback -------------------------------------------------------
+    console.print(
+        "  [warning]Usage: /schedule [list|create|delete|status|enable|disable|run] <id>[/warning]"
+    )
     console.print()
 
 
@@ -630,21 +793,32 @@ def cmd_trigger(args: str) -> None:
     console.print()
 
 
-def cmd_mcp(arg: str) -> None:
-    """Handle /mcp command — list/manage MCP servers."""
+def cmd_mcp(arg: str, *, mcp_manager: _Any | None = None) -> None:
+    """Handle /mcp command — list/manage MCP servers.
+
+    /mcp or /mcp status  → server connection status + tool counts
+    /mcp tools           → list all MCP tool names
+    /mcp reload          → reload config and reconnect
+    """
     from core.infrastructure.adapters.mcp.manager import MCPServerManager
 
-    mgr = MCPServerManager()
-    loaded = mgr.load_config()
+    mgr: MCPServerManager
+    if mcp_manager is not None:
+        mgr = mcp_manager
+    else:
+        mgr = MCPServerManager()
+        mgr.load_config()
 
-    if not arg or arg == "list":
-        if loaded == 0:
+    sub = arg.strip().lower() if arg else ""
+
+    if not sub or sub in ("status", "list"):
+        servers = mgr.list_servers()
+        if not servers:
             console.print("  [muted]No MCP servers configured.[/muted]")
             console.print("  [muted]Add servers to .claude/mcp_servers.json[/muted]")
             console.print()
             return
 
-        servers = mgr.list_servers()
         console.print()
         console.print("  [header]MCP Servers[/header]")
         for s in servers:
@@ -657,8 +831,184 @@ def cmd_mcp(arg: str) -> None:
         console.print()
         return
 
+    if sub == "tools":
+        all_tools = mgr.get_all_tools()
+        if not all_tools:
+            console.print("  [muted]No MCP tools available.[/muted]")
+            console.print()
+            return
+
+        console.print()
+        console.print("  [header]MCP Tools[/header]")
+        for tool in all_tools:
+            server = tool.get("_mcp_server", "unknown")
+            name = tool.get("name", "?")
+            desc = tool.get("description", "")[:60]
+            console.print(f"  [label]{name:30s}[/label] [muted]{server}[/muted]  {desc}")
+        console.print()
+        return
+
+    if sub == "reload":
+        count = mgr.reload_config()
+        console.print(f"  [success]MCP config reloaded: {count} server(s)[/success]")
+        console.print()
+        return
+
+    if sub.startswith("add"):
+        _mcp_add(mgr, sub[3:].strip())
+        return
+
     console.print(f"  [muted]MCP subcommand not recognized: {arg}[/muted]")
-    console.print("  [muted]Usage: /mcp [list][/muted]")
+    console.print("  [muted]Usage: /mcp [status|tools|reload|add][/muted]")
+    console.print()
+
+
+def _mcp_add(mgr: _Any, raw: str) -> None:
+    """Handle /mcp add <name> <command> [args...].
+
+    Example: /mcp add brave-search npx -y @anthropic/mcp-server-brave-search
+    """
+    parts = raw.split() if raw else []
+    if len(parts) < 2:
+        console.print("  [warning]Usage: /mcp add <name> <command> [args...][/warning]")
+        console.print(
+            "  [muted]Example: /mcp add brave-search npx"
+            " -y @anthropic/mcp-server-brave-search[/muted]"
+        )
+        console.print()
+        return
+
+    name = parts[0]
+    command = parts[1]
+    cmd_args = parts[2:] if len(parts) > 2 else []
+
+    if mgr.add_server(name, command, args=cmd_args):
+        console.print(f"  [success]Added MCP server: {name}[/success]")
+        console.print(f"  [muted]Command: {command} {' '.join(cmd_args)}[/muted]")
+        console.print("  [muted]Saved to .claude/mcp_servers.json[/muted]")
+    else:
+        console.print(f"  [warning]Failed to add MCP server: {name}[/warning]")
+    console.print()
+
+
+def cmd_skills(skill_registry: _Any, arg: str) -> None:
+    """Handle /skills command — list/inspect loaded skills.
+
+    /skills           → list loaded skills
+    /skills reload    → reload from disk
+    /skills <name>    → show skill detail
+    """
+    from core.extensibility.skills import SkillLoader, SkillRegistry
+
+    reg: SkillRegistry = skill_registry
+    sub = arg.strip() if arg else ""
+
+    if not sub:
+        names = reg.list_skills()
+        if not names:
+            console.print("  [muted]No skills loaded.[/muted]")
+            console.print("  [muted]Add skills to .claude/skills/<name>/SKILL.md[/muted]")
+            console.print()
+            return
+
+        console.print()
+        console.print(f"  [header]Skills ({len(names)})[/header]")
+        for name in names:
+            skill = reg.get(name)
+            if skill is None:
+                continue
+            tools_str = f" [muted]({len(skill.tools)} tools)[/muted]" if skill.tools else ""
+            desc = skill.description[:70]
+            if len(skill.description) > 70:
+                desc += "..."
+            console.print(f"  [label]{name:25s}[/label]{tools_str}  {desc}")
+        console.print()
+        return
+
+    if sub == "reload":
+        # Clear and reload
+        new_reg = SkillRegistry()
+        loaded = SkillLoader().load_all(registry=new_reg)
+        # Replace contents in existing registry
+        reg._skills.clear()
+        for skill in loaded:
+            reg.register(skill)
+        console.print(f"  [success]Reloaded {len(loaded)} skills[/success]")
+        console.print()
+        return
+
+    if sub.startswith("add"):
+        _skills_add(reg, sub[3:].strip())
+        return
+
+    # Show specific skill detail
+    skill = reg.get(sub)
+    if skill is None:
+        console.print(f"  [warning]Skill not found: {sub}[/warning]")
+        console.print(f"  [muted]Available: {', '.join(reg.list_skills())}[/muted]")
+        console.print()
+        return
+
+    console.print()
+    console.print(f"  [header]{skill.name}[/header]")
+    console.print(f"  [label]Description:[/label] {skill.description}")
+    if skill.triggers:
+        console.print(f"  [label]Triggers:[/label]    {', '.join(skill.triggers)}")
+    if skill.tools:
+        console.print(f"  [label]Tools:[/label]       {', '.join(skill.tools)}")
+    console.print(f"  [label]Risk:[/label]        {skill.risk}")
+    console.print(f"  [label]Body:[/label]        {len(skill.body)} chars")
+    console.print()
+
+
+def _skills_add(reg: _Any, raw: str) -> None:
+    """Handle /skills add <path> — register an external SKILL.md file.
+
+    Copies the SKILL.md into .claude/skills/<name>/ and registers it.
+    Example: /skills add /path/to/my-skill/SKILL.md
+    """
+    import shutil
+
+    from core.extensibility.skills import SkillLoader
+
+    path_str = raw.strip()
+    if not path_str:
+        console.print("  [warning]Usage: /skills add <path-to-SKILL.md>[/warning]")
+        console.print("  [muted]Example: /skills add ./my-skill/SKILL.md[/muted]")
+        console.print()
+        return
+
+    src = Path(path_str).expanduser().resolve()
+    if not src.exists():
+        console.print(f"  [warning]File not found: {src}[/warning]")
+        console.print()
+        return
+
+    if not src.name.upper().startswith("SKILL"):
+        console.print(f"  [warning]Expected a SKILL.md file, got: {src.name}[/warning]")
+        console.print()
+        return
+
+    # Determine skill name from parent directory or filename
+    skill_name = src.parent.name
+    if skill_name in (".", ""):
+        skill_name = src.stem.lower().replace(" ", "-")
+
+    # Copy to .claude/skills/<name>/SKILL.md
+    loader = SkillLoader()
+    dest_dir = loader.skills_dir / skill_name
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "SKILL.md"
+    shutil.copy2(src, dest)
+
+    # Load and register
+    skill = loader.load_file(dest)
+    reg.register(skill)
+
+    console.print(f"  [success]Added skill: {skill.name}[/success]")
+    console.print(f"  [muted]Copied to {dest}[/muted]")
+    if skill.triggers:
+        console.print(f"  [muted]Triggers: {', '.join(skill.triggers)}[/muted]")
     console.print()
 
 

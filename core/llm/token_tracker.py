@@ -1,0 +1,346 @@
+"""Unified token tracking — local cost calculation + optional LangSmith injection.
+
+Single-injection pattern: call ``get_tracker().record(...)`` once per LLM call.
+Replaces the previous triple-call pattern::
+
+    # Before — 3 scattered calls per LLM invocation:
+    cost = calculate_cost(model, in_tok, out_tok)
+    get_usage_accumulator().record(LLMUsage(...))
+    track_token_usage(model, in_tok, out_tok)
+
+    # After — 1 call:
+    get_tracker().record(model, in_tok, out_tok)
+
+Pricing verified 2026-03-12 against:
+  - Anthropic: https://platform.claude.com/docs/en/docs/about-claude/pricing
+  - OpenAI: https://developers.openai.com/api/docs/pricing/
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from contextvars import ContextVar
+from dataclasses import dataclass, field
+from typing import Any
+
+log = logging.getLogger(__name__)
+
+# ───────────────────────────────────────────────────────────────────────────
+# Data models
+# ───────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(slots=True)
+class LLMUsage:
+    """Single LLM call usage record."""
+
+    model: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cost_usd": self.cost_usd,
+        }
+
+
+@dataclass
+class LLMUsageAccumulator:
+    """Accumulates multiple LLMUsage records for session-level summary."""
+
+    calls: list[LLMUsage] = field(default_factory=list)
+
+    @property
+    def total_input_tokens(self) -> int:
+        return sum(c.input_tokens for c in self.calls)
+
+    @property
+    def total_output_tokens(self) -> int:
+        return sum(c.output_tokens for c in self.calls)
+
+    @property
+    def total_cost_usd(self) -> float:
+        return sum(c.cost_usd for c in self.calls)
+
+    def record(self, usage: LLMUsage) -> None:
+        self.calls.append(usage)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "call_count": len(self.calls),
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
+            "total_cost_usd": self.total_cost_usd,
+        }
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Model pricing — verified 2026-03-12
+# ───────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class ModelPrice:
+    """Per-token pricing for a single model.
+
+    Anthropic: cache_write = input × 1.25, cache_read = input × 0.1
+    OpenAI:    cache_read = provider-specific fixed price (no write cost)
+    """
+
+    input: float
+    output: float
+    cache_write: float = 0.0
+    cache_read: float = 0.0
+
+
+def _ant(input_mtok: float, output_mtok: float) -> ModelPrice:
+    """Anthropic pricing with standard 5-min cache multipliers (1.25× / 0.1×)."""
+    inp = input_mtok / 1_000_000
+    return ModelPrice(
+        input=inp,
+        output=output_mtok / 1_000_000,
+        cache_write=inp * 1.25,
+        cache_read=inp * 0.1,
+    )
+
+
+def _oai(
+    input_mtok: float,
+    output_mtok: float,
+    cached_mtok: float = 0.0,
+) -> ModelPrice:
+    """OpenAI pricing with optional cached-input price."""
+    return ModelPrice(
+        input=input_mtok / 1_000_000,
+        output=output_mtok / 1_000_000,
+        cache_read=cached_mtok / 1_000_000 if cached_mtok else 0.0,
+    )
+
+
+# fmt: off
+MODEL_PRICING: dict[str, ModelPrice] = {
+    # ── Anthropic (2026-03) ─────────────────────────────────────────────
+    # Source: https://platform.claude.com/docs/en/docs/about-claude/pricing
+    "claude-opus-4-6":            _ant(5.00,  25.00),
+    "claude-opus-4-5":            _ant(5.00,  25.00),
+    "claude-opus-4-1":            _ant(15.00, 75.00),
+    "claude-opus-4":              _ant(15.00, 75.00),
+    "claude-sonnet-4-6":          _ant(3.00,  15.00),
+    "claude-sonnet-4-5-20250929": _ant(3.00,  15.00),
+    "claude-sonnet-4":            _ant(3.00,  15.00),
+    "claude-haiku-4-5-20251001":  _ant(1.00,   5.00),
+    "claude-haiku-3-5":           _ant(0.80,   4.00),
+
+    # ── OpenAI GPT-5 family ────────────────────────────────────────────
+    # Source: https://developers.openai.com/api/docs/pricing/
+    "gpt-5.4":      _oai(2.50, 15.00, cached_mtok=0.25),
+    "gpt-5.2":      _oai(1.75, 14.00, cached_mtok=0.175),
+    "gpt-5.1":      _oai(1.25, 10.00, cached_mtok=0.125),
+    "gpt-5":        _oai(1.25, 10.00, cached_mtok=0.125),
+    "gpt-5-mini":   _oai(0.25,  2.00, cached_mtok=0.025),
+    "gpt-5-nano":   _oai(0.05,  0.40, cached_mtok=0.005),
+
+    # ── OpenAI GPT-4 family ────────────────────────────────────────────
+    "gpt-4.1":      _oai(2.00,  8.00, cached_mtok=0.50),
+    "gpt-4.1-mini": _oai(0.40,  1.60, cached_mtok=0.10),
+    "gpt-4.1-nano": _oai(0.10,  0.40, cached_mtok=0.025),
+    "gpt-4o":       _oai(2.50, 10.00, cached_mtok=1.25),
+    "gpt-4o-mini":  _oai(0.15,  0.60, cached_mtok=0.075),
+
+    # ── OpenAI Reasoning ───────────────────────────────────────────────
+    "o3":       _oai(2.00, 8.00, cached_mtok=0.50),
+    "o3-mini":  _oai(1.10, 4.40, cached_mtok=0.55),
+    "o4-mini":  _oai(1.10, 4.40, cached_mtok=0.275),
+}
+# fmt: on
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# TokenTracker — single record() replaces 3 scattered calls
+# ───────────────────────────────────────────────────────────────────────────
+
+
+class TokenTracker:
+    """Unified token tracker — inject once, call ``record()`` everywhere.
+
+    Usage::
+
+        tracker = get_tracker()
+        usage = tracker.record("claude-opus-4-6", 1200, 350)
+        print(tracker.summary())   # session-level totals
+    """
+
+    __slots__ = ("_accumulator", "_pricing")
+
+    def __init__(self, pricing: dict[str, ModelPrice] | None = None) -> None:
+        self._pricing = pricing or MODEL_PRICING
+        self._accumulator = LLMUsageAccumulator()
+
+    # -- public API --------------------------------------------------------
+
+    @property
+    def accumulator(self) -> LLMUsageAccumulator:
+        return self._accumulator
+
+    def record(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        *,
+        cache_creation_tokens: int = 0,
+        cache_read_tokens: int = 0,
+    ) -> LLMUsage:
+        """Record one LLM call: cost → accumulator → optional LangSmith."""
+        cost = self.calculate_cost(
+            model,
+            input_tokens,
+            output_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
+        )
+        usage = LLMUsage(
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost,
+        )
+        self._accumulator.record(usage)
+        self._inject_langsmith(model, input_tokens, output_tokens, cost)
+        return usage
+
+    def calculate_cost(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        *,
+        cache_creation_tokens: int = 0,
+        cache_read_tokens: int = 0,
+    ) -> float:
+        """Calculate cost in USD for a single LLM call."""
+        price = self._pricing.get(model)
+        if price is None:
+            return 0.0
+        cost = input_tokens * price.input + output_tokens * price.output
+        if cache_creation_tokens:
+            cost += cache_creation_tokens * price.cache_write
+        if cache_read_tokens:
+            cost += cache_read_tokens * price.cache_read
+        return cost
+
+    def reset(self) -> None:
+        """Reset accumulator for a new session."""
+        self._accumulator = LLMUsageAccumulator()
+
+    def summary(self) -> dict[str, Any]:
+        """Session-level totals."""
+        return self._accumulator.to_dict()
+
+    # -- LangSmith (optional, fire-and-forget) -----------------------------
+
+    @staticmethod
+    def _inject_langsmith(
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+    ) -> None:
+        """Inject metrics into current LangSmith RunTree (no-op if disabled)."""
+        try:
+            tracing = os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true"
+            api_key = os.environ.get("LANGCHAIN_API_KEY") or os.environ.get(
+                "LANGSMITH_API_KEY",
+            )
+            if not (tracing and api_key):
+                return
+            from langsmith.run_helpers import get_current_run_tree
+
+            run_tree = get_current_run_tree()
+            if run_tree is None:
+                return
+            if not hasattr(run_tree, "extra") or run_tree.extra is None:
+                run_tree.extra = {}
+            run_tree.extra["metrics"] = {
+                "model": model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+                "cost_usd": cost_usd,
+            }
+        except Exception:
+            log.debug("LangSmith injection skipped", exc_info=True)
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Context-local singleton
+# ───────────────────────────────────────────────────────────────────────────
+
+_tracker_ctx: ContextVar[TokenTracker | None] = ContextVar(
+    "token_tracker",
+    default=None,
+)
+
+
+def get_tracker() -> TokenTracker:
+    """Get or create context-local TokenTracker (thread-safe)."""
+    tracker = _tracker_ctx.get()
+    if tracker is None:
+        tracker = TokenTracker()
+        _tracker_ctx.set(tracker)
+    return tracker
+
+
+def reset_tracker() -> None:
+    """Reset context-local tracker (fresh accumulator)."""
+    tracker = _tracker_ctx.get()
+    if tracker is not None:
+        tracker.reset()
+    else:
+        _tracker_ctx.set(TokenTracker())
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Backward-compatible aliases (thin wrappers → TokenTracker)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def calculate_cost(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_creation_tokens: int = 0,
+    cache_read_tokens: int = 0,
+) -> float:
+    """Backward-compatible: delegates to ``get_tracker().calculate_cost()``."""
+    return get_tracker().calculate_cost(
+        model,
+        input_tokens,
+        output_tokens,
+        cache_creation_tokens=cache_creation_tokens,
+        cache_read_tokens=cache_read_tokens,
+    )
+
+
+def get_usage_accumulator() -> LLMUsageAccumulator:
+    """Backward-compatible: returns ``get_tracker().accumulator``."""
+    return get_tracker().accumulator
+
+
+def reset_usage_accumulator() -> None:
+    """Backward-compatible: delegates to ``reset_tracker()``."""
+    reset_tracker()
+
+
+def track_token_usage(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> None:
+    """Backward-compatible: full record() (accumulator + LangSmith)."""
+    get_tracker().record(model, input_tokens, output_tokens)

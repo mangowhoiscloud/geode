@@ -1,3 +1,3 @@
-"""GEODE v0.7.0 — Undervalued IP Discovery Agent."""
+"""GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스."""
 
-__version__ = "0.7.0"
+__version__ = "0.9.0"

@@ -61,13 +61,16 @@ class TestRuntimeHooksRunLog:
             {"node": "router", "ip_name": "Berserk", "duration_ms": 42.0},
         )
 
-        # Verify entries written to run log
-        entries = runtime.run_log.read(limit=10)
-        assert len(entries) == 2
-        assert entries[0].event == "node_exit"
-        assert entries[0].node == "router"
-        assert entries[0].duration_ms == 42.0
-        assert entries[1].event == "node_enter"
+        # Verify our events exist in the run log
+        # (other hooks like scheduler/trigger may add cascading entries)
+        entries = runtime.run_log.read(limit=20)
+        assert len(entries) >= 2
+        node_events = [e for e in entries if e.node == "router"]
+        assert len(node_events) == 2
+        exit_entry = next(e for e in node_events if e.event == "node_exit")
+        assert exit_entry.duration_ms == 42.0
+        enter_entry = next(e for e in node_events if e.event == "node_enter")
+        assert enter_entry.node == "router"
 
     def test_all_hook_events_logged(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
@@ -88,10 +91,12 @@ class TestRuntimeHooksRunLog:
             {"node": "router", "error": "connection timeout"},
         )
 
-        entries = runtime.run_log.read(limit=1)
-        assert len(entries) == 1
-        assert entries[0].status == "error"
-        assert entries[0].event == "node_error"
+        # Find the node_error entry (cascading hooks may add others)
+        entries = runtime.run_log.read(limit=10)
+        error_entries = [e for e in entries if e.event == "node_error"]
+        assert len(error_entries) >= 1
+        assert error_entries[0].status == "error"
+        assert error_entries[0].node == "router"
 
 
 class TestRuntimeSessionStore:

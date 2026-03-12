@@ -6,6 +6,7 @@ for pipeline events (pre/post node execution, errors, etc.).
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -16,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (23 events)."""
+    """Pipeline lifecycle events (26 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -55,6 +56,11 @@ class HookEvent(Enum):
     # Prompt Assembly (ADR-007)
     PROMPT_ASSEMBLED = "prompt_assembled"
 
+    # SubAgent lifecycle
+    SUBAGENT_STARTED = "subagent_started"
+    SUBAGENT_COMPLETED = "subagent_completed"
+    SUBAGENT_FAILED = "subagent_failed"
+
 
 @dataclass
 class HookResult:
@@ -65,6 +71,10 @@ class HookResult:
     handler_name: str
     data: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict, omitting None-valued fields."""
+        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
 # Type alias for hook handlers

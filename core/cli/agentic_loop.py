@@ -12,6 +12,7 @@ Supports:
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import time
@@ -25,7 +26,7 @@ from core.cli.conversation import ConversationContext
 from core.cli.nl_router import _build_system_prompt
 from core.cli.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY, settings
-from core.llm.client import _maybe_traceable, track_token_usage
+from core.llm.client import _maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.ui.agentic_ui import render_tool_call, render_tool_result
 
@@ -61,6 +62,11 @@ class AgenticResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     rounds: int = 0
     error: str | None = None
+    termination_reason: str = "unknown"  # "natural" | "forced_text" | "max_rounds" | "llm_error"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict, omitting None-valued fields."""
+        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
 class AgenticLoop:
@@ -70,8 +76,9 @@ class AgenticLoop:
         execute tools → feed results back → continue
     """
 
-    DEFAULT_MAX_ROUNDS = 10
+    DEFAULT_MAX_ROUNDS = 7
     DEFAULT_MAX_TOKENS = 4096
+    MAX_CLARIFICATION_ROUNDS = 3
 
     def __init__(
         self,
@@ -83,6 +90,7 @@ class AgenticLoop:
         model: str | None = None,
         tool_registry: ToolRegistry | None = None,
         mcp_manager: Any | None = None,
+        skill_registry: Any | None = None,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -91,6 +99,7 @@ class AgenticLoop:
         self.model = model or ANTHROPIC_PRIMARY
         self._tools = get_agentic_tools(tool_registry)
         self._mcp_manager = mcp_manager
+        self._skill_registry = skill_registry
         # Merge MCP tools if available
         if mcp_manager is not None:
             existing_names = {t["name"] for t in self._tools}
@@ -100,10 +109,28 @@ class AgenticLoop:
         self._tool_log: list[dict[str, Any]] = []
         self._client: anthropic.Anthropic | None = None
 
+    def refresh_tools(self) -> int:
+        """Reload MCP tools into the tool list without reconstructing the loop.
+
+        Called after install_mcp_server to make new tools available immediately.
+        Returns number of newly added tools.
+        """
+        if self._mcp_manager is None:
+            return 0
+        existing = {t["name"] for t in self._tools}
+        added = 0
+        for tool in self._mcp_manager.get_all_tools():
+            if tool.get("name") not in existing:
+                self._tools.append(tool)
+                existing.add(tool["name"])
+                added += 1
+        return added
+
     @_maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
     def run(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_log = []
+        self._clarification_count = 0
 
         # Add user message to conversation context
         self.context.add_user_message(user_input)
@@ -112,13 +139,23 @@ class AgenticLoop:
         system_prompt = self._build_system_prompt()
 
         for round_idx in range(self.max_rounds):
-            response = self._call_llm(system_prompt, messages)
+            is_last_round = round_idx == self.max_rounds - 1
+            response = self._call_llm(system_prompt, messages, round_idx=round_idx)
             if response is None:
-                return AgenticResult(
+                result = AgenticResult(
                     text="LLM call failed. Try again or use /help.",
                     rounds=round_idx + 1,
                     error="llm_call_failed",
+                    termination_reason="llm_error",
                 )
+                log.info(
+                    "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
+                    result.termination_reason,
+                    result.rounds,
+                    self.max_rounds,
+                    len(result.tool_calls),
+                )
+                return result
 
             # Track usage + Claude Code-style token display
             self._track_usage(response)
@@ -127,11 +164,21 @@ class AgenticLoop:
                 # end_turn or max_tokens → extract text, done
                 text = self._extract_text(response)
                 self.context.add_assistant_message(response.content)
-                return AgenticResult(
+                reason = "forced_text" if is_last_round else "natural"
+                result = AgenticResult(
                     text=text,
                     tool_calls=self._tool_log,
                     rounds=round_idx + 1,
+                    termination_reason=reason,
                 )
+                log.info(
+                    "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
+                    result.termination_reason,
+                    result.rounds,
+                    self.max_rounds,
+                    len(result.tool_calls),
+                )
+                return result
 
             # Process tool calls (possibly multiple in one response)
             tool_results = self._process_tool_calls(response)
@@ -146,23 +193,41 @@ class AgenticLoop:
         self.context.add_assistant_message(
             [{"type": "text", "text": "Max agentic rounds reached."}]
         )
-        return AgenticResult(
+        result = AgenticResult(
             text="Max agentic rounds reached. Please try a more specific request.",
             tool_calls=self._tool_log,
             rounds=self.max_rounds,
             error="max_rounds",
+            termination_reason="max_rounds",
         )
+        log.info(
+            "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
+            result.termination_reason,
+            result.rounds,
+            self.max_rounds,
+            len(result.tool_calls),
+        )
+        return result
 
     def _build_system_prompt(self) -> str:
-        """Build the system prompt with agentic suffix."""
+        """Build the system prompt with skill context and agentic suffix."""
         base = _build_system_prompt()
+        # Inject skill context into placeholder
+        skill_ctx = ""
+        if self._skill_registry is not None:
+            skill_ctx = self._skill_registry.get_context_block()
+        base = base.replace("{skill_context}", skill_ctx or "No skills loaded.")
         return base + "\n" + AGENTIC_SUFFIX
 
     @_maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     def _call_llm(
-        self, system: str, messages: list[dict[str, Any]]
+        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
     ) -> anthropic.types.Message | None:
-        """Call the Anthropic API with tools.  Retries on rate-limit (3×)."""
+        """Call the Anthropic API with tools.  Retries on rate-limit (3×).
+
+        On the last round (round_idx == max_rounds - 1), forces tool_choice=none
+        so the LLM must produce a text response instead of another tool call.
+        """
         api_key = settings.anthropic_api_key
         if not api_key:
             log.warning("No Anthropic API key for agentic loop")
@@ -170,6 +235,9 @@ class AgenticLoop:
 
         if self._client is None:
             self._client = anthropic.Anthropic(api_key=api_key)
+
+        is_last_round = round_idx == self.max_rounds - 1
+        tool_choice: dict[str, str] = {"type": "none"} if is_last_round else {"type": "auto"}
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -179,15 +247,10 @@ class AgenticLoop:
                     system=system,
                     messages=messages,
                     tools=self._tools,
-                    tool_choice={"type": "auto"},
+                    tool_choice=tool_choice,
                     max_tokens=self.max_tokens,
                     temperature=0.0,
                     timeout=30.0,
-                )
-                track_token_usage(
-                    self.model,
-                    response.usage.input_tokens,
-                    response.usage.output_tokens,
                 )
                 return response  # type: ignore[no-any-return]
 
@@ -233,6 +296,18 @@ class AgenticLoop:
 
             # Execute via ToolExecutor (handles HITL for dangerous tools)
             result = self.executor.execute(tool_name, tool_input)
+
+            # Track clarification rounds to prevent infinite loops
+            if isinstance(result, dict) and result.get("clarification_needed"):
+                self._clarification_count += 1
+                if self._clarification_count > self.MAX_CLARIFICATION_ROUNDS:
+                    result = {
+                        "error": (
+                            "Too many clarification attempts. "
+                            "Please provide all required parameters."
+                        ),
+                        "max_clarifications_exceeded": True,
+                    }
 
             # Claude Code-style: show tool result summary
             if isinstance(result, dict):
@@ -292,31 +367,19 @@ class AgenticLoop:
         if not response.usage:
             return
         try:
-            from core.llm.client import (
-                LLMUsage,
-                calculate_cost,
-                get_usage_accumulator,
-                track_token_usage,
-            )
+            from core.llm.token_tracker import get_tracker
+            from core.ui.agentic_ui import render_tokens
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            cost = calculate_cost(self.model, in_tok, out_tok)
-            get_usage_accumulator().record(
-                LLMUsage(
-                    model=self.model,
-                    input_tokens=in_tok,
-                    output_tokens=out_tok,
-                    cost_usd=cost,
-                )
-            )
-            track_token_usage(self.model, in_tok, out_tok)
-            log.debug(
-                "AgenticLoop: model=%s in=%d out=%d cost=$%.6f",
+            usage = get_tracker().record(self.model, in_tok, out_tok)
+            render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
+            log.info(
+                "LLM call: model=%s in=%d out=%d cost=$%.4f",
                 self.model,
                 in_tok,
                 out_tok,
-                cost,
+                usage.cost_usd,
             )
         except Exception:
             log.debug("Failed to track usage", exc_info=True)
