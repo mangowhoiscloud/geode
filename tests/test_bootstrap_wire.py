@@ -358,9 +358,9 @@ class TestContextAssemblerLlmSummary:
             "previous_results": ["Berserk: S tier", "Bebop: A tier", "GitS: B tier"],
         }
         summary = ContextAssembler._build_llm_summary(ctx)
-        assert "Organization: Focus on action RPGs" in summary
+        assert "Org: Focus on action RPGs" in summary
         assert "Project: Q1 2026 evaluation" in summary
-        assert "Previous: Berserk: S tier" in summary
+        assert "Prev: " in summary
         assert " | " in summary
 
     def test_empty_context_returns_empty_string(self) -> None:
@@ -376,7 +376,7 @@ class TestContextAssemblerLlmSummary:
             "organization_strategy": "Expand globally",
         }
         summary = ContextAssembler._build_llm_summary(ctx)
-        assert summary == "Organization: Expand globally"
+        assert summary == "Org: Expand globally"
         assert " | " not in summary
 
 

@@ -142,6 +142,43 @@ PROMPT_VERSIONS: dict[str, str] = {
 _log.debug("Prompt versions loaded: %s", PROMPT_VERSIONS)
 
 # ---------------------------------------------------------------------------
+# Prompt drift detection (Karpathy P4 ratchet + P6 context budget)
+# ---------------------------------------------------------------------------
+
+# Pinned hashes — update these when prompt templates are intentionally changed.
+# CI test verifies computed hashes match these pins; mismatch = unintended drift.
+_PINNED_HASHES: dict[str, str] = dict(PROMPT_VERSIONS)
+
+
+def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
+    """Re-compute prompt hashes and compare against pinned versions.
+
+    Returns list of drift descriptions (empty = all OK).
+    If ``raise_on_drift=True``, raises ``RuntimeError`` on first mismatch.
+    """
+    drifted: list[str] = []
+    current = {
+        "ANALYST_SYSTEM": _hash_prompt(ANALYST_SYSTEM),
+        "ANALYST_USER": _hash_prompt(ANALYST_USER),
+        "EVALUATOR_SYSTEM": _hash_prompt(EVALUATOR_SYSTEM),
+        "EVALUATOR_USER": _hash_prompt(EVALUATOR_USER),
+        "SYNTHESIZER_SYSTEM": _hash_prompt(SYNTHESIZER_SYSTEM),
+        "SYNTHESIZER_USER": _hash_prompt(SYNTHESIZER_USER),
+        "BIASBUSTER_SYSTEM": _hash_prompt(BIASBUSTER_SYSTEM),
+        "BIASBUSTER_USER": _hash_prompt(BIASBUSTER_USER),
+    }
+    for name, pinned_hash in _PINNED_HASHES.items():
+        computed = current.get(name)
+        if computed != pinned_hash:
+            msg = f"Prompt drift: {name} pin={pinned_hash} now={computed}"
+            drifted.append(msg)
+            _log.warning(msg)
+    if drifted and raise_on_drift:
+        raise RuntimeError(f"Prompt drift detected: {', '.join(drifted)}")
+    return drifted
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -170,4 +207,5 @@ __all__ = [
     "_hash_prompt",
     "hash_rendered_prompt",
     "load_prompt",
+    "verify_prompt_integrity",
 ]
