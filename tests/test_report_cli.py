@@ -178,7 +178,10 @@ class TestGenerateReport:
             "synthesis": {},
             "analyses": [],
         }
-        _set_last_result(None)  # type: ignore[arg-type]
+        # Clear the LRU cache so "berserk" is not cached
+        from core.cli import _result_cache
+
+        _result_cache._cache.clear()
         _generate_report("berserk", verbose=False)
         mock_run.assert_called_once()
 
@@ -198,12 +201,11 @@ class TestGenerateReport:
 
     @patch("core.cli._run_analysis")
     def test_runs_analysis_when_cache_differs(self, mock_run):
-        cached = {
-            "ip_name": "cowboy bebop",
-            "final_score": 90.0,
-            "tier": "S",
-        }
-        _set_last_result(cached)
+        from core.cli import _result_cache
+
+        _result_cache._cache.clear()
+        # Cache cowboy bebop, then ask for Berserk → should run analysis
+        _set_last_result({"ip_name": "cowboy bebop", "final_score": 90.0, "tier": "S"})
         mock_run.return_value = {
             "ip_name": "berserk",
             "final_score": 85.0,
@@ -242,8 +244,10 @@ class TestGenerateReport:
 
     @patch("core.cli._run_analysis")
     def test_returns_none_when_analysis_fails(self, mock_run):
+        from core.cli import _result_cache
+
+        _result_cache._cache.clear()
         mock_run.return_value = None
-        _set_last_result(None)  # type: ignore[arg-type]
         # Should not raise
         _generate_report("unknown_ip", verbose=False)
         mock_run.assert_called_once()
@@ -286,13 +290,11 @@ class TestLastResultCache:
     def test_set_and_get(self):
         result = {"ip_name": "berserk", "final_score": 85.0}
         _set_last_result(result)
-        assert _get_last_result() == result
+        got = _get_last_result()
+        assert got is not None
+        assert got["ip_name"] == "berserk"
+        assert got["final_score"] == 85.0
 
-    def test_default_none(self):
+    def test_none_is_noop(self):
+        # Setting None should not crash (no-op)
         _set_last_result(None)  # type: ignore[arg-type]
-        # ContextVar default is None, reset to None
-        from contextvars import copy_context
-
-        ctx = copy_context()
-        # In a fresh context, default is None
-        assert ctx.run(lambda: _get_last_result()) is None

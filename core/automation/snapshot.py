@@ -91,16 +91,22 @@ class SnapshotManager:
         storage_dir: Path | None = None,
         max_recent: int = DEFAULT_MAX_RECENT,
         hooks: HookSystemPort | None = None,
+        auto_gc_threshold: int = 0,
     ) -> None:
         self._storage_dir = storage_dir
         self._max_recent = max_recent
         self._hooks = hooks
+        self._auto_gc_threshold = auto_gc_threshold
         self._lock = threading.Lock()
         self._snapshots: dict[str, Snapshot] = {}
 
         if storage_dir:
             storage_dir.mkdir(parents=True, exist_ok=True)
             self._load_from_disk()
+            # GC on startup if over threshold
+            if self._auto_gc_threshold and len(self._snapshots) > self._auto_gc_threshold:
+                pruned = self.prune()
+                log.info("Snapshot startup GC: pruned %d files", pruned)
 
     def capture(
         self,
@@ -145,6 +151,11 @@ class SnapshotManager:
             )
 
         log.info("Captured snapshot %s for session %s", snapshot_id, session_id)
+
+        # Auto-GC: prune when count exceeds threshold
+        if self._auto_gc_threshold and len(self._snapshots) > self._auto_gc_threshold:
+            self.prune()
+
         return snap
 
     def restore(self, snapshot_id: str) -> Snapshot:

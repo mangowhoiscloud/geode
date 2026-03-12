@@ -473,12 +473,13 @@ class GeodeRuntime:
         # Outcome tracker
         outcome_tracker = OutcomeTracker(hooks=hooks)
 
-        # Snapshot manager
+        # Snapshot manager (with auto-GC)
         snapshot_dir = Path(settings.snapshot_dir) if settings.snapshot_dir else None
         snapshot_manager = SnapshotManager(
             storage_dir=snapshot_dir,
             max_recent=settings.snapshot_max_recent,
             hooks=hooks,
+            auto_gc_threshold=settings.snapshot_gc_threshold,
         )
 
         # Trigger manager (auto-start scheduler for cron-based triggers)
@@ -757,8 +758,14 @@ class GeodeRuntime:
             stuck_timeout_s=stuck_timeout_s,
         )
 
-        # Session store
-        session_store: SessionStorePort = InMemorySessionStore(ttl=session_ttl)
+        # Session store (with optional file-backed persistence)
+        session_storage_dir: Path | None = None
+        if settings.session_storage_dir:
+            session_storage_dir = Path(settings.session_storage_dir)
+        session_store: SessionStorePort = InMemorySessionStore(
+            ttl=session_ttl,
+            storage_dir=session_storage_dir,
+        )
 
         # Wire HybridSessionStore if redis/postgres URLs configured
         if settings.redis_url or settings.postgres_url:
