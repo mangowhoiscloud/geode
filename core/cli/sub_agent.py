@@ -440,6 +440,7 @@ def make_pipeline_handler(
     run_analysis_fn: Callable[..., dict[str, Any] | None],
     search_fn: Callable[..., dict[str, Any]] | None = None,
     compare_fn: Callable[..., dict[str, Any]] | None = None,
+    report_fn: Callable[..., tuple[str, str] | None] | None = None,
 ) -> Callable[..., dict[str, Any]]:
     """Create a task_handler routing task_type to pipeline functions."""
 
@@ -467,6 +468,28 @@ def make_pipeline_handler(
             if compare_fn is None:
                 return {"error": "Compare not configured"}
             return compare_fn(**args)
+        if task_type == "report":
+            if report_fn is None:
+                return {"error": "Report generation not configured"}
+            ip_name = args.get("ip_name", "")
+            if not ip_name:
+                return {"error": "ip_name required for report task"}
+            report_result = report_fn(
+                ip_name,
+                fmt=args.get("format", "markdown"),
+                template=args.get("template", "summary"),
+                dry_run=args.get("dry_run", True),
+            )
+            if report_result is None:
+                return {"error": f"Report generation failed for '{ip_name}'"}
+            file_path, content = report_result
+            return {
+                "status": "ok",
+                "action": "report",
+                "ip_name": ip_name,
+                "file_path": file_path,
+                "content_length": len(content),
+            }
         return {"error": f"Unknown task_type: {task_type}"}
 
     return handler

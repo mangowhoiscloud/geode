@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 import re as _re
+import select
+import sys
 from contextvars import ContextVar
 from enum import Enum
 from pathlib import Path
@@ -1294,6 +1296,13 @@ def _build_sub_agent_manager(verbose: bool = False) -> Any:
                 {"name": r.ip_name, "score": r.score} for r in _get_search_engine().search(query)
             ],
         },
+        report_fn=lambda ip_name, **kw: _generate_report(
+            ip_name,
+            dry_run=kw.get("dry_run", force_dry),
+            verbose=verbose,
+            fmt=kw.get("fmt", "markdown"),
+            template=kw.get("template", "summary"),
+        ),
     )
     runner = IsolatedRunner()
     registry = AgentRegistry()
@@ -2154,6 +2163,33 @@ def _render_agentic_result(result: AgenticResult) -> None:
         )
 
 
+def _read_multiline_input(prompt: str) -> str:
+    """Read user input with multi-line paste detection.
+
+    After reading the first line, drains any remaining data buffered
+    on stdin (from a paste operation) and joins all lines into a single
+    input string.  Timeout of 50 ms distinguishes paste from manual typing.
+    """
+    first_line = console.input(prompt).strip()
+    if not first_line:
+        return ""
+
+    lines = [first_line]
+    try:
+        fd = sys.stdin.fileno()
+        while select.select([fd], [], [], 0.05)[0]:
+            line = sys.stdin.readline()
+            if not line:
+                break
+            stripped = line.rstrip("\n")
+            if stripped:
+                lines.append(stripped)
+    except (ValueError, OSError):
+        pass  # stdin not selectable (piped / non-TTY)
+
+    return "\n".join(lines)
+
+
 def _interactive_loop() -> None:
     """Claude Code / OpenClaw-style interactive REPL.
 
@@ -2226,8 +2262,12 @@ def _interactive_loop() -> None:
     agentic_ref[0] = agentic
 
     while True:
+        # Defensive: restore terminal state before each prompt
+        # (Rich Status/Live may leave cursor hidden or echo off)
+        console.show_cursor(True)
+
         try:
-            user_input = console.input("[bold cyan]>[/bold cyan] ").strip()
+            user_input = _read_multiline_input("[bold cyan]>[/bold cyan] ")
         except (KeyboardInterrupt, EOFError):
             from core.ui.agentic_ui import render_session_cost_summary
 
@@ -2238,7 +2278,9 @@ def _interactive_loop() -> None:
         if not user_input:
             continue
 
-        if user_input.startswith("/"):
+        # Multi-line paste → always route to agentic (never slash-dispatch)
+        is_multiline = "\n" in user_input
+        if not is_multiline and user_input.startswith("/"):
             # Slash command → deterministic routing (OpenClaw Binding)
             cmd = user_input.split()[0].lower()
             args = user_input[len(cmd) :].strip()
@@ -2276,8 +2318,16 @@ def _interactive_loop() -> None:
                 agentic_ref[0] = agentic
         else:
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
-            result = agentic.run(user_input)
-            _render_agentic_result(result)
+            try:
+                result = agentic.run(user_input)
+                _render_agentic_result(result)
+            except KeyboardInterrupt:
+                console.show_cursor(True)
+                console.print("\n  [dim]Interrupted.[/dim]\n")
+            except Exception as exc:
+                console.show_cursor(True)
+                log.error("Agentic loop error: %s", exc, exc_info=True)
+                console.print(f"\n  [error]Error: {exc}[/error]\n")
 
     # Clean shutdown of SchedulerService
     _sched = _scheduler_service_ctx.get(None)
