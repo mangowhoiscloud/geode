@@ -16,6 +16,7 @@ from typing import Any
 
 from core.llm.prompts.axes import (
     ANALYST_SPECIFIC,
+    AXES_VERSIONS,
     EVALUATOR_AXES,
     PROSPECT_EVALUATOR_AXES,
 )
@@ -129,6 +130,7 @@ SYNTHESIZER_TOOLS_SUFFIX: str = _tool_augmented["synthesizer_tools"]
 # ---------------------------------------------------------------------------
 
 PROMPT_VERSIONS: dict[str, str] = {
+    # Base templates (8)
     "ANALYST_SYSTEM": _hash_prompt(ANALYST_SYSTEM),
     "ANALYST_USER": _hash_prompt(ANALYST_USER),
     "EVALUATOR_SYSTEM": _hash_prompt(EVALUATOR_SYSTEM),
@@ -137,17 +139,53 @@ PROMPT_VERSIONS: dict[str, str] = {
     "SYNTHESIZER_USER": _hash_prompt(SYNTHESIZER_USER),
     "BIASBUSTER_SYSTEM": _hash_prompt(BIASBUSTER_SYSTEM),
     "BIASBUSTER_USER": _hash_prompt(BIASBUSTER_USER),
+    # Extended templates (9)
+    "ROUTER_SYSTEM": _hash_prompt(ROUTER_SYSTEM),
+    "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
+    "COMMENTARY_SYSTEM": _hash_prompt(COMMENTARY_SYSTEM),
+    "COMMENTARY_USER": _hash_prompt(COMMENTARY_USER),
+    "CROSS_LLM_SYSTEM": _hash_prompt(CROSS_LLM_SYSTEM),
+    "CROSS_LLM_RESCORE": _hash_prompt(CROSS_LLM_RESCORE),
+    "CROSS_LLM_DUAL_VERIFY": _hash_prompt(CROSS_LLM_DUAL_VERIFY),
+    "ANALYST_TOOLS_SUFFIX": _hash_prompt(ANALYST_TOOLS_SUFFIX),
+    "SYNTHESIZER_TOOLS_SUFFIX": _hash_prompt(SYNTHESIZER_TOOLS_SUFFIX),
 }
+# Merge axes version hashes (3)
+PROMPT_VERSIONS.update(AXES_VERSIONS)
 
-_log.debug("Prompt versions loaded: %s", PROMPT_VERSIONS)
+_log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSIONS)
 
 # ---------------------------------------------------------------------------
 # Prompt drift detection (Karpathy P4 ratchet + P6 context budget)
 # ---------------------------------------------------------------------------
 
-# Pinned hashes — update these when prompt templates are intentionally changed.
+# Pinned hashes — HARDCODED. Update when prompt templates are *intentionally* changed.
 # CI test verifies computed hashes match these pins; mismatch = unintended drift.
-_PINNED_HASHES: dict[str, str] = dict(PROMPT_VERSIONS)
+# To regenerate after intentional edits:
+#   python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \
+#     print(dict(sorted(V.items())))"
+_PINNED_HASHES: dict[str, str] = {
+    "AGENTIC_SUFFIX": "f4a501ba2f16",
+    "ANALYST_SPECIFIC": "5a696a2d5ebb",
+    "ANALYST_SYSTEM": "924433f5bf11",
+    "ANALYST_TOOLS_SUFFIX": "2961fb31d96f",
+    "ANALYST_USER": "e59d00faadd5",
+    "BIASBUSTER_SYSTEM": "07987c709fd9",
+    "BIASBUSTER_USER": "378be01a6310",
+    "COMMENTARY_SYSTEM": "bd3ab28303f6",
+    "COMMENTARY_USER": "2024ac4eba69",
+    "CROSS_LLM_DUAL_VERIFY": "602669128ae2",
+    "CROSS_LLM_RESCORE": "163b08e97d66",
+    "CROSS_LLM_SYSTEM": "bf303f600fce",
+    "EVALUATOR_AXES": "0d82eb1aa5b4",
+    "EVALUATOR_SYSTEM": "e891c0ce27d4",
+    "EVALUATOR_USER": "f6d7f955338d",
+    "PROSPECT_EVALUATOR_AXES": "a9954477497b",
+    "ROUTER_SYSTEM": "190d4daf9daf",
+    "SYNTHESIZER_SYSTEM": "289e24384aa1",
+    "SYNTHESIZER_TOOLS_SUFFIX": "c6c65e47e191",
+    "SYNTHESIZER_USER": "30d99edc79a5",
+}
 
 
 def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
@@ -156,8 +194,11 @@ def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
     Returns list of drift descriptions (empty = all OK).
     If ``raise_on_drift=True``, raises ``RuntimeError`` on first mismatch.
     """
+    from core.llm.prompts.axes import AXES_VERSIONS as LIVE_AXES
+
     drifted: list[str] = []
-    current = {
+    current: dict[str, str] = {
+        # Base templates (8)
         "ANALYST_SYSTEM": _hash_prompt(ANALYST_SYSTEM),
         "ANALYST_USER": _hash_prompt(ANALYST_USER),
         "EVALUATOR_SYSTEM": _hash_prompt(EVALUATOR_SYSTEM),
@@ -166,6 +207,18 @@ def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
         "SYNTHESIZER_USER": _hash_prompt(SYNTHESIZER_USER),
         "BIASBUSTER_SYSTEM": _hash_prompt(BIASBUSTER_SYSTEM),
         "BIASBUSTER_USER": _hash_prompt(BIASBUSTER_USER),
+        # Extended templates (9)
+        "ROUTER_SYSTEM": _hash_prompt(ROUTER_SYSTEM),
+        "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
+        "COMMENTARY_SYSTEM": _hash_prompt(COMMENTARY_SYSTEM),
+        "COMMENTARY_USER": _hash_prompt(COMMENTARY_USER),
+        "CROSS_LLM_SYSTEM": _hash_prompt(CROSS_LLM_SYSTEM),
+        "CROSS_LLM_RESCORE": _hash_prompt(CROSS_LLM_RESCORE),
+        "CROSS_LLM_DUAL_VERIFY": _hash_prompt(CROSS_LLM_DUAL_VERIFY),
+        "ANALYST_TOOLS_SUFFIX": _hash_prompt(ANALYST_TOOLS_SUFFIX),
+        "SYNTHESIZER_TOOLS_SUFFIX": _hash_prompt(SYNTHESIZER_TOOLS_SUFFIX),
+        # Axes hashes (3)
+        **LIVE_AXES,
     }
     for name, pinned_hash in _PINNED_HASHES.items():
         computed = current.get(name)
@@ -188,6 +241,7 @@ __all__ = [
     "ANALYST_SYSTEM",
     "ANALYST_TOOLS_SUFFIX",
     "ANALYST_USER",
+    "AXES_VERSIONS",
     "BIASBUSTER_SYSTEM",
     "BIASBUSTER_USER",
     "COMMENTARY_SYSTEM",

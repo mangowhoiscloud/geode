@@ -264,6 +264,7 @@ def _calc_recovery_potential(evaluations: dict[str, EvaluatorResult]) -> float:
 def _calc_growth_score(
     evaluations: dict[str, EvaluatorResult],
     developer_track_record: float = 50.0,
+    momentum: float | None = None,
 ) -> float:
     """§13.8.3: Growth = 0.4*trend + 0.4*expandability + 0.2*developer.
 
@@ -271,12 +272,13 @@ def _calc_growth_score(
         evaluations: Evaluator results dict.
         developer_track_record: Dedicated developer rubric score (0-100).
             Falls back to quality_judge * 0.8 if fixture provides no value.
+        momentum: Pre-computed community momentum score. If None, computed
+            from evaluations (avoids double calculation in scoring_node).
     """
     hv = evaluations.get("hidden_value")
-    cm = evaluations.get("community_momentum")
 
-    # Trend alignment: community momentum composite as proxy for market trend
-    trend = cm.composite_score if cm else 50.0
+    # Trend alignment: server-side momentum calc (not LLM composite_score)
+    trend = momentum if momentum is not None else _calc_community_momentum(evaluations)
     # IP expandability: F axis normalized to 0-100
     expand = ((hv.axes.get("f_score", 3.0) - 1) / 4 * 100) if hv else 50.0
 
@@ -437,7 +439,11 @@ def scoring_node(state: GeodeState) -> dict[str, Any]:
 
         # Developer track record: use fixture value if available, else proxy
         developer = _load_developer_score(ip_name, quality_score)
-        growth = _calc_growth_score(evaluations, developer_track_record=developer)
+        growth = _calc_growth_score(
+            evaluations,
+            developer_track_record=developer,
+            momentum=momentum,
+        )
 
         # Clamp all subscores to [0, 100] for normalization safety
         quality_score = max(0.0, min(100.0, quality_score))

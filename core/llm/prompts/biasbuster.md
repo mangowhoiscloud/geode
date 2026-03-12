@@ -11,6 +11,11 @@ Check for:
 5. Verbosity Bias: Were longer analyst responses scored higher regardless of quality?
 6. Self-Enhancement Bias: Did the LLM favor its own prior outputs or reasoning patterns?
 
+## Constraints
+- CV < 0.05 AND ≥4 analysts → anchoring_bias = true (scores too tightly clustered for independent analysts).
+- Position/Verbosity bias require at least 3 analysts to evaluate meaningfully.
+- overall_pass = false if ANY bias flag is true.
+
 Respond in JSON:
 {{
   "confirmation_bias": <bool>,

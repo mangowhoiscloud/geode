@@ -139,6 +139,9 @@ class AgenticLoop:
 
         system_prompt = self._build_system_prompt()
 
+        # Prune old messages to stay within context budget (Karpathy P6)
+        self._maybe_prune_messages(messages)
+
         for round_idx in range(self.max_rounds):
             is_last_round = round_idx == self.max_rounds - 1
 
@@ -217,6 +220,29 @@ class AgenticLoop:
             len(result.tool_calls),
         )
         return result
+
+    def _maybe_prune_messages(self, messages: list[dict[str, Any]]) -> None:
+        """Prune old messages when conversation exceeds 5 rounds (10 msgs).
+
+        Keeps first user message + bridge + last 2 rounds for context budget.
+        Ensures user/assistant alternation is preserved for valid API calls.
+        """
+        if len(messages) <= 10:
+            return
+        first = messages[0]
+        # Ensure recent slice starts with "user" to maintain role alternation
+        # (first=user → bridge=assistant → recent must start with user)
+        cut = -4
+        if len(messages) >= 5 and messages[cut]["role"] != "user":
+            cut = -5
+        recent = messages[cut:]
+        bridge: dict[str, Any] = {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "(earlier rounds omitted)"}],
+        }
+        messages.clear()
+        messages.extend([first, bridge, *recent])
+        log.debug("Pruned messages: kept first + bridge + %d recent", len(recent))
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt with skill context and agentic suffix."""

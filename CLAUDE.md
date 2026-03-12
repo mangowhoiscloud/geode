@@ -9,7 +9,7 @@
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
 - **Modules**: 124
-- **Tests**: 2077+
+- **Tests**: 2125+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
