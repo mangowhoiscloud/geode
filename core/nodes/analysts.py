@@ -384,6 +384,16 @@ def analyst_node(state: GeodeState) -> dict[str, Any]:
     try:
         analyst_type = state.get("_analyst_type", "narrative")
         result = _run_analyst(analyst_type, state)
+        # Defensive confidence clamp [0, 100] (Karpathy P1 #4)
+        if result.confidence < 0.0 or result.confidence > 100.0:
+            log.warning(
+                "Analyst %s confidence out of range: %.1f → clamped to [0, 100]",
+                analyst_type,
+                result.confidence,
+            )
+            result = result.model_copy(
+                update={"confidence": max(0.0, min(100.0, result.confidence))}
+            )
         return {"analyses": [result]}
     except Exception as exc:
         log.error("Node analyst (%s) failed: %s", state.get("_analyst_type", "?"), exc)

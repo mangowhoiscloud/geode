@@ -6,6 +6,8 @@ Prompt templates live in .md files loaded by the prompts package.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -30,3 +32,20 @@ def _derive_valid_axes_map() -> dict[str, set[str]]:
 
 
 VALID_AXES_MAP: dict[str, set[str]] = _derive_valid_axes_map()
+
+
+# ---------------------------------------------------------------------------
+# Axes version hashing (Karpathy P4 — structured data drift detection)
+# ---------------------------------------------------------------------------
+
+
+def _hash_axes(data: Any) -> str:
+    """SHA-256[:12] of JSON-serialized axes data for drift detection."""
+    return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
+
+
+AXES_VERSIONS: dict[str, str] = {
+    "EVALUATOR_AXES": _hash_axes(EVALUATOR_AXES),
+    "PROSPECT_EVALUATOR_AXES": _hash_axes(PROSPECT_EVALUATOR_AXES),
+    "ANALYST_SPECIFIC": _hash_axes(ANALYST_SPECIFIC),
+}

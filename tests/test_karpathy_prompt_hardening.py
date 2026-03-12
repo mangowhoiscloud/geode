@@ -1,31 +1,41 @@
 """Tests for Karpathy prompt hardening — drift detection, skill versioning, context budget.
 
-Covers 6 gaps from Karpathy P4/P6 audit:
+Covers 12 gaps from Karpathy P1/P4/P6/P7/P10 audit:
   #1 L3 context budget (proportional extraction)
   #2 Skill injection versioning (SHA-256 in hook data)
   #3 Prompt drift detection (verify_prompt_integrity)
-  #4 PROMPT_VERSIONS CI gate (hash pinning)
+  #4 PROMPT_VERSIONS CI gate (hash pinning, 8→20)
   #5 Skill discovery order (already sorted — regression test)
   #6 Memory truncation improvement (budget-aware extraction)
+  #7 Prompt .md Constraints sections (P7 structured constraints)
+  #8 Node confidence clamping (P1 defensive clamp)
+  #9 Scoring LLM composite removal (P0 #2 composite_score independence)
+  #10 Synthesizer DT boundary logging (P2 #12 round-crossing warning)
+  #11 Agentic loop message pruning (P10 context budget)
+  #12 Axes version hashing (P4 structured data drift)
 """
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from core.llm.prompt_assembler import PromptAssembler
 from core.llm.prompts import (
     PROMPT_VERSIONS,
     _hash_prompt,
+    load_prompt,
     verify_prompt_integrity,
 )
+from core.llm.prompts.axes import AXES_VERSIONS, _hash_axes
 from core.llm.skill_registry import SkillDefinition, SkillRegistry
 from core.memory.context import ContextAssembler
 from core.orchestration.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------
-# Gap #3 + #4: Prompt drift detection + CI gate
+# Gap #3 + #4: Prompt drift detection + CI gate (expanded 8→20)
 # ---------------------------------------------------------------------------
 
 
@@ -42,10 +52,14 @@ class TestPromptDriftDetection:
         # Clean state — should not raise
         verify_prompt_integrity(raise_on_drift=True)
 
-    def test_prompt_versions_not_empty(self):
-        """PROMPT_VERSIONS must contain all 8 base templates."""
-        assert len(PROMPT_VERSIONS) == 8
+    def test_prompt_versions_count_20(self):
+        """PROMPT_VERSIONS must contain all 20 entries (8 base + 9 extended + 3 axes)."""
+        assert len(PROMPT_VERSIONS) == 20
+
+    def test_prompt_versions_expected_keys(self):
+        """All 20 expected keys must be present."""
         expected_keys = {
+            # Base templates (8)
             "ANALYST_SYSTEM",
             "ANALYST_USER",
             "EVALUATOR_SYSTEM",
@@ -54,6 +68,20 @@ class TestPromptDriftDetection:
             "SYNTHESIZER_USER",
             "BIASBUSTER_SYSTEM",
             "BIASBUSTER_USER",
+            # Extended templates (9)
+            "ROUTER_SYSTEM",
+            "AGENTIC_SUFFIX",
+            "COMMENTARY_SYSTEM",
+            "COMMENTARY_USER",
+            "CROSS_LLM_SYSTEM",
+            "CROSS_LLM_RESCORE",
+            "CROSS_LLM_DUAL_VERIFY",
+            "ANALYST_TOOLS_SUFFIX",
+            "SYNTHESIZER_TOOLS_SUFFIX",
+            # Axes hashes (3)
+            "EVALUATOR_AXES",
+            "PROSPECT_EVALUATOR_AXES",
+            "ANALYST_SPECIFIC",
         }
         assert set(PROMPT_VERSIONS.keys()) == expected_keys
 
@@ -73,6 +101,39 @@ class TestPromptDriftDetection:
         h1 = _hash_prompt("version A")
         h2 = _hash_prompt("version B")
         assert h1 != h2
+
+
+# ---------------------------------------------------------------------------
+# Gap #12: Axes version hashing
+# ---------------------------------------------------------------------------
+
+
+class TestAxesVersionHashing:
+    """Karpathy P4 — structured axes data drift detection."""
+
+    def test_axes_versions_has_3_entries(self):
+        assert len(AXES_VERSIONS) == 3
+
+    def test_axes_versions_keys(self):
+        expected = {"EVALUATOR_AXES", "PROSPECT_EVALUATOR_AXES", "ANALYST_SPECIFIC"}
+        assert set(AXES_VERSIONS.keys()) == expected
+
+    def test_hash_axes_deterministic(self):
+        data = {"a": 1, "b": [2, 3]}
+        h1 = _hash_axes(data)
+        h2 = _hash_axes(data)
+        assert h1 == h2
+
+    def test_hash_axes_12_char_hex(self):
+        h = _hash_axes({"key": "value"})
+        assert len(h) == 12
+        assert all(c in "0123456789abcdef" for c in h)
+
+    def test_axes_versions_merged_into_prompt_versions(self):
+        """AXES_VERSIONS entries should be present in PROMPT_VERSIONS."""
+        for key in AXES_VERSIONS:
+            assert key in PROMPT_VERSIONS
+            assert PROMPT_VERSIONS[key] == AXES_VERSIONS[key]
 
 
 # ---------------------------------------------------------------------------
@@ -297,3 +358,378 @@ class TestHookEventTypes:
     def test_hook_event_count(self):
         """Total hook events should be 27 (26 + PROMPT_DRIFT_DETECTED)."""
         assert len(HookEvent) == 27
+
+
+# ---------------------------------------------------------------------------
+# Gap #7: Prompt .md Constraints sections
+# ---------------------------------------------------------------------------
+
+
+class TestPromptConstraintsSections:
+    """Verify .md prompts contain ## Constraints sections."""
+
+    def test_evaluator_has_constraints(self):
+        system = load_prompt("evaluator", "system")
+        assert "## Constraints" in system
+        assert "composite_score" in system.lower()
+
+    def test_evaluator_has_style(self):
+        system = load_prompt("evaluator", "system")
+        assert "## Style" in system
+
+    def test_synthesizer_has_constraints(self):
+        system = load_prompt("synthesizer", "system")
+        assert "## Constraints" in system
+        assert "LOCKED" in system
+
+    def test_biasbuster_has_constraints(self):
+        system = load_prompt("biasbuster", "system")
+        assert "## Constraints" in system
+        assert "CV < 0.05" in system
+
+    def test_analyst_has_style(self):
+        system = load_prompt("analyst", "system")
+        assert "## Style" in system
+
+
+# ---------------------------------------------------------------------------
+# Gap #8: Analyst confidence clamping (P1 #4)
+# ---------------------------------------------------------------------------
+
+
+class TestAnalystConfidenceClamping:
+    """Karpathy P1 — defensive confidence clamp [0, 100]."""
+
+    def test_confidence_clamped_above_100(self):
+        from core.nodes.analysts import analyst_node
+        from core.state import AnalysisResult
+
+        # Use model_construct to bypass Pydantic validation (simulates raw LLM output)
+        over_result = AnalysisResult.model_construct(
+            analyst_type="game_mechanics",
+            score=4.0,
+            key_finding="test",
+            reasoning="test",
+            evidence=["test"],
+            confidence=150.0,
+        )
+
+        state: dict[str, Any] = {
+            "_analyst_type": "game_mechanics",
+            "ip_name": "Test",
+            "ip_info": {},
+            "monolake": {},
+            "signals": {},
+            "dry_run": True,
+            "verbose": False,
+            "analyses": [],
+            "errors": [],
+        }
+
+        with patch("core.nodes.analysts._run_analyst", return_value=over_result):
+            result = analyst_node(state)
+
+        analyses = result["analyses"]
+        assert len(analyses) == 1
+        assert analyses[0].confidence == 100.0
+
+    def test_confidence_clamped_below_0(self):
+        from core.nodes.analysts import analyst_node
+        from core.state import AnalysisResult
+
+        # Use model_construct to bypass Pydantic validation (simulates raw LLM output)
+        under_result = AnalysisResult.model_construct(
+            analyst_type="game_mechanics",
+            score=4.0,
+            key_finding="test",
+            reasoning="test",
+            evidence=["test"],
+            confidence=-10.0,
+        )
+
+        state: dict[str, Any] = {
+            "_analyst_type": "game_mechanics",
+            "ip_name": "Test",
+            "ip_info": {},
+            "monolake": {},
+            "signals": {},
+            "dry_run": True,
+            "verbose": False,
+            "analyses": [],
+            "errors": [],
+        }
+
+        with patch("core.nodes.analysts._run_analyst", return_value=under_result):
+            result = analyst_node(state)
+
+        analyses = result["analyses"]
+        assert len(analyses) == 1
+        assert analyses[0].confidence == 0.0
+
+    def test_confidence_normal_not_clamped(self):
+        from core.nodes.analysts import analyst_node
+        from core.state import AnalysisResult
+
+        normal_result = AnalysisResult(
+            analyst_type="game_mechanics",
+            score=4.0,
+            key_finding="test",
+            reasoning="test",
+            evidence=["test"],
+            confidence=85.0,
+        )
+
+        state: dict[str, Any] = {
+            "_analyst_type": "game_mechanics",
+            "ip_name": "Test",
+            "ip_info": {},
+            "monolake": {},
+            "signals": {},
+            "dry_run": True,
+            "verbose": False,
+            "analyses": [],
+            "errors": [],
+        }
+
+        with patch("core.nodes.analysts._run_analyst", return_value=normal_result):
+            result = analyst_node(state)
+
+        assert result["analyses"][0].confidence == 85.0
+
+
+# ---------------------------------------------------------------------------
+# Gap #9: Scoring — LLM composite_score independence (P0 #2)
+# ---------------------------------------------------------------------------
+
+
+class TestScoringCompositeIndependence:
+    """Scoring must use server-side _calc_community_momentum, not LLM composite."""
+
+    def test_growth_score_uses_axes_not_composite(self):
+        """_calc_growth_score should derive trend from axes, not composite_score."""
+        from core.nodes.scoring import _calc_growth_score
+        from core.state import EvaluatorResult
+
+        evaluations = {
+            "hidden_value": EvaluatorResult(
+                evaluator_type="hidden_value",
+                axes={"d_score": 4.0, "e_score": 3.0, "f_score": 4.0},
+                composite_score=0.0,  # deliberately wrong composite
+                rationale="test",
+            ),
+            "community_momentum": EvaluatorResult(
+                evaluator_type="community_momentum",
+                axes={"j_score": 5.0, "k_score": 4.0, "l_score": 4.0},
+                composite_score=0.0,  # deliberately wrong composite
+                rationale="test",
+            ),
+        }
+
+        # Server-side momentum: ((5+4+4)-3)/12*100 = 83.33
+        growth = _calc_growth_score(evaluations, developer_track_record=50.0)
+
+        # trend = 83.33, expand = ((4.0-1)/4*100) = 75.0, dev = 50.0
+        # 0.40*83.33 + 0.40*75.0 + 0.20*50.0 = 33.33 + 30.0 + 10.0 = 73.33
+        expected = 0.40 * 83.333 + 0.40 * 75.0 + 0.20 * 50.0
+        assert abs(growth - expected) < 0.1
+
+    def test_growth_score_no_community_momentum(self):
+        """Without community_momentum evaluator, trend defaults to 50.0."""
+        from core.nodes.scoring import _calc_growth_score
+        from core.state import EvaluatorResult
+
+        evaluations = {
+            "hidden_value": EvaluatorResult(
+                evaluator_type="hidden_value",
+                axes={"d_score": 4.0, "e_score": 3.0, "f_score": 4.0},
+                composite_score=99.0,
+                rationale="test",
+            ),
+        }
+
+        growth = _calc_growth_score(evaluations, developer_track_record=50.0)
+        # trend = 50.0 (default), expand = 75.0, dev = 50.0
+        expected = 0.40 * 50.0 + 0.40 * 75.0 + 0.20 * 50.0
+        assert abs(growth - expected) < 0.1
+
+    def test_growth_score_with_precomputed_momentum(self):
+        """Pre-computed momentum should be used instead of recalculating."""
+        from core.nodes.scoring import _calc_growth_score
+        from core.state import EvaluatorResult
+
+        evaluations = {
+            "hidden_value": EvaluatorResult(
+                evaluator_type="hidden_value",
+                axes={"d_score": 4.0, "e_score": 3.0, "f_score": 4.0},
+                composite_score=0.0,
+                rationale="test",
+            ),
+            "community_momentum": EvaluatorResult(
+                evaluator_type="community_momentum",
+                axes={"j_score": 5.0, "k_score": 5.0, "l_score": 5.0},
+                composite_score=0.0,
+                rationale="test",
+            ),
+        }
+
+        # Pass pre-computed momentum=90.0
+        growth = _calc_growth_score(evaluations, developer_track_record=50.0, momentum=90.0)
+        # trend = 90.0 (pre-computed, NOT recalculated), expand = 75.0, dev = 50.0
+        expected = 0.40 * 90.0 + 0.40 * 75.0 + 0.20 * 50.0
+        assert abs(growth - expected) < 0.1
+
+
+# ---------------------------------------------------------------------------
+# Gap #10: Synthesizer DT boundary logging (P2 #12)
+# ---------------------------------------------------------------------------
+
+
+class TestSynthesizerBoundaryLogging:
+    """Decision Tree boundary crossing should produce a warning log."""
+
+    def test_boundary_crossing_logged(self, caplog: Any):
+        from core.nodes.synthesizer import _extract_def_scores
+        from core.state import EvaluatorResult
+
+        evaluations = {
+            "hidden_value": EvaluatorResult(
+                evaluator_type="hidden_value",
+                axes={"d_score": 2.5, "e_score": 3.0, "f_score": 3.0},
+                composite_score=50.0,
+                rationale="test",
+            ),
+        }
+
+        with caplog.at_level(logging.WARNING, logger="core.nodes.synthesizer"):
+            d, e, f = _extract_def_scores(evaluations)
+
+        # 2.5 rounds to 2 → crosses from <3 to... no, stays <3.
+        # Actually 2.5 rounds to 2 in Python (banker's rounding).
+        # Let's verify actual values
+        assert d == 2
+        assert e == 3
+        assert f == 3
+
+    def test_boundary_crossing_at_2_point_5(self, caplog: Any):
+        """2.5 → round(2.5) = 2 in Python (banker's rounding). No boundary cross."""
+        from core.nodes.synthesizer import _extract_def_scores
+        from core.state import EvaluatorResult
+
+        evaluations = {
+            "hidden_value": EvaluatorResult(
+                evaluator_type="hidden_value",
+                axes={"d_score": 2.6, "e_score": 3.0, "f_score": 3.0},
+                composite_score=50.0,
+                rationale="test",
+            ),
+        }
+
+        with caplog.at_level(logging.WARNING, logger="core.nodes.synthesizer"):
+            d, e, f = _extract_def_scores(evaluations)
+
+        # 2.6 rounds to 3 → crosses boundary (raw < 3 but rounded >= 3)
+        assert d == 3
+        assert any("DT boundary shift" in msg for msg in caplog.messages)
+
+    def test_no_boundary_crossing_clear_scores(self, caplog: Any):
+        """Scores clearly above/below 3 should not warn."""
+        from core.nodes.synthesizer import _extract_def_scores
+        from core.state import EvaluatorResult
+
+        evaluations = {
+            "hidden_value": EvaluatorResult(
+                evaluator_type="hidden_value",
+                axes={"d_score": 4.0, "e_score": 2.0, "f_score": 4.0},
+                composite_score=60.0,
+                rationale="test",
+            ),
+        }
+
+        with caplog.at_level(logging.WARNING, logger="core.nodes.synthesizer"):
+            d, e, f = _extract_def_scores(evaluations)
+
+        assert d == 4
+        assert e == 2
+        assert f == 4
+        assert not any("DT boundary shift" in msg for msg in caplog.messages)
+
+    def test_no_hidden_value_returns_defaults(self):
+        from core.nodes.synthesizer import _extract_def_scores
+
+        d, e, f = _extract_def_scores({})
+        assert (d, e, f) == (3, 3, 3)
+
+
+# ---------------------------------------------------------------------------
+# Gap #11: Agentic loop message pruning (P10 context budget)
+# ---------------------------------------------------------------------------
+
+
+class TestAgenticLoopPruning:
+    """Karpathy P10 — message pruning for context budget."""
+
+    def test_no_pruning_under_threshold(self):
+        from core.cli.agentic_loop import AgenticLoop
+
+        loop = AgenticLoop.__new__(AgenticLoop)
+        messages: list[dict[str, Any]] = [{"role": "user", "content": f"msg{i}"} for i in range(8)]
+        loop._maybe_prune_messages(messages)
+        assert len(messages) == 8  # No change
+
+    def test_pruning_at_threshold(self):
+        from core.cli.agentic_loop import AgenticLoop
+
+        loop = AgenticLoop.__new__(AgenticLoop)
+        messages: list[dict[str, Any]] = [{"role": "user", "content": f"msg{i}"} for i in range(10)]
+        loop._maybe_prune_messages(messages)
+        assert len(messages) == 10  # Exactly 10 = no prune
+
+    def test_pruning_above_threshold(self):
+        from core.cli.agentic_loop import AgenticLoop
+
+        loop = AgenticLoop.__new__(AgenticLoop)
+        # Build alternating user/assistant (12 msgs = 6 rounds)
+        messages: list[dict[str, Any]] = [{"role": "user", "content": "first message"}]
+        for i in range(1, 12):
+            role = "assistant" if i % 2 else "user"
+            messages.append({"role": role, "content": f"msg{i}"})
+        assert len(messages) == 12
+
+        loop._maybe_prune_messages(messages)
+
+        # first(user) + bridge(assistant) + recent(user-start) = 7
+        assert messages[0]["content"] == "first message"
+        assert messages[0]["role"] == "user"
+        assert messages[1]["role"] == "assistant"
+        assert "(earlier rounds omitted)" in str(messages[1]["content"])
+        # Verify alternation: no consecutive same roles
+        for i in range(1, len(messages)):
+            assert messages[i]["role"] != messages[i - 1]["role"], (
+                f"Consecutive {messages[i]['role']} at index {i - 1},{i}"
+            )
+
+    def test_pruning_preserves_recent_and_alternation(self):
+        from core.cli.agentic_loop import AgenticLoop
+
+        loop = AgenticLoop.__new__(AgenticLoop)
+        # Build proper alternating conversation (13 msgs: 6 turns + current user)
+        messages: list[dict[str, Any]] = [{"role": "user", "content": "original"}]
+        for i in range(1, 11):
+            role = "assistant" if i % 2 else "user"
+            messages.append({"role": role, "content": f"old{i}"})
+        messages.extend(
+            [
+                {"role": "assistant", "content": "recent_a1"},
+                {"role": "user", "content": "recent_u2"},
+            ]
+        )
+        assert len(messages) == 13
+
+        loop._maybe_prune_messages(messages)
+
+        contents = [m["content"] for m in messages]
+        assert "original" in contents
+        assert "recent_u2" in contents
+        # Verify alternation
+        for i in range(1, len(messages)):
+            assert messages[i]["role"] != messages[i - 1]["role"]

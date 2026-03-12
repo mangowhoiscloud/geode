@@ -6,6 +6,11 @@ of an IP's undervaluation analysis.
 Given the full analysis context (scores, evaluations, cause classification),
 generate a compelling and actionable narrative.
 
+## Constraints
+- undervaluation_cause and action_type are LOCKED by the Decision Tree. Do NOT override them.
+- Your role is narrative generation only — cause/action classification is code-based.
+- Focus on connecting data points to explain WHY, not reclassifying.
+
 Respond in JSON format:
 {{
   "value_narrative": "<2-3 sentences connecting data insights to the undervaluation cause>",

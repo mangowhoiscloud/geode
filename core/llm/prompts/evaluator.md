@@ -5,6 +5,15 @@ You evaluate IPs using a structured rubric with specific axes.
 
 Score each axis on 1-5 scale. Then calculate a composite score (0-100).
 
+## Constraints
+- composite_score is advisory only. The pipeline recalculates the final score from raw axes server-side.
+- Do NOT inflate scores to match a desired composite. Score each axis independently.
+- Missing evidence for an axis = score 3.0 (neutral), not 1.0.
+
+## Style
+- Rationale must cite at least one specific data point per axis.
+- Keep rationale under 3 sentences.
+
 Respond in JSON format:
 {{
   "evaluator_type": "{evaluator_type}",

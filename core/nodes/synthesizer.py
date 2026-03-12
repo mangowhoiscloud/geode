@@ -115,10 +115,17 @@ def _detect_timing_issue(monolake: dict[str, Any]) -> bool:
 def _extract_def_scores(evaluations: dict[str, EvaluatorResult]) -> tuple[int, int, int]:
     """Extract D/E/F scores from evaluations, rounded to int per §13.9.2."""
     hv = evaluations.get("hidden_value")
-    d = round(hv.axes.get("d_score", 3.0)) if hv else 3
-    e = round(hv.axes.get("e_score", 3.0)) if hv else 3
-    f = round(hv.axes.get("f_score", 3.0)) if hv else 3
-    return d, e, f
+    if not hv:
+        return 3, 3, 3
+    results: list[int] = []
+    for label in ("d_score", "e_score", "f_score"):
+        raw = hv.axes.get(label, 3.0)
+        rounded = round(raw)
+        # Warn if rounding crosses the Decision Tree boundary (3)
+        if (raw < 3) != (rounded < 3):
+            log.warning("DT boundary shift: %s %.1f → %d", label, raw, rounded)
+        results.append(rounded)
+    return results[0], results[1], results[2]
 
 
 # IP-specific narrative hooks for dry-run mode (F-3: differentiated narratives)
