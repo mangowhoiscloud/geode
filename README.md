@@ -7,8 +7,7 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 - Sub-Agent Manager(pre-release)로 병렬 작업을 지원합니다.
 - Observability는 LangSmith, Evaluation은 루브릭 기반 LLM-as-Judge, CUSUM Drift 감지를 지원합니다.
 - 에이전틱 엔지니어링으로 제작되며 코딩 에이전트가 E2E를 진행, Context/Observability/Eval/CI 가드레일을 기반으로 재귀 개선 루프를 형성합니다.
-- 다음 업데이트는 Swiss Cheese Model based Eval Pipeline 구축으로 예정되어 있습니다.
-
+  
 ## Features
 
 | Feature | Description |
