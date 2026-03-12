@@ -259,10 +259,23 @@ class AgenticLoop:
                     tool_choice=tool_choice,
                     max_tokens=self.max_tokens,
                     temperature=0.0,
-                    timeout=30.0,
+                    timeout=120.0,
                 )
                 return response  # type: ignore[no-any-return]
 
+            except anthropic.APITimeoutError:
+                wait = 2**attempt * 5  # 5s, 10s, 20s
+                log.warning(
+                    "API timeout (attempt %d/%d), retrying in %ds",
+                    attempt + 1,
+                    max_retries,
+                    wait,
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(wait)
+                else:
+                    log.error("API timeout exhausted after %d retries", max_retries)
+                    return None
             except anthropic.RateLimitError:
                 wait = 2**attempt * 10  # 10s, 20s, 40s
                 log.warning(
