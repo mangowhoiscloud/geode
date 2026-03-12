@@ -53,8 +53,9 @@ class HookEvent(Enum):
     RULE_UPDATED = "rule_updated"
     RULE_DELETED = "rule_deleted"
 
-    # Prompt Assembly (ADR-007)
+    # Prompt Assembly (ADR-007) + Drift Detection (Karpathy P4)
     PROMPT_ASSEMBLED = "prompt_assembled"
+    PROMPT_DRIFT_DETECTED = "prompt_drift_detected"
 
     # SubAgent lifecycle
     SUBAGENT_STARTED = "subagent_started"

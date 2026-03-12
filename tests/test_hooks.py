@@ -4,8 +4,8 @@ from core.orchestration.hooks import HookEvent, HookResult, HookSystem
 
 
 class TestHookEvent:
-    def test_all_23_events_exist(self):
-        assert len(HookEvent) == 26
+    def test_all_events_exist(self):
+        assert len(HookEvent) == 27
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_START.value == "pipeline_start"
