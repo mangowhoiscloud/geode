@@ -145,14 +145,25 @@ class ContextAssembler:
         return (time.time() - self._last_assembly_time) < threshold
 
     @staticmethod
-    def _build_llm_summary(context: dict[str, Any]) -> str:
+    def _build_llm_summary(
+        context: dict[str, Any],
+        *,
+        max_chars: int = 280,
+    ) -> str:
         """Build a pre-formatted LLM-readable summary from assembled context.
 
         Contract (ADR-007): PromptAssembler reads this value directly without parsing.
 
-        Context hierarchy (OpenClaw/Claude Code pattern):
-          SOUL (identity) → Organization (data) → Project (rules) → Session (ephemeral)
+        Karpathy P6 L2 extraction: prioritize high-value information instead of
+        hard truncation.  Each tier gets a budget proportional to its value:
+          SOUL (10%) → Organization (25%) → Project (25%) → Session (40%)
         """
+        # Budget allocation per tier (proportional, not hard-cut)
+        budget_soul = int(max_chars * 0.10)
+        budget_org = int(max_chars * 0.25)
+        budget_proj = int(max_chars * 0.25)
+        budget_session = max_chars - budget_soul - budget_org - budget_proj
+
         parts: list[str] = []
 
         # SOUL.md — extract mission line (first non-header, non-empty line)
@@ -162,22 +173,31 @@ class ContextAssembler:
                 for line in soul_text.split("\n"):
                     stripped = line.strip()
                     if stripped and not stripped.startswith("#") and not stripped.startswith(">"):
-                        parts.append(f"Mission: {stripped[:120]}")
+                        parts.append(f"Mission: {stripped[:budget_soul]}")
                         break
 
         if context.get("_org_loaded"):
             org_strategy = context.get("organization_strategy", "")
             if org_strategy:
-                parts.append(f"Organization: {org_strategy}")
+                parts.append(f"Org: {org_strategy[:budget_org]}")
 
         if context.get("_project_loaded"):
             project_goal = context.get("project_goal", "")
             if project_goal:
-                parts.append(f"Project: {project_goal}")
+                parts.append(f"Project: {project_goal[:budget_proj]}")
 
         if context.get("_session_loaded"):
             prev_results = context.get("previous_results", [])
-            for pr in prev_results[-3:]:
-                parts.append(f"Previous: {pr}")
+            if prev_results:
+                # L2 extraction: most recent results first, fit within budget
+                remaining = budget_session
+                for pr in reversed(prev_results[-3:]):
+                    entry = str(pr)
+                    if len(entry) > remaining:
+                        if remaining > 20:
+                            parts.append(f"Prev: {entry[:remaining]}…")
+                        break
+                    parts.append(f"Prev: {entry}")
+                    remaining -= len(entry) + 8  # "Prev: " + " | "
 
         return " | ".join(parts) if parts else ""

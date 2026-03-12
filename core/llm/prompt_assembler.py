@@ -109,6 +109,8 @@ class PromptAssembler:
         """
         base_hash = _hash_prompt(base_system + base_user)
         fragments_used: list[str] = []
+        skill_hashes: dict[str, str] = {}  # Karpathy P4: track skill content for drift
+        truncation_events: list[str] = []  # Karpathy P6: record what was truncated
 
         # --- Phase 1: Prompt Override ---
         overrides = state.get("_prompt_overrides", {})
@@ -131,6 +133,7 @@ class PromptAssembler:
             system = system + "\n\n" + skill_block
             for s in skills:
                 fragments_used.append(f"{s.name}:{s.version}")
+                skill_hashes[s.name] = _hash_prompt(s.prompt_body)
 
         # --- Phase 3: Memory Context Injection ---
         memory_ctx = state.get("memory_context")
@@ -138,6 +141,9 @@ class PromptAssembler:
             memory_block = self._format_memory_block(memory_ctx)
             if memory_block:
                 if len(memory_block) > self._max_memory_chars:
+                    truncation_events.append(
+                        f"memory:{len(memory_block)}->{self._max_memory_chars}"
+                    )
                     memory_block = memory_block[: self._max_memory_chars] + "..."
                     log.warning("Memory context truncated to %d chars", self._max_memory_chars)
                 system = system + "\n\n" + memory_block
@@ -164,6 +170,9 @@ class PromptAssembler:
                 total_system_chars,
                 self._prompt_hard_limit_chars,
             )
+            truncation_events.append(
+                f"system:{total_system_chars}->{self._prompt_hard_limit_chars}"
+            )
             system = system[: self._prompt_hard_limit_chars]
         elif total_system_chars > self._prompt_warning_chars:
             log.warning(
@@ -188,18 +197,21 @@ class PromptAssembler:
 
         # Emit hook event (metadata only, NOT raw prompt content)
         if self._hooks is not None:
-            self._hooks.trigger(
-                HookEvent.PROMPT_ASSEMBLED,
-                {
-                    "node": node,
-                    "role_type": role_type,
-                    "assembled_hash": assembled_hash,
-                    "base_template_hash": base_hash,
-                    "fragment_count": len(fragments_used),
-                    "total_chars": total_chars,
-                    "fragments_used": list(fragments_used),
-                },
-            )
+            hook_data: dict[str, Any] = {
+                "node": node,
+                "role_type": role_type,
+                "assembled_hash": assembled_hash,
+                "base_template_hash": base_hash,
+                "fragment_count": len(fragments_used),
+                "total_chars": total_chars,
+                "fragments_used": list(fragments_used),
+            }
+            # Karpathy P4 ratchet: include skill content hashes for drift detection
+            if skill_hashes:
+                hook_data["skill_hashes"] = skill_hashes
+            if truncation_events:
+                hook_data["truncation_events"] = truncation_events
+            self._hooks.trigger(HookEvent.PROMPT_ASSEMBLED, hook_data)
 
         return result
 
