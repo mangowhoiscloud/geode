@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # L4.5 Automation — Snapshot Manager
     snapshot_dir: str = ".geode/snapshots"
     snapshot_max_recent: int = 30
+    snapshot_gc_threshold: int = 60  # auto-prune when count exceeds this
 
     # L4.5 Automation — Trigger Manager
     trigger_scheduler_interval_s: float = 60.0
@@ -50,6 +51,7 @@ class Settings(BaseSettings):
 
     # L2 Memory — Session
     session_ttl_hours: float = 4.0
+    session_storage_dir: str = ""  # file-backed persistence dir (empty = in-memory only)
 
     # L2 Memory — Redis/PostgreSQL (simulation URLs)
     redis_url: str = ""
