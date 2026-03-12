@@ -29,6 +29,7 @@ from core.config import ANTHROPIC_PRIMARY, settings
 from core.llm.client import _maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.ui.agentic_ui import render_tool_call, render_tool_result
+from core.ui.console import console
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
@@ -140,7 +141,15 @@ class AgenticLoop:
 
         for round_idx in range(self.max_rounds):
             is_last_round = round_idx == self.max_rounds - 1
-            response = self._call_llm(system_prompt, messages, round_idx=round_idx)
+
+            # Claude Code-style: spinner during LLM API call
+            with console.status(
+                "  [cyan]Thinking...[/cyan]",
+                spinner="dots",
+                spinner_style="cyan",
+            ):
+                response = self._call_llm(system_prompt, messages, round_idx=round_idx)
+
             if response is None:
                 result = AgenticResult(
                     text="LLM call failed. Try again or use /help.",
@@ -272,6 +281,9 @@ class AgenticLoop:
                 return None
             except anthropic.BadRequestError as exc:
                 log.warning("Anthropic BadRequest in agentic loop: %s", exc)
+                return None
+            except KeyboardInterrupt:
+                log.info("LLM call interrupted by user")
                 return None
             except Exception:
                 log.warning("Agentic LLM call failed", exc_info=True)
