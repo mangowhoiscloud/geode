@@ -26,6 +26,44 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+General Assistant Transformation — GEODE를 범용 AI 어시스턴트 + IP 분석 전문 도구로 변환.
+
+### Added
+
+#### General Assistant Transformation (P1-P5)
+- Offline mode 제거 — AgenticLoop always-online (API 키 없으면 자동 dry-run)
+- `key_registration_gate()` — Claude Code 스타일 API 키 등록 게이트 (`core/cli/startup.py`)
+- 9개 신규 도구: `web_fetch`, `general_web_search`, `read_document`, `note_save`, `note_read`, `youtube_search`, `reddit_sentiment`, `steam_info`, `google_trends`
+- Tool count: 21 → 30
+
+#### MCP Server Integration
+- `StdioMCPClient` — JSON-RPC stdio 기반 MCP 서버 클라이언트 (`core/infrastructure/adapters/mcp/stdio_client.py`)
+- `MCPServerManager` — MCP 서버 설정 로딩 + 연결 관리 + 도구 디스커버리 (`core/infrastructure/adapters/mcp/manager.py`)
+- `/mcp` CLI 커맨드 — MCP 서버 상태/도구/재로딩
+- `ToolExecutor` MCP fallback — 미등록 도구를 MCP 서버로 자동 라우팅
+
+#### NL Router 개선
+- Scored matching — `_OfflinePattern` dataclass + priority-based 5-phase matching
+- Fuzzy IP matching — `difflib.get_close_matches` ("Bersek" → "Berserk")
+- Multi-intent — compound splitting ("하고", "and", 쉼표) → 복수 NLIntent 반환
+- Disambiguation — `NLIntent.ambiguous` + `alternatives` 필드
+- Context injection — 대화 히스토리 (최근 3턴) → LLM 라우터에 전달
+
+### Changed
+- `AgenticLoop`: `offline_mode` 파라미터 제거 (하위 호환성 깨짐)
+- NL Router API: `NLIntent` 모델에 `ambiguous`, `alternatives` 필드 추가
+- System prompt: General assistant + IP specialist 이중 역할
+
+### Infrastructure
+- Test count: 2000+ → 2033+
+- Module count: 118 → 121
+- `beautifulsoup4`, `httpx` 의존성 추가
+- Coverage omit: I/O 전용 모듈 (cli/__init__.py, commands.py, mcp_server.py, web/doc tools)
+
+---
+
 ## [0.8.0] — 2026-03-11
 
 Plan/Sub-agent NL integration, Claude Code-style UI, response quality hardening.

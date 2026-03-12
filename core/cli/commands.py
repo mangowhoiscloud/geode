@@ -74,6 +74,7 @@ COMMAND_MAP: dict[str, str] = {
     "/trigger": "trigger",
     "/status": "status",
     "/compare": "compare",
+    "/mcp": "mcp",
 }
 
 
@@ -626,6 +627,38 @@ def cmd_trigger(args: str) -> None:
         return
 
     console.print("  [warning]Usage: /trigger [list|fire <event>][/warning]")
+    console.print()
+
+
+def cmd_mcp(arg: str) -> None:
+    """Handle /mcp command — list/manage MCP servers."""
+    from core.infrastructure.adapters.mcp.manager import MCPServerManager
+
+    mgr = MCPServerManager()
+    loaded = mgr.load_config()
+
+    if not arg or arg == "list":
+        if loaded == 0:
+            console.print("  [muted]No MCP servers configured.[/muted]")
+            console.print("  [muted]Add servers to .claude/mcp_servers.json[/muted]")
+            console.print()
+            return
+
+        servers = mgr.list_servers()
+        console.print()
+        console.print("  [header]MCP Servers[/header]")
+        for s in servers:
+            connected = s["connected"]
+            status = "[success]connected[/success]" if connected else "[muted]off[/muted]"
+            console.print(
+                f"  {s['name']:20s} {status}  "
+                f"[muted]{s['command']} ({s['tool_count']} tools)[/muted]"
+            )
+        console.print()
+        return
+
+    console.print(f"  [muted]MCP subcommand not recognized: {arg}[/muted]")
+    console.print("  [muted]Usage: /mcp [list][/muted]")
     console.print()
 
 

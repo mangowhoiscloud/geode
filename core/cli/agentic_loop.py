@@ -82,7 +82,7 @@ class AgenticLoop:
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model: str | None = None,
         tool_registry: ToolRegistry | None = None,
-        offline_mode: bool = False,
+        mcp_manager: Any | None = None,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -90,7 +90,13 @@ class AgenticLoop:
         self.max_tokens = max_tokens
         self.model = model or ANTHROPIC_PRIMARY
         self._tools = get_agentic_tools(tool_registry)
-        self._offline = offline_mode
+        self._mcp_manager = mcp_manager
+        # Merge MCP tools if available
+        if mcp_manager is not None:
+            existing_names = {t["name"] for t in self._tools}
+            for mcp_tool in mcp_manager.get_all_tools():
+                if mcp_tool.get("name") not in existing_names:
+                    self._tools.append(mcp_tool)
         self._tool_log: list[dict[str, Any]] = []
         self._client: anthropic.Anthropic | None = None
 
@@ -98,9 +104,6 @@ class AgenticLoop:
     def run(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_log = []
-
-        if self._offline:
-            return self._run_offline(user_input)  # type: ignore[no-any-return]
 
         # Add user message to conversation context
         self.context.add_user_message(user_input)
@@ -148,48 +151,6 @@ class AgenticLoop:
             tool_calls=self._tool_log,
             rounds=self.max_rounds,
             error="max_rounds",
-        )
-
-    # Reverse map: action → tool_name for offline mode
-    _ACTION_TO_TOOL: dict[str, str] = {
-        "list": "list_ips",
-        "analyze": "analyze_ip",
-        "search": "search_ips",
-        "compare": "compare_ips",
-        "help": "show_help",
-        "report": "generate_report",
-        "batch": "batch_analyze",
-        "status": "check_status",
-        "model": "switch_model",
-        "memory": "memory_search",
-        "key": "set_api_key",
-        "auth": "manage_auth",
-        "generate": "generate_data",
-        "schedule": "schedule_job",
-        "trigger": "trigger_event",
-        "plan": "create_plan",
-        "delegate": "delegate_task",
-    }
-
-    @_maybe_traceable(run_type="chain", name="AgenticLoop._run_offline")  # type: ignore[untyped-decorator]
-    def _run_offline(self, user_input: str) -> AgenticResult:
-        """Regex-based tool selection without LLM (1 deterministic round)."""
-        from core.cli.nl_router import _offline_fallback
-
-        intent = _offline_fallback(user_input)
-        if intent.action == "help":
-            return AgenticResult(
-                text="Offline mode: use /help for supported commands.",
-                rounds=1,
-            )
-
-        tool_name = self._ACTION_TO_TOOL.get(intent.action, intent.action)
-        result = self.executor.execute(tool_name, intent.args or {})
-        self._tool_log.append({"tool": tool_name, "input": intent.args or {}, "result": result})
-        return AgenticResult(
-            text=str(result),
-            tool_calls=self._tool_log,
-            rounds=1,
         )
 
     def _build_system_prompt(self) -> str:

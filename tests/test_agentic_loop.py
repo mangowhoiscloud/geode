@@ -237,21 +237,32 @@ class TestAgenticLoop:
         assert "run_bash" in tool_names
         assert "delegate_task" in tool_names
 
-    def test_offline_mode_help(self, context: ConversationContext, executor: ToolExecutor) -> None:
-        """Test offline mode returns help text for help intent."""
-        loop = AgenticLoop(context, executor, offline_mode=True)
-        result = loop.run("도움말 보여줘")
-        assert result.rounds == 1
-        assert "Offline" in result.text or "/help" in result.text
+    def test_key_gate_blocks_without_key(self) -> None:
+        """Test key_registration_gate returns None on /quit."""
+        from unittest.mock import patch as _patch
 
-    def test_offline_mode_tool_execution(self, context: ConversationContext) -> None:
-        """Test offline mode routes to correct tool and executes."""
-        handler = MagicMock(return_value={"status": "ok", "ips": ["Berserk"]})
-        executor = ToolExecutor(action_handlers={"list_ips": handler}, auto_approve=True)
-        loop = AgenticLoop(context, executor, offline_mode=True)
-        result = loop.run("IP 목록 보여줘")
-        assert result.rounds == 1
-        assert len(result.tool_calls) >= 1
+        from core.cli.startup import key_registration_gate
+
+        with _patch("core.cli.startup.console") as mock_console:
+            mock_console.input.return_value = "/quit"
+            result = key_registration_gate()
+            assert result is None
+
+    def test_key_gate_accepts_valid_key(self) -> None:
+        """Test key_registration_gate accepts /key command."""
+        from unittest.mock import patch as _patch
+
+        from core.cli.startup import key_registration_gate
+
+        with (
+            _patch("core.cli.startup.console") as mock_console,
+            _patch("core.cli.startup._upsert_env"),
+            _patch("core.cli.startup.settings") as mock_settings,
+        ):
+            mock_console.input.return_value = "/key sk-ant-test-key-12345678"
+            result = key_registration_gate()
+            assert result == "sk-ant-test-key-12345678"
+            assert mock_settings.anthropic_api_key == "sk-ant-test-key-12345678"
 
     def test_get_agentic_tools_no_registry(self) -> None:
         """get_agentic_tools without registry returns base tools."""
