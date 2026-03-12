@@ -28,9 +28,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Clarification 시스템 확장 + HITL Cost Tracking + AgenticLoop 안전장치 + 테스트 정합성 수정.
+Clarification 시스템 확장 + HITL Cost Tracking + AgenticLoop 안전장치 + Karpathy P1/P4/P6/P7/P10 프롬프트 강화.
 
 ### Added
+
+#### Karpathy P1/P4/P6/P7/P10 프롬프트 강화
+- `PROMPT_VERSIONS` 8→20 확장 (9 extended templates + 3 axes hashes)
+- `_hash_axes()` — 구조화 axes 데이터 SHA-256 drift 감지
+- `AXES_VERSIONS` — EVALUATOR_AXES, PROSPECT_EVALUATOR_AXES, ANALYST_SPECIFIC 해시
+- `_PINNED_HASHES` 하드코딩 — 실제 래칫 동작 (기존 자동 동기화 → CI drift 감지 불가 수정)
+- 프롬프트 .md `## Constraints` + `## Style` 섹션 표준화 (evaluator, synthesizer, biasbuster, analyst)
+- `AgenticLoop._maybe_prune_messages()` — 5라운드 이상 시 컨텍스트 예산 pruning (role 교대 보장)
+- Analyst `confidence` defensive clamp [0, 100] + 경고 로그
 
 #### Clarification 시스템 확장 (3/33 → 25/33 핸들러)
 - `_clarify()` 표준 응답 헬퍼 — `{error, clarification_needed, missing, hint}` 프로토콜
@@ -46,6 +55,13 @@ Clarification 시스템 확장 + HITL Cost Tracking + AgenticLoop 안전장치 +
 #### Whisking UI
 - `GeodeStatus._format_spinner()` — Claude Code 스타일 `✢ Whisking… · ↑3.7k · $0.093 · 2m 35s` 라이브 스피너
 
+### Changed
+- `_calc_growth_score()` — `cm.composite_score` → `_calc_community_momentum(evaluations)` (LLM composite 의존 제거, P0 #2)
+- `_calc_growth_score()` — `momentum` 파라미터 추가 (이중 호출 제거)
+- `_extract_def_scores()` — DT boundary 교차 경고 로깅 (`(raw < 3) != (rounded < 3)`)
+- `router.md` — 81줄 → 65줄 축약 (중복 도구 설명 제거, 규칙 5개 번호 리스트화)
+- `biasbuster.md` Constraints — `CV < 0.05 AND ≥4 analysts → anchoring_bias` (코드 정합성)
+
 ### Fixed
 - `test_hooks_write_to_run_log` — cascading hook 이벤트로 인한 count 불일치 수정 (정확 count → 필터 기반)
 - `test_error_events_logged_with_error_status` — 동일 원인 수정
@@ -53,7 +69,7 @@ Clarification 시스템 확장 + HITL Cost Tracking + AgenticLoop 안전장치 +
 - `TestTrackTokenUsage` — `token_tracker` 리팩터링 후 `is_langsmith_enabled` → `os.environ` 패치로 변경
 
 ### Infrastructure
-- Test count: 2077+ → 2061+ (라이브 테스트 제외 기준)
+- Test count: 2077+ → 2125+
 - `docs/blogs/21-clarification-hitl-cost-tracking.md` — Clarification + HITL + Cost Tracking 기술 블로그
 
 ---

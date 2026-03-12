@@ -9,6 +9,10 @@ IMPORTANT:
 - Do NOT reference other analysts or their scores.
 - Be rigorous and data-driven.
 
+## Style
+- Lead with the most actionable finding.
+- Cite at least 2 data points as evidence.
+
 Scoring Anchors:
   1 = Poor (well below genre average, critical weaknesses)
   2 = Below Average (notable gaps, limited appeal)
