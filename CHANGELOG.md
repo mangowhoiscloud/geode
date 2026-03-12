@@ -26,6 +26,38 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+Clarification 시스템 확장 + HITL Cost Tracking + AgenticLoop 안전장치 + 테스트 정합성 수정.
+
+### Added
+
+#### Clarification 시스템 확장 (3/33 → 25/33 핸들러)
+- `_clarify()` 표준 응답 헬퍼 — `{error, clarification_needed, missing, hint}` 프로토콜
+- `_safe_delegate()` 래퍼 — 9개 위임 도구(web_fetch, youtube_search 등) KeyError → clarification 자동 변환
+- 13개 핸들러에 직접 clarification 검증 추가 (search_ips, memory_search, create_plan 등)
+- `AgenticLoop.MAX_CLARIFICATION_ROUNDS = 3` — 무한 clarification 루프 방지
+
+#### LLM Cost Tracking (3계층)
+- Real-time UI: `render_tokens()` — `✢ claude-opus-4-6 · ↓1.2k ↑350 · $0.0930` 출력
+- Session summary: `render_session_cost_summary()` — `/quit` 시 누적 비용 자동 표시
+- `/cost` 명령어 — 세션 중 비용 확인
+
+#### Whisking UI
+- `GeodeStatus._format_spinner()` — Claude Code 스타일 `✢ Whisking… · ↑3.7k · $0.093 · 2m 35s` 라이브 스피너
+
+### Fixed
+- `test_hooks_write_to_run_log` — cascading hook 이벤트로 인한 count 불일치 수정 (정확 count → 필터 기반)
+- `test_error_events_logged_with_error_status` — 동일 원인 수정
+- `test_status.py` — 화살표 방향 정합성 (`↓input ↑output`)
+- `TestTrackTokenUsage` — `token_tracker` 리팩터링 후 `is_langsmith_enabled` → `os.environ` 패치로 변경
+
+### Infrastructure
+- Test count: 2077+ → 2061+ (라이브 테스트 제외 기준)
+- `docs/blogs/21-clarification-hitl-cost-tracking.md` — Clarification + HITL + Cost Tracking 기술 블로그
+
+---
+
 ## [0.10.0] — 2026-03-12
 
 SubAgent 병렬 실행 완성 + SchedulerService 프로덕션 와이어링 + NL 자연어 스케줄 E2E 통합.

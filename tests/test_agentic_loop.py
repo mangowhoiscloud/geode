@@ -128,6 +128,7 @@ class TestAgenticLoop:
         assert result.text == "Here are the available IPs."
         assert result.rounds == 1
         assert result.error is None
+        assert result.termination_reason == "natural"
 
     def test_run_with_tool_use(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test tool_use → tool_result → text response flow."""
@@ -169,6 +170,7 @@ class TestAgenticLoop:
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0]["tool"] == "list_ips"
         assert result.error is None
+        assert result.termination_reason == "natural"
 
     def test_run_max_rounds(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test max rounds limit."""
@@ -196,6 +198,7 @@ class TestAgenticLoop:
 
         assert result.error == "max_rounds"
         assert result.rounds == 2
+        assert result.termination_reason == "max_rounds"
 
     def test_run_llm_failure(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test graceful handling of LLM call failure."""
@@ -205,6 +208,7 @@ class TestAgenticLoop:
             result = loop.run("test")
 
         assert result.error == "llm_call_failed"
+        assert result.termination_reason == "llm_error"
 
     def test_context_preserved(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test that conversation context is maintained across runs."""
@@ -228,6 +232,56 @@ class TestAgenticLoop:
             loop.run("first message")
 
         assert context.turn_count >= 1
+
+    def test_default_max_rounds(self) -> None:
+        """Verify DEFAULT_MAX_ROUNDS is 7."""
+        assert AgenticLoop.DEFAULT_MAX_ROUNDS == 7
+
+    def test_forced_text_on_last_round(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """On the last round, tool_choice=none forces text output."""
+        loop = AgenticLoop(context, executor, max_rounds=3)
+
+        call_kwargs: list[dict[str, Any]] = []
+
+        def mock_call_llm(
+            system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
+        ) -> MagicMock:
+            call_kwargs.append({"round_idx": round_idx})
+            # Round 0, 1: return tool_use; Round 2 (last): return text
+            if round_idx < 2:
+                resp = MagicMock()
+                resp.stop_reason = "tool_use"
+                resp.usage = MagicMock(input_tokens=100, output_tokens=50)
+                block = MagicMock()
+                block.type = "tool_use"
+                block.name = "list_ips"
+                block.input = {}
+                block.id = f"toolu_{round_idx}"
+                resp.content = [block]
+                return resp
+            else:
+                resp = MagicMock()
+                resp.stop_reason = "end_turn"
+                resp.usage = MagicMock(input_tokens=100, output_tokens=50)
+                block = MagicMock()
+                block.type = "text"
+                block.text = "Forced text on last round."
+                resp.content = [block]
+                return resp
+
+        with (
+            patch.object(loop, "_call_llm", side_effect=mock_call_llm),
+            patch.object(loop, "_track_usage"),
+        ):
+            result = loop.run("test forced text")
+
+        assert result.rounds == 3
+        assert result.termination_reason == "forced_text"
+        assert result.text == "Forced text on last round."
+        # Verify all 3 rounds were called with correct round_idx
+        assert [kw["round_idx"] for kw in call_kwargs] == [0, 1, 2]
 
     def test_agentic_tools_include_all(self) -> None:
         """Verify AGENTIC_TOOLS includes base tools + bash + delegate."""
@@ -291,11 +345,17 @@ class TestAgenticLoop:
 
     def test_agentric_result_dataclass(self) -> None:
         """Test AgenticResult fields."""
-        r = AgenticResult(text="hello", rounds=2, error="test_err")
+        r = AgenticResult(text="hello", rounds=2, error="test_err", termination_reason="natural")
         assert r.text == "hello"
         assert r.rounds == 2
         assert r.error == "test_err"
         assert r.tool_calls == []
+        assert r.termination_reason == "natural"
+
+    def test_agentric_result_default_termination_reason(self) -> None:
+        """Test AgenticResult default termination_reason is 'unknown'."""
+        r = AgenticResult(text="test")
+        assert r.termination_reason == "unknown"
 
     def test_build_system_prompt(
         self, context: ConversationContext, executor: ToolExecutor

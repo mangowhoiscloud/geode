@@ -100,7 +100,7 @@ class TestAgenticLoopLive:
 
     def test_1_3_sequential_tools(self) -> None:
         """1-3. Multi-intent → sequential tool calls."""
-        loop, *_ = _make_loop(max_rounds=8)
+        loop, *_ = _make_loop(max_rounds=7)
         result = loop.run("Berserk 분석하고 Cowboy Bebop이랑 비교해줘")
         assert result.error is None
         tool_names = [tc["tool"] for tc in result.tool_calls]
@@ -116,12 +116,20 @@ class TestAgenticLoopLive:
         assert result.text
 
     def test_1_5_max_rounds_guardrail(self) -> None:
-        """1-5. Max rounds guardrail — forced termination."""
+        """1-5. Max rounds guardrail — forced text on last round."""
         loop, *_ = _make_loop(max_rounds=2)
         result = loop.run("Berserk 분석하고 비교하고 리포트 만들어줘")
         assert result.rounds <= 2
-        if result.error:
-            assert result.error == "max_rounds"
+        # With forced text on last round, should terminate gracefully
+        assert result.termination_reason in ("natural", "forced_text", "max_rounds")
+
+    def test_1_8_natural_termination(self) -> None:
+        """1-8. Simple intent terminates naturally within 3 rounds."""
+        loop, *_ = _make_loop()
+        result = loop.run("IP 목록 보여줘")
+        assert result.rounds <= 3, f"Expected ≤3 rounds, got {result.rounds}"
+        assert result.termination_reason == "natural"
+        assert result.error is None
 
     def test_1_7_multi_turn_context(self) -> None:
         """1-7. Multi-turn context preservation across turns."""

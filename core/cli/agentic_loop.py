@@ -62,6 +62,7 @@ class AgenticResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     rounds: int = 0
     error: str | None = None
+    termination_reason: str = "unknown"  # "natural" | "forced_text" | "max_rounds" | "llm_error"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, omitting None-valued fields."""
@@ -75,7 +76,7 @@ class AgenticLoop:
         execute tools → feed results back → continue
     """
 
-    DEFAULT_MAX_ROUNDS = 10
+    DEFAULT_MAX_ROUNDS = 7
     DEFAULT_MAX_TOKENS = 4096
     MAX_CLARIFICATION_ROUNDS = 3
 
@@ -138,13 +139,23 @@ class AgenticLoop:
         system_prompt = self._build_system_prompt()
 
         for round_idx in range(self.max_rounds):
-            response = self._call_llm(system_prompt, messages)
+            is_last_round = round_idx == self.max_rounds - 1
+            response = self._call_llm(system_prompt, messages, round_idx=round_idx)
             if response is None:
-                return AgenticResult(
+                result = AgenticResult(
                     text="LLM call failed. Try again or use /help.",
                     rounds=round_idx + 1,
                     error="llm_call_failed",
+                    termination_reason="llm_error",
                 )
+                log.info(
+                    "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
+                    result.termination_reason,
+                    result.rounds,
+                    self.max_rounds,
+                    len(result.tool_calls),
+                )
+                return result
 
             # Track usage + Claude Code-style token display
             self._track_usage(response)
@@ -153,11 +164,21 @@ class AgenticLoop:
                 # end_turn or max_tokens → extract text, done
                 text = self._extract_text(response)
                 self.context.add_assistant_message(response.content)
-                return AgenticResult(
+                reason = "forced_text" if is_last_round else "natural"
+                result = AgenticResult(
                     text=text,
                     tool_calls=self._tool_log,
                     rounds=round_idx + 1,
+                    termination_reason=reason,
                 )
+                log.info(
+                    "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
+                    result.termination_reason,
+                    result.rounds,
+                    self.max_rounds,
+                    len(result.tool_calls),
+                )
+                return result
 
             # Process tool calls (possibly multiple in one response)
             tool_results = self._process_tool_calls(response)
@@ -172,12 +193,21 @@ class AgenticLoop:
         self.context.add_assistant_message(
             [{"type": "text", "text": "Max agentic rounds reached."}]
         )
-        return AgenticResult(
+        result = AgenticResult(
             text="Max agentic rounds reached. Please try a more specific request.",
             tool_calls=self._tool_log,
             rounds=self.max_rounds,
             error="max_rounds",
+            termination_reason="max_rounds",
         )
+        log.info(
+            "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
+            result.termination_reason,
+            result.rounds,
+            self.max_rounds,
+            len(result.tool_calls),
+        )
+        return result
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt with skill context and agentic suffix."""
@@ -191,9 +221,13 @@ class AgenticLoop:
 
     @_maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     def _call_llm(
-        self, system: str, messages: list[dict[str, Any]]
+        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
     ) -> anthropic.types.Message | None:
-        """Call the Anthropic API with tools.  Retries on rate-limit (3×)."""
+        """Call the Anthropic API with tools.  Retries on rate-limit (3×).
+
+        On the last round (round_idx == max_rounds - 1), forces tool_choice=none
+        so the LLM must produce a text response instead of another tool call.
+        """
         api_key = settings.anthropic_api_key
         if not api_key:
             log.warning("No Anthropic API key for agentic loop")
@@ -201,6 +235,9 @@ class AgenticLoop:
 
         if self._client is None:
             self._client = anthropic.Anthropic(api_key=api_key)
+
+        is_last_round = round_idx == self.max_rounds - 1
+        tool_choice: dict[str, str] = {"type": "none"} if is_last_round else {"type": "auto"}
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -210,7 +247,7 @@ class AgenticLoop:
                     system=system,
                     messages=messages,
                     tools=self._tools,
-                    tool_choice={"type": "auto"},
+                    tool_choice=tool_choice,
                     max_tokens=self.max_tokens,
                     temperature=0.0,
                     timeout=30.0,

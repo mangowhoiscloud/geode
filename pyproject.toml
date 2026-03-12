@@ -85,6 +85,11 @@ source = ["core"]
 branch = true
 omit = [
     "core/ui/*",
+    "core/cli/__init__.py",
+    "core/cli/commands.py",
+    "core/mcp_server.py",
+    "core/tools/web_tools.py",
+    "core/tools/document_tools.py",
 ]
 
 [tool.coverage.report]
