@@ -2356,6 +2356,14 @@ def _interactive_loop() -> None:
         if not user_input:
             continue
 
+        # Bare exit/quit → immediate shutdown (no LLM round-trip)
+        if user_input.strip().lower() in ("exit", "quit", "q"):
+            from core.ui.agentic_ui import render_session_cost_summary
+
+            render_session_cost_summary()
+            console.print("  [muted]Goodbye.[/muted]\n")
+            break
+
         # Multi-line paste → always route to agentic (never slash-dispatch)
         is_multiline = "\n" in user_input
         if not is_multiline and user_input.startswith("/"):
