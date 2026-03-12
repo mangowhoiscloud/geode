@@ -243,7 +243,10 @@ class AgenticLoop:
             return None
 
         if self._client is None:
-            self._client = anthropic.Anthropic(api_key=api_key)
+            # Disable SDK-level retries to prevent double-retry with our own loop.
+            # Default max_retries=2 causes SDK to retry timeouts 3× internally,
+            # compounding with our 3 retries → 9 total attempts / 18min worst case.
+            self._client = anthropic.Anthropic(api_key=api_key, max_retries=0)
 
         is_last_round = round_idx == self.max_rounds - 1
         tool_choice: dict[str, str] = {"type": "none"} if is_last_round else {"type": "auto"}
@@ -263,10 +266,12 @@ class AgenticLoop:
                 )
                 return response  # type: ignore[no-any-return]
 
-            except anthropic.APITimeoutError:
+            except (anthropic.APITimeoutError, anthropic.APIConnectionError) as exc:
                 wait = 2**attempt * 5  # 5s, 10s, 20s
+                exc_type = type(exc).__name__
                 log.warning(
-                    "API timeout (attempt %d/%d), retrying in %ds",
+                    "%s (attempt %d/%d), retrying in %ds",
+                    exc_type,
                     attempt + 1,
                     max_retries,
                     wait,
@@ -274,7 +279,7 @@ class AgenticLoop:
                 if attempt < max_retries - 1:
                     time.sleep(wait)
                 else:
-                    log.error("API timeout exhausted after %d retries", max_retries)
+                    log.error("%s exhausted after %d retries", exc_type, max_retries)
                     return None
             except anthropic.RateLimitError:
                 wait = 2**attempt * 10  # 10s, 20s, 40s
