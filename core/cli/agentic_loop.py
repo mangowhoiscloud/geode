@@ -28,7 +28,7 @@ from core.cli.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY, settings
 from core.llm.client import _maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
-from core.ui.agentic_ui import render_tool_call, render_tool_result
+from core.ui.agentic_ui import OperationLogger
 from core.ui.console import console
 
 if TYPE_CHECKING:
@@ -111,6 +111,7 @@ class AgenticLoop:
         self._tool_log: list[dict[str, Any]] = []
         self._consecutive_failures: dict[str, int] = {}
         self._client: anthropic.Anthropic | None = None
+        self._op_logger = OperationLogger()
 
     def refresh_tools(self) -> int:
         """Reload MCP tools into the tool list without reconstructing the loop.
@@ -135,6 +136,7 @@ class AgenticLoop:
         self._tool_log = []
         self._clarification_count = 0
         self._consecutive_failures.clear()
+        self._op_logger.reset()
 
         # Add user message to conversation context
         self.context.add_user_message(user_input)
@@ -147,6 +149,7 @@ class AgenticLoop:
 
         for round_idx in range(self.max_rounds):
             is_last_round = round_idx == self.max_rounds - 1
+            self._op_logger.begin_round("AgenticLoop")
 
             # Claude Code-style: spinner during LLM API call
             with console.status(
@@ -179,6 +182,7 @@ class AgenticLoop:
 
             if response.stop_reason != "tool_use":
                 # end_turn or max_tokens → extract text, done
+                self._op_logger.finalize()
                 text = self._extract_text(response)
                 # Sync all intermediate tool-use messages + final response to context
                 assistant_content = self._serialize_content(response.content)
@@ -210,6 +214,7 @@ class AgenticLoop:
             messages.append({"role": "user", "content": tool_results})
 
         # Max rounds reached — persist what we have
+        self._op_logger.finalize()
         messages.append(
             {
                 "role": "assistant",
@@ -245,18 +250,41 @@ class AgenticLoop:
     def _maybe_prune_messages(self, messages: list[dict[str, Any]]) -> None:
         """Prune old messages when conversation exceeds 5 rounds (10 msgs).
 
-        Keeps first user message + bridge + last 2 rounds for context budget.
-        Ensures user/assistant alternation is preserved for valid API calls.
+        Keeps first user message + bridge + recent messages for context budget.
+        Ensures:
+        1. user/assistant alternation is preserved
+        2. No orphaned tool_result messages (each tool_result must follow
+           an assistant message containing the matching tool_use block)
         """
         if len(messages) <= 10:
             return
         first = messages[0]
-        # Ensure recent slice starts with "user" to maintain role alternation
-        # (first=user → bridge=assistant → recent must start with user)
-        cut = -4
-        if len(messages) >= 5 and messages[cut]["role"] != "user":
-            cut = -5
-        recent = messages[cut:]
+        # Walk backward to find a safe cut point:
+        # - Must be a "user" role message
+        # - Must NOT be a tool_result message (those need a preceding tool_use)
+        # Start from -4 and go back until we find a plain user text message
+        safe_cut = None
+        for candidate in range(-4, -(len(messages)), -1):
+            idx = len(messages) + candidate
+            if idx <= 0:
+                break
+            msg = messages[idx]
+            if msg["role"] != "user":
+                continue
+            # Check if this is a tool_result message
+            content = msg.get("content")
+            if isinstance(content, list) and any(
+                isinstance(b, dict) and b.get("type") == "tool_result" for b in content
+            ):
+                continue  # Skip — orphaned tool_result after pruning
+            safe_cut = candidate
+            break
+
+        if safe_cut is None:
+            # No safe cut found — don't prune to avoid corruption
+            return
+
+        recent = messages[safe_cut:]
         bridge: dict[str, Any] = {
             "role": "assistant",
             "content": [{"type": "text", "text": "(earlier rounds omitted)"}],
@@ -264,6 +292,61 @@ class AgenticLoop:
         messages.clear()
         messages.extend([first, bridge, *recent])
         log.debug("Pruned messages: kept first + bridge + %d recent", len(recent))
+
+    @staticmethod
+    def _repair_messages(messages: list[dict[str, Any]]) -> None:
+        """Remove orphaned tool_result messages that lack a preceding tool_use.
+
+        Scans backward and removes any user message whose content is entirely
+        tool_result blocks without matching tool_use in the prior assistant msg.
+        Also syncs the repair back to context via mutation in place.
+        """
+        i = len(messages) - 1
+        while i >= 1:
+            msg = messages[i]
+            if msg["role"] != "user":
+                i -= 1
+                continue
+            content = msg.get("content")
+            if not isinstance(content, list):
+                i -= 1
+                continue
+            # Check if ALL blocks are tool_result
+            tr_ids = {
+                b["tool_use_id"]
+                for b in content
+                if isinstance(b, dict) and b.get("type") == "tool_result"
+            }
+            if not tr_ids:
+                i -= 1
+                continue
+            # Check preceding assistant message for matching tool_use
+            if i > 0 and messages[i - 1]["role"] == "assistant":
+                prev_content = messages[i - 1].get("content", [])
+                if isinstance(prev_content, list):
+                    tu_ids = {
+                        b.get("id")
+                        for b in prev_content
+                        if isinstance(b, dict) and b.get("type") == "tool_use"
+                    }
+                    if tr_ids <= tu_ids:
+                        i -= 1
+                        continue  # All tool_results have matching tool_use — OK
+            # Orphaned — remove this tool_result message and its preceding
+            # assistant message (which also lost its tool_use context)
+            log.debug("Removing orphaned tool_result at index %d", i)
+            messages.pop(i)
+            # Also remove the preceding assistant message if it's a bridge/text
+            if i > 0 and messages[i - 1]["role"] == "assistant":
+                prev_c = messages[i - 1].get("content", [])
+                if isinstance(prev_c, list):
+                    has_tool_use = any(
+                        isinstance(b, dict) and b.get("type") == "tool_use" for b in prev_c
+                    )
+                    if not has_tool_use:
+                        messages.pop(i - 1)
+                        i -= 1
+            i -= 1
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt with skill context and agentic suffix."""
@@ -354,6 +437,11 @@ class AgenticLoop:
             except anthropic.BadRequestError as exc:
                 msg = str(exc)
                 log.warning("Anthropic BadRequest in agentic loop: %s", msg)
+                if "tool_use_id" in msg or "tool_result" in msg:
+                    # Orphaned tool_result in conversation history — repair
+                    self._repair_messages(messages)
+                    log.info("Repaired orphaned tool_result in conversation history")
+                    continue  # retry with cleaned messages
                 if "input_schema" in msg:
                     log.error(
                         "Tool schema error — likely an MCP tool missing input_schema. "
@@ -399,11 +487,11 @@ class AgenticLoop:
                     ),
                     "skipped": True,
                 }
-                render_tool_call(tool_name, tool_input)
-                render_tool_result(tool_name, result)
+                visible = self._op_logger.log_tool_call(tool_name, tool_input)
+                self._op_logger.log_tool_result(tool_name, result, visible=visible)
             else:
-                # Claude Code-style: show tool call before execution
-                render_tool_call(tool_name, tool_input)
+                # Progressive log: show tool call before execution
+                visible = self._op_logger.log_tool_call(tool_name, tool_input)
 
                 # Execute via ToolExecutor with spinner (handles HITL for dangerous tools)
                 with console.status(
@@ -431,9 +519,9 @@ class AgenticLoop:
                         "max_clarifications_exceeded": True,
                     }
 
-            # Claude Code-style: show tool result summary
+            # Progressive log: show tool result summary
             if isinstance(result, dict):
-                render_tool_result(tool_name, result)
+                self._op_logger.log_tool_result(tool_name, result, visible=visible)
 
             self._tool_log.append(
                 {

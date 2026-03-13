@@ -2421,6 +2421,11 @@ def _interactive_loop() -> None:
     )
     agentic_ref[0] = agentic
 
+    # Initialize session meter for status line
+    from core.ui.agentic_ui import init_session_meter
+
+    init_session_meter(model=agentic.model)
+
     while True:
         # Defensive: restore terminal state before each prompt
         # (Rich Status/Live may leave cursor hidden or echo off)
@@ -2489,6 +2494,10 @@ def _interactive_loop() -> None:
             try:
                 result = agentic.run(user_input)
                 _render_agentic_result(result)
+                # Claude Code-style status line after each result
+                from core.ui.agentic_ui import render_status_line
+
+                render_status_line()
             except KeyboardInterrupt:
                 console.show_cursor(True)
                 console.print("\n  [dim]Interrupted.[/dim]\n")

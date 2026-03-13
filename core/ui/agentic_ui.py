@@ -20,9 +20,130 @@ Usage::
 from __future__ import annotations
 
 import json
+import time
+from dataclasses import dataclass, field
 from typing import Any
 
 from core.ui.console import console
+
+# ───────────────────────────────────────────────────────────────────────────
+# SessionMeter — session-level timing for status line
+# ───────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class SessionMeter:
+    """Tracks session-level timing for status line display."""
+
+    start_time: float = field(default_factory=time.monotonic)
+    model: str = "claude-opus-4-6"
+
+    @property
+    def elapsed_s(self) -> float:
+        return time.monotonic() - self.start_time
+
+    @property
+    def elapsed_display(self) -> str:
+        s = int(self.elapsed_s)
+        if s < 60:
+            return f"{s}s"
+        m, sec = divmod(s, 60)
+        return f"{m}m {sec}s"
+
+
+_session_meter: SessionMeter | None = None
+
+
+def init_session_meter(model: str = "claude-opus-4-6") -> SessionMeter:
+    """Initialize the session meter singleton."""
+    global _session_meter
+    _session_meter = SessionMeter(model=model)
+    return _session_meter
+
+
+def get_session_meter() -> SessionMeter | None:
+    """Return the current session meter (None if not initialized)."""
+    return _session_meter
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# OperationLogger — progressive tree log with auto-collapse
+# ───────────────────────────────────────────────────────────────────────────
+
+
+class OperationLogger:
+    """Tracks tool call rendering within a single agentic round.
+
+    Manages the progressive log display with tree structure and
+    auto-collapse after COLLAPSE_THRESHOLD visible operations.
+    """
+
+    COLLAPSE_THRESHOLD = 5
+
+    def __init__(self) -> None:
+        self._visible_count = 0
+        self._collapsed_count = 0
+        self._header_printed = False
+
+    def begin_round(self, label: str = "AgenticLoop") -> None:
+        """Start a new agentic round — print header if not yet shown."""
+        if not self._header_printed:
+            console.print(f"\n[bold]⏺ {label}[/bold]")
+            self._header_printed = True
+
+    def log_tool_call(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
+        """Log a tool call. Returns True if visible, False if collapsed."""
+        if self._visible_count < self.COLLAPSE_THRESHOLD:
+            args_parts: list[str] = []
+            for k, v in tool_input.items():
+                if isinstance(v, str):
+                    args_parts.append(f'{k}="{v}"')
+                elif isinstance(v, bool):
+                    args_parts.append(f"{k}={str(v).lower()}")
+                elif isinstance(v, dict):
+                    args_parts.append(f"{k}={json.dumps(v, ensure_ascii=False)}")
+                else:
+                    args_parts.append(f"{k}={v}")
+            args_str = ", ".join(args_parts)
+            console.print(
+                f"  ⎿ [tool_name]▸ {tool_name}[/tool_name]([tool_args]{args_str}[/tool_args])"
+            )
+            self._visible_count += 1
+            return True
+        self._collapsed_count += 1
+        return False
+
+    def log_tool_result(
+        self, tool_name: str, result: dict[str, Any], *, visible: bool = True
+    ) -> None:
+        """Log a tool result (only renders if the call was visible)."""
+        if not visible:
+            return
+        if result.get("error"):
+            console.print(f"  ⎿ [error]✗ {tool_name}[/error] — {result['error']}")
+            return
+        summary_parts: list[str] = []
+        if "tier" in result:
+            summary_parts.append(result["tier"])
+        if "score" in result:
+            summary_parts.append(str(result["score"]))
+        if "count" in result:
+            summary_parts.append(f"{result['count']} items")
+        if "plan_id" in result:
+            summary_parts.append(f"plan:{result['plan_id'][:8]}")
+        summary = " · ".join(summary_parts) if summary_parts else "ok"
+        console.print(f"  ⎿ [success]✓ {tool_name}[/success] → {summary}")
+
+    def finalize(self) -> None:
+        """Print collapsed count if any tools were hidden."""
+        if self._collapsed_count > 0:
+            console.print(f"  ⎿ [dim]+{self._collapsed_count} more tool uses (collapsed)[/dim]")
+
+    def reset(self) -> None:
+        """Reset for next run()."""
+        self._visible_count = 0
+        self._collapsed_count = 0
+        self._header_printed = False
 
 
 def render_tool_call(tool_name: str, tool_input: dict[str, Any]) -> None:
@@ -126,6 +247,38 @@ def render_subagent_complete(count: int, elapsed_s: float) -> None:
     """Render sub-agent batch completion."""
     console.print(f"  [success]✓ {count} sub-agents completed[/success] ({elapsed_s:.1f}s)")
     console.print()
+
+
+def render_status_line() -> None:
+    """Render Claude Code-style status line after each agentic result.
+
+    Format: ✻ Worked for 48s · claude-opus-4-6 · ↓12.3k ↑2.1k · $0.42 · 11% context
+    """
+    meter = get_session_meter()
+    if meter is None:
+        return
+    try:
+        from core.llm.token_tracker import get_tracker
+
+        tracker = get_tracker()
+        acc = tracker.accumulator
+        in_str = _fmt_tokens(acc.total_input_tokens)
+        out_str = _fmt_tokens(acc.total_output_tokens)
+        cost = acc.total_cost_usd
+        ctx_pct = tracker.context_usage_pct(meter.model)
+
+        parts = [f"✻ Worked for {meter.elapsed_display}"]
+        parts.append(meter.model)
+        parts.append(f"↓{in_str} ↑{out_str}")
+        if cost > 0:
+            parts.append(f"${cost:.4f}")
+        parts.append(f"{ctx_pct:.0f}% context")
+
+        line = " · ".join(parts)
+        console.print(f"\n  [dim]{line}[/dim]")
+    except Exception:
+        # Fallback: just show elapsed time
+        console.print(f"\n  [dim]✻ Worked for {meter.elapsed_display}[/dim]")
 
 
 def _fmt_tokens(n: int) -> str:
