@@ -109,4 +109,4 @@ class TestBuildDryRunSynthesis:
             "platform_expansion",
             "품질 좋으나 확장 미진출 상태 — 플랫폼 확장",
         )
-        assert "Dark Fantasy" in result.target_gamer_segment
+        assert "Dark Fantasy" in result.target_segment

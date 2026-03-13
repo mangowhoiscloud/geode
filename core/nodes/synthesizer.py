@@ -16,12 +16,11 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
+from core.infrastructure.ports.domain_port import get_domain_or_none
 from core.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed, get_llm_tool
 from core.infrastructure.ports.tool_port import get_tool_executor
 from core.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_TOOLS_SUFFIX, SYNTHESIZER_USER
 from core.state import (
-    ActionLiteral,
-    CauseLiteral,
     EvaluatorResult,
     GeodeState,
     SynthesisResult,
@@ -39,9 +38,40 @@ _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "cause_action
 with _CONFIG_PATH.open(encoding="utf-8") as _f:
     _CONFIG_DATA: dict[str, Any] = yaml.safe_load(_f)
 
-CAUSE_TO_ACTION: dict[CauseLiteral, ActionLiteral] = _CONFIG_DATA["cause_to_action"]
+# Module-level defaults from YAML; typed as dict[str, str] for domain-flexibility.
+# Values at runtime are still CauseLiteral/ActionLiteral strings for game-IP domain.
+CAUSE_TO_ACTION: dict[str, str] = _CONFIG_DATA["cause_to_action"]
 CAUSE_DESCRIPTIONS: dict[str, str] = _CONFIG_DATA["cause_descriptions"]
 ACTION_DESCRIPTIONS: dict[str, str] = _CONFIG_DATA["action_descriptions"]
+
+
+# ---------------------------------------------------------------------------
+# Domain-aware getters (Phase 3c — DomainPort parameterization)
+# ---------------------------------------------------------------------------
+
+
+def _get_cause_to_action() -> dict[str, str]:
+    """Return cause→action mapping from domain adapter, or game-IP default."""
+    domain = get_domain_or_none()
+    if domain is not None:
+        return domain.get_cause_to_action()
+    return CAUSE_TO_ACTION
+
+
+def _get_cause_descriptions() -> dict[str, str]:
+    """Return cause→description mapping from domain adapter, or game-IP default."""
+    domain = get_domain_or_none()
+    if domain is not None:
+        return domain.get_cause_descriptions()
+    return CAUSE_DESCRIPTIONS
+
+
+def _get_action_descriptions() -> dict[str, str]:
+    """Return action→description mapping from domain adapter, or game-IP default."""
+    domain = get_domain_or_none()
+    if domain is not None:
+        return domain.get_action_descriptions()
+    return ACTION_DESCRIPTIONS
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +84,7 @@ def _classify_cause(
     e_score: float,
     f_score: float,
     release_timing_issue: bool = False,
-) -> tuple[CauseLiteral, str]:
+) -> tuple[str, str]:
     """D-E-F 프로파일 기반 저평가 원인 분류 (6개 유형).
 
     | 원인 코드           | D-E-F 프로파일               |
@@ -66,32 +96,34 @@ def _classify_cause(
     | niche_gem           | D<=2, E<=2, F>=3             |
     | discovery_failure   | D<=2, E<=2, F<=2             |
     """
-    cause: CauseLiteral
+    cause_descs = _get_cause_descriptions()
+
+    cause: str
 
     # 타이밍 이슈가 있고 D가 높으면 timing_mismatch
     if release_timing_issue and d_score >= 3:
         cause = "timing_mismatch"
-        return cause, CAUSE_DESCRIPTIONS[cause]
+        return cause, cause_descs.get(cause, cause)
 
     # D>=3: 마케팅/노출 부족 계열
     if d_score >= 3:
         if e_score >= 3:
             cause = "conversion_failure"
-            return cause, CAUSE_DESCRIPTIONS[cause]
+            return cause, cause_descs.get(cause, cause)
         cause = "undermarketed"
-        return cause, CAUSE_DESCRIPTIONS[cause]
+        return cause, cause_descs.get(cause, cause)
 
     # D<=2: 유저는 오는 계열
     if e_score >= 3:
         cause = "monetization_misfit"
-        return cause, CAUSE_DESCRIPTIONS[cause]
+        return cause, cause_descs.get(cause, cause)
 
     if f_score >= 3:
         cause = "niche_gem"
-        return cause, CAUSE_DESCRIPTIONS[cause]
+        return cause, cause_descs.get(cause, cause)
 
     cause = "discovery_failure"
-    return cause, CAUSE_DESCRIPTIONS[cause]
+    return cause, cause_descs.get(cause, cause)
 
 
 def _detect_timing_issue(monolake: dict[str, Any]) -> bool:
@@ -134,8 +166,8 @@ _IP_NARRATIVE_HOOKS: dict[str, dict[str, str]] = _CONFIG_DATA["ip_narrative_hook
 
 def _build_dry_run_synthesis(
     state: GeodeState,
-    cause: CauseLiteral,
-    action: ActionLiteral,
+    cause: str,
+    action: str,
     cause_desc: str,
 ) -> SynthesisResult:
     """Build a dry-run synthesis with IP-specific insights."""
@@ -177,14 +209,14 @@ def _build_dry_run_synthesis(
         undervaluation_cause=cause,
         action_type=action,
         value_narrative=narrative,
-        target_gamer_segment=segment,
+        target_segment=segment,
     )
 
 
 def _build_llm_synthesis(
     state: GeodeState,
-    cause: CauseLiteral,
-    action: ActionLiteral,
+    cause: str,
+    action: str,
 ) -> SynthesisResult:
     """Generate LLM-based synthesis narrative."""
     evaluations = state.get("evaluations", {})
@@ -260,7 +292,7 @@ def _build_llm_synthesis(
             undervaluation_cause=cause,
             action_type=action,
             value_narrative=data.get("value_narrative", ""),
-            target_gamer_segment=data.get("target_gamer_segment", ""),
+            target_segment=data.get("target_segment", ""),
         )
     except (ValidationError, ValueError) as ve:
         log.warning("Synthesizer legacy fallback also failed: %s", ve)
@@ -268,14 +300,14 @@ def _build_llm_synthesis(
             undervaluation_cause=cause,
             action_type=action,
             value_narrative="Schema validation failed (degraded)",
-            target_gamer_segment="Unknown (degraded)",
+            target_segment="Unknown (degraded)",
         )
 
 
 def _build_tool_augmented_synthesis(
     state: GeodeState,
-    cause: CauseLiteral,
-    action: ActionLiteral,
+    cause: str,
+    action: str,
     tool_fn: Any,
 ) -> SynthesisResult | None:
     """Generate synthesis using tool-augmented LLM (OpenClaw pattern).
@@ -328,7 +360,7 @@ def _build_tool_augmented_synthesis(
                 undervaluation_cause=cause,
                 action_type=action,
                 value_narrative=result.text,
-                target_gamer_segment="(tool-augmented)",
+                target_segment="(tool-augmented)",
             )
     except Exception as exc:
         log.warning("Tool-augmented synthesis failed: %s — falling back to standard", exc)
@@ -352,10 +384,13 @@ def synthesizer_node(state: GeodeState) -> dict[str, Any]:
         release_timing_issue = _detect_timing_issue(monolake)
 
         cause, cause_desc = _classify_cause(d_score, e_score, f_score, release_timing_issue)
-        action = CAUSE_TO_ACTION[cause]
+        cause_to_action = _get_cause_to_action()
+        action = cause_to_action[cause]
 
         if state.get("verbose"):
-            log.debug("Cause: %s -> Action: %s (%s)", cause, action, ACTION_DESCRIPTIONS[action])
+            action_descs = _get_action_descriptions()
+            action_desc = action_descs.get(action, action)
+            log.debug("Cause: %s -> Action: %s (%s)", cause, action, action_desc)
 
         if state.get("dry_run"):
             synthesis = _build_dry_run_synthesis(state, cause, action, cause_desc)

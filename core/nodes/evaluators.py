@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
+from core.infrastructure.ports.domain_port import get_domain_or_none
 from core.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
 from core.infrastructure.ports.tool_port import get_tool_executor
 from core.llm.client import call_llm_with_tools
@@ -26,6 +27,22 @@ log = logging.getLogger(__name__)
 
 EVALUATOR_TYPES: list[str] = list(EVALUATOR_AXES.keys())
 PROSPECT_EVALUATOR_TYPES: list[str] = list(PROSPECT_EVALUATOR_AXES.keys())
+
+
+def _get_evaluator_types() -> list[str]:
+    """Get evaluator types from domain adapter if available, else static."""
+    domain = get_domain_or_none()
+    if domain is not None:
+        return domain.get_evaluator_types()
+    return list(EVALUATOR_AXES.keys())
+
+
+def _get_evaluator_axes_config() -> dict[str, dict[str, Any]]:
+    """Get evaluator axes config from domain adapter if available, else static."""
+    domain = get_domain_or_none()
+    if domain is not None:
+        return domain.get_evaluator_axes()
+    return EVALUATOR_AXES
 
 
 # ---------------------------------------------------------------------------
@@ -552,7 +569,7 @@ def make_evaluator_sends(state: GeodeState) -> list[Any]:
     from langgraph.types import Send
 
     mode = state.get("pipeline_mode", "full_pipeline")
-    etypes = PROSPECT_EVALUATOR_TYPES if mode == "prospect" else EVALUATOR_TYPES
+    etypes = PROSPECT_EVALUATOR_TYPES if mode == "prospect" else _get_evaluator_types()
 
     sends = []
     for etype in etypes:

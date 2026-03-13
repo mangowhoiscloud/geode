@@ -39,6 +39,7 @@ from core.automation.outcome_tracking import OutcomeTracker
 from core.automation.snapshot import SnapshotManager
 from core.automation.triggers import TriggerManager, TriggerType
 from core.config import settings
+from core.domains.loader import load_domain_adapter
 from core.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
 from core.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
 from core.infrastructure.ports.auth_port import (
@@ -56,6 +57,7 @@ from core.infrastructure.ports.automation_port import (
     SnapshotManagerPort,
     TriggerManagerPort,
 )
+from core.infrastructure.ports.domain_port import set_domain
 from core.infrastructure.ports.hook_port import HookSystemPort
 from core.infrastructure.ports.llm_port import LLMClientPort
 from core.infrastructure.ports.memory_port import (
@@ -733,6 +735,7 @@ class GeodeRuntime:
         ip_name: str,
         *,
         phase: str = "analysis",
+        domain_name: str = "game_ip",
         enable_checkpoint: bool = True,
         log_dir: Path | str | None = None,
         session_ttl: float = DEFAULT_SESSION_TTL,
@@ -746,6 +749,10 @@ class GeodeRuntime:
         - _build_memory(): ProjectMemory, OrganizationMemory, ContextAssembler
         - _build_automation(): Drift, ModelRegistry, ExpertPanel, etc.
         """
+        # Domain adapter (Phase 4 — wire before anything that reads domain config)
+        domain = load_domain_adapter(domain_name)
+        set_domain(domain)
+
         # Session key + run ID
         session_key = build_session_key(ip_name, phase)
         run_id = uuid.uuid4().hex[:12]

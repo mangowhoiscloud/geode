@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 
 from core.fixtures import load_fixture
+from core.infrastructure.ports.domain_port import get_domain_or_none
 from core.infrastructure.ports.tool_port import get_tool_executor
 from core.state import (
     AnalysisResult,
@@ -326,16 +327,35 @@ def _calc_final_score(
     developer: float,
     confidence: float,
 ) -> float:
-    """§13.8.1: Final score with confidence multiplier."""
+    """§13.8.1: Final score with confidence multiplier.
+
+    Domain-aware: when a DomainPort is active, uses domain-provided weights
+    and confidence multiplier params. Falls back to hardcoded game-IP defaults.
+    """
+    domain = get_domain_or_none()
+    if domain is not None:
+        weights = domain.get_scoring_weights()
+        base_m, scale_m = domain.get_confidence_multiplier_params()
+    else:
+        weights = {
+            "exposure_lift": 0.25,
+            "quality": 0.20,
+            "recovery": 0.18,
+            "growth": 0.12,
+            "momentum": 0.20,
+            "developer": 0.05,
+        }
+        base_m, scale_m = 0.7, 0.3
+
     base = (
-        0.25 * exposure_lift
-        + 0.20 * quality
-        + 0.18 * recovery
-        + 0.12 * growth
-        + 0.20 * momentum
-        + 0.05 * developer
+        weights.get("exposure_lift", 0.25) * exposure_lift
+        + weights.get("quality", 0.20) * quality
+        + weights.get("recovery", 0.18) * recovery
+        + weights.get("growth", 0.12) * growth
+        + weights.get("momentum", 0.20) * momentum
+        + weights.get("developer", 0.05) * developer
     )
-    multiplier = 0.7 + (0.3 * confidence / 100)
+    multiplier = base_m + (scale_m * confidence / 100)
     return base * multiplier
 
 
@@ -361,6 +381,18 @@ def _calc_prospect_score(evaluations: dict[str, EvaluatorResult]) -> float:
 
 
 def _determine_tier(score: float) -> str:
+    """Determine tier from score.
+
+    Domain-aware: when a DomainPort is active, uses domain-provided thresholds.
+    Falls back to hardcoded game-IP thresholds (S/A/B/C).
+    """
+    domain = get_domain_or_none()
+    if domain is not None:
+        for threshold, tier_name in domain.get_tier_thresholds():
+            if score >= threshold:
+                return tier_name
+        return domain.get_tier_fallback()
+    # Fallback: hardcoded game IP thresholds
     if score >= 80:
         return "S"
     elif score >= 60:
