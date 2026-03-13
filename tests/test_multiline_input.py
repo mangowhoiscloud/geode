@@ -5,6 +5,11 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 
+def _patch_no_prompt_toolkit():
+    """Patch _get_prompt_session to return None (force console.input fallback)."""
+    return patch("core.cli._get_prompt_session", return_value=None)
+
+
 class TestReadMultilineInput:
     """_read_multiline_input drains paste-buffered stdin lines."""
 
@@ -16,6 +21,7 @@ class TestReadMultilineInput:
         mock_console.input.return_value = "Berserk 분석해줘"
 
         with (
+            _patch_no_prompt_toolkit(),
             patch("core.cli.console", mock_console),
             patch("core.cli.select.select", return_value=([], [], [])),
         ):
@@ -30,7 +36,10 @@ class TestReadMultilineInput:
         mock_console = MagicMock()
         mock_console.input.return_value = "   "
 
-        with patch("core.cli.console", mock_console):
+        with (
+            _patch_no_prompt_toolkit(),
+            patch("core.cli.console", mock_console),
+        ):
             result = _read_multiline_input("> ")
 
         assert result == ""
@@ -56,6 +65,7 @@ class TestReadMultilineInput:
             return next(paste_lines, "")
 
         with (
+            _patch_no_prompt_toolkit(),
             patch("core.cli.console", mock_console),
             patch("core.cli.select.select", side_effect=fake_select),
             patch("core.cli.sys.stdin") as mock_stdin,
@@ -83,6 +93,7 @@ class TestReadMultilineInput:
             return ([], [], [])
 
         with (
+            _patch_no_prompt_toolkit(),
             patch("core.cli.console", mock_console),
             patch("core.cli.select.select", side_effect=fake_select),
             patch("core.cli.sys.stdin") as mock_stdin,
@@ -101,6 +112,7 @@ class TestReadMultilineInput:
         mock_console.input.return_value = "hello"
 
         with (
+            _patch_no_prompt_toolkit(),
             patch("core.cli.console", mock_console),
             patch("core.cli.sys.stdin") as mock_stdin,
         ):
@@ -117,3 +129,19 @@ class TestReadMultilineInput:
         # Multi-line → should NOT enter slash command branch
         assert is_multiline is True
         assert not (not is_multiline and user_input.startswith("/"))
+
+    def test_prompt_toolkit_session_used_when_available(self):
+        """When prompt_toolkit session is available, it is used for input."""
+        from core.cli import _read_multiline_input
+
+        mock_session = MagicMock()
+        mock_session.prompt.return_value = "test input"
+
+        with (
+            patch("core.cli._get_prompt_session", return_value=mock_session),
+            patch("core.cli.select.select", return_value=([], [], [])),
+        ):
+            result = _read_multiline_input("> ")
+
+        assert result == "test input"
+        mock_session.prompt.assert_called_once()

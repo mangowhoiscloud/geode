@@ -12,6 +12,7 @@ dependencies = [
     "langgraph-checkpoint-sqlite>=3.0.0",
     "numpy>=2.2.0",
     "openai>=2.0.0",
+    "prompt-toolkit>=3.0.52",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "python-dotenv>=1.0.0",
