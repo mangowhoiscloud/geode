@@ -67,7 +67,7 @@ def key_registration_gate() -> str | None:
     )
     while True:
         try:
-            user_input = console.input("[bold cyan]>[/bold cyan] ").strip()
+            user_input = console.input("[header]>[/header] ").strip()
         except (KeyboardInterrupt, EOFError):
             return None
         if user_input.lower() in ("/quit", "quit", "exit"):

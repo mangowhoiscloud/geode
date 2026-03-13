@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import typer
-from rich.text import Text
 
 from core import __version__
 from core.cli.agentic_loop import AgenticLoop, AgenticResult
@@ -394,13 +393,15 @@ def _generate_report(
     # Skill-enhanced narrative (skip in dry-run to avoid LLM call)
     enhanced_narrative = ""
     if skill_registry is not None and not dry_run:
-        console.print("  [muted]Generating expert analysis with skills context...[/muted]")
-        enhanced_narrative = _build_skill_narrative(report_dict, skill_registry)
+        with GeodeStatus("Generating expert analysis...", model=settings.model) as st:
+            enhanced_narrative = _build_skill_narrative(report_dict, skill_registry)
+            st.stop("expert analysis" if enhanced_narrative else "expert analysis (skipped)")
 
     generator = ReportGenerator()
-    content = generator.generate(
-        report_dict, fmt=report_fmt, template=report_tpl, enhanced_narrative=enhanced_narrative
-    )
+    with console.status("  [cyan]Building report...[/cyan]", spinner="dots", spinner_style="cyan"):
+        content = generator.generate(
+            report_dict, fmt=report_fmt, template=report_tpl, enhanced_narrative=enhanced_narrative
+        )
 
     # Determine save path
     ext_map = {ReportFormat.HTML: "html", ReportFormat.JSON: "json", ReportFormat.MARKDOWN: "md"}
@@ -429,65 +430,51 @@ def _generate_report(
 # Interactive welcome screen
 # ---------------------------------------------------------------------------
 
-_LOGO = r"""
-   ____  _____ ___  ____  _____
-  / ___|| ____/ _ \|  _ \| ____|
- | |  _ |  _|| | | | | | |  _|
- | |_| || |__| |_| | |_| | |___
-  \____||_____\___/|____/|_____|
-"""
+
+def _render_welcome_brand() -> None:
+    """Render animated Claude Code-style branding with axolotl mascot."""
+    from core.ui.mascot import play_mascot_animation
+
+    cwd = str(Path.cwd())
+    play_mascot_animation(version=__version__, model=settings.model, cwd=cwd)
 
 
-def _render_mascot() -> None:
-    """Render the Harness GEODE mascot with Rich markup."""
-    # Harness GEODE: axolotl operator + orbiting tools
-    # 6-color: white body, magenta gills, yellow lamp, cyan accent
-    _M = "magenta"  # gills
-    _Y = "bold yellow"  # headlamp
-    _C = "dim cyan"  # orbiting tools
-    _D = "dim"  # outlines
-    _W = "white"  # body
-    art = (
-        f"  [{_C}]    ◇                    ◆[/{_C}]\n"
-        f"                [{_Y}]_⦿_[/{_Y}]\n"
-        f"        [{_M}]╲╲╲[/{_M}] [{_W}]( ◕ [{_D}]w[/{_D}] ◕ )[/{_W}]"
-        f" [{_M}]╱╱╱[/{_M}]\n"
-        f"         [{_M}]╲╲[/{_M}] [{_W}]([/{_W}]"
-        f" [{_D}]━━━[/{_D}] [{_W}])[/{_W}] [{_M}]╱╱[/{_M}]\n"
-        f"  [{_C}]🔍[/{_C}]   [{_W}]╭─┤[/{_W}]"
-        f"[cyan]♦[/cyan][{_W}]├────╮[/{_W}]   [{_C}]💎[/{_C}]\n"
-        f"         [{_W}]│[/{_W}] [{_D}]\\\\__//[/{_D}]"
-        f" [{_W}]│[/{_W}]\n"
-        f"         [{_W}]╰─[/{_W}]"
-        f"[dim magenta]~~~~~[/dim magenta][{_W}]─╯[/{_W}]"
-    )
-    console.print(art, highlight=False)
+def _render_readiness_compact(report: ReadinessReport) -> None:
+    """Render readiness as a compact block."""
+    ready = [c for c in report.capabilities if c.available]
+    not_ready = [c for c in report.capabilities if not c.available]
+
+    if ready:
+        names = "  ".join(f"[success]✓[/success] {c.name}" for c in ready)
+        console.print(f"  {names}")
+    if not_ready:
+        for c in not_ready:
+            hint = f" [muted]({c.reason})[/muted]" if c.reason else ""
+            console.print(f"  [warning]✗[/warning] {c.name}{hint}")
+
+    if report.blocked:
+        console.print()
+        console.print("  [warning]API key not configured — key registration required[/warning]")
+
+    console.print()
 
 
 def _welcome_screen() -> None:
     """Show Claude Code-style welcome screen with readiness check."""
-    console.print()
-    _render_mascot()
-    console.print()
-    logo = Text(_LOGO, style="bold cyan")
-    console.print(logo)
-    console.print(
-        f"  [bold]GEODE v{__version__}[/bold]  [muted]— 게임화 IP 도메인 자율 실행 하네스[/muted]"
-    )
-    console.print(f"  [muted]Model: {settings.model}[/muted]")
-    console.print("  [dim]Wiring tools. Scanning worlds.[/dim]")
-    console.print()
+    _render_welcome_brand()
 
     # OpenClaw gateway:startup — readiness check
     readiness = check_readiness()
     _set_readiness(readiness)
-    render_readiness(readiness)
+    _render_readiness_compact(readiness)
 
     # OpenClaw boot-md — initialize project memory if absent
     setup_project_memory()
 
-    console.print("  [muted]/help[/muted] for commands  [muted]·[/muted]  ", end="")
-    console.print("[muted]type naturally[/muted] to search & analyze")
+    console.print(
+        "  [muted]/help[/muted] for commands  [muted]·[/muted]  "
+        "[muted]type naturally[/muted] to search & analyze"
+    )
     console.print()
 
 
@@ -510,8 +497,8 @@ def _progress_line(done: list[str], active: str = "") -> str:
     """Build a compact progress status line."""
     parts = [f"[dim]{s}[/dim]" for s in done]
     if active:
-        parts.append(f"[bold cyan]{active}[/bold cyan]")
-    return " → ".join(parts) if parts else "[bold cyan]Starting...[/bold cyan]"
+        parts.append(f"[header]{active}[/header]")
+    return " → ".join(parts) if parts else "[header]Starting...[/header]"
 
 
 def _merge_event_output(final_state: dict[str, Any], output: dict[str, Any]) -> None:
@@ -2345,7 +2332,7 @@ def _interactive_loop() -> None:
         console.show_cursor(True)
 
         try:
-            user_input = _read_multiline_input("[bold cyan]>[/bold cyan] ")
+            user_input = _read_multiline_input("[header]>[/header] ")
         except (KeyboardInterrupt, EOFError):
             from core.ui.agentic_ui import render_session_cost_summary
 
