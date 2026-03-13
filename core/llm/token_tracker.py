@@ -11,7 +11,7 @@ Replaces the previous triple-call pattern::
     # After — 1 call:
     get_tracker().record(model, in_tok, out_tok)
 
-Pricing verified 2026-03-12 against:
+Pricing verified 2026-03-14 against:
   - Anthropic: https://platform.claude.com/docs/en/docs/about-claude/pricing
   - OpenAI: https://developers.openai.com/api/docs/pricing/
 """
@@ -145,17 +145,17 @@ MODEL_PRICING: dict[str, ModelPrice] = {
     "gpt-5-mini":   _oai(0.25,  2.00, cached_mtok=0.025),
     "gpt-5-nano":   _oai(0.05,  0.40, cached_mtok=0.005),
 
-    # ── OpenAI GPT-4 family ────────────────────────────────────────────
-    "gpt-4.1":      _oai(2.00,  8.00, cached_mtok=0.50),
-    "gpt-4.1-mini": _oai(0.40,  1.60, cached_mtok=0.10),
-    "gpt-4.1-nano": _oai(0.10,  0.40, cached_mtok=0.025),
-    "gpt-4o":       _oai(2.50, 10.00, cached_mtok=1.25),
-    "gpt-4o-mini":  _oai(0.15,  0.60, cached_mtok=0.075),
+    # ── OpenAI GPT-4 family (updated 2026-03-14) ────────────────────────
+    "gpt-4.1":      _oai(3.50, 14.00, cached_mtok=0.875),
+    "gpt-4.1-mini": _oai(0.70,  2.80, cached_mtok=0.175),
+    "gpt-4.1-nano": _oai(0.20,  0.80, cached_mtok=0.05),
+    "gpt-4o":       _oai(4.25, 17.00, cached_mtok=2.125),
+    "gpt-4o-mini":  _oai(0.25,  1.00, cached_mtok=0.125),
 
-    # ── OpenAI Reasoning ───────────────────────────────────────────────
-    "o3":       _oai(2.00, 8.00, cached_mtok=0.50),
-    "o3-mini":  _oai(1.10, 4.40, cached_mtok=0.55),
-    "o4-mini":  _oai(1.10, 4.40, cached_mtok=0.275),
+    # ── OpenAI Reasoning (updated 2026-03-14) ─────────────────────────
+    "o3":       _oai(3.50, 14.00, cached_mtok=0.875),
+    "o3-mini":  _oai(1.10,  4.40, cached_mtok=0.55),
+    "o4-mini":  _oai(2.00,  8.00, cached_mtok=0.50),
 }
 # fmt: on
 

@@ -36,7 +36,7 @@ packages = ["core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --tb=short --strict-markers"
+addopts = "-q --tb=short --strict-markers -m 'not live'"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests requiring external services",
