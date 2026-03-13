@@ -529,7 +529,12 @@ def cmd_batch(
     for i, ip_name in enumerate(ip_names, 1):
         console.print(f"  [{i}/{len(ip_names)}] [value]{ip_name}[/value]")
         if run_fn is not None:
-            result = run_fn(ip_name, dry_run=dry_run, verbose=verbose)
+            with console.status(
+                f"  [cyan]Analyzing {ip_name}...[/cyan]",
+                spinner="dots",
+                spinner_style="cyan",
+            ):
+                result = run_fn(ip_name, dry_run=dry_run, verbose=verbose)
             results.append(result)
         else:
             results.append(None)
