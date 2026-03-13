@@ -635,6 +635,8 @@ def _execute_pipeline(
                 input_state = None  # resume from checkpoint
                 status.start()
         except Exception as e:
+            # Ensure cursor/spinner cleanup before printing error
+            console.show_cursor(True)
             console.print(f"[error]Pipeline error: {e}[/error]")
             if verbose:
                 console.print_exception()
@@ -769,6 +771,7 @@ def _execute_pipeline_streaming(
             input_state = None
 
     except Exception as e:
+        console.show_cursor(True)
         console.print(f"[error]Pipeline error: {e}[/error]")
         if verbose:
             console.print_exception()
