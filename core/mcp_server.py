@@ -74,7 +74,7 @@ def create_mcp_server() -> Any:
                 output["cause"] = synthesis.undervaluation_cause
                 output["action"] = synthesis.action_type
                 output["narrative"] = synthesis.value_narrative
-                output["target_segment"] = synthesis.target_gamer_segment
+                output["target_segment"] = synthesis.target_segment
 
             analyses = result.get("analyses", [])
             output["analysts"] = [

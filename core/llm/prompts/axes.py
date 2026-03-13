@@ -34,6 +34,16 @@ def _derive_valid_axes_map() -> dict[str, set[str]]:
 VALID_AXES_MAP: dict[str, set[str]] = _derive_valid_axes_map()
 
 
+def get_valid_axes_map() -> dict[str, set[str]]:
+    """Get valid axes map from domain adapter if available, else static."""
+    from core.infrastructure.ports.domain_port import get_domain_or_none
+
+    domain = get_domain_or_none()
+    if domain is not None:
+        return domain.get_valid_axes_map()
+    return VALID_AXES_MAP
+
+
 # ---------------------------------------------------------------------------
 # Axes version hashing (Karpathy P4 — structured data drift detection)
 # ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 ---
 name: karpathy-patterns
 description: 자율 에이전트 시스템을 설계하거나, 에이전트의 자유도/안전성/컨텍스트 관리/협업 인프라를 결정할 때 참조. Karpathy autoresearch(자율 ML 실험 루프) + AgentHub(에이전트 네이티브 Git DAG) 에서 증류한 10대 설계 원칙. "autoresearch", "agenthub", "래칫", "ratchet", "context budget", "dumb platform", "program.md", "overnight", "자율 실험", "branchless", "단일 파일 제약", "고정 시간 예산" 키워드로 트리거.
+user-invocable: false
 ---
 
 # Karpathy Patterns — 자율 에이전트 설계 원칙

@@ -32,14 +32,37 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.10.1] — 2026-03-13
 
-UI/UX 리브랜딩 + 터미널 안정성 강화 + 의존성 업그레이드 + MCP 스키마 정규화.
+UI/UX 리브랜딩 + 터미널 안정성 강화 + Agentic 강건성 + 리포트 상용화 + Domain Plugin + MCP 버그 수정.
 
 ### Added
+
+#### UI/UX 리브랜딩
 - Axolotl 마스코트 + Claude Code 스타일 시작 화면 (9 표정 애니메이션)
 - Rich Markdown 렌더링 — LLM 응답의 마크다운을 터미널에서 Rich로 렌더링
 - 도구 실행 중 `Running {tool_name}...` 스피너 표시 (UI 공백 해소)
 - `_restore_terminal()` — 매 입력 전 termios ECHO/ICANON 복원 (스페이스+백스페이스 멈춤 수정)
 - `_suppress_noisy_warnings()` — Pydantic V1 / msgpack deserialization 경고 필터링
+- HTML 리포트 상용화 — SVG 게이지, 서브스코어 바차트, 반응형 + 인쇄 최적화
+
+#### Agentic Loop 강건성
+- `max_rounds` 7→15, `max_tokens` 4096→8192
+- `WRAP_UP_HEADROOM=2` — 마지막 2라운드에서 텍스트 응답 강제
+- 연속 실패 자동 스킵 — 같은 도구 2회 연속 실패 시 자동 스킵
+
+#### Domain Plugin Architecture (Phase 1-4)
+- `DomainPort` Protocol — 도메인별 analysts, evaluators, scoring weights, decision tree, prompts 플러그인 인터페이스
+- `GameIPDomain` 어댑터 — 기존 게임 IP 평가 로직을 DomainPort 구현체로 캡슐화
+- `load_domain_adapter()` / `set_domain()` — 도메인 어댑터 동적 로딩 + contextvars DI
+- `GeodeRuntime.create(domain_name=)` — 런타임 생성 시 도메인 어댑터 자동 와이어링
+
+#### Clarification 시스템 확장 (3/33 → 25/33 핸들러)
+- `_clarify()` 표준 응답 헬퍼, `_safe_delegate()` 래퍼, `MAX_CLARIFICATION_ROUNDS = 3`
+
+#### LLM Cost Tracking (3계층)
+- Real-time UI `render_tokens()`, Session summary, `/cost` 명령어
+
+#### Whisking UI
+- `GeodeStatus._format_spinner()` — Claude Code 스타일 라이브 스피너
 
 ### Changed
 - 브랜드 팔레트 통합: Coral/Gold/Cyan/Magenta/Crystal → GEODE_THEME 전역 적용

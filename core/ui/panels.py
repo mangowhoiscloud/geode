@@ -153,7 +153,7 @@ def result_panel(
     )
     content.append(f"  {synthesis.value_narrative}\n\n")
     content.append("  Target Segment: ", style="label")
-    content.append(f"{synthesis.target_gamer_segment}\n")
+    content.append(f"{synthesis.target_segment}\n")
     content.append("  Recommended Action: ", style="label")
 
     action_display = synthesis.action_type.replace("_", " ").title()

@@ -1,6 +1,7 @@
 ---
 name: openclaw-patterns
 description: OpenClaw 코드베이스에서 증류한 에이전트 시스템 설계 패턴. Gateway 중심 제어, Session Key 계층, Binding 라우팅, Lane Queue 동시성, Sub-agent Spawn+Announce, 4계층 자동화, Plugin 아키텍처, Policy Chain, Failover 전략. "gateway", "session", "binding", "lane", "spawn", "announce", "heartbeat", "cron", "hook", "plugin", "policy", "failover" 키워드로 트리거.
+user-invocable: false
 ---
 
 # OpenClaw Patterns — 에이전트 시스템 설계 증류

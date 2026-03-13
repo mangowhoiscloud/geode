@@ -30,7 +30,7 @@ _SAMPLE_RESULT: dict[str, Any] = {
         "undervaluation_cause": "undermarketed",
         "action_type": "marketing_boost",
         "value_narrative": "TestGame has strong mechanics but low visibility.",
-        "target_gamer_segment": "Achievers",
+        "target_segment": "Achievers",
     },
     "analyses": [
         {
