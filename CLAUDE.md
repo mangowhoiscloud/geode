@@ -400,66 +400,15 @@ PR 생성 → CI 실행 → 실패?
 - `mypy` 실패 시: 타입 에러 수정, `# type: ignore` 최소화
 - pre-commit stash 충돌 시: `git stash` → 커밋 → `git stash pop`
 
-**PR 작성 규칙:**
+**PR 작성 규칙:** `geode-gitflow` 스킬에 상세 템플릿과 지침 정의. 핵심만 아래 기술.
 
 | 항목 | 규칙 |
 |------|------|
 | 언어 | **한글** (제목 + 본문 모두) |
 | 제목 | `<type>: <한글 설명>` (70자 이내) |
-| 본문 | 아래 상세 템플릿 참조 |
+| 본문 | `## 요약` → `## 변경 사항` (핵심/부수 분리, 각 변경의 **왜?** 포함) → `## 영향 범위` → `## 설계 판단` (해당 시) → `## 테스트` (실제 수치) → `## 검증 체크리스트` |
 | Assignee | `--assignee mangowhoiscloud` (항상) |
 | Base | feature → `develop`, develop → `main` |
-
-**PR 본문 상세 템플릿:**
-
-```markdown
-## 요약
-<1-3줄. 무엇을 왜 변경했는지 핵심만>
-
-## 변경 사항
-### 코드 변경
-- `파일경로`: 변경 내용 (AS-IS → TO-BE 간략 설명)
-- `파일경로`: 변경 내용
-
-### 문서/설정 변경
-- `CLAUDE.md`: 갱신 항목
-- `README.md`: 갱신 항목 (정합성 검증 포함)
-- `CHANGELOG.md`: 버전/기록 변경 (해당 시)
-
-## 영향 범위
-- 영향받는 모듈/기능: <목록>
-- 하위 호환성: 유지 / 깨짐 (깨짐 시 상세 기술)
-
-## 테스트
-- [ ] `uv run ruff check core/ tests/` — 0 errors
-- [ ] `uv run mypy core/` — 0 errors
-- [ ] `uv run pytest tests/ -q` — XXXX+ pass
-- [ ] CLI dry-run 정상: `uv run geode analyze "Berserk" --dry-run`
-- [ ] 신규 테스트 추가: X개 (해당 시)
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-```
-
-**PR 생성 커맨드:**
-
-```bash
-gh pr create --base develop --assignee mangowhoiscloud \
-  --title "<type>: <한글 설명>" \
-  --body "$(cat <<'EOF'
-<위 템플릿 내용>
-EOF
-)"
-```
-
-**PR 머지 커맨드:**
-
-```bash
-# CI 통과 확인
-gh pr checks <PR#> --watch
-
-# 머지
-gh pr merge <PR#> --merge
-```
 
 ### E2E 업데이트 규칙 (필수)
 
@@ -492,8 +441,12 @@ Project-specific skills in `.claude/skills/`:
 | `geode-analysis` | analyst, evaluator, clean context | Analyst/Evaluator patterns, prompts |
 | `geode-verification` | guardrail, bias, cause, decision tree | G1-G4, BiasBuster, Decision Tree |
 | `geode-e2e` | e2e, live test, 검증, langsmith, tracing | Live E2E 패턴, LangSmith 검증, 품질 점검 |
-| `geode-gitflow` | branch, git, feature, release, hotfix | Gitflow strategy, commit convention |
-| `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget, dumb platform | 자율 에이전트 10대 설계 원칙 (P1-P10) |
+| `geode-gitflow` | branch, git, pr, merge, 커밋 | Gitflow 전략, PR 템플릿, CI 수정 루프 |
+| `geode-changelog` | changelog, release, version, 릴리스 | CHANGELOG 관리, SemVer 버전업 |
+| `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget | 자율 에이전트 10대 설계 원칙 (P1-P10) |
+| `openclaw-patterns` | gateway, session, binding, lane, plugin | 에이전트 시스템 설계 패턴 (OpenClaw) |
+| `architecture-patterns` | clean architecture, hexagonal, DDD | Backend 아키텍처 패턴 |
+| `tech-blog-writer` | blog, 포스팅, 블로그, tech blog | 기술 블로그 작성 가이드 |
 
 ## Linked Skills (from parent project)
 

@@ -1,8 +1,6 @@
-# GEODE E2E Testing Skill
-
-> Live E2E 검증 + LangSmith Observability + 품질 점검 패턴.
-> Triggers: e2e, live test, 검증, langsmith, tracing, observability, 품질 점검
-
+---
+name: geode-e2e
+description: Live E2E 검증 + LangSmith Observability + 품질 점검 패턴. Mock/Live 테스트 티어, 시나리오 매핑, _make_loop() 패턴, ReadinessReport 제어, 트레이스 검증. "e2e", "live test", "검증", "langsmith", "tracing", "observability", "품질 점검" 키워드로 트리거.
 ---
 
 ## Test Tiers
