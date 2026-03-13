@@ -20,6 +20,23 @@ log = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 _CONFIG_PATH = _PROJECT_ROOT / ".claude" / "mcp_servers.json"
 
+_EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
+
+
+def _normalise_mcp_tool(raw: dict[str, Any]) -> dict[str, Any]:
+    """Convert an MCP tool dict to Anthropic API format.
+
+    MCP spec returns ``inputSchema`` (camelCase); Anthropic requires
+    ``input_schema`` (snake_case).  Missing schema is replaced with a
+    minimal ``{"type": "object", "properties": {}}``.
+    """
+    schema = raw.get("input_schema") or raw.get("inputSchema") or _EMPTY_SCHEMA
+    return {
+        "name": raw.get("name", ""),
+        "description": raw.get("description", ""),
+        "input_schema": schema,
+    }
+
 
 class MCPServerManager:
     """Manages multiple MCP server connections and tool dispatch."""
@@ -78,29 +95,12 @@ class MCPServerManager:
         log.warning("Failed to connect to MCP server: %s", server_name)
         return None
 
-    @staticmethod
-    def _to_anthropic_tool(tool: dict[str, Any]) -> dict[str, Any]:
-        """Convert MCP tool format (inputSchema) to Anthropic format (input_schema)."""
-        result: dict[str, Any] = {
-            "name": tool.get("name", ""),
-            "description": tool.get("description", ""),
-        }
-        # MCP uses camelCase 'inputSchema', Anthropic API requires snake_case 'input_schema'
-        schema = (
-            tool.get("input_schema")
-            or tool.get("inputSchema")
-            or {"type": "object", "properties": {}}
-        )
-        result["input_schema"] = schema
-        # Preserve MCP server origin for routing
-        if "_mcp_server" in tool:
-            result["_mcp_server"] = tool["_mcp_server"]
-        return result
-
     def get_all_tools(self) -> list[dict[str, Any]]:
         """Gather tool definitions from all configured MCP servers.
 
-        Converts MCP tool format (inputSchema) to Anthropic API format (input_schema).
+        MCP spec uses camelCase (``inputSchema``), but Anthropic API
+        requires snake_case (``input_schema``).  This method normalises
+        each tool dict so it can be passed directly to ``messages.create(tools=...)``.
         """
         all_tools: list[dict[str, Any]] = []
         for server_name in self._servers:
@@ -109,8 +109,9 @@ class MCPServerManager:
                 continue
             tools = client.list_tools()
             for tool in tools:
-                tool["_mcp_server"] = server_name
-                all_tools.append(self._to_anthropic_tool(tool))
+                normalised = _normalise_mcp_tool(tool)
+                normalised["_mcp_server"] = server_name
+                all_tools.append(normalised)
         return all_tools
 
     def call_tool(self, server_name: str, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:

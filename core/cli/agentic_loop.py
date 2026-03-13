@@ -324,7 +324,14 @@ class AgenticLoop:
                 log.warning("Anthropic API key is invalid in agentic loop")
                 return None
             except anthropic.BadRequestError as exc:
-                log.warning("Anthropic BadRequest in agentic loop: %s", exc)
+                msg = str(exc)
+                log.warning("Anthropic BadRequest in agentic loop: %s", msg)
+                if "input_schema" in msg:
+                    log.error(
+                        "Tool schema error — likely an MCP tool missing input_schema. "
+                        "tools count=%d",
+                        len(self._tools),
+                    )
                 return None
             except KeyboardInterrupt:
                 log.info("LLM call interrupted by user")
