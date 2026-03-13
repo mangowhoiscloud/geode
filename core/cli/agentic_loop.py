@@ -77,9 +77,10 @@ class AgenticLoop:
         execute tools → feed results back → continue
     """
 
-    DEFAULT_MAX_ROUNDS = 7
-    DEFAULT_MAX_TOKENS = 4096
+    DEFAULT_MAX_ROUNDS = 15
+    DEFAULT_MAX_TOKENS = 8192
     MAX_CLARIFICATION_ROUNDS = 3
+    WRAP_UP_HEADROOM = 2  # force text response N rounds before max
 
     def __init__(
         self,
@@ -132,6 +133,7 @@ class AgenticLoop:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_log = []
         self._clarification_count = 0
+        self._consecutive_failures: dict[str, int] = {}  # tool_name → fail count
 
         # Add user message to conversation context
         self.context.add_user_message(user_input)
@@ -274,8 +276,11 @@ class AgenticLoop:
             # compounding with our 3 retries → 9 total attempts / 18min worst case.
             self._client = anthropic.Anthropic(api_key=api_key, max_retries=0)
 
-        is_last_round = round_idx == self.max_rounds - 1
-        tool_choice: dict[str, str] = {"type": "none"} if is_last_round else {"type": "auto"}
+        # Force text response in the last WRAP_UP_HEADROOM rounds
+        # so the LLM always has a chance to summarize before max_rounds
+        remaining = self.max_rounds - round_idx
+        force_text = remaining <= self.WRAP_UP_HEADROOM
+        tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -345,8 +350,15 @@ class AgenticLoop:
                 return None
         return None
 
+    _MAX_CONSECUTIVE_FAILURES = 2  # auto-skip after N consecutive failures per tool
+
     def _process_tool_calls(self, response: anthropic.types.Message) -> list[dict[str, Any]]:
-        """Execute all tool_use blocks and return tool_result messages."""
+        """Execute all tool_use blocks and return tool_result messages.
+
+        Tracks consecutive failures per tool name.  After _MAX_CONSECUTIVE_FAILURES
+        for the same tool, returns a synthetic "skip" result so the LLM stops retrying
+        a broken tool and moves on.
+        """
         tool_results: list[dict[str, Any]] = []
 
         for block in response.content:
@@ -358,11 +370,35 @@ class AgenticLoop:
 
             log.info("AgenticLoop: tool_use %s(%s)", tool_name, tool_input)
 
-            # Claude Code-style: show tool call before execution
-            render_tool_call(tool_name, tool_input)
+            # Auto-skip: if this tool has failed too many times consecutively
+            fail_count = self._consecutive_failures.get(tool_name, 0)
+            if fail_count >= self._MAX_CONSECUTIVE_FAILURES:
+                result: dict[str, Any] = {
+                    "error": (
+                        f"Tool '{tool_name}' failed {fail_count} times consecutively. "
+                        "Skipping — please use a different approach."
+                    ),
+                    "skipped": True,
+                }
+                render_tool_call(tool_name, tool_input)
+                render_tool_result(tool_name, result)
+            else:
+                # Claude Code-style: show tool call before execution
+                render_tool_call(tool_name, tool_input)
 
-            # Execute via ToolExecutor (handles HITL for dangerous tools)
-            result = self.executor.execute(tool_name, tool_input)
+                # Execute via ToolExecutor with spinner (handles HITL for dangerous tools)
+                with console.status(
+                    f"  [cyan]Running {tool_name}...[/cyan]",
+                    spinner="dots",
+                    spinner_style="cyan",
+                ):
+                    result = self.executor.execute(tool_name, tool_input)
+
+            # Track consecutive failures
+            if isinstance(result, dict) and result.get("error"):
+                self._consecutive_failures[tool_name] = fail_count + 1
+            else:
+                self._consecutive_failures[tool_name] = 0
 
             # Track clarification rounds to prevent infinite loops
             if isinstance(result, dict) and result.get("clarification_needed"):

@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.10.0"
+version = "0.10.1"
 description = "GEODE — 게임화 IP 도메인 자율 실행 하네스 CLI Demo"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -8,7 +8,7 @@ dependencies = [
     "anthropic>=0.84.0",
     "beautifulsoup4>=4.12.0",
     "httpx>=0.27.0",
-    "langgraph>=1.0.0",
+    "langgraph>=1.1.0",
     "langgraph-checkpoint-sqlite>=3.0.0",
     "numpy>=2.2.0",
     "openai>=2.0.0",

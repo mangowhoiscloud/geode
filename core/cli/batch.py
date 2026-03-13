@@ -99,7 +99,7 @@ def _run_analysis_standalone(ip_name: str, *, dry_run: bool = True) -> dict[str,
         initial_state.update(tool_injection)
 
     try:
-        result = graph.invoke(initial_state, config=runtime.thread_config)  # type: ignore[arg-type]
+        result = graph.invoke(initial_state, config=runtime.thread_config)  # type: ignore[call-overload]
     finally:
         runtime.shutdown()
 
