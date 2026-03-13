@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import patch
 
 from core.ui.agentic_ui import (
+    OperationLogger,
+    SessionMeter,
     _fmt_tokens,
+    get_session_meter,
+    init_session_meter,
     render_plan_steps,
+    render_status_line,
     render_subagent_complete,
     render_subagent_dispatch,
     render_tokens,
@@ -161,3 +167,132 @@ class TestRenderSubagent:
         combined = " ".join(calls)
         assert "3" in combined
         assert "5.2s" in combined
+
+
+class TestSessionMeter:
+    """SessionMeter timing tests."""
+
+    def test_elapsed_seconds(self) -> None:
+        meter = SessionMeter(start_time=time.monotonic() - 10)
+        assert meter.elapsed_s >= 10
+
+    def test_elapsed_display_seconds(self) -> None:
+        meter = SessionMeter(start_time=time.monotonic() - 42)
+        assert meter.elapsed_display == "42s"
+
+    def test_elapsed_display_minutes(self) -> None:
+        meter = SessionMeter(start_time=time.monotonic() - 125)
+        assert meter.elapsed_display == "2m 5s"
+
+    def test_init_and_get(self) -> None:
+        m = init_session_meter(model="claude-sonnet-4-6")
+        assert get_session_meter() is m
+        assert m.model == "claude-sonnet-4-6"
+
+
+class TestOperationLogger:
+    """OperationLogger progressive tree rendering tests."""
+
+    @patch("core.ui.agentic_ui.console")
+    def test_below_threshold_visible(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        logger = OperationLogger()
+        visible = logger.log_tool_call("analyze_ip", {"ip_name": "Berserk"})
+        assert visible is True
+        assert mock_console.print.called
+
+    @patch("core.ui.agentic_ui.console")
+    def test_above_threshold_collapsed(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        logger = OperationLogger()
+        for i in range(OperationLogger.COLLAPSE_THRESHOLD):
+            assert logger.log_tool_call(f"tool_{i}", {}) is True
+        # Next call should be collapsed
+        assert logger.log_tool_call("tool_extra", {}) is False
+
+    @patch("core.ui.agentic_ui.console")
+    def test_finalize_shows_collapsed_count(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        logger = OperationLogger()
+        for i in range(OperationLogger.COLLAPSE_THRESHOLD + 3):
+            logger.log_tool_call(f"tool_{i}", {})
+        logger.finalize()
+        calls = [str(c) for c in mock_console.print.call_args_list]
+        combined = " ".join(calls)
+        assert "+3 more tool uses" in combined
+
+    @patch("core.ui.agentic_ui.console")
+    def test_finalize_no_collapsed(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        logger = OperationLogger()
+        logger.log_tool_call("tool_1", {})
+        mock_console.print.reset_mock()
+        logger.finalize()
+        assert not mock_console.print.called
+
+    @patch("core.ui.agentic_ui.console")
+    def test_begin_round_prints_header(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        logger = OperationLogger()
+        logger.begin_round("TestRound")
+        printed = str(mock_console.print.call_args)
+        assert "TestRound" in printed
+
+    @patch("core.ui.agentic_ui.console")
+    def test_begin_round_only_once(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        logger = OperationLogger()
+        logger.begin_round("TestRound")
+        logger.begin_round("TestRound")
+        assert mock_console.print.call_count == 1
+
+    @patch("core.ui.agentic_ui.console")
+    def test_reset_clears_state(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        logger = OperationLogger()
+        for i in range(3):
+            logger.log_tool_call(f"tool_{i}", {})
+        logger.reset()
+        assert logger._visible_count == 0
+        assert logger._collapsed_count == 0
+        assert logger._header_printed is False
+
+    @patch("core.ui.agentic_ui.console")
+    def test_log_tool_result_error(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        logger = OperationLogger()
+        logger.log_tool_result("test", {"error": "fail"}, visible=True)
+        printed = str(mock_console.print.call_args)
+        assert "✗" in printed
+        assert "fail" in printed
+
+    @patch("core.ui.agentic_ui.console")
+    def test_log_tool_result_invisible_noop(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        logger = OperationLogger()
+        logger.log_tool_result("test", {"tier": "S"}, visible=False)
+        assert not mock_console.print.called
+
+
+class TestRenderStatusLine:
+    """Status line rendering tests."""
+
+    @patch("core.ui.agentic_ui.console")
+    def test_renders_with_session_meter(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        init_session_meter(model="claude-opus-4-6")
+        # Record some usage so tracker has data
+        from core.llm.token_tracker import get_tracker
+
+        tracker = get_tracker()
+        tracker.record("claude-opus-4-6", 1200, 350)
+
+        render_status_line()
+        printed = str(mock_console.print.call_args)
+        assert "✻" in printed
+        assert "Worked for" in printed
+        assert "claude-opus-4-6" in printed
+        assert "context" in printed
+
+    @patch("core.ui.agentic_ui.console")
+    def test_noop_without_meter(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        # Force no meter
+        import core.ui.agentic_ui as mod
+
+        old = mod._session_meter
+        mod._session_meter = None
+        try:
+            render_status_line()
+            assert not mock_console.print.called
+        finally:
+            mod._session_meter = old

@@ -929,9 +929,9 @@ class TestAgenticLoopToolCallRendering:
         mock_response = MagicMock()
         mock_response.content = [tool_block]
 
-        with patch("core.cli.agentic_loop.render_tool_call") as mock_render:
+        with patch.object(loop._op_logger, "log_tool_call", return_value=True) as mock_log:
             loop._process_tool_calls(mock_response)
-            mock_render.assert_called_once_with("analyze_ip", {"ip_name": "Berserk"})
+            mock_log.assert_called_once_with("analyze_ip", {"ip_name": "Berserk"})
 
     def test_tool_result_renders_dict(self) -> None:
         """Dict results should trigger render_tool_result."""
@@ -951,11 +951,163 @@ class TestAgenticLoopToolCallRendering:
         mock_response.content = [tool_block]
 
         with (
-            patch("core.cli.agentic_loop.render_tool_call"),
-            patch("core.cli.agentic_loop.render_tool_result") as mock_render,
+            patch.object(loop._op_logger, "log_tool_call", return_value=True),
+            patch.object(loop._op_logger, "log_tool_result") as mock_log_result,
         ):
             loop._process_tool_calls(mock_response)
-            mock_render.assert_called_once_with("analyze_ip", {"tier": "S", "score": 81.3})
+            mock_log_result.assert_called_once_with(
+                "analyze_ip", {"tier": "S", "score": 81.3}, visible=True
+            )
+
+
+# ---------------------------------------------------------------------------
+# Message pruning + repair tests (orphaned tool_result fix)
+# ---------------------------------------------------------------------------
+
+
+def _tu(tid: str, name: str = "a") -> dict[str, Any]:
+    """Helper: build a tool_use content block."""
+    return {
+        "type": "tool_use",
+        "id": tid,
+        "name": name,
+        "input": {},
+    }
+
+
+def _tr(tid: str) -> dict[str, Any]:
+    """Helper: build a tool_result content block."""
+    return {
+        "type": "tool_result",
+        "tool_use_id": tid,
+        "content": "ok",
+    }
+
+
+def _txt(text: str) -> dict[str, Any]:
+    """Helper: build a text content block."""
+    return {"type": "text", "text": text}
+
+
+class TestMessagePruning:
+    """Tests for _maybe_prune_messages — must never create orphaned tool_results."""
+
+    def _make_loop(self) -> AgenticLoop:
+        ctx = ConversationContext()
+        executor = ToolExecutor(action_handlers={}, auto_approve=True)
+        return AgenticLoop(ctx, executor)
+
+    def test_no_prune_under_threshold(self) -> None:
+        """Messages <= 10 should not be pruned."""
+        loop = self._make_loop()
+        messages: list[dict[str, Any]] = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": [_txt("hi")]},
+        ]
+        loop._maybe_prune_messages(messages)
+        assert len(messages) == 2
+
+    def test_prune_skips_orphaned_tool_result(self) -> None:
+        """Pruning must not leave a tool_result without matching tool_use."""
+        loop = self._make_loop()
+        messages: list[dict[str, Any]] = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": [_tu("t1")]},
+            {"role": "user", "content": [_tr("t1")]},
+            {"role": "assistant", "content": [_txt("done1")]},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": [_tu("t2", "b")]},
+            {"role": "user", "content": [_tr("t2")]},
+            {"role": "assistant", "content": [_txt("done2")]},
+            {"role": "user", "content": "q3"},
+            {"role": "assistant", "content": [_tu("t3", "c")]},
+            {"role": "user", "content": [_tr("t3")]},
+            {"role": "assistant", "content": [_txt("done3")]},
+            {"role": "user", "content": "q4"},
+        ]
+        loop._maybe_prune_messages(messages)
+        # After pruning, no tool_result should be orphaned
+        for i, msg in enumerate(messages):
+            if msg["role"] != "user":
+                continue
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            tr_ids = {
+                b["tool_use_id"]
+                for b in content
+                if isinstance(b, dict) and b.get("type") == "tool_result"
+            }
+            if not tr_ids:
+                continue
+            assert i > 0
+            assert messages[i - 1]["role"] == "assistant"
+            prev = messages[i - 1].get("content", [])
+            tu_ids = {
+                b.get("id") for b in prev if isinstance(b, dict) and b.get("type") == "tool_use"
+            }
+            assert tr_ids <= tu_ids, f"Orphaned tool_result at {i}"
+
+    def test_prune_finds_safe_cut(self) -> None:
+        """Pruning should cut at a plain user text message."""
+        loop = self._make_loop()
+        messages: list[dict[str, Any]] = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": [_tu("t1")]},
+            {"role": "user", "content": [_tr("t1")]},
+            {"role": "assistant", "content": [_txt("done1")]},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": [_tu("t2", "b")]},
+            {"role": "user", "content": [_tr("t2")]},
+            {"role": "assistant", "content": [_txt("done2")]},
+            {"role": "user", "content": "q3"},
+            {"role": "assistant", "content": [_txt("done3")]},
+            {"role": "user", "content": "q4"},
+        ]
+        loop._maybe_prune_messages(messages)
+        assert messages[0]["content"] == "q1"
+        assert messages[1]["role"] == "assistant"
+        # Third must be plain user text (not tool_result)
+        assert messages[2]["role"] == "user"
+        content = messages[2].get("content")
+        if isinstance(content, list):
+            assert not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content)
+
+
+class TestRepairMessages:
+    """Tests for _repair_messages — fixes orphaned tool_result."""
+
+    def test_removes_orphaned_tool_result(self) -> None:
+        """Orphaned tool_result should be removed."""
+        messages: list[dict[str, Any]] = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": [_txt("bridge")]},
+            {"role": "user", "content": [_tr("orphan")]},
+            {"role": "assistant", "content": [_txt("resp")]},
+            {"role": "user", "content": "next question"},
+        ]
+        AgenticLoop._repair_messages(messages)
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, list):
+                assert not any(
+                    isinstance(b, dict)
+                    and b.get("type") == "tool_result"
+                    and b.get("tool_use_id") == "orphan"
+                    for b in content
+                )
+
+    def test_keeps_valid_tool_result(self) -> None:
+        """tool_result with matching tool_use should be kept."""
+        messages: list[dict[str, Any]] = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": [_tu("t1")]},
+            {"role": "user", "content": [_tr("t1")]},
+            {"role": "assistant", "content": [_txt("done")]},
+        ]
+        original_len = len(messages)
+        AgenticLoop._repair_messages(messages)
+        assert len(messages) == original_len
 
 
 # ---------------------------------------------------------------------------
