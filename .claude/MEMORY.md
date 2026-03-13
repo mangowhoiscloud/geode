@@ -1,7 +1,7 @@
 # GEODE Project Memory
 
 ## 프로젝트 개요
-- 목적: 게임화 IP 중 저평가된 IP 발굴 및 회복 전략 도출
+- 목적: 범용 자율 실행 에이전트 (게임 IP 분석은 도메인 플러그인)
 - 파이프라인: Cortex → Signals → Analysts → Evaluators → Scoring → Synthesis
 
 ## 분석 규칙
@@ -16,37 +16,11 @@
 - (없음 — 기본 14-axis 루브릭 사용)
 
 ## 최근 인사이트
-- 2026-03-13: [Berserk] tier=?, score=0.00
-- 2026-03-13: [unknown] tier=?, score=0.00
-- 2026-03-13: [ghost in the shell] tier=A, score=67.75, cause=timing_mismatch, action=timing_optimization
-- 2026-03-13: [cowboy bebop] tier=A, score=73.20, cause=conversion_failure, action=marketing_boost
-- 2026-03-13: [berserk] tier=A, score=74.90, cause=conversion_failure, action=marketing_boost
+- 2026-03-13: [ghost in the shell] tier=A, score=68.14, cause=timing_mismatch, action=timing_optimization
+- 2026-03-13: [cowboy bebop] tier=A, score=72.67, cause=conversion_failure, action=marketing_boost
+- 2026-03-13: [berserk] tier=S, score=80.87, cause=conversion_failure, action=marketing_boost
+- 2026-03-13: [dead cells] tier=A, score=73.16, cause=conversion_failure, action=marketing_boost
+- 2026-03-13: [hades] tier=S, score=85.68, cause=monetization_misfit, action=monetization_pivot
 - 2026-03-12: [ghost in the shell] tier=A, score=64.53, cause=timing_mismatch, action=timing_optimization
 - 2026-03-12: [cowboy bebop] tier=A, score=69.22, cause=conversion_failure, action=marketing_boost
 - 2026-03-12: [berserk] tier=S, score=80.42, cause=conversion_failure, action=marketing_boost
-- 2026-03-12: [Berserk] tier=?, score=0.00
-- 2026-03-12: [unknown] tier=?, score=0.00
-- 2026-03-11: [Berserk] tier=?, score=0.00
-- 2026-03-11: [unknown] tier=?, score=0.00
-- 2026-03-11: [cowboy bebop] tier=A, score=74.76, cause=conversion_failure, action=marketing_boost
-- 2026-03-11: [berserk] tier=S, score=82.73, cause=conversion_failure, action=marketing_boost
-- 2026-03-10: [cowboy bebop] tier=A, score=76.10, cause=conversion_failure, action=marketing_boost
-- 2026-03-10: [berserk] tier=S, score=80.52, cause=conversion_failure, action=marketing_boost
-- 2026-03-10: berserk_tier_assessment: Berserk는 S티어 IP로 평가됨. 게임 퍼블리싱 관점에서 최상위 등급의 IP.
-- 2026-03-10: berserk_tier_assessment: Berserk는 S티어 IP로 평가됨. 게임 퍼블리싱 관점에서 최상위 등급의 IP.
-- 2026-03-10: berserk_tier_assessment: Berserk는 S티어 IP로 평가됨. 게임 퍼블리싱 관점에서 최상위 등급의 IP.
-- 2026-03-10: berserk_tier_assessment: Berserk는 S티어 IP로 평가됨. 게임 퍼블리싱 관점에서 최상위 등급의 IP.
-- 2026-03-10: test: hello
-- 2026-03-10: test: hello
-- 2026-03-10: [Berserk] tier=?, score=0.00
-- 2026-03-10: [unknown] tier=?, score=0.00
-- 2026-03-09: [Berserk] tier=?, score=0.00
-- 2026-03-09: [unknown] tier=?, score=0.00
-- 2026-03-08: [cowboy bebop] tier=B, score=56.32, cause=conversion_failure, action=marketing_boost
-- 2026-03-08: [Berserk] tier=?, score=0.00
-- 2026-03-08: [unknown] tier=?, score=0.00
-- 2026-03-06: [cowboy bebop] tier=A, score=75.31, cause=conversion_failure, action=marketing_boost
-- 2026-03-06: [Berserk] tier=?, score=0.00
-- 2026-03-06: [unknown] tier=?, score=0.00
-- 2026-03-02: [Berserk] tier=?, score=0.00
-- 2026-03-02: [unknown] tier=?, score=0.00

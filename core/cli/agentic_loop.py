@@ -156,6 +156,8 @@ class AgenticLoop:
                 response = self._call_llm(system_prompt, messages, round_idx=round_idx)
 
             if response is None:
+                # Persist intermediate tool-use messages so next turn sees them
+                self._sync_messages_to_context(messages)
                 result = AgenticResult(
                     text="LLM call failed. Try again or use /help.",
                     rounds=round_idx + 1,
@@ -177,7 +179,10 @@ class AgenticLoop:
             if response.stop_reason != "tool_use":
                 # end_turn or max_tokens → extract text, done
                 text = self._extract_text(response)
-                self.context.add_assistant_message(response.content)
+                # Sync all intermediate tool-use messages + final response to context
+                assistant_content = self._serialize_content(response.content)
+                messages.append({"role": "assistant", "content": assistant_content})
+                self._sync_messages_to_context(messages)
                 reason = "forced_text" if is_last_round else "natural"
                 result = AgenticResult(
                     text=text,
@@ -204,9 +209,13 @@ class AgenticLoop:
             messages.append({"role": "user", "content": tool_results})
 
         # Max rounds reached — persist what we have
-        self.context.add_assistant_message(
-            [{"type": "text", "text": "Max agentic rounds reached."}]
+        messages.append(
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Max agentic rounds reached."}],
+            }
         )
+        self._sync_messages_to_context(messages)
         result = AgenticResult(
             text="Max agentic rounds reached. Please try a more specific request.",
             tool_calls=self._tool_log,
@@ -222,6 +231,15 @@ class AgenticLoop:
             len(result.tool_calls),
         )
         return result
+
+    def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:
+        """Replace context messages with the full messages list.
+
+        During the agentic loop, intermediate tool-use messages are appended
+        only to the local ``messages`` list.  This method syncs them back to
+        ``self.context`` so the next user turn sees the full history.
+        """
+        self.context.messages = list(messages)
 
     def _maybe_prune_messages(self, messages: list[dict[str, Any]]) -> None:
         """Prune old messages when conversation exceeds 5 rounds (10 msgs).
