@@ -466,8 +466,16 @@ def _suppress_noisy_warnings() -> None:
 
     # Pydantic V1 deprecation from langchain_core on Python 3.14+
     warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality")
-    # LangGraph msgpack deserialization warning
+    # LangGraph msgpack deserialization warning (warnings.warn path)
     warnings.filterwarnings("ignore", message="Deserializing unregistered type")
+
+    # LangGraph checkpoint deserialization also logs via logging.warning —
+    # suppress those at the logging level.
+    for noisy_logger in (
+        "langgraph.checkpoint.serde.jsonplus",
+        "langgraph.checkpoint.serde.base",
+    ):
+        logging.getLogger(noisy_logger).setLevel(logging.ERROR)
 
 
 def _welcome_screen() -> None:
@@ -559,6 +567,7 @@ def _handle_interrupt(
     Options: [C]ontinue / [I]nspect / [S]kip / [A]bort.
     Returns True to continue, False to abort.
     """
+    _restore_terminal()
     iteration = final_state.get("iteration", 1)
     confidence = final_state.get("composite_score", {})
     console.print(

@@ -197,9 +197,9 @@ Decision Tree on D-E-F axes:
 
 | Provider | Model | Input $/M | Output $/M | 용도 |
 |----------|-------|-----------|------------|------|
-| **Anthropic** | `claude-opus-4-6` | $15.00 | $75.00 | Primary (Pipeline + Agentic) |
+| **Anthropic** | `claude-opus-4-6` | $5.00 | $25.00 | Primary (Pipeline + Agentic) |
 | Anthropic | `claude-sonnet-4-5-20250929` | $3.00 | $15.00 | Fallback |
-| Anthropic | `claude-haiku-4-5-20251001` | $0.80 | $4.00 | Lightweight |
+| Anthropic | `claude-haiku-4-5-20251001` | $1.00 | $5.00 | Lightweight |
 | **OpenAI** | `gpt-5.4` | $2.50 | $15.00 | Cross-LLM Secondary (default) |
 | OpenAI | `gpt-5.2` | $1.75 | $14.00 | Fallback 1 |
 | OpenAI | `gpt-4.1` | $2.00 | $8.00 | Fallback 2 |

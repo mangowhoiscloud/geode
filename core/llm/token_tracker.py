@@ -226,6 +226,7 @@ class TokenTracker:
         """Calculate cost in USD for a single LLM call."""
         price = self._pricing.get(model)
         if price is None:
+            log.warning("Unknown model '%s' — cost tracked as $0.00", model)
             return 0.0
         cost = input_tokens * price.input + output_tokens * price.output
         if cache_creation_tokens:
