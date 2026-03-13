@@ -106,7 +106,7 @@ class MCPServerManager:
             self._clients[server_name] = client
             return client
 
-        log.warning("Failed to connect to MCP server: %s", server_name)
+        log.debug("MCP server not available (skipped): %s", server_name)
         return None
 
     def get_all_tools(self) -> list[dict[str, Any]]:

@@ -538,9 +538,9 @@ def compile_graph(
 
     compile_kwargs: dict[str, Any] = {}
 
-    # Register Pydantic models for checkpoint deserialization to prevent
-    # "Deserializing unregistered type" warnings (future LangGraph versions
-    # will block unregistered types entirely).
+    # Register Pydantic models for checkpoint (de)serialization.
+    # allowed_json_modules covers both JSON and msgpack paths internally
+    # (langgraph-checkpoint >=4.0.1 warns on unregistered types).
     _allowed_modules: list[tuple[str, ...]] = [
         ("core.state", "AnalysisResult"),
         ("core.state", "EvaluatorResult"),
