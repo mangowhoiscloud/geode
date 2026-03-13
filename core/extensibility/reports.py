@@ -7,6 +7,7 @@ reports from GEODE pipeline output.
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -53,49 +54,88 @@ _MARKDOWN_DETAILED = _load_template("report_detailed.md")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Tier / Color mapping
 # ---------------------------------------------------------------------------
+
+_TIER_CONFIG: dict[str, dict[str, str]] = {
+    "S": {"color": "#dc2626", "css": "s", "desc": "Exceptional — Immediate action"},
+    "A": {"color": "#2563eb", "css": "a", "desc": "High potential — Priority review"},
+    "B": {"color": "#16a34a", "css": "b", "desc": "Moderate — Worth monitoring"},
+    "C": {"color": "#6b7280", "css": "c", "desc": "Low — Re-evaluate later"},
+}
+
+_SUBSCORE_BARS = [
+    ("psm", "bar-fill-psm"),
+    ("quality", "bar-fill-quality"),
+    ("recovery", "bar-fill-recovery"),
+    ("growth", "bar-fill-growth"),
+    ("momentum", "bar-fill-momentum"),
+    ("dev", "bar-fill-dev"),
+]
 
 
 def _tier_class(tier: str) -> str:
     """Map tier string to CSS class."""
-    tier_lower = tier.lower()
-    if tier_lower in ("s", "a", "high"):
+    tier_lower = tier.upper()
+    if tier_lower in ("S", "A"):
         return "tier-high"
-    if tier_lower in ("b", "c", "mid", "medium"):
+    if tier_lower in ("B",):
         return "tier-mid"
     return "tier-low"
 
 
+def _get_tier_config(tier: str) -> dict[str, str]:
+    return _TIER_CONFIG.get(tier.upper(), _TIER_CONFIG["C"])
+
+
+# ---------------------------------------------------------------------------
+# HTML formatters
+# ---------------------------------------------------------------------------
+
+_GAUGE_RADIUS = 34
+_GAUGE_CIRCUMFERENCE = 2 * math.pi * _GAUGE_RADIUS
+
+
+def _gauge_offset(score: float) -> float:
+    """Calculate SVG stroke-dashoffset for a 0-100 score gauge."""
+    pct = max(0, min(score, 100)) / 100
+    return _GAUGE_CIRCUMFERENCE * (1 - pct)
+
+
 def _format_subscores_html(subscores: dict[str, float]) -> str:
-    """Format subscores as an HTML table."""
     if not subscores:
         return ""
-    rows = "\n".join(
-        f"    <tr><td>{key}</td><td>{value:.2f}</td></tr>"
-        for key, value in sorted(subscores.items())
-    )
+    rows: list[str] = []
+    for key, css_class in _SUBSCORE_BARS:
+        val = subscores.get(key, 0.0)
+        pct = max(0, min(val, 100))
+        label = key.upper() if key in ("psm", "dev") else key.capitalize()
+        rows.append(f"""      <div class="subscore-row">
+        <span class="subscore-label">{label}</span>
+        <div class="bar-track"><div class="{css_class} bar-fill" style="width:{pct}%"></div></div>
+        <span class="subscore-value">{val:.1f}</span>
+      </div>""")
     return f"""<div class="section">
-    <h2>Sub-Scores</h2>
-    <table>
-      <tr><th>Dimension</th><th>Score</th></tr>
-{rows}
-    </table>
+    <h2><span class="icon">📊</span> Sub-Scores</h2>
+    <div class="subscore-grid">
+{chr(10).join(rows)}
+    </div>
   </div>"""
 
 
 def _format_subscores_md(subscores: dict[str, float]) -> str:
-    """Format subscores as a Markdown table."""
     if not subscores:
         return ""
-    lines = ["## Sub-Scores", "", "| Dimension | Score |", "| --- | --- |"]
-    for key, value in sorted(subscores.items()):
-        lines.append(f"| {key} | {value:.2f} |")
+    lines = ["## Sub-Scores", "", "| Dimension | Score | Bar |", "| --- | ---: | --- |"]
+    for key, _ in _SUBSCORE_BARS:
+        val = subscores.get(key, 0.0)
+        label = key.upper() if key in ("psm", "dev") else key.capitalize()
+        bar = "█" * int(val / 5) + "░" * (20 - int(val / 5))
+        lines.append(f"| {label} | {val:.1f} | `{bar}` |")
     return "\n".join(lines)
 
 
 def _format_synthesis_html(synthesis: dict[str, Any]) -> str:
-    """Format synthesis result as HTML."""
     if not synthesis:
         return ""
     cause = synthesis.get("undervaluation_cause", "N/A")
@@ -103,16 +143,26 @@ def _format_synthesis_html(synthesis: dict[str, Any]) -> str:
     narrative = synthesis.get("value_narrative", "")
     segment = synthesis.get("target_gamer_segment", "N/A")
     return f"""<div class="section">
-    <h2>Synthesis</h2>
-    <p><strong>Undervaluation Cause:</strong> {cause}</p>
-    <p><strong>Action Type:</strong> {action}</p>
-    <p><strong>Target Segment:</strong> {segment}</p>
-    <div class="narrative">{narrative}</div>
+    <h2><span class="icon">🔍</span> Synthesis</h2>
+    <div class="synthesis-grid">
+      <div class="synthesis-item">
+        <div class="synthesis-item-label">Undervaluation Cause</div>
+        <div class="synthesis-item-value">{cause}</div>
+      </div>
+      <div class="synthesis-item">
+        <div class="synthesis-item-label">Recommended Action</div>
+        <div class="synthesis-item-value">{action}</div>
+      </div>
+      <div class="synthesis-item">
+        <div class="synthesis-item-label">Target Segment</div>
+        <div class="synthesis-item-value">{segment}</div>
+      </div>
+    </div>
+    {f'<div class="narrative">{narrative}</div>' if narrative else ""}
   </div>"""
 
 
 def _format_synthesis_md(synthesis: dict[str, Any]) -> str:
-    """Format synthesis result as Markdown."""
     if not synthesis:
         return ""
     cause = synthesis.get("undervaluation_cause", "N/A")
@@ -123,49 +173,56 @@ def _format_synthesis_md(synthesis: dict[str, Any]) -> str:
         "## Synthesis",
         "",
         f"- **Undervaluation Cause:** {cause}",
-        f"- **Action Type:** {action}",
+        f"- **Recommended Action:** {action}",
         f"- **Target Segment:** {segment}",
-        "",
-        f"> {narrative}",
     ]
+    if narrative:
+        lines.extend(["", f"> {narrative}"])
     return "\n".join(lines)
 
 
 def _format_analyses_html(analyses: list[dict[str, Any]]) -> str:
-    """Format analysis results as HTML."""
     if not analyses:
         return ""
     rows = ""
     for a in analyses:
+        score = a.get("score", 0)
+        analyst = a.get("analyst_type", "N/A")
+        finding = a.get("key_finding", "")
+        confidence = a.get("confidence", "")
+        conf_str = f"{confidence}%" if confidence else "—"
         rows += (
-            f"    <tr><td>{a.get('analyst_type', 'N/A')}</td>"
-            f"<td>{a.get('score', 'N/A')}</td>"
-            f"<td>{a.get('key_finding', '')}</td></tr>\n"
+            f"      <tr><td style='font-weight:600'>{analyst}</td>"
+            f"<td>{score}</td>"
+            f"<td>{conf_str}</td>"
+            f"<td>{finding}</td></tr>\n"
         )
     return f"""<div class="section">
-    <h2>Analyst Results</h2>
+    <h2><span class="icon">🔬</span> Analyst Results</h2>
     <table>
-      <tr><th>Analyst</th><th>Score</th><th>Key Finding</th></tr>
-{rows}    </table>
+      <thead><tr><th>Analyst</th><th>Score</th><th>Confidence</th><th>Key Finding</th></tr></thead>
+      <tbody>
+{rows}      </tbody>
+    </table>
   </div>"""
 
 
 def _format_analyses_md(analyses: list[dict[str, Any]]) -> str:
-    """Format analysis results as Markdown."""
     if not analyses:
         return ""
     lines = [
         "## Analyst Results",
         "",
-        "| Analyst | Score | Key Finding |",
-        "| --- | --- | --- |",
+        "| Analyst | Score | Confidence | Key Finding |",
+        "| --- | ---: | ---: | --- |",
     ]
     for a in analyses:
-        lines.append(
-            f"| {a.get('analyst_type', 'N/A')} "
-            f"| {a.get('score', 'N/A')} "
-            f"| {a.get('key_finding', '')} |"
-        )
+        score = a.get("score", "N/A")
+        analyst = a.get("analyst_type", "N/A")
+        finding = a.get("key_finding", "")
+        confidence = a.get("confidence", "")
+        conf_str = f"{confidence}%" if confidence else "—"
+        lines.append(f"| {analyst} | {score} | {conf_str} | {finding} |")
     return "\n".join(lines)
 
 
@@ -189,18 +246,6 @@ class ReportGenerator:
         template: ReportTemplate = ReportTemplate.SUMMARY,
         enhanced_narrative: str = "",
     ) -> str:
-        """Generate a formatted report.
-
-        Args:
-            result: Pipeline result dict with keys like ip_name, final_score,
-                    tier, subscores, synthesis, analyses, etc.
-            fmt: Output format (HTML, JSON, MARKDOWN).
-            template: Detail level (SUMMARY, DETAILED, EXECUTIVE).
-            enhanced_narrative: Optional skill-enhanced expert analysis text.
-
-        Returns:
-            Formatted report string.
-        """
         if enhanced_narrative:
             result = {**result, "enhanced_narrative": enhanced_narrative}
         if fmt == ReportFormat.JSON:
@@ -210,7 +255,6 @@ class ReportGenerator:
         return self._generate_markdown(result, template)
 
     def _extract_common(self, result: dict[str, Any]) -> dict[str, Any]:
-        """Extract common fields from the result dict."""
         return {
             "ip_name": result.get("ip_name", "Unknown IP"),
             "timestamp": datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC"),
@@ -222,7 +266,6 @@ class ReportGenerator:
         }
 
     def _generate_json(self, result: dict[str, Any], template: ReportTemplate) -> str:
-        """Generate JSON report."""
         common = self._extract_common(result)
         output: dict[str, Any] = {
             "report_type": template.value,
@@ -242,8 +285,11 @@ class ReportGenerator:
         return json.dumps(output, indent=2, ensure_ascii=False)
 
     def _generate_html(self, result: dict[str, Any], template: ReportTemplate) -> str:
-        """Generate HTML report with inline CSS."""
         common = self._extract_common(result)
+        tier = str(common["tier"]).upper()
+        tier_cfg = _get_tier_config(tier)
+        score = float(common["final_score"])
+        synthesis = common.get("synthesis") or {}
 
         subscores_section = ""
         synthesis_section = ""
@@ -252,7 +298,7 @@ class ReportGenerator:
 
         if template in (ReportTemplate.DETAILED, ReportTemplate.EXECUTIVE):
             subscores_section = _format_subscores_html(common["subscores"])
-            synthesis_section = _format_synthesis_html(common["synthesis"])
+            synthesis_section = _format_synthesis_html(synthesis)
 
         if template == ReportTemplate.DETAILED:
             analyses_section = _format_analyses_html(common["analyses"])
@@ -262,9 +308,16 @@ class ReportGenerator:
             ip_name=common["ip_name"],
             timestamp=common["timestamp"],
             template_type=template.value,
-            final_score=f"{common['final_score']:.1f}",
-            tier=common["tier"],
-            tier_class=_tier_class(common["tier"]),
+            final_score=f"{score:.1f}",
+            tier=tier,
+            tier_lower=tier_cfg["css"],
+            tier_color=tier_cfg["color"],
+            tier_description=tier_cfg["desc"],
+            tier_class=_tier_class(tier),
+            gauge_circumference=f"{_GAUGE_CIRCUMFERENCE:.1f}",
+            gauge_offset=f"{_gauge_offset(score):.1f}",
+            cause=synthesis.get("undervaluation_cause", "—"),
+            action_type=synthesis.get("action_type", "—"),
             subscores_section=subscores_section,
             synthesis_section=synthesis_section,
             analyses_section=analyses_section,
@@ -272,8 +325,8 @@ class ReportGenerator:
         )
 
     def _generate_markdown(self, result: dict[str, Any], template: ReportTemplate) -> str:
-        """Generate Markdown report."""
         common = self._extract_common(result)
+        synthesis = common.get("synthesis") or {}
 
         subscores_section = ""
         synthesis_section = ""
@@ -282,7 +335,7 @@ class ReportGenerator:
 
         if template in (ReportTemplate.DETAILED, ReportTemplate.EXECUTIVE):
             subscores_section = _format_subscores_md(common["subscores"])
-            synthesis_section = _format_synthesis_md(common["synthesis"])
+            synthesis_section = _format_synthesis_md(synthesis)
 
         if template == ReportTemplate.DETAILED:
             analyses_section = _format_analyses_md(common["analyses"])
@@ -302,29 +355,29 @@ class ReportGenerator:
         )
 
     def _format_details_html(self, result: dict[str, Any]) -> str:
-        """Format additional details for DETAILED template."""
         guardrails = result.get("guardrails", {})
         if not guardrails:
             return ""
         passed = guardrails.get("all_passed", False)
-        status = "PASSED" if passed else "FAILED"
+        badge_cls = "verify-pass" if passed else "verify-fail"
+        badge_icon = "✓" if passed else "✗"
+        badge_text = "PASSED" if passed else "FAILED"
         details_list = guardrails.get("details", [])
-        items = "\n".join(f"      <li>{d}</li>" for d in details_list)
+        items = "\n".join(f"        <li>{d}</li>" for d in details_list)
         return f"""<div class="section">
-    <h2>Verification</h2>
-    <p>Guardrails: <strong>{status}</strong></p>
-    <ul>
+    <h2><span class="icon">🛡️</span> Verification</h2>
+    <p><span class="verify-badge {badge_cls}">{badge_icon} {badge_text}</span></p>
+    <ul style="margin-top:0.8rem;padding-left:1.5rem;color:var(--muted);font-size:0.9rem">
 {items}
     </ul>
   </div>"""
 
     def _format_details_md(self, result: dict[str, Any]) -> str:
-        """Format additional details for DETAILED template."""
         guardrails = result.get("guardrails", {})
         if not guardrails:
             return ""
         passed = guardrails.get("all_passed", False)
-        status = "PASSED" if passed else "FAILED"
+        status = "PASSED ✓" if passed else "FAILED ✗"
         details_list = guardrails.get("details", [])
         lines = [
             "## Verification",

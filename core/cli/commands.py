@@ -184,11 +184,25 @@ def cmd_key(args: str) -> bool:
         console.print()
         return True
 
-    # /key <value> → Anthropic
+    # /key <value> → auto-detect provider by prefix
     value = parts[0].strip()
-    settings.anthropic_api_key = value
-    _upsert_env("ANTHROPIC_API_KEY", value)
-    console.print(f"  [success]Anthropic API key set[/success]  {_mask_key(value)}")
+    if value.startswith("sk-ant-"):
+        settings.anthropic_api_key = value
+        _upsert_env("ANTHROPIC_API_KEY", value)
+        console.print(f"  [success]Anthropic API key set[/success]  {_mask_key(value)}")
+    elif value.startswith("sk-proj-") or value.startswith("sk-"):
+        settings.openai_api_key = value
+        _upsert_env("OPENAI_API_KEY", value)
+        console.print(f"  [success]OpenAI API key set[/success]  {_mask_key(value)}")
+    else:
+        # Non-LLM keys (Google, Brave, etc.) — store by explicit name only
+        console.print(
+            "  [warning]Unrecognized key prefix. Use:[/warning]\n"
+            "  [muted]/key <sk-ant-...>          → Anthropic[/muted]\n"
+            "  [muted]/key openai <sk-proj-...>  → OpenAI[/muted]"
+        )
+        console.print()
+        return False
     console.print()
     return True
 

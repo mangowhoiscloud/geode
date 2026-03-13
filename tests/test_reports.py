@@ -88,9 +88,10 @@ class TestMarkdownReport:
             fmt=ReportFormat.MARKDOWN,
             template=ReportTemplate.SUMMARY,
         )
-        assert "# GEODE Report: TestGame" in report
+        assert "# GEODE Analysis" in report
+        assert "TestGame" in report
         assert "78.5" in report
-        assert "Tier:** A" in report
+        assert "**A**" in report
         # Summary should NOT have sub-scores
         assert "Sub-Scores" not in report
 
@@ -112,7 +113,7 @@ class TestMarkdownReport:
             template=ReportTemplate.EXECUTIVE,
         )
         assert "Sub-Scores" in report
-        assert "quality" in report
+        assert "Quality" in report
         assert "Synthesis" in report
 
     def test_minimal_result(self, generator: ReportGenerator):
@@ -189,16 +190,16 @@ class TestHtmlReport:
             fmt=ReportFormat.HTML,
             template=ReportTemplate.SUMMARY,
         )
-        assert "tier-high" in report
+        assert "tier-badge-a" in report
 
     def test_tier_class_low(self, generator: ReportGenerator):
-        result = {**_SAMPLE_RESULT, "tier": "D"}
+        result = {**_SAMPLE_RESULT, "tier": "C"}
         report = generator.generate(
             result,
             fmt=ReportFormat.HTML,
             template=ReportTemplate.SUMMARY,
         )
-        assert "tier-low" in report
+        assert "tier-badge-c" in report
 
     def test_empty_result(self, generator: ReportGenerator):
         report = generator.generate(

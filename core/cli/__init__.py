@@ -13,6 +13,7 @@ import logging
 import re as _re
 import select
 import sys
+import termios
 from collections import OrderedDict
 from contextvars import ContextVar
 from enum import Enum
@@ -85,7 +86,7 @@ def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
 
 app = typer.Typer(
     name="geode",
-    help="GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스",
+    help="GEODE v0.10.1 — 게임화 IP 도메인 자율 실행 하네스",
     no_args_is_help=False,
     invoke_without_command=True,
 )
@@ -459,8 +460,19 @@ def _render_readiness_compact(report: ReadinessReport) -> None:
     console.print()
 
 
+def _suppress_noisy_warnings() -> None:
+    """Suppress known noisy warnings from dependencies."""
+    import warnings
+
+    # Pydantic V1 deprecation from langchain_core on Python 3.14+
+    warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality")
+    # LangGraph msgpack deserialization warning
+    warnings.filterwarnings("ignore", message="Deserializing unregistered type")
+
+
 def _welcome_screen() -> None:
     """Show Claude Code-style welcome screen with readiness check."""
+    _suppress_noisy_warnings()
     _render_welcome_brand()
 
     # OpenClaw gateway:startup — readiness check
@@ -604,7 +616,7 @@ def _execute_pipeline(
     with console.status(_progress_line(done)) as status:
         try:
             while True:
-                for event in graph.stream(input_state, config=config):  # type: ignore[arg-type]
+                for event in graph.stream(input_state, config=config):  # type: ignore[call-overload]
                     for node_name, output in event.items():
                         if node_name == "__end__":
                             continue
@@ -698,7 +710,7 @@ def _execute_pipeline_streaming(
 
     try:
         while True:
-            for event in graph.stream(input_state, config=config):  # type: ignore[arg-type]
+            for event in graph.stream(input_state, config=config):  # type: ignore[call-overload]
                 for node_name, output in event.items():
                     if node_name == "__end__":
                         continue
@@ -2218,7 +2230,15 @@ def _render_agentic_result(result: AgenticResult) -> None:
 
     if result.text:
         console.print()
-        console.print(f"  {result.text}")
+        # Render markdown if the response contains markdown indicators
+        if any(md in result.text for md in ("## ", "| ", "```", "**", "- [")):
+            from rich.markdown import Markdown
+            from rich.padding import Padding
+
+            md = Markdown(result.text)
+            console.print(Padding(md, (0, 2)))
+        else:
+            console.print(f"  {result.text}")
         console.print()
 
     if result.tool_calls:
@@ -2231,6 +2251,24 @@ def _render_agentic_result(result: AgenticResult) -> None:
         )
 
 
+def _restore_terminal() -> None:
+    """Restore terminal to sane cooked mode.
+
+    Rich Status/Live can leave the terminal in raw mode (echo off, no
+    line-editing) if interrupted or if an exception escapes their context
+    manager.  This ensures the terminal is usable before reading input.
+    """
+    try:
+        fd = sys.stdin.fileno()
+        attrs = termios.tcgetattr(fd)
+        # Ensure ECHO and ICANON (cooked mode) are enabled
+        attrs[3] |= termios.ECHO | termios.ICANON
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    except (ValueError, OSError, termios.error):
+        # Non-TTY or stdin not available — nothing to restore
+        pass
+
+
 def _read_multiline_input(prompt: str) -> str:
     """Read user input with multi-line paste detection.
 
@@ -2238,6 +2276,7 @@ def _read_multiline_input(prompt: str) -> str:
     on stdin (from a paste operation) and joins all lines into a single
     input string.  Timeout of 50 ms distinguishes paste from manual typing.
     """
+    _restore_terminal()
     first_line = console.input(prompt).strip()
     if not first_line:
         return ""
@@ -2422,7 +2461,7 @@ def _interactive_loop() -> None:
 
 @app.callback()
 def main(ctx: typer.Context) -> None:
-    """GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스."""
+    """GEODE v0.10.1 — 게임화 IP 도메인 자율 실행 하네스."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
         _interactive_loop()
