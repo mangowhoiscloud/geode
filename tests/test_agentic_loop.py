@@ -917,6 +917,7 @@ class TestAgenticLoopToolCallRendering:
         handler = MagicMock(return_value={"status": "ok", "tier": "S", "score": 81.3})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
         loop = AgenticLoop(ctx, executor)
+        loop._consecutive_failures = {}  # normally set in run()
 
         # Build a response with tool_use
         tool_block = MagicMock()
@@ -938,6 +939,7 @@ class TestAgenticLoopToolCallRendering:
         handler = MagicMock(return_value={"tier": "S", "score": 81.3})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
         loop = AgenticLoop(ctx, executor)
+        loop._consecutive_failures = {}  # normally set in run()
 
         tool_block = MagicMock()
         tool_block.type = "tool_use"
