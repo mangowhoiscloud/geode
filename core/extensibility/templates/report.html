@@ -1,56 +1,425 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GEODE Report: ${ip_name}</title>
+<title>GEODE Analysis — ${ip_name}</title>
 <style>
+  :root {
+    --coral: #f5a0a0;
+    --gold: #ffd700;
+    --cyan: #00ced1;
+    --magenta: #d946ef;
+    --crystal: #c8a2ff;
+    --dark: #0f172a;
+    --surface: #1e293b;
+    --card: #ffffff;
+    --text: #1e293b;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --bg: #f8fafc;
+    --tier-s: #dc2626;
+    --tier-a: #2563eb;
+    --tier-b: #16a34a;
+    --tier-c: #6b7280;
+    --radius: 12px;
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-         sans-serif; line-height: 1.6; color: #1a1a2e; background: #f0f0f5;
-         padding: 2rem; }
-  .container { max-width: 900px; margin: 0 auto; background: #fff;
-               border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-               padding: 2.5rem; }
-  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: #16213e; }
-  h2 { font-size: 1.3rem; margin: 1.5rem 0 0.8rem; color: #0f3460;
-       border-bottom: 2px solid #e2e8f0; padding-bottom: 0.4rem; }
-  .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem; }
-  .score-badge { display: inline-block; padding: 0.3rem 1rem;
-                 border-radius: 20px; font-weight: 600; font-size: 1.1rem; }
-  .tier-high { background: #d4edda; color: #155724; }
-  .tier-mid  { background: #fff3cd; color: #856404; }
-  .tier-low  { background: #f8d7da; color: #721c24; }
-  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-  th, td { text-align: left; padding: 0.6rem 1rem; border-bottom: 1px solid #e2e8f0; }
-  th { background: #f8fafc; font-weight: 600; color: #334155; }
-  .section { margin-bottom: 1.5rem; }
-  .narrative { background: #f8fafc; padding: 1.2rem; border-radius: 8px;
-               border-left: 4px solid #0f3460; margin: 1rem 0; }
-  footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;
-           color: #94a3b8; font-size: 0.8rem; text-align: center; }
+
+  body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                 Roboto, 'Helvetica Neue', sans-serif;
+    line-height: 1.7;
+    color: var(--text);
+    background: var(--bg);
+  }
+
+  /* -- Header / Hero -- */
+  .hero {
+    background: linear-gradient(135deg, var(--dark) 0%, var(--surface) 100%);
+    color: white;
+    padding: 3rem 2rem 2.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 60%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(200,162,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-inner {
+    max-width: 1000px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+  .hero-brand {
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--coral);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+  .hero h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin-bottom: 0.3rem;
+    letter-spacing: -0.02em;
+  }
+  .hero-meta {
+    color: rgba(255,255,255,0.5);
+    font-size: 0.85rem;
+  }
+
+  /* -- Container -- */
+  .container {
+    max-width: 1000px;
+    margin: -1.5rem auto 2rem;
+    padding: 0 1.5rem;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* -- Score Card (floating) -- */
+  .score-card {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
+    border: 1px solid var(--border);
+  }
+  .card-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  /* -- Score Gauge -- */
+  .gauge-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .gauge {
+    width: 80px;
+    height: 80px;
+    position: relative;
+  }
+  .gauge svg {
+    transform: rotate(-90deg);
+  }
+  .gauge-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 6;
+  }
+  .gauge-fill {
+    fill: none;
+    stroke-width: 6;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s ease;
+  }
+  .gauge-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--text);
+  }
+  .gauge-score-label {
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .gauge-score-sub {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  /* -- Tier Badge -- */
+  .tier-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    font-size: 1.6rem;
+    font-weight: 900;
+    color: white;
+    margin-bottom: 0.5rem;
+  }
+  .tier-badge-s { background: var(--tier-s); }
+  .tier-badge-a { background: var(--tier-a); }
+  .tier-badge-b { background: var(--tier-b); }
+  .tier-badge-c { background: var(--tier-c); }
+  .tier-label {
+    font-size: 0.9rem;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* -- Section -- */
+  .section {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 1.8rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid var(--border);
+  }
+  .section h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .section h2 .icon {
+    font-size: 1.2rem;
+  }
+
+  /* -- Sub-Score Bars -- */
+  .subscore-grid {
+    display: grid;
+    gap: 0.8rem;
+  }
+  .subscore-row {
+    display: grid;
+    grid-template-columns: 130px 1fr 50px;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .subscore-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    text-transform: capitalize;
+  }
+  .bar-track {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.8s ease;
+  }
+  .bar-fill-psm { background: linear-gradient(90deg, var(--coral), #e06060); }
+  .bar-fill-quality { background: linear-gradient(90deg, var(--cyan), #009ca3); }
+  .bar-fill-recovery { background: linear-gradient(90deg, var(--crystal), #9060e0); }
+  .bar-fill-growth { background: linear-gradient(90deg, var(--gold), #cc9900); }
+  .bar-fill-momentum { background: linear-gradient(90deg, var(--magenta), #b030d0); }
+  .bar-fill-dev { background: linear-gradient(90deg, #60a0ff, #3070cc); }
+  .subscore-value {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-align: right;
+    color: var(--text);
+  }
+
+  /* -- Analyst Table -- */
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.9rem;
+  }
+  thead th {
+    background: var(--bg);
+    padding: 0.7rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th:first-child { border-radius: 8px 0 0 0; }
+  thead th:last-child { border-radius: 0 8px 0 0; }
+  tbody td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(0,206,209,0.03); }
+
+  /* -- Narrative -- */
+  .narrative {
+    background: linear-gradient(135deg, rgba(200,162,255,0.06), rgba(0,206,209,0.06));
+    padding: 1.5rem;
+    border-radius: 8px;
+    border-left: 4px solid var(--crystal);
+    line-height: 1.9;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+
+  /* -- Synthesis Grid -- */
+  .synthesis-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .synthesis-item {
+    padding: 1rem;
+    background: var(--bg);
+    border-radius: 8px;
+  }
+  .synthesis-item-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+    font-weight: 600;
+  }
+  .synthesis-item-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  /* -- Verification -- */
+  .verify-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .verify-pass { background: #dcfce7; color: #166534; }
+  .verify-fail { background: #fef2f2; color: #991b1b; }
+
+  /* -- Footer -- */
+  .footer {
+    text-align: center;
+    padding: 2rem 1.5rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .footer-brand {
+    font-weight: 700;
+    color: var(--coral);
+  }
+
+  /* -- Responsive -- */
+  @media (max-width: 768px) {
+    .score-card { grid-template-columns: 1fr; }
+    .synthesis-grid { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 1.6rem; }
+    .container { padding: 0 1rem; }
+  }
+
+  /* -- Print -- */
+  @media print {
+    body { background: white; }
+    .hero { background: var(--dark) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .card, .section { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
+  }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>GEODE Analysis: ${ip_name}</h1>
-  <div class="meta">Generated: ${timestamp} | Template: ${template_type}</div>
 
-  <div class="section">
-    <h2>Score</h2>
-    <p>Final Score: <span class="score-badge ${tier_class}">${final_score}</span></p>
-    <p>Tier: <strong>${tier}</strong></p>
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-brand">GEODE · IP Valuation Report</div>
+    <h1>${ip_name}</h1>
+    <div class="hero-meta">${timestamp} · ${template_type} report</div>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="container">
+
+  <!-- Score Overview Cards -->
+  <div class="score-card">
+
+    <!-- Final Score Gauge -->
+    <div class="card">
+      <div class="card-label">Final Score</div>
+      <div class="gauge-wrapper">
+        <div class="gauge">
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle class="gauge-bg" cx="40" cy="40" r="34"></circle>
+            <circle class="gauge-fill" cx="40" cy="40" r="34"
+                    stroke="${tier_color}"
+                    stroke-dasharray="${gauge_circumference}"
+                    stroke-dashoffset="${gauge_offset}">
+            </circle>
+          </svg>
+          <span class="gauge-text">${final_score}</span>
+        </div>
+        <div>
+          <div class="gauge-score-label">${final_score}<span style="font-size:0.7em;color:var(--muted)">/100</span></div>
+          <div class="gauge-score-sub">Composite</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tier -->
+    <div class="card">
+      <div class="card-label">Tier</div>
+      <div class="tier-badge tier-badge-${tier_lower}">${tier}</div>
+      <div class="tier-label">${tier_description}</div>
+    </div>
+
+    <!-- Cause -->
+    <div class="card">
+      <div class="card-label">Undervaluation Cause</div>
+      <div style="font-size:1.3rem;font-weight:800;margin-bottom:0.3rem">${cause}</div>
+      <div style="font-size:0.85rem;color:var(--muted)">${action_type}</div>
+    </div>
+
   </div>
 
+  <!-- Sub-Scores -->
   ${subscores_section}
 
+  <!-- Synthesis -->
   ${synthesis_section}
 
+  <!-- Analyst Results -->
   ${analyses_section}
 
+  <!-- Verification -->
   ${details_section}
 
-  <footer>GEODE v0.9.0 | 게임화 IP 도메인 자율 실행 하네스</footer>
 </div>
+
+<!-- Footer -->
+<div class="footer">
+  <span class="footer-brand">GEODE</span> v0.10.1 · 게임화 IP 도메인 자율 실행 하네스<br>
+  Powered by Claude Opus 4.6 + LangGraph · &copy; 2026 Nexon Navigator
+</div>
+
 </body>
 </html>

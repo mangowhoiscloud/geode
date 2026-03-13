@@ -28,62 +28,60 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Domain Plugin Architecture + Clarification 시스템 확장 + HITL Cost Tracking + AgenticLoop 안전장치 + Karpathy P1/P4/P6/P7/P10 프롬프트 강화.
+---
+
+## [0.10.1] — 2026-03-13
+
+UI/UX 리브랜딩 + 터미널 안정성 강화 + Agentic 강건성 + 리포트 상용화 + Domain Plugin + MCP 버그 수정.
 
 ### Added
+
+#### UI/UX 리브랜딩
+- Axolotl 마스코트 + Claude Code 스타일 시작 화면 (9 표정 애니메이션)
+- Rich Markdown 렌더링 — LLM 응답의 마크다운을 터미널에서 Rich로 렌더링
+- 도구 실행 중 `Running {tool_name}...` 스피너 표시 (UI 공백 해소)
+- `_restore_terminal()` — 매 입력 전 termios ECHO/ICANON 복원 (스페이스+백스페이스 멈춤 수정)
+- `_suppress_noisy_warnings()` — Pydantic V1 / msgpack deserialization 경고 필터링
+- HTML 리포트 상용화 — SVG 게이지, 서브스코어 바차트, 반응형 + 인쇄 최적화
+
+#### Agentic Loop 강건성
+- `max_rounds` 7→15, `max_tokens` 4096→8192
+- `WRAP_UP_HEADROOM=2` — 마지막 2라운드에서 텍스트 응답 강제
+- 연속 실패 자동 스킵 — 같은 도구 2회 연속 실패 시 자동 스킵
 
 #### Domain Plugin Architecture (Phase 1-4)
 - `DomainPort` Protocol — 도메인별 analysts, evaluators, scoring weights, decision tree, prompts 플러그인 인터페이스
 - `GameIPDomain` 어댑터 — 기존 게임 IP 평가 로직을 DomainPort 구현체로 캡슐화
 - `load_domain_adapter()` / `set_domain()` — 도메인 어댑터 동적 로딩 + contextvars DI
-- 모든 노드 (analysts, evaluators, scoring, synthesizer) 도메인 파라미터화 — `get_domain_or_none()` fallback
 - `GeodeRuntime.create(domain_name=)` — 런타임 생성 시 도메인 어댑터 자동 와이어링
-- CLI `--domain` 옵션 — `geode analyze "Berserk" --domain game_ip`
-- Interactive REPL 시작 시 기본 도메인 어댑터 자동 활성화
-
-### Changed
-
-- `SynthesisResult.target_gamer_segment` → `target_segment` 리네임 (도메인 중립화)
-
-#### Karpathy P1/P4/P6/P7/P10 프롬프트 강화
-- `PROMPT_VERSIONS` 8→20 확장 (9 extended templates + 3 axes hashes)
-- `_hash_axes()` — 구조화 axes 데이터 SHA-256 drift 감지
-- `AXES_VERSIONS` — EVALUATOR_AXES, PROSPECT_EVALUATOR_AXES, ANALYST_SPECIFIC 해시
-- `_PINNED_HASHES` 하드코딩 — 실제 래칫 동작 (기존 자동 동기화 → CI drift 감지 불가 수정)
-- 프롬프트 .md `## Constraints` + `## Style` 섹션 표준화 (evaluator, synthesizer, biasbuster, analyst)
-- `AgenticLoop._maybe_prune_messages()` — 5라운드 이상 시 컨텍스트 예산 pruning (role 교대 보장)
-- Analyst `confidence` defensive clamp [0, 100] + 경고 로그
 
 #### Clarification 시스템 확장 (3/33 → 25/33 핸들러)
-- `_clarify()` 표준 응답 헬퍼 — `{error, clarification_needed, missing, hint}` 프로토콜
-- `_safe_delegate()` 래퍼 — 9개 위임 도구(web_fetch, youtube_search 등) KeyError → clarification 자동 변환
-- 13개 핸들러에 직접 clarification 검증 추가 (search_ips, memory_search, create_plan 등)
-- `AgenticLoop.MAX_CLARIFICATION_ROUNDS = 3` — 무한 clarification 루프 방지
+- `_clarify()` 표준 응답 헬퍼, `_safe_delegate()` 래퍼, `MAX_CLARIFICATION_ROUNDS = 3`
 
 #### LLM Cost Tracking (3계층)
-- Real-time UI: `render_tokens()` — `✢ claude-opus-4-6 · ↓1.2k ↑350 · $0.0930` 출력
-- Session summary: `render_session_cost_summary()` — `/quit` 시 누적 비용 자동 표시
-- `/cost` 명령어 — 세션 중 비용 확인
+- Real-time UI `render_tokens()`, Session summary, `/cost` 명령어
 
 #### Whisking UI
-- `GeodeStatus._format_spinner()` — Claude Code 스타일 `✢ Whisking… · ↑3.7k · $0.093 · 2m 35s` 라이브 스피너
+- `GeodeStatus._format_spinner()` — Claude Code 스타일 라이브 스피너
 
 ### Changed
-- `_calc_growth_score()` — `cm.composite_score` → `_calc_community_momentum(evaluations)` (LLM composite 의존 제거, P0 #2)
-- `_calc_growth_score()` — `momentum` 파라미터 추가 (이중 호출 제거)
-- `_extract_def_scores()` — DT boundary 교차 경고 로깅 (`(raw < 3) != (rounded < 3)`)
-- `router.md` — 81줄 → 65줄 축약 (중복 도구 설명 제거, 규칙 5개 번호 리스트화)
-- `biasbuster.md` Constraints — `CV < 0.05 AND ≥4 analysts → anchoring_bias` (코드 정합성)
+- 브랜드 팔레트 통합: Coral/Gold/Cyan/Magenta/Crystal → GEODE_THEME 전역 적용
+- `_normalise_mcp_tool()` — MCP camelCase(`inputSchema`) → Anthropic snake_case(`input_schema`) 정규화
+- LangGraph API 호출 시 `_mcp_server` 등 내부 메타데이터 필드 자동 제거
+- 버전 표기 0.9.0 → 0.10.1 전면 갱신 (`core/__init__`, CLI help, Typer callback)
 
 ### Fixed
-- `test_hooks_write_to_run_log` — cascading hook 이벤트로 인한 count 불일치 수정 (정확 count → 필터 기반)
-- `test_error_events_logged_with_error_status` — 동일 원인 수정
-- `test_status.py` — 화살표 방향 정합성 (`↓input ↑output`)
-- `TestTrackTokenUsage` — `token_tracker` 리팩터링 후 `is_langsmith_enabled` → `os.environ` 패치로 변경
+- MCP 도구 `input_schema: Field required` API 400 에러 (camelCase→snake_case 변환 누락)
+- MCP 도구 `_mcp_server: Extra inputs are not permitted` API 400 에러 (내부 필드 누출)
+- 터미널 상태 복원 — Rich Status/Live 종료 후 echo/cooked 모드 미복원으로 입력 불가 현상
+- LangGraph 1.1.2 타입 시그니처 변경 대응 (`invoke`/`stream` overload 주석 갱신)
+- 파이프라인 예외 경로에서 `console.show_cursor(True)` 누락 수정
 
 ### Infrastructure
-- Test count: 2077+ → 2125+
-- `docs/blogs/21-clarification-hitl-cost-tracking.md` — Clarification + HITL + Cost Tracking 기술 블로그
+- `langgraph` 1.0.9 → 1.1.2 (minor, xxhash 의존성 추가)
+- `langchain-core` 1.2.14 → 1.2.18 (patch)
+- `langsmith` 0.7.5 → 0.7.17 (patch)
+- `langgraph-checkpoint` 4.0.0 → 4.0.1 (patch)
 
 ---
 

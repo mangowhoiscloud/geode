@@ -59,7 +59,7 @@ def create_mcp_server() -> Any:
                 tool_injection = runtime.get_tool_state_injection(mode="full_pipeline")
                 initial_state.update(tool_injection)
 
-            result = graph.invoke(initial_state, config=runtime.thread_config)  # type: ignore[arg-type]
+            result = graph.invoke(initial_state, config=runtime.thread_config)  # type: ignore[call-overload]
 
             # Extract key results
             output: dict[str, Any] = {

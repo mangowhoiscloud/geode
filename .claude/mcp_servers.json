@@ -5,5 +5,39 @@
     "env": {
       "BRAVE_API_KEY": "${BRAVE_API_KEY}"
     }
+  },
+  "igdb": {
+    "command": "npx",
+    "args": ["-y", "bielacki/igdb-mcp-server"],
+    "env": {
+      "TWITCH_CLIENT_ID": "${TWITCH_CLIENT_ID}",
+      "TWITCH_CLIENT_SECRET": "${TWITCH_CLIENT_SECRET}"
+    }
+  },
+  "steam-reviews": {
+    "command": "npx",
+    "args": ["-y", "fenxer/steam-review-mcp"]
+  },
+  "discord": {
+    "command": "npx",
+    "args": ["-y", "v-3/discordmcp"],
+    "env": {
+      "DISCORD_BOT_TOKEN": "${DISCORD_BOT_TOKEN}"
+    }
+  },
+  "wikidata": {
+    "command": "npx",
+    "args": ["-y", "zzaebok/mcp-wikidata"]
+  },
+  "e2b": {
+    "command": "npx",
+    "args": ["-y", "e2b-dev/mcp-server"],
+    "env": {
+      "E2B_API_KEY": "${E2B_API_KEY}"
+    }
+  },
+  "playwright": {
+    "command": "npx",
+    "args": ["-y", "executeautomation/mcp-playwright"]
   }
 }

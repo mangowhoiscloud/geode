@@ -13,12 +13,15 @@ import os
 from pathlib import Path
 from typing import Any
 
+from dotenv import dotenv_values
+
 from core.infrastructure.adapters.mcp.stdio_client import StdioMCPClient
 
 log = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 _CONFIG_PATH = _PROJECT_ROOT / ".claude" / "mcp_servers.json"
+_DOTENV_PATH = _PROJECT_ROOT / ".env"
 
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
 
@@ -62,12 +65,23 @@ class MCPServerManager:
             return 0
 
     def _resolve_env(self, env: dict[str, str]) -> dict[str, str]:
-        """Resolve ${VAR} references in env values."""
+        """Resolve ${VAR} references in env values.
+
+        Checks os.environ first, then falls back to .env file values.
+        pydantic-settings loads .env into Settings fields but NOT into
+        os.environ, so MCP keys defined only in .env would be invisible.
+        """
+        # Lazy-load .env values (cached after first call)
+        if not hasattr(self, "_dotenv_cache"):
+            self._dotenv_cache: dict[str, str | None] = {}
+            if _DOTENV_PATH.exists():
+                self._dotenv_cache = dotenv_values(str(_DOTENV_PATH))
+
         resolved: dict[str, str] = {}
         for key, value in env.items():
             if value.startswith("${") and value.endswith("}"):
                 var_name = value[2:-1]
-                resolved[key] = os.environ.get(var_name, "")
+                resolved[key] = os.environ.get(var_name, self._dotenv_cache.get(var_name) or "")
             else:
                 resolved[key] = value
         return resolved
