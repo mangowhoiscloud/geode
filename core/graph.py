@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from core.llm.prompt_assembler import PromptAssembler
 
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -537,13 +538,29 @@ def compile_graph(
 
     compile_kwargs: dict[str, Any] = {}
 
+    # Register Pydantic models for checkpoint deserialization to prevent
+    # "Deserializing unregistered type" warnings (future LangGraph versions
+    # will block unregistered types entirely).
+    _allowed_modules: list[tuple[str, ...]] = [
+        ("core.state", "AnalysisResult"),
+        ("core.state", "EvaluatorResult"),
+        ("core.state", "PSMResult"),
+        ("core.state", "SynthesisResult"),
+        ("core.state", "GuardrailResult"),
+        ("core.state", "BiasBusterResult"),
+        ("core.state", "CalibrationResult"),
+        ("core.verification.rights_risk", "RightsStatus"),
+        ("core.verification.rights_risk", "RightsRiskResult"),
+    ]
+    _serde = JsonPlusSerializer(allowed_json_modules=_allowed_modules)
+
     if checkpoint_db is not None:
         db_path = Path(checkpoint_db)
         conn = sqlite3.connect(str(db_path), check_same_thread=False)
         atexit.register(conn.close)
-        compile_kwargs["checkpointer"] = SqliteSaver(conn)
+        compile_kwargs["checkpointer"] = SqliteSaver(conn, serde=_serde)
     elif memory_fallback:
-        compile_kwargs["checkpointer"] = MemorySaver()
+        compile_kwargs["checkpointer"] = MemorySaver(serde=_serde)
 
     if interrupt_before:
         compile_kwargs["interrupt_before"] = interrupt_before

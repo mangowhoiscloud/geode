@@ -86,7 +86,7 @@ def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
 
 app = typer.Typer(
     name="geode",
-    help="GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스",
+    help=f"GEODE v{__version__} — 게임화 IP 도메인 자율 실행 하네스",
     no_args_is_help=False,
     invoke_without_command=True,
 )
@@ -2432,7 +2432,7 @@ def _interactive_loop() -> None:
 
 @app.callback()
 def main(ctx: typer.Context) -> None:
-    """GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스."""
+    """GEODE — 게임화 IP 도메인 자율 실행 하네스."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
         _interactive_loop()

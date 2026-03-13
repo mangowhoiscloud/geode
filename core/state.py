@@ -63,13 +63,14 @@ class EvaluatorResult(BaseModel):
     @model_validator(mode="after")
     def validate_axes(self) -> EvaluatorResult:
         """Validate that axes keys match evaluator_type and values are in [1.0, 5.0]."""
-        from core.llm.prompts.axes import VALID_AXES_MAP
+        from core.llm.prompts.axes import get_valid_axes_map
 
-        expected_keys = VALID_AXES_MAP.get(self.evaluator_type)
+        valid_map = get_valid_axes_map()
+        expected_keys = valid_map.get(self.evaluator_type)
         if expected_keys is None:
             raise ValueError(
                 f"Unknown evaluator_type: {self.evaluator_type}. "
-                f"Valid types: {list(VALID_AXES_MAP.keys())}"
+                f"Valid types: {list(valid_map.keys())}"
             )
 
         actual_keys = set(self.axes.keys())
@@ -101,8 +102,8 @@ class PSMResult(BaseModel):
 
 
 class SynthesisResult(BaseModel):
-    undervaluation_cause: CauseLiteral
-    action_type: ActionLiteral
+    undervaluation_cause: str  # Was CauseLiteral — now str for domain-flexible values
+    action_type: str  # Was ActionLiteral — now str for domain-flexible values
     value_narrative: str
     target_gamer_segment: str
 
