@@ -280,11 +280,15 @@ class AgenticLoop:
         max_retries = 3
         for attempt in range(max_retries):
             try:
+                # Strip internal metadata (e.g. _mcp_server) before sending to API
+                api_tools = [
+                    {k: v for k, v in t.items() if not k.startswith("_")} for t in self._tools
+                ]
                 response = self._client.messages.create(  # type: ignore[call-overload]
                     model=self.model,
                     system=system,
                     messages=messages,
-                    tools=self._tools,
+                    tools=api_tools,
                     tool_choice=tool_choice,
                     max_tokens=self.max_tokens,
                     temperature=0.0,
