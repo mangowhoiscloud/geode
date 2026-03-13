@@ -196,6 +196,9 @@ class ToolExecutor:
 
     def _confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
         """Prompt user for cost confirmation on expensive tools."""
+        from core.cli import _restore_terminal
+
+        _restore_terminal()
         console.print()
         console.print("  [bold yellow]$ Cost confirmation[/bold yellow]")
         console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
@@ -210,6 +213,9 @@ class ToolExecutor:
 
     def _request_approval(self, command: str, reason: str) -> bool:
         """Prompt user for bash command approval."""
+        from core.cli import _restore_terminal
+
+        _restore_terminal()
         console.print()
         console.print("  [bold yellow]⚠ Bash command requires approval[/bold yellow]")
         console.print(f"  [dim]Command:[/dim] [bold]{command}[/bold]")

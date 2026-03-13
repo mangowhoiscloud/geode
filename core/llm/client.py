@@ -269,7 +269,15 @@ def call_llm(
         if hasattr(response, "usage") and response.usage:
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            usage = get_tracker().record(model, in_tok, out_tok)
+            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            usage = get_tracker().record(
+                model,
+                in_tok,
+                out_tok,
+                cache_creation_tokens=cache_create,
+                cache_read_tokens=cache_read,
+            )
             log.info(
                 "LLM call: model=%s in=%d out=%d cost=$%.4f",
                 model,
@@ -277,9 +285,6 @@ def call_llm(
                 out_tok,
                 usage.cost_usd,
             )
-            # Log cache hit/miss if available
-            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0)
-            cache_read = getattr(response.usage, "cache_read_input_tokens", 0)
             if cache_create or cache_read:
                 log.debug("Cache: create=%d read=%d", cache_create, cache_read)
 
@@ -328,7 +333,15 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
         if hasattr(response, "usage") and response.usage:
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            usage = get_tracker().record(model, in_tok, out_tok)
+            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            usage = get_tracker().record(
+                model,
+                in_tok,
+                out_tok,
+                cache_creation_tokens=cache_create,
+                cache_read_tokens=cache_read,
+            )
             log.info(
                 "LLM call (parsed): model=%s in=%d out=%d cost=$%.4f",
                 model,
@@ -336,8 +349,6 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
                 out_tok,
                 usage.cost_usd,
             )
-            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0)
-            cache_read = getattr(response.usage, "cache_read_input_tokens", 0)
             if cache_create or cache_read:
                 log.debug("Cache: create=%d read=%d", cache_create, cache_read)
 
@@ -484,7 +495,15 @@ def call_llm_with_tools(
         if hasattr(response, "usage") and response.usage:
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            usage = get_tracker().record(target_model, in_tok, out_tok)
+            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            usage = get_tracker().record(
+                target_model,
+                in_tok,
+                out_tok,
+                cache_creation_tokens=cache_create,
+                cache_read_tokens=cache_read,
+            )
             all_usage.append(usage)
 
         # Check if model wants to use tools
@@ -583,7 +602,15 @@ def call_llm_streaming(
             if final and hasattr(final, "usage") and final.usage:
                 in_tok = final.usage.input_tokens
                 out_tok = final.usage.output_tokens
-                usage = get_tracker().record(model, in_tok, out_tok)
+                cache_create = getattr(final.usage, "cache_creation_input_tokens", 0) or 0
+                cache_read = getattr(final.usage, "cache_read_input_tokens", 0) or 0
+                usage = get_tracker().record(
+                    model,
+                    in_tok,
+                    out_tok,
+                    cache_creation_tokens=cache_create,
+                    cache_read_tokens=cache_read,
+                )
                 log.info(
                     "LLM call (stream): model=%s in=%d out=%d cost=$%.4f",
                     model,
@@ -591,10 +618,6 @@ def call_llm_streaming(
                     out_tok,
                     usage.cost_usd,
                 )
-
-                # Log cache hit/miss if available
-                cache_create = getattr(final.usage, "cache_creation_input_tokens", 0)
-                cache_read = getattr(final.usage, "cache_read_input_tokens", 0)
                 if cache_create or cache_read:
                     log.debug(
                         "Streaming cache: create=%d read=%d",
