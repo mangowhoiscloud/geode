@@ -484,8 +484,7 @@ def _welcome_screen() -> None:
     setup_project_memory()
 
     console.print(
-        "  [muted]/help[/muted] for commands  [muted]·[/muted]  "
-        "[muted]type naturally[/muted] to search & analyze"
+        "  [muted]/help[/muted] for commands  [muted]·[/muted]  [muted]type naturally[/muted]"
     )
     console.print()
 

@@ -2,8 +2,8 @@
 
 3-line layout mirroring Claude Code::
 
-    ╲╲( ◕ ᵕ ◕ )╱╱  GEODE v0.9.0
-                     claude-opus-4-6 · 저평가 IP 발굴 에이전트
+    ╲╲( ◕ ᵕ ◕ )╱╱  GEODE v0.10.0
+                     claude-opus-4-6 · autonomous execution agent
                      ~/geode
 
 Expression library (used across UI contexts):
@@ -93,7 +93,7 @@ def _brand_line(
     t.append("\n")
 
     # Line 2: model + description
-    desc = "저평가 IP 발굴 에이전트"
+    desc = "autonomous execution agent"
     t.append(f"  {pad}{model} · {desc}", "dim")
     t.append("\n")
 

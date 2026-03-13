@@ -1,43 +1,43 @@
 {
   "brave-search": {
     "command": "npx",
-    "args": ["-y", "@anthropic/mcp-server-brave-search"],
+    "args": ["-y", "@brave/brave-search-mcp-server"],
     "env": {
       "BRAVE_API_KEY": "${BRAVE_API_KEY}"
     }
   },
   "igdb": {
     "command": "npx",
-    "args": ["-y", "bielacki/igdb-mcp-server"],
+    "args": ["-y", "igdb-mcp-server"],
     "env": {
-      "TWITCH_CLIENT_ID": "${TWITCH_CLIENT_ID}",
-      "TWITCH_CLIENT_SECRET": "${TWITCH_CLIENT_SECRET}"
+      "IGDB_CLIENT_ID": "${TWITCH_CLIENT_ID}",
+      "IGDB_CLIENT_SECRET": "${TWITCH_CLIENT_SECRET}"
     }
   },
-  "steam-reviews": {
+  "steam": {
     "command": "npx",
-    "args": ["-y", "fenxer/steam-review-mcp"]
+    "args": ["-y", "steam-mcp-server"]
   },
   "discord": {
     "command": "npx",
-    "args": ["-y", "v-3/discordmcp"],
+    "args": ["-y", "mcp-server-discord"],
     "env": {
       "DISCORD_BOT_TOKEN": "${DISCORD_BOT_TOKEN}"
     }
   },
-  "wikidata": {
-    "command": "npx",
-    "args": ["-y", "zzaebok/mcp-wikidata"]
-  },
   "e2b": {
     "command": "npx",
-    "args": ["-y", "e2b-dev/mcp-server"],
+    "args": ["-y", "@e2b/mcp-server"],
     "env": {
       "E2B_API_KEY": "${E2B_API_KEY}"
     }
   },
+  "arxiv": {
+    "command": "npx",
+    "args": ["-y", "@fre4x/arxiv"]
+  },
   "playwright": {
     "command": "npx",
-    "args": ["-y", "executeautomation/mcp-playwright"]
+    "args": ["-y", "@playwright/mcp"]
   }
 }
