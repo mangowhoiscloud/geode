@@ -202,7 +202,7 @@ class ToolExecutor:
         console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
         console.print()
         try:
-            response = console.input("  [bold cyan]Proceed? [Y/n][/bold cyan] ").strip().lower()
+            response = console.input("  [header]Proceed? [Y/n][/header] ").strip().lower()
         except (KeyboardInterrupt, EOFError):
             console.print()
             return False
@@ -218,7 +218,7 @@ class ToolExecutor:
         console.print()
 
         try:
-            response = console.input("  [bold cyan]Allow? [Y/n][/bold cyan] ").strip().lower()
+            response = console.input("  [header]Allow? [Y/n][/header] ").strip().lower()
         except (KeyboardInterrupt, EOFError):
             console.print()
             return False
