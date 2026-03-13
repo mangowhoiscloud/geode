@@ -165,6 +165,35 @@ MODEL_PRICING: dict[str, ModelPrice] = {
 # ───────────────────────────────────────────────────────────────────────────
 
 
+# fmt: off
+MODEL_CONTEXT_WINDOW: dict[str, int] = {
+    "claude-opus-4-6":            200_000,
+    "claude-opus-4-5":            200_000,
+    "claude-opus-4-1":            200_000,
+    "claude-opus-4":              200_000,
+    "claude-sonnet-4-6":          200_000,
+    "claude-sonnet-4-5-20250929": 200_000,
+    "claude-sonnet-4":            200_000,
+    "claude-haiku-4-5-20251001":  200_000,
+    "claude-haiku-3-5":           200_000,
+    "gpt-5.4":                    128_000,
+    "gpt-5.2":                    128_000,
+    "gpt-5.1":                    128_000,
+    "gpt-5":                      128_000,
+    "gpt-5-mini":                 128_000,
+    "gpt-5-nano":                 128_000,
+    "gpt-4.1":                  1_047_576,
+    "gpt-4.1-mini":             1_047_576,
+    "gpt-4.1-nano":             1_047_576,
+    "gpt-4o":                     128_000,
+    "gpt-4o-mini":                128_000,
+    "o3":                         200_000,
+    "o3-mini":                    200_000,
+    "o4-mini":                    200_000,
+}
+# fmt: on
+
+
 class TokenTracker:
     """Unified token tracker — inject once, call ``record()`` everywhere.
 
@@ -241,6 +270,12 @@ class TokenTracker:
     def summary(self) -> dict[str, Any]:
         """Session-level totals."""
         return self._accumulator.to_dict()
+
+    def context_usage_pct(self, model: str) -> float:
+        """Approximate context window usage as a percentage."""
+        max_ctx = MODEL_CONTEXT_WINDOW.get(model, 200_000)
+        total_input = self._accumulator.total_input_tokens
+        return min(total_input / max_ctx * 100, 100.0)
 
     # -- LangSmith (optional, fire-and-forget) -----------------------------
 
