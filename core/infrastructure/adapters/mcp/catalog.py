@@ -85,7 +85,27 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         description="Steam player counts, reviews, game info",
         tags=("steam", "game", "gaming", "player", "review"),
     ),
+    "steam-reviews": MCPCatalogEntry(
+        name="steam-reviews",
+        package="fenxer/steam-review-mcp",
+        description="Steam game reviews analysis and sentiment",
+        tags=("steam", "review", "sentiment", "game", "gaming"),
+    ),
+    "igdb": MCPCatalogEntry(
+        name="igdb",
+        package="bielacki/igdb-mcp-server",
+        description="IGDB game metadata (genre, platform, rating, franchise)",
+        tags=("igdb", "game", "gaming", "metadata", "twitch"),
+        env_keys=("TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET"),
+    ),
     # --- Social / Community ---
+    "discord": MCPCatalogEntry(
+        name="discord",
+        package="v-3/discordmcp",
+        description="Discord server activity, channels, member data",
+        tags=("discord", "social", "community", "chat", "gaming"),
+        env_keys=("DISCORD_BOT_TOKEN",),
+    ),
     "linkedin": MCPCatalogEntry(
         name="linkedin",
         package="kimtaeyoon87/mcp-server-linkedin-profile",
@@ -132,6 +152,13 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         package="erkinalp/omnisearch-mcp",
         description="Unified search across Tavily+Brave+Kagi+Perplexity",
         tags=("search", "unified", "multi", "omnisearch"),
+    ),
+    # --- Knowledge Graph ---
+    "wikidata": MCPCatalogEntry(
+        name="wikidata",
+        package="zzaebok/mcp-wikidata",
+        description="Wikidata knowledge graph (franchise, creator, studio metadata)",
+        tags=("wikidata", "knowledge", "graph", "metadata", "wiki"),
     ),
     # --- Database / Vector ---
     "qdrant": MCPCatalogEntry(
@@ -195,6 +222,27 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         description="Google Maps places, directions, geocoding",
         tags=("google", "maps", "location", "geo"),
         env_keys=("GOOGLE_MAPS_API_KEY",),
+    ),
+    # --- Agent Infrastructure ---
+    "e2b": MCPCatalogEntry(
+        name="e2b",
+        package="e2b-dev/mcp-server",
+        description="Secure cloud sandbox for code execution (Python/JS)",
+        tags=("sandbox", "code", "execution", "e2b", "isolated"),
+        env_keys=("E2B_API_KEY",),
+    ),
+    "playwright": MCPCatalogEntry(
+        name="playwright",
+        package="executeautomation/mcp-playwright",
+        description="Browser automation via Playwright (navigate, click, scrape)",
+        tags=("browser", "playwright", "automation", "scrape"),
+    ),
+    # --- Financial ---
+    "financial-datasets": MCPCatalogEntry(
+        name="financial-datasets",
+        package="financial-datasets/mcp-server",
+        description="Stock prices, financials, SEC filings for gaming companies",
+        tags=("finance", "stock", "market", "financial", "sec"),
     ),
     # --- Development ---
     "sentry": MCPCatalogEntry(

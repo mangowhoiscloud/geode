@@ -78,8 +78,30 @@ class MCPServerManager:
         log.warning("Failed to connect to MCP server: %s", server_name)
         return None
 
+    @staticmethod
+    def _to_anthropic_tool(tool: dict[str, Any]) -> dict[str, Any]:
+        """Convert MCP tool format (inputSchema) to Anthropic format (input_schema)."""
+        result: dict[str, Any] = {
+            "name": tool.get("name", ""),
+            "description": tool.get("description", ""),
+        }
+        # MCP uses camelCase 'inputSchema', Anthropic API requires snake_case 'input_schema'
+        schema = (
+            tool.get("input_schema")
+            or tool.get("inputSchema")
+            or {"type": "object", "properties": {}}
+        )
+        result["input_schema"] = schema
+        # Preserve MCP server origin for routing
+        if "_mcp_server" in tool:
+            result["_mcp_server"] = tool["_mcp_server"]
+        return result
+
     def get_all_tools(self) -> list[dict[str, Any]]:
-        """Gather tool definitions from all configured MCP servers."""
+        """Gather tool definitions from all configured MCP servers.
+
+        Converts MCP tool format (inputSchema) to Anthropic API format (input_schema).
+        """
         all_tools: list[dict[str, Any]] = []
         for server_name in self._servers:
             client = self._get_client(server_name)
@@ -88,7 +110,7 @@ class MCPServerManager:
             tools = client.list_tools()
             for tool in tools:
                 tool["_mcp_server"] = server_name
-                all_tools.append(tool)
+                all_tools.append(self._to_anthropic_tool(tool))
         return all_tools
 
     def call_tool(self, server_name: str, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
