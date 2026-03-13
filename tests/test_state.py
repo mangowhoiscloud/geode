@@ -168,27 +168,29 @@ class TestSynthesisResult:
             undervaluation_cause="undermarketed",
             action_type="marketing_boost",
             value_narrative="Test narrative",
-            target_gamer_segment="Achievers",
+            target_segment="Achievers",
         )
         assert r.undervaluation_cause == "undermarketed"
 
-    def test_invalid_cause(self):
-        with pytest.raises(ValidationError):
-            SynthesisResult(
-                undervaluation_cause="invalid_cause",
-                action_type="marketing_boost",
-                value_narrative="x",
-                target_gamer_segment="x",
-            )
+    def test_domain_flexible_cause(self):
+        """SynthesisResult accepts domain-specific cause strings (Phase 3c)."""
+        r = SynthesisResult(
+            undervaluation_cause="custom_domain_cause",
+            action_type="marketing_boost",
+            value_narrative="x",
+            target_segment="x",
+        )
+        assert r.undervaluation_cause == "custom_domain_cause"
 
-    def test_invalid_action(self):
-        with pytest.raises(ValidationError):
-            SynthesisResult(
-                undervaluation_cause="undermarketed",
-                action_type="nonexistent_action",
-                value_narrative="x",
-                target_gamer_segment="x",
-            )
+    def test_domain_flexible_action(self):
+        """SynthesisResult accepts domain-specific action strings (Phase 3c)."""
+        r = SynthesisResult(
+            undervaluation_cause="undermarketed",
+            action_type="custom_domain_action",
+            value_narrative="x",
+            target_segment="x",
+        )
+        assert r.action_type == "custom_domain_action"
 
     def test_all_valid_cause_action_pairs(self):
         """Verify all 6 cause → 5 action pairs from §13.9.3."""
@@ -205,7 +207,7 @@ class TestSynthesisResult:
                 undervaluation_cause=cause,
                 action_type=action,
                 value_narrative=f"Test {cause}",
-                target_gamer_segment="Test segment",
+                target_segment="Test segment",
             )
             assert r.undervaluation_cause == cause
             assert r.action_type == action

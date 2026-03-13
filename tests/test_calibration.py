@@ -77,7 +77,7 @@ def berserk_state() -> dict:
             undervaluation_cause="conversion_failure",
             action_type="marketing_boost",
             value_narrative="Berserk needs AAA game adaptation.",
-            target_gamer_segment="Souls-like fans",
+            target_segment="Souls-like fans",
         ),
         "analyses": [
             AnalysisResult(
@@ -130,7 +130,7 @@ def cowboy_bebop_state() -> dict:
             undervaluation_cause="undermarketed",
             action_type="marketing_boost",
             value_narrative="Cowboy Bebop needs marketing push.",
-            target_gamer_segment="Sci-fi RPG fans",
+            target_segment="Sci-fi RPG fans",
         ),
         "analyses": [],
     }
@@ -176,7 +176,7 @@ def ghost_state() -> dict:
             undervaluation_cause="discovery_failure",
             action_type="platform_expansion",
             value_narrative="Ghost in the Shell needs discovery.",
-            target_gamer_segment="Cyberpunk fans",
+            target_segment="Cyberpunk fans",
         ),
         "analyses": [],
     }
@@ -408,7 +408,7 @@ class TestRunCalibrationCheck:
             undervaluation_cause="discovery_failure",
             action_type="platform_expansion",
             value_narrative="Wrong cause.",
-            target_gamer_segment="...",
+            target_segment="...",
         )
         result = run_calibration_check(berserk_state, golden_set=golden_set)
         assert result.cause_match is False
@@ -605,7 +605,7 @@ class TestEdgeCases:
                 undervaluation_cause="conversion_failure",
                 action_type="marketing_boost",
                 value_narrative="...",
-                target_gamer_segment="...",
+                target_segment="...",
             ),
         }
         result = run_calibration_check(state, golden_set=golden_set)
@@ -655,7 +655,7 @@ class TestEdgeCases:
                 undervaluation_cause="conversion_failure",
                 action_type="marketing_boost",
                 value_narrative="...",
-                target_gamer_segment="...",
+                target_segment="...",
             ),
         }
         result = run_calibration_check(state, golden_set=golden_set)

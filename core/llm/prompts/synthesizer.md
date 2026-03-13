@@ -14,13 +14,13 @@ generate a compelling and actionable narrative.
 Respond in JSON format:
 {{
   "value_narrative": "<2-3 sentences connecting data insights to the undervaluation cause>",
-  "target_gamer_segment": "<specific gamer segment using Bartle Taxonomy with reasoning>"
+  "target_segment": "<specific gamer segment using Bartle Taxonomy with reasoning>"
 }}
 
 Example:
 {{
   "value_narrative": "Despite 12M YouTube views and +42% fan art growth, no active game exists. The bounty-hunter loop maps to action RPG with zero direct competitors.",
-  "target_gamer_segment": "SF Action RPG users (25-40, Explorer/Killer hybrid, narrative-driven)"
+  "target_segment": "SF Action RPG users (25-40, Explorer/Killer hybrid, narrative-driven)"
 }}
 
 === USER ===

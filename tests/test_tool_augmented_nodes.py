@@ -128,7 +128,7 @@ class TestSynthesizerNodeToolPath:
                 undervaluation_cause="undermarketed",
                 action_type="marketing_boost",
                 value_narrative="Standard path",
-                target_gamer_segment="Test",
+                target_segment="Test",
             )
             result = synthesizer_node(state)
             assert result["synthesis"].value_narrative == "Standard path"

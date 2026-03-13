@@ -13,6 +13,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from core.config import settings
+from core.infrastructure.ports.domain_port import get_domain_or_none
 from core.infrastructure.ports.llm_port import (
     get_llm_json,
     get_llm_parsed,
@@ -26,7 +27,15 @@ from core.state import AnalysisResult, GeodeState
 
 log = logging.getLogger(__name__)
 
-ANALYST_TYPES: list[str] = list(ANALYST_SPECIFIC.keys())
+ANALYST_TYPES: list[str] = list(ANALYST_SPECIFIC.keys())  # Keep for backward compat
+
+
+def _get_analyst_types() -> list[str]:
+    """Get analyst types from domain adapter if available, else static."""
+    domain = get_domain_or_none()
+    if domain is not None:
+        return domain.get_analyst_types()
+    return list(ANALYST_SPECIFIC.keys())
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +56,10 @@ def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, st
     if assembler is not None:
         has_skill = bool(assembler._skills.get_skills(node="analyst", role_type=analyst_type))
 
-    analyst_specific = "" if has_skill else ANALYST_SPECIFIC[analyst_type]
+    # Try domain adapter first, fall back to static config
+    domain = get_domain_or_none()
+    analyst_specific_map = domain.get_analyst_specific() if domain is not None else ANALYST_SPECIFIC
+    analyst_specific = "" if has_skill else analyst_specific_map.get(analyst_type, "")
 
     # Phase 1: Base template rendering
     base_system = ANALYST_SYSTEM.format(analyst_type=analyst_type)
@@ -420,7 +432,7 @@ def make_analyst_sends(state: GeodeState) -> list[Any]:
                 skip_types.add(a.analyst_type)
 
     sends = []
-    for atype in ANALYST_TYPES:
+    for atype in _get_analyst_types():
         if atype in skip_types:
             log.info("Partial retry: skipping %s analyst (good prior result)", atype)
             continue

@@ -101,7 +101,7 @@ def _format_synthesis_html(synthesis: dict[str, Any]) -> str:
     cause = synthesis.get("undervaluation_cause", "N/A")
     action = synthesis.get("action_type", "N/A")
     narrative = synthesis.get("value_narrative", "")
-    segment = synthesis.get("target_gamer_segment", "N/A")
+    segment = synthesis.get("target_segment", "N/A")
     return f"""<div class="section">
     <h2>Synthesis</h2>
     <p><strong>Undervaluation Cause:</strong> {cause}</p>
@@ -118,7 +118,7 @@ def _format_synthesis_md(synthesis: dict[str, Any]) -> str:
     cause = synthesis.get("undervaluation_cause", "N/A")
     action = synthesis.get("action_type", "N/A")
     narrative = synthesis.get("value_narrative", "")
-    segment = synthesis.get("target_gamer_segment", "N/A")
+    segment = synthesis.get("target_segment", "N/A")
     lines = [
         "## Synthesis",
         "",
