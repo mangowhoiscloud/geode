@@ -6,31 +6,9 @@
       "BRAVE_API_KEY": "${BRAVE_API_KEY}"
     }
   },
-  "igdb": {
-    "command": "npx",
-    "args": ["-y", "igdb-mcp-server"],
-    "env": {
-      "IGDB_CLIENT_ID": "${TWITCH_CLIENT_ID}",
-      "IGDB_CLIENT_SECRET": "${TWITCH_CLIENT_SECRET}"
-    }
-  },
   "steam": {
     "command": "npx",
     "args": ["-y", "steam-mcp-server"]
-  },
-  "discord": {
-    "command": "npx",
-    "args": ["-y", "mcp-server-discord"],
-    "env": {
-      "DISCORD_BOT_TOKEN": "${DISCORD_BOT_TOKEN}"
-    }
-  },
-  "e2b": {
-    "command": "npx",
-    "args": ["-y", "@e2b/mcp-server"],
-    "env": {
-      "E2B_API_KEY": "${E2B_API_KEY}"
-    }
   },
   "arxiv": {
     "command": "npx",
