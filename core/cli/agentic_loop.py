@@ -109,6 +109,7 @@ class AgenticLoop:
                 if mcp_tool.get("name") not in existing_names:
                     self._tools.append(mcp_tool)
         self._tool_log: list[dict[str, Any]] = []
+        self._consecutive_failures: dict[str, int] = {}
         self._client: anthropic.Anthropic | None = None
 
     def refresh_tools(self) -> int:
@@ -133,7 +134,7 @@ class AgenticLoop:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_log = []
         self._clarification_count = 0
-        self._consecutive_failures: dict[str, int] = {}  # tool_name → fail count
+        self._consecutive_failures.clear()
 
         # Add user message to conversation context
         self.context.add_user_message(user_input)

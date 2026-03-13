@@ -2269,18 +2269,62 @@ def _restore_terminal() -> None:
         pass
 
 
-def _read_multiline_input(prompt: str) -> str:
-    """Read user input with multi-line paste detection.
+# ---------------------------------------------------------------------------
+# prompt_toolkit REPL input (arrow keys, history, multi-line paste)
+# ---------------------------------------------------------------------------
+def _build_prompt_session() -> Any:
+    """Create a prompt_toolkit PromptSession with history + GEODE styling."""
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.history import FileHistory
 
-    After reading the first line, drains any remaining data buffered
-    on stdin (from a paste operation) and joins all lines into a single
-    input string.  Timeout of 50 ms distinguishes paste from manual typing.
+    history_path = Path.home() / ".geode_history"
+    return PromptSession(
+        history=FileHistory(str(history_path)),
+        message=HTML("<b>&gt;</b> "),
+        enable_history_search=True,
+        multiline=False,
+    )
+
+
+# Module-level lazy singleton
+_prompt_session: Any = None
+
+
+def _get_prompt_session() -> Any:
+    global _prompt_session
+    if _prompt_session is None:
+        try:
+            _prompt_session = _build_prompt_session()
+        except Exception:
+            log.debug("prompt_toolkit init failed, falling back to console.input", exc_info=True)
+    return _prompt_session
+
+
+def _read_multiline_input(prompt: str) -> str:
+    """Read user input via prompt_toolkit (arrow keys, history, paste).
+
+    Falls back to Rich console.input if prompt_toolkit is unavailable.
+    Multi-line paste is handled by draining buffered stdin after the
+    first line (50 ms timeout).
     """
     _restore_terminal()
-    first_line = console.input(prompt).strip()
+
+    session = _get_prompt_session()
+    if session is not None:
+        try:
+            first_line = session.prompt().strip()
+        except (KeyboardInterrupt, EOFError):
+            raise
+        except Exception:
+            first_line = console.input("> ").strip()
+    else:
+        first_line = console.input("> ").strip()
+
     if not first_line:
         return ""
 
+    # Drain pasted lines from stdin buffer
     lines = [first_line]
     try:
         fd = sys.stdin.fileno()
