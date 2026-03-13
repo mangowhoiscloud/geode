@@ -168,7 +168,7 @@ class TestSynthesisResult:
             undervaluation_cause="undermarketed",
             action_type="marketing_boost",
             value_narrative="Test narrative",
-            target_gamer_segment="Achievers",
+            target_segment="Achievers",
         )
         assert r.undervaluation_cause == "undermarketed"
 
@@ -178,7 +178,7 @@ class TestSynthesisResult:
             undervaluation_cause="custom_domain_cause",
             action_type="marketing_boost",
             value_narrative="x",
-            target_gamer_segment="x",
+            target_segment="x",
         )
         assert r.undervaluation_cause == "custom_domain_cause"
 
@@ -188,7 +188,7 @@ class TestSynthesisResult:
             undervaluation_cause="undermarketed",
             action_type="custom_domain_action",
             value_narrative="x",
-            target_gamer_segment="x",
+            target_segment="x",
         )
         assert r.action_type == "custom_domain_action"
 
@@ -207,7 +207,7 @@ class TestSynthesisResult:
                 undervaluation_cause=cause,
                 action_type=action,
                 value_narrative=f"Test {cause}",
-                target_gamer_segment="Test segment",
+                target_segment="Test segment",
             )
             assert r.undervaluation_cause == cause
             assert r.action_type == action

@@ -209,7 +209,7 @@ def _build_dry_run_synthesis(
         undervaluation_cause=cause,
         action_type=action,
         value_narrative=narrative,
-        target_gamer_segment=segment,
+        target_segment=segment,
     )
 
 
@@ -292,7 +292,7 @@ def _build_llm_synthesis(
             undervaluation_cause=cause,
             action_type=action,
             value_narrative=data.get("value_narrative", ""),
-            target_gamer_segment=data.get("target_gamer_segment", ""),
+            target_segment=data.get("target_segment", ""),
         )
     except (ValidationError, ValueError) as ve:
         log.warning("Synthesizer legacy fallback also failed: %s", ve)
@@ -300,7 +300,7 @@ def _build_llm_synthesis(
             undervaluation_cause=cause,
             action_type=action,
             value_narrative="Schema validation failed (degraded)",
-            target_gamer_segment="Unknown (degraded)",
+            target_segment="Unknown (degraded)",
         )
 
 
@@ -360,7 +360,7 @@ def _build_tool_augmented_synthesis(
                 undervaluation_cause=cause,
                 action_type=action,
                 value_narrative=result.text,
-                target_gamer_segment="(tool-augmented)",
+                target_segment="(tool-augmented)",
             )
     except Exception as exc:
         log.warning("Tool-augmented synthesis failed: %s — falling back to standard", exc)

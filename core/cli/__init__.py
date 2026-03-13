@@ -893,6 +893,7 @@ def _run_analysis(
     verbose: bool = False,
     skip_verification: bool = False,
     stream: bool = False,
+    domain_name: str = "game_ip",
 ) -> dict[str, Any] | None:
     """Core analysis logic shared by interactive and CLI modes."""
     from core.fixtures import FIXTURE_MAP
@@ -912,8 +913,8 @@ def _run_analysis(
     pipeline_mode = "full_pipeline"
     header_panel(ip_name, pipeline_mode, model)
 
-    # Create runtime with all infrastructure wired
-    runtime = GeodeRuntime.create(ip_name)
+    # Create runtime with all infrastructure wired (domain adapter activated)
+    runtime = GeodeRuntime.create(ip_name, domain_name=domain_name)
 
     # Subagent session isolation: force MemorySaver fallback (G7 fix)
     from core.cli.sub_agent import get_subagent_context
@@ -2279,6 +2280,15 @@ def _interactive_loop() -> None:
     verbose = False
     conversation = ConversationContext(max_turns=20)
 
+    # Wire default domain adapter early so all nodes/tools see it
+    from core.domains.loader import load_domain_adapter
+    from core.infrastructure.ports.domain_port import set_domain
+
+    try:
+        set_domain(load_domain_adapter("game_ip"))
+    except Exception:
+        log.debug("Domain adapter initialization skipped", exc_info=True)
+
     # Key gate: block until API key provided or user quits
     readiness = _get_readiness()
     if readiness is None or readiness.blocked:
@@ -2450,6 +2460,7 @@ def analyze(
     ),
     pipeline: str = typer.Option("full_pipeline", "--pipeline", "-p", help="Pipeline mode"),
     stream: bool = typer.Option(False, "--stream", help="Enable streaming output"),
+    domain: str = typer.Option("game_ip", "--domain", "-d", help="Domain adapter name"),
 ) -> None:
     """Analyze an IP for undervaluation potential."""
     _run_analysis(
@@ -2458,6 +2469,7 @@ def analyze(
         verbose=verbose,
         skip_verification=skip_verification,
         stream=stream,
+        domain_name=domain,
     )
 
 

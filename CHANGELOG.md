@@ -28,9 +28,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Clarification 시스템 확장 + HITL Cost Tracking + AgenticLoop 안전장치 + Karpathy P1/P4/P6/P7/P10 프롬프트 강화.
+Domain Plugin Architecture + Clarification 시스템 확장 + HITL Cost Tracking + AgenticLoop 안전장치 + Karpathy P1/P4/P6/P7/P10 프롬프트 강화.
 
 ### Added
+
+#### Domain Plugin Architecture (Phase 1-4)
+- `DomainPort` Protocol — 도메인별 analysts, evaluators, scoring weights, decision tree, prompts 플러그인 인터페이스
+- `GameIPDomain` 어댑터 — 기존 게임 IP 평가 로직을 DomainPort 구현체로 캡슐화
+- `load_domain_adapter()` / `set_domain()` — 도메인 어댑터 동적 로딩 + contextvars DI
+- 모든 노드 (analysts, evaluators, scoring, synthesizer) 도메인 파라미터화 — `get_domain_or_none()` fallback
+- `GeodeRuntime.create(domain_name=)` — 런타임 생성 시 도메인 어댑터 자동 와이어링
+- CLI `--domain` 옵션 — `geode analyze "Berserk" --domain game_ip`
+- Interactive REPL 시작 시 기본 도메인 어댑터 자동 활성화
+
+### Changed
+
+- `SynthesisResult.target_gamer_segment` → `target_segment` 리네임 (도메인 중립화)
 
 #### Karpathy P1/P4/P6/P7/P10 프롬프트 강화
 - `PROMPT_VERSIONS` 8→20 확장 (9 extended templates + 3 axes hashes)

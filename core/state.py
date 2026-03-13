@@ -105,7 +105,7 @@ class SynthesisResult(BaseModel):
     undervaluation_cause: str  # Was CauseLiteral — now str for domain-flexible values
     action_type: str  # Was ActionLiteral — now str for domain-flexible values
     value_narrative: str
-    target_gamer_segment: str
+    target_segment: str
 
 
 class GuardrailResult(BaseModel):
