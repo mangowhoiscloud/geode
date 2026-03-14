@@ -101,6 +101,16 @@ class MCPServerManager:
         args = config.get("args", [])
         env = self._resolve_env(config.get("env", {}))
 
+        # Skip server if any required env var resolved to empty string
+        missing = [k for k, v in env.items() if not v]
+        if missing:
+            log.debug(
+                "MCP server '%s' skipped — missing env: %s",
+                server_name,
+                ", ".join(missing),
+            )
+            return None
+
         client = StdioMCPClient(command=command, args=args, env=env)
         if client.connect():
             self._clients[server_name] = client
