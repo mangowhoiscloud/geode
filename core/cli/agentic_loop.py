@@ -12,10 +12,10 @@ Supports:
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import logging
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -29,7 +29,6 @@ from core.config import ANTHROPIC_PRIMARY, settings
 from core.llm.client import _maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.ui.agentic_ui import OperationLogger
-from core.ui.console import console
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
@@ -148,7 +147,7 @@ class AgenticLoop:
                     self._tools.append(mcp_tool)
         self._tool_log: list[dict[str, Any]] = []
         self._consecutive_failures: dict[str, int] = {}
-        self._client: anthropic.Anthropic | None = None
+        self._client: anthropic.AsyncAnthropic | None = None
         self._op_logger = OperationLogger()
 
     def refresh_tools(self) -> int:
@@ -168,8 +167,13 @@ class AgenticLoop:
                 added += 1
         return added
 
-    @_maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
     def run(self, user_input: str) -> AgenticResult:
+        """Sync wrapper — delegates to ``arun()`` via ``asyncio.run()``."""
+        result: AgenticResult = asyncio.run(self.arun(user_input))
+        return result
+
+    @_maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
+    async def arun(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_log = []
         self._clarification_count = 0
@@ -189,13 +193,7 @@ class AgenticLoop:
             is_last_round = round_idx == self.max_rounds - 1
             self._op_logger.begin_round("AgenticLoop")
 
-            # Claude Code-style: spinner during LLM API call
-            with console.status(
-                "  [cyan]Thinking...[/cyan]",
-                spinner="dots",
-                spinner_style="cyan",
-            ):
-                response = self._call_llm(system_prompt, messages, round_idx=round_idx)
+            response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
 
             if response is None:
                 # Persist intermediate tool-use messages so next turn sees them
@@ -242,8 +240,7 @@ class AgenticLoop:
                 )
                 return result
 
-            # Process tool calls (possibly multiple in one response)
-            tool_results = self._process_tool_calls(response)
+            tool_results = await self._process_tool_calls(response)
 
             # Accumulate messages for next round
             # Convert content blocks to serializable format
@@ -397,10 +394,10 @@ class AgenticLoop:
         return base + "\n" + AGENTIC_SUFFIX
 
     @_maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
-    def _call_llm(
+    async def _call_llm(
         self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
     ) -> anthropic.types.Message | None:
-        """Call the Anthropic API with tools.  Retries on rate-limit (3×).
+        """Async Anthropic API call with tools.  Retries on rate-limit (3×).
 
         On the last round (round_idx == max_rounds - 1), forces tool_choice=none
         so the LLM must produce a text response instead of another tool call.
@@ -414,7 +411,7 @@ class AgenticLoop:
             # Disable SDK-level retries to prevent double-retry with our own loop.
             # Default max_retries=2 causes SDK to retry timeouts 3× internally,
             # compounding with our 3 retries → 9 total attempts / 18min worst case.
-            self._client = anthropic.Anthropic(api_key=api_key, max_retries=0)
+            self._client = anthropic.AsyncAnthropic(api_key=api_key, max_retries=0)
 
         # Force text response in the last WRAP_UP_HEADROOM rounds
         # so the LLM always has a chance to summarize before max_rounds
@@ -429,7 +426,7 @@ class AgenticLoop:
                 api_tools = [
                     {k: v for k, v in t.items() if not k.startswith("_")} for t in self._tools
                 ]
-                response = self._client.messages.create(  # type: ignore[call-overload]
+                response = await self._client.messages.create(  # type: ignore[call-overload]
                     model=self.model,
                     system=system,
                     messages=messages,
@@ -452,7 +449,7 @@ class AgenticLoop:
                     wait,
                 )
                 if attempt < max_retries - 1:
-                    time.sleep(wait)
+                    await asyncio.sleep(wait)
                 else:
                     log.error("%s exhausted after %d retries", exc_type, max_retries)
                     return None
@@ -465,7 +462,7 @@ class AgenticLoop:
                     wait,
                 )
                 if attempt < max_retries - 1:
-                    time.sleep(wait)
+                    await asyncio.sleep(wait)
                 else:
                     log.error("Rate limit exhausted after %d retries", max_retries)
                     return None
@@ -497,7 +494,7 @@ class AgenticLoop:
 
     _MAX_CONSECUTIVE_FAILURES = 2  # auto-skip after N consecutive failures per tool
 
-    def _process_tool_calls(self, response: anthropic.types.Message) -> list[dict[str, Any]]:
+    async def _process_tool_calls(self, response: anthropic.types.Message) -> list[dict[str, Any]]:
         """Execute all tool_use blocks and return tool_result messages.
 
         Tracks consecutive failures per tool name.  After _MAX_CONSECUTIVE_FAILURES
@@ -531,13 +528,8 @@ class AgenticLoop:
                 # Progressive log: show tool call before execution
                 visible = self._op_logger.log_tool_call(tool_name, tool_input)
 
-                # Execute via ToolExecutor with spinner (handles HITL for dangerous tools)
-                with console.status(
-                    f"  [cyan]Running {tool_name}...[/cyan]",
-                    spinner="dots",
-                    spinner_style="cyan",
-                ):
-                    result = self.executor.execute(tool_name, tool_input)
+                # Execute via ToolExecutor (sync handlers wrapped in to_thread)
+                result = await asyncio.to_thread(self.executor.execute, tool_name, tool_input)
 
             # Track consecutive failures
             if isinstance(result, dict) and result.get("error"):
