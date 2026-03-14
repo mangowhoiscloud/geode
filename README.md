@@ -1,16 +1,17 @@
 <p align="center">
-  <img src="assets/geode-social-preview.png" alt="GEODE — 게임화 IP 도메인 자율 실행 하네스" width="720" />
+  <img src="assets/geode-social-preview.png" alt="GEODE — 범용 자율 실행 에이전트" width="720" />
 </p>
 
-# GEODE v0.10.1 — 게임화 IP 도메인 자율 실행 하네스
+# GEODE v0.10.1 — 범용 자율 실행 에이전트
 
-LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기능은 아래와 같습니다.
-- 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 분석/평가 루프와 리포트 생성을 지원합니다.
+LangGraph 기반 범용 자율 실행 에이전트입니다. 리서치, 분석, 자동화, 스케줄링 등 다양한 작업을 자율적으로 수행하며, 게임 IP 분석은 Domain Plugin으로 제공됩니다.
+- 6-Layer 아키텍처 + PSM 14-Axis 루브릭 기반 IP 분석/평가 파이프라인을 Domain Plugin(`GameIPDomain`)으로 탑재합니다.
 - Runtime Orchestration, Tool-Registry/Tool-Use, Bash, Hook-System으로 Agentic Loop(Gather->Action->Verify)를 구성, 자율 행동이 가능합니다.
 - NL Router(Multi-turn, Multi-intent, Clarification), 메모리 시스템, HITL로 사용자 의도를 정확히 파악합니다.
 - Skills 시스템(`.claude/skills/`)과 MCP 자동설치로 외부 도구를 자연어로 검색/설치/즉시 사용할 수 있습니다.
-- Sub-Agent Manager(pre-release)로 병렬 작업을 지원합니다.
+- Sub-Agent Manager로 병렬 작업 위임을 지원합니다 (TaskGraph DAG, IsolatedRunner, OpenClaw 세션 격리).
 - Observability는 LangSmith, Evaluation은 루브릭 기반 LLM-as-Judge, CUSUM Drift 감지를 지원합니다.
+- Web Search, arXiv, Brave Search 등 외부 데이터 소스를 활용한 리서치 특화 기능을 제공합니다.
 - 에이전틱 엔지니어링으로 제작되며 코딩 에이전트가 E2E를 진행, Context/Observability/Eval/CI 가드레일을 기반으로 재귀 개선 루프를 형성합니다.
 
 ## Features
@@ -18,7 +19,7 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 | Feature | Description |
 |---------|-------------|
 | **6-Layer Pipeline** | Router → Signals → Analysts → Evaluators → Scoring → Verification → Gather/Synthesizer (8 nodes) |
-| **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 10 rounds), multi-intent 자동 chaining, clarification |
+| **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 15 rounds, WRAP_UP_HEADROOM=2), multi-intent 자동 chaining, clarification |
 | **Multi-turn Context** | 슬라이딩 윈도우 대화 기록 (max 20 turns), 대명사 해석 + follow-up |
 | **HITL Bash** | 셸 명령 실행 + 위험 패턴 차단 (9종) + 사용자 승인 게이트 |
 | **Sub-Agent** | 병렬 태스크 위임 (`IsolatedRunner`, MAX_CONCURRENT=5), TaskGraph DAG, CoalescingQueue 중복 제거 |
@@ -29,7 +30,7 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 | **Skills 시스템** | `.claude/skills/*/SKILL.md` 자동 발견, 시스템 프롬프트 주입, NL 트리거 매칭 |
 | **MCP 자동설치** | "LinkedIn MCP 달아줘" → 38개 빌트인 카탈로그 검색 → 설치 → 도구 핫 리로드 |
 | **Clarification** | 필수 파라미터 누락 시 되묻기 (slot filling, disambiguation), max_rounds 방지 |
-| **MCP Adapters** | Steam, Brave Search, KG Memory 외부 데이터 소스 연결 |
+| **MCP Adapters** | Brave Search, Steam, arXiv, Playwright 외부 데이터 소스 연결 (4 active) |
 | **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
 | **Prompt Templates** | `.md` 템플릿 8종 + YAML/JSON 설정 분리 (content/code separation) |
 | **Batch Analysis** | 멀티 IP 동시 분석, Rich 테이블 렌더링 |
@@ -176,7 +177,7 @@ graph LR
 graph TB
     Input["User Input<br/>(한국어/영어)"] --> LLM["Claude Opus 4.6<br/>Tool Use API"]
     LLM --> Decision{stop_reason}
-    Decision -->|tool_use| Exec["ToolExecutor<br/>(38 tools)"]
+    Decision -->|tool_use| Exec["ToolExecutor<br/>(60+ tools)"]
     Exec --> Check{clarification<br/>needed?}
     Check -->|Yes| Clarify["LLM asks<br/>clarifying question"]
     Clarify --> Output
@@ -201,10 +202,10 @@ graph TB
 
 | 구성 요소 | 설명 |
 |----------|------|
-| **LLM Tool Use** | Claude Opus 4.6 `tool_use` API — `definitions.json` 38개 tool 정의 전달, `stop_reason` 기반 루프 제어 |
+| **LLM Tool Use** | Claude Opus 4.6 `tool_use` API — base 38 + MCP 20+ tool 정의 전달, `stop_reason` 기반 루프 제어 |
 | **ToolExecutor** | 3-tier safety: SAFE (7종, 무조건 실행) / STANDARD (일반) / DANGEROUS (bash, 사용자 승인 필수) |
 | **Clarification** | 필수 파라미터 누락 시 `clarification_needed` 반환 → LLM이 사용자에게 되묻기 |
-| **max_rounds** | 기본 10 라운드 — `end_turn` 또는 라운드 초과 시 종료 |
+| **max_rounds** | 기본 15 라운드 (`DEFAULT_MAX_ROUNDS=15`) — 마지막 2라운드(`WRAP_UP_HEADROOM`)에서 텍스트 응답 강제 |
 | **LangSmith** | `track_token_usage()` — 토큰 수/비용을 RunTree.extra.metrics에 기록, `LLMUsageAccumulator`로 세션 합산 |
 | **Retry** | AgenticLoop: `2^attempt × 10`s (10/20/40s) — Pipeline: `min(1.0 × 2^attempt, 30.0)`s (1/2/4s) |
 
@@ -284,15 +285,14 @@ graph TB
         Registry["ToolRegistry<br/>38 base tools"]
         Policy["PolicyChain<br/>+ NodeScopePolicy"]
         SkillReg["SkillRegistry<br/>(auto-inject)"]
-        MCPInstall["MCP Auto-Install<br/>(31 catalog)"]
+        MCPInstall["MCP Auto-Install<br/>(38 catalog)"]
     end
 
-    subgraph MCPAdapters["MCP Adapters (Client)"]
-        Steam["Steam MCP"]
+    subgraph MCPAdapters["MCP Adapters (Client, 4 active)"]
         Brave["Brave Search"]
-        KGMem["KG Memory"]
-        CompSig["CompositeSignal"]
-        FixSig["FixtureSignal"]
+        Steam["Steam MCP"]
+        ArXiv["arXiv MCP"]
+        PW["Playwright MCP"]
     end
 
     subgraph MCPServer["MCP Server (FastMCP)"]
@@ -315,15 +315,16 @@ graph TB
     style MCPServer fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
 ```
 
-**MCP Adapters (Client)** — 외부 데이터 소스 연결:
+**MCP Adapters (Client, 4 active)** — 외부 데이터 소스 연결:
 
-| Adapter | 용도 | Port |
-|---------|------|------|
-| Steam MCP | Steam API 게임 데이터 (가격, 리뷰, 태그) | `SignalEnrichmentPort` |
-| Brave Search | 웹 검색 기반 시그널 수집 | `SignalEnrichmentPort` |
-| KG Memory | Knowledge Graph 기반 IP 관계 검색 | `MemoryPort` |
-| CompositeSignal | 다중 소스 시그널 통합 | `SignalEnrichmentPort` |
-| FixtureSignal | 로컬 fixture JSON 기반 시그널 (dry-run) | `SignalEnrichmentPort` |
+| Adapter | 패키지 | 용도 |
+|---------|--------|------|
+| **Brave Search** | `@brave/brave-search-mcp-server` | 웹 검색 기반 시그널 수집 (`BRAVE_API_KEY` 필요) |
+| **Steam** | `steam-mcp-server` | Steam API 게임 데이터 (가격, 리뷰, 태그, 동접) |
+| **arXiv** | `@fre4x/arxiv` | 학술 논문 검색/조회 (게임 연구 시그널) |
+| **Playwright** | `@playwright/mcp` | 브라우저 자동화 (웹 크롤링, 스크린샷) |
+
+> PR#72에서 미연결 MCP 서버(discord/e2b/igdb)를 제거하여 7 → 4개로 정리. `MCPServerManager`는 env var가 빈 문자열이면 연결 시도 없이 graceful skip.
 
 **MCP Server (FastMCP)** — GEODE를 외부 에이전트에서 호출:
 
@@ -851,6 +852,7 @@ core/
 │       └── mcp/                # Steam, Brave, KGMemory MCP adapters + catalog (31 entries)
 ├── llm/                        # LLM client (prompt caching, streaming)
 │   ├── client.py               # Anthropic wrapper + token tracking + cost
+│   ├── token_tracker.py        # TokenTracker singleton (model pricing, cost calculation)
 │   └── prompts/                # Prompt templates (.md) + axes config
 │       ├── analyst.md          # Analyst system prompt template
 │       ├── evaluator.md        # Evaluator prompt template
@@ -881,7 +883,9 @@ core/
 │   └── ...                     # analysis, signal_tools, data_tools, etc.
 ├── ui/                         # Rich console + Claude Code-style agentic UI
 │   ├── agentic_ui.py           # ▸/✓/✗/✢/● markers (tool call/result/token rendering)
-│   └── console.py              # Rich Console singleton (width=120, GEODE theme)
+│   ├── console.py              # Rich Console singleton (width=120, GEODE theme)
+│   ├── status.py               # GeodeStatus spinner (✢ model · tokens · cost · elapsed)
+│   └── streaming.py            # Streaming graph progress handler
 └── verification/               # Guardrails + BiasBuster + Rights Risk
 ```
 
@@ -937,7 +941,7 @@ uv run pre-commit run --all-files
 | `GEODE_STEAM_MCP_URL` | | Steam MCP 서버 URL |
 | `GEODE_BRAVE_MCP_URL` | | Brave Search MCP 서버 URL |
 | `GEODE_BRAVE_API_KEY` | | Brave Search API 키 |
-| `GEODE_KG_MEMORY_MCP_URL` | | KG Memory MCP 서버 URL |
+| `GEODE_KG_MEMORY_MCP_URL` | | KG Memory MCP 서버 URL (미사용, 향후 제거 예정) |
 | **Observability** | | |
 | `LANGCHAIN_TRACING_V2` | `false` | LangSmith tracing 활성화 |
 | `LANGCHAIN_API_KEY` | | LangSmith API 키 |
