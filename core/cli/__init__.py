@@ -2379,6 +2379,18 @@ def _interactive_loop() -> None:
     except Exception:
         log.debug("Domain adapter initialization skipped", exc_info=True)
 
+    # Wire memory contextvars so note_read/note_save/rule_* tools work
+    # (otherwise they return "Project memory not available")
+    from core.memory.organization import MonoLakeOrganizationMemory
+    from core.memory.project import ProjectMemory
+    from core.tools.memory_tools import set_org_memory, set_project_memory
+
+    try:
+        set_project_memory(ProjectMemory())
+        set_org_memory(MonoLakeOrganizationMemory())
+    except Exception:
+        log.debug("Memory context initialization skipped", exc_info=True)
+
     # Key gate: block until API key provided or user quits
     readiness = _get_readiness()
     if readiness is None or readiness.blocked:
