@@ -2,7 +2,7 @@
   <img src="assets/geode-social-preview.png" alt="GEODE — 범용 자율 실행 에이전트" width="720" />
 </p>
 
-# GEODE v0.10.1 — 범용 자율 실행 에이전트
+# GEODE v0.11.0 — 범용 자율 실행 에이전트
 
 LangGraph 기반 범용 자율 실행 에이전트입니다. 리서치, 분석, 자동화, 스케줄링 등 다양한 작업을 자율적으로 수행하며, 게임 IP 분석은 Domain Plugin으로 제공됩니다.
 - 6-Layer 아키텍처 + PSM 14-Axis 루브릭 기반 IP 분석/평가 파이프라인을 Domain Plugin(`GameIPDomain`)으로 탑재합니다.
@@ -22,13 +22,13 @@ LangGraph 기반 범용 자율 실행 에이전트입니다. 리서치, 분석, 
 | **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 15 rounds, WRAP_UP_HEADROOM=2), multi-intent 자동 chaining, clarification |
 | **Multi-turn Context** | 슬라이딩 윈도우 대화 기록 (max 20 turns), 대명사 해석 + follow-up |
 | **HITL Bash** | 셸 명령 실행 + 위험 패턴 차단 (9종) + 사용자 승인 게이트 |
-| **Sub-Agent** | Full AgenticLoop 상속 (tools/MCP/skills/memory), 재귀 depth 제어 (max_depth=2, max_total=15), `SubAgentResult` 표준 스키마 |
+| **Sub-Agent** | Full AgenticLoop 상속 (tools/MCP/skills/memory), 재귀 depth 제어 (max_depth=2, max_total=15), `SubAgentResult` + `ErrorCategory`, async `adelegate()` |
 | **14-Axis Rubric** | PSM(Prospect Scoring Model) 기반 정량 평가 |
 | **Cross-LLM Ensemble** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, `cross` / `primary_only` 모드 |
 | **Prompt Caching** | Anthropic `cache_control` 적용, 40-60% 비용 절감 |
 | **38+ Tool Definitions** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + PolicyChain 접근 제어 (MCP 포함 60+) |
 | **Skills 시스템** | `.claude/skills/*/SKILL.md` 자동 발견, 시스템 프롬프트 주입, NL 트리거 매칭 |
-| **MCP 자동설치** | "LinkedIn MCP 달아줘" → 29개 빌트인 카탈로그 검색 → 설치 → 도구 핫 리로드 |
+| **MCP 자동설치** | "LinkedIn MCP 달아줘" → 38개 빌트인 카탈로그 검색 → 설치 → 도구 핫 리로드 |
 | **Clarification** | 필수 파라미터 누락 시 되묻기 (slot filling, disambiguation), max_rounds 방지 |
 | **MCP Adapters** | Brave Search, Steam, arXiv, Playwright 외부 데이터 소스 연결 (4 active) |
 | **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
@@ -52,6 +52,7 @@ LangGraph 기반 범용 자율 실행 에이전트입니다. 리서치, 분석, 
 | **Claude Code Status Line** | `GeodeStatus` 스피너 (✢ model · ↓input ↑output · $cost · elapsed) + progressive log |
 | **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring/decision tree 플러그인 인터페이스 |
 | **Operations Debugging** | D1-D5 패턴 기반 safe default, ContextVar lifecycle, closure capture, graceful degradation |
+| **asyncio Runtime** | `AsyncAnthropic` + `asyncio.to_thread` 기반 비차단 실행. `arun()` 단일 구현, `run()` = sync 래퍼 |
 | **2168+ Tests** | 131 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit 전체 통과 |
 
 ## Architecture
@@ -275,7 +276,7 @@ graph LR
 | **TaskGraph (DAG)** | 의존 관계 기반 실행 순서 결정, 순환 감지, 완료 상태 추적 |
 | **CoalescingQueue** | 동일 IP 중복 분석 요청 병합 (dedup key: IP name + mode) |
 | **IsolatedRunner** | `asyncio.Semaphore(MAX_CONCURRENT=5)` — 최대 5개 워커 병렬 실행 |
-| **HookSystem** | 26개 라이프사이클 이벤트 — `NODE_ENTER`/`NODE_EXIT`/`NODE_ERROR` 등 실시간 모니터링 |
+| **HookSystem** | 27개 라이프사이클 이벤트 — `NODE_ENTER`/`NODE_EXIT`/`NODE_ERROR`/`SUBAGENT_*` 등 + async `atrigger()` |
 
 ### MCP & Tool Architecture
 
@@ -864,7 +865,7 @@ core/
 ├── memory/                     # 3-Tier memory system
 ├── nodes/                      # Pipeline nodes (8: router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
 ├── orchestration/
-│   ├── hooks.py                # HookSystem (26 events)
+│   ├── hooks.py                # HookSystem (27 events + async atrigger)
 │   ├── hook_discovery.py       # Plugin-based hook loading
 │   ├── isolated_execution.py   # Concurrent runner (semaphore)
 │   ├── task_system.py          # DAG-based task graph
