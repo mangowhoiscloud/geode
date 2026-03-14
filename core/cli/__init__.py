@@ -2388,6 +2388,9 @@ def _interactive_loop() -> None:
         _mgr = MCPServerManager()
         if _mgr.load_config() > 0:
             mcp_mgr = _mgr
+            import atexit
+
+            atexit.register(_mgr.close_all)
     except Exception:
         log.debug("MCP initialization skipped", exc_info=True)
 
@@ -2506,7 +2509,13 @@ def _interactive_loop() -> None:
                 log.error("Agentic loop error: %s", exc, exc_info=True)
                 console.print(f"\n  [error]Error: {exc}[/error]\n")
 
-    # Clean shutdown of SchedulerService
+    # Clean shutdown: MCP servers → SchedulerService
+    if mcp_mgr is not None:
+        try:
+            mcp_mgr.close_all()
+        except Exception:
+            log.debug("MCP shutdown error", exc_info=True)
+
     _sched = _scheduler_service_ctx.get(None)
     if _sched is not None:
         try:
