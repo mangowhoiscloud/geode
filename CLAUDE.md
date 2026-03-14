@@ -376,7 +376,7 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
 
 **문서/리팩터만 변경 시**: CHANGELOG 항목 불필요 (Scope Rules 참조).
 
-#### 4b. README.md + CLAUDE.md 수치 동기화 (매 커밋)
+#### 4b. README.md + CLAUDE.md 수치·묘사·시각화 동기화 (매 커밋)
 
 ```bash
 # 아래 수치가 변경되면 README.md + CLAUDE.md를 같이 갱신
@@ -388,13 +388,30 @@ echo "Tests: $TESTS  Modules: $MODULES  Tools: $TOOLS"
 # → CLAUDE.md Tests/Modules, README.md 해당 수치와 대조
 ```
 
+**수치 정합성:**
+
 | 검증 항목 | CLAUDE.md 위치 | README.md 위치 |
 |----------|---------------|---------------|
-| 테스트 수 | `Tests: XXXX+` | Architecture 섹션 |
-| 모듈 수 | `Modules: XXX` | Architecture 섹션 |
-| Tool 수 | NL Router 테이블 | Tool 테이블 |
-| 프로젝트 구조 | Project Structure 트리 | 해당 시 |
-| Tier/Score | Expected Test Results | 해당 시 |
+| 테스트 수 | `Tests: XXXX+` | Features 테이블 마지막 행 |
+| 모듈 수 | `Modules: XXX` | Features 테이블 마지막 행 |
+| Tool 수 | NL Router 테이블 | Features 테이블 + Tool 목록 38종 |
+| HookSystem 이벤트 수 | Orchestration 섹션 | Sub-Agent Orchestration 테이블 |
+| MCP Adapter 수 | MCP 설정 | MCP & Tool Architecture 섹션 |
+| 프로젝트 구조 | Project Structure 트리 | Project Structure 트리 |
+| Tier/Score | Expected Test Results | Available IPs 테이블 |
+
+**묘사·시각화 정합성** (코드 동작이 바뀌면 README Mermaid도 갱신):
+
+| 검증 항목 | README.md 섹션 | 확인 방법 |
+|----------|---------------|----------|
+| Pipeline 노드 수/이름 | Pipeline Flow (mermaid) + 테이블 | `graph.py` 노드 등록과 대조 |
+| Agentic Loop 파라미터 | Agentic Loop (mermaid) + 테이블 | `DEFAULT_MAX_ROUNDS`, `WRAP_UP_HEADROOM` 등 상수 대조 |
+| CLI Input 처리 흐름 | CLI Input & Terminal (mermaid) | `_read_multiline_input()`, `_build_prompt_session()` 대조 |
+| BiasBuster Fast Path 조건 | BiasBuster (mermaid) + 테이블 | `verification/biasbuster.py` 임계값 대조 |
+| MCP Adapter 목록 | MCP & Tool Architecture (mermaid) + 테이블 | `.claude/mcp_servers.json` 대조 |
+| Sub-Agent 구성요소 | Sub-Agent Orchestration (mermaid) | `sub_agent.py` 클래스 대조 |
+| External IP Fallback 단계 | External IP Signal Fallback (mermaid) | `router.py`, `signals.py` 대조 |
+| CHANGELOG `[Unreleased]` | — | 머지된 PR body와 대조 (feature/fix PR만) |
 
 #### 4c. 버전업 판단 (릴리스 시에만)
 
