@@ -441,6 +441,7 @@ def make_pipeline_handler(
     search_fn: Callable[..., dict[str, Any]] | None = None,
     compare_fn: Callable[..., dict[str, Any]] | None = None,
     report_fn: Callable[..., tuple[str, str] | None] | None = None,
+    force_dry_run: bool = True,
 ) -> Callable[..., dict[str, Any]]:
     """Create a task_handler routing task_type to pipeline functions."""
 
@@ -454,7 +455,7 @@ def make_pipeline_handler(
             ip_name = args.get("ip_name", "")
             if not ip_name:
                 return {"error": "ip_name required for analyze task"}
-            dry_run = args.get("dry_run", True)
+            dry_run = args.get("dry_run", force_dry_run)
             result = run_analysis_fn(ip_name, dry_run=dry_run)
             if result is None:
                 return {"error": f"Analysis failed for '{ip_name}'"}
