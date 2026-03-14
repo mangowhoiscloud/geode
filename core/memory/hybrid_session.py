@@ -215,19 +215,29 @@ class HybridSessionStore:
 
     def get(self, session_id: str) -> dict[str, Any] | None:
         """Get from L1, fallback to L2. Backfill L1 on L2 hit."""
-        data = self._l1.get(session_id)
+        try:
+            data = self._l1.get(session_id)
+        except Exception:
+            log.debug("L1 read failed for %s, falling back to L2", session_id)
+            data = None
         if data is not None:
             return data
 
         data = self._l2.get(session_id)
         if data is not None:
             # Backfill L1
-            self._l1.set(session_id, data)
+            try:
+                self._l1.set(session_id, data)
+            except Exception:
+                log.debug("L1 backfill failed for %s", session_id)
         return data
 
     def set(self, session_id: str, data: dict[str, Any]) -> None:
         """Write-through: write to both L1 and L2."""
-        self._l1.set(session_id, data)
+        try:
+            self._l1.set(session_id, data)
+        except Exception:
+            log.debug("L1 write failed for %s, continuing with L2", session_id)
         self._l2.set(session_id, data)
 
     def delete(self, session_id: str) -> bool:
@@ -242,12 +252,19 @@ class HybridSessionStore:
 
     def save_checkpoint(self, session_id: str, checkpoint_data: dict[str, Any]) -> None:
         """Save checkpoint to both tiers."""
-        self._l1.save_checkpoint(session_id, checkpoint_data)
+        try:
+            self._l1.save_checkpoint(session_id, checkpoint_data)
+        except Exception:
+            log.debug("L1 checkpoint write failed for %s", session_id)
         self._l2.save_checkpoint(session_id, checkpoint_data)
 
     def load_checkpoint(self, session_id: str) -> dict[str, Any] | None:
         """Load checkpoint from L1, fallback to L2."""
-        data = self._l1.load_checkpoint(session_id)
+        try:
+            data = self._l1.load_checkpoint(session_id)
+        except Exception:
+            log.debug("L1 checkpoint read failed for %s, falling back to L2", session_id)
+            data = None
         if data is not None:
             return data
         return self._l2.load_checkpoint(session_id)

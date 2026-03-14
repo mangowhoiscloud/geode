@@ -479,7 +479,7 @@ def make_pipeline_handler(
                 ip_name,
                 fmt=args.get("format", "markdown"),
                 template=args.get("template", "summary"),
-                dry_run=args.get("dry_run", True),
+                dry_run=args.get("dry_run", force_dry_run),
             )
             if report_result is None:
                 return {"error": f"Report generation failed for '{ip_name}'"}
