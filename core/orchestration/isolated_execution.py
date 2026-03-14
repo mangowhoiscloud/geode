@@ -197,10 +197,14 @@ class IsolatedRunner:
         result_holder: list[IsolationResult] = []
         error_holder: list[str] = []
 
+        # Capture cancel event before thread creation to avoid
+        # a race condition on self._cancel_flags inside the thread.
+        with self._lock:
+            cancel_event = self._cancel_flags.get(config.session_id)
+
         def _target() -> None:
             try:
-                # Check cancel flag before execution
-                cancel_event = self._cancel_flags.get(config.session_id)
+                # Check cancel flag before execution (uses captured value)
                 if cancel_event and cancel_event.is_set():
                     error_holder.append("Cancelled before execution")
                     return

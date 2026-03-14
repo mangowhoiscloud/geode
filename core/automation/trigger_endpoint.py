@@ -133,6 +133,20 @@ class TriggerEndpoint:
         self._auth_token = auth_token
         self._mappings: dict[str, TriggerMapping] = {}
 
+        # ContextVar initialization — TriggerManager callbacks may invoke
+        # pipeline nodes that depend on memory ContextVars (org_memory,
+        # project_memory).  Without this, any callback touching LLM tools
+        # would find None callables → RuntimeError.
+        try:
+            from core.memory.organization import MonoLakeOrganizationMemory
+            from core.memory.project import ProjectMemory
+            from core.tools.memory_tools import set_org_memory, set_project_memory
+
+            set_project_memory(ProjectMemory())
+            set_org_memory(MonoLakeOrganizationMemory())
+        except Exception:
+            log.debug("Memory context initialization skipped", exc_info=True)
+
     # -- auth ---------------------------------------------------------------
 
     def validate_auth(self, token: str | None) -> bool:

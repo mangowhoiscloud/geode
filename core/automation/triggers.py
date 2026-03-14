@@ -252,11 +252,15 @@ class TriggerManager:
         """Create a HookSystem-compatible handler for an event trigger (F3).
 
         Returns a handler that can be registered with HookSystem.
+        The config is captured at creation time to avoid a race condition
+        on self._triggers when the handler is called from another thread.
         """
+        config = self._triggers.get(trigger_id)
+        if config is None:
+            return lambda _event, _data: None
 
         def _handler(event: Any, data: dict[str, Any]) -> None:
-            config = self._triggers.get(trigger_id)
-            if config and config.enabled:
+            if config.enabled:
                 self._execute_trigger(config, {**data, "event": str(event)})
 
         return _handler
