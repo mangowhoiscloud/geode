@@ -8,8 +8,8 @@
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 124
-- **Tests**: 2125+
+- **Modules**: 131
+- **Tests**: 2168+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -265,6 +265,41 @@ NLRouter는 Claude Opus 4.6 Tool Use로 자연어 → 도구 호출을 매핑한
 
 기능 구현 시 아래 재귀개선 루프를 따른다. 각 단계에서 실패/품질 저하 발견 시 이전 단계로 돌아간다.
 
+### 0. Worktree 작업 공간 분할
+
+**병렬 작업이나 독립 기능 개발 시 git worktree로 격리된 작업 공간을 생성한다.** main 저장소를 오염시키지 않고 안전하게 실험/개발 가능.
+
+```bash
+# 생성: feature 브랜치 + 격리된 디렉토리
+git worktree add .claude/worktrees/<작업명> -b feature/<브랜치명>
+
+# 작업 디렉토리로 이동 (Claude Code는 자동 인식)
+cd .claude/worktrees/<작업명>
+
+# 작업 중 원본 저장소와 독립적으로 커밋/테스트 가능
+uv run pytest tests/ -q
+git add -A && git commit -m "feat: ..."
+```
+
+**작업 완료 후 정리:**
+
+```bash
+# 1. 변경사항을 원본 저장소 브랜치로 푸시
+git push origin feature/<브랜치명>
+
+# 2. 원본 저장소로 돌아가기
+cd /Users/mango/workspace/nexon/ai-live/geode
+
+# 3. worktree 제거 + 브랜치 삭제 (PR merge 후)
+git worktree remove .claude/worktrees/<작업명>
+git branch -d feature/<브랜치명>
+```
+
+**주의사항:**
+- worktree 내에서 `git checkout`으로 브랜치 전환 금지 (같은 브랜치를 두 곳에서 체크아웃 불가)
+- `.claude/worktrees/`는 `.gitignore`에 포함되어 원격에 푸시되지 않음
+- worktree에서 작업 중이면 원본에서 해당 브랜치 체크아웃 불가
+
 ### 1. Research → Plan
 
 ```
@@ -317,37 +352,51 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
 | 품질 저하 (score 이상) | → 해당 노드 로직 점검 → 2번 |
 | 모두 통과 | → 4번 진행 |
 
-### 4. Document → Skill Update
+### 4. Docs-Sync (PR 전 필수 게이트)
 
+**코드 변경과 동일 커밋에 문서를 동기화한다.** PR 생성 전에 반드시 완료. 별도 후속 커밋으로 미루지 않는다.
+
+#### 4a. CHANGELOG.md 동기화 (매 커밋)
+
+**모든 코드 변경 커밋에 CHANGELOG 항목을 포함한다.** `[Unreleased]`에 누적 → 릴리스 시 버전 부여.
+
+```bash
+# 변경 유형 판별 → 해당 카테고리에 1줄 추가
+#   Added:    새 기능, 새 모듈, 새 도구
+#   Changed:  기존 동작 변경, 성능 개선, 기본값 변경
+#   Fixed:    버그 수정
+#   Removed:  삭제된 기능
+#   Infrastructure: CI, 의존성, 빌드
+#   Architecture:   구조적 결정
+
+# 예시 — 커밋 메시지가 "fix: MCP orphan 방지" 이면:
+# CHANGELOG.md [Unreleased] → Fixed 에 추가:
+# - MCP orphan 프로세스 방지 — REPL 종료 시 close_all() 호출
 ```
-1. docs/e2e-orchestration-scenarios.md 갱신 (시나리오 추가/변경)
-2. tests/test_e2e_live_llm.py 갱신 (라이브 테스트 추가)
-3. .claude/skills/geode-e2e/SKILL.md 갱신 (시나리오 매핑 테이블)
-4. CLAUDE.md 갱신 (기능/테스트 수/NL 도구 수)
-5. README.md 정합성 검증 (아래 §4a 참조)
-6. CHANGELOG.md 버전업 판단 (아래 §4b 참조)
+
+**문서/리팩터만 변경 시**: CHANGELOG 항목 불필요 (Scope Rules 참조).
+
+#### 4b. README.md + CLAUDE.md 수치 동기화 (매 커밋)
+
+```bash
+# 아래 수치가 변경되면 README.md + CLAUDE.md를 같이 갱신
+TESTS=$(uv run pytest tests/ -q 2>&1 | grep -oP '\d+ passed' | grep -oP '\d+')
+MODULES=$(find core/ -name "*.py" | wc -l | tr -d ' ')
+TOOLS=$(python3 -c "import json; print(len(json.load(open('core/tools/definitions.json'))))")
+
+echo "Tests: $TESTS  Modules: $MODULES  Tools: $TOOLS"
+# → CLAUDE.md Tests/Modules, README.md 해당 수치와 대조
 ```
 
-#### 4a. README.md 정합성 검증 (PR 전 필수)
+| 검증 항목 | CLAUDE.md 위치 | README.md 위치 |
+|----------|---------------|---------------|
+| 테스트 수 | `Tests: XXXX+` | Architecture 섹션 |
+| 모듈 수 | `Modules: XXX` | Architecture 섹션 |
+| Tool 수 | NL Router 테이블 | Tool 테이블 |
+| 프로젝트 구조 | Project Structure 트리 | 해당 시 |
+| Tier/Score | Expected Test Results | 해당 시 |
 
-PR 생성 전 README.md가 코드와 일치하는지 검증한다.
-
-| 검증 항목 | 확인 방법 |
-|----------|----------|
-| 테스트 수 | `uv run pytest tests/ -q` 결과와 README 기재 수 일치 |
-| 모듈 수 | `find core/ -name "*.py" \| wc -l` 결과와 일치 |
-| Tool 수 | `definitions.json` 항목 수 = README tool 테이블 행 수 |
-| 프로젝트 구조 | 신규 파일/디렉토리가 README 트리에 반영됨 |
-| 다이어그램 | 파이프라인 노드/엣지 변경 시 아키텍처 다이어그램 갱신 |
-| Tier/Score | fixture 결과(Berserk S/81.3 등)가 변경 시 README 업데이트 |
-
-불일치 발견 시 README를 수정하고 동일 커밋에 포함한다.
-
-#### 4b. CHANGELOG.md 버전업 절차
-
-변경 규모에 따라 버전업 여부를 판단하고, 필요 시 아래 절차를 수행한다.
-
-**버전업 판단 기준 (SemVer):**
+#### 4c. 버전업 판단 (릴리스 시에만)
 
 | 변경 규모 | 버전 | 예시 |
 |----------|------|------|
@@ -356,19 +405,22 @@ PR 생성 전 README.md가 코드와 일치하는지 검증한다.
 | 버그 수정/개선 | PATCH (0.0.x) | 직렬화 수정, 트레이싱 추가 |
 | 문서/리팩터만 | 버전업 안 함 | README 수정, 내부 리팩터 |
 
-**절차:**
+```
+릴리스 절차:
+1. [Unreleased] → [x.y.z] — YYYY-MM-DD 로 변환
+2. CLAUDE.md Version 필드 업데이트
+3. pyproject.toml version 필드 업데이트
+4. Version History 테이블에 행 추가
+5. 비교 링크 업데이트 ([Unreleased] compare URL)
+6. 동일 커밋에 CHANGELOG.md + CLAUDE.md + pyproject.toml 포함
+```
+
+#### 4d. Skill / E2E 문서 (해당 시)
 
 ```
-1. CHANGELOG.md [Unreleased] 섹션에 변경 사항 기록
-   - Added / Changed / Fixed / Removed / Infrastructure / Architecture 카테고리 사용
-   - Feature-level 단위 (커밋 단위 X)
-2. 버전업 필요 시:
-   a. [Unreleased] → [x.y.z] — YYYY-MM-DD 로 변환
-   b. CLAUDE.md Version 필드 업데이트
-   c. pyproject.toml version 필드 업데이트 (있는 경우)
-   d. 하단 Version History 테이블에 행 추가
-   e. 비교 링크 업데이트 ([Unreleased] compare URL)
-3. 동일 커밋에 CHANGELOG.md + CLAUDE.md + pyproject.toml 포함
+1. docs/e2e-orchestration-scenarios.md 갱신 (시나리오 추가/변경)
+2. tests/test_e2e_live_llm.py 갱신 (라이브 테스트 추가)
+3. .claude/skills/ 갱신 (시나리오 매핑 테이블)
 ```
 
 ### 5. PR & Merge

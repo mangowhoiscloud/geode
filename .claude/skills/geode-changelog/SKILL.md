@@ -61,10 +61,18 @@ PATCH: 버그 수정, 성능 개선
 
 ## 작성 절차
 
-### 새 기능 개발 완료 시
-1. `[Unreleased]` 섹션에 항목 추가
-2. 카테고리별 정리 (Added/Changed/Fixed)
-3. 한 줄 요약 + 필요시 커밋 해시 참조
+### 코드 변경 커밋 시 (매번 필수)
+
+**코드 변경과 동일 커밋에 CHANGELOG 항목을 포함한다.** PR 후 별도 커밋으로 미루지 않는다.
+
+```
+1. 변경 유형 판별 → [Unreleased] 해당 카테고리에 1줄 추가
+2. CLAUDE.md 수치 변경 시 동기화 (Tests, Modules)
+3. README.md 수치 변경 시 동기화
+4. 코드 + CHANGELOG + 문서를 하나의 커밋으로
+```
+
+**예외**: 문서/리팩터만 변경 시 CHANGELOG 항목 불필요.
 
 ### 릴리스 시
 1. `[Unreleased]` → `[X.Y.Z] — YYYY-MM-DD` 로 전환
