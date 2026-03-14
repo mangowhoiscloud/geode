@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     default_secondary_model: str = "gpt-5.4"  # see OPENAI_PRIMARY
     agreement_threshold: float = 0.67
 
+    # Sub-Agent Orchestration (P2)
+    max_subagent_depth: int = 2  # 최대 재귀 깊이 (root=0 → depth 2까지 허용)
+    max_total_subagents: int = 15  # 세션 내 최대 서브에이전트 수
+    subagent_max_rounds: int = 10  # 서브에이전트 agentic loop 라운드 제한
+    subagent_max_tokens: int = 8192  # 서브에이전트 출력 토큰 제한
+
 
 _settings_instance: Settings | None = None
 

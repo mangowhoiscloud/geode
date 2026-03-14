@@ -1361,18 +1361,31 @@ def _text_requests_dry_run(text: str) -> bool:
     return bool(_DRY_RUN_PATTERN.search(text))
 
 
-def _build_sub_agent_manager(verbose: bool = False) -> Any:
-    """Build a SubAgentManager wired to real pipeline functions."""
+def _build_sub_agent_manager(
+    verbose: bool = False,
+    *,
+    action_handlers: dict[str, Any] | None = None,
+    mcp_manager: Any = None,
+    skill_registry: Any = None,
+) -> Any:
+    """Build a SubAgentManager wired to real pipeline functions.
+
+    P2-B: When ``action_handlers`` is provided, sub-agents receive a full
+    AgenticLoop with the same tool set, MCP servers, and skills as the parent.
+    Falls back to legacy ``make_pipeline_handler`` if handlers are not provided.
+    """
     from core.cli.sub_agent import (
         SubAgentManager,
         make_pipeline_handler,
     )
+    from core.config import settings
     from core.extensibility.agents import AgentRegistry
     from core.orchestration.isolated_execution import IsolatedRunner
 
     readiness = _get_readiness()
     force_dry = readiness.force_dry_run if readiness else True
 
+    # Legacy fallback handler (used when action_handlers is not provided)
     handler = make_pipeline_handler(
         run_analysis_fn=lambda ip_name, dry_run=force_dry, **_kw: _run_analysis(
             ip_name, dry_run=dry_run, verbose=verbose
@@ -1402,6 +1415,12 @@ def _build_sub_agent_manager(verbose: bool = False) -> Any:
         handler,
         timeout_s=300.0,
         agent_registry=registry,
+        # P2-B: Full AgenticLoop inheritance
+        action_handlers=action_handlers,
+        mcp_manager=mcp_manager,
+        skill_registry=skill_registry,
+        depth=0,
+        max_depth=settings.max_subagent_depth,
     )
 
 
@@ -2470,7 +2489,12 @@ def _interactive_loop() -> None:
     handlers = _build_tool_handlers(
         verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref, skill_registry=skill_registry
     )
-    sub_mgr = _build_sub_agent_manager(verbose=verbose)
+    sub_mgr = _build_sub_agent_manager(
+        verbose=verbose,
+        action_handlers=handlers,
+        mcp_manager=mcp_mgr,
+        skill_registry=skill_registry,
+    )
     executor = ToolExecutor(
         action_handlers=handlers,
         mcp_manager=mcp_mgr,
@@ -2536,6 +2560,9 @@ def _interactive_loop() -> None:
                 )
                 sub_mgr = _build_sub_agent_manager(
                     verbose=verbose,
+                    action_handlers=handlers,
+                    mcp_manager=mcp_mgr,
+                    skill_registry=skill_registry,
                 )
                 executor = ToolExecutor(
                     action_handlers=handlers,

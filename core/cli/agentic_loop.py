@@ -55,6 +55,44 @@ def get_agentic_tools(registry: ToolRegistry | None = None) -> list[dict[str, An
     return tools
 
 
+# ---------------------------------------------------------------------------
+# Token guard — prevent oversized tool results from exploding context (P2-A)
+# ---------------------------------------------------------------------------
+MAX_TOOL_RESULT_TOKENS = 4096  # ~16K chars
+
+
+def _guard_tool_result(
+    result: dict[str, Any],
+    max_tokens: int = MAX_TOOL_RESULT_TOKENS,
+) -> dict[str, Any]:
+    """Truncate oversized tool results while preserving summary."""
+    try:
+        serialized = json.dumps(result, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return result
+    estimated_tokens = len(serialized) // 4
+    if estimated_tokens <= max_tokens:
+        return result
+    # Preserve summary if present (SubAgentResult always has one)
+    if "summary" in result:
+        guarded: dict[str, Any] = {
+            "summary": result["summary"],
+            "_truncated": True,
+            "_original_tokens": estimated_tokens,
+        }
+        # Keep lightweight fields
+        for key in ("task_id", "task_type", "status", "error_message", "tier"):
+            if key in result:
+                guarded[key] = result[key]
+        return guarded
+    # No summary — return preview
+    return {
+        "_truncated": True,
+        "_original_tokens": estimated_tokens,
+        "preview": serialized[: max_tokens * 4],
+    }
+
+
 @dataclass
 class AgenticResult:
     """Result of an agentic loop execution."""
@@ -78,7 +116,7 @@ class AgenticLoop:
     """
 
     DEFAULT_MAX_ROUNDS = 15
-    DEFAULT_MAX_TOKENS = 8192
+    DEFAULT_MAX_TOKENS = 16384
     MAX_CLARIFICATION_ROUNDS = 3
     WRAP_UP_HEADROOM = 2  # force text response N rounds before max
 
@@ -530,6 +568,10 @@ class AgenticLoop:
                     "result": result,
                 }
             )
+
+            # Token guard: truncate oversized results to prevent context explosion
+            if isinstance(result, dict):
+                result = _guard_tool_result(result)
 
             # Serialize result as JSON for LLM (not Python repr)
             try:
