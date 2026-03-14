@@ -66,6 +66,32 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
                 ),
             )
 
+        # Fast path: when stats look clean, skip expensive LLM call.
+        # LLM bias detection rarely overturns a clean statistical profile,
+        # so we only invoke LLM when CV < 0.10 (potential anchoring) or
+        # score range is suspiciously narrow.
+        score_range = stats["max"] - stats["min"]
+        if not low_variance_flag and stats["cv"] >= 0.10 and score_range >= 0.5:
+            log.info(
+                "BiasBuster fast path: CV=%.2f, range=%.1f — stats clean, LLM skipped",
+                stats["cv"],
+                score_range,
+            )
+            return BiasBusterResult(
+                confirmation_bias=False,
+                recency_bias=False,
+                anchoring_bias=False,
+                position_bias=False,
+                verbosity_bias=False,
+                self_enhancement_bias=False,
+                overall_pass=True,
+                explanation=(
+                    f"Statistical check clean (CV={stats['cv']:.2f}, "
+                    f"range=[{stats['min']:.1f}, {stats['max']:.1f}]). "
+                    "LLM verification skipped."
+                ),
+            )
+
         # Tool-augmented path: LLM can query memory for historical bias patterns
         raw_tool_defs: Any = state.get("_tool_definitions", [])
         if raw_tool_defs and not low_variance_flag:
