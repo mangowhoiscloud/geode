@@ -28,7 +28,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-운영 안정성 강화 + 서브에이전트 Full AgenticLoop 상속 + asyncio 전환 + 외부 IP 분석 지원 + BiasBuster 성능 최적화 + D1-D5 디버깅 패턴 감사 + MCP 카탈로그 정합성.
+---
+
+## [0.11.0] — 2026-03-15
+
+서브에이전트 Full AgenticLoop 상속 + asyncio 전환 + 외부 IP 분석 지원 + BiasBuster 성능 최적화 + D1-D5 운영 디버깅 감사 + MCP 정합성.
 
 ### Added
 - 미등록 IP 외부 시그널 수집 — `signals.py` 3단계 fallback (adapter → fixture → Anthropic web search)
@@ -508,6 +512,7 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.11.0 | 2026-03-15 | SubAgent Full Inheritance, asyncio 전환, External IP, BiasBuster fast path, D1-D5 감사 |
 | 0.10.1 | 2026-03-13 | UI/UX 리브랜딩, Domain Plugin, Agentic 강건성, 리포트 상용화, MCP 정규화 |
 | 0.10.0 | 2026-03-12 | SubAgent 병렬 실행, SchedulerService 와이어링, NL 스케줄, OpenClaw 세션 격리 |
 | 0.9.0 | 2026-03-11 | General Assistant, Skills, MCP 자동설치, Clarification, 마스코트 |
@@ -517,7 +522,8 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/mangowhoiscloud/geode/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/mangowhoiscloud/geode/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/mangowhoiscloud/geode/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mangowhoiscloud/geode/compare/v0.8.0...v0.9.0
