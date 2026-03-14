@@ -2330,10 +2330,17 @@ def _read_multiline_input(prompt: str) -> str:
     else:
         first_line = console.input("> ").strip()
 
+    # Repaint the prompt line to erase wide-char rendering artifacts
+    # (Korean jamo ghosts left after backspace in some terminals).
+    # After Enter, cursor is on the NEXT line; move up, clear, rewrite.
+    if first_line:
+        sys.stdout.write(f"\x1b[F\x1b[2K> {first_line}\n")
+        sys.stdout.flush()
+
     if not first_line:
         return ""
 
-    # Drain pasted lines from stdin buffer
+    # Drain pasted lines from stdin buffer (skip escape sequences)
     lines = [first_line]
     try:
         fd = sys.stdin.fileno()
@@ -2342,7 +2349,9 @@ def _read_multiline_input(prompt: str) -> str:
             if not line:
                 break
             stripped = line.rstrip("\n")
-            if stripped:
+            # Filter out arrow-key / terminal escape sequences that leak
+            # into the buffer (e.g. \x1b[A for Up, \x1b[B for Down).
+            if stripped and "\x1b" not in stripped:
                 lines.append(stripped)
     except (ValueError, OSError):
         pass  # stdin not selectable (piped / non-TTY)
