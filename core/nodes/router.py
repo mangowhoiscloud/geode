@@ -45,12 +45,30 @@ def router_node(state: GeodeState) -> dict[str, Any]:
         if ip_type == "prospect" and mode == "full_pipeline":
             mode = "prospect"
 
-        # Load fixture data
-        fixture = load_fixture(ip_name)
+        # Load fixture data (graceful degradation for unknown IPs)
+        try:
+            fixture = load_fixture(ip_name)
+            ip_info = fixture["ip_info"]
+            monolake = fixture["monolake"]
+        except ValueError:
+            log.info("No fixture for '%s' — using external data mode", ip_name)
+            ip_info = {
+                "ip_name": ip_name,
+                "media_type": "unknown",
+                "release_year": 0,
+                "studio": "unknown",
+                "genre": "unknown",
+                "synopsis": "",
+                "proof_of_game": "none",
+                "franchise_size": 0,
+                "ip_age_years": 0,
+            }
+            monolake = {}
+
         result: dict[str, Any] = {
             "pipeline_mode": mode,
-            "ip_info": fixture["ip_info"],
-            "monolake": fixture["monolake"],
+            "ip_info": ip_info,
+            "monolake": monolake,
         }
 
         # Generate session_id for memory context (fixes GAP-005)
