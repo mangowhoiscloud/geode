@@ -1392,6 +1392,7 @@ def _build_sub_agent_manager(verbose: bool = False) -> Any:
             fmt=kw.get("fmt", "markdown"),
             template=kw.get("template", "summary"),
         ),
+        force_dry_run=readiness.force_dry_run if readiness else True,
     )
     runner = IsolatedRunner()
     registry = AgentRegistry()
