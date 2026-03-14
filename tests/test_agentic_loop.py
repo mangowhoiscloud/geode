@@ -929,10 +929,8 @@ class TestAgenticLoopToolCallRendering:
         mock_response = MagicMock()
         mock_response.content = [tool_block]
 
-        import asyncio
-
         with patch.object(loop._op_logger, "log_tool_call", return_value=True) as mock_log:
-            asyncio.run(loop._process_tool_calls(mock_response))
+            loop._process_tool_calls(mock_response)
             mock_log.assert_called_once_with("analyze_ip", {"ip_name": "Berserk"})
 
     def test_tool_result_renders_dict(self) -> None:
@@ -956,9 +954,7 @@ class TestAgenticLoopToolCallRendering:
             patch.object(loop._op_logger, "log_tool_call", return_value=True),
             patch.object(loop._op_logger, "log_tool_result") as mock_log_result,
         ):
-            import asyncio
-
-            asyncio.run(loop._process_tool_calls(mock_response))
+            loop._process_tool_calls(mock_response)
             mock_log_result.assert_called_once_with(
                 "analyze_ip", {"tier": "S", "score": 81.3}, visible=True
             )
