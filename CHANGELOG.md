@@ -28,13 +28,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-운영 안정성 강화 + 서브에이전트 Full AgenticLoop 상속 + 외부 IP 분석 지원 + BiasBuster 성능 최적화 + D1-D5 디버깅 패턴 감사 + MCP 카탈로그 정합성.
+운영 안정성 강화 + 서브에이전트 Full AgenticLoop 상속 + asyncio 전환 + 외부 IP 분석 지원 + BiasBuster 성능 최적화 + D1-D5 디버깅 패턴 감사 + MCP 카탈로그 정합성.
 
 ### Added
 - 미등록 IP 외부 시그널 수집 — `signals.py` 3단계 fallback (adapter → fixture → Anthropic web search)
 - 외부 IP graceful degradation — `router.py` fixture 미존재 시 최소 `ip_info` 스켈레톤 자동 생성
 - P2 서브에이전트 Full AgenticLoop 상속 — 동일 tools/MCP/skills/memory 제공, 재귀 depth 제어 (max_depth=2, max_total=15)
 - `SubAgentResult` 표준 스키마 + `ErrorCategory` 에러 분류 — 단건/배치 응답 통일
+- P3 asyncio dual-interface — `AgenticLoop.arun()`, `_acall_llm()`, `_aprocess_tool_calls()` async 경로 추가
+- `HookSystem.atrigger()` — 비동기 훅 트리거 (`asyncio.gather()` 기반 동시 실행)
+- `SubAgentManager.adelegate()` — asyncio 기반 비동기 위임 (`asyncio.gather()` 병렬)
+- `AsyncAnthropic` 클라이언트 — agentic loop에서 비차단 LLM 호출
+- REPL에서 `asyncio.run(agentic.arun())` 기본 사용 — sync `run()` 호환 유지
 
 ### Changed
 - BiasBuster 통계 fast path — CV≥0.10 && score range≥0.5일 때 LLM 호출 생략 (10-30초 절감)
