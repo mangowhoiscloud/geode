@@ -277,7 +277,7 @@ def _verification_node(state: GeodeState) -> dict[str, Any]:
         errors.append("Guardrails failed — results may be unreliable (demo mode)")
     if not biasbuster.overall_pass:
         errors.append("BiasBuster flagged potential bias in analysis")
-    if not cross_llm.get("passed", True):
+    if not cross_llm.get("passed", False):
         errors.append("Cross-LLM agreement below threshold")
     if rights_risk.status in (RightsStatus.RESTRICTED, RightsStatus.UNKNOWN):
         errors.append(

@@ -63,7 +63,7 @@ def select_ips(
     return candidates[:top]
 
 
-def _run_analysis_standalone(ip_name: str, *, dry_run: bool = True) -> dict[str, Any]:
+def _run_analysis_standalone(ip_name: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Run analysis pipeline for a single IP (no circular import to core.cli).
 
     This is thread-safe: each call creates its own GeodeRuntime.
@@ -120,7 +120,7 @@ def _run_analysis_standalone(ip_name: str, *, dry_run: bool = True) -> dict[str,
 def run_single_analysis(
     ip_name: str,
     *,
-    dry_run: bool = True,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     """Run analysis on a single IP and return summary dict."""
     try:
@@ -142,7 +142,7 @@ def run_batch(
     genre: str | None = None,
     ips: list[str] | None = None,
     concurrency: int = 2,
-    dry_run: bool = True,
+    dry_run: bool = False,
 ) -> list[dict[str, Any]]:
     """Run batch analysis on multiple IPs."""
     selected = select_ips(top=top, genre=genre, ips=ips)
