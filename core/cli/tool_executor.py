@@ -153,16 +153,17 @@ class ToolExecutor:
 
         results = self._sub_agent_manager.delegate(sub_tasks)
 
-        if len(results) == 1:
-            r = results[0]
-            if r.success:
-                return {"result": r.output, "task_id": r.task_id}
-            return {"error": r.error or "No result"}
-
+        # P2-A: unified response format (single and batch identical)
+        succeeded = sum(1 for r in results if r.success)
+        summary_parts = []
+        for r in results:
+            status = "ok" if r.success else "error"
+            summary_parts.append(f"{r.task_id}:{status}")
         return {
-            "results": [r.to_dict() for r in results],
+            "tasks": [r.to_dict() for r in results],
             "total": len(results),
-            "succeeded": sum(1 for r in results if r.success),
+            "succeeded": succeeded,
+            "summary": f"{succeeded}/{len(results)} tasks completed. [{', '.join(summary_parts)}]",
         }
 
     def _execute_dangerous(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:

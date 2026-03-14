@@ -20,8 +20,9 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.hooks import HookEvent, HookSystem
@@ -83,6 +84,53 @@ class SubResult:
         return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
+class ErrorCategory(StrEnum):
+    """Sub-agent error classification for retry policy."""
+
+    TIMEOUT = "timeout"
+    API_ERROR = "api_error"
+    VALIDATION = "validation"
+    RESOURCE = "resource"
+    DEPTH_EXCEEDED = "depth_exceeded"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class SubAgentResult:
+    """Standardized result from sub-agent execution (P2-A).
+
+    Every sub-agent returns this format, enabling:
+    - Consistent LLM parsing (``summary`` always present)
+    - Token guard (``summary`` preserved on truncation)
+    - Error classification + retry decisions
+    - Depth tracking for recursive orchestration
+    """
+
+    task_id: str
+    task_type: str
+    status: Literal["ok", "error", "timeout", "partial"] = "ok"
+    depth: int = 0
+    summary: str = ""
+    data: dict[str, Any] = field(default_factory=dict)
+    duration_ms: float = 0.0
+    token_usage: dict[str, int] | None = None
+    children_count: int = 0
+    error_category: str | None = None
+    error_message: str | None = None
+    retryable: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize, omitting None-valued fields."""
+        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, default=str)
+
+    @property
+    def success(self) -> bool:
+        return self.status == "ok"
+
+
 @dataclass
 class SubagentRunRecord:
     """Track parent-child relationship (OpenClaw Spawn pattern)."""
@@ -105,6 +153,8 @@ class SubAgentManager:
     - **HookSystem**: Emits SUBAGENT_STARTED/COMPLETED/FAILED events.
     - **CoalescingQueue**: Deduplicates identical task_id submissions.
     - **AgentRegistry**: Resolves agent definitions for context injection.
+    - **Full AgenticLoop inheritance** (P2-B): sub-agents get the same tools,
+      MCP, skills, memory as the parent.  Controlled by ``depth`` / ``max_depth``.
     """
 
     def __init__(
@@ -117,6 +167,12 @@ class SubAgentManager:
         coalescing: CoalescingQueue | None = None,
         agent_registry: AgentRegistry | None = None,
         parent_session_key: str = "",
+        # P2-B: Full AgenticLoop inheritance
+        action_handlers: dict[str, Callable[..., dict[str, Any]]] | None = None,
+        mcp_manager: Any | None = None,
+        skill_registry: Any | None = None,
+        depth: int = 0,
+        max_depth: int = 2,
     ) -> None:
         self._runner = runner
         self._task_handler = task_handler
@@ -127,6 +183,12 @@ class SubAgentManager:
         self._parent_session_key = parent_session_key
         self._run_records: dict[str, SubagentRunRecord] = {}
         self._records_lock = threading.Lock()
+        # P2-B fields
+        self._action_handlers = action_handlers
+        self._mcp_manager = mcp_manager
+        self._skill_registry = skill_registry
+        self._depth = depth
+        self._max_depth = max_depth
 
     def delegate(
         self,
@@ -352,39 +414,111 @@ class SubAgentManager:
             )
 
     def _execute_subtask(self, task: SubTask) -> str:
-        """Execute a single sub-task (runs in isolated thread)."""
-        if self._task_handler is None:
-            return json.dumps({"error": "No task handler configured"})
+        """Execute a single sub-task (runs in isolated thread).
 
-        agent_context = self._resolve_agent(task)
-
-        # Set thread-local subagent context for downstream session isolation (G7)
+        P2-B: if ``action_handlers`` is set, creates a full AgenticLoop with
+        the parent's tools, MCP, skills, and memory.  Falls back to the legacy
+        ``task_handler`` function for backward compatibility.
+        """
         from core.memory.session_key import build_subagent_session_key
 
         child_key = build_subagent_session_key(task.args.get("ip_name", "unknown"), task.task_id)
         _subagent_context.is_subagent = True
         _subagent_context.child_session_key = child_key
         try:
-            try:
-                result: dict[str, Any] = self._task_handler(
-                    task.task_type,
-                    task.args,
-                    agent_context=agent_context,
-                )
-            except TypeError:
-                result = self._task_handler(task.task_type, task.args)
-            return json.dumps(result, default=str)
+            # P2-B: Full AgenticLoop path
+            if self._action_handlers is not None:
+                return self._execute_with_agentic_loop(task)
+
+            # Legacy path: simple task_handler function
+            return self._execute_with_handler(task)
         except Exception as exc:
-            log.error(
-                "SubTask %s failed: %s",
-                task.task_id,
-                exc,
-                exc_info=True,
-            )
+            log.error("SubTask %s failed: %s", task.task_id, exc, exc_info=True)
             return json.dumps({"error": str(exc)})
         finally:
             _subagent_context.is_subagent = False
             _subagent_context.child_session_key = ""
+
+    def _execute_with_agentic_loop(self, task: SubTask) -> str:
+        """Run sub-task through a full AgenticLoop (P2-B)."""
+        from core.cli.agentic_loop import AgenticLoop
+        from core.cli.conversation import ConversationContext
+        from core.cli.tool_executor import ToolExecutor
+        from core.config import settings
+
+        # 1. Propagate ContextVars to child thread
+        _propagate_context_vars()
+
+        # 2. Fresh conversation context (independent context window)
+        conversation = ConversationContext(max_turns=10)
+
+        # 3. Build child SubAgentManager if depth allows recursion
+        child_sam: SubAgentManager | None = None
+        if self._depth < self._max_depth:
+            child_sam = SubAgentManager(
+                runner=IsolatedRunner(),
+                action_handlers=self._action_handlers,
+                mcp_manager=self._mcp_manager,
+                skill_registry=self._skill_registry,
+                depth=self._depth + 1,
+                max_depth=self._max_depth,
+                timeout_s=self._timeout_s,
+                hooks=self._hooks,
+                agent_registry=self._agent_registry,
+                parent_session_key=self._parent_session_key,
+            )
+
+        # 4. ToolExecutor with full handler set
+        executor = ToolExecutor(
+            action_handlers=self._action_handlers,
+            sub_agent_manager=child_sam,
+            mcp_manager=self._mcp_manager,
+            auto_approve=True,  # sub-agents skip HITL prompts
+        )
+
+        # 5. AgenticLoop (same capabilities as parent)
+        loop = AgenticLoop(
+            conversation,
+            executor,
+            max_rounds=settings.subagent_max_rounds,
+            max_tokens=settings.subagent_max_tokens,
+            mcp_manager=self._mcp_manager,
+            skill_registry=self._skill_registry,
+        )
+
+        # 6. Run: use task description as user prompt
+        prompt = task.description
+        if task.args:
+            prompt += f"\n\nParameters: {json.dumps(task.args, ensure_ascii=False)}"
+        agentic_result = loop.run(prompt)
+
+        # 7. Build SubAgentResult
+        text = agentic_result.text if agentic_result else ""
+        result = SubAgentResult(
+            task_id=task.task_id,
+            task_type=task.task_type,
+            status="ok" if text else "error",
+            depth=self._depth,
+            summary=text[:500] if text else "No response from sub-agent",
+            data={"response": text},
+            error_message=None if text else "Empty response",
+        )
+        return result.to_json()
+
+    def _execute_with_handler(self, task: SubTask) -> str:
+        """Legacy path: simple task_handler function call."""
+        if self._task_handler is None:
+            return json.dumps({"error": "No task handler configured"})
+        agent_context = self._resolve_agent(task)
+        try:
+            result: dict[str, Any] = self._task_handler(
+                task.task_type,
+                task.args,
+                agent_context=agent_context,
+            )
+        except TypeError:
+            result = self._task_handler(task.task_type, task.args)
+        return json.dumps(result, default=str)
 
     def _wait_for_result(self, session_id: str) -> IsolationResult | None:
         deadline = time.time() + self._timeout_s
@@ -428,6 +562,87 @@ class SubAgentManager:
             output=output,
             duration_ms=isolation.duration_ms,
         )
+
+    def _to_agent_result(self, task: SubTask, isolation: IsolationResult | None) -> SubAgentResult:
+        """Convert IsolationResult to standardized SubAgentResult (P2-A)."""
+        if isolation is None:
+            return SubAgentResult(
+                task_id=task.task_id,
+                task_type=task.task_type,
+                status="timeout",
+                summary=f"Task timed out after {self._timeout_s}s",
+                error_category=ErrorCategory.TIMEOUT,
+                error_message=f"Timeout after {self._timeout_s}s",
+                retryable=True,
+            )
+        if not isolation.success:
+            category = self._classify_error(isolation.error or "")
+            return SubAgentResult(
+                task_id=task.task_id,
+                task_type=task.task_type,
+                status="error",
+                summary=f"Failed: {isolation.error or 'unknown'}",
+                error_category=category,
+                error_message=isolation.error,
+                retryable=category in {ErrorCategory.TIMEOUT, ErrorCategory.API_ERROR},
+                duration_ms=isolation.duration_ms,
+            )
+        data: dict[str, Any]
+        try:
+            parsed = json.loads(isolation.output) if isolation.output else {}
+            data = parsed if isinstance(parsed, dict) else {"raw": parsed}
+        except (json.JSONDecodeError, RecursionError):
+            data = {"raw": isolation.output}
+        summary = data.get("summary", "")
+        if not summary:
+            summary = str(data.get("tier", data.get("status", "")))[:200]
+        return SubAgentResult(
+            task_id=task.task_id,
+            task_type=task.task_type,
+            status="ok",
+            summary=summary,
+            data=data,
+            duration_ms=isolation.duration_ms,
+        )
+
+    @staticmethod
+    def _classify_error(error_msg: str) -> str:
+        """Classify error message into ErrorCategory."""
+        lower = error_msg.lower()
+        if "timeout" in lower or "timed out" in lower:
+            return ErrorCategory.TIMEOUT
+        if "api" in lower or "rate limit" in lower or "authentication" in lower:
+            return ErrorCategory.API_ERROR
+        if "validation" in lower or "required" in lower or "invalid" in lower:
+            return ErrorCategory.VALIDATION
+        if "memory" in lower or "disk" in lower or "resource" in lower:
+            return ErrorCategory.RESOURCE
+        if "depth" in lower:
+            return ErrorCategory.DEPTH_EXCEEDED
+        return ErrorCategory.UNKNOWN
+
+
+# ---------------------------------------------------------------------------
+# ContextVar propagation for sub-agent threads (P2-B)
+# ---------------------------------------------------------------------------
+
+
+def _propagate_context_vars() -> None:
+    """Propagate memory ContextVars to the current (child) thread.
+
+    Python ``contextvars`` do not automatically inherit across threads.
+    This function re-initializes memory bindings so that tools like
+    ``note_read``, ``memory_search`` work inside sub-agents.
+    """
+    try:
+        from core.memory.organization import MonoLakeOrganizationMemory
+        from core.memory.project import ProjectMemory
+        from core.tools.memory_tools import set_org_memory, set_project_memory
+
+        set_project_memory(ProjectMemory())
+        set_org_memory(MonoLakeOrganizationMemory())
+    except Exception:
+        log.debug("ContextVar propagation skipped (memory modules unavailable)")
 
 
 # ---------------------------------------------------------------------------
