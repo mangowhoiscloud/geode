@@ -2283,10 +2283,35 @@ def _restore_terminal() -> None:
 # prompt_toolkit REPL input (arrow keys, history, multi-line paste)
 # ---------------------------------------------------------------------------
 def _build_prompt_session() -> Any:
-    """Create a prompt_toolkit PromptSession with history + GEODE styling."""
+    """Create a prompt_toolkit PromptSession with history + GEODE styling.
+
+    Includes a custom Backspace/Delete key binding that forces a full
+    renderer redraw after deletion — fixes wide-char (Korean jamo) ghost
+    artifacts where the display doesn't update even though the buffer is
+    correctly modified.
+    """
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.history import FileHistory
+    from prompt_toolkit.key_binding import KeyBindings
+
+    kb = KeyBindings()
+
+    @kb.add("backspace")
+    def _backspace(event: Any) -> None:
+        buf = event.app.current_buffer
+        if buf.cursor_position > 0:
+            buf.delete_before_cursor(count=1)
+            event.app.renderer.reset()
+            event.app.invalidate()
+
+    @kb.add("delete")
+    def _delete(event: Any) -> None:
+        buf = event.app.current_buffer
+        if buf.cursor_position < len(buf.text):
+            buf.delete(count=1)
+            event.app.renderer.reset()
+            event.app.invalidate()
 
     history_path = Path.home() / ".geode_history"
     return PromptSession(
@@ -2294,6 +2319,7 @@ def _build_prompt_session() -> Any:
         message=HTML("<b>&gt;</b> "),
         enable_history_search=True,
         multiline=False,
+        key_bindings=kb,
     )
 
 

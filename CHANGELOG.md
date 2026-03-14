@@ -49,6 +49,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - REPL memory contextvars 초기화 — `note_read` 등 6개 메모리 도구 "not available" 해소
 - 서브에이전트 dry-run 강제 해제 (ADR-008) — API 키 존재 시 live LLM 호출 가능
 - CLI 한글 wide-char 백스페이스 잔상 + 방향키 escape code 필터링
+- prompt_toolkit Backspace/Delete 키 바인딩 — `renderer.reset()` + `invalidate()` 강제 redraw로 와이드 문자 잔상 해소
 - D1: `sub_agent.py` 리포트 경로 `force_dry_run` 적용
 - D3: `trigger_endpoint.py` 메모리 ContextVar 초기화 누락
 - D4: `triggers.py` 클로저 config 선캡처 + `isolated_execution.py` cancel_flags lock
