@@ -28,11 +28,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-운영 안정성 강화 + 외부 IP 분석 지원 + BiasBuster 성능 최적화 + D1-D5 디버깅 패턴 감사.
+운영 안정성 강화 + 서브에이전트 Full AgenticLoop 상속 + 외부 IP 분석 지원 + BiasBuster 성능 최적화 + D1-D5 디버깅 패턴 감사 + MCP 카탈로그 정합성.
 
 ### Added
 - 미등록 IP 외부 시그널 수집 — `signals.py` 3단계 fallback (adapter → fixture → Anthropic web search)
 - 외부 IP graceful degradation — `router.py` fixture 미존재 시 최소 `ip_info` 스켈레톤 자동 생성
+- P2 서브에이전트 Full AgenticLoop 상속 — 동일 tools/MCP/skills/memory 제공, 재귀 depth 제어 (max_depth=2, max_total=15)
+- `SubAgentResult` 표준 스키마 + `ErrorCategory` 에러 분류 — 단건/배치 응답 통일
 
 ### Changed
 - BiasBuster 통계 fast path — CV≥0.10 && score range≥0.5일 때 LLM 호출 생략 (10-30초 절감)
@@ -41,6 +43,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `graph.py` cross_llm 검증 결과 누락 시 fail-safe (`passed=True` → `False`)
 - OpenAI 7개 모델 가격 공식 그라운딩 (GPT-4.1, 4o, o3, o4-mini 등)
 - `pyproject.toml` live 테스트 기본 제외 (`addopts += -m 'not live'`)
+- `DEFAULT_MAX_TOKENS` 8192 → 16384
+- `tool_result` 토큰 가드 — 4096 토큰 초과 시 summary 보존 truncation
+- MCP 카탈로그 LinkedIn 패키지 정합성 — `kimtaeyoon87` → `linkedin-scraper-mcp` (Claude Code 글로벌 세팅 일치)
 
 ### Fixed
 - MCP orphan 프로세스 방지 — REPL 종료 시 `close_all()` + `atexit.register()` 호출

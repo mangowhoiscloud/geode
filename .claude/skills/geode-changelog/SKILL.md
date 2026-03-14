@@ -68,11 +68,23 @@ PATCH: 버그 수정, 성능 개선
 ```
 1. 변경 유형 판별 → [Unreleased] 해당 카테고리에 1줄 추가
 2. CLAUDE.md 수치 변경 시 동기화 (Tests, Modules)
-3. README.md 수치 변경 시 동기화
+3. README.md 수치 + 묘사 + Mermaid 시각화 변경 시 동기화
 4. 코드 + CHANGELOG + 문서를 하나의 커밋으로
 ```
 
 **예외**: 문서/리팩터만 변경 시 CHANGELOG 항목 불필요.
+
+### 정합성 검증 체크리스트 (PR 전 필수)
+
+CHANGELOG 작성 후 아래 항목을 점검한다:
+
+```
+□ [Unreleased] 항목이 실제 코드 변경을 정확히 반영하는가?
+□ Infrastructure 섹션의 Test/Module count가 실측값과 일치하는가?
+□ 머지된 PR body의 feature/fix 항목이 모두 [Unreleased]에 포함되어 있는가?
+□ README.md Features 테이블, Mermaid 다이어그램이 코드 동작과 일치하는가?
+□ .claude/mcp_servers.json 변경 시 README MCP 섹션도 갱신했는가?
+```
 
 ### 릴리스 시
 1. `[Unreleased]` → `[X.Y.Z] — YYYY-MM-DD` 로 전환
