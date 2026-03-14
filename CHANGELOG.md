@@ -28,6 +28,36 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+운영 안정성 강화 + 외부 IP 분석 지원 + BiasBuster 성능 최적화 + D1-D5 디버깅 패턴 감사.
+
+### Added
+- 미등록 IP 외부 시그널 수집 — `signals.py` 3단계 fallback (adapter → fixture → Anthropic web search)
+- 외부 IP graceful degradation — `router.py` fixture 미존재 시 최소 `ip_info` 스켈레톤 자동 생성
+
+### Changed
+- BiasBuster 통계 fast path — CV≥0.10 && score range≥0.5일 때 LLM 호출 생략 (10-30초 절감)
+- 외부 IP feedback loop 1회 제한 (`max_iterations=1`) — 동일 웹 검색 데이터 재분석 방지
+- `batch.py` 3함수 `dry_run` 기본값 `True` → `False` — caller 결정 원칙 적용
+- `graph.py` cross_llm 검증 결과 누락 시 fail-safe (`passed=True` → `False`)
+- OpenAI 7개 모델 가격 공식 그라운딩 (GPT-4.1, 4o, o3, o4-mini 등)
+- `pyproject.toml` live 테스트 기본 제외 (`addopts += -m 'not live'`)
+
+### Fixed
+- MCP orphan 프로세스 방지 — REPL 종료 시 `close_all()` + `atexit.register()` 호출
+- MCP 미연결 서버 제거 (discord/e2b/igdb → 4개 유지: brave-search, steam, arxiv, playwright)
+- MCP 미설정 서버 자동 skip — env 빈 값 체크 + `.env` fallback
+- REPL memory contextvars 초기화 — `note_read` 등 6개 메모리 도구 "not available" 해소
+- 서브에이전트 dry-run 강제 해제 (ADR-008) — API 키 존재 시 live LLM 호출 가능
+- CLI 한글 wide-char 백스페이스 잔상 + 방향키 escape code 필터링
+- D1: `sub_agent.py` 리포트 경로 `force_dry_run` 적용
+- D3: `trigger_endpoint.py` 메모리 ContextVar 초기화 누락
+- D4: `triggers.py` 클로저 config 선캡처 + `isolated_execution.py` cancel_flags lock
+- D5: `hybrid_session.py` L1(Redis) 예외 시 L2 fallback 추가
+
+### Infrastructure
+- Test count: 2077+ → 2168+
+- Module count: 125 → 131
+
 ---
 
 ## [0.10.1] — 2026-03-13
@@ -467,6 +497,7 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.10.1 | 2026-03-13 | UI/UX 리브랜딩, Domain Plugin, Agentic 강건성, 리포트 상용화, MCP 정규화 |
 | 0.10.0 | 2026-03-12 | SubAgent 병렬 실행, SchedulerService 와이어링, NL 스케줄, OpenClaw 세션 격리 |
 | 0.9.0 | 2026-03-11 | General Assistant, Skills, MCP 자동설치, Clarification, 마스코트 |
 | 0.8.0 | 2026-03-11 | Plan/Sub-agent NL, Claude Code UI, response quality, verification tracing |
@@ -475,7 +506,8 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/mangowhoiscloud/geode/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/mangowhoiscloud/geode/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mangowhoiscloud/geode/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mangowhoiscloud/geode/compare/v0.7.0...v0.8.0

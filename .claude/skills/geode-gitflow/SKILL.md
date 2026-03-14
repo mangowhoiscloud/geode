@@ -89,6 +89,11 @@ gh pr merge <PR#> --merge
 - 고려했으나 채택하지 않은 대안은?
 - 향후 확장 시 주의할 점은?
 
+## Docs-Sync (필수)
+- [ ] `CHANGELOG.md` `[Unreleased]`에 변경 항목 추가됨 (Added/Changed/Fixed)
+- [ ] `CLAUDE.md` 수치 동기화 (Tests, Modules — 변경 시)
+- [ ] `README.md` 수치 동기화 (변경 시)
+
 ## 테스트
 - [ ] `uv run ruff check core/ tests/` — 0 errors
 - [ ] `uv run mypy core/` — 0 errors
@@ -163,6 +168,25 @@ PR 생성 → CI 실행 → 실패?
 | `bandit` 보안 경고 | `# nosec` 또는 pyproject.toml skips에 추가 (정당한 경우만) |
 | pre-commit stash 충돌 | `git stash` → 커밋 → `git stash pop` |
 
+## Worktree 작업 공간 분할
+
+병렬 작업이나 독립 기능 개발 시 git worktree로 격리된 작업 공간을 생성한다.
+
+```bash
+# 생성
+git worktree add .claude/worktrees/<작업명> -b feature/<브랜치명>
+cd .claude/worktrees/<작업명>
+
+# 작업 완료 후 정리 (worktree + 브랜치 삭제)
+git push origin feature/<브랜치명>
+cd /path/to/original/repo
+git worktree remove .claude/worktrees/<작업명>
+git branch -d feature/<브랜치명>
+```
+
+- worktree 내에서 `git checkout` 금지
+- `.claude/worktrees/`는 `.gitignore`에 포함
+
 ## Branch Structure
 
 ```
@@ -189,7 +213,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 ## CI 게이트 (모든 PR)
 
 ```bash
-uv run pytest tests/ -q              # 2125+ pass, coverage ≥ 75%
+uv run pytest tests/ -q              # 2168+ pass, coverage ≥ 75%
 uv run ruff check core/ tests/       # 0 errors
 uv run mypy core/                    # 0 errors
 uv run bandit -r core/ -c pyproject.toml  # 0 errors
