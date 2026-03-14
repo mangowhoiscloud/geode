@@ -50,6 +50,7 @@ def router_node(state: GeodeState) -> dict[str, Any]:
             fixture = load_fixture(ip_name)
             ip_info = fixture["ip_info"]
             monolake = fixture["monolake"]
+            is_external = False
         except ValueError:
             log.info("No fixture for '%s' — using external data mode", ip_name)
             ip_info = {
@@ -64,12 +65,18 @@ def router_node(state: GeodeState) -> dict[str, Any]:
                 "ip_age_years": 0,
             }
             monolake = {}
+            is_external = True
 
         result: dict[str, Any] = {
             "pipeline_mode": mode,
             "ip_info": ip_info,
             "monolake": monolake,
         }
+
+        # External IPs: cap feedback loop to 1 iteration.
+        # Re-running with the same web search data won't improve confidence.
+        if is_external:
+            result["max_iterations"] = 1
 
         # Generate session_id for memory context (fixes GAP-005)
         session_id = state.get("session_id", "")
