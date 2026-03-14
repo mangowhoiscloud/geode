@@ -2,7 +2,7 @@
   <img src="assets/geode-social-preview.png" alt="GEODE — 게임화 IP 도메인 자율 실행 하네스" width="720" />
 </p>
 
-# GEODE v0.10.0 — 게임화 IP 도메인 자율 실행 하네스
+# GEODE v0.10.1 — 게임화 IP 도메인 자율 실행 하네스
 
 LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기능은 아래와 같습니다.
 - 미디어 IP(애니메이션, 만화 등)의 게임화 잠재력을 6-Layer 아키텍처로 분석하고, PSM 14-Axis 루브릭으로 분석/평가 루프와 리포트 생성을 지원합니다.
@@ -25,9 +25,9 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 | **14-Axis Rubric** | PSM(Prospect Scoring Model) 기반 정량 평가 |
 | **Cross-LLM Ensemble** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, `cross` / `primary_only` 모드 |
 | **Prompt Caching** | Anthropic `cache_control` 적용, 40-60% 비용 절감 |
-| **38 Tool Definitions** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + PolicyChain 접근 제어 |
+| **38+ Tool Definitions** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + PolicyChain 접근 제어 (MCP 포함 60+) |
 | **Skills 시스템** | `.claude/skills/*/SKILL.md` 자동 발견, 시스템 프롬프트 주입, NL 트리거 매칭 |
-| **MCP 자동설치** | "LinkedIn MCP 달아줘" → 31개 빌트인 카탈로그 검색 → 설치 → 도구 핫 리로드 |
+| **MCP 자동설치** | "LinkedIn MCP 달아줘" → 38개 빌트인 카탈로그 검색 → 설치 → 도구 핫 리로드 |
 | **Clarification** | 필수 파라미터 누락 시 되묻기 (slot filling, disambiguation), max_rounds 방지 |
 | **MCP Adapters** | Steam, Brave Search, KG Memory 외부 데이터 소스 연결 |
 | **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
@@ -45,7 +45,13 @@ LangGraph 기반 게임화 IP 도메인 자율 에이전트입니다. 주요 기
 | **Pipeline Flexibility** | Analyst 타입 YAML 동적 로드, `interrupt_before` 사용자 개입 |
 | **Pre-commit Hooks** | ruff lint/format + mypy + bandit + standard hooks |
 | **Scheduler NL** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON 3-type + active hours + JSONL 로그) |
-| **2077+ Tests** | 124 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit 전체 통과 |
+| **External IP Fallback** | 미등록 IP 분석 시 3단계 시그널 수집: Adapter → Fixture → Web Search (Anthropic `web_search_20250305`) |
+| **BiasBuster Fast Path** | CV ≥ 0.10 && score range ≥ 0.5 시 LLM 호출 생략 — 10-30초 절감 |
+| **prompt_toolkit CLI** | `FileHistory` 방향키/히스토리 + 한글 wide-char 잔상 fix + escape sequence 필터링 |
+| **Claude Code Status Line** | `GeodeStatus` 스피너 (✢ model · ↓input ↑output · $cost · elapsed) + progressive log |
+| **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring/decision tree 플러그인 인터페이스 |
+| **Operations Debugging** | D1-D5 패턴 기반 safe default, ContextVar lifecycle, closure capture, graceful degradation |
+| **2168+ Tests** | 131 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit 전체 통과 |
 
 ## Architecture
 
@@ -83,7 +89,7 @@ graph TB
     end
 
     subgraph L4["L4 — Orchestration"]
-        Hooks["HookSystem (26)"]
+        Hooks["HookSystem (27)"]
         Tasks["TaskGraph (DAG)"]
         Plan["PlanMode"]
         Coal["CoalescingQueue"]
@@ -96,7 +102,7 @@ graph TB
         Policy["PolicyChain"]
         Reports["Report Generator"]
         Skills["Skills System"]
-        MCPCat["MCP Catalog (31)"]
+        MCPCat["MCP Catalog (38)"]
     end
 
     L0 --> L3
@@ -118,8 +124,8 @@ graph TB
 | **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입, LLM 클라이언트 교체 가능 |
 | **L2** Memory | Organization (fixture), Project (.claude/MEMORY.md), Session (TTL), SqliteSaver | 3-Tier 메모리 + LangGraph 체크포인트 영속화 |
 | **L3** Pipeline | StateGraph, 8 Pipeline Nodes, GeodeState (TypedDict) | LangGraph `graph.stream()` 단계별 실행, Send API 병렬 분석 |
-| **L4** Orchestration | HookSystem (26 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
-| **L5** Extensibility | ToolRegistry (38), PolicyChain, Report Generator, Skills System, MCP Catalog (31) | 런타임 tool 확장, 노드별 접근 제어, 스킬 자동 주입, MCP 자동설치 |
+| **L4** Orchestration | HookSystem (27 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
+| **L5** Extensibility | ToolRegistry (38+), PolicyChain, Report Generator, Skills System, MCP Catalog (38) | 런타임 tool 확장, 노드별 접근 제어, 스킬 자동 주입, MCP 자동설치 |
 
 ### Pipeline Flow
 
@@ -470,6 +476,125 @@ graph LR
 | **Loopback 경로** | `verification → gather → signals → analyst → evaluator → scoring → verification` |
 | **강제 진행** | 최대 반복 도달 시 현재 점수로 Synthesizer 진행 |
 | **Confidence Multiplier** | `final = base × (0.7 + 0.3 × confidence/100)` — 신뢰도에 따라 최종 점수 30% 범위 내 조정 |
+
+### External IP Signal Fallback
+
+```mermaid
+graph LR
+    IP["IP Name<br/>(미등록)"] --> R{"Fixture<br/>exists?"}
+    R -->|Yes| Fix["Fixture Signals<br/>(3 core IPs)"]
+    R -->|No| Skel["Skeleton ip_info<br/>(all 'unknown')"]
+    Skel --> S1{"Adapter<br/>available?"}
+    S1 -->|Yes| Adapt["SignalEnrichmentPort<br/>(MCP live API)"]
+    S1 -->|No| S2{"Fixture<br/>fallback?"}
+    S2 -->|Yes| Fix
+    S2 -->|No| Web["Web Search<br/>(Anthropic web_search_20250305)"]
+
+    Web --> Q1["Query 1:<br/>'{ip} game franchise<br/>popularity statistics'"]
+    Web --> Q2["Query 2:<br/>'{ip} anime manga<br/>fan community size'"]
+    Q1 --> Merge["web_search_data<br/>+ placeholder signals"]
+    Q2 --> Merge
+    Merge --> Pipe["Pipeline<br/>(max_iterations=1)"]
+    Fix --> PipeN["Pipeline<br/>(max_iterations=5)"]
+    Adapt --> PipeN
+
+    style Web fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Fix fill:#10b981,stroke:#10b981,color:#fff
+    style Adapt fill:#3b82f6,stroke:#3b82f6,color:#fff
+    style Skel fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+```
+
+미등록 IP(fixture 없는 IP)를 분석할 때의 시그널 수집 3단계 fallback 체인이다.
+
+| 단계 | 소스 | 설명 |
+|------|------|------|
+| **Stage 1** | `SignalEnrichmentPort` 어댑터 | MCP Steam/Brave 등 라이브 API로 시그널 수집. `adapter.is_available()` 체크 후 호출 |
+| **Stage 2** | Fixture fallback | 3개 core IP (Berserk, Cowboy Bebop, Ghost in the Shell) JSON fixture 직접 로딩 |
+| **Stage 3** | Web Search | Anthropic `web_search_20250305` 도구로 2개 쿼리 실행, 결과를 `web_search_data` 키에 raw text로 전달 |
+
+- **외부 IP 스켈레톤**: `media_type="unknown"`, `genre="unknown"` 등 기본값으로 `ip_info` 생성. Analysts가 `web_search_data` 텍스트에서 맥락을 추출
+- **`max_iterations=1`**: 외부 IP는 동일 웹 검색 데이터로 재분석해도 confidence 개선 불가하므로 feedback loop 1회로 제한
+- **placeholder signals**: `youtube_views=0`, `reddit_subscribers=0` 등 downstream 스키마 호환을 위한 기본 수치. `_enrichment_source="web_search"` 마커로 출처 구분
+
+### BiasBuster Fast Path
+
+```mermaid
+graph TB
+    Analyses["Analyst Scores<br/>(4 analyses)"] --> Stats["_run_statistical_checks()<br/>mean, std, CV, min, max"]
+    Stats --> LV{"CV < 0.05<br/>AND n ≥ 4?"}
+    LV -->|Yes| Anchoring["⚠ anchoring_bias flag<br/>(low variance suspicious)"]
+    Anchoring --> LLM["Full LLM BiasBuster<br/>(6 bias types)"]
+    LV -->|No| Fast{"CV ≥ 0.10<br/>AND range ≥ 0.5?"}
+    Fast -->|Yes| Skip["✓ Fast Path<br/>LLM 호출 생략<br/>(10-30초 절감)"]
+    Fast -->|No| LLM
+
+    LLM --> Result["BiasBusterResult<br/>(6 bias flags + explanation)"]
+    Skip --> Clean["BiasBusterResult<br/>overall_pass=True<br/>'Statistical check clean'"]
+
+    style Skip fill:#10b981,stroke:#10b981,color:#fff
+    style Anchoring fill:#ef4444,stroke:#ef4444,color:#fff
+    style LLM fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Fast fill:#3b82f6,stroke:#3b82f6,color:#fff
+```
+
+BiasBuster의 통계 기반 fast path는 분석가 간 점수 분산이 건강할 때 비용이 높은 LLM 호출을 생략한다.
+
+| 조건 | 의미 | 결과 |
+|------|------|------|
+| **CV < 0.05 AND n ≥ 4** | 점수 분산이 의심스럽게 낮음 (동조 패턴) | `anchoring_bias` 플래그 → LLM 호출 |
+| **CV ≥ 0.10 AND range ≥ 0.5** | 건강한 분산 (1-5점 스케일에서 충분한 스프레드) | Fast path → LLM 생략, `overall_pass=True` |
+| **그 외** | 경계 영역 (0.05 ≤ CV < 0.10 또는 range < 0.5) | Full LLM 6-bias 탐지 실행 |
+
+- **절감 효과**: Anthropic `messages.parse()` structured output 1회 + tool-augmented memory 쿼리 생략 → 10-30초 + $0.01-0.05/건 절감
+- **dry-run 모드**: LLM 호출 없이 `low_variance_flag`만으로 즉시 반환 (통계 체크만 실행)
+- **외부 IP**: 동일 fast path 적용. 웹 검색 기반 시그널이라도 CV/range 기준은 동일
+
+### CLI Input & Terminal Management
+
+```mermaid
+graph TB
+    subgraph Input["_read_multiline_input()"]
+        Restore["_restore_terminal()<br/>ECHO + ICANON 복원"]
+        PT["prompt_toolkit<br/>PromptSession"]
+        FB["Fallback<br/>console.input()"]
+        Restore --> PT
+        PT -->|ImportError| FB
+    end
+
+    subgraph Processing["입력 처리"]
+        Wide["한글 wide-char fix<br/>\\x1b[F + \\x1b[2K 재렌더링"]
+        Drain["select.select() 50ms<br/>paste drain"]
+        ESC["\\x1b 필터링<br/>(방향키 escape 제거)"]
+        Wide --> Drain
+        Drain --> ESC
+    end
+
+    subgraph Status["GeodeStatus (스피너)"]
+        Spin["✢ Thinking...<br/>dots spinner"]
+        Tool["✢ Running {tool}...<br/>실행 중 스피너"]
+        Done["✓ {summary}<br/>↓input ↑output · $cost · elapsed"]
+    end
+
+    Input --> Processing
+    Processing --> AL["AgenticLoop"]
+    AL --> Status
+
+    style Input fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style Processing fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style Status fill:#1e293b,stroke:#10b981,color:#e2e8f0
+```
+
+prompt_toolkit 기반 CLI 입력 시스템과 Claude Code 스타일 상태줄의 동작 흐름이다.
+
+| 구성 요소 | 설명 |
+|----------|------|
+| **`_restore_terminal()`** | Rich Status/Live 후 손상된 termios 상태 복원. `ECHO` + `ICANON` 플래그를 `TCSANOW`로 즉시 적용 |
+| **`PromptSession`** | `~/.geode_history` 파일 기반 히스토리. Arrow-up/down으로 이전 명령 탐색, Ctrl+R 역방향 검색 |
+| **한글 wide-char fix** | 백스페이스 시 jamo 잔상 방지. `\x1b[F` (커서 위) + `\x1b[2K` (줄 삭제) ANSI 시퀀스로 재렌더링 |
+| **Paste drain** | `select.select()` 50ms timeout으로 붙여넣기 버퍼 수집. `\x1b` 포함 라인(방향키 escape) 필터링 |
+| **GeodeStatus** | `contextmanager`로 LLM 호출 구간 측정. 진입 시 `_UsageSnapshot` 캡처, 종료 시 delta 계산 |
+| **OperationLogger** | 처음 5개 tool call은 `▸/✓/✗` 마커로 개별 렌더링. 5개 초과 시 `+{n} more tool uses` 접기 |
+| **Session Summary** | REPL 종료 시 누적 비용 렌더링: `Calls: N · Tokens: ↓Xk ↑Yk · Total: $Z.ZZZZ` (모델별 분리) |
 
 ### Prompt Caching
 
