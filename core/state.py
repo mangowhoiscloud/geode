@@ -236,6 +236,7 @@ class GeodeState(TypedDict, total=False):
 
     # Layer 2: Signals
     signals: dict[str, Any]
+    signal_source: str  # "live", "fixture", "mixed", or "web_search"
 
     # Layer 3: Analysts (accumulated via Send)
     analyses: Annotated[list[AnalysisResult], operator.add]

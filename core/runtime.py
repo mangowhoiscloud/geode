@@ -725,6 +725,54 @@ class GeodeRuntime:
         bridge.register(hooks)
         return graph, bridge
 
+    @staticmethod
+    def _build_signal_adapter() -> None:
+        """Build and inject CompositeSignalAdapter with MCP-backed signal sources.
+
+        Chains Steam MCP + Brave MCP adapters into CompositeSignalAdapter,
+        then injects into signals_node via contextvars. If no MCP servers
+        are configured or available, the adapter will report is_available()=False
+        and signals_node falls back to fixtures.
+        """
+        from core.infrastructure.adapters.mcp.brave_adapter import (
+            BraveSearchAdapter,
+            BraveSignalAdapter,
+        )
+        from core.infrastructure.adapters.mcp.composite_signal import CompositeSignalAdapter
+        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.infrastructure.adapters.mcp.steam_adapter import SteamMCPSignalAdapter
+        from core.nodes.signals import set_signal_adapter
+
+        manager = MCPServerManager()
+        server_count = manager.load_config()
+
+        if server_count == 0:
+            log.debug("No MCP servers configured — signal adapter skipped (fixture fallback)")
+            set_signal_adapter(None)
+            return
+
+        # Build individual MCP signal adapters
+        adapters: list[SteamMCPSignalAdapter | BraveSignalAdapter] = []
+
+        steam_adapter = SteamMCPSignalAdapter(manager=manager, server_name="steam")
+        adapters.append(steam_adapter)
+
+        brave_search = BraveSearchAdapter(manager=manager, server_name="brave-search")
+        brave_signal = BraveSignalAdapter(brave_search)
+        adapters.append(brave_signal)
+
+        composite = CompositeSignalAdapter(adapters)  # type: ignore[arg-type]
+
+        if composite.is_available():
+            log.info(
+                "Signal liveification enabled: %d MCP adapters wired",
+                len(adapters),
+            )
+        else:
+            log.debug("MCP servers configured but none available — fixture fallback active")
+
+        set_signal_adapter(composite)
+
     # ------------------------------------------------------------------
     # Factory method
     # ------------------------------------------------------------------
@@ -881,6 +929,9 @@ class GeodeRuntime:
 
         # Lane queue (session serial + global concurrency)
         lane_queue = _build_default_lanes()
+
+        # Signal enrichment via MCP (liveification)
+        cls._build_signal_adapter()
 
         # Memory subsystem
         project_memory, organization_memory, context_assembler = cls._build_memory(
