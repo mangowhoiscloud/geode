@@ -33,6 +33,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - NL Router 시스템 프롬프트 Tool Selection Priority Matrix 추가 — 12개 의도별 1st/2nd Choice + 사용 금지 도구 매트릭스, 비용 인식 규칙, 도구 호출 금지 사항 (AGENTIC_SUFFIX)
+- MCP 통합 Deferred Loading 강화 — Native + MCP 도구를 통합 병합 후 deferred loading 적용, 임계값 5→10 상향, 6개 핵심 도구 항상 로드, ToolSearchTool MCP 검색 지원
 
 ---
 
