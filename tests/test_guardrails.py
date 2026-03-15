@@ -119,7 +119,7 @@ class TestValidateEvaluatorRanges:
 class TestG3Grounding:
     def test_grounded(self):
         state = _make_full_state()
-        passed, msg = _g3_grounding(state)
+        passed, msg, ratio = _g3_grounding(state)
         assert passed
 
     def test_missing_evidence(self):
@@ -131,9 +131,43 @@ class TestG3Grounding:
             evidence=[],
         )
         state = _make_full_state(analyses=[analysis])
-        passed, msg = _g3_grounding(state)
+        passed, msg, ratio = _g3_grounding(state)
         assert not passed
         assert "no evidence" in msg
+
+    def test_grounding_ratio_with_signals(self):
+        analyses = [
+            AnalysisResult(
+                analyst_type="growth_potential",
+                score=4.0,
+                key_finding="test",
+                reasoning="test reasoning",
+                evidence=["YouTube 25M views", "ungrounded claim"],
+            ),
+        ]
+        state = _make_full_state(analyses=analyses)
+        signals = {"youtube_views": 25000000, "reddit_subscribers": 520000}
+        passed, msg, ratio = _g3_grounding(state, signal_data=signals)
+        assert passed
+        assert 0.0 < ratio <= 1.0
+        assert "Grounding:" in msg
+
+    def test_quantitative_analyst_hard_fail(self):
+        analyses = [
+            AnalysisResult(
+                analyst_type="growth_potential",
+                score=4.0,
+                key_finding="test",
+                reasoning="test reasoning",
+                evidence=["completely fabricated claim"],
+            ),
+        ]
+        state = _make_full_state(analyses=analyses)
+        signals = {"youtube_views": 25000000}
+        passed, msg, ratio = _g3_grounding(state, signal_data=signals)
+        assert not passed
+        assert "requires grounding" in msg
+        assert ratio == 0.0
 
 
 class TestG4Consistency:

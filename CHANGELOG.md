@@ -52,6 +52,9 @@ HITL 보안 강화 + README/CLAUDE.md 자율 실행 코어 재구성 + Domain Pl
 - LinkedIn 우선 라우팅 — 프로필/커리어/채용 쿼리 시 `site:linkedin.com` 프리픽스 우선 검색 (AGENTIC_SUFFIX)
 - `WRITE_TOOLS` 안전 분류 — `memory_save`/`note_save`/`set_api_key`/`manage_auth` 쓰기 작업 HITL 확인 게이트
 - MCP 도구 안전 라우팅 — 외부 MCP 도구 호출 시 `_execute_mcp()` 경유, 사용자 승인 게이트 적용
+- G3 그라운딩 비율 산출 — `grounding_ratio` 필드 추가, evidence 대비 signal 근거 비율 계산
+- Quantitative analyst 그라운딩 강제 — `growth_potential`/`discovery` 분석가의 evidence가 0% 그라운딩이면 G3 hard fail
+- 리포트 Evidence Chain 섹션 — 분석가별 evidence 목록을 Markdown 리포트에 포함
 
 ### Fixed
 - DANGEROUS 도구(bash) `auto_approve` 우회 차단 — 서브에이전트에서도 항상 사용자 승인 필수
