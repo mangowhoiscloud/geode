@@ -121,17 +121,26 @@ uv run geode
 ### CLI Mode
 
 ```bash
-geode analyze "Berserk"                          # LLM 분석 (API 키 있을 때)
-geode analyze "Berserk" --dry-run                 # 명시적 dry-run
-geode analyze "Berserk" --stream                  # streaming output
-geode analyze "Berserk" --verbose                 # 상세 출력
-geode analyze "Cowboy Bebop" --skip-verification  # 검증 생략
-geode batch --top 5                               # 상위 5개 배치 분석
-geode batch --genre "Dark Fantasy"                # 장르 필터 배치
-geode report "Berserk"                            # Markdown summary
-geode report "Berserk" -f html -o berserk.html    # HTML 파일 저장
-geode search "사이버펑크"                          # 검색
-geode list                                        # 목록
+# 분석
+uv run geode analyze "Berserk"                    # CLI 분석
+uv run geode "Berserk 분석해줘"                    # 자연어 분석 (동일)
+uv run geode "Berserk 분석해줘" --stream           # 스트리밍 출력
+
+# 검색·목록
+uv run geode search "사이버펑크"                   # 장르 검색
+uv run geode "소울라이크 게임 찾아줘"               # 자연어 검색
+uv run geode list                                 # IP 목록
+
+# 리포트
+uv run geode report "Berserk"                     # Markdown 리포트
+uv run geode report "Berserk" -f html -o out.html # HTML 파일 저장
+
+# 배치
+uv run geode batch --top 5                        # 상위 5개 배치 분석
+
+# 범용 자연어 (인터랙티브 모드에서도 동일)
+uv run geode "오늘 AI 뉴스 정리해줘"               # 웹 리서치
+uv run geode "이 URL 요약해줘 https://..."         # URL 요약
 ```
 
 ---

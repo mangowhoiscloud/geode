@@ -79,9 +79,9 @@ class TestAgentRegistry:
         registry = AgentRegistry()
         registry.load_defaults()
         assert len(registry) == 3
-        assert "anime_expert" in registry
-        assert "game_analyst" in registry
-        assert "market_researcher" in registry
+        assert "research_assistant" in registry
+        assert "data_analyst" in registry
+        assert "web_researcher" in registry
 
     def test_len_and_contains(self):
         registry = AgentRegistry()

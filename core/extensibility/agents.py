@@ -39,36 +39,36 @@ class AgentDefinition(BaseModel):
 
 _DEFAULT_AGENTS: list[dict[str, Any]] = [
     {
-        "name": "anime_expert",
-        "role": "Anime & Manga IP Specialist",
+        "name": "research_assistant",
+        "role": "Research Specialist",
         "system_prompt": (
-            "You are an expert in anime and manga intellectual properties. "
-            "Analyze IPs for cultural impact, fan engagement, merchandise potential, "
-            "and cross-media adaptation viability."
+            "You are a research specialist. Gather and synthesize information "
+            "from multiple sources — web, documents, and databases. "
+            "Provide well-structured summaries with key findings and evidence."
         ),
-        "tools": ["web_search", "trend_analysis"],
+        "tools": ["web_search", "web_fetch", "read_document"],
         "model": ANTHROPIC_SECONDARY,
     },
     {
-        "name": "game_analyst",
-        "role": "Game Industry Analyst",
+        "name": "data_analyst",
+        "role": "Data Analysis Specialist",
         "system_prompt": (
-            "You are a game industry analyst specializing in market trends, "
-            "player demographics, monetization models, and competitive landscape. "
-            "Evaluate IPs for gaming potential and market fit."
+            "You are a data analyst. Analyze datasets, identify trends and patterns, "
+            "compute statistics, and generate visualizations. "
+            "Provide data-driven insights with clear methodology."
         ),
-        "tools": ["web_search", "market_data"],
+        "tools": ["web_search", "read_document"],
         "model": ANTHROPIC_SECONDARY,
     },
     {
-        "name": "market_researcher",
-        "role": "Market Research Specialist",
+        "name": "web_researcher",
+        "role": "Web Research & Monitoring Specialist",
         "system_prompt": (
-            "You are a market research specialist focused on consumer behavior, "
-            "brand valuation, and market sizing. Provide data-driven assessments "
-            "of IP commercial potential."
+            "You are a web researcher specializing in monitoring trends, "
+            "tracking updates, and aggregating information from online sources. "
+            "Provide timely summaries with source attribution."
         ),
-        "tools": ["web_search", "market_data", "trend_analysis"],
+        "tools": ["web_search", "web_fetch"],
         "model": ANTHROPIC_SECONDARY,
     },
 ]
@@ -106,7 +106,7 @@ class AgentRegistry:
         del self._agents[name]
 
     def load_defaults(self) -> None:
-        """Load the three default agents (anime_expert, game_analyst, market_researcher)."""
+        """Load the three default agents (research_assistant, data_analyst, web_researcher)."""
         for agent_dict in _DEFAULT_AGENTS:
             agent = AgentDefinition(**agent_dict)
             if agent.name not in self._agents:
@@ -140,12 +140,12 @@ class SubagentLoader:
 
     Example file format:
         ---
-        name: anime_expert
-        role: Anime & Manga IP Specialist
-        tools: [web_search, trend_analysis]
+        name: research_assistant
+        role: Research Specialist
+        tools: [web_search, web_fetch, read_document]
         model: claude-sonnet-4-5-20250929
         ---
-        You are an expert in anime and manga intellectual properties...
+        You are a research specialist...
     """
 
     def __init__(self, agents_dir: str | Path | None = None) -> None:
