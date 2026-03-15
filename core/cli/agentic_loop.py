@@ -8,6 +8,7 @@ Supports:
 - Multi-intent: "분석하고 비교해줘" → sequential tool calls
 - Multi-turn: context preserved across interactions
 - Self-correction: LLM can retry or adjust based on tool results
+- Goal decomposition: compound requests auto-decomposed into sub-goal DAGs
 """
 
 from __future__ import annotations
@@ -149,6 +150,7 @@ class AgenticLoop:
         tool_registry: ToolRegistry | None = None,
         mcp_manager: Any | None = None,
         skill_registry: Any | None = None,
+        enable_goal_decomposition: bool = True,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -166,6 +168,10 @@ class AgenticLoop:
         self._last_llm_error: str | None = None  # last error type for user message
         self._client: anthropic.AsyncAnthropic | None = None
         self._op_logger = OperationLogger()
+
+        # Goal decomposition: auto-decompose compound requests into sub-goal DAGs
+        self._enable_goal_decomposition = enable_goal_decomposition
+        self._goal_decomposer: Any | None = None  # lazy init
 
     def refresh_tools(self) -> int:
         """Reload MCP tools into the tool list without reconstructing the loop.
@@ -195,11 +201,18 @@ class AgenticLoop:
         self._consecutive_failures.clear()
         self._op_logger.reset()
 
+        # Goal decomposition: try to decompose compound requests into sub-goal DAGs.
+        # If successful, inject the decomposition plan into the system prompt so the
+        # LLM executes sub-goals in the correct dependency order.
+        decomposition_hint = self._try_decompose(user_input)
+
         # Add user message to conversation context
         self.context.add_user_message(user_input)
         messages = self.context.get_messages()
 
         system_prompt = self._build_system_prompt()
+        if decomposition_hint:
+            system_prompt += "\n\n" + decomposition_hint
 
         # Prune old messages to stay within context budget (Karpathy P6)
         self._maybe_prune_messages(messages)
@@ -412,6 +425,70 @@ class AgenticLoop:
             skill_ctx = self._skill_registry.get_context_block()
         base = base.replace("{skill_context}", skill_ctx or "No skills loaded.")
         return base + "\n" + AGENTIC_SUFFIX
+
+    def _try_decompose(self, user_input: str) -> str | None:
+        """Attempt to decompose a compound user request into sub-goals.
+
+        Returns a system prompt suffix describing the execution plan,
+        or None if the request is simple (single tool call).
+
+        Uses GoalDecomposer with ANTHROPIC_BUDGET (Haiku) for low-cost
+        decomposition. Only triggered when compound indicators are present
+        in the user input.
+        """
+        if not self._enable_goal_decomposition:
+            return None
+
+        try:
+            from core.orchestration.goal_decomposer import GoalDecomposer
+
+            if self._goal_decomposer is None:
+                self._goal_decomposer = GoalDecomposer(
+                    tool_definitions=self._tools,
+                )
+
+            result = self._goal_decomposer.decompose(
+                user_input,
+                tool_definitions=self._tools,
+            )
+
+            if result is None:
+                return None
+
+            # Build execution plan hint for the system prompt
+            lines = [
+                "## Goal Decomposition Plan",
+                "",
+                f"The user's request has been decomposed into {len(result.goals)} sub-goals.",
+                "Execute them in dependency order. For each step, call the specified tool.",
+                "If a step depends on a previous step's output, use the result from that step.",
+                "",
+            ]
+            for goal in result.goals:
+                deps = ""
+                if goal.depends_on:
+                    deps = f" (depends on: {', '.join(goal.depends_on)})"
+                args_str = ""
+                if goal.tool_args:
+                    args_str = ", ".join(f"{k}={v!r}" for k, v in goal.tool_args.items())
+                lines.append(
+                    f"- **{goal.id}**: {goal.description} → `{goal.tool_name}({args_str})`{deps}"
+                )
+
+            if result.reasoning:
+                lines.append("")
+                lines.append(f"Reasoning: {result.reasoning}")
+
+            plan_text = "\n".join(lines)
+            log.info(
+                "GoalDecomposer: injecting %d-step plan into system prompt",
+                len(result.goals),
+            )
+            return plan_text
+
+        except Exception:
+            log.debug("Goal decomposition skipped", exc_info=True)
+            return None
 
     @_maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     async def _call_llm(

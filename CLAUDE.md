@@ -8,8 +8,8 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 132
-- **Tests**: 2226+
+- **Modules**: 133
+- **Tests**: 2258+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -171,6 +171,7 @@ core/
 ├── orchestration/
 │   ├── hooks.py         # HookSystem (27 events + SUBAGENT_* + async atrigger)
 │   ├── bootstrap.py     # Node bootstrap (pre-execution context injection)
+│   ├── goal_decomposer.py # GoalDecomposer (compound request → sub-goal DAG)
 │   ├── planner.py       # Planner (multi-step plan generation)
 │   ├── plan_mode.py     # Plan mode state machine
 │   ├── task_system.py   # TaskGraph DAG (dependency, cycle detection)
