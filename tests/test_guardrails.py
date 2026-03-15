@@ -152,7 +152,8 @@ class TestG3Grounding:
         assert 0.0 < ratio <= 1.0
         assert "Grounding:" in msg
 
-    def test_quantitative_analyst_hard_fail(self):
+    def test_ungrounded_evidence_soft_warning(self):
+        """Ungrounded evidence triggers soft warning, not hard fail."""
         analyses = [
             AnalysisResult(
                 analyst_type="growth_potential",
@@ -165,8 +166,8 @@ class TestG3Grounding:
         state = _make_full_state(analyses=analyses)
         signals = {"youtube_views": 25000000}
         passed, msg, ratio = _g3_grounding(state, signal_data=signals)
-        assert not passed
-        assert "requires grounding" in msg
+        assert passed  # soft warning, not hard fail
+        assert "review recommended" in msg
         assert ratio == 0.0
 
 

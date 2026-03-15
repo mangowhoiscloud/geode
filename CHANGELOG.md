@@ -32,6 +32,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - LinkedIn MCP 어댑터 — `LinkedInPort` Protocol + `LinkedInMCPAdapter` 구현 (Port/Adapter 패턴, graceful degradation)
 - 도구 카테고리/비용 태깅 — `definitions.json` 전 38개 도구에 `category`(8종)와 `cost_tier`(3종) 메타데이터 추가, `ToolRegistry.get_tools_by_category()`/`get_tools_by_cost_tier()` 필터링 메서드
 - MCP 서버별 세션 승인 캐시 — 한 서버 최초 승인 후 동일 세션 내 재승인 생략 (`_mcp_approved_servers`)
+- 에이전트 그라운딩 트루스 — AGENTIC_SUFFIX에 Citation & Grounding 규칙 추가 (출처 인용 강제, 미확인 정보 생성 금지)
+- web_fetch/web_search 소스 태깅 — `source` 필드 명시, web_search에 `source_urls` 추출
+- G3 그라운딩 비율 산출 — `grounding_ratio` 필드, evidence 대비 signal 근거 비율 계산
+- 리포트 Evidence Chain — 분석가별 evidence 목록을 Markdown 리포트에 포함
 
 ### Fixed
 - 연속 실패 도구 스킵 메시지 중복 출력 — `skipped` 결과 이중 로깅 방지
