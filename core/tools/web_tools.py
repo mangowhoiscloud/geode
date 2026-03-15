@@ -43,6 +43,7 @@ class WebFetchTool:
             return {
                 "result": {
                     "url": url,
+                    "source": url,  # explicit source tag for grounding
                     "content": text[:max_chars],
                     "truncated": len(text) > max_chars,
                     "content_type": content_type,
@@ -114,14 +115,22 @@ class GeneralWebSearchTool:
                 timeout=30.0,
             )
             text_parts: list[str] = []
+            source_urls: list[str] = []
             for block in response.content:
                 if hasattr(block, "text"):
                     text_parts.append(block.text)
+                # Extract cited URLs from web_search_tool_result blocks
+                if getattr(block, "type", "") == "web_search_tool_result":
+                    for entry in getattr(block, "content", []):
+                        url = getattr(entry, "url", None)
+                        if url:
+                            source_urls.append(url)
             return {
                 "result": {
                     "query": query,
                     "search_results": "\n".join(text_parts),
                     "source": "anthropic_web_search",
+                    "source_urls": source_urls,
                 }
             }
         except Exception as exc:

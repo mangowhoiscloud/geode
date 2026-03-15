@@ -223,6 +223,22 @@ def _format_analyses_md(analyses: list[dict[str, Any]]) -> str:
         confidence = a.get("confidence", "")
         conf_str = f"{confidence}%" if confidence else "—"
         lines.append(f"| {analyst} | {score} | {conf_str} | {finding} |")
+
+    # Evidence chain — list cited evidence per analyst
+    has_evidence = any(a.get("evidence") for a in analyses)
+    if has_evidence:
+        lines.append("")
+        lines.append("### Evidence Chain")
+        lines.append("")
+        for a in analyses:
+            evidence = a.get("evidence", [])
+            if evidence:
+                analyst = a.get("analyst_type", "N/A")
+                lines.append(f"**{analyst}**:")
+                for ev in evidence:
+                    lines.append(f"- {ev}")
+                lines.append("")
+
     return "\n".join(lines)
 
 

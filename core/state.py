@@ -115,6 +115,7 @@ class GuardrailResult(BaseModel):
     g4_consistency: bool = True
     all_passed: bool = True
     details: list[str] = Field(default_factory=list)
+    grounding_ratio: float = 0.0  # fraction of evidence grounded in signals [0.0, 1.0]
 
 
 class BiasBusterResult(BaseModel):
