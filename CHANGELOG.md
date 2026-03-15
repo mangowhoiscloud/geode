@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- 도구 카테고리/비용 태깅 — `definitions.json` 전 38개 도구에 `category`(8종)와 `cost_tier`(3종) 메타데이터 추가, `ToolRegistry.get_tools_by_category()`/`get_tools_by_cost_tier()` 필터링 메서드
+
 ### Changed
 - NL Router 시스템 프롬프트 Tool Selection Priority Matrix 추가 — 12개 의도별 1st/2nd Choice + 사용 금지 도구 매트릭스, 비용 인식 규칙, 도구 호출 금지 사항 (AGENTIC_SUFFIX)
 
