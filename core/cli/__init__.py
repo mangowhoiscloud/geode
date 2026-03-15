@@ -2416,17 +2416,29 @@ def _interactive_loop() -> None:
     verbose = False
     conversation = ConversationContext(max_turns=20)
 
-    # Wire default domain adapter early so all nodes/tools see it
+    # --- Startup initialization with progressive status ---
+    def _init_step(label: str) -> None:
+        """Print a compact startup progress indicator."""
+        console.print(f"  [dim]Loading {label}...[/dim]", end="\r")
+
+    def _init_done(label: str, ok: bool = True) -> None:
+        mark = "[bold green]ok[/bold green]" if ok else "[dim]skip[/dim]"
+        console.print(f"  {mark} {label}          ")
+
+    # 1. Domain adapter
+    _init_step("domain")
     from core.domains.loader import load_domain_adapter
     from core.infrastructure.ports.domain_port import set_domain
 
     try:
         set_domain(load_domain_adapter("game_ip"))
+        _init_done("Domain")
     except Exception:
+        _init_done("Domain", ok=False)
         log.debug("Domain adapter initialization skipped", exc_info=True)
 
-    # Wire memory contextvars so note_read/note_save/rule_* tools work
-    # (otherwise they return "Project memory not available")
+    # 2. Memory contextvars
+    _init_step("memory")
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.project import ProjectMemory
     from core.tools.memory_tools import set_org_memory, set_project_memory
@@ -2434,45 +2446,54 @@ def _interactive_loop() -> None:
     try:
         set_project_memory(ProjectMemory())
         set_org_memory(MonoLakeOrganizationMemory())
+        _init_done("Memory")
     except Exception:
+        _init_done("Memory", ok=False)
         log.debug("Memory context initialization skipped", exc_info=True)
 
-    # Key gate: block until API key provided or user quits
+    # 3. Key gate
     readiness = _get_readiness()
     if readiness is None or readiness.blocked:
         key = key_registration_gate()
         if key is None:
             return  # user quit
-        # Re-check readiness after key registration
         readiness = check_readiness()
         _set_readiness(readiness)
 
-    # Initialize MCP server manager (optional, fails silently)
+    # 4. MCP servers (slowest — npx subprocess spawn)
+    _init_step("MCP servers")
     from core.infrastructure.adapters.mcp.manager import MCPServerManager
 
     mcp_mgr: MCPServerManager | None = None
     try:
         _mgr = MCPServerManager()
-        if _mgr.load_config() > 0:
+        n_mcp = _mgr.load_config()
+        if n_mcp > 0:
             mcp_mgr = _mgr
             import atexit
 
             atexit.register(_mgr.close_all)
+            _init_done(f"MCP ({n_mcp} servers)")
+        else:
+            _init_done("MCP (none)", ok=False)
     except Exception:
+        _init_done("MCP", ok=False)
         log.debug("MCP initialization skipped", exc_info=True)
 
-    # Initialize skill registry (optional, fails silently)
+    # 5. Skills
+    _init_step("skills")
     from core.extensibility.skills import SkillLoader, SkillRegistry
 
     skill_registry = SkillRegistry()
     try:
         loaded_skills = SkillLoader().load_all(registry=skill_registry)
-        if loaded_skills:
-            log.info("Loaded %d skills", len(loaded_skills))
+        _init_done(f"Skills ({len(loaded_skills)})" if loaded_skills else "Skills (0)")
     except Exception:
+        _init_done("Skills", ok=False)
         log.debug("Skill loading skipped", exc_info=True)
 
-    # Initialize SchedulerService (optional, fails silently)
+    # 6. Scheduler
+    _init_step("scheduler")
     try:
         from core.automation.scheduler import SchedulerService
 
@@ -2480,9 +2501,12 @@ def _interactive_loop() -> None:
         _sched_svc.load()
         _sched_svc.start()
         _scheduler_service_ctx.set(_sched_svc)
-        log.info("SchedulerService started")
+        _init_done("Scheduler")
     except Exception:
+        _init_done("Scheduler", ok=False)
         log.debug("SchedulerService initialization skipped", exc_info=True)
+
+    console.print()  # blank line before prompt
 
     # Build tool handlers and executor
     agentic_ref: list[Any] = [None]  # mutable ref for handler closure
