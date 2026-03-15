@@ -981,7 +981,7 @@ core/
 │   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, DomainPort
 │   └── adapters/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/                # Steam, Brave MCP adapters + catalog (29 entries)
+│       └── mcp/                # Steam, Brave, LinkedIn MCP adapters + catalog (29 entries)
 ├── llm/                        # LLM client (prompt caching, streaming)
 │   ├── client.py               # Anthropic wrapper + token tracking + cost
 │   ├── token_tracker.py        # TokenTracker singleton (model pricing)
