@@ -1112,18 +1112,18 @@ class TestDynamicActions:
     """L3: get_valid_actions with optional ToolRegistry."""
 
     def test_get_valid_actions_static(self) -> None:
-        """Without registry, returns static 18 actions."""
+        """Without registry, returns static 19 actions (incl. decompose)."""
         actions = get_valid_actions()
         assert actions == VALID_ACTIONS
-        assert len(actions) == 18
+        assert len(actions) == 19
 
     def test_get_valid_actions_dynamic(self) -> None:
-        """With registry containing extra tool, returns 19+ actions."""
+        """With registry containing extra tool, returns 20+ actions."""
         mock_registry = MagicMock()
         mock_registry.list_tools.return_value = ["custom_tool_xyz"]
         actions = get_valid_actions(registry=mock_registry)
         assert "custom_tool_xyz" in actions
-        assert len(actions) >= 19
+        assert len(actions) >= 20
 
 
 class TestDisambiguation:
