@@ -43,6 +43,17 @@ DANGEROUS_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# Write tools modify persistent state (credentials, memory, files).
+# Require explicit user confirmation — never auto-approved, even for sub-agents.
+WRITE_TOOLS: frozenset[str] = frozenset(
+    {
+        "memory_save",
+        "note_save",
+        "set_api_key",
+        "manage_auth",
+    }
+)
+
 # Expensive tools require cost confirmation before execution
 EXPENSIVE_TOOLS: dict[str, float] = {
     "analyze_ip": 1.50,
@@ -85,9 +96,17 @@ class ToolExecutor:
         """Execute a tool call, applying HITL gate if needed."""
         log.debug("ToolExecutor: %s(%s)", tool_name, tool_input)
 
-        # Dangerous tools: HITL gate
+        # Dangerous tools: HITL gate (never auto-approved)
         if tool_name in DANGEROUS_TOOLS:
             return self._execute_dangerous(tool_name, tool_input)
+
+        # Write tools: HITL gate (never auto-approved, even for sub-agents)
+        if (
+            tool_name in WRITE_TOOLS
+            and not self._auto_approve
+            and not self._confirm_write(tool_name, tool_input)
+        ):
+            return {"error": "User denied write operation", "denied": True}
 
         # Expensive tools: cost confirmation gate
         if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
@@ -105,15 +124,11 @@ class ToolExecutor:
         # Delegate to registered handler
         handler = self._handlers.get(tool_name)
         if handler is None:
-            # MCP fallback: try MCP servers
+            # MCP fallback: route through safety checks
             if self._mcp_manager is not None:
                 server = self._mcp_manager.find_server_for_tool(tool_name)
                 if server is not None:
-                    log.info("MCP fallback: %s → %s", tool_name, server)
-                    result: dict[str, Any] = self._mcp_manager.call_tool(
-                        server, tool_name, tool_input
-                    )
-                    return result
+                    return self._execute_mcp(server, tool_name, tool_input)
             log.warning("No handler for tool: %s", tool_name)
             return {"error": f"Unknown tool: {tool_name}"}
 
@@ -174,7 +189,11 @@ class ToolExecutor:
         return {"error": f"Dangerous tool not implemented: {tool_name}"}
 
     def _execute_bash(self, tool_input: dict[str, Any]) -> dict[str, Any]:
-        """Execute bash command with HITL approval."""
+        """Execute bash command with HITL approval.
+
+        DANGEROUS tools always require user approval — auto_approve is
+        ignored for this category to prevent sub-agent bypass.
+        """
         command = tool_input.get("command", "")
         reason = tool_input.get("reason", "")
 
@@ -186,14 +205,77 @@ class ToolExecutor:
         if blocked:
             return self._bash.to_tool_result(blocked)
 
-        # HITL approval gate
-        if not self._auto_approve:
-            approved = self._request_approval(command, reason)
-            if not approved:
-                return {"error": "User denied execution", "denied": True}
+        # HITL approval gate — NEVER skipped, even with auto_approve.
+        # Sub-agents must not execute shell commands without user consent.
+        approved = self._request_approval(command, reason)
+        if not approved:
+            return {"error": "User denied execution", "denied": True}
 
         result = self._bash.execute(command)
         return self._bash.to_tool_result(result)
+
+    def _execute_mcp(
+        self, server: str, tool_name: str, tool_input: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Execute an MCP tool with safety logging.
+
+        MCP tools from external servers are logged and routed through the
+        manager.  Previously these bypassed all safety checks.
+        """
+        log.info("MCP tool: %s → %s (args=%s)", tool_name, server, list(tool_input.keys()))
+
+        # MCP tools are external — confirm if not auto-approved
+        if not self._auto_approve and not self._confirm_mcp(server, tool_name):
+            return {"error": "User denied MCP tool execution", "denied": True}
+
+        assert self._mcp_manager is not None  # guaranteed by caller
+        result: dict[str, Any] = self._mcp_manager.call_tool(server, tool_name, tool_input)
+        return result
+
+    def _confirm_mcp(self, server: str, tool_name: str) -> bool:
+        """Prompt user for MCP tool confirmation."""
+        from core.cli import _restore_terminal
+
+        _restore_terminal()
+        console.print()
+        console.print("  [bold yellow]⚡ MCP tool requires approval[/bold yellow]")
+        console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
+        console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
+        console.print()
+        try:
+            response = console.input("  [header]Allow? [Y/n][/header] ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            return False
+        return response in ("", "y", "yes")
+
+    def _confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
+        """Prompt user for write operation confirmation."""
+        from core.cli import _restore_terminal
+
+        _restore_terminal()
+        summary = ""
+        if tool_name == "memory_save":
+            summary = tool_input.get("content", tool_input.get("value", ""))[:80]
+        elif tool_name == "note_save":
+            summary = tool_input.get("content", "")[:80]
+        elif tool_name == "set_api_key":
+            summary = f"provider={tool_input.get('provider', '?')}"
+        elif tool_name == "manage_auth":
+            summary = f"action={tool_input.get('action', '?')}"
+
+        console.print()
+        console.print("  [bold yellow]✏ Write operation requires approval[/bold yellow]")
+        console.print(f"  [dim]Tool:[/dim]    [bold]{tool_name}[/bold]")
+        if summary:
+            console.print(f"  [dim]Summary:[/dim] {summary}")
+        console.print()
+        try:
+            response = console.input("  [header]Allow? [Y/n][/header] ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            return False
+        return response in ("", "y", "yes")
 
     def _confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
         """Prompt user for cost confirmation on expensive tools."""
