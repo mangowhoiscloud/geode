@@ -43,6 +43,27 @@ class WebSearchPort(Protocol):
 
 
 @runtime_checkable
+class LinkedInPort(Protocol):
+    """Port for LinkedIn profile and company data retrieval."""
+
+    def get_person_profile(self, url: str) -> dict[str, Any]:
+        """Fetch a person's LinkedIn profile by URL."""
+        ...
+
+    def get_company_profile(self, url: str) -> dict[str, Any]:
+        """Fetch a company's LinkedIn profile by URL."""
+        ...
+
+    def search_people(self, query: str, *, count: int = 5) -> list[dict[str, Any]]:
+        """Search LinkedIn people by keyword."""
+        ...
+
+    def is_available(self) -> bool:
+        """Check if the LinkedIn service is reachable."""
+        ...
+
+
+@runtime_checkable
 class KGMemoryPort(Protocol):
     """Port for knowledge graph memory operations."""
 
