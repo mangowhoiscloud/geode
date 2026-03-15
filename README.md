@@ -59,12 +59,12 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
 | Feature | Description |
 |---------|-------------|
 | **Agentic Loop** | `while(tool_use)` 멀티 라운드 (max 15), multi-intent chaining, clarification |
+| **Sub-Agent** | Full AgenticLoop 상속, 재귀 depth 제어 (max_depth=2), `SubAgentResult` 표준 스키마, `ErrorCategory` 분류, Token Guard |
 | **38+ Tools** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + MCP 포함 60+ |
-| **Sub-Agent** | Full AgenticLoop 상속, 재귀 depth 제어 (max_depth=2), `SubAgentResult` + `ErrorCategory`, async `adelegate()` |
 | **Skills + MCP** | `.claude/skills/` 자동 발견 + 29개 MCP 카탈로그 자연어 설치 + 도구 핫 리로드 |
-| **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
+| **Orchestration** | HookSystem (27 events), TaskGraph DAG, CoalescingQueue, LaneQueue, PlanMode |
 | **NL Router** | 한국어/영어 자유 입력, Multi-turn (20 turns), Multi-intent, Fuzzy matching |
-| **Cross-LLM** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, agreement ≥ 0.67, Krippendorff's α |
+| **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
 | **Observability** | LangSmith 토큰 추적 + 비용 계산, Claude Code 스타일 상태줄 |
 | **Scheduler** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON) |
 | **2168+ Tests** | 131 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
@@ -134,33 +134,9 @@ geode search "사이버펑크"                          # 검색
 geode list                                        # 목록
 ```
 
-### MCP Server
-
-GEODE를 MCP 서버로 실행하여 다른 에이전트에서 호출할 수 있습니다:
-
-```bash
-uv run python -m core.mcp_server
-```
-
-**제공 도구:** `analyze_ip`, `quick_score`, `get_ip_signals`, `list_fixtures`, `query_memory`, `get_health`
-
-**리소스:** `geode://fixtures`, `geode://soul`
-
-### Available IPs
-
-**Core Fixtures** (hand-crafted, golden set):
-
-| IP | Tier | Score | Genre |
-|----|------|-------|-------|
-| Berserk | S | 81.3 | Dark Fantasy |
-| Cowboy Bebop | A | 68.4 | SF Noir |
-| Ghost in the Shell | B | 51.6 | Cyberpunk |
-
-**Steam Fixtures**: 201개 추가 게임 데이터 (`core/fixtures/steam/`), `/generate` 명령으로 합성 데이터 생성 가능.
-
 ---
 
-## Architecture
+## Architecture — Autonomous Core
 
 ### 6-Layer Architecture
 
@@ -170,7 +146,7 @@ graph TB
         CLI["CLI (Typer)"]
         NLR["NL Router"]
         AL["AgenticLoop<br/>while(tool_use)"]
-        Search["IP Search Engine"]
+        SubA["SubAgentManager<br/>parallel delegation"]
         Batch["Batch Analysis"]
     end
 
@@ -189,13 +165,7 @@ graph TB
         Checkpoint["SqliteSaver"]
     end
 
-    subgraph L3["L3 — LangGraph Pipeline"]
-        Graph["StateGraph"]
-        Nodes["Pipeline Nodes (8)"]
-        State["GeodeState"]
-    end
-
-    subgraph L4["L4 — Orchestration"]
+    subgraph L3["L3 — Orchestration"]
         Hooks["HookSystem (27)"]
         Tasks["TaskGraph (DAG)"]
         Plan["PlanMode"]
@@ -204,7 +174,7 @@ graph TB
         RunLog["Run Log"]
     end
 
-    subgraph L5["L5 — Extensibility"]
+    subgraph L4["L4 — Extensibility"]
         Tools["ToolRegistry (38)"]
         Policy["PolicyChain"]
         Reports["Report Generator"]
@@ -212,11 +182,17 @@ graph TB
         MCPCat["MCP Catalog (29)"]
     end
 
+    subgraph L5["L5 — Domain Plugins"]
+        Domain["DomainPort Protocol"]
+        GameIP["GameIPDomain"]
+        Pipeline["LangGraph StateGraph"]
+    end
+
+    L0 --> L1
+    L0 --> L2
     L0 --> L3
-    L3 --> L1
-    L3 --> L2
-    L3 --> L4
-    L3 --> L5
+    L0 --> L4
+    L4 --> L5
     style L0 fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
     style L1 fill:#1e293b,stroke:#10b981,color:#e2e8f0
     style L2 fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
@@ -227,55 +203,12 @@ graph TB
 
 | Layer | 구성 요소 | 설명 |
 |-------|----------|------|
-| **L0** CLI | Typer CLI, NL Router, AgenticLoop, IP Search, Batch | 사용자 인터페이스 — 슬래시 커맨드 17종, 자연어 intent 분류, while(tool_use) 멀티라운드 |
+| **L0** CLI & Agent | Typer CLI, NL Router, AgenticLoop, SubAgentManager, Batch | 사용자 인터페이스 + 자율 실행 코어 — 멀티라운드 tool use, 서브에이전트 병렬 위임 |
 | **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입, LLM 클라이언트 교체 가능 |
 | **L2** Memory | Organization (fixture), Project (.claude/MEMORY.md), Session (TTL), SqliteSaver | 3-Tier 메모리 + LangGraph 체크포인트 영속화 |
-| **L3** Pipeline | StateGraph, 8 Pipeline Nodes, GeodeState (TypedDict) | LangGraph `graph.stream()` 단계별 실행, Send API 병렬 분석 |
-| **L4** Orchestration | HookSystem (27 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
-| **L5** Extensibility | ToolRegistry (38+), PolicyChain, Report Generator, Skills System, MCP Catalog (29) | 런타임 tool 확장, 노드별 접근 제어, 스킬 자동 주입, MCP 자동설치 |
-
-### Pipeline Flow
-
-```mermaid
-graph LR
-    START((START)) --> Router
-    Router -->|"signals"| Signals
-    Router -->|"evaluators"| Eval
-    Router -->|"scoring"| Scoring
-    Signals --> A1["Analyst<br/>game_mechanics"]
-    Signals --> A2["Analyst<br/>player_experience"]
-    Signals --> A3["Analyst<br/>growth_potential"]
-    Signals --> A4["Analyst<br/>discovery"]
-    A1 --> Eval["Evaluator ×3<br/>(Cross-LLM)"]
-    A2 --> Eval
-    A3 --> Eval
-    A4 --> Eval
-    Eval --> Scoring["Scoring<br/>PSM 14-Axis"]
-    Scoring --> Verify["Verification<br/>G1-G4 + BiasBuster"]
-    Verify -->|"confidence ≥ 0.7"| Synth["Synthesizer"]
-    Verify -->|"confidence < 0.7"| Gather["gather"]
-    Gather -->|"retry (max 5)"| Signals
-    Synth --> END((END))
-
-    style START fill:#10b981,stroke:#10b981,color:#fff
-    style END fill:#ef4444,stroke:#ef4444,color:#fff
-    style Gather fill:#8b5cf6,stroke:#8b5cf6,color:#fff
-    style Eval fill:#3b82f6,stroke:#3b82f6,color:#fff
-    style Scoring fill:#f59e0b,stroke:#f59e0b,color:#fff
-    style Verify fill:#8b5cf6,stroke:#8b5cf6,color:#fff
-    style Synth fill:#06b6d4,stroke:#06b6d4,color:#fff
-```
-
-| Node | 역할 | 입출력 |
-|------|------|--------|
-| **Router** | 파이프라인 모드 결정 (6종), fixture 로딩, 메모리 조합 | `→ pipeline_mode`, `signals`/`evaluators`/`scoring` 라우팅 |
-| **Signals** | 외부 시그널 데이터 fixture 주입 | `→ external_signals` |
-| **Analyst ×4** | Send API 병렬 실행 — `game_mechanics`, `player_experience`, `growth_potential`, `discovery` | `→ analyses[]` (Clean Context: `analyses` 필드 제외) |
-| **Evaluator ×3** | 14-Axis 루브릭 평가 — `quality_judge` (8축), `hidden_value` (3축), `community_momentum` (3축) | `→ evaluations[]` (Typed Pydantic Output) |
-| **Scoring** | PSM 6-Weighted Composite + Confidence Multiplier → Tier S/A/B/C | `→ final_score`, `tier`, `cause` |
-| **Verification** | Guardrails G1-G4 + BiasBuster (6 bias) + Confidence Gate | `→ confidence ≥ 0.7` 통과 or loopback |
-| **Gather** | 재분석 상태 수집 (confidence < 0.7, max 5 iterations) | `→ signals` loopback |
-| **Synthesizer** | Decision Tree 분류 + 내러티브 생성 | `→ recommendation`, `narrative` |
+| **L3** Orchestration | HookSystem (27 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
+| **L4** Extensibility | ToolRegistry (38+), PolicyChain, Report Generator, Skills System, MCP Catalog (29) | 런타임 tool 확장, 노드별 접근 제어, 스킬 자동 주입, MCP 자동설치 |
+| **L5** Domain Plugins | DomainPort Protocol, GameIPDomain, LangGraph StateGraph | 도메인별 파이프라인 플러그인 — analysts/evaluators/scoring 교체 가능 |
 
 ### Agentic Loop
 
@@ -315,79 +248,150 @@ graph TB
 | **LangSmith** | `track_token_usage()` — 토큰 수/비용을 RunTree.extra.metrics에 기록, `LLMUsageAccumulator`로 세션 합산 |
 | **Retry** | AgenticLoop: `2^attempt × 10`s (10/20/40s) — Pipeline: `min(1.0 × 2^attempt, 30.0)`s (1/2/4s) |
 
-### Cross-LLM Ensemble
+### Sub-Agent System
+
+GEODE의 서브에이전트는 부모 AgenticLoop의 전체 역량(tools, MCP, skills, memory)을 상속받아 독립 컨텍스트에서 병렬 실행됩니다. 재귀 위임, 에러 분류, 토큰 가드를 통해 안전하고 효율적인 멀티태스킹을 지원합니다.
+
+#### Architecture
 
 ```mermaid
 graph TB
-    subgraph Primary["Claude Opus 4.6 (primary_analysts)"]
-        GM["game_mechanics"]
-        GP["growth_potential"]
+    subgraph Parent["Parent AgenticLoop"]
+        LLM["Claude Opus 4.6<br/>Tool Use"]
+        DT["delegate_task<br/>(single / batch)"]
     end
 
-    subgraph Secondary["GPT-5.4 (secondary_analysts)"]
-        PE["player_experience"]
-        DI["discovery"]
+    subgraph SAM["SubAgentManager"]
+        CQ["CoalescingQueue<br/>(250ms dedup)"]
+        TG["TaskGraph<br/>(DAG dependency)"]
+        IR["IsolatedRunner<br/>(MAX_CONCURRENT=5)"]
     end
 
-    GM --> Merge["Score Merge<br/>agreement ≥ 0.67"]
-    GP --> Merge
-    PE --> Merge
-    DI --> Merge
-    Merge --> Final["Reliability<br/>Krippendorff's α"]
+    subgraph Workers["Parallel Workers"]
+        W1["Worker 1<br/>AgenticLoop<br/>(depth=1)"]
+        W2["Worker 2<br/>AgenticLoop<br/>(depth=1)"]
+        W3["Worker N<br/>AgenticLoop<br/>(depth=1)"]
+    end
 
-    style Primary fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style Secondary fill:#1e293b,stroke:#10b981,color:#e2e8f0
-    style Merge fill:#3b82f6,stroke:#3b82f6,color:#fff
-```
+    subgraph Result["Standardized Output"]
+        SR["SubAgentResult<br/>{status, summary, data,<br/>error_category, duration_ms}"]
+        TGD["Token Guard<br/>(MAX 4096 tokens)"]
+    end
 
-> `ensemble_mode=cross` 시 `primary_analysts`/`secondary_analysts` 설정으로 모델 분배 결정. `primary_only` 모드에서는 모든 analyst가 Claude 사용.
+    LLM -->|tool_use| DT
+    DT --> SAM
+    CQ --> TG
+    TG --> IR
+    IR --> W1
+    IR --> W2
+    IR --> W3
+    W1 --> SR
+    W2 --> SR
+    W3 --> SR
+    SR --> TGD
+    TGD -->|tool_result| LLM
 
-| 항목 | 값 |
-|------|-----|
-| **Primary model** | Claude Opus 4.6 (`ClaudeAdapter`) |
-| **Secondary model** | GPT-5.4 (`OpenAIAdapter`) |
-| **Primary analysts** | `game_mechanics`, `growth_potential` (설정: `GEODE_PRIMARY_ANALYSTS`) |
-| **Secondary analysts** | `player_experience`, `discovery` (설정: `GEODE_SECONDARY_ANALYSTS`) |
-| **합의 임계값** | `agreement ≥ 0.67` (`GEODE_AGREEMENT_THRESHOLD`) |
-| **신뢰도 지표** | Krippendorff's α (순서형 데이터 기반 평가자 간 일치도) |
-| **모드 전환** | `GEODE_ENSEMBLE_MODE`: `cross` (듀얼) / `primary_only` (Claude 단독) |
+    SAM -.->|SUBAGENT_STARTED| HS["HookSystem"]
+    W1 -.->|SUBAGENT_COMPLETED| HS
+    W2 -.->|SUBAGENT_FAILED| HS
 
-### Sub-Agent Orchestration
-
-```mermaid
-graph LR
-    Main["AgenticLoop"] --> SAM["SubAgentManager"]
-    SAM --> TG["TaskGraph<br/>(DAG)"]
-    SAM --> CQ["CoalescingQueue<br/>(dedup)"]
-    SAM --> IR["IsolatedRunner<br/>(MAX_CONCURRENT=5)"]
-
-    IR --> W1["Worker 1"]
-    IR --> W2["Worker 2"]
-    IR --> W3["Worker N"]
-
-    SAM -.->|NODE_ENTER| HS["HookSystem"]
-    W1 -.->|NODE_EXIT| HS
-    W2 -.->|NODE_ERROR| HS
-
-    style Main fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style Parent fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
     style SAM fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style IR fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style Workers fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style Result fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
     style HS fill:#1e293b,stroke:#ef4444,color:#e2e8f0
 ```
 
+#### Delegation Flow
+
+```
+User: "병렬로 3개 IP 분석해: Berserk, Cowboy Bebop, Ghost in the Shell"
+
+1. NL Router → delegate_task tool call (batch mode)
+2. ToolExecutor → SubAgentManager.delegate([task1, task2, task3])
+3. CoalescingQueue → 250ms 윈도우 내 중복 제거
+4. TaskGraph → DAG 의존관계 해석, 병렬 실행 배치 결정
+5. IsolatedRunner → 최대 5개 워커 스레드 병렬 실행
+6. 각 워커:
+   ├─ ContextVar 전파 (memory, org)
+   ├─ 독립 ConversationContext (max_turns=10)
+   ├─ 부모 tools/MCP/skills 상속한 ToolExecutor (auto_approve=True)
+   ├─ AgenticLoop 실행 (max_rounds=10, max_tokens=8192)
+   └─ SubAgentResult 반환 (summary 필수 보존)
+7. Token Guard → 4096 토큰 초과 시 summary만 보존하여 부모 컨텍스트 보호
+8. Hook 이벤트 발생 (SUBAGENT_STARTED / COMPLETED / FAILED)
+```
+
+#### Core Components
+
 | 구성 요소 | 설명 |
 |----------|------|
-| **SubAgentManager** | Full AgenticLoop 상속 (tools/MCP/skills/memory), `SubAgentResult` 표준 스키마, 재귀 depth 제어 (max_depth=2, max_total=15) |
-| **TaskGraph (DAG)** | 의존 관계 기반 실행 순서 결정, 순환 감지, 완료 상태 추적 |
-| **CoalescingQueue** | 동일 IP 중복 분석 요청 병합 (dedup key: IP name + mode) |
-| **IsolatedRunner** | `asyncio.Semaphore(MAX_CONCURRENT=5)` — 최대 5개 워커 병렬 실행 |
-| **HookSystem** | 27개 라이프사이클 이벤트 — `NODE_ENTER`/`NODE_EXIT`/`NODE_ERROR`/`SUBAGENT_*` 등 + async `atrigger()` |
+| **SubAgentManager** | 병렬 위임 오케스트레이터. 부모의 `action_handlers`, `mcp_manager`, `skill_registry`를 자식에게 전달. 재귀 depth 제어 (max_depth=2, max_total=15) |
+| **SubTask** | 입력 스펙 — `task_id`, `description`, `task_type` (analyze/search/compare), `args`, 선택적 `agent` 오버라이드 |
+| **SubAgentResult** | 표준 출력 스키마 — `status` (ok/error/timeout/partial), 필수 `summary` 필드, `error_category`, `duration_ms`, `token_usage`, `children_count` |
+| **IsolatedRunner** | 스레드 풀 기반 격리 실행. `MAX_CONCURRENT=5` 동시 워커 제한. 타임아웃 + 에러 격리 |
+| **CoalescingQueue** | 250ms 윈도우 내 동일 task_id 중복 요청 병합. dedup key 기반 |
+| **TaskGraph** | DAG 기반 실행 순서 결정. 순환 감지, 완료 상태 추적, 실패 전파 (`propagate_failure`) |
+| **AgentRegistry** | 에이전트 컨텍스트 해석기. 3개 기본 에이전트 (anime_expert, game_analyst, market_researcher) |
 
-### MCP & Tool Architecture
+#### Recursion & Safety
+
+```mermaid
+graph LR
+    Root["Root AgenticLoop<br/>(depth=0)"] -->|delegate| D1["Sub-Agent<br/>(depth=1)"]
+    D1 -->|delegate| D2["Sub-Agent<br/>(depth=2)"]
+    D2 -->|"depth > max_depth"| Block["BLOCKED<br/>ErrorCategory.DEPTH_EXCEEDED"]
+
+    style Root fill:#10b981,stroke:#10b981,color:#fff
+    style D1 fill:#3b82f6,stroke:#3b82f6,color:#fff
+    style D2 fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Block fill:#ef4444,stroke:#ef4444,color:#fff
+```
+
+| 제어 | 값 | 설명 |
+|------|-----|------|
+| **max_depth** | 2 | 재귀 위임 최대 깊이. Root=0 → depth 2까지 허용, depth 3+ 차단 |
+| **max_total** | 15 | 세션당 최대 서브에이전트 수 |
+| **MAX_CONCURRENT** | 5 | 동시 병렬 워커 수 (asyncio.Semaphore) |
+| **timeout_s** | 120s (delegate) / 300s (build) | 개별 태스크 타임아웃 |
+| **auto_approve** | True | 서브에이전트는 HITL 승인 생략 (DANGEROUS 제외) |
+| **Token Guard** | 4096 tokens | tool_result 크기 제한. 초과 시 `summary` + 경량 필드만 보존 |
+
+#### Error Classification
+
+서브에이전트 실패 시 자동으로 에러를 분류하여 재시도 가능 여부를 판단합니다:
+
+| ErrorCategory | 조건 | Retryable |
+|---------------|------|-----------|
+| `TIMEOUT` | "timeout", "timed out" | Yes |
+| `API_ERROR` | "api", "rate limit", "authentication" | Yes |
+| `VALIDATION` | "validation", "required", "invalid" | No |
+| `RESOURCE` | "memory", "disk", "resource" | No |
+| `DEPTH_EXCEEDED` | "depth" | No |
+| `UNKNOWN` | 기타 | No |
+
+#### Parent-Child Tracking
+
+```python
+SubagentRunRecord(
+    run_id="a1b2c3d4e5f6",        # UUID[:12]
+    task_id="delegate_17..._0",
+    child_session_key="ip:berserk:analyze",
+    parent_session_key="root",
+    task_type="analyze",
+    started_at=1710...,
+    completed_at=1710...,
+    outcome="ok"                   # pending | ok | error
+)
+```
+
+> OpenClaw Spawn+Announce 패턴 기반. `get_run_records()`로 부모-자식 관계 조회 가능. LangSmith 트레이스와 연동하여 전체 실행 흐름 추적.
+
+### Tool & MCP Architecture
 
 ```mermaid
 graph TB
-    subgraph GEODE["GEODE Pipeline"]
+    subgraph GEODE["GEODE Autonomous Core"]
         Registry["ToolRegistry<br/>38 base tools"]
         Policy["PolicyChain<br/>+ NodeScopePolicy"]
         SkillReg["SkillRegistry<br/>(auto-inject)"]
@@ -434,6 +438,10 @@ graph TB
 
 **MCP Server (FastMCP)** — GEODE를 외부 에이전트에서 호출:
 
+```bash
+uv run python -m core.mcp_server
+```
+
 | Tool | 설명 |
 |------|------|
 | `analyze_ip` | IP 전체 분석 실행 |
@@ -469,134 +477,6 @@ graph LR
 | **LLMUsageAccumulator** | `contextvars` 기반 — 세션 내 전체 토큰/비용 누적, context-local 격리 |
 | **RunTree.extra.metrics** | LangSmith 트레이스에 토큰 수/비용 메타데이터 첨부 |
 | **조건부 활성화** | `LANGCHAIN_TRACING_V2=true` + `LANGCHAIN_API_KEY` 설정 시만 tracing 활성 |
-
-### 14-Axis Rubric (PSM Engine)
-
-```mermaid
-graph TB
-    subgraph Evaluators["3 Evaluators"]
-        QJ["quality_judge<br/>(8 axes: A,B,C,B1,C1,C2,M,N)"]
-        HV["hidden_value<br/>(3 axes: D,E,F)"]
-        CM["community_momentum<br/>(3 axes: J,K,L)"]
-    end
-
-    subgraph Scoring["PSM Scoring"]
-        W["6-Weighted Composite"]
-        Conf["Confidence Multiplier"]
-        Tier["Tier Classification<br/>S / A / B / C"]
-    end
-
-    QJ --> W
-    HV --> W
-    CM --> W
-    W --> Conf
-    Conf --> Tier
-
-    style Evaluators fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style Scoring fill:#1e293b,stroke:#10b981,color:#e2e8f0
-```
-
-> 각 축은 1-5점 한국어 루브릭 앵커 사용. `evaluator_axes.yaml`에서 SSOT 관리. Prospect IP용 9-axis 확장 루브릭도 지원.
-
-**Evaluator별 축 배분:**
-
-| Evaluator | 축 | 평가 영역 |
-|-----------|-----|----------|
-| `quality_judge` | A (Narrative Depth), B (Visual Adaptation), C (Gameplay Potential), B1 (Character Appeal), C1 (World Building), C2 (Lore Consistency), M (Market Fit), N (Innovation Score) | 품질 8축 |
-| `hidden_value` | D (Discovery Gap), E (Exploitation Gap), F (Fandom Resilience) | 숨겨진 가치 3축 |
-| `community_momentum` | J (Community Activity), K (Content Creation), L (Cross-media Traction) | 커뮤니티 모멘텀 3축 |
-
-**Scoring Formula**: `Final = (0.25×PSM + 0.20×Quality + 0.18×Recovery + 0.12×Growth + 0.20×Momentum + 0.05×Dev) × (0.7 + 0.3 × Confidence/100)`
-
-**Tier 기준**: S ≥ 80, A ≥ 60, B ≥ 40, C < 40
-
-### Verification & Feedback Loop
-
-```mermaid
-graph LR
-    V["Verification"] --> Gate{confidence<br/>≥ 0.7?}
-    Gate -->|Yes| S["Synthesizer → END"]
-    Gate -->|No| Check{iteration<br/>< max?}
-    Check -->|Yes| G["gather → signals<br/>(loopback)"]
-    Check -->|No| S2["Synthesizer<br/>(force proceed)"]
-
-    style Gate fill:#f59e0b,stroke:#f59e0b,color:#fff
-    style G fill:#8b5cf6,stroke:#8b5cf6,color:#fff
-```
-
-> Confidence < 0.7이면 `gather` 노드가 상태를 수집하고 `signals`로 loopback. `GEODE_MAX_ITERATIONS` (기본 5)회까지 재시도 후 강제 진행.
-
-| 항목 | 값 |
-|------|-----|
-| **Confidence 임계값** | 0.7 (`GEODE_CONFIDENCE_THRESHOLD`) |
-| **최대 반복** | 5회 (`GEODE_MAX_ITERATIONS`) |
-| **Loopback 경로** | `verification → gather → signals → analyst → evaluator → scoring → verification` |
-| **강제 진행** | 최대 반복 도달 시 현재 점수로 Synthesizer 진행 |
-| **Confidence Multiplier** | `final = base × (0.7 + 0.3 × confidence/100)` — 신뢰도에 따라 최종 점수 30% 범위 내 조정 |
-
-### BiasBuster Fast Path
-
-```mermaid
-graph TB
-    Analyses["Analyst Scores<br/>(4 analyses)"] --> Stats["_run_statistical_checks()<br/>mean, std, CV, min, max"]
-    Stats --> LV{"CV < 0.05<br/>AND n ≥ 4?"}
-    LV -->|Yes| Anchoring["⚠ anchoring_bias flag<br/>(low variance suspicious)"]
-    Anchoring --> LLM["Full LLM BiasBuster<br/>(6 bias types)"]
-    LV -->|No| Fast{"CV ≥ 0.10<br/>AND range ≥ 0.5?"}
-    Fast -->|Yes| Skip["✓ Fast Path<br/>LLM 호출 생략<br/>(10-30초 절감)"]
-    Fast -->|No| LLM
-
-    LLM --> Result["BiasBusterResult<br/>(6 bias flags + explanation)"]
-    Skip --> Clean["BiasBusterResult<br/>overall_pass=True<br/>'Statistical check clean'"]
-
-    style Skip fill:#10b981,stroke:#10b981,color:#fff
-    style Anchoring fill:#ef4444,stroke:#ef4444,color:#fff
-    style LLM fill:#f59e0b,stroke:#f59e0b,color:#fff
-    style Fast fill:#3b82f6,stroke:#3b82f6,color:#fff
-```
-
-| 조건 | 의미 | 결과 |
-|------|------|------|
-| **CV < 0.05 AND n ≥ 4** | 점수 분산이 의심스럽게 낮음 (동조 패턴) | `anchoring_bias` 플래그 → LLM 호출 |
-| **CV ≥ 0.10 AND range ≥ 0.5** | 건강한 분산 (1-5점 스케일에서 충분한 스프레드) | Fast path → LLM 생략, `overall_pass=True` |
-| **그 외** | 경계 영역 (0.05 ≤ CV < 0.10 또는 range < 0.5) | Full LLM 6-bias 탐지 실행 |
-
-### External IP Signal Fallback
-
-```mermaid
-graph LR
-    IP["IP Name<br/>(미등록)"] --> R{"Fixture<br/>exists?"}
-    R -->|Yes| Fix["Fixture Signals<br/>(3 core IPs)"]
-    R -->|No| Skel["Skeleton ip_info<br/>(all 'unknown')"]
-    Skel --> S1{"Adapter<br/>available?"}
-    S1 -->|Yes| Adapt["SignalEnrichmentPort<br/>(MCP live API)"]
-    S1 -->|No| S2{"Fixture<br/>fallback?"}
-    S2 -->|Yes| Fix
-    S2 -->|No| Web["Web Search<br/>(Anthropic web_search_20250305)"]
-
-    Web --> Q1["Query 1:<br/>'{ip} game franchise<br/>popularity statistics'"]
-    Web --> Q2["Query 2:<br/>'{ip} anime manga<br/>fan community size'"]
-    Q1 --> Merge["web_search_data<br/>+ placeholder signals"]
-    Q2 --> Merge
-    Merge --> Pipe["Pipeline<br/>(max_iterations=1)"]
-    Fix --> PipeN["Pipeline<br/>(max_iterations=5)"]
-    Adapt --> PipeN
-
-    style Web fill:#f59e0b,stroke:#f59e0b,color:#fff
-    style Fix fill:#10b981,stroke:#10b981,color:#fff
-    style Adapt fill:#3b82f6,stroke:#3b82f6,color:#fff
-    style Skel fill:#8b5cf6,stroke:#8b5cf6,color:#fff
-```
-
-| 단계 | 소스 | 설명 |
-|------|------|------|
-| **Stage 1** | `SignalEnrichmentPort` 어댑터 | MCP Steam/Brave 등 라이브 API로 시그널 수집. `adapter.is_available()` 체크 후 호출 |
-| **Stage 2** | Fixture fallback | 3개 core IP (Berserk, Cowboy Bebop, Ghost in the Shell) JSON fixture 직접 로딩 |
-| **Stage 3** | Web Search | Anthropic `web_search_20250305` 도구로 2개 쿼리 실행, 결과를 `web_search_data` 키에 raw text로 전달 |
-
-- **외부 IP 스켈레톤**: `media_type="unknown"`, `genre="unknown"` 등 기본값으로 `ip_info` 생성. Analysts가 `web_search_data` 텍스트에서 맥락을 추출
-- **`max_iterations=1`**: 외부 IP는 동일 웹 검색 데이터로 재분석해도 confidence 개선 불가하므로 feedback loop 1회로 제한
-- **placeholder signals**: `youtube_views=0`, `reddit_subscribers=0` 등 downstream 스키마 호환을 위한 기본 수치. `_enrichment_source="web_search"` 마커로 출처 구분
 
 ### CLI Input & Terminal Management
 
@@ -776,6 +656,232 @@ graph LR
 
 ---
 
+## Domain Plugin: Game IP Pipeline
+
+> GEODE는 `DomainPort` Protocol을 통해 도메인별 분석 파이프라인을 플러그인으로 교체할 수 있습니다. 아래는 기본 탑재된 **Game IP** 도메인 플러그인의 상세 구조입니다. 4 Analysts → 3 Evaluators → PSM Scoring → Verification 파이프라인으로 저평가 IP를 발굴합니다.
+
+### Pipeline Flow
+
+```mermaid
+graph LR
+    START((START)) --> Router
+    Router -->|"signals"| Signals
+    Router -->|"evaluators"| Eval
+    Router -->|"scoring"| Scoring
+    Signals --> A1["Analyst<br/>game_mechanics"]
+    Signals --> A2["Analyst<br/>player_experience"]
+    Signals --> A3["Analyst<br/>growth_potential"]
+    Signals --> A4["Analyst<br/>discovery"]
+    A1 --> Eval["Evaluator ×3<br/>(Cross-LLM)"]
+    A2 --> Eval
+    A3 --> Eval
+    A4 --> Eval
+    Eval --> Scoring["Scoring<br/>PSM 14-Axis"]
+    Scoring --> Verify["Verification<br/>G1-G4 + BiasBuster"]
+    Verify -->|"confidence ≥ 0.7"| Synth["Synthesizer"]
+    Verify -->|"confidence < 0.7"| Gather["gather"]
+    Gather -->|"retry (max 5)"| Signals
+    Synth --> END((END))
+
+    style START fill:#10b981,stroke:#10b981,color:#fff
+    style END fill:#ef4444,stroke:#ef4444,color:#fff
+    style Gather fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+    style Eval fill:#3b82f6,stroke:#3b82f6,color:#fff
+    style Scoring fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Verify fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+    style Synth fill:#06b6d4,stroke:#06b6d4,color:#fff
+```
+
+| Node | 역할 | 입출력 |
+|------|------|--------|
+| **Router** | 파이프라인 모드 결정 (6종), fixture 로딩, 메모리 조합 | `→ pipeline_mode`, `signals`/`evaluators`/`scoring` 라우팅 |
+| **Signals** | 외부 시그널 데이터 fixture 주입 | `→ external_signals` |
+| **Analyst ×4** | Send API 병렬 실행 — `game_mechanics`, `player_experience`, `growth_potential`, `discovery` | `→ analyses[]` (Clean Context: `analyses` 필드 제외) |
+| **Evaluator ×3** | 14-Axis 루브릭 평가 — `quality_judge` (8축), `hidden_value` (3축), `community_momentum` (3축) | `→ evaluations[]` (Typed Pydantic Output) |
+| **Scoring** | PSM 6-Weighted Composite + Confidence Multiplier → Tier S/A/B/C | `→ final_score`, `tier`, `cause` |
+| **Verification** | Guardrails G1-G4 + BiasBuster (6 bias) + Confidence Gate | `→ confidence ≥ 0.7` 통과 or loopback |
+| **Gather** | 재분석 상태 수집 (confidence < 0.7, max 5 iterations) | `→ signals` loopback |
+| **Synthesizer** | Decision Tree 분류 + 내러티브 생성 | `→ recommendation`, `narrative` |
+
+### Cross-LLM Ensemble
+
+```mermaid
+graph TB
+    subgraph Primary["Claude Opus 4.6 (primary_analysts)"]
+        GM["game_mechanics"]
+        GP["growth_potential"]
+    end
+
+    subgraph Secondary["GPT-5.4 (secondary_analysts)"]
+        PE["player_experience"]
+        DI["discovery"]
+    end
+
+    GM --> Merge["Score Merge<br/>agreement ≥ 0.67"]
+    GP --> Merge
+    PE --> Merge
+    DI --> Merge
+    Merge --> Final["Reliability<br/>Krippendorff's α"]
+
+    style Primary fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style Secondary fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style Merge fill:#3b82f6,stroke:#3b82f6,color:#fff
+```
+
+> `ensemble_mode=cross` 시 `primary_analysts`/`secondary_analysts` 설정으로 모델 분배 결정. `primary_only` 모드에서는 모든 analyst가 Claude 사용.
+
+| 항목 | 값 |
+|------|-----|
+| **Primary model** | Claude Opus 4.6 (`ClaudeAdapter`) |
+| **Secondary model** | GPT-5.4 (`OpenAIAdapter`) |
+| **Primary analysts** | `game_mechanics`, `growth_potential` (설정: `GEODE_PRIMARY_ANALYSTS`) |
+| **Secondary analysts** | `player_experience`, `discovery` (설정: `GEODE_SECONDARY_ANALYSTS`) |
+| **합의 임계값** | `agreement ≥ 0.67` (`GEODE_AGREEMENT_THRESHOLD`) |
+| **신뢰도 지표** | Krippendorff's α (순서형 데이터 기반 평가자 간 일치도) |
+| **모드 전환** | `GEODE_ENSEMBLE_MODE`: `cross` (듀얼) / `primary_only` (Claude 단독) |
+
+### 14-Axis Rubric (PSM Engine)
+
+```mermaid
+graph TB
+    subgraph Evaluators["3 Evaluators"]
+        QJ["quality_judge<br/>(8 axes: A,B,C,B1,C1,C2,M,N)"]
+        HV["hidden_value<br/>(3 axes: D,E,F)"]
+        CM["community_momentum<br/>(3 axes: J,K,L)"]
+    end
+
+    subgraph Scoring["PSM Scoring"]
+        W["6-Weighted Composite"]
+        Conf["Confidence Multiplier"]
+        Tier["Tier Classification<br/>S / A / B / C"]
+    end
+
+    QJ --> W
+    HV --> W
+    CM --> W
+    W --> Conf
+    Conf --> Tier
+
+    style Evaluators fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style Scoring fill:#1e293b,stroke:#10b981,color:#e2e8f0
+```
+
+> 각 축은 1-5점 한국어 루브릭 앵커 사용. `evaluator_axes.yaml`에서 SSOT 관리. Prospect IP용 9-axis 확장 루브릭도 지원.
+
+**Evaluator별 축 배분:**
+
+| Evaluator | 축 | 평가 영역 |
+|-----------|-----|----------|
+| `quality_judge` | A (Narrative Depth), B (Visual Adaptation), C (Gameplay Potential), B1 (Character Appeal), C1 (World Building), C2 (Lore Consistency), M (Market Fit), N (Innovation Score) | 품질 8축 |
+| `hidden_value` | D (Discovery Gap), E (Exploitation Gap), F (Fandom Resilience) | 숨겨진 가치 3축 |
+| `community_momentum` | J (Community Activity), K (Content Creation), L (Cross-media Traction) | 커뮤니티 모멘텀 3축 |
+
+**Scoring Formula**: `Final = (0.25×PSM + 0.20×Quality + 0.18×Recovery + 0.12×Growth + 0.20×Momentum + 0.05×Dev) × (0.7 + 0.3 × Confidence/100)`
+
+**Tier 기준**: S ≥ 80, A ≥ 60, B ≥ 40, C < 40
+
+### Verification & Feedback Loop
+
+```mermaid
+graph LR
+    V["Verification"] --> Gate{confidence<br/>≥ 0.7?}
+    Gate -->|Yes| S["Synthesizer → END"]
+    Gate -->|No| Check{iteration<br/>< max?}
+    Check -->|Yes| G["gather → signals<br/>(loopback)"]
+    Check -->|No| S2["Synthesizer<br/>(force proceed)"]
+
+    style Gate fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style G fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+```
+
+> Confidence < 0.7이면 `gather` 노드가 상태를 수집하고 `signals`로 loopback. `GEODE_MAX_ITERATIONS` (기본 5)회까지 재시도 후 강제 진행.
+
+| 항목 | 값 |
+|------|-----|
+| **Confidence 임계값** | 0.7 (`GEODE_CONFIDENCE_THRESHOLD`) |
+| **최대 반복** | 5회 (`GEODE_MAX_ITERATIONS`) |
+| **Loopback 경로** | `verification → gather → signals → analyst → evaluator → scoring → verification` |
+| **강제 진행** | 최대 반복 도달 시 현재 점수로 Synthesizer 진행 |
+| **Confidence Multiplier** | `final = base × (0.7 + 0.3 × confidence/100)` — 신뢰도에 따라 최종 점수 30% 범위 내 조정 |
+
+### BiasBuster Fast Path
+
+```mermaid
+graph TB
+    Analyses["Analyst Scores<br/>(4 analyses)"] --> Stats["_run_statistical_checks()<br/>mean, std, CV, min, max"]
+    Stats --> LV{"CV < 0.05<br/>AND n ≥ 4?"}
+    LV -->|Yes| Anchoring["⚠ anchoring_bias flag<br/>(low variance suspicious)"]
+    Anchoring --> LLM["Full LLM BiasBuster<br/>(6 bias types)"]
+    LV -->|No| Fast{"CV ≥ 0.10<br/>AND range ≥ 0.5?"}
+    Fast -->|Yes| Skip["✓ Fast Path<br/>LLM 호출 생략<br/>(10-30초 절감)"]
+    Fast -->|No| LLM
+
+    LLM --> Result["BiasBusterResult<br/>(6 bias flags + explanation)"]
+    Skip --> Clean["BiasBusterResult<br/>overall_pass=True<br/>'Statistical check clean'"]
+
+    style Skip fill:#10b981,stroke:#10b981,color:#fff
+    style Anchoring fill:#ef4444,stroke:#ef4444,color:#fff
+    style LLM fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Fast fill:#3b82f6,stroke:#3b82f6,color:#fff
+```
+
+| 조건 | 의미 | 결과 |
+|------|------|------|
+| **CV < 0.05 AND n ≥ 4** | 점수 분산이 의심스럽게 낮음 (동조 패턴) | `anchoring_bias` 플래그 → LLM 호출 |
+| **CV ≥ 0.10 AND range ≥ 0.5** | 건강한 분산 (1-5점 스케일에서 충분한 스프레드) | Fast path → LLM 생략, `overall_pass=True` |
+| **그 외** | 경계 영역 (0.05 ≤ CV < 0.10 또는 range < 0.5) | Full LLM 6-bias 탐지 실행 |
+
+### External IP Signal Fallback
+
+```mermaid
+graph LR
+    IP["IP Name<br/>(미등록)"] --> R{"Fixture<br/>exists?"}
+    R -->|Yes| Fix["Fixture Signals<br/>(3 core IPs)"]
+    R -->|No| Skel["Skeleton ip_info<br/>(all 'unknown')"]
+    Skel --> S1{"Adapter<br/>available?"}
+    S1 -->|Yes| Adapt["SignalEnrichmentPort<br/>(MCP live API)"]
+    S1 -->|No| S2{"Fixture<br/>fallback?"}
+    S2 -->|Yes| Fix
+    S2 -->|No| Web["Web Search<br/>(Anthropic web_search_20250305)"]
+
+    Web --> Q1["Query 1:<br/>'{ip} game franchise<br/>popularity statistics'"]
+    Web --> Q2["Query 2:<br/>'{ip} anime manga<br/>fan community size'"]
+    Q1 --> Merge["web_search_data<br/>+ placeholder signals"]
+    Q2 --> Merge
+    Merge --> Pipe["Pipeline<br/>(max_iterations=1)"]
+    Fix --> PipeN["Pipeline<br/>(max_iterations=5)"]
+    Adapt --> PipeN
+
+    style Web fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Fix fill:#10b981,stroke:#10b981,color:#fff
+    style Adapt fill:#3b82f6,stroke:#3b82f6,color:#fff
+    style Skel fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+```
+
+| 단계 | 소스 | 설명 |
+|------|------|------|
+| **Stage 1** | `SignalEnrichmentPort` 어댑터 | MCP Steam/Brave 등 라이브 API로 시그널 수집. `adapter.is_available()` 체크 후 호출 |
+| **Stage 2** | Fixture fallback | 3개 core IP (Berserk, Cowboy Bebop, Ghost in the Shell) JSON fixture 직접 로딩 |
+| **Stage 3** | Web Search | Anthropic `web_search_20250305` 도구로 2개 쿼리 실행, 결과를 `web_search_data` 키에 raw text로 전달 |
+
+- **외부 IP 스켈레톤**: `media_type="unknown"`, `genre="unknown"` 등 기본값으로 `ip_info` 생성. Analysts가 `web_search_data` 텍스트에서 맥락을 추출
+- **`max_iterations=1`**: 외부 IP는 동일 웹 검색 데이터로 재분석해도 confidence 개선 불가하므로 feedback loop 1회로 제한
+- **placeholder signals**: `youtube_views=0`, `reddit_subscribers=0` 등 downstream 스키마 호환을 위한 기본 수치. `_enrichment_source="web_search"` 마커로 출처 구분
+
+### Available IPs
+
+**Core Fixtures** (hand-crafted, golden set):
+
+| IP | Tier | Score | Genre |
+|----|------|-------|-------|
+| Berserk | S | 81.3 | Dark Fantasy |
+| Cowboy Bebop | A | 68.4 | SF Noir |
+| Ghost in the Shell | B | 51.6 | Cyberpunk |
+
+**Steam Fixtures**: 201개 추가 게임 데이터 (`core/fixtures/steam/`), `/generate` 명령으로 합성 데이터 생성 가능.
+
+---
+
 ## Configuration
 
 `.env` 파일로 설정합니다 (전체 목록: `core/config.py`):
@@ -824,9 +930,9 @@ uv run bandit -r core/ -c pyproject.toml
 
 ```
 core/
-├── cli/                        # CLI + NL Router + Agentic Loop
+├── cli/                        # CLI + NL Router + Agentic Loop + Sub-Agent
 │   ├── __init__.py             # Typer app, REPL, pipeline execution
-│   ├── agentic_loop.py         # while(tool_use) multi-round execution
+│   ├── agentic_loop.py         # while(tool_use) multi-round execution + Token Guard
 │   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
 │   ├── commands.py             # Slash command dispatch (17 commands)
@@ -834,7 +940,7 @@ core/
 │   ├── nl_router.py            # Natural language intent classification
 │   ├── search.py               # IP search engine (synonym expansion)
 │   ├── startup.py              # Readiness check, Graceful Degradation
-│   ├── sub_agent.py            # Parallel task delegation (SubAgentManager)
+│   ├── sub_agent.py            # SubAgentManager + SubAgentResult + ErrorCategory
 │   └── tool_executor.py        # Tool dispatch + HITL approval gate
 ├── auth/                       # Auth profile management + rotation
 ├── automation/                 # Feedback loop, drift detection, triggers
@@ -847,7 +953,7 @@ core/
 ├── extensibility/              # Report generation + Skills + templates
 │   ├── skills.py               # SkillLoader + SkillRegistry + SkillDefinition
 │   ├── _frontmatter.py         # Shared YAML frontmatter parser
-│   ├── agents.py               # SubagentLoader (frontmatter → _frontmatter.py)
+│   ├── agents.py               # SubagentLoader + AgentRegistry (3 defaults)
 │   └── templates/              # HTML/Markdown report templates
 ├── fixtures/                   # Fixture data (3 core IPs + 201 Steam)
 ├── graph.py                    # LangGraph StateGraph definition
@@ -866,9 +972,9 @@ core/
 ├── orchestration/
 │   ├── hooks.py                # HookSystem (27 events + async atrigger)
 │   ├── hook_discovery.py       # Plugin-based hook loading
-│   ├── isolated_execution.py   # Concurrent runner (semaphore)
-│   ├── task_system.py          # DAG-based task graph
-│   ├── coalescing.py           # Duplicate request coalescing
+│   ├── isolated_execution.py   # IsolatedRunner (MAX_CONCURRENT=5, thread pool)
+│   ├── task_system.py          # TaskGraph DAG (dependency, cycle detection)
+│   ├── coalescing.py           # CoalescingQueue (250ms dedup window)
 │   ├── plan_mode.py            # DRAFT → APPROVED → EXECUTING workflow
 │   ├── lane_queue.py           # Concurrency control lanes
 │   ├── run_log.py              # Structured execution logging
