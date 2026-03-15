@@ -31,6 +31,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - 시작 화면 초기화 진행 표시 — Domain/Memory/MCP/Skills/Scheduler 단계별 `ok`/`skip` 상태 출력
 - LinkedIn 우선 라우팅 — 프로필/커리어/채용 쿼리 시 `site:linkedin.com` 프리픽스 우선 검색 (AGENTIC_SUFFIX)
+- LinkedIn MCP 어댑터 — `LinkedInPort` Protocol + `LinkedInMCPAdapter` 구현 (Port/Adapter 패턴, graceful degradation)
 
 ### Changed
 - LinkedIn MCP: `linkedin-mcp-runner` (LiGo, 자기 콘텐츠) → `linkedin-scraper-mcp` (타인 프로필 검색 가능, Patchright 브라우저)
