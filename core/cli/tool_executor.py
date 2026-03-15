@@ -87,6 +87,8 @@ class ToolExecutor:
         self._auto_approve = auto_approve  # for testing only
         self._sub_agent_manager = sub_agent_manager
         self._mcp_manager = mcp_manager
+        # Per-server MCP approval cache — approve once per server per session
+        self._mcp_approved_servers: set[str] = set()
 
     def register(self, tool_name: str, handler: Callable[..., dict[str, Any]]) -> None:
         """Register a tool handler."""
@@ -221,9 +223,12 @@ class ToolExecutor:
         """
         log.info("MCP tool: %s → %s (args=%s)", tool_name, server, list(tool_input.keys()))
 
-        # MCP tools are external — confirm if not auto-approved
-        if not self._auto_approve and not self._confirm_mcp(server, tool_name):
-            return {"error": "User denied MCP tool execution", "denied": True}
+        # MCP tools are external — confirm once per server per session.
+        # After first approval, subsequent calls to the same server auto-execute.
+        if not self._auto_approve and server not in self._mcp_approved_servers:
+            if not self._confirm_mcp(server, tool_name):
+                return {"error": "User denied MCP tool execution", "denied": True}
+            self._mcp_approved_servers.add(server)
 
         assert self._mcp_manager is not None  # guaranteed by caller
         result: dict[str, Any] = self._mcp_manager.call_tool(server, tool_name, tool_input)

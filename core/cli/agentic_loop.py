@@ -163,6 +163,7 @@ class AgenticLoop:
         self._tools = get_agentic_tools(tool_registry, mcp_tools=mcp_tool_list)
         self._tool_log: list[dict[str, Any]] = []
         self._consecutive_failures: dict[str, int] = {}
+        self._last_llm_error: str | None = None  # last error type for user message
         self._client: anthropic.AsyncAnthropic | None = None
         self._op_logger = OperationLogger()
 
@@ -212,8 +213,13 @@ class AgenticLoop:
             if response is None:
                 # Persist intermediate tool-use messages so next turn sees them
                 self._sync_messages_to_context(messages)
+                detail = self._last_llm_error or "unknown error"
+                text = (
+                    f"LLM call failed ({detail}). "
+                    "Your conversation context is preserved — try again."
+                )
                 result = AgenticResult(
-                    text="LLM call failed. Try again or use /help.",
+                    text=text,
                     rounds=round_idx + 1,
                     error="llm_call_failed",
                     termination_reason="llm_error",
@@ -466,6 +472,7 @@ class AgenticLoop:
                     await asyncio.sleep(wait)
                 else:
                     log.error("%s exhausted after %d retries", exc_type, max_retries)
+                    self._last_llm_error = f"{exc_type} after {max_retries} retries"
                     return None
             except anthropic.RateLimitError:
                 wait = 2**attempt * 10  # 10s, 20s, 40s
@@ -479,9 +486,11 @@ class AgenticLoop:
                     await asyncio.sleep(wait)
                 else:
                     log.error("Rate limit exhausted after %d retries", max_retries)
+                    self._last_llm_error = f"RateLimitError after {max_retries} retries"
                     return None
             except anthropic.AuthenticationError:
                 log.warning("Anthropic API key is invalid in agentic loop")
+                self._last_llm_error = "AuthenticationError — API key invalid"
                 return None
             except anthropic.BadRequestError as exc:
                 msg = str(exc)
@@ -563,8 +572,8 @@ class AgenticLoop:
                         "max_clarifications_exceeded": True,
                     }
 
-            # Progressive log: show tool result summary
-            if isinstance(result, dict):
+            # Progressive log: show tool result summary (skip if already logged above)
+            if isinstance(result, dict) and not result.get("skipped"):
                 self._op_logger.log_tool_result(tool_name, result, visible=visible)
 
             self._tool_log.append(
