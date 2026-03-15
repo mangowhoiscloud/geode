@@ -316,19 +316,28 @@ graph TB
 ```
 User: "병렬로 3개 IP 분석해: Berserk, Cowboy Bebop, Ghost in the Shell"
 
-1. NL Router → delegate_task tool call (batch mode)
-2. ToolExecutor → SubAgentManager.delegate([task1, task2, task3])
-3. CoalescingQueue → 250ms 윈도우 내 중복 제거
-4. TaskGraph → DAG 의존관계 해석, 병렬 실행 배치 결정
-5. IsolatedRunner → 최대 5개 워커 스레드 병렬 실행
-6. 각 워커:
-   ├─ ContextVar 전파 (memory, org)
-   ├─ 독립 ConversationContext (max_turns=10)
-   ├─ 부모 tools/MCP/skills 상속한 ToolExecutor (auto_approve=True)
-   ├─ AgenticLoop 실행 (max_rounds=10, max_tokens=8192)
-   └─ SubAgentResult 반환 (summary 필수 보존)
-7. Token Guard → 4096 토큰 초과 시 summary만 보존하여 부모 컨텍스트 보호
-8. Hook 이벤트 발생 (SUBAGENT_STARTED / COMPLETED / FAILED)
+ 1. REPL → AgenticLoop.run(user_input)
+    └─ NL Router가 아닌 AgenticLoop이 직접 Claude Tool Use API 호출
+ 2. Claude Opus 4.6 → delegate_task tool call 결정 (batch mode)
+    └─ LLM이 "병렬" 키워드 + 복수 IP를 인식하여 delegate_task 선택
+ 3. ToolExecutor.execute("delegate_task", {tasks: [...]})
+    └─ HITL 게이트: delegate_task는 STANDARD — 승인 없이 통과
+ 4. SubAgentManager.delegate([task1, task2, task3])
+    ├─ CoalescingQueue → 250ms 윈도우 내 중복 제거
+    ├─ TaskGraph → DAG 초기화 (의존관계 없음 → 전부 병렬)
+    └─ IsolatedRunner.run_async() × 3 → 최대 5개 워커 스레드 병렬
+ 5. 각 워커 스레드:
+    ├─ ContextVar 전파 (memory, org)
+    ├─ 독립 ConversationContext (max_turns=10)
+    ├─ 부모 tools/MCP/skills 상속한 ToolExecutor (auto_approve=True)
+    │   └─ 단, DANGEROUS(bash)/WRITE(memory_save 등)는 항상 사용자 승인 필수
+    ├─ 독립 AgenticLoop.run("분석: Berserk\nParameters: {ip_name: Berserk}")
+    │   └─ 자식 Claude가 analyze_ip("Berserk") 호출 → 파이프라인 실행
+    └─ SubAgentResult 반환 (summary[:500] 필수 보존)
+ 6. SubAgentManager._wait_for_result() × 3 (polling, 120s timeout)
+ 7. Token Guard → 4096 토큰 초과 시 summary만 보존하여 부모 컨텍스트 보호
+ 8. Hook: SUBAGENT_STARTED(×3) / SUBAGENT_COMPLETED 또는 FAILED(×3)
+ 9. 부모 AgenticLoop으로 통합 결과 반환 → Claude가 3개 결과 종합 응답
 ```
 
 #### Core Components
