@@ -235,11 +235,11 @@ class TestContextBudget:
         """Summary should respect tier budgets instead of hard-cutting."""
         ctx: dict[str, Any] = {
             "_soul_loaded": True,
-            "_soul": "# Mission\nDiscover undervalued IPs through data-driven analysis",
+            "_soul": "# Mission\nAutonomous research, analysis, and task execution",
             "_org_loaded": True,
-            "organization_strategy": "Data-driven IP acquisition for game publishing portfolio",
+            "organization_strategy": "Data-driven autonomous execution with domain plugins",
             "_project_loaded": True,
-            "project_goal": "Build automated pipeline for IP evaluation and scoring",
+            "project_goal": "Build automated pipeline for analysis and scoring",
             "_session_loaded": True,
             "previous_results": ["Berserk: S/81.3", "Cowboy Bebop: A/68.4"],
         }

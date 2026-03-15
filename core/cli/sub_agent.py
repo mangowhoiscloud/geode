@@ -51,9 +51,9 @@ def get_subagent_context() -> tuple[bool, str]:
 
 # Task-type → default agent mapping
 _TYPE_AGENT_MAP: dict[str, str] = {
-    "analyze": "game_analyst",
-    "search": "market_researcher",
-    "compare": "game_analyst",
+    "analyze": "data_analyst",
+    "search": "web_researcher",
+    "compare": "data_analyst",
 }
 
 

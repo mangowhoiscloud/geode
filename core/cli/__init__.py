@@ -318,8 +318,8 @@ def _build_skill_narrative(
                 f"finding={a.get('key_finding', '')[:120]}\n"
             )
 
-    system_prompt = f"""You are a GEODE IP valuation expert. Write an expert analysis
-section for a report on the IP below. Use the domain knowledge provided.
+    system_prompt = f"""You are a GEODE analysis expert. Write an expert analysis
+section for a report on the subject below. Use the domain knowledge provided.
 
 ## Domain Knowledge (GEODE Skills)
 {skills_context}
@@ -327,8 +327,8 @@ section for a report on the IP below. Use the domain knowledge provided.
 ## Rules
 - Write 3-5 paragraphs of expert analysis in Korean.
 - Reference specific scoring dimensions and formulas from the skills context.
-- Explain WHY this IP received its tier/score using PSM, subscore weights, cause classification.
-- Provide actionable investment insights.
+- Explain WHY this subject received its tier/score using scoring dimensions from skills context.
+- Provide actionable insights and recommendations.
 - Do NOT repeat raw data — interpret and synthesize it."""
 
     user_prompt = f"""## IP: {ip_name}

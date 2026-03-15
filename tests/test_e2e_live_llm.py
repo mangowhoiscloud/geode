@@ -472,7 +472,7 @@ class TestSubAgentLive:
         assert len(received_ctx) == 1
         ctx = received_ctx[0]
         assert ctx is not None, "E5: agent_context=None (registry not wired)"
-        assert ctx["agent_name"] == "game_analyst"
+        assert ctx["agent_name"] == "data_analyst"
         assert "system_prompt" in ctx
         assert len(ctx["tools"]) > 0
 

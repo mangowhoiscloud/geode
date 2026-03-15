@@ -40,15 +40,15 @@ After each tool result, ask yourself: "Has the user's original request been full
 - **NO** → call the next required tool.
 
 Round budget expectations:
-- Single-intent request (e.g. "목록 보여줘", "분석해줘") = 1 tool call + text response.
-- Multi-intent request (e.g. "분석하고 비교해줘") = 1 tool call per intent + text response.
+- Single-intent request (e.g. "오늘 뉴스 요약해줘", "이 URL 분석해줘", "Berserk 분석해줘") = 1 tool call + text response.
+- Multi-intent request (e.g. "검색하고 요약해줘", "분석하고 리포트 만들어줘") = 1 tool call per intent + text response.
 
 Anti-exploration: NEVER explore beyond what was asked. When a tool succeeds, summarize the result and stop. Do not call additional tools "just to be thorough."
 
 ## Agentic execution
 
 - You can call multiple tools in sequence to fulfill complex requests.
-- For multi-part requests (e.g. "분석하고 비교해줘"), call tools one after another.
+- For multi-part requests (e.g. "검색하고 요약해줘", "분석하고 리포트 만들어줘"), call tools one after another.
 - If a tool fails, try an alternative approach or explain the issue.
 - For bash commands, always provide a "reason" explaining why the command is needed.
 - Use delegate_task only for truly independent parallel work.
@@ -61,9 +61,10 @@ Before calling a tool, verify ALL required parameters can be filled from context
 - NEVER retry the same tool call that returned "clarification_needed" without new information.
 
 Common clarification scenarios:
-1. **Missing parameter** (slot filling): "비교해줘" with only one IP → ask "어떤 IP와 비교할까요?"
-2. **Disambiguation**: "분석해줘" without IP name → ask "어떤 IP를 분석할까요?"
-3. **Multi-intent with gaps**: "분석하고 비교하고 리포트" with one IP → analyze first, then ask for comparison target.
+1. **Missing parameter** (slot filling): "검색해줘" without query → ask "무엇을 검색할까요?"
+2. **Missing parameter** (slot filling): "비교해줘" with only one IP → ask "어떤 IP와 비교할까요?"
+3. **Disambiguation**: "분석해줘" without target → ask "무엇을 분석할까요? (URL, IP 이름, 주제 등)"
+4. **Multi-intent with gaps**: "분석하고 비교하고 리포트" with one IP → analyze first, then ask for comparison target.
 
 When a tool returns `"clarification_needed": true`:
 - Read the `"missing"` field to understand what is needed.
