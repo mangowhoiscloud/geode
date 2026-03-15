@@ -9,7 +9,7 @@ import pytest
 from core.cli.agentic_loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
 from core.cli.conversation import ConversationContext
 from core.cli.sub_agent import SubAgentManager, SubTask
-from core.cli.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, ToolExecutor
+from core.cli.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, WRITE_TOOLS, ToolExecutor
 from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import IsolatedRunner
@@ -47,10 +47,20 @@ class TestToolExecutor:
         result = executor.execute("run_bash", {"command": "sudo rm -rf /", "reason": "test"})
         assert result.get("blocked") is True
 
-    def test_bash_auto_approve(self) -> None:
+    def test_bash_always_requires_approval(self) -> None:
+        """DANGEROUS tools always require approval, even with auto_approve=True."""
         executor = ToolExecutor(auto_approve=True)
-        result = executor.execute("run_bash", {"command": "echo test_123", "reason": "testing"})
-        assert "stdout" in result or "error" not in result
+        with patch.object(executor, "_request_approval", return_value=True) as mock_approve:
+            result = executor.execute("run_bash", {"command": "echo test_123", "reason": "testing"})
+            mock_approve.assert_called_once()
+            assert "stdout" in result or "error" not in result
+
+    def test_bash_denied_by_user(self) -> None:
+        """DANGEROUS tools denied by user return error."""
+        executor = ToolExecutor(auto_approve=True)
+        with patch.object(executor, "_request_approval", return_value=False):
+            result = executor.execute("run_bash", {"command": "echo test", "reason": "test"})
+            assert result.get("denied") is True
 
     def test_bash_empty_command(self) -> None:
         executor = ToolExecutor(auto_approve=True)
@@ -68,6 +78,30 @@ class TestToolExecutor:
 
     def test_dangerous_tools_classification(self) -> None:
         assert "run_bash" in DANGEROUS_TOOLS
+
+    def test_write_tools_classification(self) -> None:
+        assert "memory_save" in WRITE_TOOLS
+        assert "note_save" in WRITE_TOOLS
+        assert "set_api_key" in WRITE_TOOLS
+        assert "manage_auth" in WRITE_TOOLS
+
+    def test_write_tools_require_confirmation(self) -> None:
+        """Write tools require user confirmation when not auto-approved."""
+        handler = MagicMock(return_value={"status": "ok"})
+        executor = ToolExecutor(action_handlers={"memory_save": handler})
+        with patch.object(executor, "_confirm_write", return_value=False) as mock:
+            result = executor.execute("memory_save", {"content": "test"})
+            mock.assert_called_once()
+            assert result.get("denied") is True
+            handler.assert_not_called()
+
+    def test_write_tools_skip_confirmation_when_auto_approved(self) -> None:
+        """Write tools skip confirmation when auto_approve=True (sub-agents)."""
+        handler = MagicMock(return_value={"status": "ok"})
+        executor = ToolExecutor(action_handlers={"memory_save": handler}, auto_approve=True)
+        result = executor.execute("memory_save", {"content": "test"})
+        assert result["status"] == "ok"
+        handler.assert_called_once()
         assert "list_ips" not in DANGEROUS_TOOLS
 
     def test_delegate_task_no_manager(self) -> None:
