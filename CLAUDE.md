@@ -8,7 +8,7 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 132
+- **Modules**: 133
 - **Tests**: 2226+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -39,7 +39,7 @@ uv run geode
 L0: CLI & AGENT      — Typer CLI, NL Router, AgenticLoop, SubAgentManager, Batch
 L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
 L2: MEMORY           — Organization > Project > Session (3-Tier + Hybrid L1/L2)
-L3: ORCHESTRATION    — HookSystem(27), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
+L3: ORCHESTRATION    — HookSystem(30), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
 L4: EXTENSIBILITY    — ToolRegistry(38+), PolicyChain, Skills, MCP Catalog(29), Reports
 L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 ```
@@ -133,7 +133,8 @@ START → router → signals → analyst×4 (Send API)
 ```
 core/
 ├── cli/                 # CLI + NL Router + Agentic Loop + Sub-Agent
-│   ├── agentic_loop.py  # while(tool_use) multi-round + Token Guard
+│   ├── agentic_loop.py  # while(tool_use) multi-round + Token Guard + Error Recovery
+│   ├── error_recovery.py # Adaptive Error Recovery (retry → alternative → fallback → escalate)
 │   ├── sub_agent.py     # SubAgentManager + SubAgentResult + ErrorCategory
 │   ├── tool_executor.py # Tool dispatch + HITL + delegate_task handler
 │   ├── nl_router.py     # NL intent classification (LLM → regex → help)
@@ -169,7 +170,7 @@ core/
 │   ├── session_key.py   # Hierarchical key builder (ip:name:phase)
 │   └── context.py       # 3-tier context assembler
 ├── orchestration/
-│   ├── hooks.py         # HookSystem (27 events + SUBAGENT_* + async atrigger)
+│   ├── hooks.py         # HookSystem (30 events + SUBAGENT_* + TOOL_RECOVERY_*)
 │   ├── bootstrap.py     # Node bootstrap (pre-execution context injection)
 │   ├── planner.py       # Planner (multi-step plan generation)
 │   ├── plan_mode.py     # Plan mode state machine
@@ -331,7 +332,7 @@ NLRouter는 Claude Opus 4.6 Tool Use로 자연어 → 도구 호출을 매핑한
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
 - **Port/Adapter**: All infra via Protocol ports + contextvars DI
-- **Hook-driven**: 27 lifecycle events (incl. `SUBAGENT_*`) for extensibility
+- **Hook-driven**: 30 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`) for extensibility
 - **Domain Plugin**: `DomainPort` Protocol — 도메인별 pipeline 교체 가능 (`set_domain()` / `get_domain()`)
 
 ## Implementation Workflow

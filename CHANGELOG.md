@@ -29,6 +29,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- 적응형 오류 복구 시스템 — `ErrorRecoveryStrategy` 전략 패턴 (retry → alternative → fallback → escalate), 2회 연속 실패 시 자동 복구 체인 실행, DANGEROUS/WRITE 도구 안전 게이트 보존
+- `TOOL_RECOVERY_ATTEMPTED`/`SUCCEEDED`/`FAILED` HookEvent 3종 — 오류 복구 수명주기 관측성 (HookSystem 30 events)
 - LinkedIn MCP 어댑터 — `LinkedInPort` Protocol + `LinkedInMCPAdapter` 구현 (Port/Adapter 패턴, graceful degradation)
 - 도구 카테고리/비용 태깅 — `definitions.json` 전 38개 도구에 `category`(8종)와 `cost_tier`(3종) 메타데이터 추가, `ToolRegistry.get_tools_by_category()`/`get_tools_by_cost_tier()` 필터링 메서드
 - MCP 서버별 세션 승인 캐시 — 한 서버 최초 승인 후 동일 세션 내 재승인 생략 (`_mcp_approved_servers`)
