@@ -67,7 +67,7 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
 | **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
 | **Observability** | LangSmith 토큰 추적 + 비용 계산, Claude Code 스타일 상태줄 |
 | **Scheduler** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON) |
-| **2226+ Tests** | 132 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
+| **2248+ Tests** | 132 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
 
 ## Usage
 
@@ -851,31 +851,30 @@ graph TB
 | **CV ≥ 0.10 AND range ≥ 0.5** | 건강한 분산 (1-5점 스케일에서 충분한 스프레드) | Fast path → LLM 생략, `overall_pass=True` |
 | **그 외** | 경계 영역 (0.05 ≤ CV < 0.10 또는 range < 0.5) | Full LLM 6-bias 탐지 실행 |
 
-### External IP Signal Fallback
+### Signal Liveification Fallback Chain
 
 ```mermaid
 graph LR
-    IP["IP Name<br/>(미등록)"] --> R{"Fixture<br/>exists?"}
-    R -->|Yes| Fix["Fixture Signals<br/>(3 core IPs)"]
-    R -->|No| Skel["Skeleton ip_info<br/>(all 'unknown')"]
-    Skel --> S1{"Adapter<br/>available?"}
-    S1 -->|Yes| Adapt["SignalEnrichmentPort<br/>(MCP live API)"]
-    S1 -->|No| S2{"Fixture<br/>fallback?"}
-    S2 -->|Yes| Fix
-    S2 -->|No| Web["Web Search<br/>(Anthropic web_search_20250305)"]
+    IP["IP Name"] --> MCP{"MCP Adapters<br/>available?"}
+    MCP -->|Yes| Live["CompositeSignalAdapter<br/>(Steam + Brave MCP)"]
+    Live --> Suf{"Sufficient<br/>data keys?"}
+    Suf -->|Yes, >=2| LOut["signal_source='live'"]
+    Suf -->|No| Mix{"Fixture<br/>exists?"}
+    Mix -->|Yes| Mixed["Merge: live + fixture<br/>signal_source='mixed'"]
+    MCP -->|No| Fix{"Fixture<br/>exists?"}
+    Fix -->|Yes| FOut["Fixture Signals<br/>signal_source='fixture'"]
+    Fix -->|No| Web["Web Search<br/>(Anthropic web_search)"]
+    Mix --> PipeN["Pipeline<br/>(max_iterations=5)"]
+    Web --> WOut["signal_source='web_search'<br/>(max_iterations=1)"]
 
-    Web --> Q1["Query 1:<br/>'{ip} game franchise<br/>popularity statistics'"]
-    Web --> Q2["Query 2:<br/>'{ip} anime manga<br/>fan community size'"]
-    Q1 --> Merge["web_search_data<br/>+ placeholder signals"]
-    Q2 --> Merge
-    Merge --> Pipe["Pipeline<br/>(max_iterations=1)"]
-    Fix --> PipeN["Pipeline<br/>(max_iterations=5)"]
-    Adapt --> PipeN
+    LOut --> PipeN
+    FOut --> PipeN
+    WOut --> Pipe1["Pipeline<br/>(max_iterations=1)"]
 
     style Web fill:#f59e0b,stroke:#f59e0b,color:#fff
-    style Fix fill:#10b981,stroke:#10b981,color:#fff
-    style Adapt fill:#3b82f6,stroke:#3b82f6,color:#fff
-    style Skel fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+    style FOut fill:#10b981,stroke:#10b981,color:#fff
+    style LOut fill:#3b82f6,stroke:#3b82f6,color:#fff
+    style Mixed fill:#8b5cf6,stroke:#8b5cf6,color:#fff
 ```
 
 | 단계 | 소스 | 설명 |
