@@ -67,7 +67,7 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
 | **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
 | **Observability** | LangSmith 토큰 추적 + 비용 계산, Claude Code 스타일 상태줄 |
 | **Scheduler** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON) |
-| **2226+ Tests** | 132 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
+| **2243+ Tests** | 132 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
 
 ## Usage
 
