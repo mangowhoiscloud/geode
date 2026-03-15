@@ -8,6 +8,22 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
+# Valid values for tool metadata fields.
+VALID_CATEGORIES = frozenset(
+    {
+        "discovery",
+        "analysis",
+        "memory",
+        "planning",
+        "external",
+        "model",
+        "data",
+        "scheduling",
+    }
+)
+
+VALID_COST_TIERS = frozenset({"free", "cheap", "expensive"})
+
 
 @runtime_checkable
 class Tool(Protocol):
@@ -15,6 +31,10 @@ class Tool(Protocol):
 
     Any class implementing these 4 attributes/methods is a valid Tool.
     Uses @runtime_checkable for isinstance() checks.
+
+    Optional metadata:
+        category  — functional group (discovery, analysis, memory, ...).
+        cost_tier — resource cost indicator (free, cheap, expensive).
     """
 
     @property
