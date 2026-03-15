@@ -9,7 +9,7 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
 - **Modules**: 132
-- **Tests**: 2179+
+- **Tests**: 2180+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
