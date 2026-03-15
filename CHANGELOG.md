@@ -28,6 +28,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.12.0] — 2026-03-15
+
+HITL 보안 강화 + README/CLAUDE.md 자율 실행 코어 재구성 + Domain Plugin 아키텍처 문서화.
+
 ### Added
 - 시작 화면 초기화 진행 표시 — Domain/Memory/MCP/Skills/Scheduler 단계별 `ok`/`skip` 상태 출력
 - LinkedIn 우선 라우팅 — 프로필/커리어/채용 쿼리 시 `site:linkedin.com` 프리픽스 우선 검색 (AGENTIC_SUFFIX)
@@ -40,6 +46,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - LinkedIn MCP: `linkedin-mcp-runner` (LiGo, 자기 콘텐츠) → `linkedin-scraper-mcp` (타인 프로필 검색 가능, Patchright 브라우저)
+- README 구조 재편: `Architecture — Autonomous Core` 상위 배치, Game IP 파이프라인을 `Domain Plugin` 하위 분리
+- CLAUDE.md: Sub-Agent System, Domain Plugin System, 6-Layer Architecture 갱신
+
+### Infrastructure
+- Test count: 2168+ → 2179+
+- Module count: 131 → 132
 
 ---
 
@@ -525,6 +537,7 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.12.0 | 2026-03-15 | HITL 보안 강화, WRITE_TOOLS/MCP 안전 게이트, README 자율 실행 코어 재구성 |
 | 0.11.0 | 2026-03-15 | SubAgent Full Inheritance, asyncio 전환, External IP, BiasBuster fast path, D1-D5 감사 |
 | 0.10.1 | 2026-03-13 | UI/UX 리브랜딩, Domain Plugin, Agentic 강건성, 리포트 상용화, MCP 정규화 |
 | 0.10.0 | 2026-03-12 | SubAgent 병렬 실행, SchedulerService 와이어링, NL 스케줄, OpenClaw 세션 격리 |
@@ -535,7 +548,8 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/mangowhoiscloud/geode/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mangowhoiscloud/geode/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/mangowhoiscloud/geode/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/mangowhoiscloud/geode/compare/v0.9.0...v0.10.0
