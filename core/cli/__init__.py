@@ -86,7 +86,7 @@ def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
 
 app = typer.Typer(
     name="geode",
-    help=f"GEODE v{__version__} — 게임화 IP 도메인 자율 실행 하네스",
+    help=f"GEODE v{__version__} — 범용 자율 실행 에이전트",
     no_args_is_help=False,
     invoke_without_command=True,
 )

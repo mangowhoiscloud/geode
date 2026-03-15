@@ -7,9 +7,15 @@ from typing import Any
 from core.infrastructure.adapters.mcp.base import MCPClientBase, MCPTimeoutError
 from core.infrastructure.adapters.mcp.brave_adapter import BraveSearchAdapter
 from core.infrastructure.adapters.mcp.composite_signal import CompositeSignalAdapter
+from core.infrastructure.adapters.mcp.linkedin_adapter import LinkedInMCPAdapter
 from core.infrastructure.adapters.mcp.memory_adapter import KGMemoryAdapter
 from core.infrastructure.adapters.mcp.steam_adapter import SteamMCPSignalAdapter
-from core.infrastructure.ports.signal_port import KGMemoryPort, SignalEnrichmentPort, WebSearchPort
+from core.infrastructure.ports.signal_port import (
+    KGMemoryPort,
+    LinkedInPort,
+    SignalEnrichmentPort,
+    WebSearchPort,
+)
 
 # ---------------------------------------------------------------------------
 # MCPClientBase
@@ -217,6 +223,48 @@ class TestCompositeSignalAdapter:
     def test_implements_signal_enrichment_port(self) -> None:
         composite = CompositeSignalAdapter([])
         assert isinstance(composite, SignalEnrichmentPort)
+
+
+# ---------------------------------------------------------------------------
+# LinkedInMCPAdapter
+# ---------------------------------------------------------------------------
+
+
+class TestLinkedInMCPAdapter:
+    def test_get_person_profile_returns_empty_when_disconnected(self) -> None:
+        client = MCPClientBase("http://localhost:8080")
+        adapter = LinkedInMCPAdapter(client)
+        assert adapter.get_person_profile("https://linkedin.com/in/test") == {}
+
+    def test_get_company_profile_returns_empty_when_disconnected(self) -> None:
+        client = MCPClientBase("http://localhost:8080")
+        adapter = LinkedInMCPAdapter(client)
+        assert adapter.get_company_profile("https://linkedin.com/company/test") == {}
+
+    def test_search_people_returns_empty_when_disconnected(self) -> None:
+        client = MCPClientBase("http://localhost:8080")
+        adapter = LinkedInMCPAdapter(client)
+        assert adapter.search_people("AI engineer") == []
+
+    def test_search_jobs_returns_empty_when_disconnected(self) -> None:
+        client = MCPClientBase("http://localhost:8080")
+        adapter = LinkedInMCPAdapter(client)
+        assert adapter.search_jobs("ML engineer") == []
+
+    def test_get_company_posts_returns_empty_when_disconnected(self) -> None:
+        client = MCPClientBase("http://localhost:8080")
+        adapter = LinkedInMCPAdapter(client)
+        assert adapter.get_company_posts("https://linkedin.com/company/nexon") == []
+
+    def test_is_available_false_when_disconnected(self) -> None:
+        client = MCPClientBase("http://localhost:8080")
+        adapter = LinkedInMCPAdapter(client)
+        assert adapter.is_available() is False
+
+    def test_implements_linkedin_port(self) -> None:
+        client = MCPClientBase("http://localhost:8080")
+        adapter = LinkedInMCPAdapter(client)
+        assert isinstance(adapter, LinkedInPort)
 
 
 # ---------------------------------------------------------------------------

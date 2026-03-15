@@ -204,7 +204,7 @@ core/
 │   ├── ports/           # Protocol interfaces (LLM, Memory, Auth, Hook, Tool, DomainPort)
 │   └── adapters/
 │       ├── llm/         # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/         # Steam, Brave MCP adapters + catalog (29 entries)
+│       └── mcp/         # Steam, Brave, LinkedIn MCP adapters + catalog (29 entries)
 ├── tools/               # Tool Protocol + Registry + Policy + definitions.json
 ├── auth/                # API key rotation, cooldown, profiles
 ├── extensibility/       # Report generation + Skills + AgentRegistry (3 defaults)
