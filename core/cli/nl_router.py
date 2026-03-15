@@ -66,6 +66,7 @@ _STATIC_VALID_ACTIONS = {
     "trigger",
     "plan",
     "delegate",
+    "decompose",  # compound goal decomposition
 }
 
 # Backward-compatible alias
