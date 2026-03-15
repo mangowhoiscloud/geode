@@ -257,39 +257,52 @@ class SubAgentManager:
                 child_key,
             )
 
+        # Collect results as they arrive (not in submission order).
+        # This ensures SUBAGENT_COMPLETED hooks fire immediately when
+        # a task finishes, rather than waiting for earlier tasks.
         results: list[SubResult] = []
-        for task, sid in session_ids:
-            isolation = self._wait_for_result(sid)
-            sub_result = self._to_sub_result(task, isolation)
+        pending: dict[str, SubTask] = {sid: task for task, sid in session_ids}
+        deadline = time.time() + self._timeout_s
+        poll_interval = 0.05
+        max_poll = 0.5
+
+        while pending and time.time() < deadline:
+            completed_sids: list[str] = []
+            for sid in list(pending):
+                isolation = self._runner.get_result(sid)
+                if isolation is not None:
+                    completed_sids.append(sid)
+                    task = pending.pop(sid)
+                    sub_result = self._to_sub_result(task, isolation)
+                    results.append(sub_result)
+
+                    if sub_result.success:
+                        graph.mark_completed(task.task_id, result=sub_result.output)
+                        self._emit_hook(HookEvent.SUBAGENT_COMPLETED, task, sub_result=sub_result)
+                    else:
+                        graph.mark_failed(task.task_id, error=sub_result.error or "unknown")
+                        self._emit_hook(HookEvent.SUBAGENT_FAILED, task, error=sub_result.error)
+
+                    if on_progress is not None:
+                        try:
+                            on_progress(sub_result)
+                        except Exception:
+                            log.warning(
+                                "on_progress callback failed for %s",
+                                task.task_id,
+                                exc_info=True,
+                            )
+
+            if not completed_sids and pending:
+                time.sleep(min(poll_interval, max(0, deadline - time.time())))
+                poll_interval = min(poll_interval * 1.5, max_poll)
+
+        # Handle timed-out tasks
+        for _sid, task in pending.items():
+            sub_result = self._to_sub_result(task, None)
             results.append(sub_result)
-
-            if sub_result.success:
-                graph.mark_completed(task.task_id, result=sub_result.output)
-                self._emit_hook(
-                    HookEvent.SUBAGENT_COMPLETED,
-                    task,
-                    sub_result=sub_result,
-                )
-            else:
-                graph.mark_failed(
-                    task.task_id,
-                    error=sub_result.error or "unknown",
-                )
-                self._emit_hook(
-                    HookEvent.SUBAGENT_FAILED,
-                    task,
-                    error=sub_result.error,
-                )
-
-            if on_progress is not None:
-                try:
-                    on_progress(sub_result)
-                except Exception:
-                    log.warning(
-                        "on_progress callback failed for %s",
-                        task.task_id,
-                        exc_info=True,
-                    )
+            graph.mark_failed(task.task_id, error=f"Timeout after {self._timeout_s}s")
+            self._emit_hook(HookEvent.SUBAGENT_FAILED, task, error=sub_result.error)
 
         # Update run records with outcomes (G7 observability)
         now = time.time()
