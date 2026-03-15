@@ -1,8 +1,8 @@
-# GEODE — 게임화 IP 도메인 자율 실행 하네스
+# GEODE — 범용 자율 실행 에이전트
 
 ## Project Overview
 
-저평가 IP를 데이터 기반으로 발굴하는 LangGraph Agent CLI.
+LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
 - **Version**: 0.10.1
 - **Python**: >= 3.12
@@ -36,15 +36,70 @@ uv run geode
 6-Layer Architecture based on `architecture-v6.md` SOT.
 
 ```
-L6: EXTENSIBILITY   — Custom Agents, Plugins, Reports
-L5: AUTOMATION       — Triggers, Dispatch, Snapshot, CUSUM Drift, Predefined(10)
-L4: ORCHESTRATION    — Planner, Plan Mode, Task System, Hooks(19), Bootstrap
-L3: AGENTIC CORE     — StateGraph, Analysts×4, Evaluators×3, Feedback Loop(5-Phase)
+L0: CLI & AGENT      — Typer CLI, NL Router, AgenticLoop, SubAgentManager, Batch
+L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
 L2: MEMORY           — Organization > Project > Session (3-Tier + Hybrid L1/L2)
-L1: FOUNDATION       — MonoLake, LLM Clients, APIs, Skills, DI (Port/Adapter)
+L3: ORCHESTRATION    — HookSystem(27), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
+L4: EXTENSIBILITY    — ToolRegistry(38+), PolicyChain, Skills, MCP Catalog(29), Reports
+L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 ```
 
-### Pipeline (LangGraph StateGraph)
+### Sub-Agent System
+
+서브에이전트는 부모 AgenticLoop의 전체 역량(tools, MCP, skills, memory)을 상속받아 독립 컨텍스트에서 병렬 실행.
+
+```
+Parent AgenticLoop → delegate_task → SubAgentManager
+  → CoalescingQueue (250ms dedup) → TaskGraph (DAG)
+  → IsolatedRunner (MAX_CONCURRENT=5) → Worker×N
+  → SubAgentResult (summary 보존) → Token Guard (4096 tokens) → parent
+```
+
+| 구성 요소 | 설명 |
+|----------|------|
+| **SubAgentManager** | 병렬 위임 오케스트레이터. `action_handlers`/`mcp_manager`/`skill_registry` 자식 전달. 재귀 depth 제어 |
+| **SubTask** | 입력 스펙 — `task_id`, `description`, `task_type` (analyze/search/compare), `args` |
+| **SubAgentResult** | 표준 출력 — `status` (ok/error/timeout/partial), 필수 `summary`, `error_category`, `duration_ms`, `children_count` |
+| **ErrorCategory** | `TIMEOUT`/`API_ERROR` (retryable) vs `VALIDATION`/`RESOURCE`/`DEPTH_EXCEEDED`/`UNKNOWN` (not retryable) |
+| **IsolatedRunner** | 스레드 풀 격리 실행. `MAX_CONCURRENT=5`, 타임아웃 + 에러 격리 |
+| **CoalescingQueue** | 250ms 윈도우 내 동일 task_id 중복 요청 병합 |
+| **TaskGraph** | DAG 기반 실행 순서 결정, 순환 감지, 실패 전파 (`propagate_failure`) |
+| **Token Guard** | tool_result 4096 토큰 초과 시 `summary` + 경량 필드만 보존하여 부모 컨텍스트 보호 |
+
+**제어 파라미터:**
+
+| 항목 | 값 | 설명 |
+|------|-----|------|
+| `max_depth` | 2 | 재귀 위임 최대 깊이 (Root=0 → depth 2까지) |
+| `max_total` | 15 | 세션당 최대 서브에이전트 수 |
+| `MAX_CONCURRENT` | 5 | 동시 병렬 워커 수 |
+| `timeout_s` | 120s | 개별 태스크 타임아웃 |
+| `auto_approve` | True | 서브에이전트 HITL 승인 생략 |
+| `subagent_max_rounds` | 10 | 서브에이전트 AgenticLoop 라운드 제한 |
+| `subagent_max_tokens` | 8192 | 서브에이전트 출력 토큰 제한 |
+
+**Hook 이벤트**: `SUBAGENT_STARTED`, `SUBAGENT_COMPLETED`, `SUBAGENT_FAILED`
+
+### Domain Plugin System
+
+`DomainPort` Protocol로 도메인별 분석 파이프라인을 플러그인으로 교체 가능.
+
+```
+DomainPort (Protocol)
+  ├── Identity: name, version, description
+  ├── Analyst Config: get_analyst_types(), get_analyst_specific()
+  ├── Evaluator Config: get_evaluator_types(), get_evaluator_axes(), get_valid_axes_map()
+  ├── Scoring: get_scoring_weights(), get_tier_thresholds(), get_confidence_multiplier_params()
+  ├── Classification: get_cause_values(), get_cause_to_action()
+  └── Fixtures: list_fixtures(), get_fixture_path()
+```
+
+- **ContextVar 주입**: `set_domain()` / `get_domain()` — `contextvars` 기반 DI
+- **Domain Loader**: `load_domain_adapter(name)` — 동적 임포트 + 레지스트리
+- **기본 도메인**: `game_ip` → `core.domains.game_ip.adapter:GameIPDomain`
+- **확장 방법**: `register_domain(name, adapter_path)` 후 `DomainPort` Protocol 구현
+
+### Game IP Pipeline (Domain Plugin)
 
 ```
 START → router → signals → analyst×4 (Send API)
@@ -55,13 +110,15 @@ START → router → signals → analyst×4 (Send API)
 
 ### Key Design Decisions
 
+- **Port/Adapter DI**: All infra accessed via Protocol ports + contextvars injection
+- **Sub-Agent Inheritance**: 자식은 부모의 tools/MCP/skills/memory 전체 상속 (P2-B)
+- **Token Guard**: SubAgentResult의 `summary` 필드 필수 보존으로 컨텍스트 폭발 방지
+- **Domain Plugin**: 파이프라인은 DomainPort 구현체로 교체 가능 (게임 IP는 플러그인)
 - **Send API Clean Context**: Analysts receive state WITHOUT `analyses` to prevent anchoring
 - **Decision Tree**: Cause classification is code-based, NOT LLM
-- **D-axis Exclusion**: D excluded from recovery_potential (PSM covers same dimension)
 - **graph.stream()**: Step-by-step progress tracking (not invoke)
 - **Typed Evaluator Output**: Per-evaluator Pydantic models enforce required axes in structured output
 - **Confidence Multiplier**: `final = base × (0.7 + 0.3 × confidence/100)`
-- **Port/Adapter DI**: All infra accessed via Protocol ports + contextvars injection
 
 ## SOT (Source of Truth)
 
@@ -75,11 +132,22 @@ START → router → signals → analyst×4 (Send API)
 
 ```
 core/
-├── cli/                 # Typer CLI + NL router + search
+├── cli/                 # CLI + NL Router + Agentic Loop + Sub-Agent
+│   ├── agentic_loop.py  # while(tool_use) multi-round + Token Guard
+│   ├── sub_agent.py     # SubAgentManager + SubAgentResult + ErrorCategory
+│   ├── tool_executor.py # Tool dispatch + HITL + delegate_task handler
+│   ├── nl_router.py     # NL intent classification (LLM → regex → help)
+│   ├── conversation.py  # Multi-turn sliding-window (max 20 turns)
+│   ├── batch.py         # Batch analysis (ThreadPoolExecutor)
+│   ├── commands.py      # Slash command dispatch (17 commands)
+│   └── search.py        # IP search engine (synonym expansion)
 ├── config.py            # Pydantic Settings (.env)
 ├── state.py             # GeodeState TypedDict + Pydantic models
 ├── graph.py             # StateGraph build + compile
 ├── runtime.py           # GeodeRuntime — DI wiring + graph execution
+├── domains/             # Domain plugin adapters
+│   ├── loader.py        # load_domain_adapter(), register_domain()
+│   └── game_ip/         # GameIPDomain — DomainPort 구현
 ├── nodes/
 │   ├── router.py        # 6-mode routing + fixture loading + memory assembly
 │   ├── signals.py       # External signals fixture
@@ -101,17 +169,17 @@ core/
 │   ├── session_key.py   # Hierarchical key builder (ip:name:phase)
 │   └── context.py       # 3-tier context assembler
 ├── orchestration/
-│   ├── hooks.py         # HookSystem (23 events)
+│   ├── hooks.py         # HookSystem (27 events + SUBAGENT_* + async atrigger)
 │   ├── bootstrap.py     # Node bootstrap (pre-execution context injection)
 │   ├── planner.py       # Planner (multi-step plan generation)
 │   ├── plan_mode.py     # Plan mode state machine
-│   ├── task_system.py   # Task tracking + dependency management
+│   ├── task_system.py   # TaskGraph DAG (dependency, cycle detection)
 │   ├── task_bridge.py   # Task ↔ pipeline bridge
-│   ├── coalescing.py    # Duplicate request coalescing
+│   ├── coalescing.py    # CoalescingQueue (250ms dedup window)
 │   ├── lane_queue.py    # Priority lane queue
 │   ├── hook_discovery.py # Auto-discovery of hook handlers
 │   ├── hot_reload.py    # Hot reload support
-│   ├── isolated_execution.py # Sandboxed execution
+│   ├── isolated_execution.py # IsolatedRunner (MAX_CONCURRENT=5, thread pool)
 │   ├── run_log.py       # Run audit log
 │   └── stuck_detection.py # Stuck pipeline detection
 ├── automation/
@@ -133,12 +201,14 @@ core/
 │   ├── cross_llm.py     # Cross-LLM agreement + Krippendorff's α
 │   └── rights_risk.py   # IP rights risk assessment
 ├── infrastructure/
-│   ├── ports/           # Protocol interfaces (LLM, Memory, Auth, Hook, Tool, etc.)
-│   └── adapters/llm/    # Claude + OpenAI adapters
-├── tools/               # LLM-callable tools (memory, signal, analysis, output, data)
+│   ├── ports/           # Protocol interfaces (LLM, Memory, Auth, Hook, Tool, DomainPort)
+│   └── adapters/
+│       ├── llm/         # ClaudeAdapter, OpenAIAdapter
+│       └── mcp/         # Steam, Brave MCP adapters + catalog (29 entries)
+├── tools/               # Tool Protocol + Registry + Policy + definitions.json
 ├── auth/                # API key rotation, cooldown, profiles
-├── extensibility/       # Custom agents, plugins, report generators
-├── fixtures/            # JSON test data (3 IPs) + data generator
+├── extensibility/       # Report generation + Skills + AgentRegistry (3 defaults)
+├── fixtures/            # JSON test data (3 core IPs + 201 Steam)
 └── ui/
     ├── console.py       # Rich Console singleton (width=120, GEODE theme)
     ├── agentic_ui.py    # Claude Code-style renderer (▸/✓/✗/✢/● markers)
@@ -167,7 +237,9 @@ uv run mypy core/
 - Cowboy Bebop: **A** (68.4) — undermarketed
 - Ghost in the Shell: **B** (51.6) — discovery_failure
 
-## Scoring Formula (§13.8.1)
+## Domain Plugin: Game IP — Scoring & Classification
+
+### Scoring Formula (§13.8.1)
 
 ```
 Final = (0.25×PSM + 0.20×Quality + 0.18×Recovery + 0.12×Growth + 0.20×Momentum + 0.05×Dev)
@@ -176,7 +248,7 @@ Final = (0.25×PSM + 0.20×Quality + 0.18×Recovery + 0.12×Growth + 0.20×Momen
 Tier: S≥80, A≥60, B≥40, C<40
 ```
 
-## Cause Classification (§13.9.2)
+### Cause Classification (§13.9.2)
 
 Decision Tree on D-E-F axes:
 - D≥3, E≥3 → conversion_failure
@@ -185,7 +257,7 @@ Decision Tree on D-E-F axes:
 - D≤2, E≤2, F≥3 → niche_gem
 - D≤2, E≤2, F≤2 → discovery_failure
 
-## Quality Evaluation (5-Layer)
+### Quality Evaluation (5-Layer)
 
 1. **Guardrails** G1-G4: Schema, Range, Grounding, 2σ Consistency
 2. **BiasBuster**: 6 bias types (CV < 0.05 → anchoring flag)
@@ -259,7 +331,8 @@ NLRouter는 Claude Opus 4.6 Tool Use로 자연어 → 도구 호출을 매핑한
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
 - **Port/Adapter**: All infra via Protocol ports + contextvars DI
-- **Hook-driven**: 19 lifecycle events for extensibility
+- **Hook-driven**: 27 lifecycle events (incl. `SUBAGENT_*`) for extensibility
+- **Domain Plugin**: `DomainPort` Protocol — 도메인별 pipeline 교체 가능 (`set_domain()` / `get_domain()`)
 
 ## Implementation Workflow
 
