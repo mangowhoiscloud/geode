@@ -95,14 +95,24 @@ class TestToolExecutor:
             assert result.get("denied") is True
             handler.assert_not_called()
 
-    def test_write_tools_skip_confirmation_when_auto_approved(self) -> None:
-        """Write tools skip confirmation when auto_approve=True (sub-agents)."""
+    def test_write_tools_always_require_confirmation_even_auto_approve(self) -> None:
+        """Write tools always require confirmation, even with auto_approve=True."""
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"memory_save": handler}, auto_approve=True)
-        result = executor.execute("memory_save", {"content": "test"})
-        assert result["status"] == "ok"
-        handler.assert_called_once()
-        assert "list_ips" not in DANGEROUS_TOOLS
+        with patch.object(executor, "_confirm_write", return_value=True) as mock:
+            result = executor.execute("memory_save", {"content": "test"})
+            mock.assert_called_once()
+            assert result["status"] == "ok"
+            handler.assert_called_once()
+
+    def test_write_tools_denied_even_with_auto_approve(self) -> None:
+        """Write tools denied by user even when auto_approve=True."""
+        handler = MagicMock(return_value={"status": "ok"})
+        executor = ToolExecutor(action_handlers={"memory_save": handler}, auto_approve=True)
+        with patch.object(executor, "_confirm_write", return_value=False):
+            result = executor.execute("memory_save", {"content": "test"})
+            assert result.get("denied") is True
+            handler.assert_not_called()
 
     def test_delegate_task_no_manager(self) -> None:
         executor = ToolExecutor(auto_approve=True)
