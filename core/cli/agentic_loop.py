@@ -23,11 +23,13 @@ from typing import TYPE_CHECKING, Any
 import anthropic
 
 from core.cli.conversation import ConversationContext
+from core.cli.error_recovery import ErrorRecoveryStrategy
 from core.cli.nl_router import _build_system_prompt
 from core.cli.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY, settings
 from core.llm.client import _maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
+from core.orchestration.hooks import HookEvent, HookSystem
 from core.ui.agentic_ui import OperationLogger
 
 if TYPE_CHECKING:
@@ -149,6 +151,7 @@ class AgenticLoop:
         tool_registry: ToolRegistry | None = None,
         mcp_manager: Any | None = None,
         skill_registry: Any | None = None,
+        hooks: HookSystem | None = None,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -158,6 +161,7 @@ class AgenticLoop:
         self._tool_registry = tool_registry
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
+        self._hooks = hooks
         # Unified tool assembly: merge native + MCP tools together
         mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
         self._tools = get_agentic_tools(tool_registry, mcp_tools=mcp_tool_list)
@@ -166,6 +170,7 @@ class AgenticLoop:
         self._last_llm_error: str | None = None  # last error type for user message
         self._client: anthropic.AsyncAnthropic | None = None
         self._op_logger = OperationLogger()
+        self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
     def refresh_tools(self) -> int:
         """Reload MCP tools into the tool list without reconstructing the loop.
@@ -521,8 +526,11 @@ class AgenticLoop:
         """Execute all tool_use blocks and return tool_result messages.
 
         Tracks consecutive failures per tool name.  After _MAX_CONSECUTIVE_FAILURES
-        for the same tool, returns a synthetic "skip" result so the LLM stops retrying
-        a broken tool and moves on.
+        for the same tool, triggers the adaptive error recovery chain:
+        retry → alternative tool → cheaper fallback → escalate.
+
+        If recovery is not possible (safety-gated tools) or the chain is
+        exhausted, returns a synthetic error result so the LLM moves on.
         """
         tool_results: list[dict[str, Any]] = []
 
@@ -535,16 +543,12 @@ class AgenticLoop:
 
             log.info("AgenticLoop: tool_use %s(%s)", tool_name, tool_input)
 
-            # Auto-skip: if this tool has failed too many times consecutively
+            # Check consecutive failure count
             fail_count = self._consecutive_failures.get(tool_name, 0)
+
             if fail_count >= self._MAX_CONSECUTIVE_FAILURES:
-                result: dict[str, Any] = {
-                    "error": (
-                        f"Tool '{tool_name}' failed {fail_count} times consecutively. "
-                        "Skipping — please use a different approach."
-                    ),
-                    "skipped": True,
-                }
+                # Adaptive recovery: try recovery chain instead of auto-skip
+                result = await self._attempt_recovery(tool_name, tool_input, fail_count)
                 visible = self._op_logger.log_tool_call(tool_name, tool_input)
                 self._op_logger.log_tool_result(tool_name, result, visible=visible)
             else:
@@ -556,7 +560,9 @@ class AgenticLoop:
 
             # Track consecutive failures
             if isinstance(result, dict) and result.get("error"):
-                self._consecutive_failures[tool_name] = fail_count + 1
+                # Don't increment if recovery was attempted (already handled)
+                if not result.get("recovery_attempted"):
+                    self._consecutive_failures[tool_name] = fail_count + 1
             else:
                 self._consecutive_failures[tool_name] = 0
 
@@ -572,8 +578,9 @@ class AgenticLoop:
                         "max_clarifications_exceeded": True,
                     }
 
-            # Progressive log: show tool result summary (skip if already logged above)
-            if isinstance(result, dict) and not result.get("skipped"):
+            # Progressive log: show tool result summary (skip if already logged)
+            skip_log = result.get("skipped") or result.get("recovery_attempted")
+            if isinstance(result, dict) and not skip_log:
                 self._op_logger.log_tool_result(tool_name, result, visible=visible)
 
             self._tool_log.append(
@@ -603,6 +610,77 @@ class AgenticLoop:
             )
 
         return tool_results
+
+    async def _attempt_recovery(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        fail_count: int,
+    ) -> dict[str, Any]:
+        """Attempt adaptive error recovery for a repeatedly failing tool.
+
+        Runs the recovery chain in a background thread (sync executor calls)
+        and emits hook events for observability.
+        """
+        self._emit_hook(
+            HookEvent.TOOL_RECOVERY_ATTEMPTED,
+            {
+                "tool_name": tool_name,
+                "fail_count": fail_count,
+                "source": "agentic_loop",
+            },
+        )
+
+        recovery_result = await asyncio.to_thread(
+            self._error_recovery.recover,
+            tool_name,
+            tool_input,
+            fail_count,
+        )
+
+        if recovery_result.recovered:
+            # Reset consecutive failure counter on recovery success
+            self._consecutive_failures[tool_name] = 0
+            self._emit_hook(
+                HookEvent.TOOL_RECOVERY_SUCCEEDED,
+                {
+                    "tool_name": tool_name,
+                    "strategy": recovery_result.strategy_used.value
+                    if recovery_result.strategy_used
+                    else "unknown",
+                    "attempts": len(recovery_result.attempts),
+                    "source": "agentic_loop",
+                },
+            )
+            result = dict(recovery_result.final_result)
+            result["recovery_summary"] = recovery_result.to_summary()
+            result["recovery_attempted"] = True
+            return result
+
+        # Recovery failed
+        self._emit_hook(
+            HookEvent.TOOL_RECOVERY_FAILED,
+            {
+                "tool_name": tool_name,
+                "attempts": len(recovery_result.attempts),
+                "strategies_tried": [a.strategy.value for a in recovery_result.attempts],
+                "source": "agentic_loop",
+            },
+        )
+        result = dict(recovery_result.final_result)
+        result["recovery_summary"] = recovery_result.to_summary()
+        result["recovery_attempted"] = True
+        result["skipped"] = True
+        return result
+
+    def _emit_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
+        """Emit a hook event if HookSystem is configured."""
+        if self._hooks is None:
+            return
+        try:
+            self._hooks.trigger(event, data)
+        except Exception:
+            log.debug("Hook trigger failed for %s", event.value, exc_info=True)
 
     def _extract_text(self, response: anthropic.types.Message) -> str:
         """Extract text content from response blocks."""

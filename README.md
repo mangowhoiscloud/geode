@@ -62,7 +62,7 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
 | **Sub-Agent** | Full AgenticLoop 상속, 재귀 depth 제어 (max_depth=2), `SubAgentResult` 표준 스키마, `ErrorCategory` 분류, Token Guard |
 | **38+ Tools** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + MCP 포함 60+ |
 | **Skills + MCP** | `.claude/skills/` 자동 발견 + 29개 MCP 카탈로그 자연어 설치 + 도구 핫 리로드 |
-| **Orchestration** | HookSystem (27 events), TaskGraph DAG, CoalescingQueue, LaneQueue, PlanMode |
+| **Orchestration** | HookSystem (30 events), TaskGraph DAG, CoalescingQueue, LaneQueue, PlanMode |
 | **NL Router** | 한국어/영어 자유 입력, Multi-turn (20 turns), Multi-intent, Fuzzy matching |
 | **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
 | **Observability** | LangSmith 토큰 추적 + 비용 계산, Claude Code 스타일 상태줄 |
@@ -175,7 +175,7 @@ graph TB
     end
 
     subgraph L3["L3 — Orchestration"]
-        Hooks["HookSystem (27)"]
+        Hooks["HookSystem (30)"]
         Tasks["TaskGraph (DAG)"]
         Plan["PlanMode"]
         Coal["CoalescingQueue"]
@@ -215,7 +215,7 @@ graph TB
 | **L0** CLI & Agent | Typer CLI, NL Router, AgenticLoop, SubAgentManager, Batch | 사용자 인터페이스 + 자율 실행 코어 — 멀티라운드 tool use, 서브에이전트 병렬 위임 |
 | **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입, LLM 클라이언트 교체 가능 |
 | **L2** Memory | Organization (fixture), Project (.claude/MEMORY.md), Session (TTL), SqliteSaver | 3-Tier 메모리 + LangGraph 체크포인트 영속화 |
-| **L3** Orchestration | HookSystem (27 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
+| **L3** Orchestration | HookSystem (30 events), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue, RunLog | 라이프사이클 이벤트, 중복 요청 제거, 동시성 제어 |
 | **L4** Extensibility | ToolRegistry (38+), PolicyChain, Report Generator, Skills System, MCP Catalog (29) | 런타임 tool 확장, 노드별 접근 제어, 스킬 자동 주입, MCP 자동설치 |
 | **L5** Domain Plugins | DomainPort Protocol, GameIPDomain, LangGraph StateGraph | 도메인별 파이프라인 플러그인 — analysts/evaluators/scoring 교체 가능 |
 
@@ -990,7 +990,7 @@ core/
 ├── memory/                     # 3-Tier memory system
 ├── nodes/                      # Pipeline nodes (8: router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
 ├── orchestration/
-│   ├── hooks.py                # HookSystem (27 events + async atrigger)
+│   ├── hooks.py                # HookSystem (30 events + async atrigger)
 │   ├── hook_discovery.py       # Plugin-based hook loading
 │   ├── isolated_execution.py   # IsolatedRunner (MAX_CONCURRENT=5, thread pool)
 │   ├── task_system.py          # TaskGraph DAG (dependency, cycle detection)
