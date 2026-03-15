@@ -9,7 +9,7 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
 - **Modules**: 132
-- **Tests**: 2248+
+- **Tests**: 2243+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -150,7 +150,7 @@ core/
 │   └── game_ip/         # GameIPDomain — DomainPort 구현
 ├── nodes/
 │   ├── router.py        # 6-mode routing + fixture loading + memory assembly
-│   ├── signals.py       # Signal collection (MCP live → fixture fallback)
+│   ├── signals.py       # External signals fixture
 │   ├── analysts.py      # 4 Analysts (Send API, Clean Context)
 │   ├── evaluators.py    # 3+1 Evaluators (14-axis rubric, typed output models)
 │   ├── scoring.py       # PSM Engine + 6-weighted composite + Tier
