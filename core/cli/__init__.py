@@ -1878,7 +1878,8 @@ def _build_tool_handlers(
         return cached
 
     def handle_create_plan(**kwargs: Any) -> dict[str, Any]:
-        from core.orchestration.plan_mode import PlanMode
+        from core.config import settings
+        from core.orchestration.plan_mode import PlanExecutionMode, PlanMode
 
         ip_name = kwargs.get("ip_name", "")
         if not ip_name:
@@ -1887,8 +1888,8 @@ def _build_tool_handlers(
         planner = PlanMode()
         plan = planner.create_plan(ip_name, template=template)
         summary = planner.present_plan(plan)
-        _plan_cache[plan.plan_id] = (planner, plan)
 
+        # Display plan steps
         console.print()
         console.print(f"  [header]● Plan: {ip_name} 분석 계획[/header]")
         for i, step in enumerate(plan.steps, 1):
@@ -1905,6 +1906,45 @@ def _build_tool_handlers(
             ip_name,
             plan.step_count,
         )
+
+        # AUTO mode: approve and execute immediately without user intervention
+        if settings.plan_auto_execute:
+            console.print(f"  [bold cyan]▸ Auto-executing plan {plan.plan_id}[/bold cyan]")
+            exec_result = planner.auto_execute_plan(plan)
+
+            completed = exec_result.get("completed_steps", 0)
+            total = exec_result.get("total_steps", 0)
+            failed = exec_result.get("failed_steps", [])
+
+            if failed:
+                console.print(
+                    f"  [warning]⚠ Partial success: {completed}/{total} steps "
+                    f"(failed: {', '.join(failed)})[/warning]"
+                )
+            else:
+                console.print(f"  [success]✓ All {total} steps completed[/success]")
+            console.print()
+
+            return {
+                "status": "ok",
+                "action": "plan",
+                "plan_id": plan.plan_id,
+                "ip_name": ip_name,
+                "template": template,
+                "step_count": plan.step_count,
+                "steps": [s.description for s in plan.steps],
+                "summary": summary,
+                "execution_mode": PlanExecutionMode.AUTO.value,
+                "auto_executed": True,
+                "execution_result": exec_result,
+                "hint": (
+                    f"Plan auto-executed. Call analyze_ip with "
+                    f"ip_name='{ip_name}' to run the full analysis."
+                ),
+            }
+
+        # MANUAL mode: cache plan and wait for user approval
+        _plan_cache[plan.plan_id] = (planner, plan)
         return {
             "status": "ok",
             "action": "plan",
@@ -1914,6 +1954,7 @@ def _build_tool_handlers(
             "step_count": plan.step_count,
             "steps": [s.description for s in plan.steps],
             "summary": summary,
+            "execution_mode": PlanExecutionMode.MANUAL.value,
             "hint": ("Use approve_plan, reject_plan, or modify_plan to proceed."),
         }
 
