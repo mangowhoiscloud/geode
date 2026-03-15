@@ -19,7 +19,7 @@
     "args": ["-y", "@playwright/mcp"]
   },
   "linkedin": {
-    "command": "npx",
-    "args": ["-y", "linkedin-mcp-runner"]
+    "command": "uvx",
+    "args": ["linkedin-scraper-mcp"]
   }
 }
