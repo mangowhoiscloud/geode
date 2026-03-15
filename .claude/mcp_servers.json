@@ -17,5 +17,9 @@
   "playwright": {
     "command": "npx",
     "args": ["-y", "@playwright/mcp"]
+  },
+  "linkedin": {
+    "command": "npx",
+    "args": ["-y", "linkedin-mcp-runner"]
   }
 }

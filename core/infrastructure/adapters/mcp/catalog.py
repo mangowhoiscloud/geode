@@ -108,7 +108,7 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
     ),
     "linkedin": MCPCatalogEntry(
         name="linkedin",
-        package="linkedin-scraper-mcp",
+        package="linkedin-mcp-runner",
         description="LinkedIn profile, company, job search (browser session)",
         tags=("linkedin", "social", "profile", "recruiting", "company", "job"),
     ),

@@ -2,7 +2,7 @@
   <img src="assets/geode-social-preview.png" alt="GEODE — 범용 자율 실행 에이전트" width="720" />
 </p>
 
-# GEODE v0.10.1 — 범용 자율 실행 에이전트
+# GEODE v0.11.0 — 범용 자율 실행 에이전트
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
@@ -60,7 +60,7 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
 |---------|-------------|
 | **Agentic Loop** | `while(tool_use)` 멀티 라운드 (max 15), multi-intent chaining, clarification |
 | **38+ Tools** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + MCP 포함 60+ |
-| **Sub-Agent** | Full AgenticLoop 상속, 재귀 depth 제어 (max_depth=2), `SubAgentResult` 표준 스키마 |
+| **Sub-Agent** | Full AgenticLoop 상속, 재귀 depth 제어 (max_depth=2), `SubAgentResult` + `ErrorCategory`, async `adelegate()` |
 | **Skills + MCP** | `.claude/skills/` 자동 발견 + 29개 MCP 카탈로그 자연어 설치 + 도구 핫 리로드 |
 | **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
 | **NL Router** | 한국어/영어 자유 입력, Multi-turn (20 turns), Multi-intent, Fuzzy matching |
@@ -381,7 +381,7 @@ graph LR
 | **TaskGraph (DAG)** | 의존 관계 기반 실행 순서 결정, 순환 감지, 완료 상태 추적 |
 | **CoalescingQueue** | 동일 IP 중복 분석 요청 병합 (dedup key: IP name + mode) |
 | **IsolatedRunner** | `asyncio.Semaphore(MAX_CONCURRENT=5)` — 최대 5개 워커 병렬 실행 |
-| **HookSystem** | 26개 라이프사이클 이벤트 — `NODE_ENTER`/`NODE_EXIT`/`NODE_ERROR` 등 실시간 모니터링 |
+| **HookSystem** | 27개 라이프사이클 이벤트 — `NODE_ENTER`/`NODE_EXIT`/`NODE_ERROR`/`SUBAGENT_*` 등 + async `atrigger()` |
 
 ### MCP & Tool Architecture
 
@@ -862,8 +862,17 @@ core/
 │   └── prompts/                # Prompt templates (.md) + axes config
 ├── mcp_server.py               # FastMCP server (6 tools, 2 resources)
 ├── memory/                     # 3-Tier memory system
-├── nodes/                      # Pipeline nodes (8)
-├── orchestration/              # HookSystem, TaskGraph, PlanMode, etc.
+├── nodes/                      # Pipeline nodes (8: router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
+├── orchestration/
+│   ├── hooks.py                # HookSystem (27 events + async atrigger)
+│   ├── hook_discovery.py       # Plugin-based hook loading
+│   ├── isolated_execution.py   # Concurrent runner (semaphore)
+│   ├── task_system.py          # DAG-based task graph
+│   ├── coalescing.py           # Duplicate request coalescing
+│   ├── plan_mode.py            # DRAFT → APPROVED → EXECUTING workflow
+│   ├── lane_queue.py           # Concurrency control lanes
+│   ├── run_log.py              # Structured execution logging
+│   └── ...                     # planner, bootstrap, stuck_detection, etc.
 ├── runtime.py                  # GeodeRuntime (production wiring)
 ├── state.py                    # GeodeState (TypedDict + Pydantic models)
 ├── tools/                      # Tool Protocol + Registry + Policy
