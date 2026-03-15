@@ -4,55 +4,161 @@
 
 # GEODE v0.10.1 — 범용 자율 실행 에이전트
 
-LangGraph 기반 범용 자율 실행 에이전트입니다. 리서치, 분석, 자동화, 스케줄링 등 다양한 작업을 자율적으로 수행하며, 게임 IP 분석은 Domain Plugin으로 제공됩니다.
-- 6-Layer 아키텍처 + PSM 14-Axis 루브릭 기반 IP 분석/평가 파이프라인을 Domain Plugin(`GameIPDomain`)으로 탑재합니다.
-- Runtime Orchestration, Tool-Registry/Tool-Use, Bash, Hook-System으로 Agentic Loop(Gather->Action->Verify)를 구성, 자율 행동이 가능합니다.
-- NL Router(Multi-turn, Multi-intent, Clarification), 메모리 시스템, HITL로 사용자 의도를 정확히 파악합니다.
-- Skills 시스템(`.claude/skills/`)과 MCP 자동설치로 외부 도구를 자연어로 검색/설치/즉시 사용할 수 있습니다.
-- Sub-Agent Manager로 병렬 작업 위임을 지원합니다 (TaskGraph DAG, IsolatedRunner, OpenClaw 세션 격리).
-- Observability는 LangSmith, Evaluation은 루브릭 기반 LLM-as-Judge, CUSUM Drift 감지를 지원합니다.
-- Web Search, arXiv, Brave Search 등 외부 데이터 소스를 활용한 리서치 특화 기능을 제공합니다.
-- 에이전틱 엔지니어링으로 제작되며 코딩 에이전트가 E2E를 진행, Context/Observability/Eval/CI 가드레일을 기반으로 재귀 개선 루프를 형성합니다.
+LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
+
+## Installation
+
+```bash
+uv sync
+```
+
+## Quick Start
+
+```bash
+# 인터랙티브 모드 (권장)
+uv run geode
+
+# IP 분석 (API 키 있으면 LLM 호출, 없으면 자동 dry-run)
+uv run geode analyze "Berserk"
+
+# Streaming 분석
+uv run geode analyze "Berserk" --stream
+
+# 배치 분석
+uv run geode batch --top 5 --dry-run
+
+# 리포트 생성
+uv run geode report "Berserk" --format html --output berserk.html
+```
+
+### Setup
+
+```bash
+# 1. 환경 변수 설정
+cp .env.example .env
+
+# 2. .env 편집 — API 키 입력
+ANTHROPIC_API_KEY=sk-ant-...
+
+# 3. Full 분석 실행
+uv run geode analyze "Cowboy Bebop"
+```
+
+API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
+
+```
+  ✓ Dry-Run Analysis
+  ✓ IP Search
+  ✗ LLM Analysis (ANTHROPIC_API_KEY not set)
+
+  API key not configured — dry-run mode only
+```
 
 ## Features
 
 | Feature | Description |
 |---------|-------------|
-| **6-Layer Pipeline** | Router → Signals → Analysts → Evaluators → Scoring → Verification → Gather/Synthesizer (8 nodes) |
-| **Agentic Loop** | `while(tool_use)` 멀티 라운드 실행 (max 15 rounds, WRAP_UP_HEADROOM=2), multi-intent 자동 chaining, clarification |
-| **Multi-turn Context** | 슬라이딩 윈도우 대화 기록 (max 20 turns), 대명사 해석 + follow-up |
-| **HITL Bash** | 셸 명령 실행 + 위험 패턴 차단 (9종) + 사용자 승인 게이트 |
-| **Sub-Agent** | Full AgenticLoop 상속 (tools/MCP/skills/memory), 재귀 depth 제어 (max_depth=2, max_total=15), `SubAgentResult` 표준 스키마 |
-| **14-Axis Rubric** | PSM(Prospect Scoring Model) 기반 정량 평가 |
-| **Cross-LLM Ensemble** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, `cross` / `primary_only` 모드 |
-| **Prompt Caching** | Anthropic `cache_control` 적용, 40-60% 비용 절감 |
-| **38+ Tool Definitions** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + PolicyChain 접근 제어 (MCP 포함 60+) |
-| **Skills 시스템** | `.claude/skills/*/SKILL.md` 자동 발견, 시스템 프롬프트 주입, NL 트리거 매칭 |
-| **MCP 자동설치** | "LinkedIn MCP 달아줘" → 29개 빌트인 카탈로그 검색 → 설치 → 도구 핫 리로드 |
-| **Clarification** | 필수 파라미터 누락 시 되묻기 (slot filling, disambiguation), max_rounds 방지 |
-| **MCP Adapters** | Brave Search, Steam, arXiv, Playwright 외부 데이터 소스 연결 (4 active) |
-| **MCP Server** | FastMCP 기반 6 tools + 2 resources (다른 에이전트에서 GEODE 호출) |
-| **Prompt Templates** | `.md` 템플릿 8종 + YAML/JSON 설정 분리 (content/code separation) |
-| **Batch Analysis** | 멀티 IP 동시 분석, Rich 테이블 렌더링 |
-| **Streaming Output** | `--stream` 플래그로 실시간 진행 표시 |
-| **자연어 입력** | 한국어/영어 자유 입력 (NL Router intent classification) |
-| **Report Generation** | HTML/JSON/Markdown 다중 포맷, 스킬 기반 전문 분석 내러티브 주입, `.geode/reports/` 자동 저장 |
-| **Graceful Degradation** | API 키 없으면 자동 dry-run, 있으면 LLM 분석 |
-| **Project Memory** | `.claude/MEMORY.md` + `rules/`로 분석 맥락 유지 |
-| **Checkpoint** | SqliteSaver 기반 파이프라인 상태 영속화 |
-| **Feedback Loop** | Confidence < 0.7이면 자동 재분석 (최대 5회, `GEODE_MAX_ITERATIONS`) |
-| **LangSmith Observability** | 토큰 추적 + 비용 계산, RunTree 메트릭, 조건부 tracing |
-| **Dynamic Tools** | ToolRegistry 기반 런타임 tool 추가, plugin activate → 즉시 반영 |
-| **Pipeline Flexibility** | Analyst 타입 YAML 동적 로드, `interrupt_before` 사용자 개입 |
-| **Pre-commit Hooks** | ruff lint/format + mypy + bandit + standard hooks |
-| **Scheduler NL** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON 3-type + active hours + JSONL 로그) |
-| **External IP Fallback** | 미등록 IP 분석 시 3단계 시그널 수집: Adapter → Fixture → Web Search (Anthropic `web_search_20250305`) |
-| **BiasBuster Fast Path** | CV ≥ 0.10 && score range ≥ 0.5 시 LLM 호출 생략 — 10-30초 절감 |
-| **prompt_toolkit CLI** | `FileHistory` 방향키/히스토리 + Backspace/Delete 키 바인딩 (`renderer.reset()` + `invalidate()` 강제 redraw) + escape sequence 필터링 |
-| **Claude Code Status Line** | `GeodeStatus` 스피너 (✢ model · ↓input ↑output · $cost · elapsed) + progressive log |
-| **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring/decision tree 플러그인 인터페이스 |
-| **Operations Debugging** | D1-D5 패턴 기반 safe default, ContextVar lifecycle, closure capture, graceful degradation |
-| **2168+ Tests** | 131 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit 전체 통과 |
+| **Agentic Loop** | `while(tool_use)` 멀티 라운드 (max 15), multi-intent chaining, clarification |
+| **38+ Tools** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + MCP 포함 60+ |
+| **Sub-Agent** | Full AgenticLoop 상속, 재귀 depth 제어 (max_depth=2), `SubAgentResult` 표준 스키마 |
+| **Skills + MCP** | `.claude/skills/` 자동 발견 + 29개 MCP 카탈로그 자연어 설치 + 도구 핫 리로드 |
+| **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
+| **NL Router** | 한국어/영어 자유 입력, Multi-turn (20 turns), Multi-intent, Fuzzy matching |
+| **Cross-LLM** | Claude Opus 4.6 + GPT-5.4 듀얼 평가, agreement ≥ 0.67, Krippendorff's α |
+| **Observability** | LangSmith 토큰 추적 + 비용 계산, Claude Code 스타일 상태줄 |
+| **Scheduler** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON) |
+| **2168+ Tests** | 131 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
+
+## Usage
+
+### Interactive Mode
+
+```bash
+uv run geode
+```
+
+**슬래시 커맨드:**
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `/analyze <IP>` | `/a` | IP 분석 (API 키 유무에 따라 자동 모드 결정) |
+| `/run <IP>` | `/r` | IP 분석 (동일) |
+| `/search <query>` | `/s` | IP 검색 |
+| `/report <IP> [fmt]` | `/rpt` | 리포트 생성 (md/html/json) |
+| `/list` | | IP 목록 |
+| `/generate [count]` | `/gen` | 합성 데모 데이터 생성 |
+| `/model` | | LLM 모델 선택 |
+| `/key [value]` | | API 키 설정 |
+| `/auth` | | 인증 프로필 관리 |
+| `/batch [--top N]` | `/b` | 배치 분석 |
+| `/status` | | 시스템 상태 (모델, API 키, 메모리) |
+| `/compare <A> <B>` | | 두 IP 비교 분석 (Interactive) |
+| `/schedule <cron>` | `/sched` | 배치 스케줄 설정 |
+| `/trigger <event>` | | 이벤트 트리거 (drift scan 등) |
+| `/skills` | | 스킬 목록/상세/reload/add |
+| `/mcp status` | | MCP 서버 상태 |
+| `/mcp tools` | | MCP 도구 목록 |
+| `/mcp reload` | | MCP 설정 재로딩 |
+| `/mcp add <name> <cmd>` | | MCP 서버 동적 추가 |
+| `/verbose` | | 상세 출력 토글 |
+| `/help` | | 도움말 |
+| `/quit` | `/q` | 종료 |
+
+**자연어 입력:**
+
+```
+> Berserk 분석해           → LLM 분석 (API 키 있을 때) / dry-run (없을 때)
+> 소울라이크 찾아줘         → 장르 검색
+> Berserk vs Cowboy Bebop  → 비교 분석
+> Berserk 리포트 생성해     → 리포트 생성
+> 뭐가 있어?               → IP 목록
+> 시스템 상태              → 상태 확인
+> API 키 설정해            → API 키 설정
+> LinkedIn MCP 달아줘      → MCP 자동설치
+> 스케줄 걸어줘            → 배치 스케줄
+```
+
+### CLI Mode
+
+```bash
+geode analyze "Berserk"                          # LLM 분석 (API 키 있을 때)
+geode analyze "Berserk" --dry-run                 # 명시적 dry-run
+geode analyze "Berserk" --stream                  # streaming output
+geode analyze "Berserk" --verbose                 # 상세 출력
+geode analyze "Cowboy Bebop" --skip-verification  # 검증 생략
+geode batch --top 5                               # 상위 5개 배치 분석
+geode batch --genre "Dark Fantasy"                # 장르 필터 배치
+geode report "Berserk"                            # Markdown summary
+geode report "Berserk" -f html -o berserk.html    # HTML 파일 저장
+geode search "사이버펑크"                          # 검색
+geode list                                        # 목록
+```
+
+### MCP Server
+
+GEODE를 MCP 서버로 실행하여 다른 에이전트에서 호출할 수 있습니다:
+
+```bash
+uv run python -m core.mcp_server
+```
+
+**제공 도구:** `analyze_ip`, `quick_score`, `get_ip_signals`, `list_fixtures`, `query_memory`, `get_health`
+
+**리소스:** `geode://fixtures`, `geode://soul`
+
+### Available IPs
+
+**Core Fixtures** (hand-crafted, golden set):
+
+| IP | Tier | Score | Genre |
+|----|------|-------|-------|
+| Berserk | S | 81.3 | Dark Fantasy |
+| Cowboy Bebop | A | 68.4 | SF Noir |
+| Ghost in the Shell | B | 51.6 | Cyberpunk |
+
+**Steam Fixtures**: 201개 추가 게임 데이터 (`core/fixtures/steam/`), `/generate` 명령으로 합성 데이터 생성 가능.
+
+---
 
 ## Architecture
 
@@ -324,7 +430,7 @@ graph TB
 | **arXiv** | `@fre4x/arxiv` | 학술 논문 검색/조회 (게임 연구 시그널) |
 | **Playwright** | `@playwright/mcp` | 브라우저 자동화 (웹 크롤링, 스크린샷) |
 
-> PR#72에서 미연결 MCP 서버(discord/e2b/igdb)를 제거하여 7 → 4개로 정리. `MCPServerManager`는 env var가 빈 문자열이면 연결 시도 없이 graceful skip.
+> `MCPServerManager`는 env var가 빈 문자열이면 연결 시도 없이 graceful skip.
 
 **MCP Server (FastMCP)** — GEODE를 외부 에이전트에서 호출:
 
@@ -404,57 +510,7 @@ graph TB
 
 **Tier 기준**: S ≥ 80, A ≥ 60, B ≥ 40, C < 40
 
-### Multi-turn Context
-
-```mermaid
-graph LR
-    U1["User Turn 1"] --> A1["Assistant 1"]
-    A1 --> U2["User Turn 2<br/>(follow-up)"]
-    U2 --> A2["Assistant 2"]
-    A2 --> U3["..."]
-    U3 --> Window["Sliding Window<br/>max 20 turns"]
-    Window --> Trim["Oldest pair trimmed"]
-
-    style Window fill:#3b82f6,stroke:#3b82f6,color:#fff
-```
-
-> `ConversationContext` — 슬라이딩 윈도우 (max 20 turns). 대명사 해석("그거 다시 분석해")과 follow-up 쿼리 지원. 각 턴은 user/assistant/tool_result 메시지 포함.
-
-### HITL Bash
-
-```mermaid
-graph LR
-    Cmd["Shell Command"] --> Block{Blocked<br/>Pattern?}
-    Block -->|"9 patterns<br/>(rm -rf /, sudo, fork bomb...)"| Deny["BLOCKED"]
-    Block -->|Safe| Approve{User<br/>Approval?}
-    Approve -->|Yes| Exec["Execute<br/>(timeout 30s)"]
-    Approve -->|No| Skip["DENIED"]
-    Exec --> Result["stdout/stderr<br/>(max 10K/5K chars)"]
-
-    style Deny fill:#ef4444,stroke:#ef4444,color:#fff
-    style Exec fill:#10b981,stroke:#10b981,color:#fff
-    style Skip fill:#f59e0b,stroke:#f59e0b,color:#fff
-```
-
-> `BashTool` — 9개 위험 패턴 사전 차단, 나머지 명령은 사용자 승인 후 실행.
-
-**차단 패턴 (9종):**
-
-| # | 패턴 | 위험 |
-|---|------|------|
-| 1 | `rm -rf /` | 루트 파일시스템 삭제 |
-| 2 | `sudo` | 권한 상승 |
-| 3 | `> /etc/` | 시스템 설정 덮어쓰기 |
-| 4 | `curl \| sh` | 원격 코드 실행 |
-| 5 | `wget \| sh` | 원격 코드 실행 |
-| 6 | `mkfs.` | 디스크 포맷 |
-| 7 | `dd if=... of=/dev/` | 디스크 직접 쓰기 |
-| 8 | `chmod -R 777 /` | 전역 권한 개방 |
-| 9 | Fork bomb `:(){ :\|:& };:` | 시스템 리소스 고갈 |
-
-**실행 제약**: timeout 30초, stdout 최대 10K / stderr 최대 5K chars 제한.
-
-### Feedback Loop
+### Verification & Feedback Loop
 
 ```mermaid
 graph LR
@@ -477,6 +533,33 @@ graph LR
 | **Loopback 경로** | `verification → gather → signals → analyst → evaluator → scoring → verification` |
 | **강제 진행** | 최대 반복 도달 시 현재 점수로 Synthesizer 진행 |
 | **Confidence Multiplier** | `final = base × (0.7 + 0.3 × confidence/100)` — 신뢰도에 따라 최종 점수 30% 범위 내 조정 |
+
+### BiasBuster Fast Path
+
+```mermaid
+graph TB
+    Analyses["Analyst Scores<br/>(4 analyses)"] --> Stats["_run_statistical_checks()<br/>mean, std, CV, min, max"]
+    Stats --> LV{"CV < 0.05<br/>AND n ≥ 4?"}
+    LV -->|Yes| Anchoring["⚠ anchoring_bias flag<br/>(low variance suspicious)"]
+    Anchoring --> LLM["Full LLM BiasBuster<br/>(6 bias types)"]
+    LV -->|No| Fast{"CV ≥ 0.10<br/>AND range ≥ 0.5?"}
+    Fast -->|Yes| Skip["✓ Fast Path<br/>LLM 호출 생략<br/>(10-30초 절감)"]
+    Fast -->|No| LLM
+
+    LLM --> Result["BiasBusterResult<br/>(6 bias flags + explanation)"]
+    Skip --> Clean["BiasBusterResult<br/>overall_pass=True<br/>'Statistical check clean'"]
+
+    style Skip fill:#10b981,stroke:#10b981,color:#fff
+    style Anchoring fill:#ef4444,stroke:#ef4444,color:#fff
+    style LLM fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style Fast fill:#3b82f6,stroke:#3b82f6,color:#fff
+```
+
+| 조건 | 의미 | 결과 |
+|------|------|------|
+| **CV < 0.05 AND n ≥ 4** | 점수 분산이 의심스럽게 낮음 (동조 패턴) | `anchoring_bias` 플래그 → LLM 호출 |
+| **CV ≥ 0.10 AND range ≥ 0.5** | 건강한 분산 (1-5점 스케일에서 충분한 스프레드) | Fast path → LLM 생략, `overall_pass=True` |
+| **그 외** | 경계 영역 (0.05 ≤ CV < 0.10 또는 range < 0.5) | Full LLM 6-bias 탐지 실행 |
 
 ### External IP Signal Fallback
 
@@ -505,8 +588,6 @@ graph LR
     style Skel fill:#8b5cf6,stroke:#8b5cf6,color:#fff
 ```
 
-미등록 IP(fixture 없는 IP)를 분석할 때의 시그널 수집 3단계 fallback 체인이다.
-
 | 단계 | 소스 | 설명 |
 |------|------|------|
 | **Stage 1** | `SignalEnrichmentPort` 어댑터 | MCP Steam/Brave 등 라이브 API로 시그널 수집. `adapter.is_available()` 체크 후 호출 |
@@ -516,39 +597,6 @@ graph LR
 - **외부 IP 스켈레톤**: `media_type="unknown"`, `genre="unknown"` 등 기본값으로 `ip_info` 생성. Analysts가 `web_search_data` 텍스트에서 맥락을 추출
 - **`max_iterations=1`**: 외부 IP는 동일 웹 검색 데이터로 재분석해도 confidence 개선 불가하므로 feedback loop 1회로 제한
 - **placeholder signals**: `youtube_views=0`, `reddit_subscribers=0` 등 downstream 스키마 호환을 위한 기본 수치. `_enrichment_source="web_search"` 마커로 출처 구분
-
-### BiasBuster Fast Path
-
-```mermaid
-graph TB
-    Analyses["Analyst Scores<br/>(4 analyses)"] --> Stats["_run_statistical_checks()<br/>mean, std, CV, min, max"]
-    Stats --> LV{"CV < 0.05<br/>AND n ≥ 4?"}
-    LV -->|Yes| Anchoring["⚠ anchoring_bias flag<br/>(low variance suspicious)"]
-    Anchoring --> LLM["Full LLM BiasBuster<br/>(6 bias types)"]
-    LV -->|No| Fast{"CV ≥ 0.10<br/>AND range ≥ 0.5?"}
-    Fast -->|Yes| Skip["✓ Fast Path<br/>LLM 호출 생략<br/>(10-30초 절감)"]
-    Fast -->|No| LLM
-
-    LLM --> Result["BiasBusterResult<br/>(6 bias flags + explanation)"]
-    Skip --> Clean["BiasBusterResult<br/>overall_pass=True<br/>'Statistical check clean'"]
-
-    style Skip fill:#10b981,stroke:#10b981,color:#fff
-    style Anchoring fill:#ef4444,stroke:#ef4444,color:#fff
-    style LLM fill:#f59e0b,stroke:#f59e0b,color:#fff
-    style Fast fill:#3b82f6,stroke:#3b82f6,color:#fff
-```
-
-BiasBuster의 통계 기반 fast path는 분석가 간 점수 분산이 건강할 때 비용이 높은 LLM 호출을 생략한다.
-
-| 조건 | 의미 | 결과 |
-|------|------|------|
-| **CV < 0.05 AND n ≥ 4** | 점수 분산이 의심스럽게 낮음 (동조 패턴) | `anchoring_bias` 플래그 → LLM 호출 |
-| **CV ≥ 0.10 AND range ≥ 0.5** | 건강한 분산 (1-5점 스케일에서 충분한 스프레드) | Fast path → LLM 생략, `overall_pass=True` |
-| **그 외** | 경계 영역 (0.05 ≤ CV < 0.10 또는 range < 0.5) | Full LLM 6-bias 탐지 실행 |
-
-- **절감 효과**: Anthropic `messages.parse()` structured output 1회 + tool-augmented memory 쿼리 생략 → 10-30초 + $0.01-0.05/건 절감
-- **dry-run 모드**: LLM 호출 없이 `low_variance_flag`만으로 즉시 반환 (통계 체크만 실행)
-- **외부 IP**: 동일 fast path 적용. 웹 검색 기반 시그널이라도 CV/range 기준은 동일
 
 ### CLI Input & Terminal Management
 
@@ -585,8 +633,6 @@ graph TB
     style Status fill:#1e293b,stroke:#10b981,color:#e2e8f0
 ```
 
-prompt_toolkit 기반 CLI 입력 시스템과 Claude Code 스타일 상태줄의 동작 흐름이다.
-
 | 구성 요소 | 설명 |
 |----------|------|
 | **`_restore_terminal()`** | Rich Status/Live 후 손상된 termios 상태 복원. `ECHO` + `ICANON` 플래그를 `TCSANOW`로 즉시 적용 |
@@ -597,15 +643,16 @@ prompt_toolkit 기반 CLI 입력 시스템과 Claude Code 스타일 상태줄의
 | **OperationLogger** | 처음 5개 tool call은 `▸/✓/✗` 마커로 개별 렌더링. 5개 초과 시 `+{n} more tool uses` 접기 |
 | **Session Summary** | REPL 종료 시 누적 비용 렌더링: `Calls: N · Tokens: ↓Xk ↑Yk · Total: $Z.ZZZZ` (모델별 분리) |
 
-### Prompt Caching
+### Additional Architecture Details
 
-> Anthropic `cache_control: {"type": "ephemeral"}` 적용. 시스템 프롬프트와 루브릭 데이터를 캐시하여 반복 호출 시 40-60% 비용 절감. `ClaudeAdapter`에서 자동 적용.
+<details>
+<summary>Prompt Caching / Checkpoint / Dynamic Tools / Pipeline Flexibility</summary>
 
-### Checkpoint (State Persistence)
+**Prompt Caching**: Anthropic `cache_control: {"type": "ephemeral"}` 적용. 시스템 프롬프트와 루브릭 데이터를 캐시하여 반복 호출 시 40-60% 비용 절감. `ClaudeAdapter`에서 자동 적용.
 
-> `SqliteSaver` (LangGraph 내장)로 파이프라인 상태 영속화. 각 노드 실행 후 자동 체크포인트. 장애 시 마지막 체크포인트부터 재개. `GEODE_CHECKPOINT_DB` 환경변수로 DB 경로 지정.
+**Checkpoint**: `SqliteSaver` (LangGraph 내장)로 파이프라인 상태 영속화. 각 노드 실행 후 자동 체크포인트. 장애 시 마지막 체크포인트부터 재개. `GEODE_CHECKPOINT_DB` 환경변수로 DB 경로 지정.
 
-### Dynamic Tools (ToolRegistry)
+**Dynamic Tools (ToolRegistry)**:
 
 ```mermaid
 graph LR
@@ -618,9 +665,19 @@ graph LR
     style Policy fill:#f59e0b,stroke:#f59e0b,color:#fff
 ```
 
-> `definitions.json` 38개 기본 도구 + `ToolRegistry.register()` 런타임 확장. `get_agentic_tools(registry)` 호출 시 base + plugin 도구 병합. `PolicyChain`으로 노드별 도구 접근 제어. `install_mcp_server`로 MCP 도구 핫 리로드.
+**Pipeline Flexibility (C2-C5)**:
 
-**Tool 목록 (38종):**
+| 항목 | 방식 |
+|------|------|
+| **Analyst 타입** | `evaluator_axes.yaml` → `ANALYST_TYPES = list(ANALYST_SPECIFIC.keys())` — YAML에 키 추가만으로 analyst 확장 |
+| **중간 개입** | `GEODE_INTERRUPT_NODES=verification,scoring` → 해당 노드 전에 파이프라인 일시 중단 |
+| **동적 Tool** | `ToolRegistry` + `get_agentic_tools()` — 플러그인 런타임 등록 |
+| **MCP 자동설치** | `install_mcp_server` tool → 29개 카탈로그 검색 + 설치 + `refresh_tools()` 핫 리로드 |
+
+</details>
+
+<details>
+<summary>Tool 목록 (38종)</summary>
 
 | # | Tool | 용도 | Safety |
 |---|------|------|--------|
@@ -663,157 +720,105 @@ graph LR
 | 37 | `rerun_node` | 파이프라인 노드 재실행 | STANDARD |
 | 38 | `install_mcp_server` | MCP 서버 자동설치 | STANDARD |
 
-### Pipeline Flexibility (C2-C5)
+</details>
 
-| 항목 | 방식 |
-|------|------|
-| **Analyst 타입** | `evaluator_axes.yaml` → `ANALYST_TYPES = list(ANALYST_SPECIFIC.keys())` — YAML에 키 추가만으로 analyst 확장 |
-| **중간 개입** | `GEODE_INTERRUPT_NODES=verification,scoring` → 해당 노드 전에 파이프라인 일시 중단 |
-| **동적 Tool** | `ToolRegistry` + `get_agentic_tools()` — 플러그인 런타임 등록 |
-| **MCP 자동설치** | `install_mcp_server` tool → 29개 카탈로그 검색 + 설치 + `refresh_tools()` 핫 리로드 |
+<details>
+<summary>HITL Bash 차단 패턴 (9종)</summary>
 
-## Installation
+```mermaid
+graph LR
+    Cmd["Shell Command"] --> Block{Blocked<br/>Pattern?}
+    Block -->|"9 patterns<br/>(rm -rf /, sudo, fork bomb...)"| Deny["BLOCKED"]
+    Block -->|Safe| Approve{User<br/>Approval?}
+    Approve -->|Yes| Exec["Execute<br/>(timeout 30s)"]
+    Approve -->|No| Skip["DENIED"]
+    Exec --> Result["stdout/stderr<br/>(max 10K/5K chars)"]
+
+    style Deny fill:#ef4444,stroke:#ef4444,color:#fff
+    style Exec fill:#10b981,stroke:#10b981,color:#fff
+    style Skip fill:#f59e0b,stroke:#f59e0b,color:#fff
+```
+
+| # | 패턴 | 위험 |
+|---|------|------|
+| 1 | `rm -rf /` | 루트 파일시스템 삭제 |
+| 2 | `sudo` | 권한 상승 |
+| 3 | `> /etc/` | 시스템 설정 덮어쓰기 |
+| 4 | `curl \| sh` | 원격 코드 실행 |
+| 5 | `wget \| sh` | 원격 코드 실행 |
+| 6 | `mkfs.` | 디스크 포맷 |
+| 7 | `dd if=... of=/dev/` | 디스크 직접 쓰기 |
+| 8 | `chmod -R 777 /` | 전역 권한 개방 |
+| 9 | Fork bomb `:(){ :\|:& };:` | 시스템 리소스 고갈 |
+
+**실행 제약**: timeout 30초, stdout 최대 10K / stderr 최대 5K chars 제한.
+
+</details>
+
+<details>
+<summary>Multi-turn Context</summary>
+
+```mermaid
+graph LR
+    U1["User Turn 1"] --> A1["Assistant 1"]
+    A1 --> U2["User Turn 2<br/>(follow-up)"]
+    U2 --> A2["Assistant 2"]
+    A2 --> U3["..."]
+    U3 --> Window["Sliding Window<br/>max 20 turns"]
+    Window --> Trim["Oldest pair trimmed"]
+
+    style Window fill:#3b82f6,stroke:#3b82f6,color:#fff
+```
+
+> `ConversationContext` — 슬라이딩 윈도우 (max 20 turns). 대명사 해석("그거 다시 분석해")과 follow-up 쿼리 지원. 각 턴은 user/assistant/tool_result 메시지 포함.
+
+</details>
+
+---
+
+## Configuration
+
+`.env` 파일로 설정합니다 (전체 목록: `core/config.py`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| **LLM** | | |
+| `ANTHROPIC_API_KEY` | | Claude API 키 |
+| `OPENAI_API_KEY` | | GPT API 키 (Cross-LLM) |
+| `GEODE_MODEL` | `claude-opus-4-6` | 기본 LLM 모델 |
+| `GEODE_ENSEMBLE_MODE` | `primary_only` | 앙상블 모드 (`primary_only` / `cross`) |
+| `GEODE_ROUTER_MODEL` | `claude-opus-4-6` | NL Router 모델 |
+| `GEODE_AGREEMENT_THRESHOLD` | `0.67` | Cross-LLM 합의 임계값 |
+| **Pipeline** | | |
+| `GEODE_CONFIDENCE_THRESHOLD` | `0.7` | 신뢰도 게이트 (미달 시 재분석) |
+| `GEODE_MAX_ITERATIONS` | `5` | 최대 재분석 반복 횟수 |
+| `GEODE_INTERRUPT_NODES` | | 중간 개입 노드 (쉼표 구분, e.g. `verification,scoring`) |
+| `GEODE_CHECKPOINT_DB` | `geode_checkpoints.db` | Checkpoint DB 경로 |
+| **MCP** | | |
+| `GEODE_STEAM_MCP_URL` | | Steam MCP 서버 URL |
+| `GEODE_BRAVE_MCP_URL` | | Brave Search MCP 서버 URL |
+| `GEODE_BRAVE_API_KEY` | | Brave Search API 키 |
+| **Observability** | | |
+| `LANGCHAIN_TRACING_V2` | `false` | LangSmith tracing 활성화 |
+| `LANGCHAIN_API_KEY` | | LangSmith API 키 |
+| `LANGCHAIN_PROJECT` | `geode` | LangSmith 프로젝트명 |
+| **General** | | |
+| `GEODE_VERBOSE` | `false` | 상세 출력 |
+
+## Testing
 
 ```bash
-uv sync
+# 전체 테스트
+uv run pytest
+
+# Live E2E (실제 LLM 호출)
+uv run pytest tests/test_e2e_live_llm.py -v -m live
+
+# 품질 검사
+uv run ruff check core/ tests/
+uv run mypy core/
+uv run bandit -r core/ -c pyproject.toml
 ```
-
-## Quick Start
-
-```bash
-# 인터랙티브 모드 (권장)
-uv run geode
-
-# IP 분석 (API 키 있으면 LLM 호출, 없으면 자동 dry-run)
-uv run geode analyze "Berserk"
-
-# 명시적 dry-run (API 키 있어도 LLM 호출 안 함)
-uv run geode analyze "Berserk" --dry-run
-
-# Streaming 분석
-uv run geode analyze "Berserk" --stream
-
-# 배치 분석 (--dry-run 권장, batch는 기본 --live 모드)
-uv run geode batch --top 5 --dry-run
-
-# 리포트 생성
-uv run geode report "Berserk" --format html --output berserk.html
-
-# MCP 서버 실행
-uv run python -m core.mcp_server
-```
-
-## Setup
-
-```bash
-# 1. 환경 변수 설정
-cp .env.example .env
-
-# 2. .env 편집 — API 키 입력
-ANTHROPIC_API_KEY=sk-ant-...
-
-# 3. Full 분석 실행
-uv run geode analyze "Cowboy Bebop"
-```
-
-API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다 (API 키 설정 시 LLM 분석 자동 활성화):
-
-```
-  ✓ Dry-Run Analysis
-  ✓ IP Search
-  ✗ LLM Analysis (ANTHROPIC_API_KEY not set)
-
-  API key not configured — dry-run mode only
-```
-
-## Usage
-
-### Interactive Mode
-
-```bash
-uv run geode
-```
-
-**슬래시 커맨드:**
-
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `/analyze <IP>` | `/a` | IP 분석 (API 키 유무에 따라 자동 모드 결정) |
-| `/run <IP>` | `/r` | IP 분석 (동일) |
-| `/search <query>` | `/s` | IP 검색 |
-| `/report <IP> [fmt]` | `/rpt` | 리포트 생성 (md/html/json) |
-| `/list` | | IP 목록 |
-| `/generate [count]` | `/gen` | 합성 데모 데이터 생성 |
-| `/model` | | LLM 모델 선택 |
-| `/key [value]` | | API 키 설정 |
-| `/auth` | | 인증 프로필 관리 |
-| `/batch [--top N]` | `/b` | 배치 분석 |
-| `/status` | | 시스템 상태 (모델, API 키, 메모리) |
-| `/compare <A> <B>` | | 두 IP 비교 분석 (Interactive) |
-| `/schedule <cron>` | `/sched` | 배치 스케줄 설정 |
-| `/trigger <event>` | | 이벤트 트리거 (drift scan 등) |
-| `/skills` | | 스킬 목록/상세/reload/add |
-| `/mcp status` | | MCP 서버 상태 |
-| `/mcp tools` | | MCP 도구 목록 |
-| `/mcp reload` | | MCP 설정 재로딩 |
-| `/mcp add <name> <cmd>` | | MCP 서버 동적 추가 |
-| `/verbose` | | 상세 출력 토글 |
-| `/help` | | 도움말 |
-| `/quit` | `/q` | 종료 |
-
-**자연어 입력:**
-
-```
-> Berserk 분석해           → LLM 분석 (API 키 있을 때) / dry-run (없을 때)
-> 소울라이크 찾아줘         → 장르 검색
-> Berserk vs Cowboy Bebop  → 비교 분석
-> Berserk 리포트 생성해     → 리포트 생성
-> 뭐가 있어?               → IP 목록
-> 시스템 상태              → 상태 확인
-> API 키 설정해            → API 키 설정
-> LinkedIn MCP 달아줘      → MCP 자동설치
-> 스케줄 걸어줘            → 배치 스케줄
-```
-
-### CLI Mode
-
-```bash
-geode analyze "Berserk"                          # LLM 분석 (API 키 있을 때)
-geode analyze "Berserk" --dry-run                 # 명시적 dry-run
-geode analyze "Berserk" --stream                  # streaming output
-geode analyze "Berserk" --verbose                 # 상세 출력
-geode analyze "Cowboy Bebop" --skip-verification  # 검증 생략
-geode batch --top 5                               # 상위 5개 배치 분석
-geode batch --genre "Dark Fantasy"                # 장르 필터 배치
-geode report "Berserk"                            # Markdown summary
-geode report "Berserk" -f html -o berserk.html    # HTML 파일 저장
-geode search "사이버펑크"                          # 검색
-geode list                                        # 목록
-```
-
-### MCP Server
-
-GEODE를 MCP 서버로 실행하여 다른 에이전트에서 호출할 수 있습니다:
-
-```bash
-uv run python -m core.mcp_server
-```
-
-**제공 도구:** `analyze_ip`, `quick_score`, `get_ip_signals`, `list_fixtures`, `query_memory`, `get_health`
-
-**리소스:** `geode://fixtures`, `geode://soul`
-
-## Available IPs
-
-**Core Fixtures** (hand-crafted, golden set):
-
-| IP | Tier | Score | Genre |
-|----|------|-------|-------|
-| Berserk | S | 81.3 | Dark Fantasy |
-| Cowboy Bebop | A | 68.4 | SF Noir |
-| Ghost in the Shell | B | 51.6 | Cyberpunk |
-
-**Steam Fixtures**: 201개 추가 게임 데이터 (`core/fixtures/steam/`), `/generate` 명령으로 합성 데이터 생성 가능.
 
 ## Project Structure
 
@@ -838,6 +843,7 @@ core/
 │   └── cause_actions.yaml      # Cause→Action mappings
 ├── config.py                   # Settings (pydantic-settings, 30+ vars)
 ├── data/                       # Synthetic data generation
+├── domains/                    # Domain plugin adapters (GameIPDomain)
 ├── extensibility/              # Report generation + Skills + templates
 │   ├── skills.py               # SkillLoader + SkillRegistry + SkillDefinition
 │   ├── _frontmatter.py         # Shared YAML frontmatter parser
@@ -846,108 +852,24 @@ core/
 ├── fixtures/                   # Fixture data (3 core IPs + 201 Steam)
 ├── graph.py                    # LangGraph StateGraph definition
 ├── infrastructure/
-│   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, etc.
+│   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, DomainPort
 │   └── adapters/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/                # Steam, Brave, KGMemory MCP adapters + catalog (29 entries)
+│       └── mcp/                # Steam, Brave MCP adapters + catalog (29 entries)
 ├── llm/                        # LLM client (prompt caching, streaming)
 │   ├── client.py               # Anthropic wrapper + token tracking + cost
-│   ├── token_tracker.py        # TokenTracker singleton (model pricing, cost calculation)
+│   ├── token_tracker.py        # TokenTracker singleton (model pricing)
 │   └── prompts/                # Prompt templates (.md) + axes config
-│       ├── analyst.md          # Analyst system prompt template
-│       ├── evaluator.md        # Evaluator prompt template
-│       ├── synthesizer.md      # Synthesizer prompt template
-│       ├── cross_llm.md        # Cross-LLM verification prompts
-│       ├── axes.py             # Axis definitions (loads from YAML)
-│       └── ...                 # biasbuster, commentary, router, tool_augmented
 ├── mcp_server.py               # FastMCP server (6 tools, 2 resources)
 ├── memory/                     # 3-Tier memory system
-├── nodes/                      # Pipeline nodes (8: router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
-├── orchestration/
-│   ├── hooks.py                # HookSystem (26 events)
-│   ├── hook_discovery.py       # Plugin-based hook loading
-│   ├── isolated_execution.py   # Concurrent runner (semaphore)
-│   ├── task_system.py          # DAG-based task graph
-│   ├── coalescing.py           # Duplicate request coalescing
-│   ├── plan_mode.py            # DRAFT → APPROVED → EXECUTING workflow
-│   ├── lane_queue.py           # Concurrency control lanes
-│   ├── run_log.py              # Structured execution logging
-│   └── ...                     # planner, bootstrap, stuck_detection, etc.
+├── nodes/                      # Pipeline nodes (8)
+├── orchestration/              # HookSystem, TaskGraph, PlanMode, etc.
 ├── runtime.py                  # GeodeRuntime (production wiring)
 ├── state.py                    # GeodeState (TypedDict + Pydantic models)
 ├── tools/                      # Tool Protocol + Registry + Policy
-│   ├── registry.py             # ToolRegistry (38 tools + runtime extensions)
-│   ├── definitions.json        # Centralized tool definitions (38 tools)
-│   ├── tool_schemas.json       # Parameter schemas for signal/analysis tools
-│   ├── policy.py               # PolicyChain + NodeScopePolicy
-│   └── ...                     # analysis, signal_tools, data_tools, etc.
 ├── ui/                         # Rich console + Claude Code-style agentic UI
-│   ├── agentic_ui.py           # ▸/✓/✗/✢/● markers (tool call/result/token rendering)
-│   ├── console.py              # Rich Console singleton (width=120, GEODE theme)
-│   ├── status.py               # GeodeStatus spinner (✢ model · tokens · cost · elapsed)
-│   └── streaming.py            # Streaming graph progress handler
 └── verification/               # Guardrails + BiasBuster + Rights Risk
 ```
-
-## Testing
-
-```bash
-# 전체 테스트
-uv run pytest
-
-# 상세 출력
-uv run pytest -v
-
-# 특정 모듈
-uv run pytest tests/test_graph.py
-uv run pytest tests/test_batch.py
-uv run pytest tests/test_mcp_server.py
-
-# Live E2E (실제 LLM 호출)
-uv run pytest tests/test_e2e_live_llm.py -v -m live
-
-# 17-Tool Audit (실제 LLM 라우팅 검증)
-uv run python tests/_live_audit_runner.py info
-
-# 품질 검사
-uv run ruff check core/ tests/
-uv run ruff format --check core/ tests/
-uv run mypy core/
-uv run bandit -r core/ -c pyproject.toml
-
-# Pre-commit (전체 검사)
-uv run pre-commit run --all-files
-```
-
-## Configuration
-
-`.env` 파일로 설정합니다 (전체 목록: `core/config.py`):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| **LLM** | | |
-| `ANTHROPIC_API_KEY` | | Claude API 키 |
-| `OPENAI_API_KEY` | | GPT API 키 (Cross-LLM) |
-| `GEODE_MODEL` | `claude-opus-4-6` | 기본 LLM 모델 |
-| `GEODE_ENSEMBLE_MODE` | `primary_only` | 앙상블 모드 (`primary_only` / `cross`) |
-| `GEODE_ROUTER_MODEL` | `claude-opus-4-6` | NL Router 모델 |
-| `GEODE_AGREEMENT_THRESHOLD` | `0.67` | Cross-LLM 합의 임계값 |
-| **Pipeline** | | |
-| `GEODE_CONFIDENCE_THRESHOLD` | `0.7` | 신뢰도 게이트 (미달 시 재분석) |
-| `GEODE_MAX_ITERATIONS` | `5` | 최대 재분석 반복 횟수 |
-| `GEODE_INTERRUPT_NODES` | | 중간 개입 노드 (쉼표 구분, e.g. `verification,scoring`) |
-| `GEODE_CHECKPOINT_DB` | `geode_checkpoints.db` | Checkpoint DB 경로 |
-| **MCP** | | |
-| `GEODE_STEAM_MCP_URL` | | Steam MCP 서버 URL |
-| `GEODE_BRAVE_MCP_URL` | | Brave Search MCP 서버 URL |
-| `GEODE_BRAVE_API_KEY` | | Brave Search API 키 |
-| `GEODE_KG_MEMORY_MCP_URL` | | KG Memory MCP 서버 URL (미사용, 향후 제거 예정) |
-| **Observability** | | |
-| `LANGCHAIN_TRACING_V2` | `false` | LangSmith tracing 활성화 |
-| `LANGCHAIN_API_KEY` | | LangSmith API 키 |
-| `LANGCHAIN_PROJECT` | `geode` | LangSmith 프로젝트명 |
-| **General** | | |
-| `GEODE_VERBOSE` | `false` | 상세 출력 |
 
 ## License
 
