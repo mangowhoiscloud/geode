@@ -74,7 +74,7 @@ Parent AgenticLoop → delegate_task → SubAgentManager
 | `max_total` | 15 | 세션당 최대 서브에이전트 수 |
 | `MAX_CONCURRENT` | 5 | 동시 병렬 워커 수 |
 | `timeout_s` | 120s | 개별 태스크 타임아웃 |
-| `auto_approve` | True | 서브에이전트 HITL 승인 생략 |
+| `auto_approve` | True | 서브에이전트 STANDARD 도구 승인 생략 (DANGEROUS/WRITE는 항상 승인 필수) |
 | `subagent_max_rounds` | 10 | 서브에이전트 AgenticLoop 라운드 제한 |
 | `subagent_max_tokens` | 8192 | 서브에이전트 출력 토큰 제한 |
 

@@ -100,12 +100,9 @@ class ToolExecutor:
         if tool_name in DANGEROUS_TOOLS:
             return self._execute_dangerous(tool_name, tool_input)
 
-        # Write tools: HITL gate (never auto-approved, even for sub-agents)
-        if (
-            tool_name in WRITE_TOOLS
-            and not self._auto_approve
-            and not self._confirm_write(tool_name, tool_input)
-        ):
+        # Write tools: HITL gate — always requires approval, even for
+        # sub-agents (auto_approve is intentionally ignored here).
+        if tool_name in WRITE_TOOLS and not self._confirm_write(tool_name, tool_input):
             return {"error": "User denied write operation", "denied": True}
 
         # Expensive tools: cost confirmation gate
