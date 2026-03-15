@@ -36,6 +36,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Signal Liveification — MCP 기반 라이브 시그널 수집 (`CompositeSignalAdapter` → `SteamMCPSignalAdapter` + `BraveSignalAdapter`), fixture fallback 보존, `signal_source` 필드로 provenance 추적
 - Plan 자율 실행 모드 — `GEODE_PLAN_AUTO_EXECUTE=true`로 계획 생성→승인→실행을 사용자 개입 없이 자동 수행, step 실패 시 재시도 1회 후 partial success로 계속 진행 (`PlanExecutionMode.AUTO`)
 - Dynamic Graph — 분석 결과에 따라 노드 동적 건너뛰기/enrichment 경로 분기 (`skip_nodes`, `skipped_nodes`, `enrichment_needed` state 필드 + `skip_check` 조건부 노드)
+- 적응형 오류 복구 시스템 — `ErrorRecoveryStrategy` 전략 패턴 (retry → alternative → fallback → escalate), 2회 연속 실패 시 자동 복구 체인 실행, DANGEROUS/WRITE 도구 안전 게이트 보존
+- `TOOL_RECOVERY_ATTEMPTED`/`SUCCEEDED`/`FAILED` HookEvent 3종 — 오류 복구 수명주기 관측성 (HookSystem 30 events)
 - LinkedIn MCP 어댑터 — `LinkedInPort` Protocol + `LinkedInMCPAdapter` 구현 (Port/Adapter 패턴, graceful degradation)
 - 도구 카테고리/비용 태깅 — `definitions.json` 전 38개 도구에 `category`(8종)와 `cost_tier`(3종) 메타데이터 추가, `ToolRegistry.get_tools_by_category()`/`get_tools_by_cost_tier()` 필터링 메서드
 - MCP 서버별 세션 승인 캐시 — 한 서버 최초 승인 후 동일 세션 내 재승인 생략 (`_mcp_approved_servers`)

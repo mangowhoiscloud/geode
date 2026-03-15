@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (26 events)."""
+    """Pipeline lifecycle events (30 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -61,6 +61,11 @@ class HookEvent(Enum):
     SUBAGENT_STARTED = "subagent_started"
     SUBAGENT_COMPLETED = "subagent_completed"
     SUBAGENT_FAILED = "subagent_failed"
+
+    # Tool error recovery lifecycle
+    TOOL_RECOVERY_ATTEMPTED = "tool_recovery_attempted"
+    TOOL_RECOVERY_SUCCEEDED = "tool_recovery_succeeded"
+    TOOL_RECOVERY_FAILED = "tool_recovery_failed"
 
 
 @dataclass
