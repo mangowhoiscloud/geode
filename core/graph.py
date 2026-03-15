@@ -8,7 +8,13 @@ Design Decision: Plan-and-Execute over ReAct
     requests lives in L4 orchestration (see orchestration/plan_mode.py).
 
 Topology: START → router → signals → analyst×4 (Send)
-       → evaluator×3 (Send) → scoring → verification → synthesizer → END
+       → evaluator×3 (Send) → scoring → [skip?] → verification → synthesizer → END
+
+Dynamic Graph: nodes can be skipped based on state.skip_nodes.
+  - Router sets skip_nodes (e.g. dry_run → skip verification)
+  - Scoring sets skip_nodes (e.g. extreme scores → skip verification)
+  - Scoring sets enrichment_needed (mid-range → lower confidence threshold)
+  - Skipped nodes are recorded in state.skipped_nodes for audit trail
 
 Router loads fixture data (ip_info, monolake) and assembles 3-tier memory context.
 
@@ -254,6 +260,34 @@ def _make_hooked_node(
     return _wrapped
 
 
+def _skip_check_node(state: GeodeState) -> dict[str, Any]:
+    """Dynamic Graph: passthrough node that records skip decisions.
+
+    This node runs before verification. If verification is in skip_nodes,
+    it records the skip in skipped_nodes for audit trail and returns
+    minimal placeholder results so downstream nodes have valid state.
+    """
+    skip_nodes = state.get("skip_nodes", [])
+    if "verification" in skip_nodes:
+        log.info("Dynamic Graph: verification skipped (in skip_nodes)")
+        return {
+            "skipped_nodes": ["verification"],
+            "guardrails": GuardrailResult(
+                details=["Verification skipped by Dynamic Graph (skip_nodes)"],
+            ),
+            "biasbuster": BiasBusterResult(explanation="Skipped (Dynamic Graph)"),
+        }
+    return {}
+
+
+def _route_after_skip_check(state: GeodeState) -> str:
+    """Conditional edge: skip verification or proceed normally."""
+    skip_nodes = state.get("skip_nodes", [])
+    if "verification" in skip_nodes:
+        return "synthesizer"
+    return "verification"
+
+
 def _verification_node(state: GeodeState) -> dict[str, Any]:
     """Run guardrails + biasbuster + rights risk check."""
     if state.get("skip_verification"):
@@ -383,6 +417,7 @@ def build_graph(
     graph.add_node("analyst", _node(analyst_node, "analyst"))  # type: ignore[call-overload]
     graph.add_node("evaluator", _node(evaluator_node, "evaluator"))  # type: ignore[call-overload]
     graph.add_node("scoring", _node(scoring_node, "scoring"))  # type: ignore[call-overload]
+    graph.add_node("skip_check", _node(_skip_check_node, "skip_check"))  # type: ignore[call-overload]
     graph.add_node("verification", _node(_verification_node, "verification"))  # type: ignore[call-overload]
     graph.add_node("synthesizer", _node(synthesizer_node, "synthesizer"))  # type: ignore[call-overload]
     graph.add_node("gather", _node(_gather_node, "gather"))  # type: ignore[call-overload]
@@ -405,9 +440,15 @@ def build_graph(
     # Send API: analysts → 3 evaluators in parallel (Clean Context)
     graph.add_conditional_edges("analyst", make_evaluator_sends, ["evaluator"])
 
-    # Sequential: evaluators → scoring → verification
+    # Sequential: evaluators → scoring → skip_check
+    # Dynamic Graph: skip_check decides whether to run verification or skip to synthesizer
     graph.add_edge("evaluator", "scoring")
-    graph.add_edge("scoring", "verification")
+    graph.add_edge("scoring", "skip_check")
+    graph.add_conditional_edges(
+        "skip_check",
+        _route_after_skip_check,
+        {"verification": "verification", "synthesizer": "synthesizer"},
+    )
 
     # Feedback Loop: verification → _configured_should_continue → synthesizer or gather → signals
     # Use injected thresholds via closure for configurability
@@ -422,15 +463,31 @@ def build_graph(
 
         conf_normalized = confidence / 100.0 if confidence > 1.0 else confidence
 
-        if conf_normalized >= confidence_threshold:
-            log.info("Confidence %.2f >= %.2f — synthesizer", conf_normalized, confidence_threshold)
+        # Dynamic Graph: enrichment_needed lowers confidence threshold
+        # to encourage at least one feedback loop for mid-range scores
+        effective_threshold = confidence_threshold
+        if state.get("enrichment_needed") and iteration <= 1:
+            # First iteration with enrichment needed: require higher confidence
+            # to proceed, effectively forcing a re-evaluation loop
+            effective_threshold = min(confidence_threshold + 0.1, 0.95)
+            log.info(
+                "Dynamic Graph: enrichment_needed → raised threshold to %.2f",
+                effective_threshold,
+            )
+
+        if conf_normalized >= effective_threshold:
+            log.info(
+                "Confidence %.2f >= %.2f — synthesizer",
+                conf_normalized,
+                effective_threshold,
+            )
             return "synthesizer"
 
         if iteration >= max_iter:
             log.warning(
                 "Confidence %.2f < %.2f but max iterations (%d) reached — force proceeding",
                 conf_normalized,
-                confidence_threshold,
+                effective_threshold,
                 max_iter,
             )
             return "synthesizer"
@@ -438,7 +495,7 @@ def build_graph(
         log.info(
             "Confidence %.2f < %.2f — looping back (iteration %d/%d)",
             conf_normalized,
-            confidence_threshold,
+            effective_threshold,
             iteration,
             max_iter,
         )

@@ -515,13 +515,36 @@ def scoring_node(state: GeodeState) -> dict[str, Any]:
             "developer_track": developer,
         }
 
-        return {
+        result: dict[str, Any] = {
             "psm_result": psm,
             "subscores": subscores,
             "analyst_confidence": confidence,
             "final_score": final,
             "tier": tier,
         }
+
+        # Dynamic Graph: determine post-scoring path based on score extremity
+        skip_nodes = list(state.get("skip_nodes", []))
+
+        if final >= 90 or final <= 20:
+            # Extreme scores (S>=90 or C<=20): high confidence in result,
+            # skip verification and go straight to synthesizer
+            if "verification" not in skip_nodes:
+                skip_nodes.append("verification")
+                log.info(
+                    "Dynamic Graph: extreme score %.1f → skipping verification",
+                    final,
+                )
+            result["skip_nodes"] = skip_nodes
+        elif 40 <= final <= 80:
+            # Mid-range scores: ambiguous zone, flag for enrichment
+            result["enrichment_needed"] = True
+            log.info(
+                "Dynamic Graph: mid-range score %.1f → enrichment_needed=True",
+                final,
+            )
+
+        return result
     except Exception as exc:
         log.exception("Scoring node failed: %s", exc)
         return {"errors": [f"scoring: {type(exc).__name__}: {exc}"]}

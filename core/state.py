@@ -267,6 +267,11 @@ class GeodeState(TypedDict, total=False):
     skip_verification: bool
     errors: Annotated[list[str], operator.add]
 
+    # Dynamic Graph — node skip/enrichment control
+    skip_nodes: list[str]  # Nodes to skip (recorded for audit trail)
+    skipped_nodes: Annotated[list[str], operator.add]  # Audit log of actually skipped nodes
+    enrichment_needed: bool  # Whether additional enrichment evaluator pass is needed
+
     # Feedback Loop (L3)
     iteration: int  # Current iteration count (starts at 1)
     max_iterations: int  # Maximum allowed iterations before force-proceeding

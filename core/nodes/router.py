@@ -35,6 +35,7 @@ def router_node(state: GeodeState) -> dict[str, Any]:
     1. Determine pipeline_mode (prospect override for non-gamified IPs)
     2. Load IP fixture data (ip_info, monolake) from JSON fixtures
     3. Generate session_id and assemble 3-tier memory context if wired
+    4. Dynamic Graph: determine skip_nodes based on mode/context
     """
     try:
         mode = state.get("pipeline_mode", "full_pipeline")
@@ -72,6 +73,18 @@ def router_node(state: GeodeState) -> dict[str, Any]:
             "ip_info": ip_info,
             "monolake": monolake,
         }
+
+        # Dynamic Graph: determine which nodes to skip based on context.
+        # Merges any caller-provided skip_nodes with router-determined skips.
+        skip_nodes: list[str] = list(state.get("skip_nodes", []))
+
+        # dry_run mode: skip verification (mock data, no real LLM to verify)
+        if state.get("dry_run") and mode == "full_pipeline" and "verification" not in skip_nodes:
+            skip_nodes.append("verification")
+            log.info("Dynamic Graph: dry_run → skipping verification")
+
+        if skip_nodes:
+            result["skip_nodes"] = skip_nodes
 
         # External IPs: cap feedback loop to 1 iteration.
         # Re-running with the same web search data won't improve confidence.
