@@ -29,7 +29,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- LinkedIn MCP 어댑터 — `LinkedInPort` Protocol + `LinkedInMCPAdapter` 구현 (Port/Adapter 패턴, graceful degradation)
 - 도구 카테고리/비용 태깅 — `definitions.json` 전 38개 도구에 `category`(8종)와 `cost_tier`(3종) 메타데이터 추가, `ToolRegistry.get_tools_by_category()`/`get_tools_by_cost_tier()` 필터링 메서드
+- MCP 서버별 세션 승인 캐시 — 한 서버 최초 승인 후 동일 세션 내 재승인 생략 (`_mcp_approved_servers`)
+
+### Fixed
+- 연속 실패 도구 스킵 메시지 중복 출력 — `skipped` 결과 이중 로깅 방지
+- APITimeoutError 소진 시 에러 상세 정보 누락 — `_last_llm_error`로 에러 유형/재시도 횟수 표시
 
 ### Changed
 - NL Router 시스템 프롬프트 Tool Selection Priority Matrix 추가 — 12개 의도별 1st/2nd Choice + 사용 금지 도구 매트릭스, 비용 인식 규칙, 도구 호출 금지 사항 (AGENTIC_SUFFIX)
@@ -46,7 +52,6 @@ HITL 보안 강화 + README/CLAUDE.md 자율 실행 코어 재구성 + Domain Pl
 - LinkedIn 우선 라우팅 — 프로필/커리어/채용 쿼리 시 `site:linkedin.com` 프리픽스 우선 검색 (AGENTIC_SUFFIX)
 - `WRITE_TOOLS` 안전 분류 — `memory_save`/`note_save`/`set_api_key`/`manage_auth` 쓰기 작업 HITL 확인 게이트
 - MCP 도구 안전 라우팅 — 외부 MCP 도구 호출 시 `_execute_mcp()` 경유, 사용자 승인 게이트 적용
-- LinkedIn MCP 어댑터 — `LinkedInPort` Protocol + `LinkedInMCPAdapter` 구현 (Port/Adapter 패턴, graceful degradation)
 
 ### Fixed
 - DANGEROUS 도구(bash) `auto_approve` 우회 차단 — 서브에이전트에서도 항상 사용자 승인 필수

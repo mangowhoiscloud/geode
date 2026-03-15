@@ -67,7 +67,7 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
 | **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
 | **Observability** | LangSmith 토큰 추적 + 비용 계산, Claude Code 스타일 상태줄 |
 | **Scheduler** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON) |
-| **2179+ Tests** | 132 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
+| **2226+ Tests** | 132 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
 
 ## Usage
 
@@ -416,11 +416,12 @@ graph TB
         MCPInstall["MCP Auto-Install<br/>(29 catalog)"]
     end
 
-    subgraph MCPAdapters["MCP Adapters (Client, 4 active)"]
+    subgraph MCPAdapters["MCP Adapters (Client, 5 active)"]
         Brave["Brave Search"]
         Steam["Steam MCP"]
         ArXiv["arXiv MCP"]
         PW["Playwright MCP"]
+        LI["LinkedIn Reader"]
     end
 
     subgraph MCPServer["MCP Server (FastMCP)"]
@@ -443,7 +444,7 @@ graph TB
     style MCPServer fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
 ```
 
-**MCP Adapters (Client, 4 active)** — 외부 데이터 소스 연결:
+**MCP Adapters (Client, 5 active)** — 외부 데이터 소스 연결:
 
 | Adapter | 패키지 | 용도 |
 |---------|--------|------|
@@ -451,6 +452,7 @@ graph TB
 | **Steam** | `steam-mcp-server` | Steam API 게임 데이터 (가격, 리뷰, 태그, 동접) |
 | **arXiv** | `@fre4x/arxiv` | 학술 논문 검색/조회 (게임 연구 시그널) |
 | **Playwright** | `@playwright/mcp` | 브라우저 자동화 (웹 크롤링, 스크린샷) |
+| **LinkedIn Reader** | `linkedin-scraper-mcp` | LinkedIn 프로필/채용 정보 검색 (Patchright 브라우저, 인증 필요) |
 
 > `MCPServerManager`는 env var가 빈 문자열이면 연결 시도 없이 graceful skip.
 
@@ -979,7 +981,7 @@ core/
 │   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, DomainPort
 │   └── adapters/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/                # Steam, Brave MCP adapters + catalog (29 entries)
+│       └── mcp/                # Steam, Brave, LinkedIn MCP adapters + catalog (29 entries)
 ├── llm/                        # LLM client (prompt caching, streaming)
 │   ├── client.py               # Anthropic wrapper + token tracking + cost
 │   ├── token_tracker.py        # TokenTracker singleton (model pricing)
