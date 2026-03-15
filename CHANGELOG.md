@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- 서브에이전트 결과 수집 `as_completed` 패턴 — 순차 블로킹 → polling round-robin 전환. 먼저 끝난 태스크의 SUBAGENT_COMPLETED 훅이 즉시 발행
+
 ### Added
 - HITL 승인 후 스피너 — `_tool_spinner()` 컨텍스트 매니저로 bash/MCP/write/expensive 도구 실행 중 `⏳` dots 스피너 표시, 승인 거부·Safe/Standard 도구에는 미표시
 - Signal Liveification — MCP 기반 라이브 시그널 수집 (`CompositeSignalAdapter` → `SteamMCPSignalAdapter` + `BraveSignalAdapter`), fixture fallback 보존, `signal_source` 필드로 provenance 추적
