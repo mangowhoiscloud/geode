@@ -342,6 +342,36 @@ class ToolRegistry:
             raise PermissionError(f"Tool '{name}' blocked by policy in mode '{mode}'")
         return tool.execute(**kwargs)
 
+    # ------------------------------------------------------------------
+    # Category / cost-tier filtering
+    # ------------------------------------------------------------------
+
+    def get_tools_by_category(self, category: str) -> list[Tool]:
+        """Return tools that belong to *category*.
+
+        The category is read from the ``category`` attribute on each tool.
+        Tools without a ``category`` attribute are silently skipped.
+        """
+        result: list[Tool] = []
+        for tool in self._tools.values():
+            tool_category = getattr(tool, "category", None)
+            if tool_category == category:
+                result.append(tool)
+        return result
+
+    def get_tools_by_cost_tier(self, tier: str) -> list[Tool]:
+        """Return tools that belong to *tier* (free / cheap / expensive).
+
+        The tier is read from the ``cost_tier`` attribute on each tool.
+        Tools without a ``cost_tier`` attribute are silently skipped.
+        """
+        result: list[Tool] = []
+        for tool in self._tools.values():
+            tool_tier = getattr(tool, "cost_tier", None)
+            if tool_tier == tier:
+                result.append(tool)
+        return result
+
     def __len__(self) -> int:
         return len(self._tools)
 
