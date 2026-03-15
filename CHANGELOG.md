@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- MCP 통합 Deferred Loading 강화 — Native + MCP 도구를 통합 병합 후 deferred loading 적용, 임계값 5→10 상향, 6개 핵심 도구(list_ips, search_ips, analyze_ip, memory_search, show_help, general_web_search) 항상 로드, ToolSearchTool이 MCP 도구까지 검색
+
 ---
 
 ## [0.12.0] — 2026-03-15

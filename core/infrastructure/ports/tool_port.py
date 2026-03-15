@@ -49,7 +49,8 @@ class ToolRegistryPort(Protocol):
         *,
         policy: PolicyChainPort | None = None,
         mode: str = "full_pipeline",
-        defer_threshold: int = 5,
+        defer_threshold: int = 10,
+        mcp_tools: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]: ...
     def to_openai_tools(
         self,

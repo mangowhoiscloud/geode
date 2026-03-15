@@ -23,10 +23,16 @@ class ToolSearchTool:
 
     Used with deferred tool loading: LLM calls tool_search first to discover
     relevant tools, then calls them with full schema knowledge.
+    Searches both native (registry) and MCP tools.
     """
 
     def __init__(self, registry: ToolRegistry) -> None:
         self._registry = registry
+        self._mcp_tools: list[dict[str, Any]] = []
+
+    def set_mcp_tools(self, mcp_tools: list[dict[str, Any]]) -> None:
+        """Update MCP tool index for searching."""
+        self._mcp_tools = list(mcp_tools)
 
     @property
     def name(self) -> str:
@@ -35,7 +41,7 @@ class ToolSearchTool:
     @property
     def description(self) -> str:
         return (
-            "Search GEODE analysis tools by keyword. "
+            "Search GEODE native and MCP tools by keyword. "
             "Returns matching tool names and their full schemas. "
             "Use this to discover available tools before calling them."
         )
@@ -60,6 +66,8 @@ class ToolSearchTool:
             return {"error": "query is required"}
 
         matches: list[dict[str, Any]] = []
+
+        # Search native (registry) tools
         for tool in self._registry._tools.values():
             if tool.name == "tool_search":
                 continue  # Don't return self
@@ -74,14 +82,38 @@ class ToolSearchTool:
                     }
                 )
 
+        # Search MCP tools
+        for mcp_tool in self._mcp_tools:
+            tool_name = mcp_tool.get("name", "")
+            tool_desc = mcp_tool.get("description", "")
+            name_match = query in tool_name.lower()
+            desc_match = query in tool_desc.lower()
+            if name_match or desc_match:
+                matches.append(
+                    {
+                        "name": tool_name,
+                        "description": tool_desc,
+                        "input_schema": mcp_tool.get("input_schema", {}),
+                        "source": "mcp",
+                    }
+                )
+
         if not matches:
             # Return all tools as summary if no match
-            matches = [
+            all_tools: list[dict[str, Any]] = [
                 {"name": t.name, "description": t.description[:80]}
                 for t in self._registry._tools.values()
                 if t.name != "tool_search"
             ]
-            return {"matched": False, "available_tools": matches}
+            for mcp_tool in self._mcp_tools:
+                all_tools.append(
+                    {
+                        "name": mcp_tool.get("name", ""),
+                        "description": mcp_tool.get("description", "")[:80],
+                        "source": "mcp",
+                    }
+                )
+            return {"matched": False, "available_tools": all_tools}
 
         return {"matched": True, "tools": matches}
 
@@ -150,29 +182,65 @@ class ToolRegistry:
             )
         return result
 
+    # Core tools that are always loaded (never deferred) when deferral activates.
+    # These are the most frequently used tools that should be immediately available.
+    ALWAYS_LOADED_TOOLS: frozenset[str] = frozenset(
+        {
+            "list_ips",
+            "search_ips",
+            "analyze_ip",
+            "memory_search",
+            "show_help",
+            "general_web_search",
+        }
+    )
+
     def to_anthropic_tools_with_defer(
         self,
         *,
         policy: PolicyChain | None = None,
         mode: str = "full_pipeline",
-        defer_threshold: int = 5,
+        defer_threshold: int = 10,
+        mcp_tools: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Return Anthropic tool definitions with defer_loading for large tool sets.
 
-        When tool count exceeds defer_threshold, adds tool_search meta-tool
-        and marks all other tools with defer_loading=True. This reduces
+        Merges native (registry) and MCP tools BEFORE applying deferred loading.
+        When combined tool count exceeds defer_threshold, adds tool_search
+        meta-tool. Core tools (ALWAYS_LOADED_TOOLS) are never deferred.
+        The remaining tools are marked with defer_loading=True to reduce
         context token usage by ~85%.
 
-        Below threshold, returns standard tool definitions (no defer).
-        """
-        tools = self.to_anthropic_tools(policy=policy, mode=mode)
+        Below threshold, returns all tool definitions without defer.
 
-        if len(tools) <= defer_threshold:
-            return tools
+        Args:
+            policy: Optional PolicyChain for filtering native tools.
+            mode: Pipeline mode for policy evaluation.
+            defer_threshold: Combined tool count above which deferral activates.
+            mcp_tools: Optional MCP tool definitions to merge before deferring.
+        """
+        native_tools = self.to_anthropic_tools(policy=policy, mode=mode)
+
+        # Merge MCP tools (dedup by name)
+        all_tools = list(native_tools)
+        if mcp_tools:
+            existing_names = {t["name"] for t in all_tools}
+            for mcp_tool in mcp_tools:
+                if mcp_tool.get("name") not in existing_names:
+                    all_tools.append(mcp_tool)
+                    existing_names.add(mcp_tool["name"])
+
+        if len(all_tools) <= defer_threshold:
+            return all_tools
+
+        # Update ToolSearchTool MCP index if present in registry
+        tool_search_tool = self._tools.get("tool_search")
+        if tool_search_tool is not None and isinstance(tool_search_tool, ToolSearchTool):
+            tool_search_tool.set_mcp_tools(mcp_tools or [])
 
         # Build category descriptions for tool_search
         categories: set[str] = set()
-        for tool in tools:
+        for tool in all_tools:
             name = tool.get("name", "")
             if name in ("run_analyst", "run_evaluator", "psm_calculate"):
                 categories.add("analysis")
@@ -190,23 +258,30 @@ class ToolRegistry:
                 categories.add("memory")
             elif name in ("generate_report", "export_json", "send_notification"):
                 categories.add("output")
+            elif tool.get("_mcp_server"):
+                categories.add("mcp")
             else:
                 categories.add("other")
 
         category_str = ", ".join(sorted(categories))
 
-        # Mark all tools as deferred
+        # Separate always-loaded (core) tools from deferred tools
+        always_loaded: list[dict[str, Any]] = []
         deferred: list[dict[str, Any]] = []
-        for tool in tools:
-            tool_copy = dict(tool)
-            tool_copy["defer_loading"] = True
-            deferred.append(tool_copy)
+        for tool in all_tools:
+            name = tool.get("name", "")
+            if name in self.ALWAYS_LOADED_TOOLS:
+                always_loaded.append(tool)
+            else:
+                tool_copy = dict(tool)
+                tool_copy["defer_loading"] = True
+                deferred.append(tool_copy)
 
         # Insert tool_search meta-tool at the beginning
         tool_search: dict[str, Any] = {
             "name": "tool_search",
             "description": (
-                f"Search GEODE analysis tools. Categories: {category_str}. "
+                f"Search GEODE native and MCP tools. Categories: {category_str}. "
                 "Use this to find relevant tools before calling them."
             ),
             "input_schema": {
@@ -221,7 +296,7 @@ class ToolRegistry:
             },
         }
 
-        return [tool_search, *deferred]
+        return [tool_search, *always_loaded, *deferred]
 
     def to_openai_tools(
         self, *, policy: PolicyChain | None = None, mode: str = "full_pipeline"

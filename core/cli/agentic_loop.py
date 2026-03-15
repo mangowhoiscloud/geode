@@ -43,14 +43,33 @@ _BASE_TOOLS: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encodi
 AGENTIC_TOOLS: list[dict[str, Any]] = _BASE_TOOLS
 
 
-def get_agentic_tools(registry: ToolRegistry | None = None) -> list[dict[str, Any]]:
-    """Return tool definitions, merging ToolRegistry extras if provided."""
+def get_agentic_tools(
+    registry: ToolRegistry | None = None,
+    *,
+    mcp_tools: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Return tool definitions with unified deferred loading for native + MCP tools.
+
+    Merges base tools, registry extras, and MCP tools into a single list.
+    When the combined count exceeds the defer threshold (10), deferred loading
+    activates: core tools stay loaded, the rest are deferred via tool_search.
+
+    Args:
+        registry: Optional ToolRegistry with additional native tools.
+        mcp_tools: Optional MCP tool definitions to include.
+    """
     tools = list(_BASE_TOOLS)
     if registry:
         existing_names = {t["name"] for t in tools}
         for tool_def in registry.to_anthropic_tools():
             if tool_def["name"] not in existing_names:
                 tools.append(tool_def)
+    # Merge MCP tools into the unified list
+    if mcp_tools:
+        existing_names = {t["name"] for t in tools}
+        for mcp_tool in mcp_tools:
+            if mcp_tool.get("name") not in existing_names:
+                tools.append(mcp_tool)
     return tools
 
 
@@ -136,15 +155,12 @@ class AgenticLoop:
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self.model = model or ANTHROPIC_PRIMARY
-        self._tools = get_agentic_tools(tool_registry)
+        self._tool_registry = tool_registry
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
-        # Merge MCP tools if available
-        if mcp_manager is not None:
-            existing_names = {t["name"] for t in self._tools}
-            for mcp_tool in mcp_manager.get_all_tools():
-                if mcp_tool.get("name") not in existing_names:
-                    self._tools.append(mcp_tool)
+        # Unified tool assembly: merge native + MCP tools together
+        mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
+        self._tools = get_agentic_tools(tool_registry, mcp_tools=mcp_tool_list)
         self._tool_log: list[dict[str, Any]] = []
         self._consecutive_failures: dict[str, int] = {}
         self._client: anthropic.AsyncAnthropic | None = None
@@ -154,18 +170,16 @@ class AgenticLoop:
         """Reload MCP tools into the tool list without reconstructing the loop.
 
         Called after install_mcp_server to make new tools available immediately.
+        Rebuilds the unified tool list with deferred loading applied.
         Returns number of newly added tools.
         """
         if self._mcp_manager is None:
             return 0
-        existing = {t["name"] for t in self._tools}
-        added = 0
-        for tool in self._mcp_manager.get_all_tools():
-            if tool.get("name") not in existing:
-                self._tools.append(tool)
-                existing.add(tool["name"])
-                added += 1
-        return added
+        old_count = len(self._tools)
+        mcp_tool_list = self._mcp_manager.get_all_tools()
+        self._tools = get_agentic_tools(self._tool_registry, mcp_tools=mcp_tool_list)
+        new_count = len(self._tools)
+        return max(0, new_count - old_count)
 
     def run(self, user_input: str) -> AgenticResult:
         """Sync wrapper — delegates to ``arun()`` via ``asyncio.run()``."""
