@@ -2,7 +2,7 @@
   <img src="assets/geode-social-preview.png" alt="GEODE — 범용 자율 실행 에이전트" width="720" />
 </p>
 
-# GEODE v0.11.0 — 범용 자율 실행 에이전트
+# GEODE v0.12.0 — 범용 자율 실행 에이전트
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
@@ -67,7 +67,7 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
 | **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
 | **Observability** | LangSmith 토큰 추적 + 비용 계산, Claude Code 스타일 상태줄 |
 | **Scheduler** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON) |
-| **2168+ Tests** | 131 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
+| **2179+ Tests** | 132 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
 
 ## Usage
 

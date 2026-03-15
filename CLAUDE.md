@@ -4,12 +4,12 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.10.1
+- **Version**: 0.12.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 131
-- **Tests**: 2168+
+- **Modules**: 132
+- **Tests**: 2179+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start

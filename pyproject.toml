@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.11.0"
+version = "0.12.0"
 description = "GEODE — 게임화 IP 도메인 자율 실행 하네스 CLI Demo"
 readme = "README.md"
 requires-python = ">=3.12"
