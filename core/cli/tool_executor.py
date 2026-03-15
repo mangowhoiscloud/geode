@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -64,6 +65,21 @@ EXPENSIVE_TOOLS: dict[str, float] = {
 # Everything else is STANDARD — executes without special gates
 
 
+@contextmanager
+def _tool_spinner(label: str) -> Iterator[None]:
+    """Show a Rich dots spinner during post-approval tool execution.
+
+    Displays ``label`` with a spinner while the wrapped block runs,
+    then clears it on exit so OperationLogger markers (✓/✗) render cleanly.
+    """
+    status = console.status(f"  [dim]⏳ {label}[/dim]", spinner="dots", spinner_style="cyan")
+    status.start()
+    try:
+        yield
+    finally:
+        status.stop()
+
+
 class ToolExecutor:
     """Routes tool calls to handlers with HITL safety checks.
 
@@ -102,10 +118,16 @@ class ToolExecutor:
         if tool_name in DANGEROUS_TOOLS:
             return self._execute_dangerous(tool_name, tool_input)
 
+        # Track whether user went through an approval gate — if so, show
+        # a spinner during handler execution for visual feedback.
+        approved_via_hitl = False
+
         # Write tools: HITL gate — always requires approval, even for
         # sub-agents (auto_approve is intentionally ignored here).
-        if tool_name in WRITE_TOOLS and not self._confirm_write(tool_name, tool_input):
-            return {"error": "User denied write operation", "denied": True}
+        if tool_name in WRITE_TOOLS:
+            if not self._confirm_write(tool_name, tool_input):
+                return {"error": "User denied write operation", "denied": True}
+            approved_via_hitl = True
 
         # Expensive tools: cost confirmation gate
         if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
@@ -115,6 +137,7 @@ class ToolExecutor:
                     "error": "User denied expensive operation",
                     "denied": True,
                 }
+            approved_via_hitl = True
 
         # Sub-agent delegation
         if tool_name == "delegate_task":
@@ -132,6 +155,9 @@ class ToolExecutor:
             return {"error": f"Unknown tool: {tool_name}"}
 
         try:
+            if approved_via_hitl:
+                with _tool_spinner(f"Executing {tool_name}..."):
+                    return handler(**tool_input)
             return handler(**tool_input)
         except Exception as exc:
             log.error("Tool %s failed: %s", tool_name, exc, exc_info=True)
@@ -210,7 +236,8 @@ class ToolExecutor:
         if not approved:
             return {"error": "User denied execution", "denied": True}
 
-        result = self._bash.execute(command)
+        with _tool_spinner(f"Running: {command}"):
+            result = self._bash.execute(command)
         return self._bash.to_tool_result(result)
 
     def _execute_mcp(
@@ -231,7 +258,8 @@ class ToolExecutor:
             self._mcp_approved_servers.add(server)
 
         assert self._mcp_manager is not None  # guaranteed by caller
-        result: dict[str, Any] = self._mcp_manager.call_tool(server, tool_name, tool_input)
+        with _tool_spinner(f"Calling {server}/{tool_name}..."):
+            result: dict[str, Any] = self._mcp_manager.call_tool(server, tool_name, tool_input)
         return result
 
     def _confirm_mcp(self, server: str, tool_name: str) -> bool:
