@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/geode-social-preview.png" alt="GEODE — 범용 자율 실행 에이전트" width="720" />
+  <img src="assets/geode-mascot.png" alt="GEODE — 범용 자율 실행 에이전트" width="720" />
 </p>
 
 # GEODE v0.13.0 — 범용 자율 실행 에이전트
