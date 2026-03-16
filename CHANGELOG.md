@@ -31,6 +31,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 - Token Guard 완화 — `MAX_TOOL_RESULT_TOKENS` 4096 → 16384 (1M 컨텍스트 활용 극대화). `settings.max_tool_result_tokens`로 설정 가능
 
+### Fixed
+- 프롬프트/REPL 출력에서 장식용 이모지 제거 — 리포트 생성 외 모든 CLI 출력에서 이모지(⚡⚠✏⏸) 삭제, UI 마커(✓✗✢●)는 유지
+
 ---
 
 ## [0.14.0] — 2026-03-16
