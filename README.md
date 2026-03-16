@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="assets/geode-social-preview.png" alt="GEODE — Autonomous Research Harness" width="720" />
+  <img src="assets/geode-mascot.png" alt="GEODE — Autonomous Research Harness" width="360" />
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
   <img src="https://img.shields.io/badge/Opus%204.6-1M%20context-1e293b?style=flat-square" alt="Opus 4.6">
-  <img src="https://img.shields.io/badge/38%20tools-MCP%20native-1e293b?style=flat-square" alt="38 Tools">
+  <img src="https://img.shields.io/badge/42%20tools-MCP%20native-1e293b?style=flat-square" alt="42 Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -18,15 +18,60 @@
 
 ### Highlights
 
-- **Natural Language Interface** — 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링 수행
-- **`while(tool_use)` Loop** — 모든 자율 행동의 핵심 프리미티브. 도구를 호출하고, 관찰하고, 반복
-- **38 Tools + MCP** — 웹 검색, URL 요약, YouTube, arXiv, LinkedIn 등 38개 도구 + MCP 자동설치
-- **Goal Decomposition** — 복합 요청을 하위 목표 DAG로 자동 분해 (Haiku, ~$0.01/호출)
-- **Error Recovery** — 실패 시 retry → alternative → fallback → escalate 4단계 자동 복구
-- **Sub-Agent** — 부모 역량 전체 상속, 병렬 위임, Token Guard, as_completed 수집
-- **3-Tier Memory** — SOUL → Organization → Project → Session 계층적 맥락 조합
-- **Domain Plugin** — `DomainPort` Protocol로 도메인별 파이프라인 교체 (Game IP 기본 탑재)
-- **Safety** — 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), Grounding Truth, 9종 bash 차단
+- **Natural Language Interface** -- 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링 수행
+- **`while(tool_use)` Loop** -- 모든 자율 행동의 핵심 프리미티브. 도구를 호출하고, 관찰하고, 반복
+- **42 Built-in Tools** -- web_fetch, general_web_search, run_bash 등 42개 네이티브 도구
+- **MCP Auto-Discovery** -- MCPRegistry가 환경변수 기반 자동 탐지 (DEFAULT 5종 + AUTO_DISCOVER 18종), 카탈로그 38종
+- **Bash Execution** -- shell 명령 실행. SAFE_BASH_PREFIXES 38종 읽기 전용 자동승인, 9종 위험 패턴 차단, 그 외 HITL 승인
+- **Goal Decomposition** -- 복합 요청을 하위 목표 DAG로 자동 분해 (Haiku, ~$0.01/호출)
+- **Error Recovery** -- 실패 시 retry → alternative → fallback → escalate 4단계 자동 복구
+- **Sub-Agent** -- 부모 역량 전체 상속, 병렬 위임, Token Guard, as_completed 수집
+- **4-Tier Memory** -- SOUL → User Profile (Tier 0.5) → Organization → Project → Session 계층적 맥락 조합
+- **Domain Plugin** -- `DomainPort` Protocol로 도메인별 파이프라인 교체 (Game IP 기본 탑재)
+- **Safety** -- 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), Grounding Truth, 9종 bash 차단
+
+### Tool Execution Hierarchy
+
+```mermaid
+flowchart LR
+    NL["NL Router<br/>(LLM tool_use)"]
+
+    NL --> Builtin["Built-in Tools<br/>(42 definitions)"]
+    NL --> MCP["MCP Tools<br/>(auto-discovered)"]
+    NL --> Bash["Bash<br/>(run_bash)"]
+
+    Builtin --> S1["SAFE<br/>auto-execute"]
+    Builtin --> S2["STANDARD<br/>execute"]
+    Builtin --> S3["WRITE<br/>HITL approval"]
+
+    MCP --> MA["AUTO_APPROVED<br/>brave-search, steam,<br/>arxiv, linkedin-reader"]
+    MCP --> MO["Other<br/>first-call approval"]
+
+    Bash --> BBlk["Blocked<br/>(9 patterns)"]
+    Bash --> BSafe["SAFE_BASH_PREFIXES<br/>(38 read-only)"]
+    Bash --> BHitl["Other<br/>HITL approval"]
+
+    style NL fill:#1e293b,stroke:#475569,color:#e2e8f0
+    style Builtin fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    style MCP fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    style Bash fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    style S1 fill:#064e3b,stroke:#10b981,color:#6ee7b7
+    style S2 fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    style S3 fill:#7c2d12,stroke:#f97316,color:#fed7aa
+    style MA fill:#064e3b,stroke:#10b981,color:#6ee7b7
+    style MO fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    style BBlk fill:#7f1d1d,stroke:#ef4444,color:#fca5a5
+    style BSafe fill:#064e3b,stroke:#10b981,color:#6ee7b7
+    style BHitl fill:#7c2d12,stroke:#f97316,color:#fed7aa
+```
+
+NL Router가 LLM의 tool_use 응답을 3가지 경로로 디스패치합니다:
+
+| 경로 | 도구 수 | 승인 방식 |
+|------|--------|----------|
+| Built-in Tools | 42 | SAFE 자동승인, STANDARD 실행, WRITE HITL 승인 |
+| MCP Tools | 카탈로그 38종 | AUTO_APPROVED 서버 4종 자동승인, 그 외 초회 승인 |
+| Bash | shell 명령 | SAFE_BASH_PREFIXES 38종 자동승인, 9종 차단, 그 외 HITL |
 
 ## Installation
 
@@ -92,7 +137,8 @@ graph TB
         MCP["MCP Adapters"]
     end
 
-    subgraph L2["L2 — Memory (3-Tier)"]
+    subgraph L2["L2 — Memory (4-Tier)"]
+        UserProf["User Profile<br/>(Tier 0.5, preferences)"]
         Org["Organization<br/>(fixtures, immutable)"]
         Project["Project Memory<br/>(.claude/MEMORY.md)"]
         Session["Session Store<br/>(in-memory TTL)"]
@@ -109,7 +155,7 @@ graph TB
     end
 
     subgraph L4["L4 — Extensibility"]
-        Tools["ToolRegistry (38)"]
+        Tools["ToolRegistry (42)"]
         Policy["PolicyChain"]
         Reports["Report Generator"]
         Skills["Skills System"]
@@ -139,9 +185,9 @@ graph TB
 |-------|----------|------|
 | **L0** CLI & Agent | Typer CLI, NL Router, AgenticLoop, SubAgentManager, Batch | 사용자 인터페이스 + 자율 실행 코어 |
 | **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입 |
-| **L2** Memory | Organization → Project → Session (3-Tier), SqliteSaver | 계층적 메모리 + LangGraph 체크포인트 |
+| **L2** Memory | SOUL → User Profile → Organization → Project → Session (4-Tier), SqliteSaver | 계층적 메모리 + LangGraph 체크포인트 |
 | **L3** Orchestration | HookSystem (30 events), TaskGraph DAG, PlanMode, CoalescingQueue | 라이프사이클 이벤트, 동시성 제어 |
-| **L4** Extensibility | ToolRegistry (38), PolicyChain, Skills, MCP Catalog (38) | 런타임 tool/skill 확장, MCP 자동설치 |
+| **L4** Extensibility | ToolRegistry (42), PolicyChain, Skills, MCP Catalog (38) | 런타임 tool/skill 확장, MCP 자동설치 |
 | **L5** Domain Plugins | DomainPort Protocol, GameIPDomain, LangGraph StateGraph | 도메인별 파이프라인 플러그인 교체 |
 
 ---
@@ -156,7 +202,7 @@ graph TB
 graph TB
     Input["User Input<br/>(한국어/영어)"] --> LLM["Claude Opus 4.6<br/>Tool Use API"]
     LLM --> Decision{stop_reason}
-    Decision -->|tool_use| Exec["ToolExecutor<br/>(38 base + MCP)"]
+    Decision -->|tool_use| Exec["ToolExecutor<br/>(42 base + MCP)"]
     Exec --> Check{clarification<br/>needed?}
     Check -->|Yes| Clarify["LLM asks<br/>clarifying question"]
     Clarify --> Output
@@ -180,7 +226,7 @@ graph TB
 
 | 구성 요소 | 설명 |
 |----------|------|
-| **LLM Tool Use** | Claude Opus 4.6 — base 38 + MCP 20+ tool 정의 전달, `stop_reason` 기반 루프 제어 |
+| **LLM Tool Use** | Claude Opus 4.6 — base 42 + MCP 20+ tool 정의 전달, `stop_reason` 기반 루프 제어 |
 | **ToolExecutor** | 4-tier safety: SAFE / STANDARD / WRITE / DANGEROUS (bash 사용자 승인 필수) |
 | **Clarification** | 필수 파라미터 누락 시 LLM이 사용자에게 되묻기 |
 | **max_rounds** | 기본 50 라운드 — 마지막 2라운드에서 텍스트 응답 강제 (1M 컨텍스트 + `clear_tool_uses` 활용) |
@@ -331,7 +377,7 @@ graph TB
     DT --> SAM
     CQ --> TG --> IR
     IR --> W1 & W2 & W3
-    W1 & W2 & W3 -->|SubAgentResult| TGD["Token Guard<br/>(4096 tokens)"]
+    W1 & W2 & W3 -->|SubAgentResult| TGD["Token Guard<br/>(unlimited, configurable)"]
     TGD -->|tool_result| LLM
 
     style Parent fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
@@ -345,23 +391,25 @@ graph TB
 | **max_total** | 15 | 세션당 최대 서브에이전트 수 |
 | **MAX_CONCURRENT** | 5 | 동시 병렬 워커 수 |
 | **timeout_s** | 120s | 개별 태스크 타임아웃 |
-| **Token Guard** | 4096 tokens | tool_result 초과 시 `summary`만 보존 |
+| **Token Guard** | unlimited (0), configurable via GEODE_MAX_TOOL_RESULT_TOKENS | tool_result 제한 시 `summary`만 보존 |
 | **as_completed** | polling round-robin | 먼저 끝난 태스크 결과 즉시 반환 |
 
 에러 분류: `TIMEOUT`, `API_ERROR` (retryable) / `VALIDATION`, `RESOURCE`, `DEPTH_EXCEEDED` (non-retryable).
 
-### 3-Tier Memory
+### 4-Tier Memory
 
 계층적 메모리 시스템으로 분석 맥락을 조합합니다. 상위 tier의 값은 하위 tier에 의해 override됩니다.
 
 ```mermaid
 graph TB
-    Soul["SOUL.md<br/>(Organization Identity)"] --> Org["Tier 1: Organization<br/>Fixtures, immutable<br/>IP context, rubric"]
+    Soul["SOUL.md<br/>(Organization Identity)"] --> UProf["Tier 0.5: User Profile<br/>preferences, timezone<br/>personalization context"]
+    UProf --> Org["Tier 1: Organization<br/>Fixtures, immutable<br/>IP context, rubric"]
     Org --> Proj["Tier 2: Project<br/>.claude/MEMORY.md<br/>rules, insights (max 50)"]
     Proj --> Sess["Tier 3: Session<br/>In-memory, TTL 1h<br/>ephemeral analysis context"]
     Sess --> Asm["ContextAssembler<br/>→ _llm_summary (280 chars)"]
 
     style Soul fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
+    style UProf fill:#1e293b,stroke:#ec4899,color:#e2e8f0
     style Org fill:#1e293b,stroke:#10b981,color:#e2e8f0
     style Proj fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
     style Sess fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
@@ -371,6 +419,7 @@ graph TB
 | Tier | 소스 | 영속성 | 용도 |
 |------|------|--------|------|
 | **SOUL** | `.claude/SOUL.md` | 영구 | 조직 미션, 원칙 |
+| **User Profile** (0.5) | `.claude/user_profile.json` | 파일 기반 | 사용자 선호, 타임존, 개인화 맥락 |
 | **Organization** | `core/fixtures/*.json` | Read-only | IP context, rubric, 기대 결과 |
 | **Project** | `.claude/MEMORY.md`, `.claude/rules/` | 파일 기반 | 학습된 규칙, 인사이트 (최대 50개, 회전) |
 | **Session** | In-memory dict | TTL 1h | 현재 분석 컨텍스트, 체크포인트 |
@@ -402,7 +451,7 @@ graph TB
 ```mermaid
 graph TB
     subgraph GEODE["GEODE Autonomous Core"]
-        Registry["ToolRegistry<br/>38 base tools"]
+        Registry["ToolRegistry<br/>42 base tools"]
         Policy["PolicyChain"]
         SkillReg["SkillRegistry<br/>(auto-inject)"]
         MCPInstall["MCP Auto-Install<br/>(38 catalog)"]
@@ -433,7 +482,7 @@ graph TB
     style MCPServer fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
 ```
 
-- **38 base tools** — `web_fetch`, `general_web_search`, `youtube_search`, `read_document` 등 범용 도구 + `category`/`cost_tier` 메타데이터
+- **42 base tools** — `web_fetch`, `general_web_search`, `youtube_search`, `read_document` 등 범용 도구 + `category`/`cost_tier` 메타데이터
 - **MCP Adapters** — Brave Search, arXiv, Playwright, LinkedIn, Steam (env var 비어있으면 graceful skip)
 - **MCP Server** — `uv run python -m core.mcp_server` 로 GEODE를 외부 에이전트에서 호출 가능 (6 tools, 2 resources)
 - **Skills** — `.claude/skills/` 자동 발견 + YAML frontmatter 기반 도구 핫 리로드
@@ -645,7 +694,7 @@ core/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
 │       └── mcp/                # Steam, Brave, LinkedIn + CompositeSignalAdapter + catalog (38)
 ├── llm/                        # LLM client (prompt caching, streaming, cost tracking)
-├── memory/                     # 3-Tier: Organization → Project → Session
+├── memory/                     # 4-Tier: SOUL → User Profile → Organization → Project → Session
 ├── nodes/                      # Pipeline nodes (router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
 ├── orchestration/
 │   ├── hooks.py                # HookSystem (30 events + async atrigger)
