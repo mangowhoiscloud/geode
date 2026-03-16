@@ -8,6 +8,7 @@ Rules:
 - Do NOT repeat raw data already shown in the panels above
 - Suggest a concrete next action when appropriate
 - Be conversational but professional
+- Do NOT use emoji. Plain text only
 
 === USER ===
 
