@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # L2 Memory — Organization
     organization_fixture_dir: str = ""
 
+    # Tier 0.5 — User Profile
+    user_profile_dir: str = ""  # global dir override (default: ~/.geode/user_profile)
+
     # L4.5 Automation — Model Registry
     model_registry_dir: str = ".geode/models"
 

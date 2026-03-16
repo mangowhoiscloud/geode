@@ -824,5 +824,99 @@
         "query"
       ]
     }
+  },
+  {
+    "name": "profile_show",
+    "description": "사용자 프로필을 표시합니다. 사용자가 프로필, 내 정보, 설정된 역할을 물어볼 때 사용하세요. Examples: '내 프로필 보여줘', 'show my profile', '내 정보', 'who am I?', 'my profile'",
+    "category": "profile",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "profile_update",
+    "description": "사용자 프로필을 업데이트합니다. 사용자가 역할, 전문 분야, 이름, 팀 정보를 설정하거나 변경할 때 사용하세요. Examples: '내 역할은 AI 엔지니어야', 'set my expertise to ML', '이름 설정해줘', '프로필 업데이트'",
+    "category": "profile",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "description": "역할 (e.g. 'AI Engineer', 'Data Scientist')"
+        },
+        "expertise": {
+          "type": "string",
+          "description": "전문 분야 (e.g. 'ML, NLP, Game Analytics')"
+        },
+        "name": {
+          "type": "string",
+          "description": "이름"
+        },
+        "team": {
+          "type": "string",
+          "description": "팀/부서"
+        },
+        "bio": {
+          "type": "string",
+          "description": "자유 형식 자기소개"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "profile_preference",
+    "description": "사용자 선호 설정을 조회하거나 변경합니다. 언어, 출력 형식, 관심 도메인 등. Examples: '언어 한국어로 설정해', 'set language to ko', '출력 형식 바꿔줘', '내 선호 설정 보여줘', 'change preference'",
+    "category": "profile",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "설정 키 (e.g. 'language', 'output_format', 'domains_of_interest')"
+        },
+        "value": {
+          "type": "string",
+          "description": "설정할 값 (생략 시 현재 값 조회)"
+        }
+      },
+      "required": [
+        "key"
+      ]
+    }
+  },
+  {
+    "name": "profile_learn",
+    "description": "사용자의 패턴이나 인사이트를 학습합니다. 반복되는 선호, 워크플로우 패턴, 도메인 관심사를 자동 기억할 때 사용하세요. Examples: '이 패턴 기억해', 'learn this pattern', '사용자가 항상 dry-run을 먼저 사용함'",
+    "category": "profile",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "기억할 패턴/인사이트"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "general",
+            "domain",
+            "workflow",
+            "preference",
+            "tool_usage"
+          ],
+          "description": "패턴 카테고리 (기본값: general)"
+        }
+      },
+      "required": [
+        "pattern"
+      ]
+    }
   }
 ]

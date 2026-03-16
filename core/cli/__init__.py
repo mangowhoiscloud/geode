@@ -2169,6 +2169,27 @@ def _build_tool_handlers(
 
         return _safe_delegate(NoteReadTool, kwargs)
 
+    # Profile tools (Tier 0.5)
+    def handle_profile_show(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.profile_tools import ProfileShowTool
+
+        return _safe_delegate(ProfileShowTool, kwargs)
+
+    def handle_profile_update(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.profile_tools import ProfileUpdateTool
+
+        return _safe_delegate(ProfileUpdateTool, kwargs)
+
+    def handle_profile_preference(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.profile_tools import ProfilePreferenceTool
+
+        return _safe_delegate(ProfilePreferenceTool, kwargs)
+
+    def handle_profile_learn(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.profile_tools import ProfileLearnTool
+
+        return _safe_delegate(ProfileLearnTool, kwargs)
+
     def handle_youtube_search(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import YouTubeSearchTool
 
@@ -2279,6 +2300,11 @@ def _build_tool_handlers(
         "read_document": handle_read_document,
         "note_save": handle_note_save,
         "note_read": handle_note_read,
+        # Profile tools (Tier 0.5)
+        "profile_show": handle_profile_show,
+        "profile_update": handle_profile_update,
+        "profile_preference": handle_profile_preference,
+        "profile_learn": handle_profile_learn,
         # Signal tools
         "youtube_search": handle_youtube_search,
         "reddit_sentiment": handle_reddit_sentiment,
