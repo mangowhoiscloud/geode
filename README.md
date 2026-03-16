@@ -58,11 +58,17 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
 
 | Feature | Description |
 |---------|-------------|
-| **Agentic Loop** | `while(tool_use)` 멀티 라운드 (max 15), multi-intent chaining, clarification |
-| **Sub-Agent** | Full AgenticLoop 상속, 재귀 depth 제어 (max_depth=2), `SubAgentResult` 표준 스키마, `ErrorCategory` 분류, Token Guard |
+| **Agentic Loop** | `while(tool_use)` 멀티 라운드 (max 15), multi-intent chaining, clarification, 적응형 오류 복구 |
+| **Sub-Agent** | Full AgenticLoop 상속, 재귀 depth 제어 (max_depth=2), as_completed 결과 수집, Token Guard |
+| **Goal Decomposition** | 복합 요청 → 하위 목표 DAG 자동 분해 (Haiku, ~$0.01/호출), 단순 요청 휴리스틱 패스스루 |
+| **Grounding Truth** | tool_result 기반 출처 인용 강제, web_fetch/web_search 소스 태깅, 미확인 정보 생성 금지 |
+| **HITL Safety** | 4-tier 분류 (SAFE/STANDARD/WRITE/DANGEROUS), MCP 서버별 세션 승인, auto_approve 예외 |
 | **38+ Tools** | `definitions.json` 기반 + ToolRegistry 런타임 확장 + MCP 포함 60+ |
 | **Skills + MCP** | `.claude/skills/` 자동 발견 + 29개 MCP 카탈로그 자연어 설치 + 도구 핫 리로드 |
 | **Orchestration** | HookSystem (30 events), TaskGraph DAG, CoalescingQueue, LaneQueue, PlanMode |
+| **Dynamic Graph** | 분석 결과 기반 노드 동적 건너뛰기/enrichment 분기, `ErrorRecoveryStrategy` 자동 복구 체인 |
+| **Signal Liveification** | MCP 기반 라이브 시그널 수집 (Steam + Brave), fixture fallback, `signal_source` provenance |
+| **Plan Auto-Execute** | 계획 생성→승인→실행 자동 수행, step 실패 시 재시도 + partial success 진행 |
 | **NL Router** | 한국어/영어 자유 입력, Multi-turn (20 turns), Multi-intent, Fuzzy matching |
 | **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
 | **Observability** | LangSmith 토큰 추적 + 비용 계산, Claude Code 스타일 상태줄 |
