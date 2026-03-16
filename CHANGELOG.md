@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- Pre-commit mypy/bandit "files were modified" 오탐 — mypy `--cache-dir` → `--no-incremental`, bandit `--quiet` 추가
+
 ---
 
 ## [0.13.1] — 2026-03-16

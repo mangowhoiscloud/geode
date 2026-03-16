@@ -36,14 +36,14 @@ repos:
     hooks:
       - id: mypy
         name: mypy type check
-        entry: uv run mypy --cache-dir /tmp/.mypy_cache_geode core/
+        entry: uv run --frozen mypy --no-incremental core/
         language: system
         pass_filenames: false
         types: [python]
 
       - id: bandit
         name: bandit security
-        entry: uv run bandit -r core/ -c pyproject.toml
+        entry: uv run --frozen bandit -r core/ -c pyproject.toml --quiet
         language: system
         pass_filenames: false
         types: [python]
