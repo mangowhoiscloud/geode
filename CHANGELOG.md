@@ -31,6 +31,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - 복사/붙여넣기 알림 — 멀티라인 paste 감지 시 `[Pasted text +N lines]` 표시 후 추가 입력 대기 (즉시 실행 방지)
 
+### Fixed
+- 멀티턴 tool_result 고아 참조 400 에러 — 3중 방어: (1) Anthropic `clear_tool_uses` 서버사이드 컨텍스트 관리, (2) `ConversationContext._trim()`에 tool pair sanitization 추가, (3) 기존 `_repair_messages()` 유지
+
 ### Changed
 - Identity Pivot 완성 — `analyst.md` SYSTEM 프롬프트에서 "undervalued IP discovery agent" 제거, 게임 전용 예시를 도메인 비의존적 예시로 교체
 - `ANALYST_SYSTEM` 해시 핀 갱신 (`924433f5bf11` → `90acc856a5b2`)
