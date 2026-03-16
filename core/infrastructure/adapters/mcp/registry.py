@@ -48,6 +48,7 @@ DEFAULT_SERVERS: tuple[str, ...] = (
     "fetch",
     "sequential-thinking",
     "playwright",
+    "arxiv",
 )
 
 # ---------------------------------------------------------------------------
@@ -56,7 +57,7 @@ DEFAULT_SERVERS: tuple[str, ...] = (
 
 AUTO_DISCOVER_SERVERS: tuple[str, ...] = (
     "brave-search",
-    "linkedin",
+    "linkedin-reader",
     "github",
     "slack",
     "tavily-search",
@@ -184,3 +185,60 @@ class MCPRegistry:
                 ]
                 missing[name] = absent
         return missing
+
+    def get_mcp_status(
+        self,
+        json_config_servers: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build a comprehensive MCP status report.
+
+        Merges registry-discovered servers with file-based config to show:
+        1. **active** — servers that are registered and available
+        2. **available_inactive** — catalog servers missing env vars
+
+        ``json_config_servers`` is the dict from MCPServerManager._servers
+        (or None if manager is unavailable).
+        """
+        discovered = self.discover()
+        missing_env = self.list_missing_env()
+
+        # Active servers: discovered + file-config merged (deduplicated)
+        active: list[dict[str, str]] = []
+        seen: set[str] = set()
+
+        # First: servers from file config (json)
+        if json_config_servers:
+            for name in sorted(json_config_servers):
+                entry = MCP_CATALOG.get(name)
+                desc = entry.description if entry else ""
+                active.append({"name": name, "description": desc, "source": "json_config"})
+                seen.add(name)
+
+        # Second: registry-discovered servers not already in file config
+        for name in sorted(discovered):
+            if name not in seen:
+                entry = MCP_CATALOG.get(name)
+                desc = entry.description if entry else ""
+                active.append({"name": name, "description": desc, "source": "auto_discovered"})
+                seen.add(name)
+
+        # Available but inactive: catalog entries with missing env vars
+        available_inactive: list[dict[str, Any]] = []
+        for name in sorted(missing_env):
+            entry = MCP_CATALOG.get(name)
+            if entry and name not in seen:
+                available_inactive.append(
+                    {
+                        "name": name,
+                        "description": entry.description,
+                        "missing_env": missing_env[name],
+                    }
+                )
+
+        return {
+            "active": active,
+            "active_count": len(active),
+            "available_inactive": available_inactive,
+            "available_inactive_count": len(available_inactive),
+            "catalog_total": len(MCP_CATALOG),
+        }

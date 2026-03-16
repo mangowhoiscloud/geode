@@ -140,7 +140,7 @@
   },
   {
     "name": "check_status",
-    "description": "GEODE 시스템 상태를 확인합니다. 사용자가 시스템 상태, 건강 체크, 모델 정보, 설정을 물어볼 때 사용하세요. Examples: '시스템 상태', 'health check', '지금 모델 뭐야?', '상태 확인', 'status', '설정 보여줘', 'what model are you using?'",
+    "description": "GEODE 시스템 상태와 MCP 서버 목록을 확인합니다. 사용자가 시스템 상태, MCP 서버 목록/연결 상태, 건강 체크, 모델 정보, 설정을 물어볼 때 사용하세요. Examples: '시스템 상태', 'health check', '지금 모델 뭐야?', '상태 확인', 'status', '설정 보여줘', 'what model are you using?', 'MCP 리스트 보여줘', 'MCP 상태', 'Slack MCP 연결은 있어?'",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {

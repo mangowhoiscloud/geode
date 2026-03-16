@@ -106,11 +106,12 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         tags=("discord", "social", "community", "chat", "gaming"),
         env_keys=("DISCORD_BOT_TOKEN",),
     ),
-    "linkedin": MCPCatalogEntry(
-        name="linkedin",
+    "linkedin-reader": MCPCatalogEntry(
+        name="linkedin-reader",
         package="linkedin-scraper-mcp",
         description="LinkedIn people/company/job search + profile scraping (Patchright browser)",
         tags=("linkedin", "social", "profile", "recruiting", "company", "job", "career"),
+        command="uvx",
     ),
     "reddit": MCPCatalogEntry(
         name="reddit",
@@ -131,6 +132,12 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         description="YouTube video search, stats, comments",
         tags=("youtube", "video", "social", "stream"),
         env_keys=("YOUTUBE_API_KEY",),
+    ),
+    "arxiv": MCPCatalogEntry(
+        name="arxiv",
+        package="@fre4x/arxiv",
+        description="arXiv paper search and metadata retrieval",
+        tags=("arxiv", "paper", "research", "academic", "science"),
     ),
     # --- Search ---
     "tavily-search": MCPCatalogEntry(
