@@ -70,8 +70,9 @@ class ConversationContext:
     def _trim(self) -> None:
         """Keep only the last ``max_turns * 2`` messages.
 
-        We preserve pairs so the message list always starts with a user
-        message (required by the Anthropic API).
+        Preserves tool_use/tool_result pairs: after slicing, any orphaned
+        tool_result blocks (whose tool_use was trimmed away) are removed
+        to prevent Anthropic API 400 errors.
         """
         max_msgs = self.max_turns * 2
         if len(self.messages) <= max_msgs:
@@ -83,8 +84,54 @@ class ConversationContext:
         while self.messages and self.messages[0]["role"] != "user":
             self.messages.pop(0)
 
+        # Sanitize orphaned tool_result blocks.
+        # A tool_result in a user message must reference a tool_use_id
+        # in the immediately preceding assistant message.
+        self._sanitize_tool_pairs()
+
         log.debug(
             "ConversationContext trimmed to %d messages (%d turns)",
             len(self.messages),
             self.turn_count,
         )
+
+    def _sanitize_tool_pairs(self) -> None:
+        """Remove orphaned tool_result blocks from conversation history.
+
+        Scans user messages with list content; for each tool_result block,
+        checks that the preceding assistant message has a matching tool_use.
+        Orphans are dropped silently.
+        """
+        sanitized: list[dict[str, Any]] = []
+        for i, msg in enumerate(self.messages):
+            if msg["role"] == "user" and isinstance(msg.get("content"), list):
+                # Collect valid tool_use IDs from preceding assistant message
+                prev_tool_ids: set[str] = set()
+                if i > 0 and self.messages[i - 1]["role"] == "assistant":
+                    prev = self.messages[i - 1]
+                    for blk in prev.get("content") or []:
+                        if isinstance(blk, dict) and blk.get("type") == "tool_use":
+                            prev_tool_ids.add(blk["id"])
+
+                valid_content: list[Any] = []
+                dropped = 0
+                for blk in msg["content"]:
+                    if (
+                        isinstance(blk, dict)
+                        and blk.get("type") == "tool_result"
+                        and blk.get("tool_use_id") not in prev_tool_ids
+                    ):
+                        dropped += 1
+                        continue
+                    valid_content.append(blk)
+
+                if dropped:
+                    log.debug("Dropped %d orphaned tool_result blocks at index %d", dropped, i)
+
+                if valid_content:
+                    sanitized.append({**msg, "content": valid_content})
+                # else: entire message was orphaned tool_results — drop it
+            else:
+                sanitized.append(msg)
+
+        self.messages = sanitized
