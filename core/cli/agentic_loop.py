@@ -524,9 +524,13 @@ class AgenticLoop:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # Strip internal metadata (e.g. _mcp_server) before sending to API
+                # Strip non-API fields before sending to Anthropic.
+                # Anthropic tool schema only allows: name, description, input_schema,
+                # cache_control, type. Extra fields (category, cost_tier, defer_loading,
+                # _mcp_server, etc.) cause 400 "Extra inputs are not permitted".
+                _API_ALLOWED_KEYS = {"name", "description", "input_schema", "cache_control", "type"}
                 api_tools = [
-                    {k: v for k, v in t.items() if not k.startswith("_")} for t in self._tools
+                    {k: v for k, v in t.items() if k in _API_ALLOWED_KEYS} for t in self._tools
                 ]
                 response = await self._client.messages.create(  # type: ignore[call-overload]
                     model=self.model,
