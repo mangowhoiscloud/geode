@@ -329,7 +329,7 @@ class ToolExecutor:
 
         _restore_terminal()
         console.print()
-        console.print("  [bold yellow]⚡ MCP tool requires approval[/bold yellow]")
+        console.print("  [bold yellow]MCP tool requires approval[/bold yellow]")
         console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
         console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
         console.print()
@@ -356,7 +356,7 @@ class ToolExecutor:
             summary = f"action={tool_input.get('action', '?')}"
 
         console.print()
-        console.print("  [bold yellow]✏ Write operation requires approval[/bold yellow]")
+        console.print("  [bold yellow]Write operation requires approval[/bold yellow]")
         console.print(f"  [dim]Tool:[/dim]    [bold]{tool_name}[/bold]")
         if summary:
             console.print(f"  [dim]Summary:[/dim] {summary}")
@@ -391,7 +391,7 @@ class ToolExecutor:
 
         _restore_terminal()
         console.print()
-        console.print("  [bold yellow]⚠ Bash command requires approval[/bold yellow]")
+        console.print("  [bold yellow]Bash command requires approval[/bold yellow]")
         console.print(f"  [dim]Command:[/dim] [bold]{command}[/bold]")
         if reason:
             console.print(f"  [dim]Reason:[/dim]  {reason}")

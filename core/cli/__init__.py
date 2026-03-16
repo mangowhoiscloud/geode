@@ -571,7 +571,7 @@ def _handle_interrupt(
     iteration = final_state.get("iteration", 1)
     confidence = final_state.get("composite_score", {})
     console.print(
-        f"\n  [bold yellow]⏸ Pipeline paused[/bold yellow] (iter={iteration}, steps={len(done)})"
+        f"\n  [bold yellow]Pipeline paused[/bold yellow] (iter={iteration}, steps={len(done)})"
     )
     if confidence:
         console.print(f"  [dim]Current confidence: {confidence}[/dim]")
@@ -1918,7 +1918,7 @@ def _build_tool_handlers(
 
             if failed:
                 console.print(
-                    f"  [warning]⚠ Partial success: {completed}/{total} steps "
+                    f"  [warning]Partial success: {completed}/{total} steps "
                     f"(failed: {', '.join(failed)})[/warning]"
                 )
             else:

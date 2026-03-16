@@ -124,7 +124,7 @@ def main():
     # Output JSON for collection
     print(f"\n--- {group.upper()} RESULTS ---")
     for r in results:
-        mark = "✓" if r["status"] == "PASS" else "⚠" if r["status"] == "WARN" else "✗"
+        mark = "✓" if r["status"] == "PASS" else "!" if r["status"] == "WARN" else "✗"
         issues_str = f" | {', '.join(r['issues'])}" if r["issues"] else ""
         print(
             f"  {mark} {r['tool']:20s} [{r['status']}] rounds={r['rounds']} called={r['called']} "
