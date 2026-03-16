@@ -72,7 +72,7 @@ def _tool_spinner(label: str) -> Iterator[None]:
     Displays ``label`` with a spinner while the wrapped block runs,
     then clears it on exit so OperationLogger markers (✓/✗) render cleanly.
     """
-    status = console.status(f"  [dim]⏳ {label}[/dim]", spinner="dots", spinner_style="cyan")
+    status = console.status(f"  [dim]✢ {label}[/dim]", spinner="dots", spinner_style="cyan")
     status.start()
     try:
         yield
