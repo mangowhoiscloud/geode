@@ -16,6 +16,7 @@ from core.infrastructure.ports.memory_port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
     SessionStorePort,
+    UserProfilePort,
 )
 
 log = logging.getLogger(__name__)
@@ -45,11 +46,13 @@ class ContextAssembler:
         organization_memory: OrganizationMemoryPort | None = None,
         project_memory: ProjectMemoryPort | None = None,
         session_store: SessionStorePort | None = None,
+        user_profile: UserProfilePort | None = None,
         freshness_threshold_s: float = DEFAULT_FRESHNESS_THRESHOLD_S,
     ) -> None:
         self._org_memory = organization_memory
         self._project_memory = project_memory
         self._session_store = session_store
+        self._user_profile = user_profile
         self._freshness_threshold = freshness_threshold_s
         self._last_assembly_time: float = 0.0
 
@@ -78,6 +81,20 @@ class ContextAssembler:
                     context["_soul_loaded"] = True
             except Exception:
                 context["_soul_loaded"] = False
+
+        # Tier 0.5 (user profile): persistent user preferences & identity
+        if self._user_profile:
+            try:
+                if self._user_profile.exists():
+                    profile_summary = self._user_profile.get_context_summary()
+                    if profile_summary:
+                        context["_user_profile_summary"] = profile_summary
+                    context["_user_profile_loaded"] = True
+                else:
+                    context["_user_profile_loaded"] = False
+            except Exception as e:
+                log.warning("Failed to load user profile: %s", e)
+                context["_user_profile_loaded"] = False
 
         # Tier 1 (base): Organization Memory
         if self._org_memory:
@@ -175,6 +192,12 @@ class ContextAssembler:
                     if stripped and not stripped.startswith("#") and not stripped.startswith(">"):
                         parts.append(f"Mission: {stripped[:budget_soul]}")
                         break
+
+        # User profile summary (Tier 0.5)
+        if context.get("_user_profile_loaded"):
+            profile_summary = context.get("_user_profile_summary", "")
+            if profile_summary:
+                parts.append(profile_summary[:budget_soul])
 
         if context.get("_org_loaded"):
             org_strategy = context.get("organization_strategy", "")

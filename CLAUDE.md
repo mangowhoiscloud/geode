@@ -52,7 +52,7 @@ L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 Parent AgenticLoop → delegate_task → SubAgentManager
   → CoalescingQueue (250ms dedup) → TaskGraph (DAG)
   → IsolatedRunner (MAX_CONCURRENT=5) → Worker×N
-  → SubAgentResult (summary 보존) → Token Guard (4096 tokens) → parent
+  → SubAgentResult (summary 보존) → Token Guard (16384 tokens) → parent
 ```
 
 | 구성 요소 | 설명 |
@@ -64,7 +64,7 @@ Parent AgenticLoop → delegate_task → SubAgentManager
 | **IsolatedRunner** | 스레드 풀 격리 실행. `MAX_CONCURRENT=5`, 타임아웃 + 에러 격리 |
 | **CoalescingQueue** | 250ms 윈도우 내 동일 task_id 중복 요청 병합 |
 | **TaskGraph** | DAG 기반 실행 순서 결정, 순환 감지, 실패 전파 (`propagate_failure`) |
-| **Token Guard** | tool_result 4096 토큰 초과 시 `summary` + 경량 필드만 보존하여 부모 컨텍스트 보호 |
+| **Token Guard** | tool_result 16384 토큰 초과 시 `summary` + 경량 필드만 보존하여 부모 컨텍스트 보호 (Settings 설정 가능) |
 
 **제어 파라미터:**
 

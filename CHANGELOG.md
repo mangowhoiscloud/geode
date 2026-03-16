@@ -28,6 +28,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Tier 0.5 User Profile 시스템 -- `~/.geode/user_profile/` 글로벌 + `.geode/user_profile/` 프로젝트 로컬 오버라이드, 프로필/선호/학습 패턴 영속 저장
+- `UserProfilePort` Protocol + `FileBasedUserProfile` 어댑터 (`core/memory/user_profile.py`)
+- 프로필 도구 4종 (`profile_show`, `profile_update`, `profile_preference`, `profile_learn`) -- ContextAssembler Tier 0.5 주입
+
+### Changed
+- Token Guard 완화 — `MAX_TOOL_RESULT_TOKENS` 4096 → 16384 (1M 컨텍스트 활용 극대화). `settings.max_tool_result_tokens`로 설정 가능
+
+### Fixed
+- 프롬프트/REPL 출력에서 장식용 이모지 제거 — 리포트 생성 외 모든 CLI 출력에서 이모지(⚡⚠✏⏸) 삭제, UI 마커(✓✗✢●)는 유지
+- APIConnectionError 간헐 반복 — httpx 커넥션 풀 설정 추가 (max_connections=20, keepalive_expiry=30s), 싱글턴 Anthropic 클라이언트로 전환, 재시도 백오프 2s/4s/8s로 단축, 연결 관련 설정 config.py로 이관
+
 ---
 
 ## [0.14.0] — 2026-03-16

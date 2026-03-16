@@ -253,14 +253,13 @@ class WebSearchTool:
 
         # Attempt real web search via Anthropic SDK
         try:
-            import anthropic
-
             from core.config import settings
+            from core.llm.client import get_anthropic_client
 
             if not settings.anthropic_api_key:
                 return self._stub_result(query, "no_api_key")
 
-            client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            client = get_anthropic_client()
             response = client.messages.create(
                 model=ANTHROPIC_BUDGET,
                 max_tokens=1024,

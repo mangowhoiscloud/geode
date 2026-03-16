@@ -82,6 +82,7 @@ from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.project import ProjectMemory
 from core.memory.session import InMemorySessionStore
 from core.memory.session_key import build_session_key, build_thread_config
+from core.memory.user_profile import FileBasedUserProfile
 from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.hot_reload import ConfigWatcher
@@ -419,18 +420,27 @@ class GeodeRuntime:
     def _build_memory(
         *,
         session_store: SessionStorePort,
-    ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler]:
-        """Build L2 memory components: project, organization, and context assembler."""
+    ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler, FileBasedUserProfile]:
+        """Build L2 memory components: project, org, context assembler, user profile."""
         project_memory = ProjectMemory()
 
         org_dir = settings.organization_fixture_dir
         fixture_dir = Path(org_dir) if org_dir else None
         organization_memory = MonoLakeOrganizationMemory(fixture_dir=fixture_dir)
 
+        # Tier 0.5: User Profile
+        global_profile_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
+        project_profile_dir = Path(".geode") / "user_profile"
+        user_profile = FileBasedUserProfile(
+            global_dir=global_profile_dir,
+            project_dir=project_profile_dir if project_profile_dir.parent.exists() else None,
+        )
+
         context_assembler = ContextAssembler(
             organization_memory=organization_memory,
             project_memory=project_memory,
             session_store=session_store,
+            user_profile=user_profile,
         )
 
         # Wire ContextAssembler into router node (L2 → L3 bridge)
@@ -444,7 +454,12 @@ class GeodeRuntime:
         set_project_memory(project_memory)
         set_org_memory(organization_memory)
 
-        return project_memory, organization_memory, context_assembler
+        # Wire user profile into profile tools via contextvars
+        from core.tools.profile_tools import set_user_profile
+
+        set_user_profile(user_profile)
+
+        return project_memory, organization_memory, context_assembler, user_profile
 
     @staticmethod
     def _build_automation(
@@ -794,7 +809,7 @@ class GeodeRuntime:
         Composed from sub-builders:
         - _build_hooks(): HookSystem, RunLog, StuckDetector
         - _build_auth(): ProfileStore, ProfileRotator, CooldownTracker
-        - _build_memory(): ProjectMemory, OrganizationMemory, ContextAssembler
+        - _build_memory(): ProjectMemory, OrganizationMemory, ContextAssembler, UserProfile
         - _build_automation(): Drift, ModelRegistry, ExpertPanel, etc.
         """
         # Domain adapter (Phase 4 — wire before anything that reads domain config)
@@ -934,7 +949,7 @@ class GeodeRuntime:
         cls._build_signal_adapter()
 
         # Memory subsystem
-        project_memory, organization_memory, context_assembler = cls._build_memory(
+        project_memory, organization_memory, context_assembler, user_profile = cls._build_memory(
             session_store=session_store,
         )
 

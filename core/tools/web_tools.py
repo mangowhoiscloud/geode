@@ -90,14 +90,13 @@ class GeneralWebSearchTool:
         max_results: int = kwargs.get("max_results", 5)
 
         try:
-            import anthropic
-
             from core.config import ANTHROPIC_BUDGET, settings
+            from core.llm.client import get_anthropic_client
 
             if not settings.anthropic_api_key:
                 return {"error": "No API key configured for web search"}
 
-            client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            client = get_anthropic_client()
             response = client.messages.create(
                 model=ANTHROPIC_BUDGET,
                 max_tokens=1024,
