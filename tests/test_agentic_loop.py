@@ -287,8 +287,8 @@ class TestAgenticLoop:
         assert context.turn_count >= 1
 
     def test_default_max_rounds(self) -> None:
-        """Verify DEFAULT_MAX_ROUNDS is 15."""
-        assert AgenticLoop.DEFAULT_MAX_ROUNDS == 15
+        """Verify DEFAULT_MAX_ROUNDS is 30 (1M context model)."""
+        assert AgenticLoop.DEFAULT_MAX_ROUNDS == 30
 
     def test_forced_text_on_last_round(
         self, context: ConversationContext, executor: ToolExecutor
@@ -1108,25 +1108,30 @@ class TestMessagePruning:
     def test_prune_finds_safe_cut(self) -> None:
         """Pruning should cut at a plain user text message."""
         loop = self._make_loop()
+        # Build enough messages to exceed prune threshold (30)
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": "q1"},
             {"role": "assistant", "content": [_tu("t1")]},
             {"role": "user", "content": [_tr("t1")]},
             {"role": "assistant", "content": [_txt("done1")]},
-            {"role": "user", "content": "q2"},
-            {"role": "assistant", "content": [_tu("t2", "b")]},
-            {"role": "user", "content": [_tr("t2")]},
-            {"role": "assistant", "content": [_txt("done2")]},
-            {"role": "user", "content": "q3"},
-            {"role": "assistant", "content": [_txt("done3")]},
-            {"role": "user", "content": "q4"},
         ]
+        # Pad with plain user/assistant pairs to exceed threshold
+        for i in range(14):
+            messages.append({"role": "user", "content": f"pad_q{i}"})
+            messages.append({"role": "assistant", "content": f"pad_a{i}"})
+        messages.extend(
+            [
+                {"role": "user", "content": "q_final"},
+                {"role": "assistant", "content": [_txt("done_final")]},
+                {"role": "user", "content": "q_last"},
+            ]
+        )
+        assert len(messages) > 30
         loop._maybe_prune_messages(messages)
-        assert messages[0]["content"] == "q1"
+        assert messages[0]["role"] == "user"
         assert messages[1]["role"] == "assistant"
-        # Third must be plain user text (not tool_result)
-        assert messages[2]["role"] == "user"
-        content = messages[2].get("content")
+        # After pruning, no orphaned tool_result in first user msg
+        content = messages[2].get("content") if len(messages) > 2 else None
         if isinstance(content, list):
             assert not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content)
 

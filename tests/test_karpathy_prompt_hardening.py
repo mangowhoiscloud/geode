@@ -680,20 +680,20 @@ class TestAgenticLoopPruning:
         from core.cli.agentic_loop import AgenticLoop
 
         loop = AgenticLoop.__new__(AgenticLoop)
-        messages: list[dict[str, Any]] = [{"role": "user", "content": f"msg{i}"} for i in range(10)]
+        messages: list[dict[str, Any]] = [{"role": "user", "content": f"msg{i}"} for i in range(30)]
         loop._maybe_prune_messages(messages)
-        assert len(messages) == 10  # Exactly 10 = no prune
+        assert len(messages) == 30  # Exactly 30 = no prune
 
     def test_pruning_above_threshold(self):
         from core.cli.agentic_loop import AgenticLoop
 
         loop = AgenticLoop.__new__(AgenticLoop)
-        # Build alternating user/assistant (12 msgs = 6 rounds)
+        # Build alternating user/assistant (32 msgs = 16 rounds)
         messages: list[dict[str, Any]] = [{"role": "user", "content": "first message"}]
-        for i in range(1, 12):
+        for i in range(1, 32):
             role = "assistant" if i % 2 else "user"
             messages.append({"role": role, "content": f"msg{i}"})
-        assert len(messages) == 12
+        assert len(messages) == 32
 
         loop._maybe_prune_messages(messages)
 
