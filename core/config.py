@@ -102,8 +102,8 @@ class Settings(BaseSettings):
     # LLM Connection — httpx pool & timeout tuning
     llm_max_connections: int = 20  # httpx pool: max total connections
     llm_max_keepalive_connections: int = 5  # httpx pool: max idle keep-alive connections
-    llm_keepalive_expiry: float = 30.0  # seconds before idle connection is closed
-    llm_connect_timeout: float = 10.0  # TCP connect timeout (seconds)
+    llm_keepalive_expiry: float = 15.0  # idle conn TTL (shorter = fewer stale)
+    llm_connect_timeout: float = 5.0  # TCP connect timeout (fail fast)
     llm_read_timeout: float = 120.0  # response read timeout (seconds)
     llm_write_timeout: float = 30.0  # request write timeout (seconds)
     llm_pool_timeout: float = 10.0  # wait for available connection from pool (seconds)
