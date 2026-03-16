@@ -32,6 +32,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Tier 0.5 User Profile 시스템 -- `~/.geode/user_profile/` 글로벌 + `.geode/user_profile/` 프로젝트 로컬 오버라이드, 프로필/선호/학습 패턴 영속 저장
 - `UserProfilePort` Protocol + `FileBasedUserProfile` 어댑터 (`core/memory/user_profile.py`)
 - 프로필 도구 4종 (`profile_show`, `profile_update`, `profile_preference`, `profile_learn`) -- ContextAssembler Tier 0.5 주입
+- MCP 서버 코드 레벨 등록 (`MCPRegistry`) — 카탈로그 기반 자동 탐지로 세션 간 설정 영속화. 기본 서버 4종(steam, fetch, sequential-thinking, playwright) 항상 등록, env var 보유 서버 19종 자동 발견, `.claude/mcp_servers.json` 파일 오버라이드 병합
 
 ### Changed
 - README 예시 리뉴얼 — 게임 IP 중심 예시를 범용 리서치 에이전트 자연어 쿼리로 교체. Quick Start REPL 우선, 자연어 입력 예시 7종 추가, Game IP는 Domain Plugin 하위로 이동
