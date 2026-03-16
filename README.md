@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/geode-social-preview.png" alt="GEODE — Autonomous Research Harness" width="720" />
+  <img src="assets/geode-mascot.png" alt="GEODE — Autonomous Research Harness" width="360" />
 </p>
 
 <p align="center">
