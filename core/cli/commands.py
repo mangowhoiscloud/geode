@@ -329,8 +329,8 @@ def cmd_auth(args: str) -> None:
         console.print()
         console.print("  [header]Auth Profiles[/header]")
         for s in statuses:
-            icon = "✓" if s["status"] == "active" else "⏳" if "cooldown" in s["status"] else "✗"
-            style = "success" if icon == "✓" else "warning" if icon == "⏳" else "error"
+            icon = "✓" if s["status"] == "active" else "●" if "cooldown" in s["status"] else "✗"
+            style = "success" if icon == "✓" else "warning" if icon == "●" else "error"
             console.print(
                 f"  [{style}]{icon}[/{style}] {s['name']:<22} "
                 f"{s['type']:<10} {s['display']:<18} [{style}][{s['status']}][/{style}]"

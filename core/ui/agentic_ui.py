@@ -88,7 +88,7 @@ class OperationLogger:
     def begin_round(self, label: str = "AgenticLoop") -> None:
         """Start a new agentic round — print header if not yet shown."""
         if not self._header_printed:
-            console.print(f"\n[bold]⏺ {label}[/bold]")
+            console.print(f"\n[bold]● {label}[/bold]")
             self._header_printed = True
 
     def log_tool_call(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
@@ -252,7 +252,7 @@ def render_subagent_complete(count: int, elapsed_s: float) -> None:
 def render_status_line() -> None:
     """Render Claude Code-style status line after each agentic result.
 
-    Format: ✻ Worked for 48s · claude-opus-4-6 · ↓12.3k ↑2.1k · $0.42 · 11% context
+    Format: ✢ Worked for 48s · claude-opus-4-6 · ↓12.3k ↑2.1k · $0.42 · 11% context
     """
     meter = get_session_meter()
     if meter is None:
@@ -267,7 +267,7 @@ def render_status_line() -> None:
         cost = acc.total_cost_usd
         ctx_pct = tracker.context_usage_pct(meter.model)
 
-        parts = [f"✻ Worked for {meter.elapsed_display}"]
+        parts = [f"✢ Worked for {meter.elapsed_display}"]
         parts.append(meter.model)
         parts.append(f"↓{in_str} ↑{out_str}")
         if cost > 0:
@@ -278,7 +278,7 @@ def render_status_line() -> None:
         console.print(f"\n  [dim]{line}[/dim]")
     except Exception:
         # Fallback: just show elapsed time
-        console.print(f"\n  [dim]✻ Worked for {meter.elapsed_display}[/dim]")
+        console.print(f"\n  [dim]✢ Worked for {meter.elapsed_display}[/dim]")
 
 
 def _fmt_tokens(n: int) -> str:
