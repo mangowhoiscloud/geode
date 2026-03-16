@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     subagent_max_rounds: int = 10  # 서브에이전트 agentic loop 라운드 제한
     subagent_max_tokens: int = 8192  # 서브에이전트 출력 토큰 제한
 
+    # Token Guard — tool result truncation threshold
+    max_tool_result_tokens: int = 16384  # ~65K chars; 4096 was too conservative for 1M context
+
     # Plan Mode — Autonomous Execution
     plan_auto_execute: bool = False  # GEODE_PLAN_AUTO_EXECUTE=true to enable
 

@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- Token Guard 완화 — `MAX_TOOL_RESULT_TOKENS` 4096 → 16384 (1M 컨텍스트 활용 극대화). `settings.max_tool_result_tokens`로 설정 가능
+
 ---
 
 ## [0.14.0] — 2026-03-16
