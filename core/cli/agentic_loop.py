@@ -553,6 +553,19 @@ class AgenticLoop:
                     max_tokens=self.max_tokens,
                     temperature=0.0,
                     timeout=120.0,
+                    extra_headers={
+                        "anthropic-beta": "context-management-2025-06-27",
+                    },
+                    extra_body={
+                        "context_management": {
+                            "edits": [
+                                {
+                                    "type": "clear_tool_uses_20250919",
+                                    "keep": {"type": "tool_uses", "value": 5},
+                                }
+                            ]
+                        }
+                    },
                 )
                 return response  # type: ignore[no-any-return]
 
