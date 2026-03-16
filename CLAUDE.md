@@ -4,7 +4,7 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.13.1
+- **Version**: 0.13.2
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -433,7 +433,7 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
 
 #### 4a. CHANGELOG.md 동기화 (매 커밋)
 
-**모든 코드 변경 커밋에 CHANGELOG 항목을 포함한다.** `[Unreleased]`에 누적 → 릴리스 시 버전 부여.
+**모든 코드 변경 커밋에 CHANGELOG 항목을 포함한다.** `[Unreleased]`에 누적 → main 머지 시 반드시 버전 부여.
 
 ```bash
 # 변경 유형 판별 → 해당 카테고리에 1줄 추가
@@ -451,7 +451,22 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
 
 **문서/리팩터만 변경 시**: CHANGELOG 항목 불필요 (Scope Rules 참조).
 
-#### 4b. README.md + CLAUDE.md 수치·묘사·시각화 동기화 (매 커밋)
+**[Unreleased] 잔류 금지 규칙**: develop → main PR 머지 시 `[Unreleased]` 섹션에 항목이 남아 있으면 **반드시 동일 머지 커밋 또는 직후 릴리스 커밋에서 버전을 부여**한다. main 브랜치에 `[Unreleased]` 항목이 존재하는 상태는 허용하지 않는다.
+
+#### 4b. ABOUT 동기화 (프로젝트 정체성)
+
+프로젝트 정체성 관련 텍스트는 아래 3곳에서 일관성을 유지한다:
+
+| 항목 | CLAUDE.md | README.md | pyproject.toml |
+|------|-----------|-----------|----------------|
+| 프로젝트 이름 | `# GEODE — 범용 자율 실행 에이전트` | `# GEODE vX.Y.Z — Autonomous Research Harness` | `description = "GEODE — ..."` |
+| 한줄 설명 | Project Overview 첫 문장 | 타이틀 아래 첫 문장 | `description` 필드 |
+| 버전 | `Version: X.Y.Z` | 타이틀 `vX.Y.Z` + 뱃지 | `version = "X.Y.Z"` |
+| Highlights | Key Design Decisions | Highlights 리스트 | — |
+
+변경 시 3곳 동시 갱신. 특히 **버전 번호는 CHANGELOG, CLAUDE.md, README.md 타이틀, pyproject.toml 4곳 모두** 일치해야 한다.
+
+#### 4c. README.md + CLAUDE.md 수치·묘사·시각화 동기화 (매 커밋)
 
 ```bash
 # 아래 수치가 변경되면 README.md + CLAUDE.md를 같이 갱신
@@ -486,28 +501,32 @@ echo "Tests: $TESTS  Modules: $MODULES  Tools: $TOOLS"
 | MCP Adapter 목록 | MCP & Tool Architecture (mermaid) + 테이블 | `.claude/mcp_servers.json` 대조 |
 | Sub-Agent 구성요소 | Sub-Agent Orchestration (mermaid) | `sub_agent.py` 클래스 대조 |
 | External IP Fallback 단계 | External IP Signal Fallback (mermaid) | `router.py`, `signals.py` 대조 |
-| CHANGELOG `[Unreleased]` | — | 머지된 PR body와 대조 (feature/fix PR만) |
 
-#### 4c. 버전업 판단 (릴리스 시에만)
+#### 4d. 버전업 판단 및 릴리스
 
-| 변경 규모 | 버전 | 예시 |
-|----------|------|------|
-| 호환 깨짐 (API/State 변경) | MAJOR (x.0.0) | GeodeState 필드 삭제, CLI 명령어 변경 |
-| 새 기능 추가 | MINOR (0.x.0) | 새 tool, 새 노드, 새 검증 레이어 |
-| 버그 수정/개선 | PATCH (0.0.x) | 직렬화 수정, 트레이싱 추가 |
-| 문서/리팩터만 | 버전업 안 함 | README 수정, 내부 리팩터 |
+**main 머지 시 `[Unreleased]` 항목이 있으면 반드시 버전을 부여한다.** `[Unreleased]` 상태로 main에 잔류하는 것은 금지.
+
+| 변경 규모 | 버전 | 판단 기준 | 예시 |
+|----------|------|----------|------|
+| 호환 깨짐 | MAJOR (x.0.0) | API/State 스키마 변경, CLI 인터페이스 변경, 기존 도구 삭제 | GeodeState 필드 삭제, 명령어 rename |
+| 새 기능 추가 | MINOR (0.x.0) | 새 tool/노드/검증 레이어, 새 MCP 어댑터, 새 도메인 플러그인, 새 CLI 커맨드 | `delegate_task` 도구 추가, BiasBuster 신규 bias 유형 |
+| 버그 수정/UI 개선 | PATCH (0.0.x) | 기존 동작 수정, pre-commit/CI 수정, 마커/스피너 변경, 타임아웃 조정 | weekday 변환 버그, 이모지 통일, cache false positive |
+| 문서/리팩터만 | 버전업 안 함 | README 수정, 내부 리팩터, 블로그 추가 | — |
+
+**MINOR vs PATCH 판단 원칙**: "사용자가 새로운 기능을 얻는가?" → MINOR. "기존 기능이 더 잘 동작하는가?" → PATCH.
 
 ```
 릴리스 절차:
 1. [Unreleased] → [x.y.z] — YYYY-MM-DD 로 변환
 2. CLAUDE.md Version 필드 업데이트
-3. pyproject.toml version 필드 업데이트
-4. Version History 테이블에 행 추가
-5. 비교 링크 업데이트 ([Unreleased] compare URL)
-6. 동일 커밋에 CHANGELOG.md + CLAUDE.md + pyproject.toml 포함
+3. README.md 타이틀 버전 업데이트
+4. pyproject.toml version 필드 업데이트
+5. Version History 테이블에 행 추가
+6. 비교 링크 업데이트 ([Unreleased] compare URL)
+7. 동일 커밋에 CHANGELOG.md + CLAUDE.md + README.md + pyproject.toml 포함
 ```
 
-#### 4d. Skill / E2E 문서 (해당 시)
+#### 4e. Skill / E2E 문서 (해당 시)
 
 ```
 1. docs/e2e-orchestration-scenarios.md 갱신 (시나리오 추가/변경)
