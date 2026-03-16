@@ -28,6 +28,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.13.1] — 2026-03-16
+
 ### Fixed
 - Anthropic API tool 전달 시 `category`/`cost_tier` extra fields 400 에러 — underscore prefix 필터를 허용 키 화이트리스트(`name`, `description`, `input_schema`, `cache_control`, `type`)로 교체
 
