@@ -2416,14 +2416,13 @@ def _restore_terminal() -> None:
         pass
 
 
+_original_sigint = signal.getsignal(signal.SIGINT)
+
+
 def _sigint_handler(signum: int, frame: Any) -> None:
     """SIGINT handler that restores terminal before raising KeyboardInterrupt."""
     _restore_terminal()
     raise KeyboardInterrupt
-
-
-# Install signal handler so Ctrl-C always restores terminal state
-signal.signal(signal.SIGINT, _sigint_handler)
 
 
 # ---------------------------------------------------------------------------
@@ -2492,11 +2491,17 @@ def _read_multiline_input(prompt: str) -> str:
     session = _get_prompt_session()
     if session is not None:
         try:
+            # Restore default SIGINT so prompt_toolkit can handle Ctrl-C internally.
+            # Our custom handler interferes with prompt_toolkit's input loop.
+            signal.signal(signal.SIGINT, _original_sigint)
             text: str = str(session.prompt()).strip()
         except (KeyboardInterrupt, EOFError):
             raise
         except Exception:
             text = str(console.input("> ")).strip()
+        finally:
+            # Re-install our handler for the non-input phase (spinner, tool execution)
+            signal.signal(signal.SIGINT, _sigint_handler)
     else:
         text = str(console.input("> ")).strip()
 
