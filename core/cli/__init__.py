@@ -1170,6 +1170,29 @@ def _handle_command(
         from core.fixtures import FIXTURE_MAP as _FM
 
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
+
+        # MCP status section
+        from core.infrastructure.adapters.mcp.registry import MCPRegistry as _MCPReg
+
+        _reg = _MCPReg()
+        _json_servers = None
+        if mcp_manager is not None:
+            _json_servers = {s["name"]: s for s in mcp_manager.list_servers()}
+        _mcp_st = _reg.get_mcp_status(json_config_servers=_json_servers)
+        console.print()
+        console.print("  [header]MCP Servers[/header]")
+        for srv in _mcp_st["active"]:
+            _src = "json" if srv["source"] == "json_config" else "auto"
+            _desc = f" -- {srv['description']}" if srv["description"] else ""
+            console.print(f"    [green]OK[/green] {srv['name']} [dim]({_src}){_desc}[/dim]")
+        if not _mcp_st["active"]:
+            console.print("    [muted]No active servers[/muted]")
+        if _mcp_st["available_inactive"]:
+            console.print()
+            console.print("  [header]MCP Available (env missing)[/header]")
+            for srv in _mcp_st["available_inactive"]:
+                _env = ", ".join(srv["missing_env"])
+                console.print(f"    [yellow]--[/yellow] {srv['name']} [dim]needs: {_env}[/dim]")
         console.print()
     elif action == "compare":
         parts = args.strip().split()
@@ -1636,6 +1659,7 @@ def _build_tool_handlers(
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
         from core.fixtures import FIXTURE_MAP as _FM
+        from core.infrastructure.adapters.mcp.registry import MCPRegistry
 
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
@@ -1651,7 +1675,34 @@ def _build_tool_handlers(
         console.print(f"  OpenAI API: {oai_status}")
         console.print(f"  Mode: [bold]{mode}[/bold]")
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
+
+        # MCP status
+        registry = MCPRegistry()
+        json_servers = None
+        if mcp_manager is not None:
+            json_servers = {s["name"]: s for s in mcp_manager.list_servers()}
+        mcp_status = registry.get_mcp_status(json_config_servers=json_servers)
+
         console.print()
+        console.print("  [header]MCP Servers[/header]")
+        active = mcp_status["active"]
+        if active:
+            for srv in active:
+                src_tag = "json" if srv["source"] == "json_config" else "auto"
+                desc = f" -- {srv['description']}" if srv["description"] else ""
+                console.print(f"    [green]OK[/green] {srv['name']} [dim]({src_tag}){desc}[/dim]")
+        else:
+            console.print("    [muted]No active servers[/muted]")
+
+        inactive = mcp_status["available_inactive"]
+        if inactive:
+            console.print()
+            console.print("  [header]MCP Available (env missing)[/header]")
+            for srv in inactive:
+                env_list = ", ".join(srv["missing_env"])
+                console.print(f"    [yellow]--[/yellow] {srv['name']} [dim]needs: {env_list}[/dim]")
+        console.print()
+
         return {
             "status": "ok",
             "action": "status",
@@ -1661,6 +1712,7 @@ def _build_tool_handlers(
             "openai_configured": oai_ok,
             "mode": mode,
             "fixture_count": len(_FM),
+            "mcp_status": mcp_status,
         }
 
     def handle_switch_model(**kwargs: Any) -> dict[str, Any]:

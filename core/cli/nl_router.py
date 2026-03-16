@@ -326,7 +326,10 @@ _OFFLINE_BATCH = re.compile(
     r"(?:배치|전체\s*(?:ip\s*)?분석|모든\s*(?:ip\s*)?분석|순위|rank|batch|all\s*ip|top\s*\d+)",
     re.IGNORECASE,
 )
-_OFFLINE_STATUS = re.compile(r"(?:상태|건강|health|status|설정|config|모델\s*뭐)", re.IGNORECASE)
+_OFFLINE_STATUS = re.compile(
+    r"(?:상태|건강|health|status|설정|config|모델\s*뭐|mcp\s*(?:리스트|목록|상태|서버|연결|list|server|status))",
+    re.IGNORECASE,
+)
 _OFFLINE_MODEL = re.compile(
     r"(?:모델\s*바꿔|switch\s*model|앙상블|ensemble|cross\s*모드)", re.IGNORECASE
 )
