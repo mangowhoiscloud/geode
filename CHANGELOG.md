@@ -28,6 +28,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.15.0] — 2026-03-16
+
+Tier 0.5 User Profile, MCP 코드 레벨 영속화, Token Guard/턴 제한 철폐, APIConnectionError 해소, README 리서치 에이전트 정체성 반영.
+
 ### Added
 - Tier 0.5 User Profile 시스템 -- `~/.geode/user_profile/` 글로벌 + `.geode/user_profile/` 프로젝트 로컬 오버라이드, 프로필/선호/학습 패턴 영속 저장
 - `UserProfilePort` Protocol + `FileBasedUserProfile` 어댑터 (`core/memory/user_profile.py`)
