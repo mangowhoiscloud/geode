@@ -167,7 +167,7 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 _PINNED_HASHES: dict[str, str] = {
     "AGENTIC_SUFFIX": "8ec998fdf916",
     "ANALYST_SPECIFIC": "5a696a2d5ebb",
-    "ANALYST_SYSTEM": "924433f5bf11",
+    "ANALYST_SYSTEM": "90acc856a5b2",
     "ANALYST_TOOLS_SUFFIX": "2961fb31d96f",
     "ANALYST_USER": "e59d00faadd5",
     "BIASBUSTER_SYSTEM": "07987c709fd9",
