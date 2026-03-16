@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=for-the-badge&label=CI&logo=github" alt="CI"></a>
-  <img src="https://img.shields.io/badge/tests-2366%2B%20passed-10b981?style=for-the-badge&logo=pytest" alt="Tests">
-  <img src="https://img.shields.io/badge/python-3.12%2B-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/mypy-strict-blue?style=for-the-badge" alt="mypy">
-  <img src="https://img.shields.io/badge/license-internal-gray?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
+  <img src="https://img.shields.io/badge/Opus%204.6-1M%20context-1e293b?style=flat-square" alt="Opus 4.6">
+  <img src="https://img.shields.io/badge/38%20tools-MCP%20native-1e293b?style=flat-square" alt="38 Tools">
+  <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
+  <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
 # GEODE v0.13.2 — Autonomous Research Harness
