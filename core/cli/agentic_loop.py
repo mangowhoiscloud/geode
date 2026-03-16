@@ -80,14 +80,16 @@ def get_agentic_tools(
 # ---------------------------------------------------------------------------
 # Token guard — prevent oversized tool results from exploding context (P2-A)
 # ---------------------------------------------------------------------------
-MAX_TOOL_RESULT_TOKENS = 4096  # ~16K chars
+MAX_TOOL_RESULT_TOKENS = 16384  # backward-compat; canonical: settings.max_tool_result_tokens
 
 
 def _guard_tool_result(
     result: dict[str, Any],
-    max_tokens: int = MAX_TOOL_RESULT_TOKENS,
+    max_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Truncate oversized tool results while preserving summary."""
+    if max_tokens is None:
+        max_tokens = settings.max_tool_result_tokens
     try:
         serialized = json.dumps(result, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
