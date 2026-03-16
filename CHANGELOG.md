@@ -34,6 +34,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 - Identity Pivot 완성 — `analyst.md` SYSTEM 프롬프트에서 "undervalued IP discovery agent" 제거, 게임 전용 예시를 도메인 비의존적 예시로 교체
 - `ANALYST_SYSTEM` 해시 핀 갱신 (`924433f5bf11` → `90acc856a5b2`)
+- UI 팔레트 톤다운 — 선명한 5색(coral/gold/cyan/magenta/crystal)을 차분한 톤(rose/amber/cadet/iris/lavender)으로 교체. HTML 리포트 CSS 변수 + gradient 동기화
 
 ---
 

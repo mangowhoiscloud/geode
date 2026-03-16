@@ -1,10 +1,11 @@
 """Rich Console singleton — GEODE brand theme.
 
-Brand colors (from axolotl mascot):
-  Coral/pink (#f5a0a0)  — axolotl body → brand identity
-  Gold (#ffd700)         — headlamp → energy, highlights
-  Cyan (#00ced1)         — crystals, tech → interactive elements
-  Magenta (#d946ef)      — gills → accent, tool names
+Brand colors (from axolotl mascot, toned-down for readability):
+  Rose (#d4a0a0)     — axolotl body → brand identity (muted coral)
+  Amber (#e0b040)    — headlamp → energy, highlights (warm gold)
+  Cadet (#5f9ea0)    — crystals, tech → interactive elements (calm cyan)
+  Iris (#9775c4)     — gills → accent, tool names (soft purple)
+  Lavender (#a88fd4) — geode crystal purple (muted crystal)
 """
 
 from __future__ import annotations
@@ -12,12 +13,12 @@ from __future__ import annotations
 from rich.console import Console
 from rich.theme import Theme
 
-# -- Brand palette (terminal-safe) --
-_CORAL = "#f5a0a0"  # axolotl body
-_GOLD = "#ffd700"  # headlamp
-_CYAN = "#00ced1"  # crystals / tech
-_MAGENTA = "#d946ef"  # gills / accent
-_CRYSTAL = "#c8a2ff"  # geode crystal purple
+# -- Brand palette (terminal-safe, toned-down) --
+_CORAL = "#d4a0a0"  # axolotl body (muted rose)
+_GOLD = "#e0b040"  # headlamp (warm amber)
+_CYAN = "#5f9ea0"  # crystals / tech (calm cadet)
+_MAGENTA = "#9775c4"  # gills / accent (soft iris)
+_CRYSTAL = "#a88fd4"  # geode crystal (muted lavender)
 
 GEODE_THEME = Theme(
     {
