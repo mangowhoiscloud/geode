@@ -87,10 +87,12 @@ class TestBashSpinner:
     def test_bash_no_spinner_when_denied(
         self, mock_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
-        """When user denies bash, no spinner is shown."""
+        """When user denies non-safe bash command, no spinner is shown."""
         mock_console.input.return_value = "n"
 
-        result = ToolExecutor().execute("run_bash", {"command": "echo hello", "reason": "test"})
+        result = ToolExecutor().execute(
+            "run_bash", {"command": "npm install foo", "reason": "test"}
+        )
 
         mock_spinner.assert_not_called()
         assert result.get("denied") is True

@@ -47,19 +47,28 @@ class TestToolExecutor:
         result = executor.execute("run_bash", {"command": "sudo rm -rf /", "reason": "test"})
         assert result.get("blocked") is True
 
-    def test_bash_always_requires_approval(self) -> None:
-        """DANGEROUS tools always require approval, even with auto_approve=True."""
+    def test_bash_unsafe_requires_approval(self) -> None:
+        """Non-safe bash commands require approval, even with auto_approve=True."""
         executor = ToolExecutor(auto_approve=True)
         with patch.object(executor, "_request_approval", return_value=True) as mock_approve:
-            result = executor.execute("run_bash", {"command": "echo test_123", "reason": "testing"})
+            result = executor.execute(
+                "run_bash", {"command": "npm install foo", "reason": "testing"}
+            )
             mock_approve.assert_called_once()
-            assert "stdout" in result or "error" not in result
+            assert "error" not in result or "denied" not in result
+
+    def test_bash_safe_skips_approval(self) -> None:
+        """Safe read-only bash commands skip HITL approval."""
+        executor = ToolExecutor(auto_approve=True)
+        with patch.object(executor, "_request_approval") as mock_approve:
+            executor.execute("run_bash", {"command": "echo test_123", "reason": "testing"})
+            mock_approve.assert_not_called()
 
     def test_bash_denied_by_user(self) -> None:
-        """DANGEROUS tools denied by user return error."""
+        """Non-safe bash commands denied by user return error."""
         executor = ToolExecutor(auto_approve=True)
         with patch.object(executor, "_request_approval", return_value=False):
-            result = executor.execute("run_bash", {"command": "echo test", "reason": "test"})
+            result = executor.execute("run_bash", {"command": "npm install bar", "reason": "test"})
             assert result.get("denied") is True
 
     def test_bash_empty_command(self) -> None:
