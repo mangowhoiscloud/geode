@@ -32,9 +32,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Tier 0.5 User Profile 시스템 -- `~/.geode/user_profile/` 글로벌 + `.geode/user_profile/` 프로젝트 로컬 오버라이드, 프로필/선호/학습 패턴 영속 저장
 - `UserProfilePort` Protocol + `FileBasedUserProfile` 어댑터 (`core/memory/user_profile.py`)
 - 프로필 도구 4종 (`profile_show`, `profile_update`, `profile_preference`, `profile_learn`) -- ContextAssembler Tier 0.5 주입
+- MCP 서버 코드 레벨 등록 (`MCPRegistry`) — 카탈로그 기반 자동 탐지로 세션 간 설정 영속화. 기본 서버 4종(steam, fetch, sequential-thinking, playwright) 항상 등록, env var 보유 서버 19종 자동 발견, `.claude/mcp_servers.json` 파일 오버라이드 병합
 
 ### Changed
+- README 예시 리뉴얼 — 게임 IP 중심 예시를 범용 리서치 에이전트 자연어 쿼리로 교체. Quick Start REPL 우선, 자연어 입력 예시 7종 추가, Game IP는 Domain Plugin 하위로 이동
 - Token Guard 상한 제거 — `MAX_TOOL_RESULT_TOKENS` 기본값 0 (무제한). 프론티어 합의: 하드 캡 대신 압축(Karpathy P6) + `clear_tool_uses` 서버측 정리로 컨텍스트 관리. `GEODE_MAX_TOOL_RESULT_TOKENS` 환경변수로 필요 시 상한 재설정 가능
+- 대화 턴/라운드 제한 대폭 완화 — `max_turns` 20→200, `DEFAULT_MAX_ROUNDS` 30→50. 1M 컨텍스트 + 서버측 `clear_tool_uses`가 주 관리 담당, 클라이언트 제한은 극단적 runaway 방지용 안전망으로만 유지
 
 ### Fixed
 - 프롬프트/REPL 출력에서 장식용 이모지 제거 — 리포트 생성 외 모든 CLI 출력에서 이모지(⚡⚠✏⏸) 삭제, UI 마커(✓✗✢●)는 유지
