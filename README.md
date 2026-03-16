@@ -67,7 +67,7 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다:
 | **Domain Plugin** | `DomainPort` Protocol — 도메인별 analysts/evaluators/scoring 플러그인 (게임 IP: `GameIPDomain`) |
 | **Observability** | LangSmith 토큰 추적 + 비용 계산, Claude Code 스타일 상태줄 |
 | **Scheduler** | 자연어 스케줄링 ("매일 오전 9시 분석해줘" → AT/EVERY/CRON) |
-| **2243+ Tests** | 132 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
+| **2366+ Tests** | 134 modules, coverage ≥ 75%, pytest + ruff + mypy strict + bandit |
 
 ## Usage
 
@@ -957,6 +957,7 @@ core/
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
 │   ├── commands.py             # Slash command dispatch (17 commands)
 │   ├── conversation.py         # Multi-turn sliding-window context
+│   ├── error_recovery.py       # ErrorRecoveryStrategy (retry → alternative → fallback → escalate)
 │   ├── nl_router.py            # Natural language intent classification
 │   ├── search.py               # IP search engine (synonym expansion)
 │   ├── startup.py              # Readiness check, Graceful Degradation
@@ -981,7 +982,7 @@ core/
 │   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, DomainPort
 │   └── adapters/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/                # Steam, Brave, LinkedIn MCP adapters + catalog (29 entries)
+│       └── mcp/                # Steam, Brave, LinkedIn MCP adapters + CompositeSignalAdapter + catalog (29 entries)
 ├── llm/                        # LLM client (prompt caching, streaming)
 │   ├── client.py               # Anthropic wrapper + token tracking + cost
 │   ├── token_tracker.py        # TokenTracker singleton (model pricing)
@@ -991,6 +992,7 @@ core/
 ├── nodes/                      # Pipeline nodes (8: router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
 ├── orchestration/
 │   ├── hooks.py                # HookSystem (30 events + async atrigger)
+│   ├── goal_decomposer.py     # GoalDecomposer (compound request → sub-goal DAG)
 │   ├── hook_discovery.py       # Plugin-based hook loading
 │   ├── isolated_execution.py   # IsolatedRunner (MAX_CONCURRENT=5, thread pool)
 │   ├── task_system.py          # TaskGraph DAG (dependency, cycle detection)
