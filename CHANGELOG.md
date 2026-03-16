@@ -30,6 +30,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - Pre-commit mypy/bandit "files were modified" 오탐 — mypy `--cache-dir` → `--no-incremental`, bandit `--quiet` 추가
+- Cron weekday 변환 버그 — Python weekday(0=Mon) → cron 표준(0=Sun) 미변환으로 일요일 스케줄이 월요일에 실행되던 문제
+- `/trigger fire` 명령이 TriggerManager 없이 성공으로 표시되던 문제를 경고 메시지로 변경
 
 ---
 

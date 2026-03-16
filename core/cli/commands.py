@@ -808,8 +808,11 @@ def cmd_trigger(args: str) -> None:
     parts = arg.split(None, 1)
     if parts[0] == "fire" and len(parts) > 1:
         event_name = parts[1]
-        console.print(f"  [success]Fired event: {event_name}[/success]")
-        console.print("  [muted]Dispatched to TriggerManager via HookSystem.[/muted]")
+        console.print(f"  [warning]Cannot fire event: {event_name}[/warning]")
+        console.print(
+            "  [muted]Manual event dispatch requires a running TriggerManager "
+            "instance (available in GeodeRuntime, not standalone REPL).[/muted]"
+        )
         console.print()
         return
 
