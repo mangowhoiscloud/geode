@@ -275,7 +275,12 @@ def _now_minutes(timezone: str) -> int:
 
 
 def _cron_tuple_for_tz(timezone: str) -> tuple[int, int, int, int, int]:
-    """Get a cron-compatible tuple, optionally in a specific timezone."""
+    """Get a cron-compatible tuple, optionally in a specific timezone.
+
+    Returns weekday in standard cron convention: 0=Sun, 1=Mon, ..., 6=Sat.
+    Python's ``datetime.weekday()`` uses 0=Mon, so we convert:
+    ``(weekday() + 1) % 7``.
+    """
     if timezone:
         try:
             import datetime
@@ -283,7 +288,8 @@ def _cron_tuple_for_tz(timezone: str) -> tuple[int, int, int, int, int]:
 
             tz = zoneinfo.ZoneInfo(timezone)
             now = datetime.datetime.now(tz=tz)
-            return (now.minute, now.hour, now.day, now.month, now.weekday())
+            cron_wday = (now.weekday() + 1) % 7  # Python 0=Mon -> cron 0=Sun
+            return (now.minute, now.hour, now.day, now.month, cron_wday)
         except Exception:  # noqa: S110 — fallback to CronParser.current_tuple() below
             pass
     return CronParser.current_tuple()
