@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/license-internal-gray?style=for-the-badge" alt="License">
 </p>
 
-# GEODE v0.13.0 — Autonomous Research Harness
+# GEODE v0.13.1 — Autonomous Research Harness
 
 Loop-based 자율 실행 에이전트. `while(tool_use)` 루프를 핵심 프리미티브로 하여 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
