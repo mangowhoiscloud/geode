@@ -19,6 +19,7 @@ VALID_CATEGORIES = frozenset(
         "model",
         "data",
         "scheduling",
+        "profile",
     }
 )
 

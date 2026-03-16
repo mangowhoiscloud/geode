@@ -35,6 +35,7 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "general_web_search",
         "note_read",
         "read_document",
+        "profile_show",
     }
 )
 
@@ -52,6 +53,9 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "note_save",
         "set_api_key",
         "manage_auth",
+        "profile_update",
+        "profile_preference",
+        "profile_learn",
     }
 )
 
@@ -354,6 +358,13 @@ class ToolExecutor:
             summary = f"provider={tool_input.get('provider', '?')}"
         elif tool_name == "manage_auth":
             summary = f"action={tool_input.get('action', '?')}"
+        elif tool_name == "profile_update":
+            fields = [k for k in ("role", "expertise", "name", "team") if tool_input.get(k)]
+            summary = f"fields={','.join(fields)}" if fields else "profile update"
+        elif tool_name == "profile_preference":
+            summary = f"{tool_input.get('key', '?')}={tool_input.get('value', '?')}"
+        elif tool_name == "profile_learn":
+            summary = tool_input.get("pattern", "")[:80]
 
         console.print()
         console.print("  [bold yellow]Write operation requires approval[/bold yellow]")
