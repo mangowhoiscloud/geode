@@ -28,13 +28,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.13.2] — 2026-03-16
+
+Pre-commit 안정화, cron weekday 버그 수정, UI 마커 브랜딩 통일.
+
 ### Fixed
-- Pre-commit mypy/bandit "files were modified" 오탐 — mypy `--cache-dir` → `--no-incremental`, bandit `--quiet` 추가
+- Pre-commit mypy/bandit "files were modified" 오탐 — `uv run --frozen` + mypy `--no-incremental` 전환으로 uv.lock 수정 방지
 - Cron weekday 변환 버그 — Python weekday(0=Mon) → cron 표준(0=Sun) 미변환으로 일요일 스케줄이 월요일에 실행되던 문제
 - `/trigger fire` 명령이 TriggerManager 없이 성공으로 표시되던 문제를 경고 메시지로 변경
 
 ### Changed
 - UI 마커 브랜딩 통일 — 비표준 이모지(⏳, ✻, ⏺)를 GEODE 표준 마커(✢, ●)로 일괄 교체
+- Docs-Sync 워크플로우 강화 — MINOR/PATCH 판단 기준 명시, `[Unreleased]` 잔류 금지 규칙, ABOUT 동기화 섹션 추가
 
 ---
 
@@ -592,6 +599,8 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.13.2 | 2026-03-16 | Pre-commit 안정화, cron weekday 버그, UI 마커 브랜딩 통일, Docs-Sync 강화 |
+| 0.13.1 | 2026-03-16 | Anthropic API extra fields 400 에러 수정 |
 | 0.13.0 | 2026-03-16 | Signal Liveification, Plan 자율 실행, Dynamic Graph, 오류 복구, Goal Decomposition, 그라운딩 |
 | 0.12.0 | 2026-03-15 | HITL 보안 강화, WRITE_TOOLS/MCP 안전 게이트, README 자율 실행 코어 재구성 |
 | 0.11.0 | 2026-03-15 | SubAgent Full Inheritance, asyncio 전환, External IP, BiasBuster fast path, D1-D5 감사 |
@@ -604,7 +613,9 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.13.2...HEAD
+[0.13.2]: https://github.com/mangowhoiscloud/geode/compare/v0.13.1...v0.13.2
+[0.13.1]: https://github.com/mangowhoiscloud/geode/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/mangowhoiscloud/geode/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/mangowhoiscloud/geode/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mangowhoiscloud/geode/compare/v0.10.1...v0.11.0
