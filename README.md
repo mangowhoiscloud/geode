@@ -12,20 +12,20 @@
 
 # GEODE v0.14.0 — Autonomous Research Harness
 
-Loop-based 자율 실행 에이전트. `while(tool_use)` 루프를 핵심 프리미티브로 하여 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
+범용 자율 실행 에이전트. `while(tool_use)` 루프를 핵심 프리미티브로 하여 리서치, 분석, 자동화, 스케줄링을 자연어 한 줄로 수행합니다.
 
-> *LLM이 도구를 호출하고, 결과를 관찰하고, 다음 행동을 결정하는 루프를 반복합니다. 복합 요청은 자동 분해하고, 실패는 자동 복구하며, 그래프 토폴로지는 결과에 따라 동적으로 변형됩니다. 사람은 `program.md`를 작성하고, 에이전트는 밤새 실행합니다.*
+> *"AI 에이전트 트렌드 조사해줘", "이 URL 요약해줘", "매주 월요일 뉴스 브리핑 잡아줘" -- 자연어로 요청하면 LLM이 도구를 호출하고, 결과를 관찰하고, 다음 행동을 결정하는 루프를 반복합니다. 복합 요청은 자동 분해하고, 실패는 자동 복구하며, 도메인별 분석 파이프라인은 플러그인으로 교체됩니다.*
 
 ### Highlights
 
-- **`while(tool_use)` Loop** — 모든 자율 행동의 핵심 프리미티브. 도구를 호출하고, 관찰하고, 반복.
+- **Natural Language Interface** — 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링 수행
+- **`while(tool_use)` Loop** — 모든 자율 행동의 핵심 프리미티브. 도구를 호출하고, 관찰하고, 반복
+- **38 Tools + MCP** — 웹 검색, URL 요약, YouTube, arXiv, LinkedIn 등 38개 도구 + MCP 자동설치
 - **Goal Decomposition** — 복합 요청을 하위 목표 DAG로 자동 분해 (Haiku, ~$0.01/호출)
 - **Error Recovery** — 실패 시 retry → alternative → fallback → escalate 4단계 자동 복구
-- **Dynamic Graph** — 분석 결과에 따라 노드 건너뛰기 / enrichment 경로 동적 분기
 - **Sub-Agent** — 부모 역량 전체 상속, 병렬 위임, Token Guard, as_completed 수집
 - **3-Tier Memory** — SOUL → Organization → Project → Session 계층적 맥락 조합
-- **38 Tools + MCP** — `definitions.json` 기반 + 38개 MCP 카탈로그 자동설치
-- **Domain Plugin** — `DomainPort` Protocol로 분석 파이프라인 교체 (Game IP 기본 탑재)
+- **Domain Plugin** — `DomainPort` Protocol로 도메인별 파이프라인 교체 (Game IP 기본 탑재)
 - **Safety** — 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), Grounding Truth, 9종 bash 차단
 
 ## Installation
@@ -37,20 +37,20 @@ uv sync
 ## Quick Start
 
 ```bash
-# 인터랙티브 모드 (권장)
+# 인터랙티브 REPL (권장) — 자연어로 무엇이든 요청
 uv run geode
 
-# IP 분석 (API 키 있으면 LLM 호출, 없으면 자동 dry-run)
+# 자연어 쿼리 (CLI에서 직접)
+uv run geode "최근 AI 에이전트 프레임워크 트렌드 조사해줘"
+
+# 웹 리서치
+uv run geode "이 URL 내용 요약해줘: https://example.com/article"
+
+# 스케줄링
+uv run geode "매주 월요일 AI 뉴스 브리핑 스케줄 잡아줘"
+
+# Domain Plugin: 게임 IP 분석 (API 키 있으면 LLM 호출, 없으면 자동 dry-run)
 uv run geode analyze "Berserk"
-
-# Streaming 분석
-uv run geode analyze "Berserk" --stream
-
-# 배치 분석
-uv run geode batch --top 5 --dry-run
-
-# 리포트 생성
-uv run geode report "Berserk" --format html --output berserk.html
 ```
 
 ### Setup
@@ -62,8 +62,8 @@ cp .env.example .env
 # 2. .env 편집 — API 키 입력
 ANTHROPIC_API_KEY=sk-ant-...
 
-# 3. Full 분석 실행
-uv run geode analyze "Cowboy Bebop"
+# 3. REPL 시작
+uv run geode
 ```
 
 API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다.
@@ -233,8 +233,8 @@ graph LR
 
 | 전략 | 동작 | 예시 |
 |------|------|------|
-| **Retry** | 동일 도구 재실행 (1s backoff) | `steam_info` 재시도 |
-| **Alternative** | 같은 `category` 다른 도구 (`definitions.json`) | `steam_info` → `web_fetch` |
+| **Retry** | 동일 도구 재실행 (1s backoff) | `web_fetch` 재시도 |
+| **Alternative** | 같은 `category` 다른 도구 (`definitions.json`) | `web_fetch` → `general_web_search` |
 | **Fallback** | 더 낮은 `cost_tier` 도구 | `expensive` → `cheap` → `free` |
 | **Escalate** | 사용자 개입 요청 (terminal) | HITL 승인 |
 
@@ -290,7 +290,7 @@ graph LR
 | `mixed` | MCP 반환 1개 + fixture 존재 | live 값이 fixture를 override |
 | `fixture` | MCP 미연결/에러 | 자동 fallback |
 
-`CompositeSignalAdapter`는 `SteamMCPSignalAdapter` + `BraveSignalAdapter`를 체이닝하며, `_enrichment_sources` 리스트로 provenance를 추적합니다.
+`CompositeSignalAdapter`는 여러 MCP 어댑터(Steam, Brave 등)를 체이닝하며, `_enrichment_sources` 리스트로 provenance를 추적합니다.
 
 ### Plan Auto-Execute
 
@@ -417,10 +417,9 @@ graph TB
     end
 
     subgraph MCPServer["MCP Server (FastMCP)"]
-        T1["analyze_ip"]
-        T2["quick_score"]
-        T3["get_ip_signals"]
-        T4["list_fixtures / query_memory / get_health"]
+        T1["analyze_ip / quick_score"]
+        T2["get_ip_signals"]
+        T3["list_fixtures / query_memory / get_health"]
     end
 
     Registry --> Policy
@@ -434,15 +433,15 @@ graph TB
     style MCPServer fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
 ```
 
-- **38 base tools** — `definitions.json` 기반 + `category`/`cost_tier` 메타데이터 (Error Recovery에서 활용)
-- **MCP Adapters** — Brave Search, Steam, arXiv, Playwright, LinkedIn (env var 비어있으면 graceful skip)
+- **38 base tools** — `web_fetch`, `general_web_search`, `youtube_search`, `read_document` 등 범용 도구 + `category`/`cost_tier` 메타데이터
+- **MCP Adapters** — Brave Search, arXiv, Playwright, LinkedIn, Steam (env var 비어있으면 graceful skip)
 - **MCP Server** — `uv run python -m core.mcp_server` 로 GEODE를 외부 에이전트에서 호출 가능 (6 tools, 2 resources)
 - **Skills** — `.claude/skills/` 자동 발견 + YAML frontmatter 기반 도구 핫 리로드
 - **MCP 자동설치** — `install_mcp_server` tool → 38개 카탈로그 검색 + 설치 + `refresh_tools()`
 
 ### Domain Plugin
 
-`DomainPort` Protocol로 도메인별 분석 파이프라인을 플러그인으로 교체합니다. 아래는 기본 탑재된 Game IP 도메인의 구조입니다.
+`DomainPort` Protocol로 도메인별 분석 파이프라인을 플러그인으로 교체합니다. 동일한 자율 실행 하네스 위에 게임 IP, 금융, 콘텐츠 등 다양한 도메인 파이프라인을 탑재할 수 있습니다. 아래는 기본 탑재된 Game IP 도메인의 구조입니다.
 
 ```mermaid
 graph LR
@@ -534,13 +533,13 @@ uv run geode
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `/analyze <IP>` | `/a` | IP 분석 |
-| `/search <query>` | `/s` | IP 검색 |
+| `/analyze <IP>` | `/a` | IP 분석 (Domain Plugin) |
+| `/search <query>` | `/s` | 검색 |
 | `/report <IP> [fmt]` | `/rpt` | 리포트 생성 (md/html/json) |
-| `/list` | | IP 목록 |
+| `/list` | | IP 목록 (Domain Plugin) |
 | `/batch [--top N]` | `/b` | 배치 분석 |
-| `/compare <A> <B>` | | 두 IP 비교 |
-| `/schedule <cron>` | `/sched` | 배치 스케줄 |
+| `/compare <A> <B>` | | 비교 분석 |
+| `/schedule <cron>` | `/sched` | 작업 스케줄 |
 | `/mcp status\|tools\|reload\|add` | | MCP 관리 |
 | `/skills` | | 스킬 목록/상세 |
 | `/status` | | 시스템 상태 |
@@ -548,25 +547,39 @@ uv run geode
 | `/verbose` | | 상세 출력 토글 |
 | `/quit` | `/q` | 종료 |
 
-**자연어 입력:**
+**자연어 입력 (리서치 에이전트):**
+
+```
+> 최근 AI 에이전트 프레임워크 트렌드 조사해줘       → 웹 리서치 + 요약
+> 이 사람 LinkedIn 프로필 분석해줘                  → LinkedIn MCP 호출
+> YouTube에서 LangGraph 관련 영상 찾아서 요약해줘    → youtube_search + 요약
+> 이 URL 내용 요약하고 핵심 포인트 정리해줘          → web_fetch + 분석
+> 매주 월요일 AI 뉴스 브리핑 스케줄 잡아줘           → NL 스케줄 생성
+> arXiv에서 RAG 관련 최신 논문 찾아줘               → arXiv MCP 검색
+> LinkedIn MCP 달아줘                              → MCP 자동설치
+```
+
+**자연어 입력 (Game IP Domain Plugin):**
 
 ```
 > Berserk 분석해           → LLM 분석 / dry-run
 > 소울라이크 찾아줘         → 장르 검색
 > Berserk vs Cowboy Bebop  → 비교 분석
-> LinkedIn MCP 달아줘      → MCP 자동설치
-> 스케줄 걸어줘            → 배치 스케줄
 ```
 
 ### CLI Mode
 
 ```bash
+# 범용 리서치 쿼리
+uv run geode "최근 AI 에이전트 프레임워크 트렌드 조사해줘"
+uv run geode "이 URL 요약해줘: https://example.com/article"
+uv run geode "매주 월요일 AI 뉴스 브리핑 스케줄 잡아줘"
+
+# Domain Plugin: 게임 IP 분석
 uv run geode analyze "Berserk"                    # CLI 분석
-uv run geode "Berserk 분석해줘" --stream           # 스트리밍
 uv run geode search "사이버펑크"                   # 장르 검색
 uv run geode report "Berserk" -f html -o out.html # HTML 리포트
 uv run geode batch --top 5                        # 배치 분석
-uv run geode "오늘 AI 뉴스 정리해줘"               # 범용 리서치
 ```
 
 ---
@@ -655,9 +668,10 @@ core/
 
 ## Design Choices
 
+- **Natural language first.** 자연어 한 줄이 입력이고, 에이전트가 도구 선택부터 결과 종합까지 자율적으로 수행한다. 리서치, 요약, 스케줄링, 분석 -- 도메인을 가리지 않는다.
 - **`while(tool_use)` as primitive.** 모든 자율 행동은 하나의 루프에서 나온다. 서브에이전트도, 계획 실행도, 배치 분석도 전부 AgenticLoop 인스턴스. 추상화가 아닌 구체적 실행 단위.
 - **Port/Adapter DI.** 모든 인프라는 `Protocol` 포트 + `contextvars` 주입. LLM, 메모리, MCP 전부 교체 가능. 테스트에서 mock 주입, 프로덕션에서 실제 어댑터.
-- **도메인은 플러그인.** `DomainPort` Protocol 구현체를 교체하면 Game IP가 아닌 다른 도메인(금융, 의료, 콘텐츠)에도 동일한 자율 하네스를 적용할 수 있다.
+- **도메인은 플러그인.** `DomainPort` Protocol 구현체를 교체하면 게임 IP, 금융, 의료, 콘텐츠 등 어떤 도메인이든 동일한 자율 하네스 위에 탑재할 수 있다.
 - **Safety by default.** 자율 에이전트는 위험하다. DANGEROUS 도구는 항상 사용자 승인, Error Recovery에서도 제외, 서브에이전트에서도 제외. 안전 게이트 우회 경로가 없다.
 - **Graceful degradation.** API 키 없으면 dry-run, MCP 미연결이면 fixture fallback, LLM 실패하면 retry chain. 어떤 상태에서든 에이전트는 멈추지 않는다.
 

@@ -34,6 +34,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 프로필 도구 4종 (`profile_show`, `profile_update`, `profile_preference`, `profile_learn`) -- ContextAssembler Tier 0.5 주입
 
 ### Changed
+- README 예시 리뉴얼 — 게임 IP 중심 예시를 범용 리서치 에이전트 자연어 쿼리로 교체. Quick Start REPL 우선, 자연어 입력 예시 7종 추가, Game IP는 Domain Plugin 하위로 이동
 - Token Guard 상한 제거 — `MAX_TOOL_RESULT_TOKENS` 기본값 0 (무제한). 프론티어 합의: 하드 캡 대신 압축(Karpathy P6) + `clear_tool_uses` 서버측 정리로 컨텍스트 관리. `GEODE_MAX_TOOL_RESULT_TOKENS` 환경변수로 필요 시 상한 재설정 가능
 
 ### Fixed
