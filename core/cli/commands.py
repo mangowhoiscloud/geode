@@ -669,6 +669,7 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
             console.print()
             return
         scheduler_service.add_job(result.job)
+        scheduler_service.save()  # persist immediately — prevent crash data loss
         console.print(f"  [success]Created: {result.job.job_id}[/success]")
         console.print(f"  Schedule: {_format_schedule_desc(result.job)}")
         console.print()
@@ -682,6 +683,7 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
             return
         removed = scheduler_service.remove_job(target_id)
         if removed:
+            scheduler_service.save()  # persist deletion immediately
             console.print(f"  [success]Deleted: {target_id}[/success]")
         else:
             console.print(f"  [warning]Job not found: {target_id}[/warning]")
