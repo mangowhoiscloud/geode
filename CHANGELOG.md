@@ -33,6 +33,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - 멀티턴 tool_result 고아 참조 400 에러 — 3중 방어: (1) Anthropic `clear_tool_uses` 서버사이드 컨텍스트 관리, (2) `ConversationContext._trim()`에 tool pair sanitization 추가, (3) 기존 `_repair_messages()` 유지
+- 스케줄 생성/삭제 즉시 영속화 — `add_job()`/`remove_job()` 후 `save()` 호출 추가 (crash 시 job 소실 방지)
 
 ### Changed
 - Identity Pivot 완성 — `analyst.md` SYSTEM 프롬프트에서 "undervalued IP discovery agent" 제거, 게임 전용 예시를 도메인 비의존적 예시로 교체
