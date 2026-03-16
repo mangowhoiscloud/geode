@@ -2,7 +2,7 @@
   <img src="assets/geode-social-preview.png" alt="GEODE — 범용 자율 실행 에이전트" width="720" />
 </p>
 
-# GEODE v0.12.0 — 범용 자율 실행 에이전트
+# GEODE v0.13.0 — 범용 자율 실행 에이전트
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 

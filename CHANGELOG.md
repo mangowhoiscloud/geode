@@ -28,6 +28,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.13.0] — 2026-03-16
+
+자율 실행 강화 — Signal Liveification, Plan 자율 실행, Dynamic Graph, 적응형 오류 복구, Goal Decomposition, 에이전트 그라운딩 트루스.
+
 ### Changed
 - 서브에이전트 결과 수집 `as_completed` 패턴 — 순차 블로킹 → polling round-robin 전환. 먼저 끝난 태스크의 SUBAGENT_COMPLETED 훅이 즉시 발행
 
@@ -54,6 +60,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 - NL Router 시스템 프롬프트 Tool Selection Priority Matrix 추가 — 12개 의도별 1st/2nd Choice + 사용 금지 도구 매트릭스, 비용 인식 규칙, 도구 호출 금지 사항 (AGENTIC_SUFFIX)
 - MCP 통합 Deferred Loading 강화 — Native + MCP 도구를 통합 병합 후 deferred loading 적용, 임계값 5→10 상향, 6개 핵심 도구 항상 로드, ToolSearchTool MCP 검색 지원
+
+### Infrastructure
+- Test count: 2226+ → 2366+
+- Module count: 132 → 134
+- HookEvent count: 27 → 30
 
 ---
 
@@ -566,6 +577,7 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.13.0 | 2026-03-16 | Signal Liveification, Plan 자율 실행, Dynamic Graph, 오류 복구, Goal Decomposition, 그라운딩 |
 | 0.12.0 | 2026-03-15 | HITL 보안 강화, WRITE_TOOLS/MCP 안전 게이트, README 자율 실행 코어 재구성 |
 | 0.11.0 | 2026-03-15 | SubAgent Full Inheritance, asyncio 전환, External IP, BiasBuster fast path, D1-D5 감사 |
 | 0.10.1 | 2026-03-13 | UI/UX 리브랜딩, Domain Plugin, Agentic 강건성, 리포트 상용화, MCP 정규화 |
@@ -577,7 +589,8 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/mangowhoiscloud/geode/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/mangowhoiscloud/geode/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mangowhoiscloud/geode/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/mangowhoiscloud/geode/compare/v0.10.0...v0.10.1

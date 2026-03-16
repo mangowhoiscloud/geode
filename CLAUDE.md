@@ -4,7 +4,7 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.12.0
+- **Version**: 0.13.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -333,7 +333,7 @@ NLRouter는 Claude Opus 4.6 Tool Use로 자연어 → 도구 호출을 매핑한
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
 - **Port/Adapter**: All infra via Protocol ports + contextvars DI
-- **Hook-driven**: 27 lifecycle events (incl. `SUBAGENT_*`) for extensibility
+- **Hook-driven**: 30 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`) for extensibility
 - **Domain Plugin**: `DomainPort` Protocol — 도메인별 pipeline 교체 가능 (`set_domain()` / `get_domain()`)
 
 ## Implementation Workflow
