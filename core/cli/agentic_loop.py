@@ -28,7 +28,7 @@ from core.cli.error_recovery import ErrorRecoveryStrategy
 from core.cli.nl_router import _build_system_prompt
 from core.cli.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY, settings
-from core.llm.client import _maybe_traceable
+from core.llm.client import _maybe_traceable, get_async_anthropic_client
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.ui.agentic_ui import OperationLogger
@@ -524,10 +524,10 @@ class AgenticLoop:
             return None
 
         if self._client is None:
-            # Disable SDK-level retries to prevent double-retry with our own loop.
-            # Default max_retries=2 causes SDK to retry timeouts 3× internally,
-            # compounding with our 3 retries → 9 total attempts / 18min worst case.
-            self._client = anthropic.AsyncAnthropic(api_key=api_key, max_retries=0)
+            # Use singleton async client with configured httpx connection pool.
+            # SDK max_retries=0 is set in the singleton to prevent double-retry
+            # with our app-level backoff loop below.
+            self._client = get_async_anthropic_client(api_key)
 
         # Force text response in the last WRAP_UP_HEADROOM rounds
         # so the LLM always has a chance to summarize before max_rounds
@@ -535,7 +535,7 @@ class AgenticLoop:
         force_text = remaining <= self.WRAP_UP_HEADROOM
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
-        max_retries = 3
+        max_retries = settings.llm_max_retries
         for attempt in range(max_retries):
             try:
                 # Strip non-API fields before sending to Anthropic.
@@ -554,7 +554,6 @@ class AgenticLoop:
                     tool_choice=tool_choice,
                     max_tokens=self.max_tokens,
                     temperature=0.0,
-                    timeout=120.0,
                     extra_headers={
                         "anthropic-beta": "context-management-2025-06-27",
                     },
@@ -572,10 +571,15 @@ class AgenticLoop:
                 return response  # type: ignore[no-any-return]
 
             except (anthropic.APITimeoutError, anthropic.APIConnectionError) as exc:
-                wait = 2**attempt * 5  # 5s, 10s, 20s
+                # Exponential backoff: 2s, 4s, 8s (fast initial retry for transient
+                # connection resets, capped by settings.llm_retry_max_delay)
+                wait = min(
+                    settings.llm_retry_base_delay * (2**attempt),
+                    settings.llm_retry_max_delay,
+                )
                 exc_type = type(exc).__name__
                 log.warning(
-                    "%s (attempt %d/%d), retrying in %ds",
+                    "%s (attempt %d/%d), retrying in %.1fs",
                     exc_type,
                     attempt + 1,
                     max_retries,
@@ -588,9 +592,10 @@ class AgenticLoop:
                     self._last_llm_error = f"{exc_type} after {max_retries} retries"
                     return None
             except anthropic.RateLimitError:
-                wait = 2**attempt * 10  # 10s, 20s, 40s
+                # Rate limits use longer backoff: 10s, 20s, 40s
+                wait = min(2**attempt * 10, settings.llm_retry_max_delay)
                 log.warning(
-                    "Rate limited (attempt %d/%d), retrying in %ds",
+                    "Rate limited (attempt %d/%d), retrying in %.1fs",
                     attempt + 1,
                     max_retries,
                     wait,

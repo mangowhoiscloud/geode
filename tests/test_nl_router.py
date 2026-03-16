@@ -232,12 +232,12 @@ class TestToolUseRouter:
         """LLM calls list_ips tool."""
         resp = _make_tool_use_response("list_ips", {})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("IP 목록 보여줘")
@@ -249,12 +249,12 @@ class TestToolUseRouter:
         """LLM calls analyze_ip tool with ip_name."""
         resp = _make_tool_use_response("analyze_ip", {"ip_name": "Cowboy Bebop"})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("Cowboy Bebop 분석해")
@@ -266,12 +266,12 @@ class TestToolUseRouter:
         """LLM calls search_ips tool."""
         resp = _make_tool_use_response("search_ips", {"query": "소울라이크"})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("소울라이크 검색")
@@ -286,12 +286,12 @@ class TestToolUseRouter:
             {"ip_a": "Berserk", "ip_b": "Ghost In The Shell"},
         )
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("Berserk vs Ghost In The Shell")
@@ -304,12 +304,12 @@ class TestToolUseRouter:
         """LLM calls show_help tool."""
         resp = _make_tool_use_response("show_help", {})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("도움말")
@@ -321,12 +321,12 @@ class TestToolUseRouter:
         """LLM responds with text → chat intent."""
         resp = _make_text_response("게임 퍼블리싱은 계약을 통해 진행됩니다.")
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("게임 퍼블리싱이 뭐야?")
@@ -367,12 +367,11 @@ class TestGracefulDegradation:
     def test_api_error(self, router_llm: NLRouter) -> None:
         """API exception → offline fallback."""
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
-            _preserve_exceptions(mock_anthropic)
-            mock_anthropic.Anthropic.side_effect = Exception("API down")
+            mock_get_client.side_effect = Exception("API down")
 
             intent = router_llm.classify("이상한 입력")
 
@@ -383,13 +382,12 @@ class TestGracefulDegradation:
     def test_api_timeout(self, router_llm: NLRouter) -> None:
         """Timeout → offline fallback."""
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
-            _preserve_exceptions(mock_anthropic)
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.side_effect = TimeoutError("Request timed out")
 
             intent = router_llm.classify("타임아웃 테스트")
@@ -401,13 +399,12 @@ class TestGracefulDegradation:
     def test_auth_error(self, router_llm: NLRouter) -> None:
         """Invalid API key → offline fallback with auth_error."""
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-invalid"
-            _preserve_exceptions(mock_anthropic)
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.side_effect = anthropic.AuthenticationError(
                 message="invalid x-api-key",
                 response=MagicMock(status_code=401),
@@ -422,13 +419,12 @@ class TestGracefulDegradation:
     def test_billing_error(self, router_llm: NLRouter) -> None:
         """Credit balance error → offline fallback with billing error."""
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
-            _preserve_exceptions(mock_anthropic)
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.side_effect = anthropic.BadRequestError(
                 message="Your credit balance is too low",
                 response=MagicMock(status_code=400),
@@ -443,13 +439,12 @@ class TestGracefulDegradation:
     def test_billing_error_unknown_input(self, router_llm: NLRouter) -> None:
         """Billing error on unrecognized input → help with billing."""
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
-            _preserve_exceptions(mock_anthropic)
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.side_effect = anthropic.BadRequestError(
                 message="Your credit balance is too low",
                 response=MagicMock(status_code=400),
@@ -465,12 +460,12 @@ class TestGracefulDegradation:
         """LLM returns empty text → help fallback."""
         resp = _make_text_response("", with_usage=False)
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("빈 응답 테스트")
@@ -493,13 +488,13 @@ class TestTokenUsageTracking:
         mock_tracker = MagicMock()
         mock_tracker.record.return_value = MagicMock(cost_usd=0.0035)
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
             patch("core.llm.token_tracker.get_tracker", return_value=mock_tracker),
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             router_llm.classify("목록")
@@ -510,12 +505,12 @@ class TestTokenUsageTracking:
         """No usage field → no tracking error."""
         resp = _make_tool_use_response("list_ips", {}, with_usage=False)
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("목록")
@@ -735,12 +730,12 @@ class TestNewToolParsing:
         """Full flow: LLM calls batch_analyze."""
         resp = _make_tool_use_response("batch_analyze", {"top": 10})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("전체 IP 배치 분석해줘")
@@ -752,12 +747,12 @@ class TestNewToolParsing:
         """Full flow: LLM calls check_status."""
         resp = _make_tool_use_response("check_status", {})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("시스템 상태 보여줘")
@@ -809,12 +804,12 @@ class TestPlanDelegateNL:
         """Full flow: LLM calls create_plan."""
         resp = _make_tool_use_response("create_plan", {"ip_name": "Berserk"})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("Berserk 분석 계획 세워줘")
@@ -829,12 +824,12 @@ class TestPlanDelegateNL:
             {"tasks": [{"type": "analyze", "ip_name": "Berserk"}]},
         )
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             intent = router_llm.classify("병렬로 Berserk 분석해줘")
@@ -892,12 +887,12 @@ class TestContextInjection:
 
         resp = _make_tool_use_response("analyze_ip", {"ip_name": "Berserk"})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             router = NLRouter(llm_enabled=True)
@@ -914,12 +909,12 @@ class TestContextInjection:
         """context=None sends single message (backward compat)."""
         resp = _make_tool_use_response("list_ips", {})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             router = NLRouter(llm_enabled=True)
@@ -941,12 +936,12 @@ class TestContextInjection:
 
         resp = _make_tool_use_response("list_ips", {})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             router = NLRouter(llm_enabled=True)
@@ -968,12 +963,12 @@ class TestContextInjection:
 
         resp = _make_tool_use_response("list_ips", {})
         with (
-            patch("core.cli.nl_router.anthropic") as mock_anthropic,
+            patch("core.cli.nl_router.get_anthropic_client") as mock_get_client,
             patch("core.cli.nl_router.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.messages.create.return_value = resp
 
             router = NLRouter(llm_enabled=True)

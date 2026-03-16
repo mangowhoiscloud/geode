@@ -33,6 +33,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - 프롬프트/REPL 출력에서 장식용 이모지 제거 — 리포트 생성 외 모든 CLI 출력에서 이모지(⚡⚠✏⏸) 삭제, UI 마커(✓✗✢●)는 유지
+- APIConnectionError 간헐 반복 — httpx 커넥션 풀 설정 추가 (max_connections=20, keepalive_expiry=30s), 싱글턴 Anthropic 클라이언트로 전환, 재시도 백오프 2s/4s/8s로 단축, 연결 관련 설정 config.py로 이관
 
 ---
 

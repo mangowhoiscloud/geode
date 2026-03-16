@@ -5,20 +5,29 @@ Failover strategy (OpenClaw-inspired 4-stage):
 2. Model fallback chain (primary → fallback models)
 3. Context overflow detection (token limit → truncation hint)
 4. Graceful degradation (log + raise after all retries exhausted)
+
+Connection pool strategy:
+- Singleton Anthropic clients (sync + async) with configured httpx pool
+- max_connections=20, max_keepalive=5, keepalive_expiry=30s
+- Explicit connect/read/write/pool timeouts prevent stale connection hangs
+- SDK max_retries=0 to avoid double-retry with app-level backoff
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os as _os
 import re
+import threading
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
 import anthropic
+import httpx
 from anthropic.types import TextBlockParam
 from pydantic import BaseModel
 
@@ -81,11 +90,45 @@ def _maybe_traceable(
 # ---------------------------------------------------------------------------
 
 
-# Failover configuration
-MAX_RETRIES = 3
-RETRY_BASE_DELAY = 1.0  # seconds
-RETRY_MAX_DELAY = 30.0
+# Failover configuration — sourced from settings with backward-compat defaults
+MAX_RETRIES = settings.llm_max_retries
+RETRY_BASE_DELAY = settings.llm_retry_base_delay
+RETRY_MAX_DELAY = settings.llm_retry_max_delay
 FALLBACK_MODELS = ANTHROPIC_FALLBACK_CHAIN
+
+
+# ---------------------------------------------------------------------------
+# httpx connection pool — configured for long-lived REPL sessions
+# ---------------------------------------------------------------------------
+
+
+def _build_httpx_timeout() -> httpx.Timeout:
+    """Build httpx Timeout from settings."""
+    return httpx.Timeout(
+        connect=settings.llm_connect_timeout,
+        read=settings.llm_read_timeout,
+        write=settings.llm_write_timeout,
+        pool=settings.llm_pool_timeout,
+    )
+
+
+def _build_httpx_limits() -> httpx.Limits:
+    """Build httpx connection pool Limits from settings."""
+    return httpx.Limits(
+        max_connections=settings.llm_max_connections,
+        max_keepalive_connections=settings.llm_max_keepalive_connections,
+        keepalive_expiry=settings.llm_keepalive_expiry,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Singleton Anthropic clients — reuse connection pool across all calls
+# ---------------------------------------------------------------------------
+_sync_client: anthropic.Anthropic | None = None
+_sync_client_lock = threading.Lock()
+
+_async_client: anthropic.AsyncAnthropic | None = None
+_async_client_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +187,72 @@ _RETRYABLE_ERRORS = (
 
 
 def get_anthropic_client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    """Return a singleton sync Anthropic client with configured connection pool.
+
+    Thread-safe. The client is created once and reused for all sync LLM calls,
+    ensuring httpx connection pooling works effectively across calls.
+    SDK-level retries are disabled (max_retries=0) to avoid conflict with
+    app-level retry logic in ``_retry_with_backoff()``.
+    """
+    global _sync_client
+    if _sync_client is not None:
+        return _sync_client
+    with _sync_client_lock:
+        if _sync_client is None:
+            http_client = httpx.Client(
+                limits=_build_httpx_limits(),
+                timeout=_build_httpx_timeout(),
+            )
+            _sync_client = anthropic.Anthropic(
+                api_key=settings.anthropic_api_key,
+                max_retries=0,  # app-level retry handles this
+                http_client=http_client,
+            )
+        return _sync_client
+
+
+def get_async_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnthropic:
+    """Return a singleton async Anthropic client with configured connection pool.
+
+    Thread-safe. The client is created once and reused for all async LLM calls
+    (AgenticLoop, etc.), ensuring httpx connection pooling works effectively.
+    SDK-level retries are disabled (max_retries=0) to avoid conflict with
+    app-level retry logic.
+
+    Args:
+        api_key: Optional API key override. If None, uses settings.
+    """
+    global _async_client
+    if _async_client is not None:
+        return _async_client
+    with _async_client_lock:
+        if _async_client is None:
+            key = api_key or settings.anthropic_api_key
+            http_client = httpx.AsyncClient(
+                limits=_build_httpx_limits(),
+                timeout=_build_httpx_timeout(),
+            )
+            _async_client = anthropic.AsyncAnthropic(
+                api_key=key,
+                max_retries=0,  # app-level retry handles this
+                http_client=http_client,
+            )
+        return _async_client
+
+
+def reset_clients() -> None:
+    """Close and reset singleton clients. Used in tests and on API key change."""
+    global _sync_client, _async_client
+    with _sync_client_lock:
+        if _sync_client is not None:
+            with contextlib.suppress(Exception):
+                _sync_client.close()
+            _sync_client = None
+    with _async_client_lock:
+        if _async_client is not None:
+            # AsyncClient.close() is a coroutine but we're in sync context
+            # Just drop the reference — GC will clean up
+            _async_client = None
 
 
 def _system_with_cache(system: str) -> list[TextBlockParam]:
@@ -263,7 +371,6 @@ def call_llm(
             temperature=temperature,
             system=system_cached,
             messages=[{"role": "user", "content": user}],
-            timeout=90.0,
         )
         # Capture token usage
         if hasattr(response, "usage") and response.usage:
@@ -327,7 +434,6 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
             system=system_cached,
             messages=[{"role": "user", "content": user}],
             output_format=output_model,
-            timeout=90.0,
         )
         # Capture token usage
         if hasattr(response, "usage") and response.usage:
@@ -486,7 +592,6 @@ def call_llm_with_tools(
                 messages=messages,
                 tools=tools,
                 tool_choice=_tc,
-                timeout=90.0,
             )
 
         response = _retry_with_backoff(_do_call, model=target_model)
