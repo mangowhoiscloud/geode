@@ -1,7 +1,11 @@
 """MCP Server Manager — load config, discover tools, and call MCP servers.
 
 Manages external MCP server connections using stdio-based JSON-RPC protocol.
-Configuration is loaded from .claude/mcp_servers.json.
+Configuration is loaded in two layers:
+  1. Code-level registry — auto-discovers servers from MCP_CATALOG based on
+     available env vars (always persists across sessions).
+  2. File overrides — .claude/mcp_servers.json entries override/extend
+     registry defaults.
 """
 
 from __future__ import annotations
@@ -50,19 +54,51 @@ class MCPServerManager:
         self._clients: dict[str, StdioMCPClient] = {}
 
     def load_config(self) -> int:
-        """Load MCP server configurations. Returns number of servers loaded."""
-        if not self._config_path.exists():
-            log.debug("MCP config not found: %s", self._config_path)
-            return 0
+        """Load MCP server configurations from registry + file overrides.
 
+        Layer 1: Code-level registry auto-discovers servers from MCP_CATALOG
+        whose required env vars are present (persists across sessions).
+        Layer 2: .claude/mcp_servers.json entries override/extend registry
+        defaults (backward-compatible).
+
+        Returns total number of servers loaded.
+        """
+        from core.infrastructure.adapters.mcp.registry import MCPRegistry
+
+        # Layer 1: code-level registry (auto-discovery)
         try:
-            raw = self._config_path.read_text(encoding="utf-8")
-            self._servers = json.loads(raw)
-            log.info("Loaded %d MCP server configs", len(self._servers))
-            return len(self._servers)
-        except (json.JSONDecodeError, OSError) as exc:
-            log.warning("Failed to load MCP config: %s", exc)
-            return 0
+            registry = MCPRegistry(dotenv_path=str(_DOTENV_PATH))
+            self._servers = registry.discover()
+            registry_count = len(self._servers)
+            if registry_count > 0:
+                log.info("MCP registry: %d servers auto-discovered", registry_count)
+        except Exception as exc:
+            log.warning("MCP registry discovery failed: %s", exc)
+
+        # Layer 2: file overrides (merge on top)
+        file_count = 0
+        if self._config_path.exists():
+            try:
+                raw = self._config_path.read_text(encoding="utf-8")
+                file_servers: dict[str, dict[str, Any]] = json.loads(raw)
+                file_count = len(file_servers)
+                # File entries override registry defaults
+                self._servers.update(file_servers)
+                if file_count > 0:
+                    log.info(
+                        "MCP file overrides: %d from %s",
+                        file_count,
+                        self._config_path,
+                    )
+            except (json.JSONDecodeError, OSError) as exc:
+                log.warning("Failed to load MCP config file: %s", exc)
+
+        total = len(self._servers)
+        if total > 0:
+            log.info("MCP total: %d servers configured", total)
+        else:
+            log.debug("MCP: no servers configured")
+        return total
 
     def _resolve_env(self, env: dict[str, str]) -> dict[str, str]:
         """Resolve ${VAR} references in env values.
