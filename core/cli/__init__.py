@@ -11,7 +11,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import re as _re
-import select
+import signal
 import sys
 import termios
 from collections import OrderedDict
@@ -567,7 +567,6 @@ def _handle_interrupt(
     Options: [C]ontinue / [I]nspect / [S]kip / [A]bort.
     Returns True to continue, False to abort.
     """
-    _restore_terminal()
     iteration = final_state.get("iteration", 1)
     confidence = final_state.get("composite_score", {})
     console.print(
@@ -2417,8 +2416,18 @@ def _restore_terminal() -> None:
         pass
 
 
+def _sigint_handler(signum: int, frame: Any) -> None:
+    """SIGINT handler that restores terminal before raising KeyboardInterrupt."""
+    _restore_terminal()
+    raise KeyboardInterrupt
+
+
+# Install signal handler so Ctrl-C always restores terminal state
+signal.signal(signal.SIGINT, _sigint_handler)
+
+
 # ---------------------------------------------------------------------------
-# prompt_toolkit REPL input (arrow keys, history, multi-line paste)
+# prompt_toolkit REPL input (arrow keys, history)
 # ---------------------------------------------------------------------------
 def _build_prompt_session() -> Any:
     """Create a prompt_toolkit PromptSession with history + GEODE styling.
@@ -2440,7 +2449,6 @@ def _build_prompt_session() -> Any:
         buf = event.app.current_buffer
         if buf.cursor_position > 0:
             buf.delete_before_cursor(count=1)
-            event.app.renderer.reset()
             event.app.invalidate()
 
     @kb.add("delete")
@@ -2448,7 +2456,6 @@ def _build_prompt_session() -> Any:
         buf = event.app.current_buffer
         if buf.cursor_position < len(buf.text):
             buf.delete(count=1)
-            event.app.renderer.reset()
             event.app.invalidate()
 
     history_path = Path.home() / ".geode_history"
@@ -2476,74 +2483,24 @@ def _get_prompt_session() -> Any:
 
 
 def _read_multiline_input(prompt: str) -> str:
-    """Read user input via prompt_toolkit (arrow keys, history, paste).
+    """Read user input via prompt_toolkit (arrow keys, history).
 
     Falls back to Rich console.input if prompt_toolkit is unavailable.
-    Multi-line paste is detected by draining buffered stdin (50 ms timeout).
-    When paste is detected, shows ``[Pasted text +N lines]`` notification
-    and waits for additional input before submitting.
+    Paste handling is delegated to prompt_toolkit's built-in bracketed
+    paste support (no manual stdin polling).
     """
-    _restore_terminal()
-
     session = _get_prompt_session()
     if session is not None:
         try:
-            first_line = session.prompt().strip()
+            text: str = str(session.prompt()).strip()
         except (KeyboardInterrupt, EOFError):
             raise
         except Exception:
-            first_line = console.input("> ").strip()
+            text = str(console.input("> ")).strip()
     else:
-        first_line = console.input("> ").strip()
+        text = str(console.input("> ")).strip()
 
-    # Repaint the prompt line to erase wide-char rendering artifacts
-    # (Korean jamo ghosts left after backspace in some terminals).
-    # After Enter, cursor is on the NEXT line; move up, clear, rewrite.
-    if first_line:
-        sys.stdout.write(f"\x1b[F\x1b[2K> {first_line}\n")
-        sys.stdout.flush()
-
-    if not first_line:
-        return ""
-
-    # Drain pasted lines from stdin buffer (skip escape sequences)
-    lines = [first_line]
-    try:
-        fd = sys.stdin.fileno()
-        while select.select([fd], [], [], 0.05)[0]:
-            line = sys.stdin.readline()
-            if not line:
-                break
-            stripped = line.rstrip("\n")
-            # Filter out arrow-key / terminal escape sequences that leak
-            # into the buffer (e.g. \x1b[A for Up, \x1b[B for Down).
-            if stripped and "\x1b" not in stripped:
-                lines.append(stripped)
-    except (ValueError, OSError):
-        pass  # stdin not selectable (piped / non-TTY)
-
-    # Paste notification — show count and wait for explicit submit
-    extra_count = len(lines) - 1
-    if extra_count > 0:
-        console.print(f"  [dim][Pasted text +{extra_count} lines][/dim]")
-        # Allow user to add more input or press Enter to submit
-        _restore_terminal()
-        if session is not None:
-            try:
-                additional = session.prompt().strip()
-            except (KeyboardInterrupt, EOFError):
-                additional = ""
-            except Exception:
-                additional = ""
-        else:
-            try:
-                additional = console.input("> ").strip()
-            except (KeyboardInterrupt, EOFError):
-                additional = ""
-        if additional:
-            lines.append(additional)
-
-    return "\n".join(lines)
+    return text
 
 
 def _interactive_loop() -> None:

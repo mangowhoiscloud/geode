@@ -13,12 +13,62 @@ Usage::
 
 from __future__ import annotations
 
+import sys
+import threading
 import time
 from dataclasses import dataclass
-from typing import Any
 
 from core.llm.client import LLMUsageAccumulator, get_usage_accumulator
 from core.ui.console import console
+
+
+class TextSpinner:
+    """Non-invasive text spinner. No raw mode, no cursor hiding."""
+
+    FRAMES = [
+        "\u280b",
+        "\u2819",
+        "\u2839",
+        "\u2838",
+        "\u283c",
+        "\u2834",
+        "\u2826",
+        "\u2827",
+        "\u2807",
+        "\u280f",
+    ]
+
+    def __init__(self, message: str) -> None:
+        self._message = message
+        self._running = False
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        self._running = True
+        self._thread = threading.Thread(target=self._animate, daemon=True)
+        self._thread.start()
+
+    def update(self, message: str) -> None:
+        """Update the spinner message while running."""
+        self._message = message
+
+    def _animate(self) -> None:
+        idx = 0
+        while self._running:
+            frame = self.FRAMES[idx % len(self.FRAMES)]
+            sys.stdout.write(f"\r  {frame} {self._message}")
+            sys.stdout.flush()
+            time.sleep(0.08)
+            idx += 1
+
+    def stop(self, final_message: str = "") -> None:
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=0.2)
+        sys.stdout.write("\r\x1b[2K")
+        if final_message:
+            sys.stdout.write(f"  {final_message}\n")
+        sys.stdout.flush()
 
 
 @dataclass(frozen=True)
@@ -46,7 +96,7 @@ def _fmt(n: int) -> str:
 
 
 class GeodeStatus:
-    """Context manager that shows a Rich spinner during LLM calls.
+    """Context manager that shows a TextSpinner during LLM calls.
 
     On ``__enter__``, captures a token-usage snapshot and starts the spinner.
     ``update(msg)`` changes the spinner text mid-flight.
@@ -59,24 +109,20 @@ class GeodeStatus:
         self._model = model
         self._start_time: float = 0.0
         self._snap_before: _UsageSnapshot | None = None
-        self._status: Any | None = None  # Rich Status object
+        self._spinner: TextSpinner | None = None
         self._stopped = False
 
     def __enter__(self) -> GeodeStatus:
         self._start_time = time.monotonic()
         self._snap_before = _snapshot(get_usage_accumulator())
-        self._status = console.status(
-            self._format_spinner(self._initial_message),
-            spinner="dots",
-            spinner_style="cyan",
-        )
-        self._status.__enter__()
+        self._spinner = TextSpinner(self._format_spinner(self._initial_message))
+        self._spinner.start()
         return self
 
     def update(self, message: str) -> None:
         """Change the spinner message while running."""
-        if self._status is not None and not self._stopped:
-            self._status.update(self._format_spinner(message))
+        if self._spinner is not None and not self._stopped:
+            self._spinner.update(self._format_spinner(message))
 
     def stop(self, summary: str) -> None:
         """End spinner and print a permanent summary line."""
@@ -85,9 +131,9 @@ class GeodeStatus:
         self._stopped = True
 
         # Stop the spinner
-        if self._status is not None:
-            self._status.__exit__(None, None, None)
-            self._status = None
+        if self._spinner is not None:
+            self._spinner.stop()
+            self._spinner = None
 
         elapsed = time.monotonic() - self._start_time
         delta = self._get_token_delta()
@@ -106,9 +152,9 @@ class GeodeStatus:
             # Auto-stop with a generic summary if stop() was not called explicitly
             elapsed = time.monotonic() - self._start_time
             self._stopped = True
-            if self._status is not None:
-                self._status.__exit__(None, None, None)
-                self._status = None
+            if self._spinner is not None:
+                self._spinner.stop()
+                self._spinner = None
             delta = self._get_token_delta()
             parts = ["  [bold green]✓[/bold green] done"]
             if delta.input_tokens > 0 or delta.output_tokens > 0:
@@ -123,23 +169,10 @@ class GeodeStatus:
     # ------------------------------------------------------------------
 
     def _format_spinner(self, message: str) -> str:
-        """Build the spinner line with optional model name + live cost."""
-        elapsed = time.monotonic() - self._start_time if self._start_time else 0
-        delta = self._get_token_delta()
-
-        parts = [f"  ✢ {message}"]
+        """Build the spinner text with optional model name."""
+        parts = [f"✢ {message}"]
         if self._model:
-            parts.append(f"[dim]{self._model}[/dim]")
-        if delta.input_tokens > 0:
-            parts.append(f"[dim]↑{delta.input_tokens}[/dim]")
-        if delta.cost_usd > 0:
-            parts.append(f"[dim]${delta.cost_usd:.3f}[/dim]")
-        if elapsed > 0.5:
-            mins, secs = divmod(int(elapsed), 60)
-            if mins:
-                parts.append(f"[dim]{mins}m {secs}s[/dim]")
-            else:
-                parts.append(f"[dim]{secs}s[/dim]")
+            parts.append(self._model)
         return " · ".join(parts)
 
     def _get_token_delta(self) -> _UsageSnapshot:

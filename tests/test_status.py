@@ -1,4 +1,4 @@
-"""Tests for GeodeStatus — Claude Code-style spinner UI."""
+"""Tests for GeodeStatus -- TextSpinner-based spinner UI."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from core.config import ANTHROPIC_PRIMARY
 from core.llm.client import LLMUsage, LLMUsageAccumulator
-from core.ui.status import GeodeStatus, _snapshot, _UsageSnapshot
+from core.ui.status import GeodeStatus, TextSpinner, _snapshot, _UsageSnapshot
 
 # ---------------------------------------------------------------------------
 # _snapshot / _UsageSnapshot
@@ -39,6 +39,33 @@ class TestUsageSnapshot:
 
 
 # ---------------------------------------------------------------------------
+# TextSpinner
+# ---------------------------------------------------------------------------
+
+
+class TestTextSpinner:
+    """TextSpinner starts, updates, and stops cleanly."""
+
+    def test_start_stop(self) -> None:
+        """Spinner can start and stop without error."""
+        spinner = TextSpinner("Loading...")
+        spinner.start()
+        spinner.stop()
+
+    def test_stop_with_final_message(self) -> None:
+        """Stop with a final message writes it to stdout."""
+        spinner = TextSpinner("Loading...")
+        spinner.start()
+        spinner.stop("Done!")
+
+    def test_update_message(self) -> None:
+        """update() changes the message."""
+        spinner = TextSpinner("Step 1")
+        spinner.update("Step 2")
+        assert spinner._message == "Step 2"
+
+
+# ---------------------------------------------------------------------------
 # GeodeStatus context manager
 # ---------------------------------------------------------------------------
 
@@ -51,40 +78,33 @@ class TestGeodeStatusContextManager:
     def test_enter_exit(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """Context manager enters and exits without error."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Testing...", model="test-model"):
             pass  # auto-exit prints summary
 
-        mock_console.status.assert_called_once()
-        mock_status.__enter__.assert_called_once()
-        # __exit__ called once by stop (or auto-exit)
-        mock_status.__exit__.assert_called_once()
+        # Auto-exit should print a summary via console.print
+        mock_console.print.assert_called_once()
+        printed = str(mock_console.print.call_args)
+        assert "done" in printed
 
     @patch("core.ui.status.console")
     @patch("core.ui.status.get_usage_accumulator")
     def test_update_changes_spinner(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
-        """update() calls status.update on the Rich Status object."""
+        """update() changes the internal spinner message."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Step 1") as status:
             status.update("Step 2")
+            # Verify the spinner's message was updated
+            assert status._spinner is not None
+            assert status._spinner._message == "✢ Step 2"
             status.stop("done")
-
-        mock_status.update.assert_called_once()
-        call_arg = mock_status.update.call_args[0][0]
-        assert "Step 2" in call_arg
 
     @patch("core.ui.status.console")
     @patch("core.ui.status.get_usage_accumulator")
     def test_stop_prints_summary(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """stop() prints a line with checkmark and summary."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Working...") as status:
             status.stop("analyze · Berserk")
@@ -99,8 +119,6 @@ class TestGeodeStatusContextManager:
     def test_stop_idempotent(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """Calling stop() twice does not double-print."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Working...") as status:
             status.stop("result")
@@ -117,8 +135,6 @@ class TestGeodeStatusContextManager:
     def test_auto_exit_summary(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """If stop() is never called, __exit__ prints a generic summary."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Working..."):
             pass  # no explicit stop
@@ -144,9 +160,6 @@ class TestTokenDelta:
         acc.record(LLMUsage(model="m", input_tokens=100, output_tokens=20, cost_usd=0.005))
         mock_acc_fn.return_value = acc
 
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
-
         with GeodeStatus("Test") as status:
             # Simulate an LLM call recording additional tokens
             acc.record(LLMUsage(model="m", input_tokens=200, output_tokens=50, cost_usd=0.010))
@@ -161,12 +174,9 @@ class TestTokenDelta:
     def test_delta_zero_when_no_calls(
         self, mock_acc_fn: MagicMock, mock_console: MagicMock
     ) -> None:
-        """No LLM calls during context → zero delta."""
+        """No LLM calls during context -> zero delta."""
         acc = LLMUsageAccumulator()
         mock_acc_fn.return_value = acc
-
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Test") as status:
             delta = status._get_token_delta()
@@ -189,11 +199,9 @@ class TestSummaryFormatting:
     def test_summary_includes_tokens_and_cost(
         self, mock_acc_fn: MagicMock, mock_console: MagicMock
     ) -> None:
-        """When there are tokens, the summary shows ↑in ↓out $cost."""
+        """When there are tokens, the summary shows arrows and cost."""
         acc = LLMUsageAccumulator()
         mock_acc_fn.return_value = acc
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Test") as status:
             acc.record(LLMUsage(model="m", input_tokens=150, output_tokens=30, cost_usd=0.004))
@@ -202,8 +210,8 @@ class TestSummaryFormatting:
         # Inspect the printed line
         print_args = [str(c) for c in mock_console.print.call_args_list]
         summary_line = next((p for p in print_args if "analyze" in p), "")
-        assert "↓150" in summary_line  # ↓ = input tokens
-        assert "↑30" in summary_line  # ↑ = output tokens
+        assert "↓150" in summary_line  # input tokens
+        assert "↑30" in summary_line  # output tokens
         assert "$0.004" in summary_line
 
     @patch("core.ui.status.console")
@@ -214,11 +222,9 @@ class TestSummaryFormatting:
         """Offline fallback: no tokens, still shows elapsed time."""
         acc = LLMUsageAccumulator()
         mock_acc_fn.return_value = acc
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Test") as status:
-            # No LLM calls — simulates offline
+            # No LLM calls -- simulates offline
             status.stop("help (offline)")
 
         print_args = [str(c) for c in mock_console.print.call_args_list]
@@ -240,24 +246,19 @@ class TestModelDisplay:
     @patch("core.ui.status.get_usage_accumulator")
     def test_model_in_spinner(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         mock_acc_fn.return_value = LLMUsageAccumulator()
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Classifying...", model=ANTHROPIC_PRIMARY) as status:
+            # Verify model appears in the spinner format string
+            fmt = status._format_spinner("Classifying...")
+            assert ANTHROPIC_PRIMARY in fmt
             status.stop("done")
-
-        init_call = mock_console.status.call_args[0][0]
-        assert ANTHROPIC_PRIMARY in init_call
 
     @patch("core.ui.status.console")
     @patch("core.ui.status.get_usage_accumulator")
     def test_no_model(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         mock_acc_fn.return_value = LLMUsageAccumulator()
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
 
         with GeodeStatus("Working...") as status:
+            fmt = status._format_spinner("Working...")
+            assert "Working..." in fmt
             status.stop("done")
-
-        init_call = mock_console.status.call_args[0][0]
-        assert "Working..." in init_call

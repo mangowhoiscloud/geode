@@ -32,7 +32,7 @@ from core.llm.client import _maybe_traceable, get_async_anthropic_client
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.ui.agentic_ui import OperationLogger
-from core.ui.console import console
+from core.ui.status import TextSpinner
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
@@ -239,16 +239,12 @@ class AgenticLoop:
 
             # Show spinner while waiting for LLM response
             label = "Thinking..." if round_idx == 0 else f"Thinking... (round {round_idx + 1})"
-            _status = console.status(
-                f"  ✢ {label}",
-                spinner="dots",
-                spinner_style="cyan",
-            )
-            _status.start()
+            _spinner = TextSpinner(f"✢ {label}")
+            _spinner.start()
             try:
                 response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
             finally:
-                _status.stop()
+                _spinner.stop()
 
             if response is None:
                 # Persist intermediate tool-use messages so next turn sees them
