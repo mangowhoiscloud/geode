@@ -137,7 +137,7 @@ core/
 │   ├── sub_agent.py     # SubAgentManager + SubAgentResult + ErrorCategory
 │   ├── tool_executor.py # Tool dispatch + HITL + delegate_task handler
 │   ├── nl_router.py     # NL intent classification (LLM → regex → help)
-│   ├── conversation.py  # Multi-turn sliding-window (max 20 turns)
+│   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── batch.py         # Batch analysis (ThreadPoolExecutor)
 │   ├── commands.py      # Slash command dispatch (17 commands)
 │   ├── error_recovery.py # ErrorRecoveryStrategy (retry → alternative → fallback → escalate)

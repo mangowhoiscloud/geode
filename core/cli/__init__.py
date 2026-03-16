@@ -2503,7 +2503,7 @@ def _interactive_loop() -> None:
       fallback  → single-shot NL Router (when agentic unavailable)
     """
     verbose = False
-    conversation = ConversationContext(max_turns=20)
+    conversation = ConversationContext()
 
     # --- Startup initialization with progressive status ---
     def _init_step(label: str) -> None:

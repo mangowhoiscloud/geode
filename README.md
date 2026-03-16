@@ -183,8 +183,8 @@ graph TB
 | **LLM Tool Use** | Claude Opus 4.6 — base 38 + MCP 20+ tool 정의 전달, `stop_reason` 기반 루프 제어 |
 | **ToolExecutor** | 4-tier safety: SAFE / STANDARD / WRITE / DANGEROUS (bash 사용자 승인 필수) |
 | **Clarification** | 필수 파라미터 누락 시 LLM이 사용자에게 되묻기 |
-| **max_rounds** | 기본 15 라운드 — 마지막 2라운드에서 텍스트 응답 강제 |
-| **Multi-turn** | 슬라이딩 윈도우 (max 20 turns) — 대명사 해석, follow-up 쿼리 지원 |
+| **max_rounds** | 기본 50 라운드 — 마지막 2라운드에서 텍스트 응답 강제 (1M 컨텍스트 + `clear_tool_uses` 활용) |
+| **Multi-turn** | 슬라이딩 윈도우 (max 200 turns) — 서버측 `clear_tool_uses`가 주 컨텍스트 관리, 클라이언트 제한은 안전망 |
 | **LangSmith** | 토큰 수/비용을 RunTree에 기록, 세션 합산 |
 
 ### Goal Decomposition
@@ -629,7 +629,7 @@ core/
 │   ├── sub_agent.py            # SubAgentManager + SubAgentResult + ErrorCategory
 │   ├── tool_executor.py        # Tool dispatch + HITL approval gate
 │   ├── nl_router.py            # Natural language intent classification
-│   ├── conversation.py         # Multi-turn sliding-window context
+│   ├── conversation.py         # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
 │   ├── commands.py             # Slash command dispatch (17 commands)

@@ -1,8 +1,12 @@
 """ConversationContext — session-level multi-turn message history.
 
-Maintains a sliding window of user/assistant messages for multi-turn
-agentic conversations. Used by AgenticLoop to preserve context across
-tool-use rounds and follow-up questions.
+Maintains user/assistant messages for multi-turn agentic conversations.
+Used by AgenticLoop to preserve context across tool-use rounds and
+follow-up questions.
+
+With 1M context models and server-side ``clear_tool_uses`` context
+management, aggressive client-side trimming is unnecessary. The default
+``max_turns=200`` acts as a safety net, not a performance optimisation.
 """
 
 from __future__ import annotations
@@ -19,12 +23,13 @@ log = logging.getLogger(__name__)
 class ConversationContext:
     """Session-level conversation history for multi-turn agentic interactions.
 
-    Keeps the most recent ``max_turns`` user+assistant pairs to avoid
-    exceeding the context window while enabling pronoun resolution and
-    follow-up queries.
+    Keeps the most recent ``max_turns`` user+assistant pairs as a safety
+    net.  With 1M context models and server-side ``clear_tool_uses``,
+    the primary context management is handled server-side; this limit
+    only guards against extreme runaway sessions.
     """
 
-    max_turns: int = 50
+    max_turns: int = 200
     messages: list[dict[str, Any]] = field(default_factory=list)
 
     # ------------------------------------------------------------------
