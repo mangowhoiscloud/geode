@@ -40,7 +40,7 @@ L0: CLI & AGENT      — Typer CLI, NL Router, AgenticLoop, SubAgentManager, Bat
 L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
 L2: MEMORY           — Organization > Project > Session (3-Tier + Hybrid L1/L2)
 L3: ORCHESTRATION    — HookSystem(30), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
-L4: EXTENSIBILITY    — ToolRegistry(38+), PolicyChain, Skills, MCP Catalog(29), Reports
+L4: EXTENSIBILITY    — ToolRegistry(38+), PolicyChain, Skills, MCP Catalog(38), Reports
 L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 ```
 
@@ -206,7 +206,7 @@ core/
 │   ├── ports/           # Protocol interfaces (LLM, Memory, Auth, Hook, Tool, DomainPort)
 │   └── adapters/
 │       ├── llm/         # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/         # Steam, Brave, LinkedIn MCP adapters + CompositeSignalAdapter + catalog (29 entries)
+│       └── mcp/         # Steam, Brave, LinkedIn MCP adapters + CompositeSignalAdapter + catalog (38 entries)
 ├── tools/               # Tool Protocol + Registry + Policy + definitions.json
 ├── auth/                # API key rotation, cooldown, profiles
 ├── extensibility/       # Report generation + Skills + AgentRegistry (3 defaults)
