@@ -2477,7 +2477,7 @@ def _get_prompt_session() -> Any:
         try:
             _prompt_session = _build_prompt_session()
         except Exception:
-            log.debug("prompt_toolkit init failed, falling back to console.input", exc_info=True)
+            log.warning("prompt_toolkit init failed, falling back to console.input", exc_info=True)
     return _prompt_session
 
 
@@ -2498,6 +2498,7 @@ def _read_multiline_input(prompt: str) -> str:
         except (KeyboardInterrupt, EOFError):
             raise
         except Exception:
+            log.warning("prompt_toolkit failed, falling back to console.input", exc_info=True)
             text = str(console.input("> ")).strip()
         finally:
             # Re-install our handler for the non-input phase (spinner, tool execution)
