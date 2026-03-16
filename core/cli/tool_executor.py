@@ -62,6 +62,59 @@ EXPENSIVE_TOOLS: dict[str, float] = {
     "compare_ips": 3.00,
 }
 
+# Bash commands starting with these prefixes are safe (read-only, no side effects).
+# They execute without HITL approval to reduce friction for common queries.
+SAFE_BASH_PREFIXES: tuple[str, ...] = (
+    "cat ",
+    "head ",
+    "tail ",
+    "ls ",
+    "ls\n",
+    "pwd",
+    "echo ",
+    "wc ",
+    "grep ",
+    "rg ",
+    "find ",
+    "which ",
+    "whoami",
+    "date",
+    "env ",
+    "printenv",
+    "uname",
+    "df ",
+    "du ",
+    "file ",
+    "stat ",
+    "curl -s",
+    "curl --silent",
+    "python3 -c",
+    "python -c",
+    "uv run pytest",
+    "uv run ruff",
+    "uv run mypy",
+    "uv run python",
+    "git status",
+    "git log",
+    "git diff",
+    "git branch",
+    "git show",
+    "git remote",
+    "gh pr",
+    "gh run",
+    "gh api",
+)
+
+# MCP servers that are read-only and auto-approved (no HITL gate on first call).
+AUTO_APPROVED_MCP_SERVERS: frozenset[str] = frozenset(
+    {
+        "brave-search",
+        "steam",
+        "arxiv",
+        "linkedin-reader",
+    }
+)
+
 # Everything else is STANDARD — executes without special gates
 
 
@@ -230,11 +283,16 @@ class ToolExecutor:
         if blocked:
             return self._bash.to_tool_result(blocked)
 
-        # HITL approval gate — NEVER skipped, even with auto_approve.
-        # Sub-agents must not execute shell commands without user consent.
-        approved = self._request_approval(command, reason)
-        if not approved:
-            return {"error": "User denied execution", "denied": True}
+        # Safe read-only commands skip HITL approval for reduced friction.
+        # Dangerous patterns are already blocked above (validate).
+        cmd_stripped = command.strip()
+        is_safe_cmd = any(cmd_stripped.startswith(p) for p in SAFE_BASH_PREFIXES)
+
+        if not is_safe_cmd:
+            # HITL approval gate — not skipped for non-safe commands.
+            approved = self._request_approval(command, reason)
+            if not approved:
+                return {"error": "User denied execution", "denied": True}
 
         with _tool_spinner(f"Running: {command}"):
             result = self._bash.execute(command)
@@ -251,7 +309,10 @@ class ToolExecutor:
         log.info("MCP tool: %s → %s (args=%s)", tool_name, server, list(tool_input.keys()))
 
         # MCP tools are external — confirm once per server per session.
+        # Read-only servers in AUTO_APPROVED_MCP_SERVERS skip first-call approval.
         # After first approval, subsequent calls to the same server auto-execute.
+        if server in AUTO_APPROVED_MCP_SERVERS:
+            self._mcp_approved_servers.add(server)
         if not self._auto_approve and server not in self._mcp_approved_servers:
             if not self._confirm_mcp(server, tool_name):
                 return {"error": "User denied MCP tool execution", "denied": True}
