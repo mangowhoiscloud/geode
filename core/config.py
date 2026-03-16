@@ -96,6 +96,18 @@ class Settings(BaseSettings):
     # Plan Mode — Autonomous Execution
     plan_auto_execute: bool = False  # GEODE_PLAN_AUTO_EXECUTE=true to enable
 
+    # LLM Connection — httpx pool & timeout tuning
+    llm_max_connections: int = 20  # httpx pool: max total connections
+    llm_max_keepalive_connections: int = 5  # httpx pool: max idle keep-alive connections
+    llm_keepalive_expiry: float = 30.0  # seconds before idle connection is closed
+    llm_connect_timeout: float = 10.0  # TCP connect timeout (seconds)
+    llm_read_timeout: float = 120.0  # response read timeout (seconds)
+    llm_write_timeout: float = 30.0  # request write timeout (seconds)
+    llm_pool_timeout: float = 10.0  # wait for available connection from pool (seconds)
+    llm_retry_base_delay: float = 2.0  # base delay for exponential backoff (seconds)
+    llm_retry_max_delay: float = 30.0  # max delay cap for retries (seconds)
+    llm_max_retries: int = 3  # max retry attempts per model
+
 
 _settings_instance: Settings | None = None
 

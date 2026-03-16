@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any
 import anthropic
 
 from core.config import settings
+from core.llm.client import get_anthropic_client
 from core.llm.prompts import ROUTER_SYSTEM
 
 if TYPE_CHECKING:
@@ -544,7 +545,7 @@ def _call_tool_use_router(
             log.debug("No Anthropic API key — LLM router unavailable")
             return _offline_fallback(text, error="no_api_key")
 
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        client = get_anthropic_client()
 
         # Build messages with conversation history for context-aware routing
         if context is not None and not context.is_empty:
