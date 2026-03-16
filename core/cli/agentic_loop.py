@@ -147,7 +147,7 @@ class AgenticLoop:
         execute tools → feed results back → continue
     """
 
-    DEFAULT_MAX_ROUNDS = 30
+    DEFAULT_MAX_ROUNDS = 50
     DEFAULT_MAX_TOKENS = 32768
     MAX_CLARIFICATION_ROUNDS = 3
     WRAP_UP_HEADROOM = 2  # force text response N rounds before max

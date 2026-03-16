@@ -287,8 +287,8 @@ class TestAgenticLoop:
         assert context.turn_count >= 1
 
     def test_default_max_rounds(self) -> None:
-        """Verify DEFAULT_MAX_ROUNDS is 30 (1M context model)."""
-        assert AgenticLoop.DEFAULT_MAX_ROUNDS == 30
+        """Verify DEFAULT_MAX_ROUNDS is 50 (1M context + clear_tool_uses)."""
+        assert AgenticLoop.DEFAULT_MAX_ROUNDS == 50
 
     def test_forced_text_on_last_round(
         self, context: ConversationContext, executor: ToolExecutor

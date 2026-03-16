@@ -35,6 +35,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - Token Guard 상한 제거 — `MAX_TOOL_RESULT_TOKENS` 기본값 0 (무제한). 프론티어 합의: 하드 캡 대신 압축(Karpathy P6) + `clear_tool_uses` 서버측 정리로 컨텍스트 관리. `GEODE_MAX_TOOL_RESULT_TOKENS` 환경변수로 필요 시 상한 재설정 가능
+- 대화 턴/라운드 제한 대폭 완화 — `max_turns` 20→200, `DEFAULT_MAX_ROUNDS` 30→50. 1M 컨텍스트 + 서버측 `clear_tool_uses`가 주 관리 담당, 클라이언트 제한은 극단적 runaway 방지용 안전망으로만 유지
 
 ### Fixed
 - 프롬프트/REPL 출력에서 장식용 이모지 제거 — 리포트 생성 외 모든 CLI 출력에서 이모지(⚡⚠✏⏸) 삭제, UI 마커(✓✗✢●)는 유지
