@@ -329,8 +329,8 @@ def cmd_auth(args: str) -> None:
         console.print()
         console.print("  [header]Auth Profiles[/header]")
         for s in statuses:
-            icon = "✓" if s["status"] == "active" else "⏳" if "cooldown" in s["status"] else "✗"
-            style = "success" if icon == "✓" else "warning" if icon == "⏳" else "error"
+            icon = "✓" if s["status"] == "active" else "●" if "cooldown" in s["status"] else "✗"
+            style = "success" if icon == "✓" else "warning" if icon == "●" else "error"
             console.print(
                 f"  [{style}]{icon}[/{style}] {s['name']:<22} "
                 f"{s['type']:<10} {s['display']:<18} [{style}][{s['status']}][/{style}]"
@@ -808,8 +808,11 @@ def cmd_trigger(args: str) -> None:
     parts = arg.split(None, 1)
     if parts[0] == "fire" and len(parts) > 1:
         event_name = parts[1]
-        console.print(f"  [success]Fired event: {event_name}[/success]")
-        console.print("  [muted]Dispatched to TriggerManager via HookSystem.[/muted]")
+        console.print(f"  [warning]Cannot fire event: {event_name}[/warning]")
+        console.print(
+            "  [muted]Manual event dispatch requires a running TriggerManager "
+            "instance (available in GeodeRuntime, not standalone REPL).[/muted]"
+        )
         console.print()
         return
 

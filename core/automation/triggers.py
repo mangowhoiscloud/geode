@@ -89,7 +89,8 @@ class CronParser:
 
         Args:
             cron_expr: Cron string "min hour day month weekday".
-            dt_tuple: (minute, hour, day, month, weekday) where weekday 0=Mon.
+            dt_tuple: (minute, hour, day, month, weekday) where weekday
+                uses standard cron convention: 0=Sun, 1=Mon, ..., 6=Sat.
 
         Returns:
             True if the cron expression matches the given time.
@@ -132,9 +133,14 @@ class CronParser:
 
     @staticmethod
     def current_tuple() -> tuple[int, int, int, int, int]:
-        """Get current time as a cron-compatible tuple."""
+        """Get current time as a cron-compatible tuple.
+
+        Returns weekday in standard cron convention: 0=Sun, 1=Mon, ..., 6=Sat.
+        Python's ``tm_wday`` uses 0=Mon, so we convert: ``(tm_wday + 1) % 7``.
+        """
         t = time.localtime()
-        return (t.tm_min, t.tm_hour, t.tm_mday, t.tm_mon, t.tm_wday)
+        cron_wday = (t.tm_wday + 1) % 7  # Python 0=Mon -> cron 0=Sun
+        return (t.tm_min, t.tm_hour, t.tm_mday, t.tm_mon, cron_wday)
 
 
 # ---------------------------------------------------------------------------

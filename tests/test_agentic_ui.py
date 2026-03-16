@@ -279,7 +279,7 @@ class TestRenderStatusLine:
 
         render_status_line()
         printed = str(mock_console.print.call_args)
-        assert "✻" in printed
+        assert "✢" in printed
         assert "Worked for" in printed
         assert "claude-opus-4-6" in printed
         assert "context" in printed
