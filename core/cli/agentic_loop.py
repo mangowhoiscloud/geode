@@ -78,18 +78,26 @@ def get_agentic_tools(
 
 
 # ---------------------------------------------------------------------------
-# Token guard — prevent oversized tool results from exploding context (P2-A)
+# Token guard — optional tool result truncation (P2-A)
+# Default: unlimited (0). Frontier consensus: compression > hard cap.
+# Server-side clear_tool_uses handles context accumulation.
+# Set GEODE_MAX_TOOL_RESULT_TOKENS to a positive value to re-enable.
 # ---------------------------------------------------------------------------
-MAX_TOOL_RESULT_TOKENS = 16384  # backward-compat; canonical: settings.max_tool_result_tokens
+MAX_TOOL_RESULT_TOKENS = 0  # backward-compat alias; canonical: settings.max_tool_result_tokens
 
 
 def _guard_tool_result(
     result: dict[str, Any],
     max_tokens: int | None = None,
 ) -> dict[str, Any]:
-    """Truncate oversized tool results while preserving summary."""
+    """Truncate oversized tool results while preserving summary.
+
+    When *max_tokens* is 0 (default), no truncation is performed.
+    """
     if max_tokens is None:
         max_tokens = settings.max_tool_result_tokens
+    if max_tokens <= 0:
+        return result
     try:
         serialized = json.dumps(result, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
