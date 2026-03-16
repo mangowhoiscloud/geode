@@ -2401,8 +2401,9 @@ def _read_multiline_input(prompt: str) -> str:
     """Read user input via prompt_toolkit (arrow keys, history, paste).
 
     Falls back to Rich console.input if prompt_toolkit is unavailable.
-    Multi-line paste is handled by draining buffered stdin after the
-    first line (50 ms timeout).
+    Multi-line paste is detected by draining buffered stdin (50 ms timeout).
+    When paste is detected, shows ``[Pasted text +N lines]`` notification
+    and waits for additional input before submitting.
     """
     _restore_terminal()
 
@@ -2442,6 +2443,27 @@ def _read_multiline_input(prompt: str) -> str:
                 lines.append(stripped)
     except (ValueError, OSError):
         pass  # stdin not selectable (piped / non-TTY)
+
+    # Paste notification — show count and wait for explicit submit
+    extra_count = len(lines) - 1
+    if extra_count > 0:
+        console.print(f"  [dim][Pasted text +{extra_count} lines][/dim]")
+        # Allow user to add more input or press Enter to submit
+        _restore_terminal()
+        if session is not None:
+            try:
+                additional = session.prompt().strip()
+            except (KeyboardInterrupt, EOFError):
+                additional = ""
+            except Exception:
+                additional = ""
+        else:
+            try:
+                additional = console.input("> ").strip()
+            except (KeyboardInterrupt, EOFError):
+                additional = ""
+        if additional:
+            lines.append(additional)
 
     return "\n".join(lines)
 

@@ -45,11 +45,12 @@ class TestReadMultilineInput:
         assert result == ""
 
     def test_multiline_paste_joins_lines(self):
-        """Pasted multi-line text is joined into a single string."""
+        """Pasted multi-line text is joined and shows notification."""
         from core.cli import _read_multiline_input
 
         mock_console = MagicMock()
-        mock_console.input.return_value = "line 1"
+        # First call: initial input; second call: submit after paste notification
+        mock_console.input.side_effect = ["line 1", ""]
 
         # Simulate two additional lines buffered from paste
         paste_lines = iter(["line 2\n", "line 3\n", ""])
@@ -75,13 +76,18 @@ class TestReadMultilineInput:
             result = _read_multiline_input("> ")
 
         assert result == "line 1\nline 2\nline 3"
+        # Verify paste notification was shown
+        mock_console.print.assert_called()
+        notif_call = str(mock_console.print.call_args_list)
+        assert "Pasted text +2 lines" in notif_call
 
     def test_multiline_paste_skips_blank_lines(self):
         """Blank lines in paste are excluded."""
         from core.cli import _read_multiline_input
 
         mock_console = MagicMock()
-        mock_console.input.return_value = "first"
+        # First call: initial input; second call: submit after paste notification
+        mock_console.input.side_effect = ["first", ""]
 
         paste_lines = iter(["\n", "second\n", ""])
         call_count = [0]
