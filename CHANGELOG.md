@@ -28,12 +28,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.14.0] — 2026-03-16
+
+Identity Pivot 완성, 1M 컨텍스트 활용 극대화, tool_result 고아 400 에러 3중 방어, HITL 완화, UI 톤다운.
+
 ### Added
 - 복사/붙여넣기 알림 — 멀티라인 paste 감지 시 `[Pasted text +N lines]` 표시 후 추가 입력 대기 (즉시 실행 방지)
 
 ### Fixed
 - 멀티턴 tool_result 고아 참조 400 에러 — 3중 방어: (1) Anthropic `clear_tool_uses` 서버사이드 컨텍스트 관리, (2) `ConversationContext._trim()`에 tool pair sanitization 추가, (3) 기존 `_repair_messages()` 유지
 - 스케줄 생성/삭제 즉시 영속화 — `add_job()`/`remove_job()` 후 `save()` 호출 추가 (crash 시 job 소실 방지)
+- `core/__init__.py` 버전 0.13.0→0.13.2 동기화 누락 수정
+- README 뱃지 에이전틱 네이티브 스타일 교체 (while(tool_use), Opus 4.6 1M, 38 tools MCP, LangGraph)
 
 ### Changed
 - 컨텍스트 제한 완화 — `max_turns` 20→50, `DEFAULT_MAX_ROUNDS` 15→30, `DEFAULT_MAX_TOKENS` 16384→32768, prune threshold 10→30 (1M 모델 활용 극대화)
@@ -613,6 +621,7 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.14.0 | 2026-03-16 | Identity Pivot, 1M 컨텍스트, tool_result 3중 방어, HITL 완화, 톤다운 UI |
 | 0.13.2 | 2026-03-16 | Pre-commit 안정화, cron weekday 버그, UI 마커 브랜딩 통일, Docs-Sync 강화 |
 | 0.13.1 | 2026-03-16 | Anthropic API extra fields 400 에러 수정 |
 | 0.13.0 | 2026-03-16 | Signal Liveification, Plan 자율 실행, Dynamic Graph, 오류 복구, Goal Decomposition, 그라운딩 |
@@ -627,7 +636,8 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.13.2...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/mangowhoiscloud/geode/compare/v0.13.2...v0.14.0
 [0.13.2]: https://github.com/mangowhoiscloud/geode/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/mangowhoiscloud/geode/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/mangowhoiscloud/geode/compare/v0.12.0...v0.13.0
