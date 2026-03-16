@@ -212,11 +212,11 @@ core/
 ├── extensibility/       # Report generation + Skills + AgentRegistry (3 defaults)
 ├── fixtures/            # JSON test data (3 core IPs + 201 Steam)
 └── ui/
-    ├── console.py       # Rich Console singleton (width=120, GEODE theme)
+    ├── console.py       # Rich Console singleton (dynamic width 80-160, GEODE theme)
     ├── agentic_ui.py    # Claude Code-style renderer (▸/✓/✗/✢/● markers)
     ├── panels.py        # Rich Panel builders
     ├── streaming.py     # Streaming output handler
-    └── status.py        # Status bar + spinner
+    └── status.py        # TextSpinner + GeodeStatus (non-invasive, no raw mode)
 ```
 
 ## Development

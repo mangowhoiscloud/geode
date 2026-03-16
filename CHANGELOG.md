@@ -30,6 +30,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - `check_status` 도구에 MCP 서버 가시성 추가 -- 활성 서버(json_config/auto_discovered) 목록과 비활성 서버(환경변수 누락) 목록을 함께 표시. "MCP 리스트 보여줘" 등 자연어 쿼리 지원
+- CLI 입력 UX 개선 -- renderer.reset() 제거, ANSI 재페인팅 제거, 50ms 폴링 제거, TextSpinner 도입, 동적 터미널 폭
 
 ### Fixed
 - MCP 카탈로그 이름 불일치 해소 -- `linkedin` -> `linkedin-reader` (mcp_servers.json과 일치), `arxiv` 카탈로그 항목 추가 (DEFAULT_SERVERS에 등록)

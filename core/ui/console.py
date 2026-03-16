@@ -10,6 +10,9 @@ Brand colors (from axolotl mascot, toned-down for readability):
 
 from __future__ import annotations
 
+import shutil
+import sys
+
 from rich.console import Console
 from rich.theme import Theme
 
@@ -56,4 +59,13 @@ GEODE_THEME = Theme(
     }
 )
 
-console = Console(theme=GEODE_THEME, width=120)
+
+def _get_terminal_width() -> int | None:
+    """Return dynamic terminal width (min=80, max=160), or None for non-TTY."""
+    if not sys.stdout.isatty():
+        return 120  # fallback for pipes, CI
+    cols = shutil.get_terminal_size().columns
+    return max(80, min(cols, 160))
+
+
+console = Console(theme=GEODE_THEME, width=_get_terminal_width())
