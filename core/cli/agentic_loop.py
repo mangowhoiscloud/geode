@@ -32,6 +32,7 @@ from core.llm.client import _maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.ui.agentic_ui import OperationLogger
+from core.ui.console import console
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
@@ -226,7 +227,18 @@ class AgenticLoop:
             is_last_round = round_idx == self.max_rounds - 1
             self._op_logger.begin_round("AgenticLoop")
 
-            response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
+            # Show spinner while waiting for LLM response
+            label = "Thinking..." if round_idx == 0 else f"Thinking... (round {round_idx + 1})"
+            _status = console.status(
+                f"  ✢ {label}",
+                spinner="dots",
+                spinner_style="cyan",
+            )
+            _status.start()
+            try:
+                response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
+            finally:
+                _status.stop()
 
             if response is None:
                 # Persist intermediate tool-use messages so next turn sees them
