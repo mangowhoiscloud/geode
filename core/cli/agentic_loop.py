@@ -137,8 +137,8 @@ class AgenticLoop:
         execute tools → feed results back → continue
     """
 
-    DEFAULT_MAX_ROUNDS = 15
-    DEFAULT_MAX_TOKENS = 16384
+    DEFAULT_MAX_ROUNDS = 30
+    DEFAULT_MAX_TOKENS = 32768
     MAX_CLARIFICATION_ROUNDS = 3
     WRAP_UP_HEADROOM = 2  # force text response N rounds before max
 
@@ -341,7 +341,7 @@ class AgenticLoop:
         2. No orphaned tool_result messages (each tool_result must follow
            an assistant message containing the matching tool_use block)
         """
-        if len(messages) <= 10:
+        if len(messages) <= 30:
             return
         first = messages[0]
         # Walk backward to find a safe cut point:

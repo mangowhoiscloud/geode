@@ -24,7 +24,7 @@ class ConversationContext:
     follow-up queries.
     """
 
-    max_turns: int = 20
+    max_turns: int = 50
     messages: list[dict[str, Any]] = field(default_factory=list)
 
     # ------------------------------------------------------------------

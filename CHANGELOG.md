@@ -33,8 +33,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - 멀티턴 tool_result 고아 참조 400 에러 — 3중 방어: (1) Anthropic `clear_tool_uses` 서버사이드 컨텍스트 관리, (2) `ConversationContext._trim()`에 tool pair sanitization 추가, (3) 기존 `_repair_messages()` 유지
+- 스케줄 생성/삭제 즉시 영속화 — `add_job()`/`remove_job()` 후 `save()` 호출 추가 (crash 시 job 소실 방지)
 
 ### Changed
+- 컨텍스트 제한 완화 — `max_turns` 20→50, `DEFAULT_MAX_ROUNDS` 15→30, `DEFAULT_MAX_TOKENS` 16384→32768, prune threshold 10→30 (1M 모델 활용 극대화)
 - Identity Pivot 완성 — `analyst.md` SYSTEM 프롬프트에서 "undervalued IP discovery agent" 제거, 게임 전용 예시를 도메인 비의존적 예시로 교체
 - `ANALYST_SYSTEM` 해시 핀 갱신 (`924433f5bf11` → `90acc856a5b2`)
 - UI 팔레트 톤다운 — 선명한 5색(coral/gold/cyan/magenta/crystal)을 차분한 톤(rose/amber/cadet/iris/lavender)으로 교체. HTML 리포트 CSS 변수 + gradient 동기화
