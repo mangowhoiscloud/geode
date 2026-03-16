@@ -34,7 +34,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 프로필 도구 4종 (`profile_show`, `profile_update`, `profile_preference`, `profile_learn`) -- ContextAssembler Tier 0.5 주입
 
 ### Changed
-- Token Guard 완화 — `MAX_TOOL_RESULT_TOKENS` 4096 → 16384 (1M 컨텍스트 활용 극대화). `settings.max_tool_result_tokens`로 설정 가능
+- Token Guard 상한 제거 — `MAX_TOOL_RESULT_TOKENS` 기본값 0 (무제한). 프론티어 합의: 하드 캡 대신 압축(Karpathy P6) + `clear_tool_uses` 서버측 정리로 컨텍스트 관리. `GEODE_MAX_TOOL_RESULT_TOKENS` 환경변수로 필요 시 상한 재설정 가능
 
 ### Fixed
 - 프롬프트/REPL 출력에서 장식용 이모지 제거 — 리포트 생성 외 모든 CLI 출력에서 이모지(⚡⚠✏⏸) 삭제, UI 마커(✓✗✢●)는 유지
