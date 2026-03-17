@@ -610,7 +610,10 @@ def compile_graph(
         ("core.verification.rights_risk", "RightsStatus"),
         ("core.verification.rights_risk", "RightsRiskResult"),
     ]
-    _serde = JsonPlusSerializer(allowed_json_modules=_allowed_modules)
+    _serde = JsonPlusSerializer(
+        allowed_json_modules=_allowed_modules,
+        allowed_msgpack_modules=_allowed_modules,
+    )
 
     if checkpoint_db is not None:
         db_path = Path(checkpoint_db)
