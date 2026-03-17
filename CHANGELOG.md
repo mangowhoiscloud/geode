@@ -28,6 +28,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Config Cascade -- `~/.geode/config.toml` (글로벌) + `.geode/config.toml` (프로젝트) TOML 설정 지원. 4-level 우선순위: CLI > env > project TOML > global TOML > default
+- Run History Context -- ContextAssembler에 최근 실행 이력 3건 자동 주입 (Karpathy P6 L3 judgment-level compression)
+- `geode init` 서브커맨드 -- `.geode/` 디렉토리 구조 + 템플릿 config.toml + .gitignore 자동 생성
+
 ### Architecture
 - CLI 레이어 분리 -- `__init__.py` (2842줄) -> `repl.py` + `tool_handlers.py` + `result_cache.py` 추출. 모듈별 단일 책임 원칙 적용
 - `anthropic` SDK 직접 참조 제거 -- CLI 레이어(`agentic_loop.py`, `nl_router.py`)에서 `core.llm.client` 래퍼(`LLMTimeoutError` 등) 사용으로 전환. Port/Adapter 경계 유지

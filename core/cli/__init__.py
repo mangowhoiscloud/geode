@@ -2838,5 +2838,69 @@ def batch(
         render_batch_table(results)
 
 
+@app.command()
+def init(
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing config.toml"),
+) -> None:
+    """Initialize .geode/ project structure with template config."""
+    from core.config import DEFAULT_CONFIG_TOML
+    from core.memory.project import ProjectMemory
+    from core.memory.user_profile import FileBasedUserProfile
+
+    project_mem = ProjectMemory(Path("."))
+    user_profile = FileBasedUserProfile()
+
+    # .claude/ (ProjectMemory)
+    created_claude = project_mem.ensure_structure()
+    if created_claude:
+        console.print("  Created .claude/ structure")
+
+    # .geode/ directories
+    geode_dirs = [
+        Path(".geode/snapshots"),
+        Path(".geode/reports"),
+        Path(".geode/result_cache"),
+        Path(".geode/models"),
+        Path(".geode/sessions"),
+    ]
+    for d in geode_dirs:
+        d.mkdir(parents=True, exist_ok=True)
+    console.print("  Created .geode/ directories")
+
+    # config.toml template
+    config_path = Path(".geode/config.toml")
+    if not config_path.exists() or force:
+        config_path.write_text(DEFAULT_CONFIG_TOML, encoding="utf-8")
+        console.print("  Created .geode/config.toml")
+    else:
+        console.print("  .geode/config.toml already exists (use --force to overwrite)")
+
+    # ~/.geode/user_profile
+    created_profile = user_profile.ensure_structure()
+    if created_profile:
+        console.print("  Created ~/.geode/user_profile/")
+
+    # .gitignore entry
+    _ensure_gitignore_entry(".geode/", "# GEODE")
+    console.print("[green]GEODE project initialized.[/green]")
+
+
+def _ensure_gitignore_entry(entry: str, comment: str = "") -> None:
+    """Add entry to .gitignore if not already present."""
+    gitignore = Path(".gitignore")
+    if gitignore.exists():
+        content = gitignore.read_text(encoding="utf-8")
+        if entry in content:
+            return
+        if not content.endswith("\n"):
+            content += "\n"
+    else:
+        content = ""
+    if comment:
+        content += f"\n{comment}\n"
+    content += f"{entry}\n"
+    gitignore.write_text(content, encoding="utf-8")
+
+
 if __name__ == "__main__":
     app()
