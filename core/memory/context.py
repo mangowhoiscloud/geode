@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 from core.infrastructure.ports.memory_port import (
@@ -23,6 +24,25 @@ log = logging.getLogger(__name__)
 
 # Context freshness threshold (seconds) — data older than this is stale
 DEFAULT_FRESHNESS_THRESHOLD_S = 3600.0  # 1 hour
+
+# Maximum run history entries to inject
+DEFAULT_RUN_HISTORY_MAX_ENTRIES = 3
+
+
+def _format_age(seconds: float) -> str:
+    """Format elapsed seconds as human-readable age string."""
+    if seconds < 0:
+        return "now"
+    minutes = seconds / 60
+    if minutes < 1:
+        return "now"
+    if minutes < 60:
+        return f"{int(minutes)}m ago"
+    hours = minutes / 60
+    if hours < 24:
+        return f"{int(hours)}h ago"
+    days = hours / 24
+    return f"{int(days)}d ago"
 
 
 class ContextAssembler:
@@ -48,6 +68,7 @@ class ContextAssembler:
         session_store: SessionStorePort | None = None,
         user_profile: UserProfilePort | None = None,
         freshness_threshold_s: float = DEFAULT_FRESHNESS_THRESHOLD_S,
+        run_log_dir: Path | str | None = None,
     ) -> None:
         self._org_memory = organization_memory
         self._project_memory = project_memory
@@ -55,6 +76,7 @@ class ContextAssembler:
         self._user_profile = user_profile
         self._freshness_threshold = freshness_threshold_s
         self._last_assembly_time: float = 0.0
+        self._run_log_dir: Path | None = Path(run_log_dir) if run_log_dir else None
 
     def assemble(
         self,
@@ -133,6 +155,9 @@ class ContextAssembler:
                 log.warning("Failed to load session context: %s", e)
                 context["_session_loaded"] = False
 
+        # Run History: inject recent execution summaries (Karpathy P6 L3)
+        self._inject_run_history(ip_name, context)
+
         assembled_at = time.time()
         context["_assembled_at"] = assembled_at
         context["_session_id"] = session_id
@@ -160,6 +185,53 @@ class ContextAssembler:
             return False
         threshold = max_age_s or self._freshness_threshold
         return (time.time() - self._last_assembly_time) < threshold
+
+    def _inject_run_history(
+        self,
+        ip_name: str,
+        context: dict[str, Any],
+        max_entries: int = DEFAULT_RUN_HISTORY_MAX_ENTRIES,
+    ) -> None:
+        """P6 Context Budget L3: inject recent run results as 1-line summary.
+
+        Format: "Recent: Berserk S/81.3 (2h ago) | Cowboy Bebop A/68.4 (1d ago)"
+        """
+        if not self._run_log_dir:
+            return
+
+        try:
+            from core.orchestration.run_log import RunLog
+
+            # Scan all JSONL files in run_log_dir for pipeline_end events
+            if not self._run_log_dir.exists():
+                return
+
+            all_entries = []
+            for jsonl_file in self._run_log_dir.glob("*.jsonl"):
+                session_key = jsonl_file.stem.replace("_", ":")
+                run_log = RunLog(session_key, log_dir=self._run_log_dir)
+                entries = run_log.read(limit=max_entries, event_filter="pipeline_end")
+                all_entries.extend(entries)
+
+            if not all_entries:
+                return
+
+            # Sort by timestamp descending, take most recent
+            all_entries.sort(key=lambda e: e.timestamp, reverse=True)
+            recent = all_entries[:max_entries]
+
+            now = time.time()
+            summaries = []
+            for entry in recent:
+                tier = entry.metadata.get("tier", "?")
+                score = entry.metadata.get("score", "?")
+                age = _format_age(now - entry.timestamp)
+                name = entry.metadata.get("ip_name", ip_name)
+                summaries.append(f"{name} {tier}/{score} ({age})")
+
+            context["_run_history"] = " | ".join(summaries)
+        except Exception:
+            log.debug("Failed to inject run history", exc_info=True)
 
     @staticmethod
     def _build_llm_summary(

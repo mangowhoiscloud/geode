@@ -441,6 +441,7 @@ class GeodeRuntime:
             project_memory=project_memory,
             session_store=session_store,
             user_profile=user_profile,
+            run_log_dir=DEFAULT_LOG_DIR,
         )
 
         # Wire ContextAssembler into router node (L2 → L3 bridge)
