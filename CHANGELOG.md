@@ -689,6 +689,9 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.17.0 | 2026-03-17 | Cost Tracker, Agent Reflection, Cache Expiry, geode history, tool_handlers 분할 |
+| 0.16.0 | 2026-03-17 | Config Cascade TOML, Run History Context, geode init, CLI 레이어 분리, 코드 퀄리티 |
+| 0.15.0 | 2026-03-16 | Tier 0.5 User Profile, MCP 코드 레벨 영속화, Token Guard 철폐, README 정체성 반영 |
 | 0.14.0 | 2026-03-16 | Identity Pivot, 1M 컨텍스트, tool_result 3중 방어, HITL 완화, 톤다운 UI |
 | 0.13.2 | 2026-03-16 | Pre-commit 안정화, cron weekday 버그, UI 마커 브랜딩 통일, Docs-Sync 강화 |
 | 0.13.1 | 2026-03-16 | Anthropic API extra fields 400 에러 수정 |
@@ -704,7 +707,10 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/mangowhoiscloud/geode/compare/v0.16.0...v0.17.0
+[0.16.0]: https://github.com/mangowhoiscloud/geode/compare/v0.15.0...v0.16.0
+[0.15.0]: https://github.com/mangowhoiscloud/geode/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/mangowhoiscloud/geode/compare/v0.13.2...v0.14.0
 [0.13.2]: https://github.com/mangowhoiscloud/geode/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/mangowhoiscloud/geode/compare/v0.13.0...v0.13.1
