@@ -241,6 +241,7 @@ class TokenTracker:
         )
         self._accumulator.record(usage)
         self._inject_langsmith(model, input_tokens, output_tokens, cost)
+        self._persist_usage(model, input_tokens, output_tokens, cost)
         return usage
 
     def calculate_cost(
@@ -311,6 +312,23 @@ class TokenTracker:
             }
         except Exception:
             log.debug("LangSmith injection skipped", exc_info=True)
+
+    # -- Persistent usage store (fire-and-forget) ---------------------------
+
+    @staticmethod
+    def _persist_usage(
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+    ) -> None:
+        """Persist usage to ~/.geode/usage/ JSONL (no-op on failure)."""
+        try:
+            from core.llm.usage_store import get_usage_store
+
+            get_usage_store().record(model, input_tokens, output_tokens, cost_usd)
+        except Exception:
+            log.debug("Usage persistence skipped", exc_info=True)
 
 
 # ───────────────────────────────────────────────────────────────────────────
