@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 def _patch_no_prompt_toolkit():
     """Patch _get_prompt_session to return None (force console.input fallback)."""
-    return patch("core.cli._get_prompt_session", return_value=None)
+    return patch("core.cli.repl._get_prompt_session", return_value=None)
 
 
 class TestReadMultilineInput:
@@ -22,7 +22,7 @@ class TestReadMultilineInput:
 
         with (
             _patch_no_prompt_toolkit(),
-            patch("core.cli.console", mock_console),
+            patch("core.cli.repl.console", mock_console),
         ):
             result = _read_multiline_input("[bold cyan]>[/bold cyan] ")
 
@@ -37,7 +37,7 @@ class TestReadMultilineInput:
 
         with (
             _patch_no_prompt_toolkit(),
-            patch("core.cli.console", mock_console),
+            patch("core.cli.repl.console", mock_console),
         ):
             result = _read_multiline_input("> ")
 
@@ -52,7 +52,7 @@ class TestReadMultilineInput:
 
         with (
             _patch_no_prompt_toolkit(),
-            patch("core.cli.console", mock_console),
+            patch("core.cli.repl.console", mock_console),
         ):
             result = _read_multiline_input("> ")
 
@@ -69,8 +69,8 @@ class TestReadMultilineInput:
         mock_console.input.return_value = "fallback input"
 
         with (
-            patch("core.cli._get_prompt_session", return_value=mock_session),
-            patch("core.cli.console", mock_console),
+            patch("core.cli.repl._get_prompt_session", return_value=mock_session),
+            patch("core.cli.repl.console", mock_console),
         ):
             result = _read_multiline_input("> ")
 
@@ -92,7 +92,7 @@ class TestReadMultilineInput:
         mock_session = MagicMock()
         mock_session.prompt.return_value = "test input"
 
-        with patch("core.cli._get_prompt_session", return_value=mock_session):
+        with patch("core.cli.repl._get_prompt_session", return_value=mock_session):
             result = _read_multiline_input("> ")
 
         assert result == "test input"
