@@ -353,16 +353,16 @@ class TestCallLLMParsed:
 
 
 # ---------------------------------------------------------------------------
-# _maybe_traceable
+# maybe_traceable
 # ---------------------------------------------------------------------------
 
 
 class TestMaybeTraceable:
     def test_returns_identity_when_disabled(self):
-        from core.llm.client import _maybe_traceable
+        from core.llm.client import maybe_traceable
 
         with patch("core.llm.client.is_langsmith_enabled", return_value=False):
-            decorator = _maybe_traceable(run_type="llm", name="test")
+            decorator = maybe_traceable(run_type="llm", name="test")
 
             # Should be identity — decorating a function returns same function
             def dummy() -> str:
@@ -371,23 +371,23 @@ class TestMaybeTraceable:
             assert decorator(dummy) is dummy
 
     def test_returns_traceable_when_enabled(self):
-        from core.llm.client import _maybe_traceable
+        from core.llm.client import maybe_traceable
 
         mock_traceable = MagicMock(return_value=lambda fn: fn)
         with (
             patch("core.llm.client.is_langsmith_enabled", return_value=True),
             patch.dict("sys.modules", {"langsmith": MagicMock(traceable=mock_traceable)}),
         ):
-            _maybe_traceable(run_type="chain", name="test_fn")
+            maybe_traceable(run_type="chain", name="test_fn")
 
     def test_falls_back_on_import_error(self):
-        from core.llm.client import _maybe_traceable
+        from core.llm.client import maybe_traceable
 
         with (
             patch("core.llm.client.is_langsmith_enabled", return_value=True),
             patch.dict("sys.modules", {"langsmith": None}),
         ):
-            decorator = _maybe_traceable(run_type="llm")
+            decorator = maybe_traceable(run_type="llm")
 
             def dummy() -> str:
                 return "ok"

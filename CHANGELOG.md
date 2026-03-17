@@ -31,6 +31,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Architecture
 - CLI 레이어 분리 -- `__init__.py` (2842줄) -> `repl.py` + `tool_handlers.py` + `result_cache.py` 추출. 모듈별 단일 책임 원칙 적용
 - `anthropic` SDK 직접 참조 제거 -- CLI 레이어(`agentic_loop.py`, `nl_router.py`)에서 `core.llm.client` 래퍼(`LLMTimeoutError` 등) 사용으로 전환. Port/Adapter 경계 유지
+- L5→L3 레이어 위반 수정 -- `calculate_krippendorff_alpha` 순수 수학 함수를 `core/verification/stats.py`로 이동. `expert_panel.py`는 역호환 re-export 유지
+- L5→L1 config 의존성 제거 -- `nodes/analysts.py`와 `verification/cross_llm.py`에서 `settings` 직접 접근 → state/파라미터 주입으로 전환
+- `_maybe_traceable` → `maybe_traceable` 공개 API 전환 -- 외부 모듈이 private 함수를 import하던 위반 해소. 역호환 alias 유지
+
+### Removed
+- `core/ui/streaming.py` 삭제 (198줄 데드코드, 전체 코드베이스에서 미참조)
 
 ### Changed
 - `check_status` 도구에 MCP 서버 가시성 추가 -- 활성 서버(json_config/auto_discovered) 목록과 비활성 서버(환경변수 누락) 목록을 함께 표시. "MCP 리스트 보여줘" 등 자연어 쿼리 지원
