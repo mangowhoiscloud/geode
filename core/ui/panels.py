@@ -85,12 +85,23 @@ def evaluator_panel(evaluations: dict[str, EvaluatorResult]) -> None:
         "hidden_value": "Hidden",
         "community_momentum": "Momentum",
     }
-    for key, ev in evaluations.items():
-        label = labels.get(key, key)
+    table = Table(show_header=True, header_style="bold", border_style="dim")
+    table.add_column("Evaluator", style="label", width=14)
+    table.add_column("Score", justify="center", width=9)
+    table.add_column("Rationale", width=40)
+
+    for key, ev in sorted(evaluations.items()):
+        label = labels.get(key, key.replace("_", " ").title())
         score = ev.composite_score
-        filled = int(score / 100 * 24)
-        bar = "[green]" + "\u2588" * filled + "[/green][dim]" + "\u2591" * (24 - filled) + "[/dim]"
-        console.print(f"  {label:10s} {bar} {score:.0f}/100")
+        score_style = "bold green" if score >= 80 else "yellow" if score >= 60 else "red"
+        # Truncate rationale to first sentence for table readability
+        rationale = ev.rationale.split(".")[0] + "." if ev.rationale else ""
+        table.add_row(
+            label,
+            f"[{score_style}]{score:.0f}/100[/{score_style}]",
+            rationale,
+        )
+    console.print(table)
     console.print()
 
 
