@@ -28,6 +28,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- TextSpinner 줄 늘어짐 -- `\r` → `\r\x1b[2K` ANSI 라인 클리어로 동일 줄 덮어쓰기
+- Pipeline 진행 표시 터미널 폭 초과 시 축약 -- 첫 2단계 + `... (+N tasks)` 형태로 truncate
+
 ---
 
 ## [0.18.0] — 2026-03-17

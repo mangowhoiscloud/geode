@@ -56,7 +56,7 @@ class TextSpinner:
         idx = 0
         while self._running:
             frame = self.FRAMES[idx % len(self.FRAMES)]
-            sys.stdout.write(f"\r  {frame} {self._message}")
+            sys.stdout.write(f"\r\x1b[2K  {frame} {self._message}")
             sys.stdout.flush()
             time.sleep(0.08)
             idx += 1
