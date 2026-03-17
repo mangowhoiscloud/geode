@@ -12,26 +12,25 @@ from typing import Any
 
 import numpy as np
 
-from core.automation.expert_panel import calculate_krippendorff_alpha
-from core.config import settings
 from core.infrastructure.ports.llm_port import LLMClientPort
-from core.llm.client import _maybe_traceable
+from core.llm.client import maybe_traceable
 from core.llm.prompts import CROSS_LLM_DUAL_VERIFY, CROSS_LLM_RESCORE, CROSS_LLM_SYSTEM
 from core.state import AnalysisResult, GeodeState
+from core.verification.stats import calculate_krippendorff_alpha
 
 log = logging.getLogger(__name__)
 
-# Agreement threshold: >= 0.67 acceptable, >= 0.80 good
-AGREEMENT_THRESHOLD = settings.agreement_threshold
+# Default agreement threshold: >= 0.67 acceptable, >= 0.80 good
+DEFAULT_AGREEMENT_THRESHOLD = 0.67
 
 # Scale parameters for agreement normalization
 _SCALE_MIN = 1.0
 _SCALE_MAX = 5.0
 _MAX_VARIANCE = ((_SCALE_MAX - _SCALE_MIN) / 2) ** 2  # 4.0 — max possible variance
 
-# Default model name when adapter info is unavailable
-_DEFAULT_PRIMARY_MODEL = settings.model
-_DEFAULT_SECONDARY_MODEL = settings.default_secondary_model
+# Default model names when adapter info is unavailable
+_DEFAULT_PRIMARY_MODEL = "claude-opus-4-6"
+_DEFAULT_SECONDARY_MODEL = "gpt-5.4"
 
 
 def _derive_model_names(
@@ -80,11 +79,12 @@ def _calc_agreement(scores: list[float], scale_max_var: float = _MAX_VARIANCE) -
     return max(0.0, min(1.0, agreement))
 
 
-@_maybe_traceable(run_type="chain", name="run_cross_llm_check")  # type: ignore[untyped-decorator]
+@maybe_traceable(run_type="chain", name="run_cross_llm_check")  # type: ignore[untyped-decorator]
 def run_cross_llm_check(
     state: GeodeState,
     *,
     secondary_adapter: LLMClientPort | None = None,
+    agreement_threshold: float = DEFAULT_AGREEMENT_THRESHOLD,
 ) -> dict[str, Any]:
     """Cross-LLM agreement check using analyst score distributions.
 
@@ -185,7 +185,7 @@ def run_cross_llm_check(
     except Exception:
         krippendorff_alpha = None
 
-    passed = combined >= AGREEMENT_THRESHOLD
+    passed = combined >= agreement_threshold
 
     log.info(
         "Cross-LLM agreement: %.3f (score=%.3f, conf=%.3f), passed=%s, mode=%s",
@@ -215,7 +215,7 @@ def run_cross_llm_check(
         "models_compared": _derive_model_names(secondary_adapter=secondary_adapter),
         "n_raters": len(analyses),
         "passed": passed,
-        "threshold": AGREEMENT_THRESHOLD,
+        "threshold": agreement_threshold,
         "verification_mode": verification_mode,
     }
     if secondary_score is not None:
@@ -228,6 +228,7 @@ def run_dual_adapter_check(
     *,
     primary_adapter: LLMClientPort | None = None,
     secondary_adapter: LLMClientPort | None = None,
+    agreement_threshold: float = DEFAULT_AGREEMENT_THRESHOLD,
 ) -> dict[str, Any]:
     """Cross-LLM verification using dual adapters (Claude ↔ GPT).
 
@@ -239,15 +240,20 @@ def run_dual_adapter_check(
         state: Current pipeline state with analyses.
         primary_adapter: Primary LLMClientPort (e.g. ClaudeAdapter).
         secondary_adapter: Secondary LLMClientPort (e.g. OpenAIAdapter).
+        agreement_threshold: Minimum agreement for passing (default 0.67).
     """
     # If no adapters, fall back to standard check
     if primary_adapter is None or secondary_adapter is None:
-        fallback: dict[str, Any] = run_cross_llm_check(state)
+        fallback: dict[str, Any] = run_cross_llm_check(
+            state, agreement_threshold=agreement_threshold
+        )
         fallback["verification_mode"] = "agreement_only"
         return fallback
 
     # Standard agreement check first
-    base_result: dict[str, Any] = run_cross_llm_check(state)
+    base_result: dict[str, Any] = run_cross_llm_check(
+        state, agreement_threshold=agreement_threshold
+    )
 
     # Dual-adapter verification: ask secondary model for a quick sanity check
     ip_name = state.get("ip_name", "Unknown")
@@ -281,7 +287,7 @@ def run_dual_adapter_check(
         if secondary_agreement is not None:
             secondary_normalized = secondary_agreement / 5.0
             combined = 0.7 * base_result["cross_llm_agreement"] + 0.3 * secondary_normalized
-            passed = combined >= AGREEMENT_THRESHOLD
+            passed = combined >= agreement_threshold
             verification_mode = "dual_adapter"
 
             log.info(

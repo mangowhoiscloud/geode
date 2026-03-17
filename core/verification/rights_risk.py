@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from core.llm.client import _maybe_traceable
+from core.llm.client import maybe_traceable
 
 
 class RightsStatus(StrEnum):
@@ -108,7 +108,7 @@ _FIXTURE_RIGHTS: dict[str, dict[str, Any]] = {
 }
 
 
-@_maybe_traceable(run_type="chain", name="check_rights_risk")  # type: ignore[untyped-decorator]
+@maybe_traceable(run_type="chain", name="check_rights_risk")  # type: ignore[untyped-decorator]
 def check_rights_risk(ip_name: str, ip_info: dict[str, Any] | None = None) -> RightsRiskResult:
     """Assess IP rights and licensing risk.
 

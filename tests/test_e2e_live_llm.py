@@ -184,9 +184,9 @@ class TestLangSmithTracingLive:
 
         # If LangSmith is enabled, verify decorator is active (no remote call)
         if is_langsmith_enabled():
-            from core.llm.client import _maybe_traceable
+            from core.llm.client import maybe_traceable
 
-            decorator = _maybe_traceable(name="test_check")
+            decorator = maybe_traceable(name="test_check")
             assert callable(decorator)
 
 

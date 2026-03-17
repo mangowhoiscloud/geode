@@ -357,11 +357,11 @@ class TestStuckDetectorHooks:
 
 class TestLangSmithConditional:
     def test_no_api_key_returns_identity(self):
-        from core.llm.client import _maybe_traceable
+        from core.llm.client import maybe_traceable
 
         with patch.dict(os.environ, {}, clear=True):
             # No LANGCHAIN_TRACING_V2 or API key → passthrough
-            decorator = _maybe_traceable(run_type="llm", name="test")
+            decorator = maybe_traceable(run_type="llm", name="test")
 
             def dummy():
                 return 42
