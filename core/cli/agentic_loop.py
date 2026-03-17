@@ -906,7 +906,7 @@ class AgenticLoop:
                 log.debug("_restore_terminal() unavailable in batch approval")
 
             console.print()
-            console.print("  [bold yellow]$ Cost confirmation[/bold yellow]")
+            console.print("  [warning]$ Cost confirmation[/warning]")
             count = len(items)
             plural = "s" if count > 1 else ""
             verb = "s" if count == 1 else ""
