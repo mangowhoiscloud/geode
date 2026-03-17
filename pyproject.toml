@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.17.0"
+version = "0.18.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 readme = "README.md"
 requires-python = ">=3.12"
