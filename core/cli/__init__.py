@@ -240,6 +240,12 @@ def _state_to_report_dict(state: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("subscores", {})
     out.setdefault("synthesis", {})
     out.setdefault("analyses", [])
+    out.setdefault("evaluations", {})
+    out.setdefault("psm_result", {})
+    out.setdefault("guardrails", {})
+    out.setdefault("biasbuster", {})
+    out.setdefault("signals", {})
+    out.setdefault("analyst_confidence", 0.0)
     return out
 
 
