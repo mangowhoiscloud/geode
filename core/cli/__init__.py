@@ -520,8 +520,11 @@ def _progress_line(done: list[str], active: str = "") -> str:
     return " → ".join(parts) if parts else "[header]Starting...[/header]"
 
 
-def _merge_event_output(final_state: dict[str, Any], output: dict[str, Any]) -> None:
+def _merge_event_output(final_state: dict[str, Any], output: dict[str, Any] | None) -> None:
     """Merge a single node's output into the accumulated final state."""
+    if output is None:
+        log.warning("Node returned None output, skipping merge")
+        return
     for k, v in output.items():
         if k in ("analyses", "errors"):
             lst = v if isinstance(v, list) else [v]
