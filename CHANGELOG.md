@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Architecture
+- `_build_tool_handlers` 957줄 → 그룹별 헬퍼 함수 분할 (~50줄 디스패처) — 10개 논리 그룹(Analysis, Memory, Plan, HITL, System, Execution, Delegated, Profile, Signal, MCP)으로 분리
+
 ---
 
 ## [0.16.0] — 2026-03-17
