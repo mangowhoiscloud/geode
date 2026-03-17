@@ -426,6 +426,68 @@ graph TB
 
 `ContextAssembler`가 4-tier를 조합하여 `_llm_summary` (280자, SOUL 10% / Org 25% / Project 25% / Session 40% 예산)로 압축합니다.
 
+### Prompt Assembly Pipeline
+
+모든 노드(Analyst, Evaluator, Synthesizer, BiasBuster)는 동일한 5단계 조합 파이프라인(ADR-007)을 거쳐 LLM을 호출합니다.
+
+```mermaid
+graph LR
+    T["Base Template<br/>prompts/*.md<br/>(11 templates)"] --> P0["Phase 0<br/>.format(**kwargs)"]
+    P0 --> P1["Phase 1<br/>Prompt Override"]
+    P1 --> P2["Phase 2<br/>Skill Injection<br/>(top 3, ≤500c)"]
+    P2 --> P3["Phase 3<br/>Memory Context<br/>(_llm_summary, ≤300c)"]
+    P3 --> P4["Phase 4<br/>Bootstrap Extra<br/>(5 × 100c)"]
+    P4 --> Budget["Token Budget<br/>(hard limit 6000c)"]
+    Budget --> AP["AssembledPrompt<br/>+ SHA-256[:12] hash"]
+    AP --> Cache["cache_control:<br/>ephemeral"]
+    Cache --> LLM["call_llm_parsed()<br/>→ Pydantic model"]
+
+    style T fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style P0 fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style P1 fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
+    style P2 fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style P3 fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style P4 fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
+    style Budget fill:#7c2d12,stroke:#f97316,color:#fed7aa
+    style AP fill:#1e293b,stroke:#ec4899,color:#e2e8f0
+    style Cache fill:#064e3b,stroke:#10b981,color:#6ee7b7
+    style LLM fill:#f59e0b,stroke:#f59e0b,color:#fff
+```
+
+| 단계 | 입력 | 제한 | 설명 |
+|------|------|------|------|
+| **Phase 0** | `prompts/*.md` (11개 `.md` + `axes.py`) | — | `=== SYSTEM ===` / `=== USER ===` 구분자로 분리, `.format(**kwargs)` 렌더링 |
+| **Phase 1** | `state._prompt_overrides` | append-only (기본) | 노드별 프롬프트 오버라이드. full replace opt-in |
+| **Phase 2** | `SkillRegistry` | top 3, 500c/skill | `.claude/skills/` YAML frontmatter 기반 자동 발견, `node` + `role_type` 필터, priority 정렬 |
+| **Phase 3** | `ContextAssembler._llm_summary` | 300c | 4-tier 메모리 압축 요약 주입 |
+| **Phase 4** | `BootstrapManager._extra_instructions` | 5개 × 100c | 노드 사전 실행 컨텍스트 (pre-execution injection) |
+| **Budget** | 전체 조합 결과 | hard limit 6000c, warning 4000c | 초과 시 truncation, 이벤트 기록 |
+
+**노드 호출 패턴** — 모든 노드가 동일한 3단계를 따릅니다:
+
+```mermaid
+sequenceDiagram
+    participant Node as Node (analyst, evaluator, ...)
+    participant Asm as PromptAssembler
+    participant LLM as Claude Opus 4.6
+
+    Node->>Node: base_system = TEMPLATE.format(...)
+    Node->>Node: base_user = TEMPLATE.format(...)
+    Node->>Asm: assemble(base_system, base_user, state, node, role_type)
+    Asm->>Asm: Phase 1-4 injection + budget check
+    Asm-->>Node: AssembledPrompt (system, user, hash, fragments)
+    Node->>LLM: call_llm_parsed(system, user, output_model=PydanticModel)
+    LLM-->>Node: Typed result (AnalysisResult, EvaluatorOutput, ...)
+```
+
+| 호출 함수 | 출력 타입 | 용도 |
+|-----------|----------|------|
+| `call_llm_parsed()` | Pydantic model | **주력** — Anthropic `messages.parse()` 구조화 출력 |
+| `call_llm()` | `str` | 텍스트 생성 (내러티브, 코멘터리) |
+| `call_llm_json()` | `dict` | 레거시 JSON 파싱 (fallback) |
+
+**무결성 보장**: 모든 템플릿에 SHA-256[:12] 핀 해시 저장. CI `verify_prompt_integrity()`로 의도치 않은 변경 감지 (Karpathy P4 Ratchet).
+
 ---
 
 ## Safety & HITL
@@ -723,6 +785,46 @@ core/
 - **도메인은 플러그인.** `DomainPort` Protocol 구현체를 교체하면 게임 IP, 금융, 의료, 콘텐츠 등 어떤 도메인이든 동일한 자율 하네스 위에 탑재할 수 있다.
 - **Safety by default.** 자율 에이전트는 위험하다. DANGEROUS 도구는 항상 사용자 승인, Error Recovery에서도 제외, 서브에이전트에서도 제외. 안전 게이트 우회 경로가 없다.
 - **Graceful degradation.** API 키 없으면 dry-run, MCP 미연결이면 fixture fallback, LLM 실패하면 retry chain. 어떤 상태에서든 에이전트는 멈추지 않는다.
+
+## Development Workflow
+
+기능 구현 시 **재귀개선 루프**를 따릅니다. 각 단계에서 실패/품질 저하 발견 시 이전 단계로 돌아갑니다.
+
+```mermaid
+graph TB
+    W["0. Worktree 분할<br/>(git worktree)"] --> Plan["1. Research → Plan<br/>코드 탐색 → Gap 분석<br/>→ docs/plans/ 문서화"]
+    Plan --> Impl["2. Implement + Unit Verify<br/>코드 변경 → ruff → mypy<br/>→ pytest (반복)"]
+    Impl --> E2E["3. E2E Verify<br/>Mock → CLI dry-run<br/>→ Live → LangSmith"]
+    E2E -->|"fail"| Impl
+    E2E -->|"pass"| Docs["4. Docs-Sync<br/>CHANGELOG + README<br/>+ CLAUDE.md + pyproject.toml"]
+    Docs --> PR["5. PR & Merge<br/>feature → develop → main"]
+    PR -->|"CI fail"| Impl
+
+    style W fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
+    style Plan fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style Impl fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style E2E fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style Docs fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
+    style PR fill:#1e293b,stroke:#ef4444,color:#e2e8f0
+```
+
+| 단계 | 활동 | 재귀 조건 |
+|------|------|-----------|
+| **0. Worktree** | `git worktree add`로 격리된 작업 공간 생성 | — |
+| **1. Research → Plan** | 기존 코드 탐색, 외부 패턴 참조, Gap 분석, `docs/plans/`에 계획 문서 | — |
+| **2. Implement + Unit Verify** | 최소 단위 코드 변경 → `ruff check` → `mypy` → `pytest` | 테스트 실패 시 수정 후 반복 |
+| **3. E2E Verify** | Mock E2E → CLI `--dry-run` → Live E2E → LangSmith 트레이스 확인 | 어떤 단계든 실패 시 **2번으로 복귀** |
+| **4. Docs-Sync** | CHANGELOG, README, CLAUDE.md, pyproject.toml 수치/버전 동기화 | — |
+| **5. PR & Merge** | feature → develop → main (GitFlow). CI 실패 시 수정 루프 | CI 실패 시 **2번으로 복귀** |
+
+**품질 게이트** (모두 통과 필수):
+
+| 게이트 | 명령어 | 기준 |
+|--------|--------|------|
+| Lint | `uv run ruff check core/ tests/` | 0 errors |
+| Type | `uv run mypy core/` | 0 errors |
+| Test | `uv run pytest tests/ -q` | 2530+ pass |
+| Live | `uv run pytest tests/test_e2e_live_llm.py -v -m live` | All pass |
 
 ## License
 
