@@ -32,8 +32,8 @@ from core.llm.client import (
     LLMConnectionError,
     LLMRateLimitError,
     LLMTimeoutError,
-    _maybe_traceable,
     get_async_anthropic_client,
+    maybe_traceable,
 )
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.orchestration.hooks import HookEvent, HookSystem
@@ -220,7 +220,7 @@ class AgenticLoop:
         result: AgenticResult = asyncio.run(self.arun(user_input))
         return result
 
-    @_maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
+    @maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
     async def arun(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_log = []
@@ -524,7 +524,7 @@ class AgenticLoop:
             log.debug("Goal decomposition skipped", exc_info=True)
             return None
 
-    @_maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
+    @maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     async def _call_llm(
         self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
     ) -> Any | None:

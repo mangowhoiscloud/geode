@@ -283,3 +283,7 @@ class GeodeState(TypedDict, total=False):
     # Internal (Send API)
     _analyst_type: str
     _evaluator_type: str  # Which evaluator to run (for Send API)
+
+    # Internal (Ensemble config injection from L0)
+    _ensemble_mode: str  # "single" | "cross"
+    _secondary_analysts: str  # Comma-separated analyst types for secondary LLM

@@ -45,6 +45,8 @@ def create_mcp_server() -> Any:
             runtime = GeodeRuntime.create(ip_name)
             graph = runtime.compile_graph()
 
+            from core.config import settings
+
             initial_state: dict[str, Any] = {
                 "ip_name": ip_name,
                 "pipeline_mode": "full_pipeline",
@@ -53,6 +55,9 @@ def create_mcp_server() -> Any:
                 "analyses": [],
                 "evaluations": {},
                 "errors": [],
+                # Ensemble config injection (L5 nodes read from state, not settings)
+                "_ensemble_mode": settings.ensemble_mode,
+                "_secondary_analysts": settings.secondary_analysts,
             }
 
             if not dry_run:

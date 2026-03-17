@@ -8,7 +8,7 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 137
+- **Modules**: 140
 - **Tests**: 2423+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -201,6 +201,7 @@ core/
 │   ├── guardrails.py    # G1-G4 checks (schema, range, grounding, consistency)
 │   ├── biasbuster.py    # 6 bias types (REAE framework)
 │   ├── cross_llm.py     # Cross-LLM agreement + Krippendorff's α
+│   ├── stats.py         # Statistical utilities (Krippendorff's α, shared)
 │   └── rights_risk.py   # IP rights risk assessment
 ├── infrastructure/
 │   ├── ports/           # Protocol interfaces (LLM, Memory, Auth, Hook, Tool, DomainPort)
@@ -215,7 +216,6 @@ core/
     ├── console.py       # Rich Console singleton (dynamic width 80-160, GEODE theme)
     ├── agentic_ui.py    # Claude Code-style renderer (▸/✓/✗/✢/● markers)
     ├── panels.py        # Rich Panel builders
-    ├── streaming.py     # Streaming output handler
     └── status.py        # TextSpinner + GeodeStatus (non-invasive, no raw mode)
 ```
 

@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from core.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed, get_llm_tool
 from core.infrastructure.ports.tool_port import get_tool_executor
-from core.llm.client import _maybe_traceable
+from core.llm.client import maybe_traceable
 from core.llm.prompts import BIASBUSTER_SYSTEM, BIASBUSTER_USER
 from core.state import AnalysisResult, BiasBusterResult, GeodeState
 
@@ -41,7 +41,7 @@ def _run_statistical_checks(analyses: list[AnalysisResult]) -> dict[str, float]:
     }
 
 
-@_maybe_traceable(run_type="chain", name="run_biasbuster")  # type: ignore[untyped-decorator]
+@maybe_traceable(run_type="chain", name="run_biasbuster")  # type: ignore[untyped-decorator]
 def run_biasbuster(state: GeodeState) -> BiasBusterResult:
     """Run BiasBuster 4-step verification."""
     try:

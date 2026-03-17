@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from core.state import AnalysisResult
 from core.verification.cross_llm import (
-    AGREEMENT_THRESHOLD,
+    DEFAULT_AGREEMENT_THRESHOLD,
     _calc_agreement,
     run_cross_llm_check,
 )
+
+# Backward compat alias for tests
+AGREEMENT_THRESHOLD = DEFAULT_AGREEMENT_THRESHOLD
 
 
 class TestCalcAgreement:

@@ -955,6 +955,9 @@ def _run_analysis(
         "errors": [],
         "iteration": 1,
         "max_iterations": 3,
+        # Ensemble config injection (L5 nodes read from state, not settings)
+        "_ensemble_mode": settings.ensemble_mode,
+        "_secondary_analysts": settings.secondary_analysts,
     }
 
     # Inject tool definitions for tool-augmented nodes (Synthesizer, BiasBuster)
@@ -1009,6 +1012,9 @@ def _build_initial_state(
         "errors": [],
         "iteration": 1,
         "max_iterations": 3,
+        # Ensemble config injection (L5 nodes read from state, not settings)
+        "_ensemble_mode": settings.ensemble_mode,
+        "_secondary_analysts": settings.secondary_analysts,
     }
     if not dry_run:
         tool_injection = runtime.get_tool_state_injection(mode="full_pipeline")

@@ -11,7 +11,6 @@ Covers:
 from __future__ import annotations
 
 from typing import Any, TypeVar
-from unittest.mock import patch
 
 import pytest
 from core.config import Settings
@@ -21,13 +20,17 @@ from core.infrastructure.ports.llm_port import (
     set_llm_callable,
 )
 from core.nodes.analysts import (
-    _PRIMARY_ANALYSTS,
-    _SECONDARY_ANALYSTS,
+    _DEFAULT_PRIMARY_ANALYSTS,
+    _DEFAULT_SECONDARY_ANALYSTS,
     _run_analyst,
     _should_use_secondary,
 )
 from core.state import AnalysisResult, GeodeState
 from pydantic import BaseModel
+
+# Derive sets from default CSV strings (matches old module-level sets)
+_PRIMARY_ANALYSTS = set(_DEFAULT_PRIMARY_ANALYSTS.split(","))
+_SECONDARY_ANALYSTS = set(_DEFAULT_SECONDARY_ANALYSTS.split(","))
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -182,22 +185,16 @@ class TestShouldUseSecondary:
     """Test analyst-to-LLM routing logic."""
 
     def test_single_mode_never_secondary(self) -> None:
-        with patch("core.nodes.analysts.settings") as mock_settings:
-            mock_settings.ensemble_mode = "single"
-            for atype in ["game_mechanics", "player_experience", "growth_potential", "discovery"]:
-                assert _should_use_secondary(atype) is False
+        for atype in ["game_mechanics", "player_experience", "growth_potential", "discovery"]:
+            assert _should_use_secondary(atype, ensemble_mode="single") is False
 
     def test_cross_mode_primary_analysts(self) -> None:
-        with patch("core.nodes.analysts.settings") as mock_settings:
-            mock_settings.ensemble_mode = "cross"
-            for atype in _PRIMARY_ANALYSTS:
-                assert _should_use_secondary(atype) is False
+        for atype in _PRIMARY_ANALYSTS:
+            assert _should_use_secondary(atype, ensemble_mode="cross") is False
 
     def test_cross_mode_secondary_analysts(self) -> None:
-        with patch("core.nodes.analysts.settings") as mock_settings:
-            mock_settings.ensemble_mode = "cross"
-            for atype in _SECONDARY_ANALYSTS:
-                assert _should_use_secondary(atype) is True
+        for atype in _SECONDARY_ANALYSTS:
+            assert _should_use_secondary(atype, ensemble_mode="cross") is True
 
 
 # ---------------------------------------------------------------------------
@@ -218,9 +215,8 @@ class TestSingleMode:
         )
 
         state = _make_state(dry_run=False)
-        with patch("core.nodes.analysts.settings") as mock_settings:
-            mock_settings.ensemble_mode = "single"
-            result = _run_analyst("game_mechanics", state)
+        state["_ensemble_mode"] = "single"
+        result = _run_analyst("game_mechanics", state)
 
         assert result.model_provider == "primary"
         assert result.key_finding == "Primary model finding"
@@ -244,9 +240,8 @@ class TestCrossMode:
         )
 
         state = _make_state(dry_run=False)
-        with patch("core.nodes.analysts.settings") as mock_settings:
-            mock_settings.ensemble_mode = "cross"
-            result = _run_analyst("game_mechanics", state)
+        state["_ensemble_mode"] = "cross"
+        result = _run_analyst("game_mechanics", state)
 
         assert result.model_provider == "primary"
 
@@ -260,9 +255,8 @@ class TestCrossMode:
         )
 
         state = _make_state(dry_run=False)
-        with patch("core.nodes.analysts.settings") as mock_settings:
-            mock_settings.ensemble_mode = "cross"
-            result = _run_analyst("player_experience", state)
+        state["_ensemble_mode"] = "cross"
+        result = _run_analyst("player_experience", state)
 
         assert result.model_provider == "secondary"
 
@@ -284,9 +278,8 @@ class TestFallbackToPrimary:
         )
 
         state = _make_state(dry_run=False)
-        with patch("core.nodes.analysts.settings") as mock_settings:
-            mock_settings.ensemble_mode = "cross"
-            result = _run_analyst("player_experience", state)
+        state["_ensemble_mode"] = "cross"
+        result = _run_analyst("player_experience", state)
 
         # Should fall back to primary since secondary is None
         assert result.model_provider == "primary"
