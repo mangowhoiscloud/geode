@@ -28,6 +28,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.16.0] — 2026-03-17
+
+.geode Phase 1 (Config Cascade, Run History, geode init), Clean Architecture 레이어 수정, CLI 입력 UX 개선, 코드 퀄리티 리팩터링.
+
 ### Added
 - Config Cascade -- `~/.geode/config.toml` (글로벌) + `.geode/config.toml` (프로젝트) TOML 설정 지원. 4-level 우선순위: CLI > env > project TOML > global TOML > default
 - Run History Context -- ContextAssembler에 최근 실행 이력 3건 자동 주입 (Karpathy P6 L3 judgment-level compression)
