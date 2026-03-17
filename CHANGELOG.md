@@ -28,6 +28,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- AgenticLoop 병렬 도구 실행 -- Tiered Batch Approval 패턴 적용. TIER 0-1 (SAFE/MCP auto-approved) 즉시 병렬, TIER 2 (EXPENSIVE) 일괄 비용 확인 후 병렬, TIER 3-4 (WRITE/DANGEROUS) 개별 승인 순차 실행. `asyncio.gather` + `to_thread` 기반, 단일 tool_use는 기존 동작 유지
+- AGENTIC_SUFFIX 프롬프트에 병렬 도구 호출 가이드 추가 -- 독립 도구는 한 응답에서 동시 호출 권장
+
 ---
 
 ## [0.17.0] — 2026-03-17
