@@ -28,9 +28,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.18.0] — 2026-03-17
+
+AgenticLoop 병렬 도구 실행 (Tiered Batch Approval), Pipeline None guard, 구형 정체성 제거, LLM 안정성.
+
 ### Changed
-- AgenticLoop 병렬 도구 실행 -- Tiered Batch Approval 패턴 적용. TIER 0-1 (SAFE/MCP auto-approved) 즉시 병렬, TIER 2 (EXPENSIVE) 일괄 비용 확인 후 병렬, TIER 3-4 (WRITE/DANGEROUS) 개별 승인 순차 실행. `asyncio.gather` + `to_thread` 기반, 단일 tool_use는 기존 동작 유지
-- AGENTIC_SUFFIX 프롬프트에 병렬 도구 호출 가이드 추가 -- 독립 도구는 한 응답에서 동시 호출 권장
+- AgenticLoop 병렬 도구 실행 -- Tiered Batch Approval 패턴. TIER 0-1 즉시 병렬, TIER 2 일괄 비용 확인 후 병렬, TIER 3-4 개별 승인 순차
+- AGENTIC_SUFFIX 프롬프트에 병렬 도구 호출 가이드 추가
+
+### Fixed
+- Pipeline 노드 None 반환 방어 (`_merge_event_output` null guard)
+- 구형 버전/정체성 하드코딩 제거 (panels.py v0.9.0 → 동적 `__version__`)
+- LLM read timeout 120s → 300s (1M 컨텍스트)
+- LangSmith 429 로그 스팸 suppression
+- LangGraph checkpoint deserialization 경고 제거
 
 ---
 
