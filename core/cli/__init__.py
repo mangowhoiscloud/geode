@@ -11,6 +11,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import re as _re
+import shutil
 import signal
 import sys
 import termios
@@ -513,11 +514,37 @@ _STEP_LABELS: dict[str, str] = {
 
 
 def _progress_line(done: list[str], active: str = "") -> str:
-    """Build a compact progress status line."""
+    """Build a compact progress status line, truncated to terminal width.
+
+    When the full line would exceed the terminal width, shows the first 2
+    completed steps, a ``... (+N tasks)`` summary, and the current active step.
+    """
+    cols = shutil.get_terminal_size().columns
+    # Reserve space for spinner frame + padding ("  X " = 4 chars)
+    max_width = cols - 4
+
     parts = [f"[dim]{s}[/dim]" for s in done]
     if active:
         parts.append(f"[header]{active}[/header]")
-    return " → ".join(parts) if parts else "[header]Starting...[/header]"
+    if not parts:
+        return "[header]Starting...[/header]"
+
+    full = " \u2192 ".join(parts)
+    # Estimate plain-text length by stripping Rich markup tags
+    plain = _re.sub(r"\[/?[^\]]*\]", "", full)
+    if len(plain) <= max_width:
+        return full
+
+    # Truncate: first 2 done steps + ... (+N tasks) [+ active]
+    keep = 2
+    shown = [f"[dim]{s}[/dim]" for s in done[:keep]]
+    remaining = len(done) - keep
+    if active:
+        suffix = f"[dim]... (+{remaining} tasks)[/dim] \u2192 [header]{active}[/header]"
+    else:
+        suffix = f"[dim]... (+{remaining} tasks)[/dim]"
+    shown.append(suffix)
+    return " \u2192 ".join(shown)
 
 
 def _merge_event_output(final_state: dict[str, Any], output: dict[str, Any] | None) -> None:
@@ -619,6 +646,7 @@ def _execute_pipeline(
 
     done: list[str] = []
     analyst_count = 0
+    evaluator_count = 0
     final_state: dict[str, Any] = dict(initial_state)
     config = runtime.thread_config
     input_state: GeodeState | None = initial_state
@@ -638,6 +666,15 @@ def _execute_pipeline(
                                 status.update(_progress_line(done, f"Analyze ({analyst_count}/4)"))
                             else:
                                 done.append("Analyze ✓")
+                                status.update(_progress_line(done))
+                        elif node_name == "evaluator":
+                            evaluator_count += 1
+                            if evaluator_count < 3:
+                                status.update(
+                                    _progress_line(done, f"Evaluate ({evaluator_count}/3)")
+                                )
+                            else:
+                                done.append("Evaluate ✓")
                                 status.update(_progress_line(done))
                         else:
                             done.append(f"{label} ✓")
