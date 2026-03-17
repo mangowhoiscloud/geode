@@ -605,9 +605,7 @@ def _handle_interrupt(
     """
     iteration = final_state.get("iteration", 1)
     confidence = final_state.get("composite_score", {})
-    console.print(
-        f"\n  [bold yellow]Pipeline paused[/bold yellow] (iter={iteration}, steps={len(done)})"
-    )
+    console.print(f"\n  [warning]Pipeline paused[/warning] (iter={iteration}, steps={len(done)})")
     if confidence:
         console.print(f"  [dim]Current confidence: {confidence}[/dim]")
 

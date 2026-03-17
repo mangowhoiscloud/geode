@@ -214,7 +214,7 @@ def render_session_cost_summary() -> None:
         in_str = _fmt_tokens(acc.total_input_tokens)
         out_str = _fmt_tokens(acc.total_output_tokens)
         console.print(f"  [dim]Tokens:[/dim] ↓{in_str} ↑{out_str}")
-        console.print(f"  [bold yellow]Total: ${acc.total_cost_usd:.4f}[/bold yellow]")
+        console.print(f"  [warning]Total: ${acc.total_cost_usd:.4f}[/warning]")
         # Per-model breakdown
         model_costs: dict[str, float] = {}
         model_calls: dict[str, int] = {}
