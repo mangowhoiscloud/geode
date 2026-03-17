@@ -2750,7 +2750,7 @@ def _interactive_loop() -> None:
 
 @app.callback()
 def main(ctx: typer.Context) -> None:
-    """GEODE — 게임화 IP 도메인 자율 실행 하네스."""
+    """GEODE — Autonomous Research Harness."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
         _interactive_loop()

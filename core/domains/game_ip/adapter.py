@@ -58,7 +58,7 @@ class GameIPDomain:
 
     @property
     def description(self) -> str:
-        return "저평가 게임 IP 평가 도메인 — 게임화 IP의 시장 잠재력 분석"
+        return "Game IP 평가 도메인 — 저평가 IP의 시장 잠재력 분석"
 
     # --- Analyst Configuration ---
 

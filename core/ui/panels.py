@@ -9,6 +9,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 
+from core import __version__
 from core.state import AnalysisResult, EvaluatorResult, PSMResult, SynthesisResult
 from core.ui.console import console
 
@@ -24,7 +25,7 @@ def header_panel(ip_name: str, pipeline_mode: str, model: str) -> None:
     console.print(
         Panel(
             content,
-            title="[header]GEODE v0.9.0 — 게임화 IP 도메인 자율 실행 하네스[/header]",
+            title=f"[header]GEODE v{__version__} — Autonomous Research Harness[/header]",
             border_style="cyan",
         )
     )

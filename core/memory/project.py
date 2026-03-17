@@ -364,7 +364,7 @@ class ProjectMemory:
 # GEODE Project Memory
 
 ## 프로젝트 개요
-- 목적: 게임화 IP 중 저평가된 IP 발굴 및 회복 전략 도출
+- 목적: 범용 자율 실행 에이전트 (리서치, 분석, 자동화). Game IP 분석은 도메인 플러그인
 - 파이프라인: Router → Signals → Analysts → Evaluators → Scoring → Synthesis
 
 ## 분석 규칙
