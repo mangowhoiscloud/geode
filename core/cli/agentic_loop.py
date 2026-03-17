@@ -24,7 +24,14 @@ from typing import TYPE_CHECKING, Any
 from core.cli.conversation import ConversationContext
 from core.cli.error_recovery import ErrorRecoveryStrategy
 from core.cli.nl_router import _build_system_prompt
-from core.cli.tool_executor import ToolExecutor
+from core.cli.tool_executor import (
+    AUTO_APPROVED_MCP_SERVERS,
+    DANGEROUS_TOOLS,
+    EXPENSIVE_TOOLS,
+    SAFE_TOOLS,
+    WRITE_TOOLS,
+    ToolExecutor,
+)
 from core.config import ANTHROPIC_PRIMARY, settings
 from core.llm.client import (
     LLMAuthenticationError,
@@ -649,93 +656,302 @@ class AgenticLoop:
     _MAX_CONSECUTIVE_FAILURES = 2  # auto-skip after N consecutive failures per tool
 
     async def _process_tool_calls(self, response: Any) -> list[dict[str, Any]]:
-        """Execute all tool_use blocks and return tool_result messages.
+        """Execute tool_use blocks — parallel when multiple, sequential when single.
+
+        When the LLM returns 2+ tool_use blocks in one response, executes them
+        concurrently via ``asyncio.gather`` (frontier pattern: runtime handles
+        parallelism, LLM just calls tools).  Single tool_use falls through to
+        the sequential path for zero-overhead backward compatibility.
 
         Tracks consecutive failures per tool name.  After _MAX_CONSECUTIVE_FAILURES
         for the same tool, triggers the adaptive error recovery chain:
         retry → alternative tool → cheaper fallback → escalate.
-
-        If recovery is not possible (safety-gated tools) or the chain is
-        exhausted, returns a synthetic error result so the LLM moves on.
         """
+        tool_blocks = [b for b in response.content if b.type == "tool_use"]
+
+        if len(tool_blocks) <= 1:
+            return await self._execute_tools_sequential(tool_blocks)
+
+        # Multiple tools: parallel execution via asyncio.gather
+        return await self._execute_tools_parallel(tool_blocks)
+
+    async def _execute_single_tool(self, block: Any) -> dict[str, Any]:
+        """Execute a single tool_use block and return its processed result dict.
+
+        Handles consecutive failure tracking, recovery, clarification guards,
+        logging, tool_log bookkeeping, and token guard — the same per-tool
+        logic shared by both sequential and parallel paths.
+
+        Returns a dict ready to be used as a tool_result content block
+        (with ``type``, ``tool_use_id``, ``content`` keys).
+        """
+        tool_name = block.name
+        tool_input: dict[str, Any] = block.input
+
+        log.info("AgenticLoop: tool_use %s(%s)", tool_name, tool_input)
+
+        # Check consecutive failure count
+        fail_count = self._consecutive_failures.get(tool_name, 0)
+
+        if fail_count >= self._MAX_CONSECUTIVE_FAILURES:
+            # Adaptive recovery: try recovery chain instead of auto-skip
+            result = await self._attempt_recovery(tool_name, tool_input, fail_count)
+            visible = self._op_logger.log_tool_call(tool_name, tool_input)
+            self._op_logger.log_tool_result(tool_name, result, visible=visible)
+        else:
+            # Progressive log: show tool call before execution
+            visible = self._op_logger.log_tool_call(tool_name, tool_input)
+
+            # Execute via ToolExecutor (sync handlers wrapped in to_thread)
+            result = await asyncio.to_thread(self.executor.execute, tool_name, tool_input)
+
+        # Track consecutive failures
+        if isinstance(result, dict) and result.get("error"):
+            # Don't increment if recovery was attempted (already handled)
+            if not result.get("recovery_attempted"):
+                self._consecutive_failures[tool_name] = fail_count + 1
+        else:
+            self._consecutive_failures[tool_name] = 0
+
+        # Track clarification rounds to prevent infinite loops
+        if isinstance(result, dict) and result.get("clarification_needed"):
+            self._clarification_count += 1
+            if self._clarification_count > self.MAX_CLARIFICATION_ROUNDS:
+                result = {
+                    "error": (
+                        "Too many clarification attempts. Please provide all required parameters."
+                    ),
+                    "max_clarifications_exceeded": True,
+                }
+
+        # Progressive log: show tool result summary (skip if already logged)
+        skip_log = result.get("skipped") or result.get("recovery_attempted")
+        if isinstance(result, dict) and not skip_log:
+            self._op_logger.log_tool_result(tool_name, result, visible=visible)
+
+        self._tool_log.append(
+            {
+                "tool": tool_name,
+                "input": tool_input,
+                "result": result,
+            }
+        )
+
+        # Token guard: truncate oversized results to prevent context explosion
+        if isinstance(result, dict):
+            result = _guard_tool_result(result)
+
+        # Serialize result as JSON for LLM (not Python repr)
+        try:
+            content = json.dumps(result, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            content = str(result)
+
+        return {
+            "type": "tool_result",
+            "tool_use_id": block.id,
+            "content": content,
+        }
+
+    async def _execute_tools_sequential(self, tool_blocks: list[Any]) -> list[dict[str, Any]]:
+        """Execute tool blocks one by one (single-tool fast path)."""
         tool_results: list[dict[str, Any]] = []
-
-        for block in response.content:
-            if block.type != "tool_use":
-                continue
-
-            tool_name = block.name
-            tool_input: dict[str, Any] = block.input
-
-            log.info("AgenticLoop: tool_use %s(%s)", tool_name, tool_input)
-
-            # Check consecutive failure count
-            fail_count = self._consecutive_failures.get(tool_name, 0)
-
-            if fail_count >= self._MAX_CONSECUTIVE_FAILURES:
-                # Adaptive recovery: try recovery chain instead of auto-skip
-                result = await self._attempt_recovery(tool_name, tool_input, fail_count)
-                visible = self._op_logger.log_tool_call(tool_name, tool_input)
-                self._op_logger.log_tool_result(tool_name, result, visible=visible)
-            else:
-                # Progressive log: show tool call before execution
-                visible = self._op_logger.log_tool_call(tool_name, tool_input)
-
-                # Execute via ToolExecutor (sync handlers wrapped in to_thread)
-                result = await asyncio.to_thread(self.executor.execute, tool_name, tool_input)
-
-            # Track consecutive failures
-            if isinstance(result, dict) and result.get("error"):
-                # Don't increment if recovery was attempted (already handled)
-                if not result.get("recovery_attempted"):
-                    self._consecutive_failures[tool_name] = fail_count + 1
-            else:
-                self._consecutive_failures[tool_name] = 0
-
-            # Track clarification rounds to prevent infinite loops
-            if isinstance(result, dict) and result.get("clarification_needed"):
-                self._clarification_count += 1
-                if self._clarification_count > self.MAX_CLARIFICATION_ROUNDS:
-                    result = {
-                        "error": (
-                            "Too many clarification attempts. "
-                            "Please provide all required parameters."
-                        ),
-                        "max_clarifications_exceeded": True,
-                    }
-
-            # Progressive log: show tool result summary (skip if already logged)
-            skip_log = result.get("skipped") or result.get("recovery_attempted")
-            if isinstance(result, dict) and not skip_log:
-                self._op_logger.log_tool_result(tool_name, result, visible=visible)
-
-            self._tool_log.append(
-                {
-                    "tool": tool_name,
-                    "input": tool_input,
-                    "result": result,
-                }
-            )
-
-            # Token guard: truncate oversized results to prevent context explosion
-            if isinstance(result, dict):
-                result = _guard_tool_result(result)
-
-            # Serialize result as JSON for LLM (not Python repr)
-            try:
-                content = json.dumps(result, ensure_ascii=False, default=str)
-            except (TypeError, ValueError):
-                content = str(result)
-
-            tool_results.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": content,
-                }
-            )
-
+        for block in tool_blocks:
+            tool_result = await self._execute_single_tool(block)
+            tool_results.append(tool_result)
         return tool_results
+
+    # -- Tier classification for parallel execution --------------------------
+
+    @staticmethod
+    def _classify_tool_tier(tool_name: str, mcp_manager: Any | None = None) -> int:
+        """Classify a tool into a safety tier for parallel execution.
+
+        TIER 0: SAFE tools — auto-execute, no gate
+        TIER 1: MCP auto-approved — auto-execute, logged
+        TIER 2: EXPENSIVE tools — batch cost confirmation, then parallel
+        TIER 3: WRITE tools — individual approval, sequential
+        TIER 4: DANGEROUS tools — individual approval, sequential
+        Unclassified (STANDARD) tools default to TIER 0 (parallel-safe).
+        """
+        if tool_name in DANGEROUS_TOOLS:
+            return 4
+        if tool_name in WRITE_TOOLS:
+            return 3
+        if tool_name in EXPENSIVE_TOOLS:
+            return 2
+        # Check if this is an MCP tool from an auto-approved server
+        if mcp_manager is not None:
+            server = mcp_manager.find_server_for_tool(tool_name)
+            if server is not None:
+                if server in AUTO_APPROVED_MCP_SERVERS:
+                    return 1
+                # Non-auto-approved MCP tools need per-server approval —
+                # treat as sequential (tier 3) to avoid parallel prompts
+                return 3
+        if tool_name in SAFE_TOOLS:
+            return 0
+        # STANDARD tools (analyze_ip without expensive, delegate, etc.)
+        # are parallel-safe — no HITL gate.
+        return 0
+
+    async def _execute_tools_parallel(self, tool_blocks: list[Any]) -> list[dict[str, Any]]:
+        """Execute 2+ tool blocks with tiered batch approval.
+
+        Tier classification:
+          TIER 0-1 (SAFE/MCP auto-approved): start immediately in parallel
+          TIER 2 (EXPENSIVE): batch cost confirmation → parallel execution
+          TIER 3-4 (WRITE/DANGEROUS): individual approval → sequential
+
+        Results are returned in the same order as the input tool_use blocks
+        to satisfy the Anthropic API ordering requirement.
+        """
+        log.info(
+            "AgenticLoop: parallel execution of %d tools: %s",
+            len(tool_blocks),
+            [b.name for b in tool_blocks],
+        )
+
+        # Step 1: Classify blocks into tiers
+        tiered: dict[int, list[tuple[int, Any]]] = {0: [], 1: [], 2: [], 3: [], 4: []}
+        for idx, block in enumerate(tool_blocks):
+            tier = self._classify_tool_tier(block.name, self._mcp_manager)
+            tiered[tier].append((idx, block))
+            log.debug("Tool %s → tier %d", block.name, tier)
+
+        # Pre-allocate result slots in original order
+        results: list[dict[str, Any] | None] = [None] * len(tool_blocks)
+
+        # Step 2: Batch cost approval for TIER 2 (EXPENSIVE) tools
+        tier2_approved = True
+        if tiered[2]:
+            tier2_approved = await self._batch_cost_approval([block for _, block in tiered[2]])
+
+        # Step 3: Build parallel tasks for TIER 0 + TIER 1 + approved TIER 2
+        parallel_items: list[tuple[int, Any]] = []
+        parallel_items.extend(tiered[0])
+        parallel_items.extend(tiered[1])
+
+        if tier2_approved:
+            # Temporarily flag executor to skip per-tool cost confirmation
+            # since we already got batch approval
+            parallel_items.extend(tiered[2])
+        else:
+            # User denied batch cost — return denial for all TIER 2 tools
+            for idx, block in tiered[2]:
+                results[idx] = self._make_denial_result(block, "User denied batch cost approval")
+
+        # Step 4: Execute parallel pool
+        if parallel_items:
+            # For TIER 2 tools, temporarily set auto_approve to bypass
+            # the per-tool cost confirmation (batch approval already done)
+            old_auto_approve = self.executor._auto_approve
+            if tier2_approved and tiered[2]:
+                self.executor._auto_approve = True
+
+            try:
+                gathered = await asyncio.gather(
+                    *[self._safe_execute_single(block) for _, block in parallel_items]
+                )
+            finally:
+                # Restore original auto_approve state
+                if tier2_approved and tiered[2]:
+                    self.executor._auto_approve = old_auto_approve
+
+            for (idx, _block), result in zip(parallel_items, gathered, strict=True):
+                results[idx] = result
+
+        # Step 5: Execute TIER 3-4 (WRITE/DANGEROUS) sequentially
+        # These require individual user approval — ToolExecutor handles HITL
+        sequential_items = list(tiered[3]) + list(tiered[4])
+        for idx, block in sequential_items:
+            results[idx] = await self._execute_single_tool(block)
+
+        # All slots should be filled
+        return [r for r in results if r is not None]
+
+    async def _safe_execute_single(self, block: Any) -> dict[str, Any]:
+        """Wrapper that catches unexpected exceptions per tool."""
+        try:
+            return await self._execute_single_tool(block)
+        except Exception as exc:
+            log.error(
+                "Parallel tool %s raised unexpected error: %s",
+                block.name,
+                exc,
+                exc_info=True,
+            )
+            return self._make_error_result(block, exc)
+
+    async def _batch_cost_approval(self, blocks: list[Any]) -> bool:
+        """Show a single cost confirmation prompt for all EXPENSIVE tools.
+
+        Returns True if user approves, False if denied.
+        """
+        from core.ui.console import console
+
+        items: list[tuple[str, dict[str, Any], float]] = []
+        for block in blocks:
+            cost = EXPENSIVE_TOOLS.get(block.name, 0.0)
+            items.append((block.name, block.input, cost))
+
+        total_cost = sum(c for _, _, c in items)
+
+        def _prompt() -> bool:
+            try:
+                from core.cli import _restore_terminal
+
+                _restore_terminal()
+            except Exception:
+                log.debug("_restore_terminal() unavailable in batch approval")
+
+            console.print()
+            console.print("  [bold yellow]$ Cost confirmation[/bold yellow]")
+            count = len(items)
+            plural = "s" if count > 1 else ""
+            verb = "s" if count == 1 else ""
+            console.print(f"  {count} tool{plural} require{verb} approval:")
+            for name, inp, cost in items:
+                args_preview = ", ".join(f"{k}={v!r}" for k, v in inp.items())
+                console.print(f"    [dim]--[/dim] {name}({args_preview}) -- ~${cost:.2f}")
+            console.print(f"  [dim]Total estimated cost:[/dim] ~${total_cost:.2f}")
+            console.print()
+            try:
+                response = console.input("  [header]Proceed? [Y/n][/header] ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                console.print()
+                return False
+            return response in ("", "y", "yes")
+
+        return await asyncio.to_thread(_prompt)
+
+    @staticmethod
+    def _make_denial_result(block: Any, reason: str) -> dict[str, Any]:
+        """Build a tool_result for a denied tool execution."""
+        error_result = {"error": reason, "denied": True}
+        try:
+            content = json.dumps(error_result, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            content = str(error_result)
+        return {
+            "type": "tool_result",
+            "tool_use_id": block.id,
+            "content": content,
+        }
+
+    @staticmethod
+    def _make_error_result(block: Any, exc: Exception) -> dict[str, Any]:
+        """Build a tool_result for an unexpected exception."""
+        error_result = {"error": str(exc)}
+        try:
+            content = json.dumps(error_result, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            content = str(error_result)
+        return {
+            "type": "tool_result",
+            "tool_use_id": block.id,
+            "content": content,
+        }
 
     async def _attempt_recovery(
         self,

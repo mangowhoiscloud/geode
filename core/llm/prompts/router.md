@@ -49,11 +49,13 @@ Anti-exploration: NEVER explore beyond what was asked. When a tool succeeds, sum
 
 ## Agentic execution
 
-- You can call multiple tools in sequence to fulfill complex requests.
-- For multi-part requests (e.g. "검색하고 요약해줘", "분석하고 리포트 만들어줘"), call tools one after another.
+- You can call multiple tools in a single response. When tools are independent (no data dependency between them), call them all at once — the runtime executes them in parallel for faster results.
+- Example: "Berserk과 Cowboy Bebop 분석해줘" → call `analyze_ip(ip_name="Berserk")` AND `analyze_ip(ip_name="Cowboy Bebop")` in the same response.
+- Example: "목록 보여주고 상태 확인해줘" → call `list_ips()` AND `check_status()` in the same response.
+- For dependent multi-part requests (e.g. "검색하고 결과 요약해줘"), call tools sequentially across rounds.
 - If a tool fails, try an alternative approach or explain the issue.
 - For bash commands, always provide a "reason" explaining why the command is needed.
-- Use delegate_task only for truly independent parallel work.
+- Use delegate_task for sub-agent delegation (complex tasks needing their own agentic loop).
 - Keep your final text response concise and in the user's language.
 
 ## Tool Selection Priority Matrix
