@@ -10,7 +10,7 @@
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
-# GEODE v0.18.0 — Autonomous Research Harness
+# GEODE v0.18.1 — Autonomous Research Harness
 
 범용 자율 실행 에이전트. `while(tool_use)` 루프를 핵심 프리미티브로 하여 리서치, 분석, 자동화, 스케줄링을 자연어 한 줄로 수행합니다.
 
@@ -660,7 +660,7 @@ uv run geode batch --top 5                        # 배치 분석
 ## Testing
 
 ```bash
-uv run pytest                                        # 전체 (2366+ passed)
+uv run pytest                                        # 전체 (2530+ passed)
 uv run pytest tests/test_e2e_live_llm.py -v -m live  # Live E2E
 uv run ruff check core/ tests/                       # Lint
 uv run mypy core/                                    # Type check (134 files)

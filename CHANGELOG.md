@@ -28,9 +28,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.18.1] — 2026-03-17
+
+Report 보강, Evaluator UI 개선, Spinner/색상 안정화.
+
+### Changed
+- `generate_report` 보강 -- Evaluator 3명 축별 점수, PSM ATT/Z/Gamma, Scoring 6가중치, BiasBuster 플래그, 외부 시그널 수치를 리포트에 전체 포함
+- Evaluator UI를 Rich Table로 변경 -- Analyst 패널과 동일 형식
+- Evaluator 진행 카운터 -- `evaluator ✓` 반복 → `Evaluate (1/3)` 형태
+
 ### Fixed
 - TextSpinner 줄 늘어짐 -- `\r` → `\r\x1b[2K` ANSI 라인 클리어로 동일 줄 덮어쓰기
 - Pipeline 진행 표시 터미널 폭 초과 시 축약 -- 첫 2단계 + `... (+N tasks)` 형태로 truncate
+- HITL 승인 프롬프트 색상 톤다운 -- `bold yellow` → GEODE `warning` 테마 (brand gold) 통일 (3곳 잔여분 포함)
 
 ---
 
@@ -710,6 +722,8 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.18.1 | 2026-03-17 | Report 보강, Evaluator UI 개선, Spinner/색상 안정화 |
+| 0.18.0 | 2026-03-17 | 병렬 도구 실행 (Tiered Batch Approval), Pipeline 안정성 |
 | 0.17.0 | 2026-03-17 | Cost Tracker, Agent Reflection, Cache Expiry, geode history, tool_handlers 분할 |
 | 0.16.0 | 2026-03-17 | Config Cascade TOML, Run History Context, geode init, CLI 레이어 분리, 코드 퀄리티 |
 | 0.15.0 | 2026-03-16 | Tier 0.5 User Profile, MCP 코드 레벨 영속화, Token Guard 철폐, README 정체성 반영 |
@@ -728,7 +742,9 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.18.1...HEAD
+[0.18.1]: https://github.com/mangowhoiscloud/geode/compare/v0.18.0...v0.18.1
+[0.18.0]: https://github.com/mangowhoiscloud/geode/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/mangowhoiscloud/geode/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/mangowhoiscloud/geode/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/mangowhoiscloud/geode/compare/v0.14.0...v0.15.0
