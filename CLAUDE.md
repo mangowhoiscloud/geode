@@ -4,12 +4,12 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.15.0
+- **Version**: 0.17.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 140
-- **Tests**: 2423+
+- **Modules**: 142
+- **Tests**: 2520+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -18,17 +18,19 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 # Install
 uv sync
 
-# Dry-run (no LLM, fixture only)
+# Interactive REPL (primary interface)
+uv run geode
+
+# Natural language CLI
+uv run geode "summarize the latest AI research trends"
+uv run geode "compare React vs Vue for a new project"
+uv run geode "schedule daily standup reminder at 9am"
+
+# Game IP Domain Plugin (dry-run, no LLM)
 uv run geode analyze "Cowboy Bebop" --dry-run
 
-# Full run (requires API keys in .env)
-uv run geode analyze "Cowboy Bebop"
-
-# Verbose
+# Game IP Domain Plugin (full run, requires API keys)
 uv run geode analyze "Cowboy Bebop" --verbose
-
-# Interactive REPL
-uv run geode
 ```
 
 ## Architecture
@@ -38,7 +40,7 @@ uv run geode
 ```
 L0: CLI & AGENT      — Typer CLI, NL Router, AgenticLoop, SubAgentManager, Batch
 L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
-L2: MEMORY           — Organization > Project > Session (3-Tier + Hybrid L1/L2)
+L2: MEMORY           — Organization > Project > Session + User Profile (4-Tier + Hybrid L1/L2)
 L3: ORCHESTRATION    — HookSystem(30), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
 L4: EXTENSIBILITY    — ToolRegistry(38+), PolicyChain, Skills, MCP Catalog(38), Reports
 L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
@@ -120,6 +122,19 @@ START → router → signals → analyst×4 (Send API)
 - **Typed Evaluator Output**: Per-evaluator Pydantic models enforce required axes in structured output
 - **Confidence Multiplier**: `final = base × (0.7 + 0.3 × confidence/100)`
 
+### Recent Features (v0.15.0 -- v0.17.0)
+
+| Version | Feature | Description |
+|---------|---------|-------------|
+| v0.15.0 | Tier 0.5 User Profile | `~/.geode/user_profile/` + `.geode/user_profile/` -- 프로필/선호/학습 패턴 영속 저장 |
+| v0.16.0 | Config Cascade (TOML) | 4-level 우선순위: CLI > env > project TOML > global TOML > default |
+| v0.16.0 | `geode init` | `.geode/` 디렉토리 구조 + 템플릿 config.toml + .gitignore 자동 생성 |
+| v0.16.0 | Run History Context | ContextAssembler에 최근 실행 이력 3건 자동 주입 (Karpathy P6) |
+| v0.17.0 | Cost Tracker / UsageStore | `~/.geode/usage/YYYY-MM.jsonl`에 LLM 비용 영속 저장 |
+| v0.17.0 | Agent Reflection | `PIPELINE_END` Hook으로 `learned.md` 자동 패턴 추출 (Karpathy P4 Ratchet) |
+| v0.17.0 | Cache Expiry 24h+hash | ResultCache 24h TTL + SHA-256 content hash 검증 |
+| v0.17.0 | `geode history` | 실행 이력 + 모델별 비용 요약 조회 서브커맨드 |
+
 ## SOT (Source of Truth)
 
 | Document | Path | Content |
@@ -140,6 +155,9 @@ core/
 │   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── batch.py         # Batch analysis (ThreadPoolExecutor)
 │   ├── commands.py      # Slash command dispatch (17 commands)
+│   ├── repl.py          # REPL 메인 루프 (prompt_toolkit 기반)
+│   ├── tool_handlers.py # 10개 논리 그룹 tool handler 디스패처
+│   ├── result_cache.py  # ResultCache (24h TTL + SHA-256 content hash)
 │   ├── error_recovery.py # ErrorRecoveryStrategy (retry → alternative → fallback → escalate)
 │   └── search.py        # IP search engine (synonym expansion)
 ├── config.py            # Pydantic Settings (.env)
@@ -161,6 +179,7 @@ core/
 │   ├── prompts.py       # All prompt templates (versioned SHA-256)
 │   ├── prompt_assembler.py  # ADR-007 prompt assembly
 │   ├── skill_registry.py   # Skill definition + registry
+│   ├── usage_store.py     # UsageStore — ~/.geode/usage/ LLM 비용 영속 저장
 │   └── commentary.py       # LLM commentary generation
 ├── memory/
 │   ├── organization.py  # Org tier — fixture-based, read-only
@@ -168,7 +187,7 @@ core/
 │   ├── session.py       # Session tier — in-memory with TTL
 │   ├── hybrid_session.py # L1(Redis) → L2(PostgreSQL) hybrid store
 │   ├── session_key.py   # Hierarchical key builder (ip:name:phase)
-│   └── context.py       # 3-tier context assembler
+│   └── context.py       # 4-tier context assembler
 ├── orchestration/
 │   ├── hooks.py         # HookSystem (30 events + async atrigger)
 │   ├── bootstrap.py     # Node bootstrap (pre-execution context injection)
@@ -182,6 +201,7 @@ core/
 │   ├── hook_discovery.py # Auto-discovery of hook handlers
 │   ├── hot_reload.py    # Hot reload support
 │   ├── isolated_execution.py # IsolatedRunner (MAX_CONCURRENT=5, thread pool)
+│   ├── agent_reflection.py # Agent Reflection — PIPELINE_END 학습 패턴 추출
 │   ├── run_log.py       # Run audit log
 │   └── stuck_detection.py # Stuck pipeline detection
 ├── automation/
