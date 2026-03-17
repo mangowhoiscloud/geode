@@ -31,6 +31,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - README에 Prompt Assembly Pipeline 섹션 추가 — 5단계 조합 파이프라인 Mermaid 다이어그램 + 노드 호출 시퀀스
 - README에 Development Workflow 섹션 추가 — 재귀개선 루프 Mermaid 다이어그램 + 품질 게이트 테이블
+- README Game IP Domain 섹션 분리 — DomainPort Protocol과 Game IP 파이프라인을 독립 서브섹션으로 확장 (4 Analysts, 3 Evaluators, Scoring, Decision Tree, Verification 5-Layer)
+
+### Fixed
+- README 수치 정합성 수정 — MCP catalog 38→39, SAFE_BASH_PREFIXES 38→41, MCP adapters 5→4, User Profile 경로, prompt 템플릿 수 11→10, slash commands 17→20, config vars 30+→57
 
 
 ---

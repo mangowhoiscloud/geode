@@ -21,8 +21,8 @@
 - **Natural Language Interface** -- 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링 수행
 - **`while(tool_use)` Loop** -- 모든 자율 행동의 핵심 프리미티브. 도구를 호출하고, 관찰하고, 반복
 - **42 Built-in Tools** -- web_fetch, general_web_search, run_bash 등 42개 네이티브 도구
-- **MCP Auto-Discovery** -- MCPRegistry가 환경변수 기반 자동 탐지 (DEFAULT 5종 + AUTO_DISCOVER 18종), 카탈로그 38종
-- **Bash Execution** -- shell 명령 실행. SAFE_BASH_PREFIXES 38종 읽기 전용 자동승인, 9종 위험 패턴 차단, 그 외 HITL 승인
+- **MCP Auto-Discovery** -- MCPRegistry가 환경변수 기반 자동 탐지 (DEFAULT 5종 + AUTO_DISCOVER 18종), 카탈로그 39종
+- **Bash Execution** -- shell 명령 실행. SAFE_BASH_PREFIXES 41종 읽기 전용 자동승인, 9종 위험 패턴 차단, 그 외 HITL 승인
 - **Goal Decomposition** -- 복합 요청을 하위 목표 DAG로 자동 분해 (Haiku, ~$0.01/호출)
 - **Error Recovery** -- 실패 시 retry → alternative → fallback → escalate 4단계 자동 복구
 - **Sub-Agent** -- 부모 역량 전체 상속, 병렬 위임, Token Guard, as_completed 수집
@@ -48,7 +48,7 @@ flowchart LR
     MCP --> MO["Other<br/>first-call approval"]
 
     Bash --> BBlk["Blocked<br/>(9 patterns)"]
-    Bash --> BSafe["SAFE_BASH_PREFIXES<br/>(38 read-only)"]
+    Bash --> BSafe["SAFE_BASH_PREFIXES<br/>(41 read-only)"]
     Bash --> BHitl["Other<br/>HITL approval"]
 
     style NL fill:#1e293b,stroke:#475569,color:#e2e8f0
@@ -70,8 +70,8 @@ NL Router가 LLM의 tool_use 응답을 3가지 경로로 디스패치합니다:
 | 경로 | 도구 수 | 승인 방식 |
 |------|--------|----------|
 | Built-in Tools | 42 | SAFE 자동승인, STANDARD 실행, WRITE HITL 승인 |
-| MCP Tools | 카탈로그 38종 | AUTO_APPROVED 서버 4종 자동승인, 그 외 초회 승인 |
-| Bash | shell 명령 | SAFE_BASH_PREFIXES 38종 자동승인, 9종 차단, 그 외 HITL |
+| MCP Tools | 카탈로그 39종 | AUTO_APPROVED 서버 4종 자동승인, 그 외 초회 승인 |
+| Bash | shell 명령 | SAFE_BASH_PREFIXES 41종 자동승인, 9종 차단, 그 외 HITL |
 
 ## Installation
 
@@ -159,7 +159,7 @@ graph TB
         Policy["PolicyChain"]
         Reports["Report Generator"]
         Skills["Skills System"]
-        MCPCat["MCP Catalog (38)"]
+        MCPCat["MCP Catalog (39)"]
     end
 
     subgraph L5["L5 — Domain Plugins"]
@@ -187,7 +187,7 @@ graph TB
 | **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입 |
 | **L2** Memory | SOUL → User Profile → Organization → Project → Session (4-Tier), SqliteSaver | 계층적 메모리 + LangGraph 체크포인트 |
 | **L3** Orchestration | HookSystem (30 events), TaskGraph DAG, PlanMode, CoalescingQueue | 라이프사이클 이벤트, 동시성 제어 |
-| **L4** Extensibility | ToolRegistry (42), PolicyChain, Skills, MCP Catalog (38) | 런타임 tool/skill 확장, MCP 자동설치 |
+| **L4** Extensibility | ToolRegistry (42), PolicyChain, Skills, MCP Catalog (39) | 런타임 tool/skill 확장, MCP 자동설치 |
 | **L5** Domain Plugins | DomainPort Protocol, GameIPDomain, LangGraph StateGraph | 도메인별 파이프라인 플러그인 교체 |
 
 ---
@@ -419,7 +419,7 @@ graph TB
 | Tier | 소스 | 영속성 | 용도 |
 |------|------|--------|------|
 | **SOUL** | `.claude/SOUL.md` | 영구 | 조직 미션, 원칙 |
-| **User Profile** (0.5) | `.claude/user_profile.json` | 파일 기반 | 사용자 선호, 타임존, 개인화 맥락 |
+| **User Profile** (0.5) | `~/.geode/user_profile/` | 파일 기반 | 사용자 선호, 타임존, 개인화 맥락 |
 | **Organization** | `core/fixtures/*.json` | Read-only | IP context, rubric, 기대 결과 |
 | **Project** | `.claude/MEMORY.md`, `.claude/rules/` | 파일 기반 | 학습된 규칙, 인사이트 (최대 50개, 회전) |
 | **Session** | In-memory dict | TTL 1h | 현재 분석 컨텍스트, 체크포인트 |
@@ -432,7 +432,7 @@ graph TB
 
 ```mermaid
 graph LR
-    T["Base Template<br/>prompts/*.md<br/>(11 templates)"] --> P0["Phase 0<br/>.format(**kwargs)"]
+    T["Base Template<br/>prompts/*.md<br/>(10 templates)"] --> P0["Phase 0<br/>.format(**kwargs)"]
     P0 --> P1["Phase 1<br/>Prompt Override"]
     P1 --> P2["Phase 2<br/>Skill Injection<br/>(top 3, ≤500c)"]
     P2 --> P3["Phase 3<br/>Memory Context<br/>(_llm_summary, ≤300c)"]
@@ -456,7 +456,7 @@ graph LR
 
 | 단계 | 입력 | 제한 | 설명 |
 |------|------|------|------|
-| **Phase 0** | `prompts/*.md` (11개 `.md` + `axes.py`) | — | `=== SYSTEM ===` / `=== USER ===` 구분자로 분리, `.format(**kwargs)` 렌더링 |
+| **Phase 0** | `prompts/*.md` (9개 `.md` + `axes.py`) | — | `=== SYSTEM ===` / `=== USER ===` 구분자로 분리, `.format(**kwargs)` 렌더링 |
 | **Phase 1** | `state._prompt_overrides` | append-only (기본) | 노드별 프롬프트 오버라이드. full replace opt-in |
 | **Phase 2** | `SkillRegistry` | top 3, 500c/skill | `.claude/skills/` YAML frontmatter 기반 자동 발견, `node` + `role_type` 필터, priority 정렬 |
 | **Phase 3** | `ContextAssembler._llm_summary` | 300c | 4-tier 메모리 압축 요약 주입 |
@@ -516,15 +516,14 @@ graph TB
         Registry["ToolRegistry<br/>42 base tools"]
         Policy["PolicyChain"]
         SkillReg["SkillRegistry<br/>(auto-inject)"]
-        MCPInstall["MCP Auto-Install<br/>(38 catalog)"]
+        MCPInstall["MCP Auto-Install<br/>(39 catalog)"]
     end
 
-    subgraph MCPAdapters["MCP Adapters (5 active)"]
+    subgraph MCPAdapters["MCP Adapters (4 active)"]
         Brave["Brave Search"]
         Steam["Steam MCP"]
-        ArXiv["arXiv MCP"]
-        PW["Playwright MCP"]
         LI["LinkedIn Reader"]
+        Mem["Memory MCP"]
     end
 
     subgraph MCPServer["MCP Server (FastMCP)"]
@@ -545,56 +544,117 @@ graph TB
 ```
 
 - **42 base tools** — `web_fetch`, `general_web_search`, `youtube_search`, `read_document` 등 범용 도구 + `category`/`cost_tier` 메타데이터
-- **MCP Adapters** — Brave Search, arXiv, Playwright, LinkedIn, Steam (env var 비어있으면 graceful skip)
+- **MCP Adapters** — Brave Search, Steam, LinkedIn, Memory (env var 비어있으면 graceful skip)
 - **MCP Server** — `uv run python -m core.mcp_server` 로 GEODE를 외부 에이전트에서 호출 가능 (6 tools, 2 resources)
 - **Skills** — `.claude/skills/` 자동 발견 + YAML frontmatter 기반 도구 핫 리로드
-- **MCP 자동설치** — `install_mcp_server` tool → 38개 카탈로그 검색 + 설치 + `refresh_tools()`
+- **MCP 자동설치** — `install_mcp_server` tool → 39개 카탈로그 검색 + 설치 + `refresh_tools()`
 
 ### Domain Plugin
 
-`DomainPort` Protocol로 도메인별 분석 파이프라인을 플러그인으로 교체합니다. 동일한 자율 실행 하네스 위에 게임 IP, 금융, 콘텐츠 등 다양한 도메인 파이프라인을 탑재할 수 있습니다. 아래는 기본 탑재된 Game IP 도메인의 구조입니다.
+`DomainPort` Protocol로 도메인별 분석 파이프라인을 플러그인으로 교체합니다. 동일한 자율 실행 하네스 위에 게임 IP, 금융, 콘텐츠 등 다양한 도메인 파이프라인을 탑재할 수 있습니다.
+
+```python
+# DomainPort Protocol — 도메인 플러그인 인터페이스
+class DomainPort(Protocol):
+    name: str; version: str; description: str
+    def get_analyst_types(self) -> list[str]: ...
+    def get_evaluator_types(self) -> list[str]: ...
+    def get_scoring_weights(self) -> dict[str, float]: ...
+    def get_tier_thresholds(self) -> dict[str, float]: ...
+    def get_cause_values(self) -> list[str]: ...
+    # ... 12 methods total
+```
+
+- **ContextVar 주입**: `set_domain()` / `get_domain()` — 런타임에 도메인 교체
+- **동적 로딩**: `load_domain_adapter(name)` — 레지스트리 기반 임포트
+- **확장**: `register_domain(name, path)` 후 `DomainPort` Protocol 구현체 교체
+
+### Game IP Domain (Default Plugin)
+
+기본 탑재된 게임 IP 가치 평가 파이프라인. LangGraph StateGraph 기반 9-node 토폴로지.
 
 ```mermaid
 graph LR
     START((START)) --> Router
-    Router --> Signals
+    Router --> Signals["Signals<br/>(MCP → fixture fallback)"]
     Signals --> A["Analyst ×4<br/>(Send API, Clean Context)"]
     A --> E["Evaluator ×3<br/>(14-Axis Rubric)"]
     E --> Scoring["Scoring<br/>(PSM 6-Weighted)"]
-    Scoring --> SkipCheck["skip_check"]
-    SkipCheck --> V["Verification<br/>(G1-G4 + BiasBuster)"]
-    V -->|"confidence ≥ 0.7"| Synth["Synthesizer"]
-    V -->|"< 0.7"| Gather["gather → loopback"]
-    Gather -->|"max 5"| Signals
+    Scoring --> SkipCheck{"skip_check"}
+    SkipCheck -->|"normal"| V["Verification<br/>(G1-G4 + BiasBuster)"]
+    SkipCheck -->|"score ≥90 or ≤20"| Synth
+    V -->|"confidence ≥ 0.7"| Synth["Synthesizer<br/>(Decision Tree + Narrative)"]
+    V -->|"< 0.7"| Gather["gather"]
+    Gather -->|"max 5 iter"| Signals
     Synth --> END((END))
 
     style START fill:#10b981,stroke:#10b981,color:#fff
     style END fill:#ef4444,stroke:#ef4444,color:#fff
     style SkipCheck fill:#f59e0b,stroke:#f59e0b,color:#fff
+    style A fill:#3b82f6,stroke:#3b82f6,color:#fff
+    style E fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+    style V fill:#ec4899,stroke:#ec4899,color:#fff
 ```
 
-<details>
-<summary>Game IP Domain 상세</summary>
+#### 4 Analysts (Send API 병렬)
 
-**Cross-LLM Ensemble**: Claude Opus 4.6 (primary) + GPT-5.4 (secondary), agreement ≥ 0.67, Krippendorff's α.
+| Analyst | 역할 | Clean Context |
+|---------|------|---------------|
+| `game_mechanics` | 게임 메커니즘 적합성 평가 | `analyses` 필드 제외 (앵커링 방지) |
+| `player_experience` | 플레이어 경험/감성 분석 | 동일 |
+| `growth_potential` | 성장 잠재력/시장 확장성 | 동일 |
+| `discovery` | 발견 가능성/접근성 분석 | 동일 |
 
-**14-Axis Rubric**: 3 Evaluators — `quality_judge` (8축), `hidden_value` (3축: D/E/F), `community_momentum` (3축: J/K/L).
+#### 3 Evaluators (14-Axis Rubric)
 
-**Scoring**: `Final = (0.25×PSM + 0.20×Quality + 0.18×Recovery + 0.12×Growth + 0.20×Momentum + 0.05×Dev) × (0.7 + 0.3 × Confidence/100)`. Tier: S ≥ 80, A ≥ 60, B ≥ 40, C < 40.
+| Evaluator | 축 | 축 ID |
+|-----------|-----|-------|
+| `quality_judge` | 8축 | A, B, C, B1, C1, C2, M, N |
+| `hidden_value` | 3축 | D (Discovery), E (Exposure), F (Fandom) |
+| `community_momentum` | 3축 | J, K, L |
 
-**Verification**: Guardrails G1-G4 (Schema, Range, Grounding, Consistency) + BiasBuster (6 bias, CV-based fast path) + Confidence Gate (≥ 0.7 or loopback, max 5 iter).
+Prospect Mode (비게임화 IP): `prospect_judge` 1개 (9축: G, H, I, O, P, Q, R, S, T).
 
-**Core Fixtures** (golden set):
+#### Scoring Formula
 
-| IP | Tier | Score | Genre |
-|----|------|-------|-------|
-| Berserk | S | 81.3 | Dark Fantasy |
-| Cowboy Bebop | A | 68.4 | SF Noir |
-| Ghost in the Shell | B | 51.6 | Cyberpunk |
+```
+Final = (0.25×PSM + 0.20×Quality + 0.18×Recovery + 0.12×Growth + 0.20×Momentum + 0.05×Dev)
+        × (0.7 + 0.3 × Confidence/100)
+
+Tier: S ≥ 80, A ≥ 60, B ≥ 40, C < 40
+```
+
+#### Cause Classification (Decision Tree)
+
+D-E-F 축 기반 코드 분류 (LLM이 아닌 룰 기반):
+
+| 조건 | 분류 | 권장 조치 |
+|------|------|----------|
+| D≥3, E≥3 | `conversion_failure` | 전환 최적화 |
+| D≥3, E<3 | `undermarketed` | 마케팅 강화 |
+| D≤2, E≥3 | `monetization_misfit` | 수익 모델 재설계 |
+| D≤2, E≤2, F≥3 | `niche_gem` | 니치 커뮤니티 육성 |
+| D≤2, E≤2, F≤2 | `discovery_failure` | 노출 확대 |
+
+#### Verification (5-Layer)
+
+| Layer | 메커니즘 | 기준 |
+|-------|----------|------|
+| **G1-G4** | Schema, Range, Grounding, 2σ Consistency | 구조적 무결성 |
+| **BiasBuster** | 6 bias types (REAE framework), CV-based fast path | CV < 0.05 → anchoring flag |
+| **Cross-LLM** | Claude Opus 4.6 + GPT-5.4, Krippendorff's α | agreement ≥ 0.67 |
+| **Confidence Gate** | 신뢰도 판정 | ≥ 0.7 → proceed, else loopback (max 5) |
+| **Rights Risk** | IP 권리 리스크 | CLEAR / NEGOTIABLE / RESTRICTED |
+
+#### Core Fixtures (golden set)
+
+| IP | Tier | Score | Cause | Genre |
+|----|------|-------|-------|-------|
+| Berserk | S | 81.3 | conversion_failure | Dark Fantasy |
+| Cowboy Bebop | A | 68.4 | undermarketed | SF Noir |
+| Ghost in the Shell | B | 51.6 | discovery_failure | Cyberpunk |
 
 **Steam Fixtures**: 201개 추가 게임 데이터 (`core/fixtures/steam/`).
-
-</details>
 
 ### LangSmith Observability
 
@@ -743,10 +803,10 @@ core/
 │   ├── conversation.py         # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
-│   ├── commands.py             # Slash command dispatch (17 commands)
+│   ├── commands.py             # Slash command dispatch (20 actions)
 │   ├── search.py               # IP search engine (synonym expansion)
 │   └── startup.py              # Readiness check, Graceful Degradation
-├── config.py                   # Settings (pydantic-settings, 30+ vars)
+├── config.py                   # Settings (pydantic-settings, 57 vars)
 ├── state.py                    # GeodeState (TypedDict + Pydantic models)
 ├── graph.py                    # LangGraph StateGraph + skip_check node
 ├── runtime.py                  # GeodeRuntime (production DI wiring)
@@ -754,7 +814,7 @@ core/
 │   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, DomainPort
 │   └── adapters/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/                # Steam, Brave, LinkedIn + CompositeSignalAdapter + catalog (38)
+│       └── mcp/                # Steam, Brave, LinkedIn + CompositeSignalAdapter + catalog (39)
 ├── llm/                        # LLM client (prompt caching, streaming, cost tracking)
 ├── memory/                     # 4-Tier: SOUL → User Profile → Organization → Project → Session
 ├── nodes/                      # Pipeline nodes (router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
