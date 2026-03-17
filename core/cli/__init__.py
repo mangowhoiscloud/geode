@@ -1,21 +1,20 @@
 """GEODE CLI — Typer entrypoint with natural language interactive mode.
 
 Architecture (OpenClaw-inspired):
-  /command  -> commands.py (Binding Router: deterministic dispatch)
-  free-text -> nl_router.py (NL Router: intent classification)
-              -> search.py (IP Search Engine: keyword matching)
-
-Split modules:
-  repl.py          — _interactive_loop, _read_multiline_input, _build_prompt_session,
-                     _restore_terminal, signal handling
-  tool_handlers.py — _build_tool_handlers (tool name -> handler mapping)
-  result_cache.py  — ResultCache (multi-IP LRU with disk persistence)
+  /command  → commands.py (Binding Router: deterministic dispatch)
+  free-text → nl_router.py (NL Router: intent classification)
+              → search.py (IP Search Engine: keyword matching)
 """
 
 from __future__ import annotations
 
+import json as _json
 import logging
 import re as _re
+import signal
+import sys
+import termios
+from collections import OrderedDict
 from contextvars import ContextVar
 from enum import Enum
 from pathlib import Path
@@ -24,6 +23,7 @@ from typing import Any, cast
 import typer
 
 from core import __version__
+from core.cli.agentic_loop import AgenticLoop, AgenticResult
 from core.cli.commands import (
     cmd_auth,
     cmd_batch,
@@ -38,25 +38,22 @@ from core.cli.commands import (
     resolve_action,
     show_help,
 )
-from core.cli.repl import _build_prompt_session as _build_prompt_session
-from core.cli.repl import _interactive_loop as _interactive_loop
-from core.cli.repl import _read_multiline_input as _read_multiline_input
-from core.cli.repl import _render_agentic_result as _render_agentic_result
-from core.cli.repl import _restore_terminal as _restore_terminal
-from core.cli.result_cache import ResultCache
-from core.cli.result_cache import _ResultCache as _ResultCache
+from core.cli.conversation import ConversationContext
 from core.cli.search import IPSearchEngine
 from core.cli.startup import (
     ReadinessReport,
     check_readiness,
+    key_registration_gate,
     render_readiness,
     setup_project_memory,
 )
-from core.cli.tool_handlers import _build_tool_handlers as _build_tool_handlers
+from core.cli.tool_executor import ToolExecutor
 from core.config import settings
 from core.extensibility.reports import ReportFormat, ReportGenerator, ReportTemplate
 from core.infrastructure.ports.hook_port import HookSystemPort
-from core.llm.commentary import generate_commentary
+from core.llm.commentary import (
+    generate_commentary,
+)
 from core.runtime import GeodeRuntime
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
 from core.ui.console import console
@@ -101,10 +98,76 @@ _scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", defaul
 
 
 # ---------------------------------------------------------------------------
-# Result cache — delegated to result_cache.py
+# Multi-IP LRU analysis result cache
 # ---------------------------------------------------------------------------
 
-_result_cache = ResultCache()
+_RESULT_CACHE_DIR = Path(".geode/result_cache")
+_RESULT_CACHE_MAX = 8
+
+
+class _ResultCache:
+    """OrderedDict-based LRU cache for pipeline results, with disk persistence."""
+
+    def __init__(self, max_size: int = _RESULT_CACHE_MAX) -> None:
+        self._cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._max_size = max_size
+        self._load_from_disk()
+
+    def get(self, ip_name: str) -> dict[str, Any] | None:
+        key = ip_name.lower()
+        if key not in self._cache:
+            return None
+        self._cache.move_to_end(key)
+        return self._cache[key]
+
+    def put(self, result: dict[str, Any] | None) -> None:
+        if result is None:
+            return
+        ip_name = result.get("ip_name", "")
+        if not ip_name:
+            return
+        key = ip_name.lower()
+        self._cache[key] = result
+        self._cache.move_to_end(key)
+        while len(self._cache) > self._max_size:
+            self._cache.popitem(last=False)
+        self._persist(key, result)
+
+    def _persist(self, key: str, result: dict[str, Any]) -> None:
+        try:
+            _RESULT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            safe = key.replace(" ", "-")
+            fpath = _RESULT_CACHE_DIR / f"{safe}.json"
+            from pydantic import BaseModel
+
+            def _default(obj: Any) -> Any:
+                if isinstance(obj, BaseModel):
+                    return obj.model_dump()
+                return str(obj)
+
+            fpath.write_text(
+                _json.dumps(result, ensure_ascii=False, default=_default),
+                encoding="utf-8",
+            )
+        except Exception:
+            log.debug("Failed to persist result cache for %s", key, exc_info=True)
+
+    def _load_from_disk(self) -> None:
+        if not _RESULT_CACHE_DIR.exists():
+            return
+        for fpath in sorted(_RESULT_CACHE_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime):
+            try:
+                data = _json.loads(fpath.read_text(encoding="utf-8"))
+                ip = data.get("ip_name", fpath.stem)
+                self._cache[ip.lower()] = data
+            except Exception:
+                log.debug("Failed to load result cache %s", fpath.name, exc_info=True)
+        # Trim to max
+        while len(self._cache) > self._max_size:
+            self._cache.popitem(last=False)
+
+
+_result_cache = _ResultCache()
 
 
 def _get_search_engine() -> IPSearchEngine:
@@ -184,7 +247,7 @@ def _parse_report_args(parts: list[str]) -> dict[str, str]:
 
     Returns dict with keys: ip_name, fmt, template.
     Example: ["Berserk", "html", "detailed"]
-      -> {"ip_name": "Berserk", "fmt": "html", "template": "detailed"}
+      → {"ip_name": "Berserk", "fmt": "html", "template": "detailed"}
     """
     fmt = "md"
     template = "summary"
@@ -266,7 +329,7 @@ section for a report on the subject below. Use the domain knowledge provided.
 - Reference specific scoring dimensions and formulas from the skills context.
 - Explain WHY this subject received its tier/score using scoring dimensions from skills context.
 - Provide actionable insights and recommendations.
-- Do NOT repeat raw data -- interpret and synthesize it."""
+- Do NOT repeat raw data — interpret and synthesize it."""
 
     user_prompt = f"""## IP: {ip_name}
 - Final Score: {score:.1f} / 100
@@ -354,7 +417,7 @@ def _generate_report(
 
     save_path.parent.mkdir(parents=True, exist_ok=True)
     save_path.write_text(content, encoding="utf-8")
-    console.print(f"\n  [success]Report saved -> {save_path}[/success]")
+    console.print(f"\n  [success]Report saved → {save_path}[/success]")
 
     # Also print to console
     console.print()
@@ -392,7 +455,7 @@ def _render_readiness_compact(report: ReadinessReport) -> None:
 
     if report.blocked:
         console.print()
-        console.print("  [warning]API key not configured -- key registration required[/warning]")
+        console.print("  [warning]API key not configured — key registration required[/warning]")
 
     console.print()
 
@@ -406,7 +469,7 @@ def _suppress_noisy_warnings() -> None:
     # LangGraph msgpack deserialization warning (warnings.warn path)
     warnings.filterwarnings("ignore", message="Deserializing unregistered type")
 
-    # LangGraph checkpoint deserialization also logs via logging.warning --
+    # LangGraph checkpoint deserialization also logs via logging.warning —
     # suppress those at the logging level.
     for noisy_logger in (
         "langgraph.checkpoint.serde.jsonplus",
@@ -420,12 +483,12 @@ def _welcome_screen() -> None:
     _suppress_noisy_warnings()
     _render_welcome_brand()
 
-    # OpenClaw gateway:startup -- readiness check
+    # OpenClaw gateway:startup — readiness check
     readiness = check_readiness()
     _set_readiness(readiness)
     _render_readiness_compact(readiness)
 
-    # OpenClaw boot-md -- initialize project memory if absent
+    # OpenClaw boot-md — initialize project memory if absent
     setup_project_memory()
 
     console.print(
@@ -584,7 +647,7 @@ def _execute_pipeline(
                 if not snapshot.next:
                     break
 
-                # interrupt_before triggered -- ask user
+                # interrupt_before triggered — ask user
                 status.stop()
                 if not _handle_interrupt(graph, config, final_state, done):
                     return final_state  # abort: return partial results
@@ -640,7 +703,7 @@ def _execute_pipeline_streaming(
     *,
     runtime: GeodeRuntime,
 ) -> dict[str, Any] | None:
-    """Execute the pipeline with streaming output -- display results as they arrive."""
+    """Execute the pipeline with streaming output — display results as they arrive."""
     graph = runtime.compile_graph()
     runtime.store_session_data(dict(initial_state))
 
@@ -749,7 +812,7 @@ def _render_data_panels(result: dict[str, Any]) -> None:
         evaluator_panel(result["evaluations"])
     if result.get("psm_result") is not None:
         conf = result.get("analyst_confidence", 0)
-        # In dry-run, confidence is from fixture data -- flag it
+        # In dry-run, confidence is from fixture data — flag it
         if result.get("dry_run"):
             conf = 0  # suppress misleading confidence in dry-run
         score_panel(
@@ -801,7 +864,7 @@ def _resolve_ip_name(ip_name: str) -> str | None:
 
     Resolution order:
     1. Exact fixture key match
-    2. Canonical name -> fixture key map (ip_info.ip_name lookup)
+    2. Canonical name → fixture key map (ip_info.ip_name lookup)
     3. Substring: fixture key is contained in input
     4. Substring: input is contained in fixture key
     """
@@ -814,7 +877,7 @@ def _resolve_ip_name(ip_name: str) -> str | None:
     if key in FIXTURE_MAP:
         return key
 
-    # 2. Canonical ip_info.ip_name -> fixture key
+    # 2. Canonical ip_info.ip_name → fixture key
     name_map = get_ip_name_map()
     if key in name_map:
         return name_map[key]
@@ -970,7 +1033,7 @@ def _render_search_results(query: str, results: list[Any]) -> None:
 
     for r in results:
         bar_len = int(r.score * 20)
-        bar = "\u2588" * bar_len + "\u2591" * (20 - bar_len)
+        bar = "█" * bar_len + "░" * (20 - bar_len)
         style = "success" if r.score >= 0.5 else "muted"
         console.print(
             f"    [{style}]{bar}[/{style}] [dim]relevance[/dim] {r.score:.0%}"
@@ -981,7 +1044,7 @@ def _render_search_results(query: str, results: list[Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Interactive REPL — command handler
+# Interactive REPL — OpenClaw-style dual routing
 # ---------------------------------------------------------------------------
 
 
@@ -1027,7 +1090,7 @@ def _handle_command(
         if force_dry and readiness is not None and not readiness.force_dry_run:
             console.print("  [info]Dry-run mode (explicitly requested)[/info]")
         elif force_dry:
-            console.print("  [warning]API key not configured -- forcing dry-run mode[/warning]")
+            console.print("  [warning]API key not configured — forcing dry-run mode[/warning]")
         if not args:
             console.print(f"  [warning]Usage: /{action} <IP name>[/warning]")
         else:
@@ -1303,9 +1366,9 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
     else:
         console.print()
         console.print("  [muted]Memory command not recognized. Try:[/muted]")
-        console.print("  [muted]  '이전 분석 결과 검색해' -- search memory[/muted]")
-        console.print("  [muted]  '규칙 목록 보여줘' -- list rules[/muted]")
-        console.print("  [muted]  '이 결과 기억해' -- save to memory[/muted]")
+        console.print("  [muted]  '이전 분석 결과 검색해' — search memory[/muted]")
+        console.print("  [muted]  '규칙 목록 보여줘' — list rules[/muted]")
+        console.print("  [muted]  '이 결과 기억해' — save to memory[/muted]")
         console.print()
 
 
@@ -1383,6 +1446,1297 @@ def _build_sub_agent_manager(
     )
 
 
+def _build_tool_handlers(
+    verbose: bool = False,
+    *,
+    mcp_manager: Any = None,
+    agentic_ref: list[Any] | None = None,
+    skill_registry: Any = None,
+) -> dict[str, Any]:
+    """Build tool name → handler function mapping for ToolExecutor.
+
+    Each handler receives tool_input kwargs and returns a dict result.
+    ``mcp_manager`` and ``agentic_ref`` are used by install_mcp_server.
+    ``skill_registry`` is used by generate_report for skill-enhanced narrative.
+    """
+    from core.cli.batch import run_batch
+    from core.memory.project import ProjectMemory
+
+    readiness = _get_readiness()
+    force_dry = readiness.force_dry_run if readiness else True
+
+    def _clarify(
+        tool: str,
+        missing: list[str],
+        hint: str,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        """Standard clarification response for missing required params."""
+        return {
+            "error": f"{tool} requires: {', '.join(missing)}",
+            "clarification_needed": True,
+            "missing": missing,
+            "hint": hint,
+            **extra,
+        }
+
+    def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Wrap delegated tool execution — catch KeyError as clarification."""
+        try:
+            result: dict[str, Any] = tool_class().execute(**kwargs)
+            return result
+        except (KeyError, TypeError) as exc:
+            param = str(exc).strip("'\"")
+            return _clarify(
+                tool_class.__name__,
+                [param],
+                f"'{param}' 값을 알려주세요.",
+            )
+
+    def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
+        from core.fixtures import FIXTURE_MAP as _FM
+
+        cmd_list()
+        names = [n.title() for n in _FM]
+        return {"status": "ok", "action": "list", "count": len(names), "ips": names}
+
+    def handle_analyze_ip(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("analyze_ip", ["ip_name"], "어떤 IP를 분석할까요?")
+        dry_run = kwargs.get("dry_run", force_dry)
+        if _text_requests_dry_run(ip_name):
+            dry_run = True
+        result = _run_analysis(ip_name, dry_run=dry_run, verbose=verbose)
+        if result is None:
+            return {"error": f"Analysis failed for '{ip_name}'"}
+        # Extract analyst summaries for LLM context
+        analyses_summary = []
+        for a in result.get("analyses", []):
+            if hasattr(a, "model_dump"):
+                a = a.model_dump()
+            analyses_summary.append(
+                {
+                    "type": a.get("analyst_type", "?"),
+                    "score": a.get("score", 0),
+                    "finding": a.get("key_finding", ""),
+                }
+            )
+        synthesis = result.get("synthesis")
+        if synthesis is not None and hasattr(synthesis, "model_dump"):
+            synthesis = synthesis.model_dump()
+        return {
+            "status": "ok",
+            "action": "analyze",
+            "ip_name": result.get("ip_name", ip_name),
+            "tier": result.get("tier", "N/A"),
+            "score": round(result.get("final_score", 0), 1),
+            "cause": (
+                (synthesis or {}).get("cause", "unknown")
+                if isinstance(synthesis, dict)
+                else "unknown"
+            ),
+            "analyses": analyses_summary,
+        }
+
+    def handle_search_ips(**kwargs: Any) -> dict[str, Any]:
+        query = kwargs.get("query", "")
+        if not query:
+            return _clarify("search_ips", ["query"], "무엇을 검색할까요?")
+        results = _get_search_engine().search(query)
+        _render_search_results(query, results)
+        return {
+            "status": "ok",
+            "action": "search",
+            "query": query,
+            "count": len(results),
+            "results": [{"name": r.ip_name, "score": r.score} for r in results],
+        }
+
+    def handle_compare_ips(**kwargs: Any) -> dict[str, Any]:
+        ip_a = kwargs.get("ip_a", "")
+        ip_b = kwargs.get("ip_b", "")
+        dry_run = kwargs.get("dry_run", force_dry)
+
+        # Clarification: both IPs required
+        if not ip_a or not ip_b:
+            missing = [k for k, v in {"ip_a": ip_a, "ip_b": ip_b}.items() if not v]
+            hint = "어떤 IP와 비교할까요?" if ip_a else "비교할 두 IP를 알려주세요."
+            return _clarify("compare_ips", missing, hint, provided={"ip_a": ip_a, "ip_b": ip_b})
+
+        console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
+        result_a = _run_analysis(ip_a, dry_run=dry_run, verbose=verbose)
+        result_b = _run_analysis(ip_b, dry_run=dry_run, verbose=verbose)
+
+        def _ip_summary(name: str, r: dict[str, Any] | None) -> dict[str, Any]:
+            if not r:
+                return {"name": name, "tier": "N/A", "score": 0}
+            return {
+                "name": name,
+                "tier": r.get("tier", "N/A"),
+                "score": round(r.get("final_score", 0), 1),
+            }
+
+        return {
+            "status": "ok",
+            "action": "compare",
+            "ip_a": _ip_summary(ip_a, result_a),
+            "ip_b": _ip_summary(ip_b, result_b),
+        }
+
+    def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
+        show_help()
+        commands = [
+            "/analyze <IP> — Analyze an IP (dry-run)",
+            "/run <IP> — Analyze with real LLM",
+            "/search <query> — Search IPs by keyword",
+            "/list — Show available IPs",
+            "/compare <A> <B> — Compare two IPs",
+            "/report <IP> — Generate analysis report",
+            "/batch — Batch analyze multiple IPs",
+            "/status — Show system status",
+            "/model — Switch LLM model",
+            "/help — Show help",
+        ]
+        return {"status": "ok", "action": "help", "commands": commands}
+
+    def handle_generate_report(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("generate_report", ["ip_name"], "어떤 IP의 리포트를 생성할까요?")
+        fmt = kwargs.get("format", "markdown")
+        if fmt == "md":
+            fmt = "markdown"
+        template = kwargs.get("template", "summary")
+        dry_run = kwargs.get("dry_run", force_dry)
+        report_result = _generate_report(
+            ip_name,
+            dry_run=dry_run,
+            verbose=verbose,
+            fmt=fmt,
+            template=template,
+            skill_registry=skill_registry,
+        )
+        if report_result is None:
+            return {"error": f"Report generation failed for '{ip_name}'"}
+        file_path, content = report_result
+        return {
+            "status": "ok",
+            "action": "report",
+            "ip_name": ip_name,
+            "format": fmt,
+            "template": template,
+            "file_path": file_path,
+            "content_preview": content[:500] if len(content) > 500 else content,
+            "content_length": len(content),
+        }
+
+    def handle_batch_analyze(**kwargs: Any) -> dict[str, Any]:
+        top = kwargs.get("top", 20)
+        genre = kwargs.get("genre")
+        dry_run = kwargs.get("dry_run", force_dry)
+        batch_results = run_batch(top=top, genre=genre, dry_run=dry_run)
+        from core.cli.batch import render_batch_table
+
+        render_batch_table(batch_results)
+        summary = []
+        for br in batch_results:
+            if br:
+                summary.append(
+                    {
+                        "ip_name": br.get("ip_name", "?"),
+                        "tier": br.get("tier", "?"),
+                        "score": round(br.get("final_score", 0), 1),
+                    }
+                )
+        return {
+            "status": "ok",
+            "action": "batch",
+            "count": len(batch_results),
+            "results": summary[:20],
+        }
+
+    def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
+        from core.fixtures import FIXTURE_MAP as _FM
+        from core.infrastructure.adapters.mcp.registry import MCPRegistry
+
+        ant_ok = bool(settings.anthropic_api_key)
+        oai_ok = bool(settings.openai_api_key)
+        mode = "full_llm" if (readiness and not readiness.force_dry_run) else "dry_run"
+
+        console.print()
+        console.print("  [header]GEODE System Status[/header]")
+        console.print(f"  Model: [bold]{settings.model}[/bold]")
+        console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
+        ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
+        oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
+        console.print(f"  Anthropic API: {ant_status}")
+        console.print(f"  OpenAI API: {oai_status}")
+        console.print(f"  Mode: [bold]{mode}[/bold]")
+        console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
+
+        # MCP status
+        registry = MCPRegistry()
+        json_servers = None
+        if mcp_manager is not None:
+            json_servers = {s["name"]: s for s in mcp_manager.list_servers()}
+        mcp_status = registry.get_mcp_status(json_config_servers=json_servers)
+
+        console.print()
+        console.print("  [header]MCP Servers[/header]")
+        active = mcp_status["active"]
+        if active:
+            for srv in active:
+                src_tag = "json" if srv["source"] == "json_config" else "auto"
+                desc = f" -- {srv['description']}" if srv["description"] else ""
+                console.print(f"    [green]OK[/green] {srv['name']} [dim]({src_tag}){desc}[/dim]")
+        else:
+            console.print("    [muted]No active servers[/muted]")
+
+        inactive = mcp_status["available_inactive"]
+        if inactive:
+            console.print()
+            console.print("  [header]MCP Available (env missing)[/header]")
+            for srv in inactive:
+                env_list = ", ".join(srv["missing_env"])
+                console.print(f"    [yellow]--[/yellow] {srv['name']} [dim]needs: {env_list}[/dim]")
+        console.print()
+
+        return {
+            "status": "ok",
+            "action": "status",
+            "model": settings.model,
+            "ensemble": settings.ensemble_mode,
+            "anthropic_configured": ant_ok,
+            "openai_configured": oai_ok,
+            "mode": mode,
+            "fixture_count": len(_FM),
+            "mcp_status": mcp_status,
+        }
+
+    def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
+        model_hint = kwargs.get("model_hint", "")
+        cmd_model(model_hint)
+        return {
+            "status": "ok",
+            "action": "model",
+            "current_model": settings.model,
+            "ensemble": settings.ensemble_mode,
+        }
+
+    def handle_memory_search(**kwargs: Any) -> dict[str, Any]:
+        query = kwargs.get("query", "")
+        if not query:
+            return _clarify("memory_search", ["query"], "무엇을 검색할까요?")
+        try:
+            mem = ProjectMemory()
+            content = mem.search(query) if hasattr(mem, "search") else mem.load_memory()
+            return {"status": "ok", "action": "memory_search", "content": content[:2000]}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def handle_memory_save(**kwargs: Any) -> dict[str, Any]:
+        key = kwargs.get("key", "")
+        content = kwargs.get("content", "")
+        if not key or not content:
+            missing = [k for k, v in {"key": key, "content": content}.items() if not v]
+            return _clarify("memory_save", missing, "저장할 키와 내용을 알려주세요.")
+        try:
+            mem = ProjectMemory()
+            mem.add_insight(f"{key}: {content}")
+            console.print(f"  [success]Saved to memory: {key}[/success]")
+            return {"status": "ok", "action": "memory_save", "key": key}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def handle_manage_rule(**kwargs: Any) -> dict[str, Any]:
+        from core.cli.nl_router import NLIntent
+
+        rule_action = kwargs.get("action", "list")
+        name = kwargs.get("name", "")
+        if rule_action in ("add", "delete") and not name:
+            return _clarify("manage_rule", ["name"], "규칙 이름을 알려주세요.")
+        intent = NLIntent(
+            action="memory",
+            args={
+                "rule_action": rule_action,
+                "name": name,
+                "paths": kwargs.get("paths", []),
+                "content": kwargs.get("content", ""),
+            },
+        )
+        _handle_memory_action(intent, "", False)
+        # Return rule list for LLM context
+        try:
+            mem = ProjectMemory()
+            rules = mem.list_rules() if hasattr(mem, "list_rules") else []
+            return {
+                "status": "ok",
+                "action": "manage_rule",
+                "sub_action": rule_action,
+                "name": name,
+                "rules": [str(r) for r in rules][:20],
+            }
+        except Exception:
+            return {"status": "ok", "action": "manage_rule", "sub_action": rule_action}
+
+    def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
+        key_value = kwargs.get("key_value", "")
+        changed = cmd_key(key_value)
+        if changed:
+            new_readiness = check_readiness()
+            _set_readiness(new_readiness)
+            render_readiness(new_readiness)
+        return {
+            "status": "ok",
+            "action": "key",
+            "changed": changed,
+            "anthropic_configured": bool(settings.anthropic_api_key),
+            "openai_configured": bool(settings.openai_api_key),
+        }
+
+    def handle_manage_auth(**kwargs: Any) -> dict[str, Any]:
+        sub_action = kwargs.get("sub_action", "")
+        cmd_auth(sub_action)
+        try:
+            from core.cli.commands import _get_profile_store
+
+            store = _get_profile_store()
+            profiles = [
+                {"name": p.name, "provider": p.provider, "type": p.credential_type.value}
+                for p in store.list_all()
+            ]
+        except Exception:
+            profiles = []
+        return {
+            "status": "ok",
+            "action": "auth",
+            "sub_action": sub_action,
+            "profiles": profiles,
+        }
+
+    def handle_generate_data(**kwargs: Any) -> dict[str, Any]:
+        count = kwargs.get("count", 5)
+        genre = kwargs.get("genre", "")
+        gen_args = str(count)
+        if genre:
+            gen_args += f" {genre}"
+        cmd_generate(gen_args)
+        return {
+            "status": "ok",
+            "action": "generate",
+            "count": count,
+            "genre": genre or "random",
+        }
+
+    def handle_schedule_job(**kwargs: Any) -> dict[str, Any]:
+        sub_action = kwargs.get("sub_action", "") or "list"
+        target_id = kwargs.get("target_id", "")
+        expression = kwargs.get("expression", "")
+        svc = _scheduler_service_ctx.get(None)
+
+        if sub_action == "create" and expression:
+            cmd_schedule(f"create {expression}", scheduler_service=svc)
+            try:
+                from core.automation.nl_scheduler import NLScheduleParser
+
+                result = NLScheduleParser().parse(expression)
+                if result.success and result.job:
+                    return {
+                        "status": "ok",
+                        "action": "schedule",
+                        "sub_action": "create",
+                        "job_id": result.job.job_id,
+                        "schedule_kind": (
+                            result.inferred_kind.value if result.inferred_kind else ""
+                        ),
+                        "expression": expression,
+                    }
+                return {
+                    "status": "error",
+                    "action": "schedule",
+                    "sub_action": "create",
+                    "error": result.error or "parse failed",
+                }
+            except Exception as exc:
+                return {
+                    "status": "error",
+                    "action": "schedule",
+                    "sub_action": "create",
+                    "error": str(exc),
+                }
+
+        sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
+        cmd_schedule(sched_args, scheduler_service=svc)
+        try:
+            from core.automation.predefined import PREDEFINED_AUTOMATIONS
+
+            templates = [
+                {"id": t.id, "name": t.name, "enabled": t.enabled} for t in PREDEFINED_AUTOMATIONS
+            ]
+        except Exception:
+            templates = []
+        result_dict: dict[str, Any] = {
+            "status": "ok",
+            "action": "schedule",
+            "sub_action": sub_action,
+            "templates": templates[:10],
+        }
+        if svc is not None:
+            try:
+                dynamic = [
+                    {"id": j.job_id, "name": j.name, "enabled": j.enabled}
+                    for j in svc.list_jobs(include_disabled=True)
+                    if not j.job_id.startswith("predefined:")
+                ]
+                result_dict["dynamic_jobs"] = dynamic
+            except Exception:
+                log.debug("Failed to list dynamic jobs", exc_info=True)
+        return result_dict
+
+    def handle_trigger_event(**kwargs: Any) -> dict[str, Any]:
+        sub_action = kwargs.get("sub_action", "") or "list"
+        event_name = kwargs.get("event_name", "")
+        trigger_args = f"{sub_action} {event_name}".strip() if sub_action else ""
+        cmd_trigger(trigger_args)
+        return {
+            "status": "ok",
+            "action": "trigger",
+            "sub_action": sub_action,
+            "event_name": event_name,
+        }
+
+    # --- Plan mode handlers (multi-plan cache keyed by plan_id) ---
+
+    _plan_cache: dict[str, tuple[Any, Any]] = {}
+    _human_ratings: dict[str, dict[str, Any]] = {}
+    _result_feedback: dict[str, str] = {}
+
+    def _resolve_plan(
+        plan_id: str,
+    ) -> tuple[Any, Any] | None:
+        """Resolve plan from cache by ID, falling back to most recent."""
+        cached = _plan_cache.get(plan_id)
+        if not cached and _plan_cache:
+            last_key = list(_plan_cache.keys())[-1]
+            cached = _plan_cache.get(last_key)
+            if cached:
+                log.debug(
+                    "Plan ID '%s' not found, using latest '%s'",
+                    plan_id,
+                    last_key,
+                )
+        return cached
+
+    def handle_create_plan(**kwargs: Any) -> dict[str, Any]:
+        from core.config import settings
+        from core.orchestration.plan_mode import PlanExecutionMode, PlanMode
+
+        ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("create_plan", ["ip_name"], "어떤 IP의 분석 계획을 세울까요?")
+        template = kwargs.get("template", "full_pipeline")
+        planner = PlanMode()
+        plan = planner.create_plan(ip_name, template=template)
+        summary = planner.present_plan(plan)
+
+        # Display plan steps
+        console.print()
+        console.print(f"  [header]● Plan: {ip_name} 분석 계획[/header]")
+        for i, step in enumerate(plan.steps, 1):
+            console.print(f"    {i}. {step.description}")
+        console.print(
+            f"  [muted]예상 시간: "
+            f"{plan.total_estimated_time_s:.0f}s "
+            f"| 단계: {plan.step_count}개[/muted]"
+        )
+        console.print()
+        log.info(
+            "Plan '%s' created for '%s' (%d steps)",
+            plan.plan_id,
+            ip_name,
+            plan.step_count,
+        )
+
+        # AUTO mode: approve and execute immediately without user intervention
+        if settings.plan_auto_execute:
+            console.print(f"  [bold cyan]▸ Auto-executing plan {plan.plan_id}[/bold cyan]")
+            exec_result = planner.auto_execute_plan(plan)
+
+            completed = exec_result.get("completed_steps", 0)
+            total = exec_result.get("total_steps", 0)
+            failed = exec_result.get("failed_steps", [])
+
+            if failed:
+                console.print(
+                    f"  [warning]Partial success: {completed}/{total} steps "
+                    f"(failed: {', '.join(failed)})[/warning]"
+                )
+            else:
+                console.print(f"  [success]✓ All {total} steps completed[/success]")
+            console.print()
+
+            return {
+                "status": "ok",
+                "action": "plan",
+                "plan_id": plan.plan_id,
+                "ip_name": ip_name,
+                "template": template,
+                "step_count": plan.step_count,
+                "steps": [s.description for s in plan.steps],
+                "summary": summary,
+                "execution_mode": PlanExecutionMode.AUTO.value,
+                "auto_executed": True,
+                "execution_result": exec_result,
+                "hint": (
+                    f"Plan auto-executed. Call analyze_ip with "
+                    f"ip_name='{ip_name}' to run the full analysis."
+                ),
+            }
+
+        # MANUAL mode: cache plan and wait for user approval
+        _plan_cache[plan.plan_id] = (planner, plan)
+        return {
+            "status": "ok",
+            "action": "plan",
+            "plan_id": plan.plan_id,
+            "ip_name": ip_name,
+            "template": template,
+            "step_count": plan.step_count,
+            "steps": [s.description for s in plan.steps],
+            "summary": summary,
+            "execution_mode": PlanExecutionMode.MANUAL.value,
+            "hint": ("Use approve_plan, reject_plan, or modify_plan to proceed."),
+        }
+
+    def handle_approve_plan(**kwargs: Any) -> dict[str, Any]:
+        plan_id = kwargs.get("plan_id", "")
+        cached = _resolve_plan(plan_id)
+        if not cached:
+            return {"error": "No plan to approve. Use create_plan first."}
+
+        planner, plan = cached
+        if plan_id and plan.plan_id != plan_id:
+            return {"error": (f"Plan ID mismatch: expected {plan.plan_id}, got {plan_id}")}
+
+        planner.approve_plan(plan)
+        result = planner.execute_plan(plan)
+        _plan_cache.pop(plan.plan_id, None)
+
+        ip = plan.ip_name
+        console.print(f"  [success]✓ Plan approved: {ip}[/success]")
+        console.print()
+        log.info("Plan '%s' approved for '%s'", plan.plan_id, ip)
+        return {
+            "status": "ok",
+            "action": "approve_plan",
+            "plan_id": plan.plan_id,
+            "executed": True,
+            "result": str(result)[:500],
+            "hint": (f"Plan approved. Call analyze_ip with ip_name='{ip}' to run the analysis."),
+        }
+
+    def handle_reject_plan(**kwargs: Any) -> dict[str, Any]:
+        plan_id = kwargs.get("plan_id", "")
+        reason = kwargs.get("reason", "")
+        cached = _resolve_plan(plan_id)
+        if not cached:
+            return {"error": "No plan to reject."}
+
+        planner, plan = cached
+        planner.reject_plan(plan, reason=reason)
+        _plan_cache.pop(plan.plan_id, None)
+        console.print(f"  [warning]✗ Plan rejected: {plan.ip_name}[/warning]")
+        log.info(
+            "Plan '%s' rejected (reason=%s)",
+            plan.plan_id,
+            reason or "(none)",
+        )
+        return {
+            "status": "ok",
+            "action": "reject_plan",
+            "plan_id": plan.plan_id,
+            "reason": reason,
+        }
+
+    def handle_modify_plan(**kwargs: Any) -> dict[str, Any]:
+        plan_id = kwargs.get("plan_id", "")
+        cached = _resolve_plan(plan_id)
+        if not cached:
+            return {"error": "No plan to modify."}
+
+        planner, plan = cached
+        template = kwargs.get("template")
+        remove = kwargs.get("remove_steps")
+        planner.modify_plan(
+            plan,
+            template=template,
+            remove_steps=remove,
+        )
+        _plan_cache[plan.plan_id] = (planner, plan)
+        console.print(f"  [header]● Plan modified: {plan.ip_name}[/header]")
+        for i, step in enumerate(plan.steps, 1):
+            console.print(f"    {i}. {step.description}")
+        console.print()
+        log.info(
+            "Plan '%s' modified (%d steps)",
+            plan.plan_id,
+            plan.step_count,
+        )
+        return {
+            "status": "ok",
+            "action": "modify_plan",
+            "plan_id": plan.plan_id,
+            "step_count": plan.step_count,
+            "steps": [s.description for s in plan.steps],
+        }
+
+    def handle_list_plans(**kwargs: Any) -> dict[str, Any]:
+        plans = []
+        for pid, (_, plan) in _plan_cache.items():
+            plans.append(
+                {
+                    "plan_id": pid,
+                    "ip_name": plan.ip_name,
+                    "status": plan.status.value,
+                    "steps": plan.step_count,
+                }
+            )
+        return {
+            "status": "ok",
+            "action": "list_plans",
+            "count": len(plans),
+            "plans": plans,
+        }
+
+    def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        rating = kwargs.get("rating", 0)
+        if not ip_name:
+            return _clarify("rate_result", ["ip_name"], "어떤 IP에 평점을 매길까요?")
+        if not (1 <= rating <= 5):
+            return _clarify("rate_result", ["rating"], "평점은 1-5 사이로 입력해주세요.")
+        comment = kwargs.get("comment", "")
+        _human_ratings[ip_name] = {
+            "rating": rating,
+            "comment": comment,
+        }
+        console.print(f"  [success]✓ Rating saved for {ip_name}: {rating}/5[/success]")
+        log.info(
+            "HITL rating: %s = %d/5",
+            ip_name,
+            rating,
+        )
+        return {
+            "status": "ok",
+            "action": "rate_result",
+            "ip_name": ip_name,
+            "rating": rating,
+        }
+
+    def handle_accept_result(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("accept_result", ["ip_name"], "어떤 IP 결과를 수락할까요?")
+        _result_feedback[ip_name] = "accepted"
+        console.print(f"  [success]✓ Result accepted: {ip_name}[/success]")
+        log.info("HITL accept: %s", ip_name)
+        return {
+            "status": "ok",
+            "action": "accept_result",
+            "ip_name": ip_name,
+        }
+
+    def handle_reject_result(**kwargs: Any) -> dict[str, Any]:
+        ip_name = kwargs.get("ip_name", "")
+        if not ip_name:
+            return _clarify("reject_result", ["ip_name"], "어떤 IP 결과를 거부할까요?")
+        reason = kwargs.get("reason", "")
+        _result_feedback[ip_name] = "rejected"
+        console.print(f"  [warning]✗ Result rejected: {ip_name}[/warning]")
+        log.info(
+            "HITL reject: %s (reason=%s)",
+            ip_name,
+            reason or "(none)",
+        )
+        return {
+            "status": "ok",
+            "action": "reject_result",
+            "ip_name": ip_name,
+            "reason": reason,
+            "hint": ("Use rerun_node to re-execute specific pipeline steps."),
+        }
+
+    def handle_rerun_node(**kwargs: Any) -> dict[str, Any]:
+        node_name = kwargs.get("node_name", "")
+        ip_name = kwargs.get("ip_name", "")
+        if not node_name or not ip_name:
+            missing = [k for k, v in {"node_name": node_name, "ip_name": ip_name}.items() if not v]
+            return _clarify("rerun_node", missing, "재실행할 노드와 IP를 알려주세요.")
+        allowed = {"scoring", "verification", "synthesizer"}
+        if node_name not in allowed:
+            return {
+                "error": (f"Cannot rerun '{node_name}'. Allowed: {sorted(allowed)}"),
+            }
+        console.print(f"  [header]▸ Rerunning {node_name} for {ip_name}[/header]")
+        log.info(
+            "HITL rerun: %s for %s",
+            node_name,
+            ip_name,
+        )
+        return {
+            "status": "ok",
+            "action": "rerun_node",
+            "node_name": node_name,
+            "ip_name": ip_name,
+            "hint": ("Node re-execution queued. Results will update in-place."),
+        }
+
+    # --- New tools: web, document, note, signal ---
+    # All delegated tools wrapped with _safe_delegate for KeyError → clarification
+
+    def handle_web_fetch(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.web_tools import WebFetchTool
+
+        return _safe_delegate(WebFetchTool, kwargs)
+
+    def handle_general_web_search(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.web_tools import GeneralWebSearchTool
+
+        return _safe_delegate(GeneralWebSearchTool, kwargs)
+
+    def handle_read_document(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.document_tools import ReadDocumentTool
+
+        return _safe_delegate(ReadDocumentTool, kwargs)
+
+    def handle_note_save(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.memory_tools import NoteSaveTool
+
+        return _safe_delegate(NoteSaveTool, kwargs)
+
+    def handle_note_read(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.memory_tools import NoteReadTool
+
+        return _safe_delegate(NoteReadTool, kwargs)
+
+    # Profile tools (Tier 0.5)
+    def handle_profile_show(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.profile_tools import ProfileShowTool
+
+        return _safe_delegate(ProfileShowTool, kwargs)
+
+    def handle_profile_update(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.profile_tools import ProfileUpdateTool
+
+        return _safe_delegate(ProfileUpdateTool, kwargs)
+
+    def handle_profile_preference(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.profile_tools import ProfilePreferenceTool
+
+        return _safe_delegate(ProfilePreferenceTool, kwargs)
+
+    def handle_profile_learn(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.profile_tools import ProfileLearnTool
+
+        return _safe_delegate(ProfileLearnTool, kwargs)
+
+    def handle_youtube_search(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.signal_tools import YouTubeSearchTool
+
+        return _safe_delegate(YouTubeSearchTool, kwargs)
+
+    def handle_reddit_sentiment(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.signal_tools import RedditSentimentTool
+
+        return _safe_delegate(RedditSentimentTool, kwargs)
+
+    def handle_steam_info(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.signal_tools import SteamInfoTool
+
+        return _safe_delegate(SteamInfoTool, kwargs)
+
+    def handle_google_trends(**kwargs: Any) -> dict[str, Any]:
+        from core.tools.signal_tools import GoogleTrendsTool
+
+        return _safe_delegate(GoogleTrendsTool, kwargs)
+
+    def handle_install_mcp_server(**kwargs: Any) -> dict[str, Any]:
+        import os as _os
+
+        from core.infrastructure.adapters.mcp.catalog import search_catalog
+
+        query = kwargs.get("query", "")
+        matches = search_catalog(query)
+        if not matches:
+            return {
+                "status": "not_found",
+                "message": f"'{query}'에 맞는 MCP 서버를 찾지 못했습니다.",
+            }
+
+        best = matches[0]
+
+        # Already installed?
+        if mcp_manager is not None:
+            existing = {s["name"] for s in mcp_manager.list_servers()}
+            if best.name in existing:
+                return {
+                    "status": "already_installed",
+                    "server": best.name,
+                    "message": f"{best.name}은 이미 설치되어 있습니다.",
+                }
+
+        if mcp_manager is None:
+            return {"status": "error", "message": "MCP manager not available"}
+
+        # Register server
+        args = ["-y", best.package, *best.extra_args]
+        env_map = {k: f"${{{k}}}" for k in best.env_keys} or None
+        ok = mcp_manager.add_server(best.name, best.command, args=args, env=env_map)
+        if not ok:
+            return {"status": "error", "message": f"Failed to save {best.name}"}
+
+        # Hot-reload tools into running AgenticLoop
+        added = 0
+        if agentic_ref and agentic_ref[0] is not None:
+            added = agentic_ref[0].refresh_tools()
+
+        # Check for missing env vars
+        missing = [k for k in best.env_keys if not _os.environ.get(k)]
+
+        msg = f"{best.name} 설치 완료. {added}개 도구 추가됨."
+        if missing:
+            msg += f" 환경변수 필요: {', '.join(missing)}"
+
+        return {
+            "status": "installed",
+            "server": best.name,
+            "package": best.package,
+            "tools_added": added,
+            "env_required": list(best.env_keys),
+            "env_missing": missing,
+            "message": msg,
+        }
+
+    return {
+        "list_ips": handle_list_ips,
+        "analyze_ip": handle_analyze_ip,
+        "search_ips": handle_search_ips,
+        "compare_ips": handle_compare_ips,
+        "show_help": handle_show_help,
+        "generate_report": handle_generate_report,
+        "batch_analyze": handle_batch_analyze,
+        "check_status": handle_check_status,
+        "switch_model": handle_switch_model,
+        "memory_search": handle_memory_search,
+        "memory_save": handle_memory_save,
+        "manage_rule": handle_manage_rule,
+        "set_api_key": handle_set_api_key,
+        "manage_auth": handle_manage_auth,
+        "generate_data": handle_generate_data,
+        "schedule_job": handle_schedule_job,
+        "trigger_event": handle_trigger_event,
+        "create_plan": handle_create_plan,
+        "approve_plan": handle_approve_plan,
+        "reject_plan": handle_reject_plan,
+        "modify_plan": handle_modify_plan,
+        "list_plans": handle_list_plans,
+        "rate_result": handle_rate_result,
+        "accept_result": handle_accept_result,
+        "reject_result": handle_reject_result,
+        "rerun_node": handle_rerun_node,
+        # New tools
+        "web_fetch": handle_web_fetch,
+        "general_web_search": handle_general_web_search,
+        "read_document": handle_read_document,
+        "note_save": handle_note_save,
+        "note_read": handle_note_read,
+        # Profile tools (Tier 0.5)
+        "profile_show": handle_profile_show,
+        "profile_update": handle_profile_update,
+        "profile_preference": handle_profile_preference,
+        "profile_learn": handle_profile_learn,
+        # Signal tools
+        "youtube_search": handle_youtube_search,
+        "reddit_sentiment": handle_reddit_sentiment,
+        "steam_info": handle_steam_info,
+        "google_trends": handle_google_trends,
+        # MCP auto-install
+        "install_mcp_server": handle_install_mcp_server,
+    }
+
+
+def _render_agentic_result(result: AgenticResult) -> None:
+    """Render the final result from an agentic loop execution."""
+    if result.error == "llm_call_failed":
+        console.print()
+        console.print("  [warning]LLM call failed. Try again or check your API key.[/warning]")
+        console.print("  [muted]Use /help for available commands.[/muted]")
+        console.print()
+        return
+
+    if result.text:
+        console.print()
+        # Render markdown if the response contains markdown indicators
+        if any(md in result.text for md in ("## ", "| ", "```", "**", "- [")):
+            from rich.markdown import Markdown
+            from rich.padding import Padding
+
+            md = Markdown(result.text)
+            console.print(Padding(md, (0, 2)))
+        else:
+            console.print(f"  {result.text}")
+        console.print()
+
+    if result.tool_calls:
+        tool_names = [tc["tool"] for tc in result.tool_calls]
+        log.debug(
+            "Agentic loop: %d rounds, %d tool calls (%s)",
+            result.rounds,
+            len(result.tool_calls),
+            ", ".join(tool_names),
+        )
+
+
+def _restore_terminal() -> None:
+    """Restore terminal to sane cooked mode.
+
+    Rich Status/Live can leave the terminal in raw mode (echo off, no
+    line-editing) if interrupted or if an exception escapes their context
+    manager.  This ensures the terminal is usable before reading input.
+    """
+    try:
+        fd = sys.stdin.fileno()
+        attrs = termios.tcgetattr(fd)
+        # Ensure ECHO and ICANON (cooked mode) are enabled
+        attrs[3] |= termios.ECHO | termios.ICANON
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    except (ValueError, OSError, termios.error):
+        # Non-TTY or stdin not available — nothing to restore
+        pass
+
+
+_original_sigint = signal.getsignal(signal.SIGINT)
+
+
+def _sigint_handler(signum: int, frame: Any) -> None:
+    """SIGINT handler that restores terminal before raising KeyboardInterrupt."""
+    _restore_terminal()
+    raise KeyboardInterrupt
+
+
+# ---------------------------------------------------------------------------
+# prompt_toolkit REPL input (arrow keys, history)
+# ---------------------------------------------------------------------------
+def _build_prompt_session() -> Any:
+    """Create a prompt_toolkit PromptSession with history + GEODE styling.
+
+    Includes a custom Backspace/Delete key binding that forces a full
+    renderer redraw after deletion — fixes wide-char (Korean jamo) ghost
+    artifacts where the display doesn't update even though the buffer is
+    correctly modified.
+    """
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.history import FileHistory
+    from prompt_toolkit.key_binding import KeyBindings
+
+    kb = KeyBindings()
+
+    @kb.add("backspace")
+    def _backspace(event: Any) -> None:
+        buf = event.app.current_buffer
+        if buf.cursor_position > 0:
+            buf.delete_before_cursor(count=1)
+            event.app.invalidate()
+
+    @kb.add("delete")
+    def _delete(event: Any) -> None:
+        buf = event.app.current_buffer
+        if buf.cursor_position < len(buf.text):
+            buf.delete(count=1)
+            event.app.invalidate()
+
+    history_path = Path.home() / ".geode_history"
+    return PromptSession(
+        history=FileHistory(str(history_path)),
+        message=HTML("<b>&gt;</b> "),
+        enable_history_search=True,
+        multiline=False,
+        key_bindings=kb,
+    )
+
+
+# Module-level lazy singleton
+_prompt_session: Any = None
+
+
+def _get_prompt_session() -> Any:
+    global _prompt_session
+    if _prompt_session is None:
+        try:
+            _prompt_session = _build_prompt_session()
+        except Exception:
+            log.warning("prompt_toolkit init failed, falling back to console.input", exc_info=True)
+    return _prompt_session
+
+
+def _read_multiline_input(prompt: str) -> str:
+    """Read user input via prompt_toolkit (arrow keys, history).
+
+    Falls back to Rich console.input if prompt_toolkit is unavailable.
+    Paste handling is delegated to prompt_toolkit's built-in bracketed
+    paste support (no manual stdin polling).
+    """
+    session = _get_prompt_session()
+    if session is not None:
+        try:
+            # Restore default SIGINT so prompt_toolkit can handle Ctrl-C internally.
+            # Our custom handler interferes with prompt_toolkit's input loop.
+            signal.signal(signal.SIGINT, _original_sigint)
+            text: str = str(session.prompt()).strip()
+        except (KeyboardInterrupt, EOFError):
+            raise
+        except Exception:
+            log.warning("prompt_toolkit failed, falling back to console.input", exc_info=True)
+            text = str(console.input("> ")).strip()
+        finally:
+            # Re-install our handler for the non-input phase (spinner, tool execution)
+            signal.signal(signal.SIGINT, _sigint_handler)
+    else:
+        text = str(console.input("> ")).strip()
+
+    return text
+
+
+def _interactive_loop() -> None:
+    """Claude Code / OpenClaw-style interactive REPL.
+
+    Three routing paths:
+      /command  → deterministic dispatch (commands.py)
+      free-text → agentic loop (AgenticLoop, multi-turn + multi-intent)
+      fallback  → single-shot NL Router (when agentic unavailable)
+    """
+    verbose = False
+    conversation = ConversationContext()
+
+    # --- Startup initialization with progressive status ---
+    def _init_step(label: str) -> None:
+        """Print a compact startup progress indicator."""
+        console.print(f"  [dim]Loading {label}...[/dim]", end="\r")
+
+    def _init_done(label: str, ok: bool = True) -> None:
+        mark = "[bold green]ok[/bold green]" if ok else "[dim]skip[/dim]"
+        console.print(f"  {mark} {label}          ")
+
+    # 1. Domain adapter
+    _init_step("domain")
+    from core.domains.loader import load_domain_adapter
+    from core.infrastructure.ports.domain_port import set_domain
+
+    try:
+        set_domain(load_domain_adapter("game_ip"))
+        _init_done("Domain")
+    except Exception:
+        _init_done("Domain", ok=False)
+        log.debug("Domain adapter initialization skipped", exc_info=True)
+
+    # 2. Memory contextvars
+    _init_step("memory")
+    from core.memory.organization import MonoLakeOrganizationMemory
+    from core.memory.project import ProjectMemory
+    from core.tools.memory_tools import set_org_memory, set_project_memory
+
+    try:
+        set_project_memory(ProjectMemory())
+        set_org_memory(MonoLakeOrganizationMemory())
+        _init_done("Memory")
+    except Exception:
+        _init_done("Memory", ok=False)
+        log.debug("Memory context initialization skipped", exc_info=True)
+
+    # 3. Key gate
+    readiness = _get_readiness()
+    if readiness is None or readiness.blocked:
+        key = key_registration_gate()
+        if key is None:
+            return  # user quit
+        readiness = check_readiness()
+        _set_readiness(readiness)
+
+    # 4. MCP servers (slowest — npx subprocess spawn)
+    _init_step("MCP servers")
+    from core.infrastructure.adapters.mcp.manager import MCPServerManager
+
+    mcp_mgr: MCPServerManager | None = None
+    try:
+        _mgr = MCPServerManager()
+        n_mcp = _mgr.load_config()
+        if n_mcp > 0:
+            mcp_mgr = _mgr
+            import atexit
+
+            atexit.register(_mgr.close_all)
+            _init_done(f"MCP ({n_mcp} servers)")
+        else:
+            _init_done("MCP (none)", ok=False)
+    except Exception:
+        _init_done("MCP", ok=False)
+        log.debug("MCP initialization skipped", exc_info=True)
+
+    # 5. Skills
+    _init_step("skills")
+    from core.extensibility.skills import SkillLoader, SkillRegistry
+
+    skill_registry = SkillRegistry()
+    try:
+        loaded_skills = SkillLoader().load_all(registry=skill_registry)
+        _init_done(f"Skills ({len(loaded_skills)})" if loaded_skills else "Skills (0)")
+    except Exception:
+        _init_done("Skills", ok=False)
+        log.debug("Skill loading skipped", exc_info=True)
+
+    # 6. Scheduler
+    _init_step("scheduler")
+    try:
+        from core.automation.scheduler import SchedulerService
+
+        _sched_svc = SchedulerService()
+        _sched_svc.load()
+        _sched_svc.start()
+        _scheduler_service_ctx.set(_sched_svc)
+        _init_done("Scheduler")
+    except Exception:
+        _init_done("Scheduler", ok=False)
+        log.debug("SchedulerService initialization skipped", exc_info=True)
+
+    console.print()  # blank line before prompt
+
+    # Build tool handlers and executor
+    agentic_ref: list[Any] = [None]  # mutable ref for handler closure
+    handlers = _build_tool_handlers(
+        verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref, skill_registry=skill_registry
+    )
+    sub_mgr = _build_sub_agent_manager(
+        verbose=verbose,
+        action_handlers=handlers,
+        mcp_manager=mcp_mgr,
+        skill_registry=skill_registry,
+    )
+    executor = ToolExecutor(
+        action_handlers=handlers,
+        mcp_manager=mcp_mgr,
+        sub_agent_manager=sub_mgr,
+    )
+    agentic = AgenticLoop(
+        conversation, executor, mcp_manager=mcp_mgr, skill_registry=skill_registry
+    )
+    agentic_ref[0] = agentic
+
+    # Initialize session meter for status line
+    from core.ui.agentic_ui import init_session_meter
+
+    init_session_meter(model=agentic.model)
+
+    while True:
+        # Defensive: restore terminal state before each prompt
+        # (Rich Status/Live may leave cursor hidden or echo off)
+        console.show_cursor(True)
+
+        try:
+            user_input = _read_multiline_input("[header]>[/header] ")
+        except (KeyboardInterrupt, EOFError):
+            from core.ui.agentic_ui import render_session_cost_summary
+
+            render_session_cost_summary()
+            console.print("\n  [muted]Goodbye.[/muted]\n")
+            break
+
+        if not user_input:
+            continue
+
+        # Bare exit/quit → immediate shutdown (no LLM round-trip)
+        if user_input.strip().lower() in ("exit", "quit", "q"):
+            from core.ui.agentic_ui import render_session_cost_summary
+
+            render_session_cost_summary()
+            console.print("  [muted]Goodbye.[/muted]\n")
+            break
+
+        # Multi-line paste → always route to agentic (never slash-dispatch)
+        is_multiline = "\n" in user_input
+        if not is_multiline and user_input.startswith("/"):
+            # Slash command → deterministic routing (OpenClaw Binding)
+            cmd = user_input.split()[0].lower()
+            args = user_input[len(cmd) :].strip()
+            should_break, verbose = _handle_command(
+                cmd,
+                args,
+                verbose,
+                skill_registry=skill_registry,
+                mcp_manager=mcp_mgr,
+            )
+            if should_break:
+                break
+            # Update handlers if verbose changed
+            if verbose != (handlers.get("_verbose_flag") is True):
+                handlers = _build_tool_handlers(
+                    verbose=verbose,
+                    mcp_manager=mcp_mgr,
+                    agentic_ref=agentic_ref,
+                    skill_registry=skill_registry,
+                )
+                sub_mgr = _build_sub_agent_manager(
+                    verbose=verbose,
+                    action_handlers=handlers,
+                    mcp_manager=mcp_mgr,
+                    skill_registry=skill_registry,
+                )
+                executor = ToolExecutor(
+                    action_handlers=handlers,
+                    mcp_manager=mcp_mgr,
+                    sub_agent_manager=sub_mgr,
+                )
+                agentic = AgenticLoop(
+                    conversation,
+                    executor,
+                    mcp_manager=mcp_mgr,
+                    skill_registry=skill_registry,
+                )
+                agentic_ref[0] = agentic
+        else:
+            # Agentic loop: multi-turn + multi-intent (online) or offline regex
+            try:
+                result = agentic.run(user_input)
+                _render_agentic_result(result)
+                # Claude Code-style status line after each result
+                from core.ui.agentic_ui import render_status_line
+
+                render_status_line()
+            except KeyboardInterrupt:
+                console.show_cursor(True)
+                console.print("\n  [dim]Interrupted.[/dim]\n")
+            except Exception as exc:
+                console.show_cursor(True)
+                log.error("Agentic loop error: %s", exc, exc_info=True)
+                console.print(f"\n  [error]Error: {exc}[/error]\n")
+
+    # Clean shutdown: MCP servers → SchedulerService
+    if mcp_mgr is not None:
+        try:
+            mcp_mgr.close_all()
+        except Exception:
+            log.debug("MCP shutdown error", exc_info=True)
+
+    _sched = _scheduler_service_ctx.get(None)
+    if _sched is not None:
+        try:
+            _sched.save()
+            _sched.stop()
+        except Exception:
+            log.debug("SchedulerService shutdown error", exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # Typer commands
 # ---------------------------------------------------------------------------
@@ -1390,7 +2744,7 @@ def _build_sub_agent_manager(
 
 @app.callback()
 def main(ctx: typer.Context) -> None:
-    """GEODE -- 게임화 IP 도메인 자율 실행 하네스."""
+    """GEODE — 게임화 IP 도메인 자율 실행 하네스."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
         _interactive_loop()
