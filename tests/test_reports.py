@@ -20,11 +20,14 @@ _SAMPLE_RESULT: dict[str, Any] = {
     "ip_name": "TestGame",
     "final_score": 78.5,
     "tier": "A",
+    "analyst_confidence": 82.0,
     "subscores": {
+        "psm": 75.0,
         "quality": 82.0,
         "recovery": 71.0,
         "growth": 85.0,
         "momentum": 76.0,
+        "dev": 60.0,
     },
     "synthesis": {
         "undervaluation_cause": "undermarketed",
@@ -37,16 +40,66 @@ _SAMPLE_RESULT: dict[str, Any] = {
             "analyst_type": "game_mechanics",
             "score": 4.2,
             "key_finding": "Strong gameplay loop",
+            "confidence": 85.0,
         },
         {
             "analyst_type": "market_position",
             "score": 3.5,
             "key_finding": "Crowded segment",
+            "confidence": 78.0,
         },
     ],
+    "evaluations": {
+        "market_evaluator": {
+            "evaluator_type": "market_evaluator",
+            "composite_score": 72.5,
+            "rationale": "Strong market signals but limited platform reach.",
+            "axes": {"d_score": 3.8, "e_score": 3.2, "f_score": 4.1},
+        },
+        "quality_evaluator": {
+            "evaluator_type": "quality_evaluator",
+            "composite_score": 80.0,
+            "rationale": "High production value with polished mechanics.",
+            "axes": {"a_score": 4.5, "b_score": 3.9},
+        },
+    },
+    "psm_result": {
+        "att_pct": 31.2,
+        "z_value": 2.45,
+        "rosenbaum_gamma": 1.82,
+        "max_smd": 0.048,
+        "exposure_lift_score": 75.0,
+        "psm_valid": True,
+    },
     "guardrails": {
         "all_passed": True,
+        "g1_schema": True,
+        "g2_range": True,
+        "g3_grounding": True,
+        "g4_consistency": True,
+        "grounding_ratio": 0.85,
         "details": ["Schema OK", "Range OK"],
+    },
+    "biasbuster": {
+        "overall_pass": True,
+        "confirmation_bias": False,
+        "recency_bias": False,
+        "anchoring_bias": False,
+        "position_bias": False,
+        "verbosity_bias": False,
+        "self_enhancement_bias": False,
+        "explanation": "No significant bias detected across all dimensions.",
+    },
+    "signals": {
+        "youtube_views": 25000000,
+        "reddit_subscribers": 520000,
+        "fan_art_yoy_pct": 65.0,
+        "google_trends_index": 78,
+        "twitter_mentions_monthly": 120000,
+        "cosplay_events_annual": 200,
+        "mod_patch_activity": "medium",
+        "genre_fit_keywords": ["action RPG", "souls-like"],
+        "game_sales_data": "~100K units",
     },
 }
 
@@ -104,7 +157,61 @@ class TestMarkdownReport:
         assert "Analyst Results" in report
         assert "game_mechanics" in report
         assert "market_position" in report
-        assert "Verification" in report
+        assert "Guardrails" in report
+
+    def test_detailed_includes_evaluators(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Evaluator Results" in report
+        assert "market_evaluator" in report
+        assert "quality_evaluator" in report
+        assert "Axis Breakdown" in report
+
+    def test_detailed_includes_psm(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "PSM Engine" in report
+        assert "VALID" in report
+        assert "31.2" in report
+        assert "2.45" in report
+
+    def test_detailed_includes_scoring_breakdown(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Scoring Breakdown" in report
+        assert "Weight" in report
+        assert "Weighted" in report
+        assert "Confidence Multiplier" in report
+
+    def test_detailed_includes_biasbuster(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "BiasBuster" in report
+        assert "Confirmation" in report
+        assert "no bias detected" in report.lower() or "PASS" in report
+
+    def test_detailed_includes_signals(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "External Signals" in report
+        assert "YouTube Views" in report
+        assert "Reddit Subscribers" in report
+        assert "Google Trends Index" in report
 
     def test_executive_includes_subscores(self, generator: ReportGenerator):
         report = generator.generate(
@@ -150,6 +257,12 @@ class TestJsonReport:
         assert "analyses" in data
         assert len(data["analyses"]) == 2
         assert "subscores" in data
+        assert "evaluations" in data
+        assert "psm_result" in data
+        assert "guardrails" in data
+        assert "biasbuster" in data
+        assert "signals" in data
+        assert "analyst_confidence" in data
 
     def test_executive_json_has_subscores_no_analyses(self, generator: ReportGenerator):
         raw = generator.generate(
@@ -182,7 +295,54 @@ class TestHtmlReport:
         )
         assert "<table>" in report
         assert "game_mechanics" in report
-        assert "Verification" in report
+        assert "Guardrails" in report
+
+    def test_detailed_html_has_evaluators(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.HTML,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Evaluator Results" in report
+        assert "market_evaluator" in report
+        assert "72.5" in report
+
+    def test_detailed_html_has_psm(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.HTML,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "PSM Engine" in report
+        assert "VALID" in report
+        assert "+31.2%" in report
+
+    def test_detailed_html_has_scoring_breakdown(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.HTML,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Scoring Breakdown" in report
+        assert "Weighted Sum" in report
+
+    def test_detailed_html_has_biasbuster(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.HTML,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "BiasBuster" in report
+        assert "NO BIAS DETECTED" in report
+
+    def test_detailed_html_has_signals(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.HTML,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "External Signals" in report
+        assert "YouTube Views" in report
 
     def test_tier_class_high(self, generator: ReportGenerator):
         report = generator.generate(
