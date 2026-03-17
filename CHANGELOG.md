@@ -28,6 +28,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Cost Tracker -- `~/.geode/usage/YYYY-MM.jsonl`에 LLM 비용 영속 저장 (`UsageStore`)
+- Agent Reflection -- `PIPELINE_END` Hook으로 `learned.md` 자동 패턴 추출 (Karpathy P4 Ratchet)
+- Cache Expiry -- ResultCache 24h TTL + SHA-256 content hash 검증
+- `geode history` 서브커맨드 -- 실행 이력 + 모델별 비용 요약 조회
+
 ### Architecture
 - `_build_tool_handlers` 957줄 → 그룹별 헬퍼 함수 분할 (~50줄 디스패처) — 10개 논리 그룹(Analysis, Memory, Plan, HITL, System, Execution, Delegated, Profile, Signal, MCP)으로 분리
 

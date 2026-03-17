@@ -2891,6 +2891,104 @@ def init(
     console.print("[green]GEODE project initialized.[/green]")
 
 
+@app.command()
+def history(
+    limit: int = typer.Option(10, "--limit", "-n", help="Number of recent entries to show"),
+    month: str = typer.Option(None, "--month", "-m", help="Month to show (YYYY-MM)"),
+) -> None:
+    """Show execution history and cost summary."""
+    from datetime import date
+
+    from rich.table import Table
+
+    from core.llm.usage_store import UsageStore
+
+    store = UsageStore()
+
+    # Parse month
+    if month:
+        try:
+            parts = month.split("-")
+            year, mon = int(parts[0]), int(parts[1])
+        except (ValueError, IndexError):
+            console.print(f"  [warning]Invalid month format: {month} (use YYYY-MM)[/warning]")
+            return
+    else:
+        today = date.today()
+        year, mon = today.year, today.month
+
+    # Monthly summary
+    summary = store.get_monthly_summary(year, mon)
+    console.print()
+    console.print(f"  [header]GEODE Usage Report -- {year:04d}-{mon:02d}[/header]")
+    console.print()
+
+    if summary["total_calls"] == 0:
+        console.print("  [muted]No usage data for this month.[/muted]")
+        console.print()
+        return
+
+    # Model breakdown table
+    table = Table(show_header=True, padding=(0, 2), box=None)
+    table.add_column("Model", style="label", min_width=22)
+    table.add_column("Calls", justify="right", style="value")
+    table.add_column("Input", justify="right")
+    table.add_column("Output", justify="right")
+    table.add_column("Cost", justify="right", style="bold")
+
+    for model_name, stats in sorted(summary["by_model"].items()):
+        in_k = stats["in"] / 1000
+        out_k = stats["out"] / 1000
+        table.add_row(
+            model_name,
+            str(int(stats["calls"])),
+            f"{in_k:.1f}K",
+            f"{out_k:.1f}K",
+            f"${stats['cost']:.2f}",
+        )
+
+    # Total row
+    table.add_section()
+    total_in_k = summary["total_input_tokens"] / 1000
+    total_out_k = summary["total_output_tokens"] / 1000
+    table.add_row(
+        "Total",
+        str(summary["total_calls"]),
+        f"{total_in_k:.1f}K",
+        f"{total_out_k:.1f}K",
+        f"${summary['total_cost']:.2f}",
+    )
+
+    console.print(table)
+    console.print()
+
+    # Recent records
+    recent = store.get_recent_records(limit=limit)
+    if recent:
+        from datetime import datetime
+
+        console.print(f"  [header]Recent LLM Calls (last {min(limit, len(recent))})[/header]")
+        console.print()
+        recent_table = Table(show_header=True, padding=(0, 2), box=None)
+        recent_table.add_column("Time", style="muted", min_width=16)
+        recent_table.add_column("Model", style="label", min_width=22)
+        recent_table.add_column("In", justify="right")
+        recent_table.add_column("Out", justify="right")
+        recent_table.add_column("Cost", justify="right", style="bold")
+
+        for rec in recent:
+            dt = datetime.fromtimestamp(rec.ts)
+            recent_table.add_row(
+                dt.strftime("%m-%d %H:%M:%S"),
+                rec.model,
+                str(rec.input_tokens),
+                str(rec.output_tokens),
+                f"${rec.cost_usd:.4f}",
+            )
+        console.print(recent_table)
+        console.print()
+
+
 def _ensure_gitignore_entry(entry: str, comment: str = "") -> None:
     """Add entry to .gitignore if not already present."""
     gitignore = Path(".gitignore")
