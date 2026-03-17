@@ -45,6 +45,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from core.config import settings
 from core.infrastructure.ports.hook_port import HookSystemPort
 from core.nodes.analysts import analyst_node, make_analyst_sends
 from core.nodes.evaluators import evaluator_node, make_evaluator_sends
@@ -300,7 +301,7 @@ def _verification_node(state: GeodeState) -> dict[str, Any]:
         }
     guardrails = run_guardrails(state, signal_data=state.get("signals"))
     biasbuster = run_biasbuster(state)
-    cross_llm = run_cross_llm_check(state)
+    cross_llm = run_cross_llm_check(state, agreement_threshold=settings.agreement_threshold)
 
     # Rights risk assessment (GAP-2)
     ip_name = state.get("ip_name", "")

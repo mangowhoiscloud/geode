@@ -12,7 +12,6 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from core.config import settings
 from core.infrastructure.ports.domain_port import get_domain_or_none
 from core.infrastructure.ports.llm_port import (
     get_llm_json,
@@ -98,16 +97,22 @@ def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, st
     return base_system, base_user
 
 
-# Analyst types assigned to the secondary LLM in cross-ensemble mode
-_SECONDARY_ANALYSTS = set(settings.secondary_analysts.split(","))
-_PRIMARY_ANALYSTS = set(settings.primary_analysts.split(","))
+# Default ensemble configuration (matches Settings defaults)
+_DEFAULT_SECONDARY_ANALYSTS = "player_experience,discovery"
+_DEFAULT_PRIMARY_ANALYSTS = "game_mechanics,growth_potential"
+_DEFAULT_ENSEMBLE_MODE = "single"
 
 
-def _should_use_secondary(analyst_type: str) -> bool:
+def _should_use_secondary(
+    analyst_type: str,
+    *,
+    ensemble_mode: str = _DEFAULT_ENSEMBLE_MODE,
+    secondary_analysts: str = _DEFAULT_SECONDARY_ANALYSTS,
+) -> bool:
     """Determine whether this analyst should use the secondary LLM in cross mode."""
-    if settings.ensemble_mode != "cross":
+    if ensemble_mode != "cross":
         return False
-    return analyst_type in _SECONDARY_ANALYSTS
+    return analyst_type in set(secondary_analysts.split(","))
 
 
 def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
@@ -151,7 +156,14 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
             log.debug("Analyst %s tool-augmented path unexpected error: %s", analyst_type, exc)
 
     # Determine which LLM to use based on ensemble mode
-    use_secondary = _should_use_secondary(analyst_type)
+    # Ensemble config injected via state from graph/runtime layer
+    ensemble_mode = str(state.get("_ensemble_mode", _DEFAULT_ENSEMBLE_MODE))
+    secondary_analysts_csv = str(state.get("_secondary_analysts", _DEFAULT_SECONDARY_ANALYSTS))
+    use_secondary = _should_use_secondary(
+        analyst_type,
+        ensemble_mode=ensemble_mode,
+        secondary_analysts=secondary_analysts_csv,
+    )
     model_provider: str = "primary"
 
     if use_secondary:
@@ -453,6 +465,9 @@ def make_analyst_sends(state: GeodeState) -> list[Any]:
             "memory_context": state.get("memory_context"),
             # Phase 2: tool definitions propagation for tool-augmented analysts
             "_tool_definitions": state.get("_tool_definitions", []),
+            # Ensemble config propagation (L5→state injection)
+            "_ensemble_mode": state.get("_ensemble_mode", _DEFAULT_ENSEMBLE_MODE),
+            "_secondary_analysts": state.get("_secondary_analysts", _DEFAULT_SECONDARY_ANALYSTS),
         }
         sends.append(Send("analyst", send_state))
     return sends

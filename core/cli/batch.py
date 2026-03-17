@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from core.config import settings
 from core.fixtures import FIXTURE_MAP
 
 log = logging.getLogger(__name__)
@@ -92,6 +93,9 @@ def _run_analysis_standalone(ip_name: str, *, dry_run: bool = False) -> dict[str
         "analyses": [],
         "evaluations": {},
         "errors": [],
+        # Ensemble config injection (L5 nodes read from state, not settings)
+        "_ensemble_mode": settings.ensemble_mode,
+        "_secondary_analysts": settings.secondary_analysts,
     }
 
     if not dry_run:

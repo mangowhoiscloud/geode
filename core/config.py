@@ -1,13 +1,134 @@
-"""GEODE configuration via Pydantic BaseSettings."""
+"""GEODE configuration via Pydantic BaseSettings.
+
+Config Cascade (priority high → low):
+  1. CLI arguments
+  2. Environment variables / .env
+  3. Project TOML: .geode/config.toml
+  4. Global TOML: ~/.geode/config.toml
+  5. Code defaults
+"""
 
 from __future__ import annotations
 
+import logging
+import os
 import threading
+import tomllib
+from pathlib import Path
+from typing import Any
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+log = logging.getLogger(__name__)
+
 _settings_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# TOML Config Cascade
+# ---------------------------------------------------------------------------
+
+GLOBAL_CONFIG_PATH = Path.home() / ".geode" / "config.toml"
+PROJECT_CONFIG_PATH = Path(".geode") / "config.toml"
+
+# Mapping: TOML dotted key → Settings field name.
+# Only mapped keys are applied; unknown TOML keys are silently ignored.
+_TOML_TO_SETTINGS: dict[str, str] = {
+    "llm.primary_model": "model",
+    "llm.secondary_model": "default_secondary_model",
+    "llm.router_model": "router_model",
+    "output.verbose": "verbose",
+    "pipeline.confidence_threshold": "confidence_threshold",
+    "pipeline.max_iterations": "max_iterations",
+}
+
+DEFAULT_CONFIG_TOML = """\
+# GEODE config.toml
+# Priority: CLI > env > project .geode/config.toml > global ~/.geode/config.toml > defaults
+#
+# Uncomment and edit values to override defaults.
+
+[llm]
+# primary_model = "claude-opus-4-6"
+# secondary_model = "gpt-5.4"
+# router_model = "claude-opus-4-6"
+
+[output]
+# verbose = false
+
+[pipeline]
+# confidence_threshold = 0.7
+# max_iterations = 5
+"""
+
+
+def _flatten_toml(
+    data: dict[str, Any],
+    prefix: str = "",
+) -> dict[str, Any]:
+    """Flatten nested TOML dict to dotted-key → value mapping.
+
+    Example:
+        {"llm": {"primary_model": "x"}} → {"llm.primary_model": "x"}
+    """
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        full_key = f"{prefix}{key}" if prefix else key
+        if isinstance(value, dict):
+            result.update(_flatten_toml(value, f"{full_key}."))
+        else:
+            result[full_key] = value
+    return result
+
+
+def _load_toml_config(
+    *,
+    global_path: Path | None = None,
+    project_path: Path | None = None,
+) -> dict[str, Any]:
+    """Load and merge TOML configs: project overrides global.
+
+    Returns a dict mapping Settings field names to their values.
+    Only keys present in _TOML_TO_SETTINGS are returned.
+    """
+    gp = global_path or GLOBAL_CONFIG_PATH
+    pp = project_path or PROJECT_CONFIG_PATH
+    merged: dict[str, Any] = {}
+
+    for path in (gp, pp):  # global first (lower prio), project second (higher)
+        if not path.exists():
+            continue
+        try:
+            with open(path, "rb") as f:
+                raw = tomllib.load(f)
+            flat = _flatten_toml(raw)
+            for toml_key, settings_field in _TOML_TO_SETTINGS.items():
+                if toml_key in flat:
+                    merged[settings_field] = flat[toml_key]
+        except Exception:
+            log.warning("Failed to load TOML config %s, skipping", path, exc_info=True)
+
+    return merged
+
+
+def _apply_toml_overlay(s: Settings) -> None:
+    """Overlay TOML values onto Settings for fields not set by env vars."""
+    toml_values = _load_toml_config()
+    if not toml_values:
+        return
+
+    for field_name, toml_value in toml_values.items():
+        # Skip fields that were explicitly set via environment variable.
+        # Pydantic Settings loads from GEODE_<FIELD> and .env automatically.
+        # We only overlay TOML for fields still at their code default.
+        env_key = f"GEODE_{field_name.upper()}"
+        if env_key in os.environ:
+            continue
+        # Also check special alias env vars for API keys
+        if field_name in ("anthropic_api_key", "openai_api_key"):
+            continue
+        if hasattr(s, field_name):
+            object.__setattr__(s, field_name, toml_value)
 
 
 class Settings(BaseSettings):
@@ -116,14 +237,20 @@ _settings_instance: Settings | None = None
 
 
 def _get_settings() -> Settings:
-    """Get or create the Settings singleton in a thread-safe manner."""
+    """Get or create the Settings singleton in a thread-safe manner.
+
+    After Pydantic loads from env/.env, overlays TOML config values
+    for fields not explicitly set via environment variables.
+    """
     global _settings_instance
     if _settings_instance is not None:
         return _settings_instance
     with _settings_lock:
         # Double-checked locking
         if _settings_instance is None:
-            _settings_instance = Settings()
+            s = Settings()
+            _apply_toml_overlay(s)
+            _settings_instance = s
         return _settings_instance
 
 
