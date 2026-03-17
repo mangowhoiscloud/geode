@@ -31,6 +31,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 - `check_status` 도구에 MCP 서버 가시성 추가 -- 활성 서버(json_config/auto_discovered) 목록과 비활성 서버(환경변수 누락) 목록을 함께 표시. "MCP 리스트 보여줘" 등 자연어 쿼리 지원
 - CLI 입력 UX 개선 -- renderer.reset() 제거, ANSI 재페인팅 제거, 50ms 폴링 제거, TextSpinner 도입, 동적 터미널 폭
+- CircuitBreaker 스레드 안전성 추가 (threading.Lock) -- sub-agent ThreadPool(MAX_CONCURRENT=5) 환경에서 경합 조건 방지
+- Token usage 기록 3x 중복 → `_record_response_usage()` 헬퍼 추출 -- call_llm, call_llm_parsed, call_llm_with_tools, call_llm_streaming 4곳 통합
+- YAML frontmatter 파서 중복 제거 -- project.py가 canonical `_frontmatter.py`의 `_FRONTMATTER_RE` 사용
+- `_API_ALLOWED_KEYS` 루프 내 재생성 → 모듈 레벨 `frozenset` 상수로 이동
 
 ### Fixed
 - MCP 카탈로그 이름 불일치 해소 -- `linkedin` -> `linkedin-reader` (mcp_servers.json과 일치), `arxiv` 카탈로그 항목 추가 (DEFAULT_SERVERS에 등록)

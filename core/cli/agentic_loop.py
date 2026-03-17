@@ -43,6 +43,11 @@ log = logging.getLogger(__name__)
 _TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
 _BASE_TOOLS: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
 
+# Anthropic API tool schema allowed keys — fields outside this set cause
+# 400 "Extra inputs are not permitted" errors. Defined at module level
+# to avoid re-creating the frozenset on every LLM call.
+_API_ALLOWED_KEYS = frozenset({"name", "description", "input_schema", "cache_control", "type"})
+
 # Backward-compatible alias
 AGENTIC_TOOLS: list[dict[str, Any]] = _BASE_TOOLS
 
@@ -543,10 +548,8 @@ class AgenticLoop:
         for attempt in range(max_retries):
             try:
                 # Strip non-API fields before sending to Anthropic.
-                # Anthropic tool schema only allows: name, description, input_schema,
-                # cache_control, type. Extra fields (category, cost_tier, defer_loading,
+                # Extra fields (category, cost_tier, defer_loading,
                 # _mcp_server, etc.) cause 400 "Extra inputs are not permitted".
-                _API_ALLOWED_KEYS = {"name", "description", "input_schema", "cache_control", "type"}
                 api_tools = [
                     {k: v for k, v in t.items() if k in _API_ALLOWED_KEYS} for t in self._tools
                 ]
