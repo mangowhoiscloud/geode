@@ -54,6 +54,10 @@ LLMAPIStatusError = anthropic.APIStatusError
 
 log = logging.getLogger(__name__)
 
+# Suppress langsmith/langchain rate-limit log spam (429 errors when quota exceeded)
+logging.getLogger("langsmith").setLevel(logging.ERROR)
+logging.getLogger("langchain").setLevel(logging.ERROR)
+
 # ---------------------------------------------------------------------------
 # LangSmith tracing (Phase 5-A): LangChain standard env vars
 #   LANGCHAIN_TRACING_V2=true  — tracing on/off gate
