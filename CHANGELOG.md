@@ -30,9 +30,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.16.0] — 2026-03-17
+## [0.17.0] — 2026-03-17
 
-.geode Phase 1 (Config Cascade, Run History, geode init), Clean Architecture 레이어 수정, CLI 입력 UX 개선, 코드 퀄리티 리팩터링.
+.geode Phase 2 (Cost Tracker, Agent Reflection, Cache Expiry, geode history), tool_handlers 그룹 분할.
 
 ### Added
 - Cost Tracker -- `~/.geode/usage/YYYY-MM.jsonl`에 LLM 비용 영속 저장 (`UsageStore`)
