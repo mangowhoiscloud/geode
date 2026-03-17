@@ -333,7 +333,7 @@ class ToolExecutor:
 
         _restore_terminal()
         console.print()
-        console.print("  [bold yellow]MCP tool requires approval[/bold yellow]")
+        console.print("  [warning]MCP tool requires approval[/warning]")
         console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
         console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
         console.print()
@@ -367,7 +367,7 @@ class ToolExecutor:
             summary = tool_input.get("pattern", "")[:80]
 
         console.print()
-        console.print("  [bold yellow]Write operation requires approval[/bold yellow]")
+        console.print("  [warning]Write operation requires approval[/warning]")
         console.print(f"  [dim]Tool:[/dim]    [bold]{tool_name}[/bold]")
         if summary:
             console.print(f"  [dim]Summary:[/dim] {summary}")
@@ -385,7 +385,7 @@ class ToolExecutor:
 
         _restore_terminal()
         console.print()
-        console.print("  [bold yellow]$ Cost confirmation[/bold yellow]")
+        console.print("  [warning]$ Cost confirmation[/warning]")
         console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
         console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
         console.print()
@@ -402,8 +402,8 @@ class ToolExecutor:
 
         _restore_terminal()
         console.print()
-        console.print("  [bold yellow]Bash command requires approval[/bold yellow]")
-        console.print(f"  [dim]Command:[/dim] [bold]{command}[/bold]")
+        console.print("  [warning]Bash command requires approval[/warning]")
+        console.print(f"  [dim]Command:[/dim] [value]{command}[/value]")
         if reason:
             console.print(f"  [dim]Reason:[/dim]  {reason}")
         console.print()
