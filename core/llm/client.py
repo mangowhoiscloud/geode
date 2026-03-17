@@ -86,8 +86,55 @@ def _maybe_traceable(
 # Token tracking — canonical module: core.llm.token_tracker
 # Re-exports (LLMUsage, LLMUsageAccumulator, calculate_cost,
 # get_usage_accumulator, reset_usage_accumulator, track_token_usage,
-# get_tracker, MODEL_PRICING) are imported at the top of this file.
+# MODEL_PRICING) are imported at the top of this file for backward
+# compatibility. All are actively used by tests and/or UI modules.
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Token usage recording helper — shared by call_llm, call_llm_parsed,
+# call_llm_with_tools, and call_llm_streaming to eliminate duplication.
+# ---------------------------------------------------------------------------
+
+
+def _record_response_usage(
+    response: Any,
+    model: str,
+    *,
+    label: str = "",
+) -> LLMUsage | None:
+    """Record token usage from an LLM response. Returns usage or None.
+
+    Args:
+        response: Anthropic API response with optional ``usage`` attribute.
+        model: Model name for cost calculation.
+        label: Optional label for log messages (e.g. "parsed", "stream").
+    """
+    if not (hasattr(response, "usage") and response.usage):
+        return None
+    in_tok = response.usage.input_tokens
+    out_tok = response.usage.output_tokens
+    cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+    cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+    usage = get_tracker().record(
+        model,
+        in_tok,
+        out_tok,
+        cache_creation_tokens=cache_create,
+        cache_read_tokens=cache_read,
+    )
+    suffix = f" ({label})" if label else ""
+    log.info(
+        "LLM call%s: model=%s in=%d out=%d cost=$%.4f",
+        suffix,
+        model,
+        in_tok,
+        out_tok,
+        usage.cost_usd,
+    )
+    if cache_create or cache_read:
+        log.debug("Cache: create=%d read=%d", cache_create, cache_read)
+    return usage
 
 
 # Failover configuration — sourced from settings with backward-compat defaults
@@ -137,9 +184,14 @@ _async_client_lock = threading.Lock()
 
 
 class CircuitBreaker:
-    """Simple circuit breaker for LLM API calls."""
+    """Thread-safe circuit breaker for LLM API calls.
+
+    Used in ThreadPoolExecutor contexts (sub-agent MAX_CONCURRENT=5),
+    so all state mutations are protected by a threading.Lock.
+    """
 
     def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0) -> None:
+        self._lock = threading.Lock()
         self._failures = 0
         self._threshold = failure_threshold
         self._recovery_timeout = recovery_timeout
@@ -147,33 +199,36 @@ class CircuitBreaker:
         self._state: str = "closed"  # closed, open, half-open
 
     def record_failure(self) -> None:
-        self._failures += 1
-        self._last_failure = time.time()
-        if self._failures >= self._threshold:
-            self._state = "open"
-            log.warning(
-                "Circuit breaker OPEN after %d failures (threshold=%d)",
-                self._failures,
-                self._threshold,
-            )
+        with self._lock:
+            self._failures += 1
+            self._last_failure = time.time()
+            if self._failures >= self._threshold:
+                self._state = "open"
+                log.warning(
+                    "Circuit breaker OPEN after %d failures (threshold=%d)",
+                    self._failures,
+                    self._threshold,
+                )
 
     def record_success(self) -> None:
-        prev_state = self._state
-        self._failures = 0
-        self._state = "closed"
-        if prev_state == "half-open":
-            log.info("Circuit breaker CLOSED (recovered from half-open)")
+        with self._lock:
+            prev_state = self._state
+            self._failures = 0
+            self._state = "closed"
+            if prev_state == "half-open":
+                log.info("Circuit breaker CLOSED (recovered from half-open)")
 
     def can_execute(self) -> bool:
-        if self._state == "closed":
-            return True
-        if self._state == "open":
-            if time.time() - self._last_failure > self._recovery_timeout:
-                self._state = "half-open"
-                log.info("Circuit breaker HALF-OPEN (cooldown expired, testing)")
+        with self._lock:
+            if self._state == "closed":
                 return True
-            return False
-        return True  # half-open: allow one attempt
+            if self._state == "open":
+                if time.time() - self._last_failure > self._recovery_timeout:
+                    self._state = "half-open"
+                    log.info("Circuit breaker HALF-OPEN (cooldown expired, testing)")
+                    return True
+                return False
+            return True  # half-open: allow one attempt
 
 
 _circuit_breaker = CircuitBreaker()
@@ -372,28 +427,7 @@ def call_llm(
             system=system_cached,
             messages=[{"role": "user", "content": user}],
         )
-        # Capture token usage
-        if hasattr(response, "usage") and response.usage:
-            in_tok = response.usage.input_tokens
-            out_tok = response.usage.output_tokens
-            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
-            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
-            usage = get_tracker().record(
-                model,
-                in_tok,
-                out_tok,
-                cache_creation_tokens=cache_create,
-                cache_read_tokens=cache_read,
-            )
-            log.info(
-                "LLM call: model=%s in=%d out=%d cost=$%.4f",
-                model,
-                in_tok,
-                out_tok,
-                usage.cost_usd,
-            )
-            if cache_create or cache_read:
-                log.debug("Cache: create=%d read=%d", cache_create, cache_read)
+        _record_response_usage(response, model)
 
         block = response.content[0]
         if not hasattr(block, "text"):
@@ -435,28 +469,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
             messages=[{"role": "user", "content": user}],
             output_format=output_model,
         )
-        # Capture token usage
-        if hasattr(response, "usage") and response.usage:
-            in_tok = response.usage.input_tokens
-            out_tok = response.usage.output_tokens
-            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
-            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
-            usage = get_tracker().record(
-                model,
-                in_tok,
-                out_tok,
-                cache_creation_tokens=cache_create,
-                cache_read_tokens=cache_read,
-            )
-            log.info(
-                "LLM call (parsed): model=%s in=%d out=%d cost=$%.4f",
-                model,
-                in_tok,
-                out_tok,
-                usage.cost_usd,
-            )
-            if cache_create or cache_read:
-                log.debug("Cache: create=%d read=%d", cache_create, cache_read)
+        _record_response_usage(response, model, label="parsed")
 
         if response.parsed_output is None:
             raise ValueError("Structured output parsing returned None")
@@ -597,18 +610,8 @@ def call_llm_with_tools(
         response = _retry_with_backoff(_do_call, model=target_model)
 
         # Track usage
-        if hasattr(response, "usage") and response.usage:
-            in_tok = response.usage.input_tokens
-            out_tok = response.usage.output_tokens
-            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
-            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
-            usage = get_tracker().record(
-                target_model,
-                in_tok,
-                out_tok,
-                cache_creation_tokens=cache_create,
-                cache_read_tokens=cache_read,
-            )
+        usage = _record_response_usage(response, target_model, label="tools")
+        if usage is not None:
             all_usage.append(usage)
 
         # Check if model wants to use tools
@@ -704,31 +707,8 @@ def call_llm_streaming(
 
             # Capture token usage from the stream's final response
             final = stream.get_final_message()
-            if final and hasattr(final, "usage") and final.usage:
-                in_tok = final.usage.input_tokens
-                out_tok = final.usage.output_tokens
-                cache_create = getattr(final.usage, "cache_creation_input_tokens", 0) or 0
-                cache_read = getattr(final.usage, "cache_read_input_tokens", 0) or 0
-                usage = get_tracker().record(
-                    model,
-                    in_tok,
-                    out_tok,
-                    cache_creation_tokens=cache_create,
-                    cache_read_tokens=cache_read,
-                )
-                log.info(
-                    "LLM call (stream): model=%s in=%d out=%d cost=$%.4f",
-                    model,
-                    in_tok,
-                    out_tok,
-                    usage.cost_usd,
-                )
-                if cache_create or cache_read:
-                    log.debug(
-                        "Streaming cache: create=%d read=%d",
-                        cache_create,
-                        cache_read,
-                    )
+            if final:
+                _record_response_usage(final, model, label="stream")
 
     # Circuit breaker check — mirrors call_llm() behavior
     if not _circuit_breaker.can_execute():

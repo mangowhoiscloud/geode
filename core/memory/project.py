@@ -21,6 +21,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core.extensibility._frontmatter import _FRONTMATTER_RE
+
 log = logging.getLogger(__name__)
 
 # MEMORY.md max lines loaded into context (SOT: 200)
@@ -29,8 +31,7 @@ MAX_MEMORY_LINES = 200
 # Maximum insight entries before oldest-drop rotation
 MAX_INSIGHTS = 50
 
-# YAML frontmatter regex
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+# Project-specific path extraction from YAML frontmatter (multi-line list format)
 _PATHS_RE = re.compile(r"paths:\s*\n((?:\s*-\s*.+\n)*)", re.MULTILINE)
 _PATH_ITEM_RE = re.compile(r'^\s*-\s*["\']?(.+?)["\']?\s*$', re.MULTILINE)
 
@@ -112,12 +113,12 @@ class ProjectMemory:
             except OSError:
                 continue
 
-            # Parse YAML frontmatter
+            # Parse YAML frontmatter (canonical regex from _frontmatter.py)
             fm_match = _FRONTMATTER_RE.match(raw)
             if fm_match:
                 frontmatter = fm_match.group(1)
                 paths = _extract_paths(frontmatter)
-                body = raw[fm_match.end() :]
+                body = fm_match.group(2)
             else:
                 paths = []
                 body = raw
@@ -283,7 +284,7 @@ class ProjectMemory:
             return False
 
         fm_match = _FRONTMATTER_RE.match(raw)
-        frontmatter_block = raw[: fm_match.end()] if fm_match else ""
+        frontmatter_block = raw[: fm_match.start(2)] if fm_match else ""
 
         try:
             rule_path.write_text(frontmatter_block + content, encoding="utf-8")
@@ -325,7 +326,7 @@ class ProjectMemory:
             paths: list[str] = []
             if fm_match:
                 paths = _extract_paths(fm_match.group(1))
-                body = raw[fm_match.end() :].strip()
+                body = fm_match.group(2).strip()
             else:
                 body = raw.strip()
 
