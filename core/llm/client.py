@@ -41,6 +41,17 @@ from core.llm.token_tracker import get_usage_accumulator as get_usage_accumulato
 from core.llm.token_tracker import reset_usage_accumulator as reset_usage_accumulator
 from core.llm.token_tracker import track_token_usage as track_token_usage
 
+# ---------------------------------------------------------------------------
+# LLM error type aliases — re-exported so CLI layer does NOT import anthropic
+# directly.  Keeps the Port/Adapter boundary clean.
+# ---------------------------------------------------------------------------
+LLMTimeoutError = anthropic.APITimeoutError
+LLMConnectionError = anthropic.APIConnectionError
+LLMRateLimitError = anthropic.RateLimitError
+LLMAuthenticationError = anthropic.AuthenticationError
+LLMBadRequestError = anthropic.BadRequestError
+LLMAPIStatusError = anthropic.APIStatusError
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------

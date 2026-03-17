@@ -207,7 +207,7 @@ class TestResultCache:
         """Cache persists to and loads from disk."""
         from core.cli import _ResultCache
 
-        monkeypatch.setattr("core.cli._RESULT_CACHE_DIR", tmp_path)
+        monkeypatch.setattr("core.cli.result_cache._RESULT_CACHE_DIR", tmp_path)
 
         cache1 = _ResultCache(max_size=5)
         cache1._cache.clear()

@@ -21,14 +21,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import anthropic
-
 from core.cli.conversation import ConversationContext
 from core.cli.error_recovery import ErrorRecoveryStrategy
 from core.cli.nl_router import _build_system_prompt
 from core.cli.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY, settings
-from core.llm.client import _maybe_traceable, get_async_anthropic_client
+from core.llm.client import (
+    LLMAuthenticationError,
+    LLMBadRequestError,
+    LLMConnectionError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    _maybe_traceable,
+    get_async_anthropic_client,
+)
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.ui.agentic_ui import OperationLogger
@@ -186,7 +192,7 @@ class AgenticLoop:
         self._tool_log: list[dict[str, Any]] = []
         self._consecutive_failures: dict[str, int] = {}
         self._last_llm_error: str | None = None  # last error type for user message
-        self._client: anthropic.AsyncAnthropic | None = None
+        self._client: Any | None = None
         self._op_logger = OperationLogger()
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
@@ -521,8 +527,8 @@ class AgenticLoop:
     @_maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     async def _call_llm(
         self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
-    ) -> anthropic.types.Message | None:
-        """Async Anthropic API call with tools.  Retries on rate-limit (3×).
+    ) -> Any | None:
+        """Async Anthropic API call with tools.  Retries on rate-limit (3x).
 
         On the last round (round_idx == max_rounds - 1), forces tool_choice=none
         so the LLM must produce a text response instead of another tool call.
@@ -575,9 +581,9 @@ class AgenticLoop:
                         }
                     },
                 )
-                return response  # type: ignore[no-any-return]
+                return response
 
-            except (anthropic.APITimeoutError, anthropic.APIConnectionError) as exc:
+            except (LLMTimeoutError, LLMConnectionError) as exc:
                 # Exponential backoff: 2s, 4s, 8s (fast initial retry for transient
                 # connection resets, capped by settings.llm_retry_max_delay)
                 wait = min(
@@ -598,7 +604,7 @@ class AgenticLoop:
                     log.error("%s exhausted after %d retries", exc_type, max_retries)
                     self._last_llm_error = f"{exc_type} after {max_retries} retries"
                     return None
-            except anthropic.RateLimitError:
+            except LLMRateLimitError:
                 # Rate limits use longer backoff: 10s, 20s, 40s
                 wait = min(2**attempt * 10, settings.llm_retry_max_delay)
                 log.warning(
@@ -613,11 +619,11 @@ class AgenticLoop:
                     log.error("Rate limit exhausted after %d retries", max_retries)
                     self._last_llm_error = f"RateLimitError after {max_retries} retries"
                     return None
-            except anthropic.AuthenticationError:
+            except LLMAuthenticationError:
                 log.warning("Anthropic API key is invalid in agentic loop")
                 self._last_llm_error = "AuthenticationError — API key invalid"
                 return None
-            except anthropic.BadRequestError as exc:
+            except LLMBadRequestError as exc:
                 msg = str(exc)
                 log.warning("Anthropic BadRequest in agentic loop: %s", msg)
                 if "tool_use_id" in msg or "tool_result" in msg:
@@ -642,7 +648,7 @@ class AgenticLoop:
 
     _MAX_CONSECUTIVE_FAILURES = 2  # auto-skip after N consecutive failures per tool
 
-    async def _process_tool_calls(self, response: anthropic.types.Message) -> list[dict[str, Any]]:
+    async def _process_tool_calls(self, response: Any) -> list[dict[str, Any]]:
         """Execute all tool_use blocks and return tool_result messages.
 
         Tracks consecutive failures per tool name.  After _MAX_CONSECUTIVE_FAILURES
@@ -802,7 +808,7 @@ class AgenticLoop:
         except Exception:
             log.debug("Hook trigger failed for %s", event.value, exc_info=True)
 
-    def _extract_text(self, response: anthropic.types.Message) -> str:
+    def _extract_text(self, response: Any) -> str:
         """Extract text content from response blocks."""
         parts: list[str] = []
         for block in response.content:
@@ -827,7 +833,7 @@ class AgenticLoop:
                 )
         return serialized
 
-    def _track_usage(self, response: anthropic.types.Message) -> None:
+    def _track_usage(self, response: Any) -> None:
         """Track token usage for cost monitoring."""
         if not response.usage:
             return

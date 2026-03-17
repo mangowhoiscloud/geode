@@ -32,10 +32,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import anthropic
-
 from core.config import settings
-from core.llm.client import get_anthropic_client
+from core.llm.client import (
+    LLMAuthenticationError,
+    LLMBadRequestError,
+    get_anthropic_client,
+)
 from core.llm.prompts import ROUTER_SYSTEM
 
 if TYPE_CHECKING:
@@ -596,11 +598,11 @@ def _call_tool_use_router(
         # Text-only response → chat
         return _parse_text_response(response)
 
-    except anthropic.AuthenticationError:
+    except LLMAuthenticationError:
         log.warning("Anthropic API key is invalid or expired")
         return _offline_fallback(text, error="auth_error")
 
-    except anthropic.BadRequestError as exc:
+    except LLMBadRequestError as exc:
         error_msg = str(exc)
         if "credit balance" in error_msg.lower() or "billing" in error_msg.lower():
             log.warning("Anthropic API credit balance too low")
@@ -613,7 +615,7 @@ def _call_tool_use_router(
         return _offline_fallback(text, error="api_error")
 
 
-def _parse_tool_use(response: anthropic.types.Message) -> NLIntent:
+def _parse_tool_use(response: Any) -> NLIntent:
     """Extract intent from a tool_use response."""
     for block in response.content:
         if block.type == "tool_use":
@@ -635,7 +637,7 @@ def _parse_tool_use(response: anthropic.types.Message) -> NLIntent:
     return NLIntent(action="help", confidence=0.5)
 
 
-def _parse_text_response(response: anthropic.types.Message) -> NLIntent:
+def _parse_text_response(response: Any) -> NLIntent:
     """Extract chat response from a text-only response."""
     parts: list[str] = []
     for block in response.content:
