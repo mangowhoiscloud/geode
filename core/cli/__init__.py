@@ -619,6 +619,7 @@ def _execute_pipeline(
 
     done: list[str] = []
     analyst_count = 0
+    evaluator_count = 0
     final_state: dict[str, Any] = dict(initial_state)
     config = runtime.thread_config
     input_state: GeodeState | None = initial_state
@@ -638,6 +639,15 @@ def _execute_pipeline(
                                 status.update(_progress_line(done, f"Analyze ({analyst_count}/4)"))
                             else:
                                 done.append("Analyze ✓")
+                                status.update(_progress_line(done))
+                        elif node_name == "evaluator":
+                            evaluator_count += 1
+                            if evaluator_count < 3:
+                                status.update(
+                                    _progress_line(done, f"Evaluate ({evaluator_count}/3)")
+                                )
+                            else:
+                                done.append("Evaluate ✓")
                                 status.update(_progress_line(done))
                         else:
                             done.append(f"{label} ✓")
