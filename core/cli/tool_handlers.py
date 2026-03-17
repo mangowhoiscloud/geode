@@ -2,6 +2,18 @@
 
 Extracted from ``core/cli/__init__.py`` for architectural clarity.
 Each handler receives tool_input kwargs and returns a dict result.
+
+Handlers are organized into logical groups:
+- Analysis: analyze_ip, compare_ips, search_ips, list_ips, batch_analyze, generate_report
+- Memory: memory_search, memory_save, manage_rule
+- Plan: create_plan, approve_plan, reject_plan, modify_plan, list_plans
+- HITL: rate_result, accept_result, reject_result, rerun_node
+- System: check_status, show_help, switch_model, set_api_key, manage_auth
+- Execution: generate_data, schedule_job, trigger_event
+- Delegated: web_fetch, general_web_search, read_document, note_save, note_read
+- Profile: profile_show, profile_update, profile_preference, profile_learn
+- Signal: youtube_search, reddit_sentiment, steam_info, google_trends
+- MCP: install_mcp_server
 """
 
 from __future__ import annotations
@@ -15,76 +27,62 @@ from core.ui.console import console
 log = logging.getLogger(__name__)
 
 
-def _build_tool_handlers(
-    verbose: bool = False,
-    *,
-    mcp_manager: Any = None,
-    agentic_ref: list[Any] | None = None,
-    skill_registry: Any = None,
-) -> dict[str, Any]:
-    """Build tool name -> handler function mapping for ToolExecutor.
+# ---------------------------------------------------------------------------
+# Shared utilities (used by multiple handler groups)
+# ---------------------------------------------------------------------------
 
-    Each handler receives tool_input kwargs and returns a dict result.
-    ``mcp_manager`` and ``agentic_ref`` are used by install_mcp_server.
-    ``skill_registry`` is used by generate_report for skill-enhanced narrative.
-    """
+
+def _clarify(
+    tool: str,
+    missing: list[str],
+    hint: str,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Standard clarification response for missing required params."""
+    return {
+        "error": f"{tool} requires: {', '.join(missing)}",
+        "clarification_needed": True,
+        "missing": missing,
+        "hint": hint,
+        **extra,
+    }
+
+
+def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Wrap delegated tool execution -- catch KeyError as clarification."""
+    try:
+        result: dict[str, Any] = tool_class().execute(**kwargs)
+        return result
+    except (KeyError, TypeError) as exc:
+        param = str(exc).strip("'\"")
+        return _clarify(
+            tool_class.__name__,
+            [param],
+            f"'{param}' 값을 알려주세요.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Handler group: Analysis
+# ---------------------------------------------------------------------------
+
+
+def _build_analysis_handlers(
+    verbose: bool,
+    force_dry: bool,
+    skill_registry: Any,
+) -> dict[str, Any]:
+    """Build analysis-related tool handlers."""
     from core.cli import (
         _generate_report,
-        _get_readiness,
         _get_search_engine,
-        _handle_memory_action,
         _render_search_results,
         _run_analysis,
-        _scheduler_service_ctx,
-        _set_readiness,
         _text_requests_dry_run,
     )
-    from core.cli.batch import run_batch
-    from core.cli.commands import (
-        cmd_auth,
-        cmd_generate,
-        cmd_key,
-        cmd_list,
-        cmd_model,
-        cmd_schedule,
-        cmd_trigger,
-        show_help,
-    )
-    from core.cli.startup import check_readiness, render_readiness
-    from core.memory.project import ProjectMemory
-
-    readiness = _get_readiness()
-    force_dry = readiness.force_dry_run if readiness else True
-
-    def _clarify(
-        tool: str,
-        missing: list[str],
-        hint: str,
-        **extra: Any,
-    ) -> dict[str, Any]:
-        """Standard clarification response for missing required params."""
-        return {
-            "error": f"{tool} requires: {', '.join(missing)}",
-            "clarification_needed": True,
-            "missing": missing,
-            "hint": hint,
-            **extra,
-        }
-
-    def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Wrap delegated tool execution -- catch KeyError as clarification."""
-        try:
-            result: dict[str, Any] = tool_class().execute(**kwargs)
-            return result
-        except (KeyError, TypeError) as exc:
-            param = str(exc).strip("'\"")
-            return _clarify(
-                tool_class.__name__,
-                [param],
-                f"'{param}' 값을 알려주세요.",
-            )
 
     def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
+        from core.cli.commands import cmd_list
         from core.fixtures import FIXTURE_MAP as _FM
 
         cmd_list()
@@ -175,22 +173,6 @@ def _build_tool_handlers(
             "ip_b": _ip_summary(ip_b, result_b),
         }
 
-    def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
-        show_help()
-        commands = [
-            "/analyze <IP> -- Analyze an IP (dry-run)",
-            "/run <IP> -- Analyze with real LLM",
-            "/search <query> -- Search IPs by keyword",
-            "/list -- Show available IPs",
-            "/compare <A> <B> -- Compare two IPs",
-            "/report <IP> -- Generate analysis report",
-            "/batch -- Batch analyze multiple IPs",
-            "/status -- Show system status",
-            "/model -- Switch LLM model",
-            "/help -- Show help",
-        ]
-        return {"status": "ok", "action": "help", "commands": commands}
-
     def handle_generate_report(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
         if not ip_name:
@@ -223,12 +205,12 @@ def _build_tool_handlers(
         }
 
     def handle_batch_analyze(**kwargs: Any) -> dict[str, Any]:
+        from core.cli.batch import render_batch_table, run_batch
+
         top = kwargs.get("top", 20)
         genre = kwargs.get("genre")
         dry_run = kwargs.get("dry_run", force_dry)
         batch_results = run_batch(top=top, genre=genre, dry_run=dry_run)
-        from core.cli.batch import render_batch_table
-
         render_batch_table(batch_results)
         summary = []
         for br in batch_results:
@@ -247,73 +229,25 @@ def _build_tool_handlers(
             "results": summary[:20],
         }
 
-    def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
-        from core.fixtures import FIXTURE_MAP as _FM
-        from core.infrastructure.adapters.mcp.registry import MCPRegistry
+    return {
+        "list_ips": handle_list_ips,
+        "analyze_ip": handle_analyze_ip,
+        "search_ips": handle_search_ips,
+        "compare_ips": handle_compare_ips,
+        "generate_report": handle_generate_report,
+        "batch_analyze": handle_batch_analyze,
+    }
 
-        ant_ok = bool(settings.anthropic_api_key)
-        oai_ok = bool(settings.openai_api_key)
-        mode = "full_llm" if (readiness and not readiness.force_dry_run) else "dry_run"
 
-        console.print()
-        console.print("  [header]GEODE System Status[/header]")
-        console.print(f"  Model: [bold]{settings.model}[/bold]")
-        console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
-        ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
-        oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
-        console.print(f"  Anthropic API: {ant_status}")
-        console.print(f"  OpenAI API: {oai_status}")
-        console.print(f"  Mode: [bold]{mode}[/bold]")
-        console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
+# ---------------------------------------------------------------------------
+# Handler group: Memory
+# ---------------------------------------------------------------------------
 
-        # MCP status
-        registry = MCPRegistry()
-        json_servers = None
-        if mcp_manager is not None:
-            json_servers = {s["name"]: s for s in mcp_manager.list_servers()}
-        mcp_status = registry.get_mcp_status(json_config_servers=json_servers)
 
-        console.print()
-        console.print("  [header]MCP Servers[/header]")
-        active = mcp_status["active"]
-        if active:
-            for srv in active:
-                src_tag = "json" if srv["source"] == "json_config" else "auto"
-                desc = f" -- {srv['description']}" if srv["description"] else ""
-                console.print(f"    [green]OK[/green] {srv['name']} [dim]({src_tag}){desc}[/dim]")
-        else:
-            console.print("    [muted]No active servers[/muted]")
-
-        inactive = mcp_status["available_inactive"]
-        if inactive:
-            console.print()
-            console.print("  [header]MCP Available (env missing)[/header]")
-            for srv in inactive:
-                env_list = ", ".join(srv["missing_env"])
-                console.print(f"    [yellow]--[/yellow] {srv['name']} [dim]needs: {env_list}[/dim]")
-        console.print()
-
-        return {
-            "status": "ok",
-            "action": "status",
-            "model": settings.model,
-            "ensemble": settings.ensemble_mode,
-            "anthropic_configured": ant_ok,
-            "openai_configured": oai_ok,
-            "mode": mode,
-            "fixture_count": len(_FM),
-            "mcp_status": mcp_status,
-        }
-
-    def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
-        model_hint = kwargs.get("model_hint", "")
-        cmd_model(model_hint)
-        return {
-            "status": "ok",
-            "action": "model",
-            "current_model": settings.model,
-            "ensemble": settings.ensemble_mode,
-        }
+def _build_memory_handlers() -> dict[str, Any]:
+    """Build memory-related tool handlers."""
+    from core.cli import _handle_memory_action
+    from core.memory.project import ProjectMemory
 
     def handle_memory_search(**kwargs: Any) -> dict[str, Any]:
         query = kwargs.get("query", "")
@@ -371,137 +305,22 @@ def _build_tool_handlers(
         except Exception:
             return {"status": "ok", "action": "manage_rule", "sub_action": rule_action}
 
-    def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
-        key_value = kwargs.get("key_value", "")
-        changed = cmd_key(key_value)
-        if changed:
-            new_readiness = check_readiness()
-            _set_readiness(new_readiness)
-            render_readiness(new_readiness)
-        return {
-            "status": "ok",
-            "action": "key",
-            "changed": changed,
-            "anthropic_configured": bool(settings.anthropic_api_key),
-            "openai_configured": bool(settings.openai_api_key),
-        }
+    return {
+        "memory_search": handle_memory_search,
+        "memory_save": handle_memory_save,
+        "manage_rule": handle_manage_rule,
+    }
 
-    def handle_manage_auth(**kwargs: Any) -> dict[str, Any]:
-        sub_action = kwargs.get("sub_action", "")
-        cmd_auth(sub_action)
-        try:
-            from core.cli.commands import _get_profile_store
 
-            store = _get_profile_store()
-            profiles = [
-                {"name": p.name, "provider": p.provider, "type": p.credential_type.value}
-                for p in store.list_all()
-            ]
-        except Exception:
-            profiles = []
-        return {
-            "status": "ok",
-            "action": "auth",
-            "sub_action": sub_action,
-            "profiles": profiles,
-        }
+# ---------------------------------------------------------------------------
+# Handler group: Plan mode
+# ---------------------------------------------------------------------------
 
-    def handle_generate_data(**kwargs: Any) -> dict[str, Any]:
-        count = kwargs.get("count", 5)
-        genre = kwargs.get("genre", "")
-        gen_args = str(count)
-        if genre:
-            gen_args += f" {genre}"
-        cmd_generate(gen_args)
-        return {
-            "status": "ok",
-            "action": "generate",
-            "count": count,
-            "genre": genre or "random",
-        }
 
-    def handle_schedule_job(**kwargs: Any) -> dict[str, Any]:
-        sub_action = kwargs.get("sub_action", "") or "list"
-        target_id = kwargs.get("target_id", "")
-        expression = kwargs.get("expression", "")
-        svc = _scheduler_service_ctx.get(None)
-
-        if sub_action == "create" and expression:
-            cmd_schedule(f"create {expression}", scheduler_service=svc)
-            try:
-                from core.automation.nl_scheduler import NLScheduleParser
-
-                result = NLScheduleParser().parse(expression)
-                if result.success and result.job:
-                    return {
-                        "status": "ok",
-                        "action": "schedule",
-                        "sub_action": "create",
-                        "job_id": result.job.job_id,
-                        "schedule_kind": (
-                            result.inferred_kind.value if result.inferred_kind else ""
-                        ),
-                        "expression": expression,
-                    }
-                return {
-                    "status": "error",
-                    "action": "schedule",
-                    "sub_action": "create",
-                    "error": result.error or "parse failed",
-                }
-            except Exception as exc:
-                return {
-                    "status": "error",
-                    "action": "schedule",
-                    "sub_action": "create",
-                    "error": str(exc),
-                }
-
-        sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
-        cmd_schedule(sched_args, scheduler_service=svc)
-        try:
-            from core.automation.predefined import PREDEFINED_AUTOMATIONS
-
-            templates = [
-                {"id": t.id, "name": t.name, "enabled": t.enabled} for t in PREDEFINED_AUTOMATIONS
-            ]
-        except Exception:
-            templates = []
-        result_dict: dict[str, Any] = {
-            "status": "ok",
-            "action": "schedule",
-            "sub_action": sub_action,
-            "templates": templates[:10],
-        }
-        if svc is not None:
-            try:
-                dynamic = [
-                    {"id": j.job_id, "name": j.name, "enabled": j.enabled}
-                    for j in svc.list_jobs(include_disabled=True)
-                    if not j.job_id.startswith("predefined:")
-                ]
-                result_dict["dynamic_jobs"] = dynamic
-            except Exception:
-                log.debug("Failed to list dynamic jobs", exc_info=True)
-        return result_dict
-
-    def handle_trigger_event(**kwargs: Any) -> dict[str, Any]:
-        sub_action = kwargs.get("sub_action", "") or "list"
-        event_name = kwargs.get("event_name", "")
-        trigger_args = f"{sub_action} {event_name}".strip() if sub_action else ""
-        cmd_trigger(trigger_args)
-        return {
-            "status": "ok",
-            "action": "trigger",
-            "sub_action": sub_action,
-            "event_name": event_name,
-        }
-
-    # --- Plan mode handlers (multi-plan cache keyed by plan_id) ---
+def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
+    """Build plan mode tool handlers (multi-plan cache keyed by plan_id)."""
 
     _plan_cache: dict[str, tuple[Any, Any]] = {}
-    _human_ratings: dict[str, dict[str, Any]] = {}
-    _result_feedback: dict[str, str] = {}
 
     def _resolve_plan(
         plan_id: str,
@@ -700,6 +519,26 @@ def _build_tool_handlers(
             "plans": plans,
         }
 
+    return {
+        "create_plan": handle_create_plan,
+        "approve_plan": handle_approve_plan,
+        "reject_plan": handle_reject_plan,
+        "modify_plan": handle_modify_plan,
+        "list_plans": handle_list_plans,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler group: HITL (Human-in-the-Loop)
+# ---------------------------------------------------------------------------
+
+
+def _build_hitl_handlers() -> dict[str, Any]:
+    """Build HITL feedback tool handlers."""
+
+    _human_ratings: dict[str, dict[str, Any]] = {}
+    _result_feedback: dict[str, str] = {}
+
     def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs.get("ip_name", "")
         rating = kwargs.get("rating", 0)
@@ -783,8 +622,272 @@ def _build_tool_handlers(
             "hint": ("Node re-execution queued. Results will update in-place."),
         }
 
-    # --- New tools: web, document, note, signal ---
-    # All delegated tools wrapped with _safe_delegate for KeyError -> clarification
+    return {
+        "rate_result": handle_rate_result,
+        "accept_result": handle_accept_result,
+        "reject_result": handle_reject_result,
+        "rerun_node": handle_rerun_node,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler group: System
+# ---------------------------------------------------------------------------
+
+
+def _build_system_handlers(
+    readiness: Any,
+    force_dry: bool,
+    mcp_manager: Any,
+) -> dict[str, Any]:
+    """Build system management tool handlers."""
+    from core.cli import _set_readiness
+    from core.cli.commands import cmd_auth, cmd_key, cmd_model, show_help
+    from core.cli.startup import check_readiness, render_readiness
+
+    def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
+        show_help()
+        commands = [
+            "/analyze <IP> -- Analyze an IP (dry-run)",
+            "/run <IP> -- Analyze with real LLM",
+            "/search <query> -- Search IPs by keyword",
+            "/list -- Show available IPs",
+            "/compare <A> <B> -- Compare two IPs",
+            "/report <IP> -- Generate analysis report",
+            "/batch -- Batch analyze multiple IPs",
+            "/status -- Show system status",
+            "/model -- Switch LLM model",
+            "/help -- Show help",
+        ]
+        return {"status": "ok", "action": "help", "commands": commands}
+
+    def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
+        from core.fixtures import FIXTURE_MAP as _FM
+        from core.infrastructure.adapters.mcp.registry import MCPRegistry
+
+        ant_ok = bool(settings.anthropic_api_key)
+        oai_ok = bool(settings.openai_api_key)
+        mode = "full_llm" if (readiness and not readiness.force_dry_run) else "dry_run"
+
+        console.print()
+        console.print("  [header]GEODE System Status[/header]")
+        console.print(f"  Model: [bold]{settings.model}[/bold]")
+        console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
+        ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
+        oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
+        console.print(f"  Anthropic API: {ant_status}")
+        console.print(f"  OpenAI API: {oai_status}")
+        console.print(f"  Mode: [bold]{mode}[/bold]")
+        console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
+
+        # MCP status
+        registry = MCPRegistry()
+        json_servers = None
+        if mcp_manager is not None:
+            json_servers = {s["name"]: s for s in mcp_manager.list_servers()}
+        mcp_status = registry.get_mcp_status(json_config_servers=json_servers)
+
+        console.print()
+        console.print("  [header]MCP Servers[/header]")
+        active = mcp_status["active"]
+        if active:
+            for srv in active:
+                src_tag = "json" if srv["source"] == "json_config" else "auto"
+                desc = f" -- {srv['description']}" if srv["description"] else ""
+                console.print(f"    [green]OK[/green] {srv['name']} [dim]({src_tag}){desc}[/dim]")
+        else:
+            console.print("    [muted]No active servers[/muted]")
+
+        inactive = mcp_status["available_inactive"]
+        if inactive:
+            console.print()
+            console.print("  [header]MCP Available (env missing)[/header]")
+            for srv in inactive:
+                env_list = ", ".join(srv["missing_env"])
+                console.print(f"    [yellow]--[/yellow] {srv['name']} [dim]needs: {env_list}[/dim]")
+        console.print()
+
+        return {
+            "status": "ok",
+            "action": "status",
+            "model": settings.model,
+            "ensemble": settings.ensemble_mode,
+            "anthropic_configured": ant_ok,
+            "openai_configured": oai_ok,
+            "mode": mode,
+            "fixture_count": len(_FM),
+            "mcp_status": mcp_status,
+        }
+
+    def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
+        model_hint = kwargs.get("model_hint", "")
+        cmd_model(model_hint)
+        return {
+            "status": "ok",
+            "action": "model",
+            "current_model": settings.model,
+            "ensemble": settings.ensemble_mode,
+        }
+
+    def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
+        key_value = kwargs.get("key_value", "")
+        changed = cmd_key(key_value)
+        if changed:
+            new_readiness = check_readiness()
+            _set_readiness(new_readiness)
+            render_readiness(new_readiness)
+        return {
+            "status": "ok",
+            "action": "key",
+            "changed": changed,
+            "anthropic_configured": bool(settings.anthropic_api_key),
+            "openai_configured": bool(settings.openai_api_key),
+        }
+
+    def handle_manage_auth(**kwargs: Any) -> dict[str, Any]:
+        sub_action = kwargs.get("sub_action", "")
+        cmd_auth(sub_action)
+        try:
+            from core.cli.commands import _get_profile_store
+
+            store = _get_profile_store()
+            profiles = [
+                {"name": p.name, "provider": p.provider, "type": p.credential_type.value}
+                for p in store.list_all()
+            ]
+        except Exception:
+            profiles = []
+        return {
+            "status": "ok",
+            "action": "auth",
+            "sub_action": sub_action,
+            "profiles": profiles,
+        }
+
+    return {
+        "show_help": handle_show_help,
+        "check_status": handle_check_status,
+        "switch_model": handle_switch_model,
+        "set_api_key": handle_set_api_key,
+        "manage_auth": handle_manage_auth,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler group: Execution (schedule, trigger, generate)
+# ---------------------------------------------------------------------------
+
+
+def _build_execution_handlers() -> dict[str, Any]:
+    """Build execution-related tool handlers."""
+    from core.cli import _scheduler_service_ctx
+    from core.cli.commands import cmd_generate, cmd_schedule, cmd_trigger
+
+    def handle_generate_data(**kwargs: Any) -> dict[str, Any]:
+        count = kwargs.get("count", 5)
+        genre = kwargs.get("genre", "")
+        gen_args = str(count)
+        if genre:
+            gen_args += f" {genre}"
+        cmd_generate(gen_args)
+        return {
+            "status": "ok",
+            "action": "generate",
+            "count": count,
+            "genre": genre or "random",
+        }
+
+    def handle_schedule_job(**kwargs: Any) -> dict[str, Any]:
+        sub_action = kwargs.get("sub_action", "") or "list"
+        target_id = kwargs.get("target_id", "")
+        expression = kwargs.get("expression", "")
+        svc = _scheduler_service_ctx.get(None)
+
+        if sub_action == "create" and expression:
+            cmd_schedule(f"create {expression}", scheduler_service=svc)
+            try:
+                from core.automation.nl_scheduler import NLScheduleParser
+
+                result = NLScheduleParser().parse(expression)
+                if result.success and result.job:
+                    return {
+                        "status": "ok",
+                        "action": "schedule",
+                        "sub_action": "create",
+                        "job_id": result.job.job_id,
+                        "schedule_kind": (
+                            result.inferred_kind.value if result.inferred_kind else ""
+                        ),
+                        "expression": expression,
+                    }
+                return {
+                    "status": "error",
+                    "action": "schedule",
+                    "sub_action": "create",
+                    "error": result.error or "parse failed",
+                }
+            except Exception as exc:
+                return {
+                    "status": "error",
+                    "action": "schedule",
+                    "sub_action": "create",
+                    "error": str(exc),
+                }
+
+        sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
+        cmd_schedule(sched_args, scheduler_service=svc)
+        try:
+            from core.automation.predefined import PREDEFINED_AUTOMATIONS
+
+            templates = [
+                {"id": t.id, "name": t.name, "enabled": t.enabled} for t in PREDEFINED_AUTOMATIONS
+            ]
+        except Exception:
+            templates = []
+        result_dict: dict[str, Any] = {
+            "status": "ok",
+            "action": "schedule",
+            "sub_action": sub_action,
+            "templates": templates[:10],
+        }
+        if svc is not None:
+            try:
+                dynamic = [
+                    {"id": j.job_id, "name": j.name, "enabled": j.enabled}
+                    for j in svc.list_jobs(include_disabled=True)
+                    if not j.job_id.startswith("predefined:")
+                ]
+                result_dict["dynamic_jobs"] = dynamic
+            except Exception:
+                log.debug("Failed to list dynamic jobs", exc_info=True)
+        return result_dict
+
+    def handle_trigger_event(**kwargs: Any) -> dict[str, Any]:
+        sub_action = kwargs.get("sub_action", "") or "list"
+        event_name = kwargs.get("event_name", "")
+        trigger_args = f"{sub_action} {event_name}".strip() if sub_action else ""
+        cmd_trigger(trigger_args)
+        return {
+            "status": "ok",
+            "action": "trigger",
+            "sub_action": sub_action,
+            "event_name": event_name,
+        }
+
+    return {
+        "generate_data": handle_generate_data,
+        "schedule_job": handle_schedule_job,
+        "trigger_event": handle_trigger_event,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler group: Delegated tools (web, document, note)
+# ---------------------------------------------------------------------------
+
+
+def _build_delegated_handlers() -> dict[str, Any]:
+    """Build delegated tool handlers (web, document, note)."""
 
     def handle_web_fetch(**kwargs: Any) -> dict[str, Any]:
         from core.tools.web_tools import WebFetchTool
@@ -811,7 +914,23 @@ def _build_tool_handlers(
 
         return _safe_delegate(NoteReadTool, kwargs)
 
-    # Profile tools (Tier 0.5)
+    return {
+        "web_fetch": handle_web_fetch,
+        "general_web_search": handle_general_web_search,
+        "read_document": handle_read_document,
+        "note_save": handle_note_save,
+        "note_read": handle_note_read,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler group: Profile tools
+# ---------------------------------------------------------------------------
+
+
+def _build_profile_handlers() -> dict[str, Any]:
+    """Build user profile tool handlers."""
+
     def handle_profile_show(**kwargs: Any) -> dict[str, Any]:
         from core.tools.profile_tools import ProfileShowTool
 
@@ -832,6 +951,22 @@ def _build_tool_handlers(
 
         return _safe_delegate(ProfileLearnTool, kwargs)
 
+    return {
+        "profile_show": handle_profile_show,
+        "profile_update": handle_profile_update,
+        "profile_preference": handle_profile_preference,
+        "profile_learn": handle_profile_learn,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler group: Signal tools
+# ---------------------------------------------------------------------------
+
+
+def _build_signal_handlers() -> dict[str, Any]:
+    """Build external signal tool handlers."""
+
     def handle_youtube_search(**kwargs: Any) -> dict[str, Any]:
         from core.tools.signal_tools import YouTubeSearchTool
 
@@ -851,6 +986,25 @@ def _build_tool_handlers(
         from core.tools.signal_tools import GoogleTrendsTool
 
         return _safe_delegate(GoogleTrendsTool, kwargs)
+
+    return {
+        "youtube_search": handle_youtube_search,
+        "reddit_sentiment": handle_reddit_sentiment,
+        "steam_info": handle_steam_info,
+        "google_trends": handle_google_trends,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler group: MCP auto-install
+# ---------------------------------------------------------------------------
+
+
+def _build_mcp_handler(
+    mcp_manager: Any,
+    agentic_ref: list[Any] | None,
+) -> dict[str, Any]:
+    """Build MCP server installation handler."""
 
     def handle_install_mcp_server(**kwargs: Any) -> dict[str, Any]:
         import os as _os
@@ -910,48 +1064,44 @@ def _build_tool_handlers(
         }
 
     return {
-        "list_ips": handle_list_ips,
-        "analyze_ip": handle_analyze_ip,
-        "search_ips": handle_search_ips,
-        "compare_ips": handle_compare_ips,
-        "show_help": handle_show_help,
-        "generate_report": handle_generate_report,
-        "batch_analyze": handle_batch_analyze,
-        "check_status": handle_check_status,
-        "switch_model": handle_switch_model,
-        "memory_search": handle_memory_search,
-        "memory_save": handle_memory_save,
-        "manage_rule": handle_manage_rule,
-        "set_api_key": handle_set_api_key,
-        "manage_auth": handle_manage_auth,
-        "generate_data": handle_generate_data,
-        "schedule_job": handle_schedule_job,
-        "trigger_event": handle_trigger_event,
-        "create_plan": handle_create_plan,
-        "approve_plan": handle_approve_plan,
-        "reject_plan": handle_reject_plan,
-        "modify_plan": handle_modify_plan,
-        "list_plans": handle_list_plans,
-        "rate_result": handle_rate_result,
-        "accept_result": handle_accept_result,
-        "reject_result": handle_reject_result,
-        "rerun_node": handle_rerun_node,
-        # New tools
-        "web_fetch": handle_web_fetch,
-        "general_web_search": handle_general_web_search,
-        "read_document": handle_read_document,
-        "note_save": handle_note_save,
-        "note_read": handle_note_read,
-        # Profile tools (Tier 0.5)
-        "profile_show": handle_profile_show,
-        "profile_update": handle_profile_update,
-        "profile_preference": handle_profile_preference,
-        "profile_learn": handle_profile_learn,
-        # Signal tools
-        "youtube_search": handle_youtube_search,
-        "reddit_sentiment": handle_reddit_sentiment,
-        "steam_info": handle_steam_info,
-        "google_trends": handle_google_trends,
-        # MCP auto-install
         "install_mcp_server": handle_install_mcp_server,
     }
+
+
+# ---------------------------------------------------------------------------
+# Public API: dispatcher
+# ---------------------------------------------------------------------------
+
+
+def _build_tool_handlers(
+    verbose: bool = False,
+    *,
+    mcp_manager: Any = None,
+    agentic_ref: list[Any] | None = None,
+    skill_registry: Any = None,
+) -> dict[str, Any]:
+    """Build tool name -> handler function mapping for ToolExecutor.
+
+    Each handler receives tool_input kwargs and returns a dict result.
+    ``mcp_manager`` and ``agentic_ref`` are used by install_mcp_server.
+    ``skill_registry`` is used by generate_report for skill-enhanced narrative.
+
+    Delegates to group-specific builder functions and merges the results.
+    """
+    from core.cli import _get_readiness
+
+    readiness = _get_readiness()
+    force_dry = readiness.force_dry_run if readiness else True
+
+    handlers: dict[str, Any] = {}
+    handlers.update(_build_analysis_handlers(verbose, force_dry, skill_registry))
+    handlers.update(_build_memory_handlers())
+    handlers.update(_build_plan_handlers(force_dry))
+    handlers.update(_build_hitl_handlers())
+    handlers.update(_build_system_handlers(readiness, force_dry, mcp_manager))
+    handlers.update(_build_execution_handlers())
+    handlers.update(_build_delegated_handlers())
+    handlers.update(_build_profile_handlers())
+    handlers.update(_build_signal_handlers())
+    handlers.update(_build_mcp_handler(mcp_manager, agentic_ref))
+    return handlers
