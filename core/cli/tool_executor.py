@@ -140,6 +140,31 @@ def _tool_spinner(label: str) -> Iterator[None]:
         status.stop()
 
 
+# Write fallback suggestions per tool — helps LLM recover from denial
+_WRITE_FALLBACK_HINTS: dict[str, str] = {
+    "memory_save": "Try memory_search to read existing data instead.",
+    "note_save": "Try reading existing notes or suggest the content to the user.",
+    "set_api_key": "Show the user the /key command to set it themselves.",
+    "profile_update": "Show current profile with profile_get instead.",
+    "profile_preference": "Show current preferences with profile_get instead.",
+    "profile_learn": "Show current learning patterns with profile_get instead.",
+    "calendar_create_event": "Try calendar_list_events to show existing events.",
+    "calendar_sync_scheduler": "Show the user /schedule command to manage manually.",
+}
+
+
+def _write_denial_with_fallback(tool_name: str) -> dict[str, Any]:
+    """Return a denial result with a fallback suggestion for the LLM."""
+    hint = _WRITE_FALLBACK_HINTS.get(tool_name, "")
+    fallback_msg = (
+        f"User denied write operation for '{tool_name}'. "
+        "Do NOT retry this tool without explicit user request."
+    )
+    if hint:
+        fallback_msg += f" Suggestion: {hint}"
+    return {"error": fallback_msg, "denied": True, "fallback_hint": hint}
+
+
 class ToolExecutor:
     """Routes tool calls to handlers with HITL safety checks.
 
@@ -186,7 +211,7 @@ class ToolExecutor:
         # sub-agents (auto_approve is intentionally ignored here).
         if tool_name in WRITE_TOOLS:
             if not self._confirm_write(tool_name, tool_input):
-                return {"error": "User denied write operation", "denied": True}
+                return _write_denial_with_fallback(tool_name)
             approved_via_hitl = True
 
         # Expensive tools: cost confirmation gate

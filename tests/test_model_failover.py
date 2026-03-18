@@ -363,12 +363,20 @@ class TestAgenticLoopFailover:
     def test_call_llm_uses_failover(
         self, mock_get_client: MagicMock, mock_failover: MagicMock, mock_settings: MagicMock
     ) -> None:
-        """_call_llm should delegate to call_with_failover."""
+        """_call_llm should delegate to call_with_failover and return AgenticResponse."""
         mock_settings.anthropic_api_key = "test-key"
         mock_settings.llm_max_retries = 3
         mock_settings.llm_retry_base_delay = 0.01
         mock_settings.llm_retry_max_delay = 0.1
+        # Build a mock that normalize_anthropic can process
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "Hello"
         mock_response = MagicMock()
+        mock_response.content = [text_block]
+        mock_response.stop_reason = "end_turn"
+        mock_response.usage.input_tokens = 100
+        mock_response.usage.output_tokens = 50
         mock_failover.return_value = (mock_response, ANTHROPIC_PRIMARY)
         mock_get_client.return_value = MagicMock()
 
@@ -377,7 +385,8 @@ class TestAgenticLoopFailover:
         result = asyncio.run(
             loop._call_llm("system prompt", [{"role": "user", "content": "hello"}])
         )
-        assert result is mock_response
+        assert result is not None
+        assert result.stop_reason == "end_turn"
         mock_failover.assert_called_once()
 
     @patch("core.cli.agentic_loop.settings")
@@ -413,7 +422,14 @@ class TestAgenticLoopFailover:
         mock_settings.llm_max_retries = 3
         mock_settings.llm_retry_base_delay = 0.01
         mock_settings.llm_retry_max_delay = 0.1
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "Hello"
         mock_response = MagicMock()
+        mock_response.content = [text_block]
+        mock_response.stop_reason = "end_turn"
+        mock_response.usage.input_tokens = 100
+        mock_response.usage.output_tokens = 50
         mock_failover.return_value = (mock_response, ANTHROPIC_SECONDARY)
         mock_get_client.return_value = MagicMock()
 
@@ -423,7 +439,7 @@ class TestAgenticLoopFailover:
             result = asyncio.run(
                 loop._call_llm("system prompt", [{"role": "user", "content": "hello"}])
             )
-            assert result is mock_response
+            assert result is not None
             mock_log.warning.assert_called()
             warning_args = mock_log.warning.call_args_list
             found_switch_log = any("Model failover" in str(args) for args in warning_args)
