@@ -409,8 +409,13 @@ git branch -d feature/<브랜치명>
     - P0/P1/P2 우선순위 분류
     - 구현 범위 결정 (전체 적용 vs 핵심만)
 
-1d. docs/plans/에 계획 문서 작성
-    - 리서치 결과 요약 + 설계 판단 근거 포함
+1d. ▸ 검증팀 (리서치) — Step 1b~1c와 병렬 실행
+    - 프론티어 GAP 탐지 에이전트: 주제 관련 4종 시스템 대비 누락 패턴 감사
+    - 결과를 1c Gap 분석에 병합
+    - 구현 전 GAP 사전 방지 (사후 발견 → 사전 탐지 전환)
+
+1e. docs/plans/에 계획 문서 작성
+    - 리서치 결과 요약 + 검증팀 GAP 탐지 결과 + 설계 판단 근거 포함
 ```
 
 **리서치 판정 기준:**
@@ -421,6 +426,7 @@ git branch -d feature/<브랜치명>
 | 프론티어에 유사 패턴 존재 | → 핵심만 추출, GEODE 맥락에 맞게 변형 |
 | 프론티어에 패턴 없음 | → 자체 설계, 근거 문서화 |
 | 과잉 엔지니어링 위험 | → Karpathy P10 (Simplicity Selection) 적용 |
+| 검증팀이 GAP 발견 | → 1c에 병합, 구현 범위 재조정 |
 
 ### 2. Implement → Unit Verify (반복)
 
@@ -432,9 +438,9 @@ git branch -d feature/<브랜치명>
 5. 실패 시 → 수정 → 2번으로
 ```
 
-### 3. E2E Verify (재귀 핵심)
+### 3. E2E Verify + 검증팀 (병렬)
 
-Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각 단계에서 오류/품질 저하 발견 시 **2번으로 즉시 복귀**.
+Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. **검증팀 에이전트를 E2E와 동시 병렬 실행**하여 시간 추가 없이 품질 확보. 각 단계에서 오류/품질 저하 발견 시 **2번으로 즉시 복귀**.
 
 ```
 3a. Mock E2E: uv run pytest tests/test_agentic_loop.py tests/test_e2e.py tests/test_e2e_orchestration_live.py -v
@@ -450,10 +456,19 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
     - AgenticLoop 트레이스 존재
     - tool call 성공률 확인
     - 비용(cost_usd) 확인
-3f. 품질 판정:
+
+3v. ▸ 검증팀 (구현) — 3a~3e와 병렬 실행 (Explore agent 다중 투입)
+    - 코드 검증: Port/Adapter 패턴 일관성, contextvars DI 정합성, 에러 핸들링
+    - 와이어링 검증: runtime.py 주입 경로, repl.py 초기화/종료 순서, dead code 탐지
+    - 문서 검증: 수치 동기화 (Modules, Tests, Tools, MCP, HookEvents), ABOUT 4곳 일치
+    - OpenClaw 대조: 해당 기능의 OpenClaw 패턴 준수 여부 (openclaw-patterns 스킬 참조)
+    - 검증팀 발견 이슈 → 즉시 2번 복귀
+
+3f. 품질 판정 (E2E + 검증팀 결과 종합):
     - tool 실행 결과에 error 없음
     - 올바른 모드(dry-run vs live) 확인
     - UI 출력 형식 (▸/✓/✗/✢) 정상
+    - 검증팀 이슈 0건 확인
 ```
 
 **재귀 판정 기준:**
@@ -465,7 +480,10 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
 | 의도→tool 불일치 | → system prompt / tool definitions 수정 → 2번 |
 | LangSmith 트레이스 누락 | → tracing 데코레이터 확인 → 2번 |
 | 품질 저하 (score 이상) | → 해당 노드 로직 점검 → 2번 |
-| 모두 통과 | → 4번 진행 |
+| 검증팀: 패턴 불일치 | → 해당 패턴 수정 → 2번 |
+| 검증팀: 와이어링 누락 | → runtime/repl 주입 추가 → 2번 |
+| 검증팀: 문서 불일치 | → 4번에서 동기화 (코드 수정 불필요 시) |
+| 모두 통과 + 검증팀 0건 | → 4번 진행 |
 
 ### 4. Docs-Sync (PR 전 필수 게이트)
 
