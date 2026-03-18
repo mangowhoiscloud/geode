@@ -202,9 +202,7 @@ class SendNotificationTool:
 
         adapter = get_notification()
         if adapter is not None and adapter.is_available(channel):
-            result = adapter.send_message(
-                channel, recipient, message, severity=severity
-            )
+            result = adapter.send_message(channel, recipient, message, severity=severity)
             return {
                 "result": {
                     "sent": result.success,

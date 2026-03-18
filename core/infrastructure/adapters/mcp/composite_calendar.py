@@ -39,7 +39,8 @@ class CompositeCalendarAdapter:
                 continue
             try:
                 events = adapter.list_events(
-                    start=start, end=end,
+                    start=start,
+                    end=end,
                     calendar_name=calendar_name,
                     max_results=max_results,
                 )
@@ -62,7 +63,9 @@ class CompositeCalendarAdapter:
         for adapter in self._adapters:
             if adapter.is_available():
                 return adapter.create_event(
-                    title, start, end,
+                    title,
+                    start,
+                    end,
                     description=description,
                     location=location,
                     calendar_name=calendar_name,

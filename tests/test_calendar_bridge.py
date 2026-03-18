@@ -85,7 +85,9 @@ class TestPushToCalendar:
         call_args = mock_calendar.create_event.call_args
         assert call_args[0][0].startswith("[GEODE]")
 
-    def test_push_skips_disabled_jobs(self, bridge: CalendarSchedulerBridge, mock_scheduler: MagicMock):
+    def test_push_skips_disabled_jobs(
+        self, bridge: CalendarSchedulerBridge, mock_scheduler: MagicMock
+    ):
         mock_scheduler.list_jobs.return_value[0].enabled = False
         result = bridge.sync(direction="push")
         assert result["pushed"] == 0
@@ -145,7 +147,9 @@ class TestPullFromCalendar:
         result = bridge.sync(direction="pull")
         assert result["pulled"] == 0
 
-    def test_pull_skips_existing_job(self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock, mock_scheduler: MagicMock):
+    def test_pull_skips_existing_job(
+        self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock, mock_scheduler: MagicMock
+    ):
         mock_calendar.list_events.return_value = [
             CalendarEvent(
                 event_id="cal_3",

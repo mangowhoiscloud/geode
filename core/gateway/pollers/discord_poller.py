@@ -92,9 +92,7 @@ class DiscordPoller(BasePoller):
                 response = self._manager.route_message(inbound)
 
                 if response and self._notification:
-                    self._notification.send_message(
-                        "discord", channel_id, response
-                    )
+                    self._notification.send_message("discord", channel_id, response)
 
         except Exception as exc:
             log.debug("Discord poll error for %s: %s", channel_id, exc)

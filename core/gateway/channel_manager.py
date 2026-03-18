@@ -63,7 +63,7 @@ class ChannelManager:
         with self._lock:
             self._bindings.append(binding)
             # Sort: specific bindings first (non-empty channel_id)
-            self._bindings.sort(key=lambda b: (b.channel_id == ""), reverse=False)
+            self._bindings.sort(key=lambda b: b.channel_id == "", reverse=False)
         log.info(
             "Channel binding added: %s/%s (auto_respond=%s)",
             binding.channel,
@@ -163,10 +163,7 @@ class ChannelManager:
     def _is_mentioned(message: InboundMessage) -> bool:
         """Check if GEODE is mentioned in the message."""
         content_lower = message.content.lower()
-        return any(
-            mention in content_lower
-            for mention in ("@geode", "geode", "<@geode>")
-        )
+        return any(mention in content_lower for mention in ("@geode", "geode", "<@geode>"))
 
     def get_stats(self) -> dict[str, int]:
         """Return routing statistics."""

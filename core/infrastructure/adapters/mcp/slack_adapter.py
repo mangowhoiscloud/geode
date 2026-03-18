@@ -48,9 +48,7 @@ class SlackNotificationAdapter:
                 {"channel": recipient, "text": message},
             )
             if "error" in result:
-                return NotificationResult(
-                    success=False, channel="slack", error=result["error"]
-                )
+                return NotificationResult(success=False, channel="slack", error=result["error"])
             return NotificationResult(
                 success=True,
                 channel="slack",
@@ -59,9 +57,7 @@ class SlackNotificationAdapter:
             )
         except Exception as exc:
             log.warning("Slack send_message failed: %s", exc)
-            return NotificationResult(
-                success=False, channel="slack", error=str(exc)
-            )
+            return NotificationResult(success=False, channel="slack", error=str(exc))
 
     def is_available(self, channel: str | None = None) -> bool:
         if self._manager is None:

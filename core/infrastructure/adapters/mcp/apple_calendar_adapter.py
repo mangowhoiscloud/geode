@@ -145,13 +145,9 @@ class AppleCalendarAdapter:
                         event_id=item.get("uid", item.get("id", "")),
                         title=title,
                         start=(
-                            datetime.fromisoformat(start_str) if start_str
-                            else datetime.now(UTC)
+                            datetime.fromisoformat(start_str) if start_str else datetime.now(UTC)
                         ),
-                        end=(
-                            datetime.fromisoformat(end_str) if end_str
-                            else datetime.now(UTC)
-                        ),
+                        end=(datetime.fromisoformat(end_str) if end_str else datetime.now(UTC)),
                         description=item.get("description", ""),
                         location=item.get("location", ""),
                         source="apple",

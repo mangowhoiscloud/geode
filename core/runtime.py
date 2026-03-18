@@ -949,21 +949,24 @@ class GeodeRuntime:
 
         manager.register_poller(
             SlackPoller(
-                manager, mcp_manager=mcp,
+                manager,
+                mcp_manager=mcp,
                 notification=notification,
                 poll_interval_s=poll_interval,
             )
         )
         manager.register_poller(
             DiscordPoller(
-                manager, mcp_manager=mcp,
+                manager,
+                mcp_manager=mcp,
                 notification=notification,
                 poll_interval_s=poll_interval,
             )
         )
         manager.register_poller(
             TelegramPoller(
-                manager, mcp_manager=mcp,
+                manager,
+                mcp_manager=mcp,
                 notification=notification,
                 poll_interval_s=poll_interval,
             )

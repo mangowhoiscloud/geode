@@ -86,9 +86,7 @@ class CalendarSchedulerBridge:
 
             # Determine event time from next_run_at_ms
             if job.next_run_at_ms:
-                start = datetime.fromtimestamp(
-                    job.next_run_at_ms / 1000, tz=UTC
-                )
+                start = datetime.fromtimestamp(job.next_run_at_ms / 1000, tz=UTC)
             else:
                 start = datetime.now(UTC) + timedelta(hours=1)
 
@@ -100,8 +98,7 @@ class CalendarSchedulerBridge:
                     start,
                     end,
                     description=(
-                        f"GEODE scheduled job: {job.job_id}\n"
-                        f"Schedule: {job.schedule.kind.value}"
+                        f"GEODE scheduled job: {job.job_id}\nSchedule: {job.schedule.kind.value}"
                     ),
                 )
                 pushed += 1
@@ -140,7 +137,7 @@ class CalendarSchedulerBridge:
             if not event.is_geode:
                 continue
             # Strip [GEODE] prefix to get job name
-            job_name = event.title[len(GEODE_PREFIX):].strip()
+            job_name = event.title[len(GEODE_PREFIX) :].strip()
             if not job_name or job_name in existing_names:
                 continue
 

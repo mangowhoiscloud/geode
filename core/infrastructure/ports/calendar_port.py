@@ -97,9 +97,7 @@ class CalendarPort(Protocol):
 # contextvars injection (same pattern as DomainPort)
 # ---------------------------------------------------------------------------
 
-_calendar_ctx: ContextVar[CalendarPort | None] = ContextVar(
-    "calendar_port", default=None
-)
+_calendar_ctx: ContextVar[CalendarPort | None] = ContextVar("calendar_port", default=None)
 
 
 def set_calendar(adapter: CalendarPort | None) -> None:

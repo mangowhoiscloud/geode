@@ -105,9 +105,7 @@ class TestChannelManager:
         # Add generic binding
         manager.add_binding(ChannelBinding(channel="slack"))
         # Add specific binding
-        manager.add_binding(
-            ChannelBinding(channel="slack", channel_id="C12345", max_rounds=10)
-        )
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C12345", max_rounds=10))
 
         msg = InboundMessage(
             channel="slack",
@@ -123,9 +121,7 @@ class TestChannelManager:
     def test_require_mention_filter(self):
         manager = ChannelManager()
         manager.set_processor(lambda content: "processed")
-        manager.add_binding(
-            ChannelBinding(channel="discord", require_mention=True)
-        )
+        manager.add_binding(ChannelBinding(channel="discord", require_mention=True))
 
         # Without mention — should be ignored
         msg = InboundMessage(
@@ -336,15 +332,20 @@ class TestAllowedToolsEnforcement:
         received_content = []
         manager = ChannelManager()
         manager.set_processor(lambda c: (received_content.append(c), "ok")[1])
-        manager.add_binding(ChannelBinding(
-            channel="slack",
-            allowed_tools=["list_ips", "search_ips"],
-        ))
+        manager.add_binding(
+            ChannelBinding(
+                channel="slack",
+                allowed_tools=["list_ips", "search_ips"],
+            )
+        )
 
         msg = InboundMessage(
-            channel="slack", channel_id="C1",
-            sender_id="U1", sender_name="Alice",
-            content="show IPs", timestamp=time.time(),
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="show IPs",
+            timestamp=time.time(),
         )
         manager.route_message(msg)
         assert "[allowed_tools:" in received_content[0]
@@ -358,9 +359,12 @@ class TestAllowedToolsEnforcement:
         manager.add_binding(ChannelBinding(channel="slack"))
 
         msg = InboundMessage(
-            channel="slack", channel_id="C1",
-            sender_id="U1", sender_name="Alice",
-            content="hello", timestamp=time.time(),
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="hello",
+            timestamp=time.time(),
         )
         manager.route_message(msg)
         assert received_content[0] == "hello"
@@ -379,9 +383,12 @@ class TestLaneQueueIntegration:
         manager.add_binding(ChannelBinding(channel="slack"))
 
         msg = InboundMessage(
-            channel="slack", channel_id="C1",
-            sender_id="U1", sender_name="Alice",
-            content="test", timestamp=time.time(),
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="test",
+            timestamp=time.time(),
         )
         response = manager.route_message(msg)
         assert response == "processed: test"
@@ -393,9 +400,12 @@ class TestLaneQueueIntegration:
         manager.add_binding(ChannelBinding(channel="slack"))
 
         msg = InboundMessage(
-            channel="slack", channel_id="C1",
-            sender_id="U1", sender_name="Alice",
-            content="test", timestamp=time.time(),
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="test",
+            timestamp=time.time(),
         )
         assert manager.route_message(msg) == "ok"
 

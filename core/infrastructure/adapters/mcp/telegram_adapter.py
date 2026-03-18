@@ -50,9 +50,7 @@ class TelegramNotificationAdapter:
                 {"chat_id": recipient, "text": message},
             )
             if "error" in result:
-                return NotificationResult(
-                    success=False, channel="telegram", error=result["error"]
-                )
+                return NotificationResult(success=False, channel="telegram", error=result["error"])
             return NotificationResult(
                 success=True,
                 channel="telegram",
@@ -61,9 +59,7 @@ class TelegramNotificationAdapter:
             )
         except Exception as exc:
             log.warning("Telegram send_message failed: %s", exc)
-            return NotificationResult(
-                success=False, channel="telegram", error=str(exc)
-            )
+            return NotificationResult(success=False, channel="telegram", error=str(exc))
 
     def is_available(self, channel: str | None = None) -> bool:
         if self._manager is None:

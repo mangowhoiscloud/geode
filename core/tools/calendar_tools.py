@@ -150,9 +150,7 @@ class CalendarCreateEventTool:
 
         adapter = get_calendar()
         if adapter is None or not adapter.is_available():
-            return {
-                "error": "No calendar adapter available. Configure credentials."
-            }
+            return {"error": "No calendar adapter available. Configure credentials."}
 
         title: str = kwargs["title"]
         start = _parse_datetime(kwargs["start_datetime"])
@@ -222,9 +220,7 @@ class CalendarSyncSchedulerTool:
 
         bridge = get_calendar_bridge()
         if bridge is None:
-            return {
-                "error": "Calendar bridge not available. Configure scheduler + calendar."
-            }
+            return {"error": "Calendar bridge not available. Configure scheduler + calendar."}
 
         direction: str = kwargs.get("direction", "both")
         try:

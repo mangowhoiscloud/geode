@@ -65,7 +65,9 @@ class TestNotificationPort:
     def test_contextvars_injection(self):
         """set_notification / get_notification round-trip."""
         mock_adapter = MagicMock()
-        mock_adapter.send_message = MagicMock(return_value=NotificationResult(success=True, channel="test"))
+        mock_adapter.send_message = MagicMock(
+            return_value=NotificationResult(success=True, channel="test")
+        )
         mock_adapter.is_available = MagicMock(return_value=True)
         mock_adapter.list_channels = MagicMock(return_value=["test"])
 
@@ -97,7 +99,9 @@ class TestNotificationResult:
 
 
 class TestSlackNotificationAdapter:
-    def test_send_message_success(self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock):
+    def test_send_message_success(
+        self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock
+    ):
         result = slack_adapter.send_message("slack", "#general", "Hello!")
         assert result.success
         assert result.channel == "slack"
@@ -106,7 +110,9 @@ class TestSlackNotificationAdapter:
             "slack", "send_message", {"channel": "#general", "text": "Hello!"}
         )
 
-    def test_send_message_error(self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock):
+    def test_send_message_error(
+        self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"error": "channel_not_found"}
         result = slack_adapter.send_message("slack", "#nonexistent", "Hello!")
         assert not result.success
@@ -128,7 +134,9 @@ class TestSlackNotificationAdapter:
     def test_list_channels(self, slack_adapter: SlackNotificationAdapter):
         assert slack_adapter.list_channels() == ["slack"]
 
-    def test_send_message_exception(self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock):
+    def test_send_message_exception(
+        self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.side_effect = Exception("connection lost")
         result = slack_adapter.send_message("slack", "#general", "Hello!")
         assert not result.success
@@ -141,7 +149,9 @@ class TestSlackNotificationAdapter:
 
 
 class TestDiscordNotificationAdapter:
-    def test_send_message_success(self, discord_adapter: DiscordNotificationAdapter, mock_manager: MagicMock):
+    def test_send_message_success(
+        self, discord_adapter: DiscordNotificationAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"id": "msg_123"}
         result = discord_adapter.send_message("discord", "123456", "Hello Discord!")
         assert result.success
@@ -150,7 +160,9 @@ class TestDiscordNotificationAdapter:
             "discord", "send_message", {"channel_id": "123456", "content": "Hello Discord!"}
         )
 
-    def test_send_message_error(self, discord_adapter: DiscordNotificationAdapter, mock_manager: MagicMock):
+    def test_send_message_error(
+        self, discord_adapter: DiscordNotificationAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"error": "forbidden"}
         result = discord_adapter.send_message("discord", "123456", "Hello!")
         assert not result.success
@@ -168,7 +180,9 @@ class TestDiscordNotificationAdapter:
 
 
 class TestTelegramNotificationAdapter:
-    def test_send_message_success(self, telegram_adapter: TelegramNotificationAdapter, mock_manager: MagicMock):
+    def test_send_message_success(
+        self, telegram_adapter: TelegramNotificationAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"message_id": 42}
         result = telegram_adapter.send_message("telegram", "123456789", "Hello Telegram!")
         assert result.success
@@ -178,7 +192,9 @@ class TestTelegramNotificationAdapter:
             "telegram", "send_message", {"chat_id": "123456789", "text": "Hello Telegram!"}
         )
 
-    def test_send_message_error(self, telegram_adapter: TelegramNotificationAdapter, mock_manager: MagicMock):
+    def test_send_message_error(
+        self, telegram_adapter: TelegramNotificationAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"error": "chat not found"}
         result = telegram_adapter.send_message("telegram", "invalid", "Hello!")
         assert not result.success

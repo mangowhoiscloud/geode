@@ -77,9 +77,7 @@ def _make_notification_handler(
         severity = _SEVERITY_MAP.get(event, "info")
         message = _format_message(event, data)
 
-        result = adapter.send_message(
-            channel, recipient, message, severity=severity
-        )
+        result = adapter.send_message(channel, recipient, message, severity=severity)
         if not result.success:
             log.warning(
                 "Notification send failed for %s → %s: %s",

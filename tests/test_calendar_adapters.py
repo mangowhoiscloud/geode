@@ -78,7 +78,9 @@ class TestCalendarEvent:
 
 
 class TestGoogleCalendarAdapter:
-    def test_list_events_success(self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock):
+    def test_list_events_success(
+        self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {
             "items": [
                 {
@@ -96,17 +98,23 @@ class TestGoogleCalendarAdapter:
         assert events[0].title == "Team Standup"
         assert events[0].source == "google"
 
-    def test_list_events_empty(self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock):
+    def test_list_events_empty(
+        self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"items": []}
         events = google_adapter.list_events()
         assert events == []
 
-    def test_list_events_error(self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock):
+    def test_list_events_error(
+        self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"error": "unauthorized"}
         events = google_adapter.list_events()
         assert events == []
 
-    def test_create_event_success(self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock):
+    def test_create_event_success(
+        self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"id": "new_evt_1"}
         start = NOW + timedelta(days=1)
         end = start + timedelta(hours=1)
@@ -116,7 +124,9 @@ class TestGoogleCalendarAdapter:
         assert event.title == "Meeting"
         assert event.source == "google"
 
-    def test_create_event_error(self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock):
+    def test_create_event_error(
+        self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"error": "quota exceeded"}
         with pytest.raises(RuntimeError, match="quota exceeded"):
             google_adapter.create_event("Meeting", NOW, NOW + timedelta(hours=1))
@@ -125,7 +135,9 @@ class TestGoogleCalendarAdapter:
         mock_manager.call_tool.return_value = {"status": "deleted"}
         assert google_adapter.delete_event("evt_1") is True
 
-    def test_delete_event_error(self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock):
+    def test_delete_event_error(
+        self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"error": "not found"}
         assert google_adapter.delete_event("nonexistent") is False
 
@@ -150,7 +162,9 @@ class TestGoogleCalendarAdapter:
 
 
 class TestAppleCalendarAdapter:
-    def test_list_events_success(self, apple_adapter: AppleCalendarAdapter, mock_manager: MagicMock):
+    def test_list_events_success(
+        self, apple_adapter: AppleCalendarAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {
             "events": [
                 {
@@ -166,7 +180,9 @@ class TestAppleCalendarAdapter:
         assert events[0].title == "Lunch"
         assert events[0].source == "apple"
 
-    def test_create_event_success(self, apple_adapter: AppleCalendarAdapter, mock_manager: MagicMock):
+    def test_create_event_success(
+        self, apple_adapter: AppleCalendarAdapter, mock_manager: MagicMock
+    ):
         mock_manager.call_tool.return_value = {"uid": "new_cal_1"}
         event = apple_adapter.create_event("Meeting", NOW, NOW + timedelta(hours=1))
         assert event.event_id == "new_cal_1"
@@ -191,9 +207,27 @@ class TestCompositeCalendarAdapter:
     def test_merge_events(self, mock_manager: MagicMock):
         mock_manager.call_tool.side_effect = [
             # Google events
-            {"items": [{"id": "g1", "summary": "Google Meeting", "start": {"dateTime": "2026-03-18T10:00:00+00:00"}, "end": {"dateTime": "2026-03-18T11:00:00+00:00"}}]},
+            {
+                "items": [
+                    {
+                        "id": "g1",
+                        "summary": "Google Meeting",
+                        "start": {"dateTime": "2026-03-18T10:00:00+00:00"},
+                        "end": {"dateTime": "2026-03-18T11:00:00+00:00"},
+                    }
+                ]
+            },
             # CalDAV events
-            {"events": [{"uid": "a1", "summary": "Apple Lunch", "start": "2026-03-18T12:00:00+00:00", "end": "2026-03-18T13:00:00+00:00"}]},
+            {
+                "events": [
+                    {
+                        "uid": "a1",
+                        "summary": "Apple Lunch",
+                        "start": "2026-03-18T12:00:00+00:00",
+                        "end": "2026-03-18T13:00:00+00:00",
+                    }
+                ]
+            },
         ]
         google = GoogleCalendarAdapter(manager=mock_manager)
         apple = AppleCalendarAdapter(manager=mock_manager)

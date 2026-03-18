@@ -64,7 +64,8 @@ class BasePoller(ABC):
         self._thread.start()
         log.info(
             "Gateway poller started: %s (interval=%.1fs)",
-            self.channel_name, self._poll_interval,
+            self.channel_name,
+            self._poll_interval,
         )
 
     def stop(self) -> None:

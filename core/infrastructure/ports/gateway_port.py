@@ -6,6 +6,7 @@ to GEODE processing.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any, Protocol, runtime_checkable
 
@@ -22,6 +23,10 @@ class GatewayPort(Protocol):
         """Stop all pollers."""
         ...
 
+    def set_processor(self, processor: Callable[[str], str]) -> None:
+        """Set the message processor callback."""
+        ...
+
     def add_binding(self, binding: Any) -> None:
         """Add a channel binding rule (ChannelBinding dataclass)."""
         ...
@@ -35,9 +40,7 @@ class GatewayPort(Protocol):
 # contextvars injection
 # ---------------------------------------------------------------------------
 
-_gateway_ctx: ContextVar[GatewayPort | None] = ContextVar(
-    "gateway_port", default=None
-)
+_gateway_ctx: ContextVar[GatewayPort | None] = ContextVar("gateway_port", default=None)
 
 
 def set_gateway(gateway: GatewayPort | None) -> None:

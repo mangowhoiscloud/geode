@@ -48,9 +48,7 @@ class DiscordNotificationAdapter:
                 {"channel_id": recipient, "content": message},
             )
             if "error" in result:
-                return NotificationResult(
-                    success=False, channel="discord", error=result["error"]
-                )
+                return NotificationResult(success=False, channel="discord", error=result["error"])
             return NotificationResult(
                 success=True,
                 channel="discord",
@@ -59,9 +57,7 @@ class DiscordNotificationAdapter:
             )
         except Exception as exc:
             log.warning("Discord send_message failed: %s", exc)
-            return NotificationResult(
-                success=False, channel="discord", error=str(exc)
-            )
+            return NotificationResult(success=False, channel="discord", error=str(exc))
 
     def is_available(self, channel: str | None = None) -> bool:
         if self._manager is None:

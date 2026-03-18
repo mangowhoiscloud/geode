@@ -84,9 +84,7 @@ class TestNotificationHookRegistration:
         """Verify hooks call NotificationPort.send_message when triggered."""
         mock_adapter = MagicMock()
         mock_adapter.is_available.return_value = True
-        mock_adapter.send_message.return_value = NotificationResult(
-            success=True, channel="slack"
-        )
+        mock_adapter.send_message.return_value = NotificationResult(success=True, channel="slack")
         set_notification(mock_adapter)
 
         hooks = HookSystem()
@@ -145,9 +143,7 @@ class TestNotificationHookRegistration:
         """Can configure custom channel and recipient."""
         mock_adapter = MagicMock()
         mock_adapter.is_available.return_value = True
-        mock_adapter.send_message.return_value = NotificationResult(
-            success=True, channel="discord"
-        )
+        mock_adapter.send_message.return_value = NotificationResult(success=True, channel="discord")
         set_notification(mock_adapter)
 
         hooks = HookSystem()

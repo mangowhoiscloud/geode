@@ -51,9 +51,7 @@ class CompositeNotificationAdapter:
                 channel=channel,
                 error=f"Channel '{channel}' not available (MCP server down or key missing)",
             )
-        return adapter.send_message(
-            channel, recipient, message, severity=severity, **kwargs
-        )
+        return adapter.send_message(channel, recipient, message, severity=severity, **kwargs)
 
     def is_available(self, channel: str | None = None) -> bool:
         if channel is not None:

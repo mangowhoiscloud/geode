@@ -54,7 +54,7 @@ class TelegramPoller(BasePoller):
             if self._last_update_id:
                 args["offset"] = self._last_update_id + 1
 
-            result = self._mcp.call_tool("telegram", "get_updates", args)  # type: ignore[union-attr]
+            result = self._mcp.call_tool("telegram", "get_updates", args)
             if "error" in result:
                 return
 
@@ -84,9 +84,7 @@ class TelegramPoller(BasePoller):
                 response = self._manager.route_message(inbound)
 
                 if response and self._notification:
-                    self._notification.send_message(
-                        "telegram", chat_id, response
-                    )
+                    self._notification.send_message("telegram", chat_id, response)
 
         except Exception as exc:
             log.debug("Telegram poll error: %s", exc)
