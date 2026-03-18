@@ -145,7 +145,7 @@ graph TB
     end
 
     subgraph L3["L3 — Orchestration"]
-        Hooks["HookSystem (30)"]
+        Hooks["HookSystem (34)"]
         Tasks["TaskGraph (DAG)"]
         Plan["PlanMode"]
         Coal["CoalescingQueue"]
@@ -185,7 +185,7 @@ graph TB
 | **L0** CLI & Agent | Typer CLI, AgenticLoop, SubAgentManager, Batch, Gateway | 사용자 인터페이스 + 자율 실행 코어 |
 | **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입 |
 | **L2** Memory | SOUL → User Profile → Organization → Project → Session (4-Tier), SqliteSaver | 계층적 메모리 + LangGraph 체크포인트 |
-| **L3** Orchestration | HookSystem (32 events), TaskGraph DAG, PlanMode, CoalescingQueue | 라이프사이클 이벤트, 동시성 제어 |
+| **L3** Orchestration | HookSystem (34 events), TaskGraph DAG, PlanMode, CoalescingQueue | 라이프사이클 이벤트, 동시성 제어 |
 | **L4** Extensibility | ToolRegistry (46), PolicyChain, Skills, MCP Catalog (42) | 런타임 tool/skill 확장, MCP 자동설치 |
 | **L5** Domain Plugins | DomainPort Protocol, GameIPDomain, LangGraph StateGraph | 도메인별 파이프라인 플러그인 교체 |
 
@@ -818,7 +818,7 @@ core/
 ├── memory/                     # 4-Tier: SOUL → User Profile → Organization → Project → Session
 ├── nodes/                      # Pipeline nodes (router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
 ├── orchestration/
-│   ├── hooks.py                # HookSystem (30 events + async atrigger)
+│   ├── hooks.py                # HookSystem (34 events + async atrigger)
 │   ├── goal_decomposer.py      # GoalDecomposer (compound request → sub-goal DAG)
 │   ├── plan_mode.py            # DRAFT → APPROVED → EXECUTING (MANUAL / AUTO)
 │   ├── task_system.py          # TaskGraph DAG (dependency, cycle detection)
