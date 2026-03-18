@@ -668,6 +668,7 @@ Project-specific skills in `.claude/skills/`:
 | `openclaw-patterns` | gateway, session, binding, lane, plugin | 에이전트 시스템 설계 패턴 (OpenClaw) |
 | `architecture-patterns` | clean architecture, hexagonal, DDD | Backend 아키텍처 패턴 |
 | `frontier-harness-research` | 리서치, research, gap, frontier, harness, 사례 조사 | 프론티어 하네스 4종 비교 리서치 프로세스 |
+| `verification-team` | 검증, 검증팀, review, verify, 점검, 리뷰 | 4인 페르소나 검증 (Beck/Karpathy/Steinberger/Cherny) |
 | `tech-blog-writer` | blog, 포스팅, 블로그, tech blog | 기술 블로그 작성 가이드 |
 
 ## Linked Skills (from parent project)
