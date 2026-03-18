@@ -2900,11 +2900,22 @@ def init(
 
     # .geode/ directories
     geode_dirs = [
-        Path(".geode/snapshots"),
+        # C1: Project config
+        Path(".geode/project"),
+        # C2: Journal (append-only execution history)
+        Path(".geode/journal"),
+        # C3: Session (checkpoints, resumable)
+        Path(".geode/session"),
+        # C4: Plan (goals, pending tasks)
+        Path(".geode/plan"),
+        # Cache + outputs
+        Path(".geode/cache"),
         Path(".geode/reports"),
-        Path(".geode/result_cache"),
+        Path(".geode/snapshots"),
         Path(".geode/models"),
+        # Legacy compat
         Path(".geode/sessions"),
+        Path(".geode/result_cache"),
     ]
     for d in geode_dirs:
         d.mkdir(parents=True, exist_ok=True)

@@ -69,6 +69,7 @@ class ContextAssembler:
         user_profile: UserProfilePort | None = None,
         freshness_threshold_s: float = DEFAULT_FRESHNESS_THRESHOLD_S,
         run_log_dir: Path | str | None = None,
+        project_journal: Any | None = None,
     ) -> None:
         self._org_memory = organization_memory
         self._project_memory = project_memory
@@ -77,6 +78,7 @@ class ContextAssembler:
         self._freshness_threshold = freshness_threshold_s
         self._last_assembly_time: float = 0.0
         self._run_log_dir: Path | None = Path(run_log_dir) if run_log_dir else None
+        self._project_journal = project_journal  # C2: ProjectJournal
 
     def assemble(
         self,
@@ -158,6 +160,9 @@ class ContextAssembler:
         # Run History: inject recent execution summaries (Karpathy P6 L3)
         self._inject_run_history(ip_name, context)
 
+        # C2 Journal: inject project-level context (history + learned patterns)
+        self._inject_journal_context(context)
+
         assembled_at = time.time()
         context["_assembled_at"] = assembled_at
         context["_session_id"] = session_id
@@ -232,6 +237,23 @@ class ContextAssembler:
             context["_run_history"] = " | ".join(summaries)
         except Exception:
             log.debug("Failed to inject run history", exc_info=True)
+
+    def _inject_journal_context(self, context: dict[str, Any]) -> None:
+        """C2 Journal: inject project-level history and learned patterns."""
+        if not self._project_journal:
+            return
+        try:
+            summary = self._project_journal.get_context_summary(max_runs=3)
+            if summary:
+                context["_journal_summary"] = summary
+
+            patterns = self._project_journal.get_learned_patterns()
+            if patterns:
+                # Take last 5 patterns for context budget
+                recent = patterns[-5:]
+                context["_journal_learned"] = " | ".join(p.lstrip("- ") for p in recent)
+        except Exception:
+            log.debug("Failed to inject journal context", exc_info=True)
 
     @staticmethod
     def _build_llm_summary(
