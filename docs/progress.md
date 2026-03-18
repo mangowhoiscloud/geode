@@ -1,7 +1,8 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-18 (세션 3)
+> 마지막 갱신: 2026-03-18 (세션 3 — 칸반 체크포인트 2)
+> **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
 
@@ -11,14 +12,16 @@
 
 | task_id | 설명 | 우선순위 | plan | 비고 |
 |---------|------|:--------:|------|------|
-| — | — | — | — | — |
+| career-identity | C0 Identity career.toml 로딩 + 시스템 프롬프트 주입 | P1 | geode-context-hub.md Phase E | UserProfile 확장 |
+| app-tracker | C4 Plan tracker.json 지원 상태 CRUD + /apply 커맨드 | P1 | geode-context-hub.md Phase F | Vault applications 연동 |
+| session-resume | geode resume 커맨드 + AgenticLoop 체크포인트 통합 | P1 | geode-context-hub.md Phase B2-B5 | SessionCheckpoint 활용 |
+| context-command | /context 슬래시 커맨드 + Startup 자동 주입 | P2 | geode-context-hub.md Phase C | 전 계층 요약 표시 |
 
 ### In Progress
 
 | task_id | 설명 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|------|------|--------|--------|------|
-| multi-provider | Multi-Provider AgenticLoop — AgenticResponse 정규화 + OpenAI 경로 | @mangowhoiscloud | feature/p1-final-multi-write-verify | 2026-03-18 | 코드 완료, PR 대기 |
-| write-fallback | WRITE 거부 후 대안 제안 fallback 메시지 | @mangowhoiscloud | feature/p1-final-multi-write-verify | 2026-03-18 | 코드 완료, PR 대기 |
+| workflow-reode-sync | REODE 워크플로우 6건 이식 (칸반 3-checkpoint, .owner, main-only 등) | @mangowhoiscloud | feature/workflow-reode-sync | 2026-03-18 | CLAUDE.md 워크플로우 갱신 |
 
 ### In Review
 
@@ -30,6 +33,10 @@
 
 | task_id | 설명 | PR | 담당 | 완료일 |
 |---------|------|----|------|--------|
+| vault-v0 | Vault (V0) — 산출물 영속 저장소 (profile/research/applications/general) | #279→#280 | @mangowhoiscloud | 2026-03-18 |
+| context-hub-ab | .geode Context Hub Phase A+B — Journal + SessionCheckpoint | #277→#278 | @mangowhoiscloud | 2026-03-18 |
+| multi-provider | Multi-Provider AgenticLoop — AgenticResponse + OpenAI 경로 | #275→#276 | @mangowhoiscloud | 2026-03-18 |
+| write-fallback | WRITE 거부 후 대안 제안 fallback | #275→#276 | @mangowhoiscloud | 2026-03-18 |
 | context-overflow | Context Overflow Detection — ContextMonitor + Hook | #273→#274 | @mangowhoiscloud | 2026-03-18 |
 | policy-6layer | 6-Layer Policy Chain — Profile + Org 레이어 | #273→#274 | @mangowhoiscloud | 2026-03-18 |
 | cost-approval | /cost 대시보드 — 세션/월간/예산 조회 + 예산 설정 | #273→#274 | @mangowhoiscloud | 2026-03-18 |
@@ -110,8 +117,8 @@
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
 | Version | 0.19.1 | 2026-03-18 |
-| Modules | 167 | 2026-03-18 |
-| Tests | 2688 | 2026-03-18 |
+| Modules | 171 | 2026-03-18 |
+| Tests | 2740 | 2026-03-18 |
 | Tools | 46 | 2026-03-18 |
 | MCP Catalog | 42 | 2026-03-18 |
 | HookEvents | 36 | 2026-03-18 |
@@ -123,8 +130,10 @@
 
 1. **task_id**: 케밥 케이스, 고유, 변경 불가
 2. **상태 흐름**: `Backlog → In Progress → In Review → Done` (역방향 이동 시 Blocked 경유)
-3. **담당**: GitHub 계정 (`@username`)
-4. **갱신 시점**: 세션 시작 시 읽기, 세션 종료 시 쓰기
-5. **plan 연결**: `docs/plans/{task_id}.md` 경로로 연결
-6. **GAP 연결**: GAP Registry의 `gap_id`와 Backlog의 `task_id` 매핑
-7. **Done 이력**: 날짜별 그룹핑, 30일 초과 시 아카이브 (`docs/progress-archive/`)
+3. **Backlog → Done 직행 금지** — 반드시 In Progress 경유 (REODE 패턴)
+4. **main-only 편집** — progress.md는 feature/develop 브랜치에서 수정 금지 (REODE 패턴)
+5. **3-Checkpoint 갱신**: alloc(Step 0) → free(PR merge 후) → session-start(교차 검증)
+6. **담당**: GitHub 계정 (`@username`)
+7. **plan 연결**: `docs/plans/{task_id}.md` 경로로 연결
+8. **GAP 연결**: GAP Registry의 `gap_id`와 Backlog의 `task_id` 매핑
+9. **Done 이력**: 날짜별 그룹핑, 30일 초과 시 아카이브 (`docs/progress-archive/`)

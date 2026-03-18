@@ -52,6 +52,9 @@ P1 전체 완료 + .geode Context Hub (5-Layer C0-C4) Phase A+B.
 - `HookEvent.CONTEXT_WARNING` / `CONTEXT_CRITICAL` — Context Overflow 이벤트 (34→36)
 - Stop Hook `check-progress.sh` — develop→main 격차 감지 추가 (블로그 §5.2 스펙)
 
+### Changed
+- 워크플로우 REODE 6건 이식: 3-Checkpoint 칸반, .owner 소유권 보호, main-only progress.md, Docs-Sync 2중 구조, PR Body 엄격 규칙, Backlog→Done 직행 금지
+
 ### Infrastructure
 - Worktree 좀비 3건 + dangling 브랜치 40건 정리 (alloc/free 누수 해소)
 - GAP Registry 전체 P1 해소 (gap-multi-provider 포함)
