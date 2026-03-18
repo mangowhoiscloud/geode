@@ -357,12 +357,17 @@ class TestAgenticLoopFailover:
             max_rounds=5,
         )
 
+    @patch("core.cli.agentic_loop.settings")
     @patch("core.cli.agentic_loop.call_with_failover")
     @patch("core.cli.agentic_loop.get_async_anthropic_client")
     def test_call_llm_uses_failover(
-        self, mock_get_client: MagicMock, mock_failover: MagicMock
+        self, mock_get_client: MagicMock, mock_failover: MagicMock, mock_settings: MagicMock
     ) -> None:
         """_call_llm should delegate to call_with_failover."""
+        mock_settings.anthropic_api_key = "test-key"
+        mock_settings.llm_max_retries = 3
+        mock_settings.llm_retry_base_delay = 0.01
+        mock_settings.llm_retry_max_delay = 0.1
         mock_response = MagicMock()
         mock_failover.return_value = (mock_response, ANTHROPIC_PRIMARY)
         mock_get_client.return_value = MagicMock()
@@ -375,12 +380,17 @@ class TestAgenticLoopFailover:
         assert result is mock_response
         mock_failover.assert_called_once()
 
+    @patch("core.cli.agentic_loop.settings")
     @patch("core.cli.agentic_loop.call_with_failover")
     @patch("core.cli.agentic_loop.get_async_anthropic_client")
     def test_call_llm_returns_none_on_chain_exhaustion(
-        self, mock_get_client: MagicMock, mock_failover: MagicMock
+        self, mock_get_client: MagicMock, mock_failover: MagicMock, mock_settings: MagicMock
     ) -> None:
         """When call_with_failover returns (None, None), _call_llm returns None."""
+        mock_settings.anthropic_api_key = "test-key"
+        mock_settings.llm_max_retries = 3
+        mock_settings.llm_retry_base_delay = 0.01
+        mock_settings.llm_retry_max_delay = 0.1
         mock_failover.return_value = (None, None)
         mock_get_client.return_value = MagicMock()
 
@@ -392,12 +402,17 @@ class TestAgenticLoopFailover:
         assert result is None
         assert loop._last_llm_error is not None
 
+    @patch("core.cli.agentic_loop.settings")
     @patch("core.cli.agentic_loop.call_with_failover")
     @patch("core.cli.agentic_loop.get_async_anthropic_client")
     def test_call_llm_logs_model_switch(
-        self, mock_get_client: MagicMock, mock_failover: MagicMock
+        self, mock_get_client: MagicMock, mock_failover: MagicMock, mock_settings: MagicMock
     ) -> None:
         """When failover switches model, it should be logged."""
+        mock_settings.anthropic_api_key = "test-key"
+        mock_settings.llm_max_retries = 3
+        mock_settings.llm_retry_base_delay = 0.01
+        mock_settings.llm_retry_max_delay = 0.1
         mock_response = MagicMock()
         mock_failover.return_value = (mock_response, ANTHROPIC_SECONDARY)
         mock_get_client.return_value = MagicMock()
@@ -409,7 +424,6 @@ class TestAgenticLoopFailover:
                 loop._call_llm("system prompt", [{"role": "user", "content": "hello"}])
             )
             assert result is mock_response
-            # Verify warning log about model switch
             mock_log.warning.assert_called()
             warning_args = mock_log.warning.call_args_list
             found_switch_log = any("Model failover" in str(args) for args in warning_args)
@@ -423,12 +437,17 @@ class TestAgenticLoopFailover:
             result = asyncio.run(loop._call_llm("system", [{"role": "user", "content": "hi"}]))
         assert result is None
 
+    @patch("core.cli.agentic_loop.settings")
     @patch("core.cli.agentic_loop.call_with_failover")
     @patch("core.cli.agentic_loop.get_async_anthropic_client")
     def test_failover_chain_includes_current_model_first(
-        self, mock_get_client: MagicMock, mock_failover: MagicMock
+        self, mock_get_client: MagicMock, mock_failover: MagicMock, mock_settings: MagicMock
     ) -> None:
         """The failover chain passed to call_with_failover starts with self.model."""
+        mock_settings.anthropic_api_key = "test-key"
+        mock_settings.llm_max_retries = 3
+        mock_settings.llm_retry_base_delay = 0.01
+        mock_settings.llm_retry_max_delay = 0.1
         mock_failover.return_value = (MagicMock(), ANTHROPIC_PRIMARY)
         mock_get_client.return_value = MagicMock()
 
