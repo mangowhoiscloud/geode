@@ -67,6 +67,10 @@ class HookEvent(Enum):
     TOOL_RECOVERY_SUCCEEDED = "tool_recovery_succeeded"
     TOOL_RECOVERY_FAILED = "tool_recovery_failed"
 
+    # Gateway (inbound messaging)
+    GATEWAY_MESSAGE_RECEIVED = "gateway_message_received"
+    GATEWAY_RESPONSE_SENT = "gateway_response_sent"
+
 
 @dataclass
 class HookResult:

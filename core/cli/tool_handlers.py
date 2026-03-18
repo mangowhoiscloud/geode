@@ -1103,5 +1103,59 @@ def _build_tool_handlers(
     handlers.update(_build_delegated_handlers())
     handlers.update(_build_profile_handlers())
     handlers.update(_build_signal_handlers())
+    handlers.update(_build_notification_handlers())
+    handlers.update(_build_calendar_handlers())
     handlers.update(_build_mcp_handler(mcp_manager, agentic_ref))
     return handlers
+
+
+# ---------------------------------------------------------------------------
+# Notification handlers
+# ---------------------------------------------------------------------------
+
+
+def _build_notification_handlers() -> dict[str, Any]:
+    """Build notification tool handlers."""
+    from core.tools.output_tools import SendNotificationTool
+
+    notification_tool = SendNotificationTool()
+
+    def handle_send_notification(**kwargs: Any) -> dict[str, Any]:
+        return notification_tool.execute(**kwargs)
+
+    return {
+        "send_notification": handle_send_notification,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Calendar handlers
+# ---------------------------------------------------------------------------
+
+
+def _build_calendar_handlers() -> dict[str, Any]:
+    """Build calendar tool handlers."""
+    from core.tools.calendar_tools import (
+        CalendarCreateEventTool,
+        CalendarListEventsTool,
+        CalendarSyncSchedulerTool,
+    )
+
+    list_tool = CalendarListEventsTool()
+    create_tool = CalendarCreateEventTool()
+    sync_tool = CalendarSyncSchedulerTool()
+
+    def handle_calendar_list_events(**kwargs: Any) -> dict[str, Any]:
+        return list_tool.execute(**kwargs)
+
+    def handle_calendar_create_event(**kwargs: Any) -> dict[str, Any]:
+        return create_tool.execute(**kwargs)
+
+    def handle_calendar_sync_scheduler(**kwargs: Any) -> dict[str, Any]:
+        return sync_tool.execute(**kwargs)
+
+    return {
+        "calendar_list_events": handle_calendar_list_events,
+        "calendar_create_event": handle_calendar_create_event,
+        "calendar_sync_scheduler": handle_calendar_sync_scheduler,
+    }

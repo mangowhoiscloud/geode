@@ -296,6 +296,35 @@ def _interactive_loop() -> None:
         _init_done("Scheduler", ok=False)
         log.debug("SchedulerService initialization skipped", exc_info=True)
 
+    # 7. Gateway (inbound messaging pollers)
+    gateway_mgr = None
+    try:
+        from core.infrastructure.ports.gateway_port import get_gateway
+
+        gateway_mgr = get_gateway()
+        if gateway_mgr is not None:
+            _init_step("gateway")
+            _init_done("Gateway")
+    except Exception:
+        log.debug("Gateway initialization skipped", exc_info=True)
+
+    # 8. Calendar bridge wiring
+    try:
+        from core.infrastructure.ports.calendar_port import get_calendar
+        from core.orchestration.calendar_bridge import (
+            CalendarSchedulerBridge,
+            set_calendar_bridge,
+        )
+
+        _cal = get_calendar()
+        _sched = _scheduler_service_ctx.get(None)
+        if _cal is not None and _sched is not None:
+            bridge = CalendarSchedulerBridge(_sched, _cal)
+            set_calendar_bridge(bridge)
+            log.debug("CalendarSchedulerBridge wired")
+    except Exception:
+        log.debug("Calendar bridge wiring skipped", exc_info=True)
+
     console.print()  # blank line before prompt
 
     # Build tool handlers and executor
@@ -318,6 +347,18 @@ def _interactive_loop() -> None:
         conversation, executor, mcp_manager=mcp_mgr, skill_registry=skill_registry
     )
     agentic_ref[0] = agentic
+
+    # Wire Gateway processor + start pollers (#2, #3)
+    if gateway_mgr is not None:
+
+        def _gateway_processor(content: str) -> str:
+            """Process inbound gateway message via AgenticLoop."""
+            result = agentic.run(content)
+            return result.text if result and result.text else ""
+
+        gateway_mgr.set_processor(_gateway_processor)
+        gateway_mgr.start()
+        log.info("Gateway pollers started")
 
     # Initialize session meter for status line
     from core.ui.agentic_ui import init_session_meter
@@ -407,7 +448,13 @@ def _interactive_loop() -> None:
                 log.error("Agentic loop error: %s", exc, exc_info=True)
                 console.print(f"\n  [error]Error: {exc}[/error]\n")
 
-    # Clean shutdown: MCP servers -> SchedulerService
+    # Clean shutdown: Gateway -> MCP servers -> SchedulerService
+    if gateway_mgr is not None:
+        try:
+            gateway_mgr.stop()
+        except Exception:
+            log.debug("Gateway shutdown error", exc_info=True)
+
     if mcp_mgr is not None:
         try:
             mcp_mgr.close_all()

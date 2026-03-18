@@ -147,10 +147,10 @@ class ExportJsonTool:
 
 
 class SendNotificationTool:
-    """Stub tool for sending pipeline notifications.
+    """Send notifications via external messaging services.
 
-    In production, integrates with Slack, email, or webhook
-    notification systems. Demo logs the notification.
+    Routes to NotificationPort adapter (Slack, Discord, Telegram) when
+    available; falls back to stub response in demo mode.
     """
 
     @property
@@ -161,7 +161,7 @@ class SendNotificationTool:
     def description(self) -> str:
         return (
             "Send a notification about pipeline events (completion, alerts, drift). "
-            "Supports channels: slack, email, webhook."
+            "Supports channels: slack, discord, telegram, email, webhook."
         )
 
     @property
@@ -171,7 +171,7 @@ class SendNotificationTool:
             "properties": {
                 "channel": {
                     "type": "string",
-                    "enum": ["slack", "email", "webhook"],
+                    "enum": ["slack", "discord", "telegram", "email", "webhook"],
                     "description": "Notification channel.",
                 },
                 "message": {
@@ -186,26 +186,47 @@ class SendNotificationTool:
                 },
                 "recipient": {
                     "type": "string",
-                    "description": "Target recipient (channel name, email, or URL).",
+                    "description": "Target recipient (channel name, chat ID, or URL).",
                 },
             },
             "required": ["channel", "message"],
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
+        from core.infrastructure.ports.notification_port import get_notification
+
         channel: str = kwargs["channel"]
         message: str = kwargs["message"]
         severity: str = kwargs.get("severity", "info")
         recipient: str = kwargs.get("recipient", "default")
 
+        adapter = get_notification()
+        if adapter is not None and adapter.is_available(channel):
+            result = adapter.send_message(
+                channel, recipient, message, severity=severity
+            )
+            return {
+                "result": {
+                    "sent": result.success,
+                    "channel": result.channel,
+                    "severity": severity,
+                    "recipient": recipient,
+                    "message_id": result.message_id,
+                    "message_preview": message[:100],
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "error": result.error,
+                }
+            }
+
+        # Fallback: stub response when no adapter is available
         return {
             "result": {
-                "sent": True,
+                "sent": False,
                 "channel": channel,
                 "severity": severity,
                 "recipient": recipient,
                 "message_preview": message[:100],
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "note": "Stub notification — not actually delivered in demo mode.",
+                "note": f"No {channel} adapter available — notification not delivered.",
             }
         }

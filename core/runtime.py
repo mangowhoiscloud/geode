@@ -414,6 +414,20 @@ class GeodeRuntime:
         for event in (HookEvent.PIPELINE_START, HookEvent.PIPELINE_END, HookEvent.PIPELINE_ERROR):
             hooks.register(event, stuck_fn, name=stuck_name, priority=40)
 
+        # Notification hook plugin (events → external messaging)
+        try:
+            from core.orchestration.plugins.notification_hook.hook import (
+                register_notification_hooks,
+            )
+
+            register_notification_hooks(
+                hooks,  # type: ignore[arg-type]
+                channel=settings.notification_channel,
+                recipient=settings.notification_recipient,
+            )
+        except Exception:
+            log.debug("Notification hook registration skipped", exc_info=True)
+
         return hooks, run_log, stuck_detector
 
     @staticmethod
@@ -789,6 +803,175 @@ class GeodeRuntime:
 
         set_signal_adapter(composite)
 
+    @staticmethod
+    def _build_notification_adapter() -> None:
+        """Build and inject CompositeNotificationAdapter with MCP-backed channels.
+
+        Chains Slack + Discord + Telegram adapters. If no messaging MCP servers
+        are available, notification tools fall back to stub responses.
+        """
+        from core.infrastructure.adapters.mcp.composite_notification import (
+            CompositeNotificationAdapter,
+        )
+        from core.infrastructure.adapters.mcp.discord_adapter import DiscordNotificationAdapter
+        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.infrastructure.adapters.mcp.slack_adapter import SlackNotificationAdapter
+        from core.infrastructure.adapters.mcp.telegram_adapter import TelegramNotificationAdapter
+        from core.infrastructure.ports.notification_port import set_notification
+
+        try:
+            manager = MCPServerManager()
+            manager.load_config()
+        except Exception:
+            log.debug("MCPServerManager unavailable — notification adapter skipped")
+            set_notification(None)
+            return
+
+        adapters = [
+            SlackNotificationAdapter(manager=manager),
+            DiscordNotificationAdapter(manager=manager),
+            TelegramNotificationAdapter(manager=manager),
+        ]
+
+        composite = CompositeNotificationAdapter(adapters)  # type: ignore[arg-type]
+
+        if composite.is_available():
+            log.info(
+                "Notification adapter enabled: channels=%s",
+                composite.list_channels(),
+            )
+        else:
+            log.debug("No messaging MCP servers available — stub notification mode")
+
+        set_notification(composite)
+
+    @staticmethod
+    def _build_calendar_adapter() -> None:
+        """Build and inject CompositeCalendarAdapter with MCP-backed sources.
+
+        Chains Google Calendar + CalDAV (Apple Calendar) adapters.
+        If no calendar MCP servers are available, calendar tools return empty.
+        """
+        from core.infrastructure.adapters.mcp.apple_calendar_adapter import (
+            AppleCalendarAdapter,
+        )
+        from core.infrastructure.adapters.mcp.composite_calendar import (
+            CompositeCalendarAdapter,
+        )
+        from core.infrastructure.adapters.mcp.google_calendar_adapter import (
+            GoogleCalendarAdapter,
+        )
+        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.infrastructure.ports.calendar_port import set_calendar
+
+        try:
+            manager = MCPServerManager()
+            manager.load_config()
+        except Exception:
+            log.debug("MCPServerManager unavailable — calendar adapter skipped")
+            set_calendar(None)
+            return
+
+        adapters = [
+            GoogleCalendarAdapter(manager=manager),
+            AppleCalendarAdapter(manager=manager),
+        ]
+
+        composite = CompositeCalendarAdapter(adapters)  # type: ignore[arg-type]
+
+        if composite.is_available():
+            log.info(
+                "Calendar adapter enabled: sources=%s",
+                composite.list_sources(),
+            )
+        else:
+            log.debug("No calendar MCP servers available — calendar tools disabled")
+
+        set_calendar(composite)
+
+    @staticmethod
+    def _build_gateway() -> None:
+        """Build and inject Gateway with channel pollers.
+
+        Creates ChannelManager with Slack/Discord/Telegram pollers.
+        Pollers only start if their credentials are configured and
+        gateway_enabled=True in settings.
+        """
+        from core.config import settings
+        from core.gateway.channel_manager import ChannelManager
+        from core.gateway.pollers.discord_poller import DiscordPoller
+        from core.gateway.pollers.slack_poller import SlackPoller
+        from core.gateway.pollers.telegram_poller import TelegramPoller
+        from core.infrastructure.ports.gateway_port import set_gateway
+        from core.infrastructure.ports.notification_port import get_notification
+
+        if not settings.gateway_enabled:
+            log.debug("Gateway disabled (GEODE_GATEWAY_ENABLED=false)")
+            set_gateway(None)
+            return
+
+        # Wire Lane Queue for gateway concurrency control
+        lane_queue = None
+        try:
+            from core.orchestration.lane_queue import LaneQueue
+
+            lane_queue = LaneQueue()
+            lane_queue.add_lane("gateway", max_concurrent=2, timeout_s=120.0)
+        except Exception:
+            log.debug("LaneQueue unavailable — gateway runs without concurrency control")
+
+        manager = ChannelManager(lane_queue=lane_queue)
+        notification = get_notification()
+        poll_interval = settings.gateway_poll_interval_s
+
+        # Load bindings from TOML config (hot-reloadable)
+        try:
+            import tomllib
+            from pathlib import Path
+
+            config_path = Path(".geode") / "config.toml"
+            if config_path.exists():
+                with open(config_path, "rb") as f:
+                    toml_config = tomllib.load(f)
+                manager.load_bindings_from_config(toml_config)
+        except Exception:
+            log.debug("No gateway bindings in config.toml")
+
+        try:
+            from core.infrastructure.adapters.mcp.manager import MCPServerManager
+
+            mcp = MCPServerManager()
+            mcp.load_config()
+        except Exception:
+            log.debug("MCPServerManager unavailable — gateway skipped")
+            set_gateway(None)
+            return
+
+        manager.register_poller(
+            SlackPoller(
+                manager, mcp_manager=mcp,
+                notification=notification,
+                poll_interval_s=poll_interval,
+            )
+        )
+        manager.register_poller(
+            DiscordPoller(
+                manager, mcp_manager=mcp,
+                notification=notification,
+                poll_interval_s=poll_interval,
+            )
+        )
+        manager.register_poller(
+            TelegramPoller(
+                manager, mcp_manager=mcp,
+                notification=notification,
+                poll_interval_s=poll_interval,
+            )
+        )
+
+        set_gateway(manager)
+        log.info("Gateway built with %d pollers", len(manager._pollers))
+
     # ------------------------------------------------------------------
     # Factory method
     # ------------------------------------------------------------------
@@ -948,6 +1131,30 @@ class GeodeRuntime:
 
         # Signal enrichment via MCP (liveification)
         cls._build_signal_adapter()
+
+        # Notification adapters (Slack/Discord/Telegram)
+        cls._build_notification_adapter()
+
+        # Calendar adapters (Google Calendar / CalDAV)
+        cls._build_calendar_adapter()
+
+        # Gateway (inbound messaging pollers)
+        cls._build_gateway()
+
+        # Calendar ↔ Scheduler bridge
+        try:
+            from core.infrastructure.ports.calendar_port import get_calendar
+            from core.orchestration.calendar_bridge import set_calendar_bridge
+
+            cal = get_calendar()
+            if cal is not None and cal.is_available():
+                # Scheduler is wired later in REPL; bridge also wired in REPL
+                # Here we just set up the port dependency
+                log.debug("Calendar adapter available — bridge will wire in REPL")
+            else:
+                set_calendar_bridge(None)
+        except Exception:
+            log.debug("Calendar bridge setup skipped", exc_info=True)
 
         # Memory subsystem
         project_memory, organization_memory, context_assembler, user_profile = cls._build_memory(

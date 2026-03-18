@@ -1,0 +1,19 @@
+name: notification_hook
+version: "1.0.0"
+description: "Route pipeline lifecycle events to external notification channels"
+author: geode
+handler: hook.py
+events:
+  - PIPELINE_END
+  - PIPELINE_ERROR
+  - DRIFT_DETECTED
+  - SUBAGENT_FAILED
+priority: 200
+config:
+  default_channel: slack
+  default_recipient: "#geode-alerts"
+  severity_map:
+    PIPELINE_END: info
+    PIPELINE_ERROR: critical
+    DRIFT_DETECTED: warning
+    SUBAGENT_FAILED: warning
