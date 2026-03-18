@@ -168,6 +168,106 @@ FALLBACK_MODELS = ANTHROPIC_FALLBACK_CHAIN
 
 
 # ---------------------------------------------------------------------------
+# Non-retryable errors — these should NOT trigger model failover
+# ---------------------------------------------------------------------------
+_NON_RETRYABLE_ERRORS = (anthropic.AuthenticationError,)
+
+
+# ---------------------------------------------------------------------------
+# call_with_failover — async model failover for AgenticLoop
+# ---------------------------------------------------------------------------
+
+
+async def call_with_failover(
+    models: list[str],
+    call_fn: Any,
+    *,
+    max_retries: int | None = None,
+    retry_base_delay: float | None = None,
+    retry_max_delay: float | None = None,
+) -> tuple[Any | None, str | None]:
+    """Execute an async LLM call with model failover chain.
+
+    Iterates through the ``models`` list. For each model, retries on
+    retryable errors (rate-limit, timeout, connection, server errors)
+    with exponential backoff. If all retries for a model are exhausted,
+    moves to the next model in the chain.
+
+    Non-retryable errors (e.g. AuthenticationError) cause immediate failure
+    without trying further models.
+
+    Args:
+        models: Ordered list of model names to try.
+        call_fn: Async callable ``(model: str) -> response``.
+        max_retries: Per-model retry count (default: settings.llm_max_retries).
+        retry_base_delay: Base delay in seconds (default: settings.llm_retry_base_delay).
+        retry_max_delay: Max delay cap in seconds (default: settings.llm_retry_max_delay).
+
+    Returns:
+        A tuple of ``(response, model_used)``. On complete failure,
+        returns ``(None, None)``.
+    """
+    import asyncio as _asyncio
+
+    _max_retries = max_retries if max_retries is not None else MAX_RETRIES
+    _base_delay = retry_base_delay if retry_base_delay is not None else RETRY_BASE_DELAY
+    _max_delay = retry_max_delay if retry_max_delay is not None else RETRY_MAX_DELAY
+
+    last_error: Exception | None = None
+
+    for model_idx, current_model in enumerate(models):
+        for attempt in range(_max_retries):
+            try:
+                result = await call_fn(current_model)
+                return result, current_model
+            except _NON_RETRYABLE_ERRORS as exc:
+                # Non-retryable: fail immediately, do not try other models
+                log.warning(
+                    "Non-retryable error on model=%s: %s — aborting failover",
+                    current_model,
+                    type(exc).__name__,
+                )
+                return None, None
+            except _RETRYABLE_ERRORS as exc:
+                last_error = exc
+                wait = min(_base_delay * (2**attempt), _max_delay)
+                log.warning(
+                    "Failover: model=%s attempt=%d/%d error=%s, retrying in %.1fs",
+                    current_model,
+                    attempt + 1,
+                    _max_retries,
+                    type(exc).__name__,
+                    wait,
+                )
+                if attempt < _max_retries - 1:
+                    await _asyncio.sleep(wait)
+            except Exception as exc:
+                # Unexpected error: log and move on to next model
+                last_error = exc
+                log.warning(
+                    "Failover: unexpected error on model=%s: %s",
+                    current_model,
+                    exc,
+                )
+                break  # break retry loop, try next model
+
+        # All retries exhausted for this model
+        if model_idx < len(models) - 1:
+            next_model = models[model_idx + 1]
+            log.warning(
+                "Failover: all retries exhausted for model=%s, falling back to %s",
+                current_model,
+                next_model,
+            )
+
+    log.error(
+        "Failover: all models exhausted. Last error: %s",
+        last_error,
+    )
+    return None, None
+
+
+# ---------------------------------------------------------------------------
 # httpx connection pool — configured for long-lived REPL sessions
 # ---------------------------------------------------------------------------
 
