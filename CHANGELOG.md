@@ -26,6 +26,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- NL Router 이중 라우팅 제거 — 모든 자유 텍스트 AgenticLoop 직행. ip_names.py, system_prompt.py 분리 추출
+- README NL Router → AgenticLoop 표기 전환 + 도구 수 46개 반영
+
+### Added
+- `frontier-harness-research` 스킬 — Claude Code/Codex/OpenClaw/autoresearch 4종 비교 리서치 프로세스
+- `verification-team` 스킬 — 4인 페르소나 검증 (Beck/Karpathy/Steinberger/Cherny)
+- 워크플로우 Step 1d(리서치 검증) + Step 3v(구현 검증) 검증팀 병렬 배치
+- tests/ per-file-ignores에 E501 추가
+
+---
+
 ## [0.19.0] — 2026-03-18
 
 외부 메시징 (Slack/Discord/Telegram) + 캘린더 (Google Calendar/Apple Calendar) 통합. OpenClaw Gateway 패턴 적용.
