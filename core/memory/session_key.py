@@ -129,6 +129,26 @@ def parse_session_key(key: str) -> dict[str, str | None | bool]:
     }
 
 
+def build_gateway_session_key(
+    channel: str,
+    channel_id: str,
+    sender_id: str = "",
+) -> str:
+    """Build a session key for a gateway inbound message.
+
+    Format: gateway:{channel}:{channel_id}[:{sender_id}]
+
+    Examples:
+        gateway:slack:C12345
+        gateway:telegram:987654321:U123
+        gateway:discord:456789
+    """
+    parts = [f"gateway:{channel}:{_normalize_name(channel_id)}"]
+    if sender_id:
+        parts[0] += f":{_normalize_name(sender_id)}"
+    return parts[0]
+
+
 def build_thread_config(ip_name: str, phase: str, sub_context: str | None = None) -> dict[str, Any]:
     """Build a LangGraph thread config with hierarchical session key.
 

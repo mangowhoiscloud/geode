@@ -410,8 +410,8 @@ class TestRecoveryHookEvents:
         assert received[0]["tool_name"] == "list_ips"
 
     def test_total_hook_event_count(self) -> None:
-        """Verify total hook event count is 30 (27 + 3 recovery)."""
-        assert len(HookEvent) == 30
+        """Verify total hook event count is 32 (27 + 3 recovery + 2 gateway)."""
+        assert len(HookEvent) == 32
 
 
 # ---------------------------------------------------------------------------

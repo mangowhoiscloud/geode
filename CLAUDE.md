@@ -4,12 +4,12 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.18.1
+- **Version**: 0.19.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 142
-- **Tests**: 2530+
+- **Modules**: 164
+- **Tests**: 2636+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -41,8 +41,8 @@ uv run geode analyze "Cowboy Bebop" --verbose
 L0: CLI & AGENT      — Typer CLI, NL Router, AgenticLoop, SubAgentManager, Batch
 L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
 L2: MEMORY           — Organization > Project > Session + User Profile (4-Tier + Hybrid L1/L2)
-L3: ORCHESTRATION    — HookSystem(30), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
-L4: EXTENSIBILITY    — ToolRegistry(38+), PolicyChain, Skills, MCP Catalog(38), Reports
+L3: ORCHESTRATION    — HookSystem(32), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
+L4: EXTENSIBILITY    — ToolRegistry(46), PolicyChain, Skills, MCP Catalog(42), Reports
 L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 ```
 
@@ -122,7 +122,7 @@ START → router → signals → analyst×4 (Send API)
 - **Typed Evaluator Output**: Per-evaluator Pydantic models enforce required axes in structured output
 - **Confidence Multiplier**: `final = base × (0.7 + 0.3 × confidence/100)`
 
-### Recent Features (v0.15.0 -- v0.17.0)
+### Recent Features (v0.15.0 -- v0.19.0)
 
 | Version | Feature | Description |
 |---------|---------|-------------|
@@ -134,6 +134,9 @@ START → router → signals → analyst×4 (Send API)
 | v0.17.0 | Agent Reflection | `PIPELINE_END` Hook으로 `learned.md` 자동 패턴 추출 (Karpathy P4 Ratchet) |
 | v0.17.0 | Cache Expiry 24h+hash | ResultCache 24h TTL + SHA-256 content hash 검증 |
 | v0.17.0 | `geode history` | 실행 이력 + 모델별 비용 요약 조회 서브커맨드 |
+| v0.19.0 | Messaging Integration | Slack/Discord/Telegram 아웃바운드 알림 + 인바운드 Gateway (OpenClaw 패턴) |
+| v0.19.0 | Calendar Integration | Google Calendar + Apple Calendar (CalDAV) 양방향 동기화 |
+| v0.19.0 | Notification Hook Plugin | PIPELINE_END/ERROR → 외부 채널 자동 알림 (YAML auto-discovery) |
 
 ## SOT (Source of Truth)
 
@@ -189,7 +192,7 @@ core/
 │   ├── session_key.py   # Hierarchical key builder (ip:name:phase)
 │   └── context.py       # 4-tier context assembler
 ├── orchestration/
-│   ├── hooks.py         # HookSystem (30 events + async atrigger)
+│   ├── hooks.py         # HookSystem (32 events + async atrigger)
 │   ├── bootstrap.py     # Node bootstrap (pre-execution context injection)
 │   ├── goal_decomposer.py # GoalDecomposer (compound request → sub-goal DAG)
 │   ├── planner.py       # Planner (multi-step plan generation)
@@ -203,7 +206,14 @@ core/
 │   ├── isolated_execution.py # IsolatedRunner (MAX_CONCURRENT=5, thread pool)
 │   ├── agent_reflection.py # Agent Reflection — PIPELINE_END 학습 패턴 추출
 │   ├── run_log.py       # Run audit log
-│   └── stuck_detection.py # Stuck pipeline detection
+│   ├── stuck_detection.py # Stuck pipeline detection
+│   ├── calendar_bridge.py # CalendarSchedulerBridge (scheduler ↔ calendar sync)
+│   └── plugins/
+│       └── notification_hook/ # YAML plugin: 이벤트 → 알림 자동 전송
+├── gateway/               # Inbound messaging (OpenClaw Gateway pattern)
+│   ├── models.py          # InboundMessage, ChannelBinding
+│   ├── channel_manager.py # Binding-based routing + Lane Queue
+│   └── pollers/           # Slack/Discord/Telegram daemon pollers
 ├── automation/
 │   ├── triggers.py      # TriggerManager + unified dispatch
 │   ├── predefined.py    # 10 predefined automation templates (§12.4)
@@ -224,11 +234,11 @@ core/
 │   ├── stats.py         # Statistical utilities (Krippendorff's α, shared)
 │   └── rights_risk.py   # IP rights risk assessment
 ├── infrastructure/
-│   ├── ports/           # Protocol interfaces (LLM, Memory, Auth, Hook, Tool, DomainPort)
+│   ├── ports/           # Protocol interfaces (LLM, Memory, Auth, Hook, Tool, Domain, Notification, Calendar, Gateway)
 │   └── adapters/
 │       ├── llm/         # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/         # Steam, Brave, LinkedIn MCP adapters + CompositeSignalAdapter + catalog (38 entries)
-├── tools/               # Tool Protocol + Registry + Policy + definitions.json
+│       └── mcp/         # MCP adapters (9) + Composite adapters (3) + catalog (42 entries)
+├── tools/               # Tool Protocol + Registry + Policy + definitions.json (46 tools)
 ├── auth/                # API key rotation, cooldown, profiles
 ├── extensibility/       # Report generation + Skills + AgentRegistry (3 defaults)
 ├── fixtures/            # JSON test data (3 core IPs + 201 Steam)

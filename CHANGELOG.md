@@ -26,12 +26,39 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.19.0] — 2026-03-18
+
+외부 메시징 (Slack/Discord/Telegram) + 캘린더 (Google Calendar/Apple Calendar) 통합. OpenClaw Gateway 패턴 적용.
 
 ### Added
+- NotificationPort Protocol + contextvars DI — 외부 메시징 서비스 추상화 계층
+- CalendarPort Protocol + CalendarEvent 모델 — 캘린더 서비스 추상화 계층
+- GatewayPort Protocol — 인바운드 메시지 게이트웨이 추상화
+- Slack/Discord/Telegram Notification Adapters — MCP 기반 아웃바운드 메시징 (3 어댑터)
+- CompositeNotificationAdapter — 채널별 라우팅 합성 어댑터
+- Google Calendar / Apple Calendar (CalDAV) Adapters — MCP 기반 캘린더 (2 어댑터)
+- CompositeCalendarAdapter — 다중 소스 이벤트 병합
+- MCP Catalog에 telegram, google-calendar, caldav 3개 서버 추가 (총 42개)
+- send_notification 도구 업그레이드 — 스텁 → NotificationPort 기반 실제 전송 (discord/telegram 채널 추가)
+- calendar_list_events (SAFE), calendar_create_event (WRITE), calendar_sync_scheduler (WRITE) 도구 3개 추가
+- Notification Hook Plugin — PIPELINE_END/ERROR, DRIFT_DETECTED, SUBAGENT_FAILED → 자동 알림 전송
+- CalendarSchedulerBridge — 스케줄러 ↔ 캘린더 양방향 동기화 ([GEODE] 접두사 기반)
+- Gateway 인바운드 모듈 — ChannelManager + Slack/Discord/Telegram Poller (OpenClaw Binding 패턴)
+- Gateway Session Key — `gateway:{channel}:{channel_id}:{sender_id}` 형식 세션 격리
+- Gateway → Lane Queue 연결 — 인바운드 메시지 동시성 제어 (OpenClaw Lane 패턴)
+- ChannelBinding.allowed_tools 적용 — 바인딩별 도구 접근 제한
+- Binding Config Hot Reload — TOML 기반 게이트웨이 바인딩 로드 (`load_bindings_from_config`)
+- HookEvent에 GATEWAY_MESSAGE_RECEIVED, GATEWAY_RESPONSE_SENT 추가 (30→32 이벤트)
+- TriggerEndpoint에 discord, telegram 소스 추가
+- Notification Hook YAML auto-discovery 지원 — hook_discovery.py 호환 `handler` 필드 + `handle()` 진입점
+- Config에 notification/gateway/calendar 설정 섹션 추가
+- VALID_CATEGORIES에 notification, calendar 추가
+- 테스트 105개 추가 (notification_adapters 27, calendar_adapters 26, notification_hook 10, calendar_bridge 10, gateway 32)
+
+### Changed
 - README에 Prompt Assembly Pipeline 섹션 추가 — 5단계 조합 파이프라인 Mermaid 다이어그램 + 노드 호출 시퀀스
 - README에 Development Workflow 섹션 추가 — 재귀개선 루프 Mermaid 다이어그램 + 품질 게이트 테이블
-- README Game IP Domain 섹션 분리 — DomainPort Protocol과 Game IP 파이프라인을 독립 서브섹션으로 확장 (4 Analysts, 3 Evaluators, Scoring, Decision Tree, Verification 5-Layer)
+- README Game IP Domain 섹션 분리 — DomainPort Protocol과 Game IP 파이프라인을 독립 서브섹션으로 확장
 
 ### Fixed
 - README 수치 정합성 수정 — MCP catalog 38→39, SAFE_BASH_PREFIXES 38→41, MCP adapters 5→4, User Profile 경로, prompt 템플릿 수 11→10, slash commands 17→20, config vars 30+→57
@@ -751,7 +778,8 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.18.1...HEAD
+[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/mangowhoiscloud/geode/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/mangowhoiscloud/geode/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/mangowhoiscloud/geode/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/mangowhoiscloud/geode/compare/v0.16.0...v0.17.0

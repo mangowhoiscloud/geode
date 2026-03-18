@@ -5,12 +5,12 @@
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
   <img src="https://img.shields.io/badge/Opus%204.6-1M%20context-1e293b?style=flat-square" alt="Opus 4.6">
-  <img src="https://img.shields.io/badge/42%20tools-MCP%20native-1e293b?style=flat-square" alt="42 Tools">
+  <img src="https://img.shields.io/badge/46%20tools-MCP%20native-1e293b?style=flat-square" alt="46 Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
-# GEODE v0.18.1 — Autonomous Research Harness
+# GEODE v0.19.0 — Autonomous Research Harness
 
 범용 자율 실행 에이전트. `while(tool_use)` 루프를 핵심 프리미티브로 하여 리서치, 분석, 자동화, 스케줄링을 자연어 한 줄로 수행합니다.
 
@@ -20,8 +20,8 @@
 
 - **Natural Language Interface** -- 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링 수행
 - **`while(tool_use)` Loop** -- 모든 자율 행동의 핵심 프리미티브. 도구를 호출하고, 관찰하고, 반복
-- **42 Built-in Tools** -- web_fetch, general_web_search, run_bash 등 42개 네이티브 도구
-- **MCP Auto-Discovery** -- MCPRegistry가 환경변수 기반 자동 탐지 (DEFAULT 5종 + AUTO_DISCOVER 18종), 카탈로그 39종
+- **46 Built-in Tools** -- web_fetch, general_web_search, send_notification, calendar 등 46개 네이티브 도구
+- **MCP Auto-Discovery** -- MCPRegistry가 환경변수 기반 자동 탐지 (DEFAULT 5종 + AUTO_DISCOVER 22종), 카탈로그 42종
 - **Bash Execution** -- shell 명령 실행. SAFE_BASH_PREFIXES 41종 읽기 전용 자동승인, 9종 위험 패턴 차단, 그 외 HITL 승인
 - **Goal Decomposition** -- 복합 요청을 하위 목표 DAG로 자동 분해 (Haiku, ~$0.01/호출)
 - **Error Recovery** -- 실패 시 retry → alternative → fallback → escalate 4단계 자동 복구
@@ -36,7 +36,7 @@
 flowchart LR
     NL["NL Router<br/>(LLM tool_use)"]
 
-    NL --> Builtin["Built-in Tools<br/>(42 definitions)"]
+    NL --> Builtin["Built-in Tools<br/>(46 definitions)"]
     NL --> MCP["MCP Tools<br/>(auto-discovered)"]
     NL --> Bash["Bash<br/>(run_bash)"]
 
@@ -70,7 +70,7 @@ NL Router가 LLM의 tool_use 응답을 3가지 경로로 디스패치합니다:
 | 경로 | 도구 수 | 승인 방식 |
 |------|--------|----------|
 | Built-in Tools | 42 | SAFE 자동승인, STANDARD 실행, WRITE HITL 승인 |
-| MCP Tools | 카탈로그 39종 | AUTO_APPROVED 서버 4종 자동승인, 그 외 초회 승인 |
+| MCP Tools | 카탈로그 42종 | AUTO_APPROVED 서버 4종 자동승인, 그 외 초회 승인 |
 | Bash | shell 명령 | SAFE_BASH_PREFIXES 41종 자동승인, 9종 차단, 그 외 HITL |
 
 ## Installation

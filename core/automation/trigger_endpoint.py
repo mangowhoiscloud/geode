@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _VALID_MODES = frozenset({"full_pipeline", "dry_run", "evaluation_only"})
-_VALID_SOURCES = frozenset({"api", "slack", "ci_cd", "webhook"})
+_VALID_SOURCES = frozenset({"api", "slack", "discord", "telegram", "ci_cd", "webhook"})
 
 
 @dataclass
