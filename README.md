@@ -10,7 +10,7 @@
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
-# GEODE v0.19.0 — Autonomous Research Harness
+# GEODE v0.19.1 — Autonomous Research Harness
 
 범용 자율 실행 에이전트. `while(tool_use)` 루프를 핵심 프리미티브로 하여 리서치, 분석, 자동화, 스케줄링을 자연어 한 줄로 수행합니다.
 
@@ -798,7 +798,7 @@ core/
 │   ├── error_recovery.py       # ErrorRecoveryStrategy (retry → alternative → fallback → escalate)
 │   ├── sub_agent.py            # SubAgentManager + SubAgentResult + ErrorCategory
 │   ├── tool_executor.py        # Tool dispatch + HITL approval gate
-│   ├── nl_router.py            # Legacy NL router (decoupled, AgenticLoop 직행)
+│   ├── system_prompt.py        # System prompt builder for AgenticLoop
 │   ├── conversation.py         # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
