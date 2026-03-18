@@ -70,6 +70,7 @@ class ContextAssembler:
         freshness_threshold_s: float = DEFAULT_FRESHNESS_THRESHOLD_S,
         run_log_dir: Path | str | None = None,
         project_journal: Any | None = None,
+        vault: Any | None = None,
     ) -> None:
         self._org_memory = organization_memory
         self._project_memory = project_memory
@@ -79,6 +80,7 @@ class ContextAssembler:
         self._last_assembly_time: float = 0.0
         self._run_log_dir: Path | None = Path(run_log_dir) if run_log_dir else None
         self._project_journal = project_journal  # C2: ProjectJournal
+        self._vault = vault  # V0: Vault (artifact storage)
 
     def assemble(
         self,
@@ -162,6 +164,9 @@ class ContextAssembler:
 
         # C2 Journal: inject project-level context (history + learned patterns)
         self._inject_journal_context(context)
+
+        # V0 Vault: inject artifact inventory summary
+        self._inject_vault_context(context)
 
         assembled_at = time.time()
         context["_assembled_at"] = assembled_at
@@ -254,6 +259,17 @@ class ContextAssembler:
                 context["_journal_learned"] = " | ".join(p.lstrip("- ") for p in recent)
         except Exception:
             log.debug("Failed to inject journal context", exc_info=True)
+
+    def _inject_vault_context(self, context: dict[str, Any]) -> None:
+        """V0 Vault: inject artifact inventory for the LLM."""
+        if not self._vault:
+            return
+        try:
+            summary = self._vault.get_context_summary()
+            if summary:
+                context["_vault_summary"] = summary
+        except Exception:
+            log.debug("Failed to inject vault context", exc_info=True)
 
     @staticmethod
     def _build_llm_summary(
