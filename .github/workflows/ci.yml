@@ -10,22 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  AGENT_TOOLSDIRECTORY: /Users/mango/actions-runner-geode/_toolcache
-  RUNNER_TOOL_CACHE: /Users/mango/actions-runner-geode/_toolcache
-
 jobs:
   lint:
     name: Lint & Format
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - run: uv sync
       - run: uv run ruff check core/ tests/
       - run: uv run ruff format --check core/ tests/
@@ -35,48 +25,22 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - run: uv sync
       - run: uv run mypy core/
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Test
     runs-on: self-hosted
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
       - run: uv sync
-      - run: uv run pytest --cov=core --cov-report=xml --cov-report=term-missing
-      - uses: actions/upload-artifact@v4
-        if: matrix.python-version == '3.12'
-        with:
-          name: coverage-report
-          path: coverage.xml
+      - run: uv run pytest --cov=core --cov-report=term-missing
 
   security:
     name: Security Scan
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - run: uv sync
       - run: uv run bandit -r core/ -c pyproject.toml
 
