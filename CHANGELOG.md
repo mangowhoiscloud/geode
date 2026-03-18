@@ -35,6 +35,7 @@ P1 전체 완료 + .geode Context Hub (5-Layer C0-C4) Phase A+B.
 - `ProjectJournal` (C2) — `.geode/journal/` append-only 실행 기록 (runs.jsonl, costs.jsonl, learned.md, errors.jsonl)
 - Journal Hook 자동 기록 — PIPELINE_END/ERROR → runs.jsonl + learned.md 자동 침전
 - `SessionCheckpoint` (C3) — `.geode/session/` 세션 체크포인트 저장/복원/정리 (72h auto-cleanup)
+- `Vault` (V0) — `.geode/vault/` 목적별 산출물 영속 저장소 (profile/research/applications/general), 자동 분류 + 버전 관리
 - ContextAssembler C2 통합 — Journal 이력 + 학습 패턴 시스템 프롬프트 자동 주입
 - `geode init` 5-Layer 디렉토리 — project/, journal/, session/, plan/, cache/ 생성
 - Multi-Provider AgenticLoop — `AgenticResponse` 정규화 레이어 + Anthropic/OpenAI 이중 경로 (`_call_llm_anthropic`/`_call_llm_openai`)
