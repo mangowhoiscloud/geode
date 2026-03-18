@@ -16,6 +16,7 @@
 | subagent-announce | Sub-agent Announce — Parent 결과 자동 주입 | P1 | — | OpenClaw Spawn+Announce |
 | policy-6layer | 6-계층 Policy Chain 확대 | P1 | — | OpenClaw Policy Resolution |
 | mcp-lifecycle | MCP Adapter Lifecycle — startup/shutdown hook | P1 | — | orphan 방지 |
+| cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | P1 | — | Claude Code Permission 패턴 |
 | multi-provider | AgenticLoop 멀티 프로바이더 — Anthropic SDK 결합 해제 | P2 | — | LLMClientPort 추상화 |
 | write-fallback | WRITE_TOOLS 거부 후 fallback 경로 | P2 | — | Claude Code Permission 패턴 |
 
@@ -35,7 +36,7 @@
 
 | task_id | 설명 | PR | 담당 | 완료일 |
 |---------|------|----|------|--------|
-| messaging-v019 | Slack/Discord/Telegram + Google/Apple Calendar 통합 | #241→#242 | @mangowhoiscloud | 2026-03-18 |
+| messaging-v019 | Slack/Discord/Telegram + Google/Apple Calendar 통합 (v0.19.0) | #241→#242 | @mangowhoiscloud | 2026-03-18 |
 | gateway-wiring | 검증팀 발견 — GatewayPort + runtime 와이어링 수정 | #241 | @mangowhoiscloud | 2026-03-18 |
 | openclaw-gap6 | OpenClaw GAP 6건 수정 (Lane Queue, Session Key 등) | #241 | @mangowhoiscloud | 2026-03-18 |
 | runtime-wiring5 | 런타임 와이어링 5건 (Gateway, CalendarBridge, Hook) | #241 | @mangowhoiscloud | 2026-03-18 |
@@ -45,6 +46,13 @@
 | verify-team-skill | 검증팀 4인 페르소나 스킬 | #249→#250 | @mangowhoiscloud | 2026-03-18 |
 | docs-sync-final | 문서 싱크 + README 수치 + progress.md | #251→#252 | @mangowhoiscloud | 2026-03-18 |
 | nl-router-delete | nl_router.py 완전 삭제 + v0.19.1 릴리스 | #255→#256 | @mangowhoiscloud | 2026-03-18 |
+| progress-kanban | progress.md 칸반 보드 고도화 + Step 6 | #259→#260 | @mangowhoiscloud | 2026-03-18 |
+| dag-research | Claude Code Tasks DAG 리서치 리포트 | #261→#262 | @mangowhoiscloud | 2026-03-18 |
+| kanban-design | 칸반 시스템 설계 문서 (Karpathy Dumb Platform) | #261→#262 | @mangowhoiscloud | 2026-03-18 |
+| kanban-blog | GEODE 칸반 기술 블로그 (14,517자) | #261→#262 | @mangowhoiscloud | 2026-03-18 |
+| pr-body-align | PR body 규칙 geode-gitflow 스킬 정렬 | #261→#262 | @mangowhoiscloud | 2026-03-18 |
+| cli-audit | CLI 점검 감사 (코드 레벨) | 리서치 | @mangowhoiscloud | 2026-03-18 |
+| gap-detection | Claude Code/Codex/OpenClaw GAP 탐지 | 리서치 | @mangowhoiscloud | 2026-03-18 |
 
 ### Blocked
 
@@ -56,7 +64,7 @@
 
 ## GAP Registry
 
-프론티어 대비 누적 GAP. 해소되면 Done으로 이동.
+프론티어 대비 누적 GAP. 해소되면 Resolved로 이동.
 
 ### P1 (High)
 
@@ -67,7 +75,7 @@
 | gap-announce | Sub-agent 결과 자동 주입 | OpenClaw | subagent-announce |
 | gap-policy | 6-계층 Policy Chain | OpenClaw | policy-6layer |
 | gap-mcp-lifecycle | MCP startup/shutdown hook | Claude Code | mcp-lifecycle |
-| gap-cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | Claude Code | — |
+| gap-cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | Claude Code | cost-approval |
 
 ### P2 (Medium)
 
@@ -98,12 +106,12 @@
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
 | Version | 0.19.1 | 2026-03-18 |
-| Modules | 166 | 2026-03-18 |
+| Modules | 165 | 2026-03-18 |
 | Tests | 2505 | 2026-03-18 |
 | Tools | 46 | 2026-03-18 |
 | MCP Catalog | 42 | 2026-03-18 |
 | HookEvents | 32 | 2026-03-18 |
-| Skills | 14 | 2026-03-18 |
+| Skills | 18 | 2026-03-18 |
 
 ---
 
