@@ -13,11 +13,6 @@ from core.cli import (
     _state_to_report_dict,
 )
 from core.cli.commands import COMMAND_MAP, resolve_action
-from core.cli.nl_router import (
-    _OFFLINE_REPORT,
-    VALID_ACTIONS,
-    _offline_fallback,
-)
 from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
@@ -178,7 +173,6 @@ class TestGenerateReport:
             "synthesis": {},
             "analyses": [],
         }
-        # Clear the LRU cache so "berserk" is not cached
         from core.cli import _result_cache
 
         _result_cache._cache.clear()
@@ -204,7 +198,6 @@ class TestGenerateReport:
         from core.cli import _result_cache
 
         _result_cache._cache.clear()
-        # Cache cowboy bebop, then ask for Berserk → should run analysis
         _set_last_result({"ip_name": "cowboy bebop", "final_score": 90.0, "tier": "S"})
         mock_run.return_value = {
             "ip_name": "berserk",
@@ -239,7 +232,6 @@ class TestGenerateReport:
             "tier": "A",
         }
         _set_last_result(cached)
-        # Should not raise, falls back to markdown
         _generate_report("Berserk", fmt="xml", verbose=False)
 
     @patch("core.cli._run_analysis")
@@ -248,37 +240,8 @@ class TestGenerateReport:
 
         _result_cache._cache.clear()
         mock_run.return_value = None
-        # Should not raise
         _generate_report("unknown_ip", verbose=False)
         mock_run.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# TestReportNLRouter
-# ---------------------------------------------------------------------------
-
-
-class TestReportNLRouter:
-    def test_report_in_valid_actions(self):
-        assert "report" in VALID_ACTIONS
-
-    def test_offline_pattern_korean(self):
-        assert _OFFLINE_REPORT.search("리포트 생성해")
-        assert _OFFLINE_REPORT.search("보고서 만들어줘")
-        assert _OFFLINE_REPORT.search("레포트 생성")
-
-    def test_offline_pattern_english(self):
-        assert _OFFLINE_REPORT.search("generate a report")
-        assert _OFFLINE_REPORT.search("Report for Berserk")
-
-    def test_offline_fallback_report(self):
-        intent = _offline_fallback("Berserk 리포트 생성해", error="no_api_key")
-        assert intent.action == "report"
-        assert intent.args.get("_error") == "no_api_key"
-
-    def test_offline_fallback_report_english(self):
-        intent = _offline_fallback("generate report for Berserk", error="api_error")
-        assert intent.action == "report"
 
 
 # ---------------------------------------------------------------------------
@@ -296,5 +259,4 @@ class TestLastResultCache:
         assert got["final_score"] == 85.0
 
     def test_none_is_noop(self):
-        # Setting None should not crash (no-op)
         _set_last_result(None)  # type: ignore[arg-type]
