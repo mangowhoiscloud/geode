@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  AGENT_TOOLSDIRECTORY: /Users/mango/actions-runner-geode/_toolcache
+
 jobs:
   lint:
     name: Lint & Format
