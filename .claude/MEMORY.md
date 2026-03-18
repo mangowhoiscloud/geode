@@ -16,6 +16,8 @@
 - (없음 — 기본 14-axis 루브릭 사용)
 
 ## 최근 인사이트
+- 2026-03-18: [Berserk] tier=?, score=0.00
+- 2026-03-18: [unknown] tier=?, score=0.00
 - 2026-03-16: [Berserk] tier=?, score=0.00
 - 2026-03-16: [unknown] tier=?, score=0.00
 - 2026-03-15: [Berserk] tier=?, score=0.00

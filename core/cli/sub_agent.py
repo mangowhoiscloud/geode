@@ -41,6 +41,23 @@ log = logging.getLogger(__name__)
 # Thread-local storage for subagent context (OpenClaw Spawn pattern)
 _subagent_context = threading.local()
 
+# Module-level announce queue: parent_session_key → list[SubAgentResult]
+# Thread-safe via _announce_lock. Parent AgenticLoop polls this queue
+# to inject completion notifications into its conversation context.
+_announce_queue: dict[str, list[SubAgentResult]] = {}
+_announce_lock = threading.Lock()
+
+
+def drain_announced_results(parent_session_key: str) -> list[SubAgentResult]:
+    """Drain all announced results for a parent session (thread-safe).
+
+    Returns the list of completed SubAgentResults and clears the queue.
+    Called by AgenticLoop._check_announced_results() each round.
+    """
+    with _announce_lock:
+        results = _announce_queue.pop(parent_session_key, [])
+    return results
+
 
 def get_subagent_context() -> tuple[bool, str]:
     """Return (is_subagent, child_session_key) from thread-local."""
@@ -118,6 +135,7 @@ class SubAgentResult:
     error_category: str | None = None
     error_message: str | None = None
     retryable: bool = False
+    announced: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize, omitting None-valued fields."""
@@ -189,6 +207,8 @@ class SubAgentManager:
         self._skill_registry = skill_registry
         self._depth = depth
         self._max_depth = max_depth
+        # Announce mechanism (OpenClaw Spawn+Announce pattern)
+        self._announce_enabled = bool(parent_session_key)
 
     def delegate(
         self,
@@ -313,6 +333,28 @@ class SubAgentManager:
                     rec.completed_at = now
                     rec.outcome = "ok" if sub_result.success else "error"
 
+        # Announce completed results to parent (OpenClaw Spawn+Announce)
+        if self._announce_enabled and self._parent_session_key:
+            for sub_result in results:
+                # Build a SubAgentResult for announce (may already be one)
+                summary = ""
+                if sub_result.success:
+                    summary = sub_result.output.get("summary", "") if sub_result.output else ""
+                    if not summary:
+                        summary = str(sub_result.output)[:200] if sub_result.output else "completed"
+                else:
+                    summary = sub_result.error or "failed"
+                agent_result = SubAgentResult(
+                    task_id=sub_result.task_id,
+                    task_type=sub_result.description,
+                    status="ok" if sub_result.success else "error",
+                    summary=summary,
+                    data=sub_result.output,
+                    duration_ms=sub_result.duration_ms,
+                    error_message=sub_result.error,
+                )
+                self._announce_result(self._parent_session_key, agent_result)
+
         succeeded = sum(1 for r in results if r.success)
         log.info(
             "SubAgent batch complete: %d/%d succeeded",
@@ -329,6 +371,29 @@ class SubAgentManager:
         """Return a snapshot of all run records for observability."""
         with self._records_lock:
             return dict(self._run_records)
+
+    def _announce_result(self, parent_session_key: str, child_result: SubAgentResult) -> None:
+        """Announce a completed sub-agent result to the parent session.
+
+        Pushes the result into the module-level ``_announce_queue`` so
+        the parent AgenticLoop can pick it up on the next round via
+        ``drain_announced_results()``.  Marks ``child_result.announced``
+        to prevent double-announce.
+
+        OpenClaw Spawn+Announce pattern: child completes -> parent is
+        notified asynchronously -> parent injects summary into context.
+        """
+        if child_result.announced:
+            return
+        child_result.announced = True
+        with _announce_lock:
+            _announce_queue.setdefault(parent_session_key, []).append(child_result)
+        log.debug(
+            "Announced result: task_id=%s to parent=%s (status=%s)",
+            child_result.task_id,
+            parent_session_key,
+            child_result.status,
+        )
 
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:
         """Resolve agent context.
@@ -414,6 +479,13 @@ class SubAgentManager:
         if sub_result is not None:
             data["duration_ms"] = sub_result.duration_ms
             data["success"] = sub_result.success
+            # Include result summary in SUBAGENT_COMPLETED hook data
+            # (OpenClaw Announce pattern — hooks carry the completion summary)
+            if event == HookEvent.SUBAGENT_COMPLETED:
+                summary = sub_result.output.get("summary", "") if sub_result.output else ""
+                if not summary:
+                    summary = str(sub_result.output)[:200] if sub_result.output else ""
+                data["summary"] = summary
         if error is not None:
             data["error"] = error
         try:

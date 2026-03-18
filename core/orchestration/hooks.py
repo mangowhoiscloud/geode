@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (30 events)."""
+    """Pipeline lifecycle events (34 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -70,6 +70,10 @@ class HookEvent(Enum):
     # Gateway (inbound messaging)
     GATEWAY_MESSAGE_RECEIVED = "gateway_message_received"
     GATEWAY_RESPONSE_SENT = "gateway_response_sent"
+
+    # MCP server lifecycle
+    MCP_SERVER_STARTED = "mcp_server_started"
+    MCP_SERVER_STOPPED = "mcp_server_stopped"
 
 
 @dataclass

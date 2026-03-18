@@ -6,14 +6,20 @@ Configuration is loaded in two layers:
      available env vars (always persists across sessions).
   2. File overrides — .claude/mcp_servers.json entries override/extend
      registry defaults.
+
+Lifecycle:
+  startup()  — load config + connect all + register signal handlers
+  shutdown() — graceful close all + unregister signal handlers
 """
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import json
 import logging
 import os
+import signal
 from pathlib import Path
 from typing import Any
 
@@ -46,12 +52,135 @@ def _normalise_mcp_tool(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 class MCPServerManager:
-    """Manages multiple MCP server connections and tool dispatch."""
+    """Manages multiple MCP server connections and tool dispatch.
+
+    Provides lifecycle hooks (startup/shutdown) with signal-handler
+    registration so that MCP subprocess cleanup happens even on
+    SIGTERM/SIGINT, preventing orphan processes.
+    """
 
     def __init__(self, config_path: Path | None = None) -> None:
         self._config_path = config_path or _CONFIG_PATH
         self._servers: dict[str, dict[str, Any]] = {}
         self._clients: dict[str, StdioMCPClient] = {}
+        self._signal_installed = False
+        self._prev_sigterm: Any = None
+        self._prev_sigint: signal.Handlers | None = None
+        self._atexit_registered = False
+        self._shutdown_called = False
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def startup(self) -> int:
+        """Full lifecycle startup: load config, connect all servers, register signal handlers.
+
+        Returns the number of servers that connected successfully.
+        """
+        self.load_config()
+        connected = self._connect_all()
+        self._install_signal_handlers()
+        log.info("MCP startup complete: %d/%d servers connected", connected, len(self._servers))
+        return connected
+
+    def shutdown(self) -> None:
+        """Full lifecycle shutdown: close all servers, unregister signal handlers.
+
+        Safe to call multiple times (idempotent).
+        """
+        if self._shutdown_called:
+            return
+        self._shutdown_called = True
+        log.info("MCP shutdown initiated")
+        self.close_all()
+        self._uninstall_signal_handlers()
+        log.info("MCP shutdown complete")
+
+    def _connect_all(self) -> int:
+        """Connect to all configured servers. Returns count of successful connections."""
+        connected = 0
+        for server_name in list(self._servers.keys()):
+            client = self._get_client(server_name)
+            if client is not None:
+                connected += 1
+        return connected
+
+    def _install_signal_handlers(self) -> None:
+        """Register SIGTERM/SIGINT handlers for graceful cleanup.
+
+        Chains with existing handlers so other shutdown logic still runs.
+        Also registers an atexit handler as a safety net.
+        """
+        if self._signal_installed:
+            return
+
+        # Only install signal handlers in the main thread
+        try:
+            if not _is_main_thread():
+                log.debug("MCP signal handlers skipped (not main thread)")
+                return
+        except Exception:
+            return
+
+        def _signal_shutdown(signum: int, frame: Any) -> None:
+            """Signal handler that ensures MCP cleanup before exit."""
+            log.info("MCP received signal %d, shutting down servers", signum)
+            self.shutdown()
+            # Chain to previous handler
+            prev = self._prev_sigterm if signum == signal.SIGTERM else self._prev_sigint
+            if prev and callable(prev):
+                prev(signum, frame)
+            elif prev == signal.SIG_DFL:
+                # Re-raise with default handler
+                signal.signal(signum, signal.SIG_DFL)
+                signal.raise_signal(signum)
+
+        try:
+            self._prev_sigterm = signal.getsignal(signal.SIGTERM)
+            signal.signal(signal.SIGTERM, _signal_shutdown)
+            # Note: SIGINT is typically managed by the REPL's own handler.
+            # We save a reference but only install a SIGTERM handler to
+            # avoid interfering with KeyboardInterrupt handling.
+            self._signal_installed = True
+            log.debug("MCP SIGTERM handler installed")
+        except (OSError, ValueError):
+            # Cannot set signal handler (e.g., not main thread, or restricted env)
+            log.debug("MCP signal handler installation failed", exc_info=True)
+
+        # Atexit safety net
+        if not self._atexit_registered:
+            atexit.register(self._atexit_cleanup)
+            self._atexit_registered = True
+
+    def _atexit_cleanup(self) -> None:
+        """Atexit fallback — ensures cleanup even if signals were not caught."""
+        if not self._shutdown_called:
+            log.debug("MCP atexit cleanup triggered")
+            self.close_all()
+
+    def _uninstall_signal_handlers(self) -> None:
+        """Restore previous signal handlers."""
+        if not self._signal_installed:
+            return
+
+        try:
+            if not _is_main_thread():
+                return
+        except Exception:
+            return
+
+        try:
+            if self._prev_sigterm is not None:
+                signal.signal(signal.SIGTERM, self._prev_sigterm)
+            self._signal_installed = False
+            log.debug("MCP signal handlers restored")
+        except (OSError, ValueError):
+            log.debug("MCP signal handler restoration failed", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Configuration
+    # ------------------------------------------------------------------
 
     def load_config(self) -> int:
         """Load MCP server configurations from registry + file overrides.
@@ -155,6 +284,10 @@ class MCPServerManager:
         log.debug("MCP server not available (skipped): %s", server_name)
         return None
 
+    # ------------------------------------------------------------------
+    # Tool dispatch
+    # ------------------------------------------------------------------
+
     def get_all_tools(self) -> list[dict[str, Any]]:
         """Gather tool definitions from all configured MCP servers.
 
@@ -197,6 +330,10 @@ class MCPServerManager:
                     return server_name
         return None
 
+    # ------------------------------------------------------------------
+    # Server management
+    # ------------------------------------------------------------------
+
     def list_servers(self) -> list[dict[str, Any]]:
         """List configured servers with their status."""
         result: list[dict[str, Any]] = []
@@ -214,12 +351,29 @@ class MCPServerManager:
             )
         return result
 
-    def check_health(self) -> dict[str, bool]:
-        """Return connection health status for each configured server."""
+    def check_health(self, *, auto_restart: bool = False) -> dict[str, bool]:
+        """Return connection health status for each configured server.
+
+        Args:
+            auto_restart: If True, attempt to reconnect dead servers.
+        """
         result: dict[str, bool] = {}
         for name in self._servers:
             client = self._clients.get(name)
-            result[name] = client.is_connected() if client else False
+            alive = client.is_connected() if client else False
+
+            if not alive and auto_restart:
+                log.info("MCP server '%s' is down, attempting restart", name)
+                # Remove dead client reference
+                self._clients.pop(name, None)
+                new_client = self._get_client(name)
+                alive = new_client is not None and new_client.is_connected()
+                if alive:
+                    log.info("MCP server '%s' restarted successfully", name)
+                else:
+                    log.warning("MCP server '%s' restart failed", name)
+
+            result[name] = alive
         return result
 
     def add_server(
@@ -262,7 +416,15 @@ class MCPServerManager:
 
     def close_all(self) -> None:
         """Close all MCP server connections."""
-        for client in self._clients.values():
+        for name, client in self._clients.items():
             with contextlib.suppress(Exception):
+                log.debug("Closing MCP server '%s' (PID %s)", name, client.pid)
                 client.close()
         self._clients.clear()
+
+
+def _is_main_thread() -> bool:
+    """Check if current thread is the main thread."""
+    import threading
+
+    return threading.current_thread() is threading.main_thread()

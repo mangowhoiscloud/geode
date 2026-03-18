@@ -64,6 +64,19 @@ class ConversationContext:
         """Number of user messages (approximate turn count)."""
         return sum(1 for m in self.messages if m["role"] == "user")
 
+    def add_system_event(self, event_type: str, content: str) -> None:
+        """Inject a system event as a user message (non-tool-result).
+
+        Used for out-of-band notifications such as sub-agent completion
+        announcements (OpenClaw Spawn+Announce pattern).  The event is
+        wrapped in a structured text block so the LLM can distinguish
+        system events from user input.
+        """
+        formatted = f"[system:{event_type}] {content}"
+        self.messages.append({"role": "user", "content": formatted})
+        self._trim()
+        log.debug("System event injected: type=%s len=%d", event_type, len(content))
+
     @property
     def is_empty(self) -> bool:
         return len(self.messages) == 0

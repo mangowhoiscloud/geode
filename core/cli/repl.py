@@ -249,19 +249,17 @@ def _interactive_loop() -> None:
         _set_readiness(readiness)
 
     # 4. MCP servers (slowest -- npx subprocess spawn)
+    #    Uses startup() for full lifecycle: config + connect + signal handlers + atexit
     _init_step("MCP servers")
     from core.infrastructure.adapters.mcp.manager import MCPServerManager
 
     mcp_mgr: MCPServerManager | None = None
     try:
         _mgr = MCPServerManager()
-        n_mcp = _mgr.load_config()
-        if n_mcp > 0:
+        n_connected = _mgr.startup()
+        if len(_mgr._servers) > 0:
             mcp_mgr = _mgr
-            import atexit
-
-            atexit.register(_mgr.close_all)
-            _init_done(f"MCP ({n_mcp} servers)")
+            _init_done(f"MCP ({n_connected}/{len(_mgr._servers)} servers)")
         else:
             _init_done("MCP (none)", ok=False)
     except Exception:
@@ -455,7 +453,7 @@ def _interactive_loop() -> None:
 
     if mcp_mgr is not None:
         try:
-            mcp_mgr.close_all()
+            mcp_mgr.shutdown()
         except Exception:
             log.debug("MCP shutdown error", exc_info=True)
 
