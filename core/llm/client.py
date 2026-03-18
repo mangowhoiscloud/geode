@@ -51,6 +51,7 @@ LLMRateLimitError = anthropic.RateLimitError
 LLMAuthenticationError = anthropic.AuthenticationError
 LLMBadRequestError = anthropic.BadRequestError
 LLMAPIStatusError = anthropic.APIStatusError
+LLMInternalServerError = anthropic.InternalServerError
 
 log = logging.getLogger(__name__)
 
