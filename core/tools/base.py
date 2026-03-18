@@ -20,6 +20,8 @@ VALID_CATEGORIES = frozenset(
         "data",
         "scheduling",
         "profile",
+        "notification",
+        "calendar",
     }
 )
 

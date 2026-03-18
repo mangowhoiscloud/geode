@@ -89,7 +89,11 @@ class TestSendNotificationTool:
     def test_name(self):
         assert SendNotificationTool().name == "send_notification"
 
-    def test_execute_slack(self):
+    def test_execute_slack_no_adapter(self):
+        """Without adapter, falls back to stub response."""
+        from core.infrastructure.ports.notification_port import set_notification
+
+        set_notification(None)
         tool = SendNotificationTool()
         result = tool.execute(
             channel="slack",
@@ -98,18 +102,51 @@ class TestSendNotificationTool:
             recipient="#geode-alerts",
         )
         data = result["result"]
-        assert data["sent"] is True
+        assert data["sent"] is False
         assert data["channel"] == "slack"
         assert data["severity"] == "info"
         assert data["recipient"] == "#geode-alerts"
-        assert "stub" in data["note"].lower()
+        assert "not delivered" in data["note"].lower()
+
+    def test_execute_with_adapter(self):
+        """With adapter available, sends via NotificationPort."""
+        from unittest.mock import MagicMock
+
+        from core.infrastructure.ports.notification_port import (
+            NotificationResult,
+            set_notification,
+        )
+
+        mock_adapter = MagicMock()
+        mock_adapter.is_available.return_value = True
+        mock_adapter.send_message.return_value = NotificationResult(
+            success=True, channel="slack", message_id="ts_123"
+        )
+        set_notification(mock_adapter)
+
+        tool = SendNotificationTool()
+        result = tool.execute(
+            channel="slack",
+            message="Test message",
+            recipient="#general",
+        )
+        assert result["result"]["sent"] is True
+        assert result["result"]["message_id"] == "ts_123"
+
+        set_notification(None)
 
     def test_execute_default_severity(self):
+        from core.infrastructure.ports.notification_port import set_notification
+
+        set_notification(None)
         tool = SendNotificationTool()
         result = tool.execute(channel="email", message="Test")
         assert result["result"]["severity"] == "info"
 
     def test_execute_message_preview_truncated(self):
+        from core.infrastructure.ports.notification_port import set_notification
+
+        set_notification(None)
         tool = SendNotificationTool()
         long_msg = "A" * 200
         result = tool.execute(channel="webhook", message=long_msg)

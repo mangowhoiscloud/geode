@@ -217,6 +217,20 @@ class Settings(BaseSettings):
     # Token Guard — tool result truncation threshold (0 = unlimited)
     max_tool_result_tokens: int = 0  # 0 = no limit; frontier consensus: compression > hard cap
 
+    # Notification — external messaging
+    notification_channel: str = "slack"  # default notification channel
+    notification_recipient: str = "#geode-alerts"  # default recipient
+    notification_on_pipeline_end: bool = True
+    notification_on_pipeline_error: bool = True
+    notification_on_drift: bool = True
+
+    # Gateway — inbound messaging
+    gateway_enabled: bool = False  # GEODE_GATEWAY_ENABLED=true to enable
+    gateway_poll_interval_s: float = 3.0
+
+    # Calendar — external calendar sync
+    calendar_sync_on_trigger: bool = False  # auto-sync on TRIGGER_FIRED
+
     # Plan Mode — Autonomous Execution
     plan_auto_execute: bool = False  # GEODE_PLAN_AUTO_EXECUTE=true to enable
 

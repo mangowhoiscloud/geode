@@ -202,7 +202,7 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         tags=("memory", "temporal", "kg", "zep", "history"),
         env_keys=("ZEP_API_KEY",),
     ),
-    # --- Productivity / Utilities ---
+    # --- Messaging ---
     "slack": MCPCatalogEntry(
         name="slack",
         package="@anthropic/mcp-server-slack",
@@ -210,6 +210,29 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         tags=("slack", "chat", "messaging", "team"),
         env_keys=("SLACK_BOT_TOKEN",),
     ),
+    "telegram": MCPCatalogEntry(
+        name="telegram",
+        package="punkpeye/telegram-mcp",
+        description="Telegram bot messaging and chat management",
+        tags=("telegram", "chat", "messaging", "bot"),
+        env_keys=("TELEGRAM_BOT_TOKEN",),
+    ),
+    # --- Calendar ---
+    "google-calendar": MCPCatalogEntry(
+        name="google-calendar",
+        package="@anthropic/mcp-server-google-calendar",
+        description="Google Calendar event management",
+        tags=("google", "calendar", "schedule", "event"),
+        env_keys=("GOOGLE_CALENDAR_CREDENTIALS",),
+    ),
+    "caldav": MCPCatalogEntry(
+        name="caldav",
+        package="vatsalaggarwal/caldav-mcp-server",
+        description="CalDAV calendar access (Apple Calendar, Nextcloud, etc.)",
+        tags=("caldav", "calendar", "apple", "ical", "schedule"),
+        env_keys=("CALDAV_URL", "CALDAV_USERNAME", "CALDAV_PASSWORD"),
+    ),
+    # --- Productivity / Utilities ---
     "notion": MCPCatalogEntry(
         name="notion",
         package="makenotion/notion-mcp-server",

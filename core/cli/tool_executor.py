@@ -36,6 +36,7 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "note_read",
         "read_document",
         "profile_show",
+        "calendar_list_events",
     }
 )
 
@@ -56,6 +57,8 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "profile_update",
         "profile_preference",
         "profile_learn",
+        "calendar_create_event",
+        "calendar_sync_scheduler",
     }
 )
 

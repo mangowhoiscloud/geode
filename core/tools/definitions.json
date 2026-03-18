@@ -918,5 +918,116 @@
         "pattern"
       ]
     }
+  },
+  {
+    "name": "send_notification",
+    "description": "외부 메시징 서비스로 알림을 보냅니다. Slack, Discord, Telegram 채널에 메시지를 전송합니다. Examples: 'Slack에 메시지 보내줘', 'Discord로 알림 전송', 'send notification to Telegram'",
+    "category": "notification",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": ["slack", "discord", "telegram", "email", "webhook"],
+          "description": "Notification channel"
+        },
+        "message": {
+          "type": "string",
+          "description": "Message body text"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warning", "critical"],
+          "description": "Severity level (default: info)"
+        },
+        "recipient": {
+          "type": "string",
+          "description": "Target recipient (channel name, chat ID, URL)"
+        }
+      },
+      "required": ["channel", "message"]
+    }
+  },
+  {
+    "name": "calendar_list_events",
+    "description": "캘린더 일정을 조회합니다. Google Calendar, Apple Calendar에서 일정을 가져옵니다. Examples: '내일 일정 뭐 있어?', '이번 주 스케줄', 'show my calendar', 'upcoming events'",
+    "category": "calendar",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "description": "Start date in ISO format (YYYY-MM-DD). Defaults to now."
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End date in ISO format. Defaults to +7 days."
+        },
+        "calendar_name": {
+          "type": "string",
+          "description": "Filter by calendar name (optional)"
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Maximum events to return (default: 20)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "calendar_create_event",
+    "description": "캘린더에 새 일정을 생성합니다. Google Calendar 또는 Apple Calendar에 이벤트를 추가합니다. Examples: '금요일 3시에 미팅 잡아줘', 'schedule meeting tomorrow 2pm', '일정 추가해줘'",
+    "category": "calendar",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Event title"
+        },
+        "start_datetime": {
+          "type": "string",
+          "description": "Start datetime in ISO format (YYYY-MM-DDTHH:MM:SS)"
+        },
+        "end_datetime": {
+          "type": "string",
+          "description": "End datetime in ISO format (defaults to +1 hour)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Event description (optional)"
+        },
+        "location": {
+          "type": "string",
+          "description": "Event location (optional)"
+        },
+        "calendar_name": {
+          "type": "string",
+          "description": "Target calendar name (optional)"
+        }
+      },
+      "required": ["title", "start_datetime"]
+    }
+  },
+  {
+    "name": "calendar_sync_scheduler",
+    "description": "GEODE 스케줄러와 외부 캘린더를 동기화합니다. 스케줄러 작업을 캘린더에 반영하거나, 캘린더 일정을 스케줄러로 가져옵니다. Examples: '캘린더 동기화', 'sync calendar', '스케줄러 캘린더 연동'",
+    "category": "calendar",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": ["push", "pull", "both"],
+          "description": "Sync direction: push (scheduler→calendar), pull (calendar→scheduler), both"
+        }
+      },
+      "required": []
+    }
   }
 ]
