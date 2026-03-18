@@ -12,6 +12,7 @@ concurrency:
 
 env:
   AGENT_TOOLSDIRECTORY: /Users/mango/actions-runner-geode/_toolcache
+  RUNNER_TOOL_CACHE: /Users/mango/actions-runner-geode/_toolcache
 
 jobs:
   lint:
