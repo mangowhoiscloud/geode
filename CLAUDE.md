@@ -8,8 +8,8 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 166
-- **Tests**: 2671+
+- **Modules**: 167
+- **Tests**: 2688+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -151,9 +151,10 @@ START → router → signals → analyst×4 (Send API)
 ```
 core/
 ├── cli/                 # CLI + Agentic Loop + Sub-Agent
-│   ├── agentic_loop.py  # while(tool_use) multi-round + Token Guard
+│   ├── agentic_loop.py  # while(tool_use) multi-round + Token Guard + multi-provider
+│   ├── agentic_response.py # AgenticResponse — provider-agnostic response normalization
 │   ├── sub_agent.py     # SubAgentManager + SubAgentResult + ErrorCategory
-│   ├── tool_executor.py # Tool dispatch + HITL + delegate_task handler
+│   ├── tool_executor.py # Tool dispatch + HITL + delegate_task + write fallback
 │   ├── system_prompt.py # System prompt builder for AgenticLoop
 │   ├── ip_names.py      # IP name registry (canonical names from fixtures)
 │   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
