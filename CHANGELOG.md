@@ -28,9 +28,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-P1 전체 완료: Model Failover, MCP Lifecycle, Sub-agent Announce, Batch Approval, Context Overflow, Cost Dashboard, 6-Layer Policy, Multi-Provider, Write Fallback + 검증팀 감사.
+P1 전체 완료 + .geode Context Hub (5-Layer C0-C4) Phase A+B.
 
 ### Added
+- `.geode` Context Hub — 5-Layer 목적 중심 컨텍스트 계층 (C0 Identity → C1 Project → C2 Journal → C3 Session → C4 Plan)
+- `ProjectJournal` (C2) — `.geode/journal/` append-only 실행 기록 (runs.jsonl, costs.jsonl, learned.md, errors.jsonl)
+- Journal Hook 자동 기록 — PIPELINE_END/ERROR → runs.jsonl + learned.md 자동 침전
+- `SessionCheckpoint` (C3) — `.geode/session/` 세션 체크포인트 저장/복원/정리 (72h auto-cleanup)
+- ContextAssembler C2 통합 — Journal 이력 + 학습 패턴 시스템 프롬프트 자동 주입
+- `geode init` 5-Layer 디렉토리 — project/, journal/, session/, plan/, cache/ 생성
 - Multi-Provider AgenticLoop — `AgenticResponse` 정규화 레이어 + Anthropic/OpenAI 이중 경로 (`_call_llm_anthropic`/`_call_llm_openai`)
 - Write Fallback — WRITE 거부 시 도구별 대안 제안 메시지 (`_write_denial_with_fallback`)
 - `agentic_response.py` (신규) — `normalize_anthropic()`, `normalize_openai()`, `AgenticResponse` 프로바이더 비종속 응답 모델

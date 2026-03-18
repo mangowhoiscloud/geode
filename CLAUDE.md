@@ -8,8 +8,8 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 167
-- **Tests**: 2688+
+- **Modules**: 170
+- **Tests**: 2718+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -155,6 +155,7 @@ core/
 │   ├── agentic_response.py # AgenticResponse — provider-agnostic response normalization
 │   ├── sub_agent.py     # SubAgentManager + SubAgentResult + ErrorCategory
 │   ├── tool_executor.py # Tool dispatch + HITL + delegate_task + write fallback
+│   ├── session_checkpoint.py # C3 Session checkpoint — save/restore/resume
 │   ├── system_prompt.py # System prompt builder for AgenticLoop
 │   ├── ip_names.py      # IP name registry (canonical names from fixtures)
 │   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
@@ -189,6 +190,8 @@ core/
 ├── memory/
 │   ├── organization.py  # Org tier — fixture-based, read-only
 │   ├── project.py       # Project tier — .claude/MEMORY.md, rules, insights
+│   ├── project_journal.py # C2 Journal — .geode/journal/ append-only execution record
+│   ├── journal_hooks.py # Hook handlers for auto-recording to Journal
 │   ├── session.py       # Session tier — in-memory with TTL
 │   ├── hybrid_session.py # L1(Redis) → L2(PostgreSQL) hybrid store
 │   ├── session_key.py   # Hierarchical key builder (ip:name:phase)

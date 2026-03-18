@@ -428,6 +428,23 @@ class GeodeRuntime:
         except Exception:
             log.debug("Notification hook registration skipped", exc_info=True)
 
+        # C2: Journal auto-record hooks (PIPELINE_END → runs.jsonl, errors.jsonl)
+        try:
+            from core.memory.journal_hooks import make_journal_handlers
+            from core.memory.project_journal import get_project_journal
+
+            journal = get_project_journal()
+            for handler_name, handler_fn in make_journal_handlers(journal):
+                target_events = {
+                    "journal_pipeline_end": [HookEvent.PIPELINE_END],
+                    "journal_pipeline_error": [HookEvent.PIPELINE_ERROR],
+                    "journal_subagent": [HookEvent.SUBAGENT_COMPLETED],
+                }
+                for evt in target_events.get(handler_name, []):
+                    hooks.register(evt, handler_fn, name=handler_name, priority=60)
+        except Exception:
+            log.debug("Journal hook registration skipped", exc_info=True)
+
         return hooks, run_log, stuck_detector
 
     @staticmethod
@@ -450,12 +467,19 @@ class GeodeRuntime:
             project_dir=project_profile_dir if project_profile_dir.parent.exists() else None,
         )
 
+        # C2: Project Journal — append-only execution history
+        from core.memory.project_journal import ProjectJournal
+
+        project_journal = ProjectJournal()
+        project_journal.ensure_structure()
+
         context_assembler = ContextAssembler(
             organization_memory=organization_memory,
             project_memory=project_memory,
             session_store=session_store,
             user_profile=user_profile,
             run_log_dir=DEFAULT_LOG_DIR,
+            project_journal=project_journal,
         )
 
         # Wire ContextAssembler into router node (L2 → L3 bridge)
