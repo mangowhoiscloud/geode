@@ -37,6 +37,7 @@ from core.llm.client import (
     LLMAuthenticationError,
     LLMBadRequestError,
     LLMConnectionError,
+    LLMInternalServerError,
     LLMRateLimitError,
     LLMTimeoutError,
     get_async_anthropic_client,
@@ -590,9 +591,10 @@ class AgenticLoop:
                 )
                 return response
 
-            except (LLMTimeoutError, LLMConnectionError) as exc:
+            except (LLMTimeoutError, LLMConnectionError, LLMInternalServerError) as exc:
                 # Exponential backoff: 2s, 4s, 8s (fast initial retry for transient
-                # connection resets, capped by settings.llm_retry_max_delay)
+                # connection resets and server errors (500/502/503),
+                # capped by settings.llm_retry_max_delay)
                 wait = min(
                     settings.llm_retry_base_delay * (2**attempt),
                     settings.llm_retry_max_delay,

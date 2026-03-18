@@ -17,7 +17,7 @@
 | policy-6layer | 6-계층 Policy Chain 확대 | P1 | — | OpenClaw Policy Resolution |
 | mcp-lifecycle | MCP Adapter Lifecycle — startup/shutdown hook | P1 | — | orphan 방지 |
 | cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | P1 | — | Claude Code Permission 패턴 |
-| multi-provider | AgenticLoop 멀티 프로바이더 — Anthropic SDK 결합 해제 | P2 | — | LLMClientPort 추상화 |
+| multi-provider | AgenticLoop 멀티 프로바이더 — Anthropic SDK 결합 해제 | P1 | — | P2→P1 승격 (GLM-5 버그 발견). LLMClientPort 추상화 |
 | write-fallback | WRITE_TOOLS 거부 후 fallback 경로 | P2 | — | Claude Code Permission 패턴 |
 
 ### In Progress
@@ -53,6 +53,7 @@
 | pr-body-align | PR body 규칙 geode-gitflow 스킬 정렬 | #261→#262 | @mangowhoiscloud | 2026-03-18 |
 | cli-audit | CLI 점검 감사 (코드 레벨) | 리서치 | @mangowhoiscloud | 2026-03-18 |
 | gap-detection | Claude Code/Codex/OpenClaw GAP 탐지 | 리서치 | @mangowhoiscloud | 2026-03-18 |
+| glm5-500-retry | LLM 500 에러 retry 미동작 수정 (LLMInternalServerError) | — | @mangowhoiscloud | 2026-03-18 |
 
 ### Blocked
 
