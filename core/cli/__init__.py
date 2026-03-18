@@ -2904,6 +2904,7 @@ def init(
         Path(".geode/project"),
         # C2: Journal (append-only execution history)
         Path(".geode/journal"),
+        Path(".geode/journal/transcripts"),
         # V0: Vault (purpose-routed artifact storage)
         Path(".geode/vault/profile"),
         Path(".geode/vault/research"),
