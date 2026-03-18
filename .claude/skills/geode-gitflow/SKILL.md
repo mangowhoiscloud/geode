@@ -55,6 +55,9 @@ feature/xxx ──PR──→ develop ──PR──→ main
 │    - Added / Changed / Fixed 분류       │
 │    - 코드 변경 없으면 생략 가능          │
 │                                         │
+│  □ docs/progress.md 오늘 날짜 섹션 갱신  │
+│    - 완료 테이블 + 누락/잔여 테이블      │
+│                                         │
 │  □ README.md 수치 정합성 확인            │
 │    - 버전, 테스트 수, 모듈 수, 도구 수   │
 │    - grep "v0\.\|2168\|131 module" 등   │
@@ -164,6 +167,7 @@ gh pr merge <PR#> --merge
 - [x] CHANGELOG.md [Unreleased] 항목 추가됨
 - [x] README.md 수치 정합성 확인됨
 - [ ] CLAUDE.md 동기화 (해당 시)
+- [x] docs/progress.md 오늘 날짜 섹션 갱신됨
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```

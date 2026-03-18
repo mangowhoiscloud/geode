@@ -5,5 +5,18 @@
       "Bash(uv sync*)",
       "Bash(python3 *)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-progress.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
   }
 }
