@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (34 events)."""
+    """Pipeline lifecycle events (36 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -74,6 +74,10 @@ class HookEvent(Enum):
     # MCP server lifecycle
     MCP_SERVER_STARTED = "mcp_server_started"
     MCP_SERVER_STOPPED = "mcp_server_stopped"
+
+    # Context overflow detection (Karpathy P6 Context Budget)
+    CONTEXT_WARNING = "context_warning"
+    CONTEXT_CRITICAL = "context_critical"
 
 
 @dataclass

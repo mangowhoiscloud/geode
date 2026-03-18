@@ -28,14 +28,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-P1 배치: Model Failover, MCP Lifecycle, Sub-agent Announce, Batch Approval + 칸반 정비.
+P1 배치: Model Failover, MCP Lifecycle, Sub-agent Announce, Batch Approval, Context Overflow, Cost Dashboard, 6-Layer Policy + 칸반 정비.
 
 ### Added
 - Model Failover — `call_with_failover()` async 체인 + circuit breaker + per-model exponential backoff
 - MCP Lifecycle — `MCPServerManager.startup()/shutdown()` + SIGTERM/atexit 이중방어 + PID 추적
 - Sub-agent Announce — `drain_announced_results()` 큐 기반 비동기 결과 주입 (OpenClaw Spawn+Announce)
 - Tiered Batch Approval — 5단계 안전등급 (SAFE→MCP→EXPENSIVE→WRITE→DANGEROUS) 분류 + 배치 비용 승인
-- `HookEvent.MCP_SERVER_STARTED` / `MCP_SERVER_STOPPED` — MCP 라이프사이클 이벤트 2건 (32→34)
+- Context Overflow Detection — `check_context()` 80%/95% 임계값 + `prune_oldest_messages()` 비상 압축 (Karpathy P6)
+- `/cost` 대시보드 — session/daily/recent/budget 서브커맨드 + 월 예산 설정 + Rich 프로그레스 바
+- 6-Layer Policy Chain — ProfilePolicy(Layer 1) + OrgPolicy(Layer 2) + `build_6layer_chain()` (OpenClaw 패턴)
+- `HookEvent.MCP_SERVER_STARTED` / `MCP_SERVER_STOPPED` — MCP 라이프사이클 이벤트 (34→36 중 32→34)
+- `HookEvent.CONTEXT_WARNING` / `CONTEXT_CRITICAL` — Context Overflow 이벤트 (34→36)
 - Stop Hook `check-progress.sh` — develop→main 격차 감지 추가 (블로그 §5.2 스펙)
 
 ### Infrastructure

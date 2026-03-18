@@ -8,8 +8,8 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 165
-- **Tests**: 2583+
+- **Modules**: 166
+- **Tests**: 2671+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -41,7 +41,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 L0: CLI & AGENT      — Typer CLI, AgenticLoop, SubAgentManager, Batch
 L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
 L2: MEMORY           — Organization > Project > Session + User Profile (4-Tier + Hybrid L1/L2)
-L3: ORCHESTRATION    — HookSystem(34), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
+L3: ORCHESTRATION    — HookSystem(36), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
 L4: EXTENSIBILITY    — ToolRegistry(46), PolicyChain, Skills, MCP Catalog(42), Reports
 L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 ```
@@ -193,7 +193,8 @@ core/
 │   ├── session_key.py   # Hierarchical key builder (ip:name:phase)
 │   └── context.py       # 4-tier context assembler
 ├── orchestration/
-│   ├── hooks.py         # HookSystem (32 events + async atrigger)
+│   ├── hooks.py         # HookSystem (36 events + async atrigger)
+│   ├── context_monitor.py # Context Overflow Detection (Karpathy P6 Context Budget)
 │   ├── bootstrap.py     # Node bootstrap (pre-execution context injection)
 │   ├── goal_decomposer.py # GoalDecomposer (compound request → sub-goal DAG)
 │   ├── planner.py       # Planner (multi-step plan generation)
@@ -346,7 +347,7 @@ Decision Tree on D-E-F axes:
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
 - **Port/Adapter**: All infra via Protocol ports + contextvars DI
-- **Hook-driven**: 30 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`) for extensibility
+- **Hook-driven**: 36 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`) for extensibility
 - **Domain Plugin**: `DomainPort` Protocol — 도메인별 pipeline 교체 가능 (`set_domain()` / `get_domain()`)
 
 ## Implementation Workflow
