@@ -11,11 +11,8 @@
 
 | task_id | 설명 | 우선순위 | plan | 비고 |
 |---------|------|:--------:|------|------|
-| model-failover | Model Failover 자동화 — FALLBACK_CHAIN 자동 전환 | P1 | — | OpenClaw Failover 패턴 |
 | context-overflow | Context Overflow Detection — Token 초과 자동 압축 | P1 | — | Karpathy P6 Context Budget |
-| subagent-announce | Sub-agent Announce — Parent 결과 자동 주입 | P1 | — | OpenClaw Spawn+Announce |
 | policy-6layer | 6-계층 Policy Chain 확대 | P1 | — | OpenClaw Policy Resolution |
-| mcp-lifecycle | MCP Adapter Lifecycle — startup/shutdown hook | P1 | — | orphan 방지 |
 | cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | P1 | — | Claude Code Permission 패턴 |
 | multi-provider | AgenticLoop 멀티 프로바이더 — Anthropic SDK 결합 해제 | P1 | — | P2→P1 승격 (GLM-5 버그 발견). LLMClientPort 추상화 |
 | write-fallback | WRITE_TOOLS 거부 후 fallback 경로 | P2 | — | Claude Code Permission 패턴 |
@@ -53,7 +50,10 @@
 | pr-body-align | PR body 규칙 geode-gitflow 스킬 정렬 | #261→#262 | @mangowhoiscloud | 2026-03-18 |
 | cli-audit | CLI 점검 감사 (코드 레벨) | 리서치 | @mangowhoiscloud | 2026-03-18 |
 | gap-detection | Claude Code/Codex/OpenClaw GAP 탐지 | 리서치 | @mangowhoiscloud | 2026-03-18 |
-| glm5-500-retry | LLM 500 에러 retry 미동작 수정 (LLMInternalServerError) | — | @mangowhoiscloud | 2026-03-18 |
+| glm5-500-retry | LLM 500 에러 retry 미동작 수정 (LLMInternalServerError) | #265→#266 | @mangowhoiscloud | 2026-03-18 |
+| model-failover | Model Failover 자동화 — call_with_failover + FALLBACK_CHAIN | — | @mangowhoiscloud | 2026-03-18 |
+| mcp-lifecycle | MCP Adapter Lifecycle — startup/shutdown + SIGTERM + atexit 이중방어 | — | @mangowhoiscloud | 2026-03-18 |
+| subagent-announce | Sub-agent Announce — drain queue + conversation 주입 | — | @mangowhoiscloud | 2026-03-18 |
 
 ### Blocked
 
@@ -71,11 +71,8 @@
 
 | gap_id | 설명 | 출처 | 관련 task_id |
 |--------|------|------|-------------|
-| gap-failover | Model Failover 자동 전환 | OpenClaw | model-failover |
 | gap-ctx-overflow | Token 초과 자동 압축 | OpenClaw + Karpathy P6 | context-overflow |
-| gap-announce | Sub-agent 결과 자동 주입 | OpenClaw | subagent-announce |
 | gap-policy | 6-계층 Policy Chain | OpenClaw | policy-6layer |
-| gap-mcp-lifecycle | MCP startup/shutdown hook | Claude Code | mcp-lifecycle |
 | gap-cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | Claude Code | cost-approval |
 
 ### P2 (Medium)
@@ -99,6 +96,9 @@
 | gap-hook-discovery | #241 | 2026-03-18 |
 | gap-binding-reload | #241 | 2026-03-18 |
 | gap-nl-router | #243→#244, #255→#256 | 2026-03-18 |
+| gap-failover | — | 2026-03-18 |
+| gap-announce | — | 2026-03-18 |
+| gap-mcp-lifecycle | — | 2026-03-18 |
 
 ---
 
@@ -108,10 +108,10 @@
 |------|-----|--------|
 | Version | 0.19.1 | 2026-03-18 |
 | Modules | 165 | 2026-03-18 |
-| Tests | 2505 | 2026-03-18 |
+| Tests | 2583 | 2026-03-18 |
 | Tools | 46 | 2026-03-18 |
 | MCP Catalog | 42 | 2026-03-18 |
-| HookEvents | 32 | 2026-03-18 |
+| HookEvents | 34 | 2026-03-18 |
 | Skills | 18 | 2026-03-18 |
 
 ---

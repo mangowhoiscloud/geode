@@ -17,6 +17,9 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+# Graceful shutdown timeout before force kill (seconds)
+_CLOSE_TIMEOUT_S = 5
+
 
 class StdioMCPClient:
     """MCP client using stdio transport (subprocess JSON-RPC)."""
@@ -37,6 +40,12 @@ class StdioMCPClient:
         self._connected = False
         self._tools: list[dict[str, Any]] = []
         self._request_id = 0
+        self._pid: int | None = None
+
+    @property
+    def pid(self) -> int | None:
+        """Return the PID of the subprocess, or None if not running."""
+        return self._pid
 
     def is_connected(self) -> bool:
         return self._connected and self._process is not None and self._process.poll() is None
@@ -53,6 +62,12 @@ class StdioMCPClient:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
+            )
+            self._pid = self._process.pid
+            log.debug(
+                "MCP subprocess spawned: %s (PID %d)",
+                self._command,
+                self._pid,
             )
 
             # Send initialize request
@@ -79,14 +94,16 @@ class StdioMCPClient:
 
             self._connected = True
             log.info(
-                "MCP connected: %s (%d tools)",
+                "MCP connected: %s (PID %d, %d tools)",
                 self._command,
+                self._pid,
                 len(self._tools),
             )
             return True
 
         except (OSError, FileNotFoundError) as exc:
             log.warning("Failed to start MCP server '%s': %s", self._command, exc)
+            self._pid = None
             return False
 
     def list_tools(self) -> list[dict[str, Any]]:
@@ -112,17 +129,33 @@ class StdioMCPClient:
         return dict(result)
 
     def close(self) -> None:
-        """Terminate the MCP server subprocess."""
+        """Terminate the MCP server subprocess.
+
+        Two-phase shutdown: graceful SIGTERM with timeout, then SIGKILL
+        if the process does not exit within ``_CLOSE_TIMEOUT_S`` seconds.
+        """
         self._connected = False
         if self._process is not None:
+            pid = self._pid
             try:
                 self._process.stdin.close()  # type: ignore[union-attr]
                 self._process.terminate()
-                self._process.wait(timeout=5)
+                self._process.wait(timeout=_CLOSE_TIMEOUT_S)
+                log.debug("MCP subprocess terminated gracefully (PID %s)", pid)
+            except subprocess.TimeoutExpired:
+                log.warning(
+                    "MCP subprocess did not exit within %ds, sending SIGKILL (PID %s)",
+                    _CLOSE_TIMEOUT_S,
+                    pid,
+                )
+                with contextlib.suppress(Exception):
+                    self._process.kill()
+                    self._process.wait(timeout=2)
             except Exception:
                 with contextlib.suppress(Exception):
                     self._process.kill()
             self._process = None
+            self._pid = None
 
     def _next_id(self) -> int:
         self._request_id += 1

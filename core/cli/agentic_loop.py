@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.cli.conversation import ConversationContext
 from core.cli.error_recovery import ErrorRecoveryStrategy
+from core.cli.sub_agent import SubAgentResult, drain_announced_results
 from core.cli.system_prompt import build_system_prompt as _build_system_prompt
 from core.cli.tool_executor import (
     AUTO_APPROVED_MCP_SERVERS,
@@ -32,14 +33,10 @@ from core.cli.tool_executor import (
     WRITE_TOOLS,
     ToolExecutor,
 )
-from core.config import ANTHROPIC_PRIMARY, settings
+from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY, settings
 from core.llm.client import (
-    LLMAuthenticationError,
     LLMBadRequestError,
-    LLMConnectionError,
-    LLMInternalServerError,
-    LLMRateLimitError,
-    LLMTimeoutError,
+    call_with_failover,
     get_async_anthropic_client,
     maybe_traceable,
 )
@@ -184,9 +181,11 @@ class AgenticLoop:
         skill_registry: Any | None = None,
         hooks: HookSystem | None = None,
         enable_goal_decomposition: bool = True,
+        parent_session_key: str = "",
     ) -> None:
         self.context = context
         self.executor = tool_executor
+        self._parent_session_key = parent_session_key
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self.model = model or ANTHROPIC_PRIMARY
@@ -255,6 +254,9 @@ class AgenticLoop:
         for round_idx in range(self.max_rounds):
             is_last_round = round_idx == self.max_rounds - 1
             self._op_logger.begin_round("AgenticLoop")
+
+            # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
+            self._check_announced_results(messages)
 
             # Show spinner while waiting for LLM response
             label = "Thinking..." if round_idx == 0 else f"Thinking... (round {round_idx + 1})"
@@ -532,11 +534,40 @@ class AgenticLoop:
             log.debug("Goal decomposition skipped", exc_info=True)
             return None
 
+    def _check_announced_results(self, messages: list[dict[str, Any]]) -> int:
+        """Poll for sub-agent announced results and inject into conversation.
+
+        Drains the announce queue for this parent session and adds each
+        completed sub-agent's summary as a system event message.
+
+        OpenClaw Spawn+Announce pattern: parent polls at each round start.
+        """
+        if not self._parent_session_key:
+            return 0
+        announced: list[SubAgentResult] = drain_announced_results(self._parent_session_key)
+        if not announced:
+            return 0
+        for result in announced:
+            status_label = "completed" if result.success else "failed"
+            content = (
+                f"Sub-agent {status_label}: task_id={result.task_id}, summary={result.summary}"
+            )
+            if result.error_message:
+                content += f", error={result.error_message}"
+            self.context.add_system_event("subagent_completed", content)
+            messages.append({"role": "user", "content": f"[system:subagent_completed] {content}"})
+            log.debug("Injected announce for task_id=%s", result.task_id)
+        return len(announced)
+
     @maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     async def _call_llm(
         self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
     ) -> Any | None:
-        """Async Anthropic API call with tools.  Retries on rate-limit (3x).
+        """Async Anthropic API call with tools + automatic model failover.
+
+        Uses ``call_with_failover`` to iterate through the fallback chain
+        (ANTHROPIC_FALLBACK_CHAIN) when the current model fails with retryable
+        errors. AuthenticationError aborts immediately without failover.
 
         On the last round (round_idx == max_rounds - 1), forces tool_choice=none
         so the LLM must produce a text response instead of another tool call.
@@ -558,102 +589,80 @@ class AgenticLoop:
         force_text = remaining <= self.WRAP_UP_HEADROOM
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
-        max_retries = settings.llm_max_retries
-        for attempt in range(max_retries):
-            try:
-                # Strip non-API fields before sending to Anthropic.
-                # Extra fields (category, cost_tier, defer_loading,
-                # _mcp_server, etc.) cause 400 "Extra inputs are not permitted".
-                api_tools = [
-                    {k: v for k, v in t.items() if k in _API_ALLOWED_KEYS} for t in self._tools
-                ]
-                response = await self._client.messages.create(  # type: ignore[call-overload]
-                    model=self.model,
-                    system=system,
-                    messages=messages,
-                    tools=api_tools,
-                    tool_choice=tool_choice,
-                    max_tokens=self.max_tokens,
-                    temperature=0.0,
-                    extra_headers={
-                        "anthropic-beta": "context-management-2025-06-27",
-                    },
-                    extra_body={
-                        "context_management": {
-                            "edits": [
-                                {
-                                    "type": "clear_tool_uses_20250919",
-                                    "keep": {"type": "tool_uses", "value": 5},
-                                }
-                            ]
-                        }
-                    },
-                )
-                return response
+        # Strip non-API fields before sending to Anthropic.
+        # Extra fields (category, cost_tier, defer_loading,
+        # _mcp_server, etc.) cause 400 "Extra inputs are not permitted".
+        api_tools = [{k: v for k, v in t.items() if k in _API_ALLOWED_KEYS} for t in self._tools]
 
-            except (LLMTimeoutError, LLMConnectionError, LLMInternalServerError) as exc:
-                # Exponential backoff: 2s, 4s, 8s (fast initial retry for transient
-                # connection resets and server errors (500/502/503),
-                # capped by settings.llm_retry_max_delay)
-                wait = min(
-                    settings.llm_retry_base_delay * (2**attempt),
-                    settings.llm_retry_max_delay,
-                )
-                exc_type = type(exc).__name__
-                log.warning(
-                    "%s (attempt %d/%d), retrying in %.1fs",
-                    exc_type,
-                    attempt + 1,
-                    max_retries,
-                    wait,
-                )
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(wait)
-                else:
-                    log.error("%s exhausted after %d retries", exc_type, max_retries)
-                    self._last_llm_error = f"{exc_type} after {max_retries} retries"
+        # Build failover chain: current model first, then rest of ANTHROPIC_FALLBACK_CHAIN
+        failover_models = [self.model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != self.model]
+
+        async def _do_call(model: str) -> Any:
+            return await self._client.messages.create(  # type: ignore[union-attr]
+                model=model,
+                system=system,
+                messages=messages,
+                tools=api_tools,
+                tool_choice=tool_choice,
+                max_tokens=self.max_tokens,
+                temperature=0.0,
+                extra_headers={
+                    "anthropic-beta": "context-management-2025-06-27",
+                },
+                extra_body={
+                    "context_management": {
+                        "edits": [
+                            {
+                                "type": "clear_tool_uses_20250919",
+                                "keep": {"type": "tool_uses", "value": 5},
+                            }
+                        ]
+                    }
+                },
+            )
+
+        try:
+            response, used_model = await call_with_failover(failover_models, _do_call)
+        except KeyboardInterrupt:
+            log.info("LLM call interrupted by user")
+            return None
+        except LLMBadRequestError as exc:
+            msg = str(exc)
+            log.warning("Anthropic BadRequest in agentic loop: %s", msg)
+            if "tool_use_id" in msg or "tool_result" in msg:
+                # Orphaned tool_result in conversation history — repair and retry
+                self._repair_messages(messages)
+                log.info("Repaired orphaned tool_result in conversation history")
+                # Retry once after repair (no recursive failover to keep it simple)
+                try:
+                    response = await _do_call(self.model)
+                    return response
+                except Exception:
+                    log.warning("Retry after repair failed", exc_info=True)
                     return None
-            except LLMRateLimitError:
-                # Rate limits use longer backoff: 10s, 20s, 40s
-                wait = min(2**attempt * 10, settings.llm_retry_max_delay)
-                log.warning(
-                    "Rate limited (attempt %d/%d), retrying in %.1fs",
-                    attempt + 1,
-                    max_retries,
-                    wait,
+            if "input_schema" in msg:
+                log.error(
+                    "Tool schema error — likely an MCP tool missing input_schema. tools count=%d",
+                    len(self._tools),
                 )
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(wait)
-                else:
-                    log.error("Rate limit exhausted after %d retries", max_retries)
-                    self._last_llm_error = f"RateLimitError after {max_retries} retries"
-                    return None
-            except LLMAuthenticationError:
-                log.warning("Anthropic API key is invalid in agentic loop")
-                self._last_llm_error = "AuthenticationError — API key invalid"
-                return None
-            except LLMBadRequestError as exc:
-                msg = str(exc)
-                log.warning("Anthropic BadRequest in agentic loop: %s", msg)
-                if "tool_use_id" in msg or "tool_result" in msg:
-                    # Orphaned tool_result in conversation history — repair
-                    self._repair_messages(messages)
-                    log.info("Repaired orphaned tool_result in conversation history")
-                    continue  # retry with cleaned messages
-                if "input_schema" in msg:
-                    log.error(
-                        "Tool schema error — likely an MCP tool missing input_schema. "
-                        "tools count=%d",
-                        len(self._tools),
-                    )
-                return None
-            except KeyboardInterrupt:
-                log.info("LLM call interrupted by user")
-                return None
-            except Exception:
-                log.warning("Agentic LLM call failed", exc_info=True)
-                return None
-        return None
+            return None
+        except Exception:
+            log.warning("Agentic LLM call failed", exc_info=True)
+            return None
+
+        if response is None:
+            self._last_llm_error = "All models in failover chain exhausted"
+            return None
+
+        # Log model switch for visibility
+        if used_model and used_model != self.model:
+            log.warning(
+                "Model failover: %s -> %s (primary unavailable)",
+                self.model,
+                used_model,
+            )
+
+        return response
 
     _MAX_CONSECUTIVE_FAILURES = 2  # auto-skip after N consecutive failures per tool
 
