@@ -2904,6 +2904,11 @@ def init(
         Path(".geode/project"),
         # C2: Journal (append-only execution history)
         Path(".geode/journal"),
+        # V0: Vault (purpose-routed artifact storage)
+        Path(".geode/vault/profile"),
+        Path(".geode/vault/research"),
+        Path(".geode/vault/applications"),
+        Path(".geode/vault/general"),
         # C3: Session (checkpoints, resumable)
         Path(".geode/session"),
         # C4: Plan (goals, pending tasks)

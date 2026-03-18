@@ -473,6 +473,12 @@ class GeodeRuntime:
         project_journal = ProjectJournal()
         project_journal.ensure_structure()
 
+        # V0: Vault — purpose-routed artifact storage
+        from core.memory.vault import Vault
+
+        vault = Vault()
+        vault.ensure_structure()
+
         context_assembler = ContextAssembler(
             organization_memory=organization_memory,
             project_memory=project_memory,
@@ -480,6 +486,7 @@ class GeodeRuntime:
             user_profile=user_profile,
             run_log_dir=DEFAULT_LOG_DIR,
             project_journal=project_journal,
+            vault=vault,
         )
 
         # Wire ContextAssembler into router node (L2 → L3 bridge)
