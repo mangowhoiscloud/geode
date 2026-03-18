@@ -9,9 +9,13 @@ from core.cli.commands import (
     COMMAND_MAP,
     MODEL_PROFILES,
     _apply_model,
+    _budget_bar,
+    _get_cost_budget,
     _mask_key,
+    _set_cost_budget,
     _upsert_env,
     cmd_batch,
+    cmd_cost,
     cmd_key,
     cmd_model,
     cmd_schedule,
@@ -322,3 +326,84 @@ class TestCmdTrigger:
     def test_trigger_fire(self):
         """Should not raise."""
         cmd_trigger("fire test_event")
+
+
+class TestCmdCost:
+    def test_cost_command_registered(self):
+        assert resolve_action("/cost") == "cost"
+
+    def test_cost_no_args(self):
+        """Should display session + monthly summary without error."""
+        cmd_cost("")
+
+    def test_cost_daily(self):
+        """Should display daily summary without error."""
+        cmd_cost("daily")
+
+    def test_cost_recent(self):
+        """Should display recent records without error."""
+        cmd_cost("recent")
+
+    def test_cost_budget_no_amount(self, tmp_path, monkeypatch):
+        """Should show current budget (or 'no budget set')."""
+        monkeypatch.chdir(tmp_path)
+        cmd_cost("budget")
+
+    def test_cost_budget_set(self, tmp_path, monkeypatch):
+        """Should set and persist budget."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".geode").mkdir()
+        cmd_cost("budget 100")
+        assert _get_cost_budget() == 100.0
+
+    def test_cost_budget_invalid(self, tmp_path, monkeypatch):
+        """Should handle invalid amount gracefully."""
+        monkeypatch.chdir(tmp_path)
+        cmd_cost("budget abc")
+
+    def test_cost_unknown_subcommand(self):
+        """Should show usage hint."""
+        cmd_cost("unknown_sub")
+
+
+class TestBudgetBar:
+    def test_low_usage(self):
+        bar = _budget_bar(20)
+        assert "success" in bar
+        assert "20%" in bar
+
+    def test_medium_usage(self):
+        bar = _budget_bar(75)
+        assert "warning" in bar
+
+    def test_high_usage(self):
+        bar = _budget_bar(95)
+        assert "error" in bar
+
+    def test_over_100(self):
+        bar = _budget_bar(120)
+        assert "error" in bar
+
+
+class TestCostBudgetPersistence:
+    def test_set_and_get(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".geode").mkdir()
+        _set_cost_budget(50.0)
+        assert _get_cost_budget() == 50.0
+
+    def test_get_default_zero(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        assert _get_cost_budget() == 0.0
+
+    def test_env_override(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GEODE_MONTHLY_BUDGET", "200")
+        assert _get_cost_budget() == 200.0
+
+    def test_update_existing(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".geode").mkdir()
+        _set_cost_budget(50.0)
+        _set_cost_budget(100.0)
+        assert _get_cost_budget() == 100.0

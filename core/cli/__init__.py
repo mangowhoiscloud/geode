@@ -1119,9 +1119,9 @@ def _handle_command(
     if action == "help":
         show_help()
     elif action == "cost":
-        from core.ui.agentic_ui import render_session_cost_summary
+        from core.cli.commands import cmd_cost
 
-        render_session_cost_summary()
+        cmd_cost(args)
     elif action == "list":
         cmd_list()
     elif action == "verbose":
