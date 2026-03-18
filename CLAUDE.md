@@ -4,12 +4,12 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.19.0
+- **Version**: 0.19.1
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 166
-- **Tests**: 2505+
+- **Modules**: 165
+- **Tests**: 2583+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -41,7 +41,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 L0: CLI & AGENT      — Typer CLI, AgenticLoop, SubAgentManager, Batch
 L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
 L2: MEMORY           — Organization > Project > Session + User Profile (4-Tier + Hybrid L1/L2)
-L3: ORCHESTRATION    — HookSystem(32), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
+L3: ORCHESTRATION    — HookSystem(34), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
 L4: EXTENSIBILITY    — ToolRegistry(46), PolicyChain, Skills, MCP Catalog(42), Reports
 L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 ```
@@ -154,7 +154,6 @@ core/
 │   ├── agentic_loop.py  # while(tool_use) multi-round + Token Guard
 │   ├── sub_agent.py     # SubAgentManager + SubAgentResult + ErrorCategory
 │   ├── tool_executor.py # Tool dispatch + HITL + delegate_task handler
-│   ├── nl_router.py     # NL intent classification (legacy, not in main routing path)
 │   ├── system_prompt.py # System prompt builder for AgenticLoop
 │   ├── ip_names.py      # IP name registry (canonical names from fixtures)
 │   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
