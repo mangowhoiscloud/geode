@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-18
+> 마지막 갱신: 2026-03-18 (세션 2)
 
 ---
 
@@ -21,7 +21,11 @@
 
 | task_id | 설명 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| model-failover | Model Failover — call_with_failover + circuit breaker | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | 코드 완료, PR 대기 |
+| mcp-lifecycle | MCP Lifecycle — startup/shutdown + SIGTERM + atexit | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | 코드 완료, PR 대기 |
+| subagent-announce | Sub-agent Announce — drain queue + conversation 주입 | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | 코드 완료, PR 대기 |
+| batch-approval | Tiered Batch Tool Approval — 5단계 안전등급 분류 | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | 신규. 코드 완료, PR 대기 |
+| kanban-cleanup | Worktree 누수 3건 + 좀비 브랜치 40건 + Stop Hook 보강 | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | alloc/free 정리 |
 
 ### In Review
 
@@ -51,9 +55,6 @@
 | cli-audit | CLI 점검 감사 (코드 레벨) | 리서치 | @mangowhoiscloud | 2026-03-18 |
 | gap-detection | Claude Code/Codex/OpenClaw GAP 탐지 | 리서치 | @mangowhoiscloud | 2026-03-18 |
 | glm5-500-retry | LLM 500 에러 retry 미동작 수정 (LLMInternalServerError) | #265→#266 | @mangowhoiscloud | 2026-03-18 |
-| model-failover | Model Failover 자동화 — call_with_failover + FALLBACK_CHAIN | — | @mangowhoiscloud | 2026-03-18 |
-| mcp-lifecycle | MCP Adapter Lifecycle — startup/shutdown + SIGTERM + atexit 이중방어 | — | @mangowhoiscloud | 2026-03-18 |
-| subagent-announce | Sub-agent Announce — drain queue + conversation 주입 | — | @mangowhoiscloud | 2026-03-18 |
 
 ### Blocked
 
@@ -74,12 +75,12 @@
 | gap-ctx-overflow | Token 초과 자동 압축 | OpenClaw + Karpathy P6 | context-overflow |
 | gap-policy | 6-계층 Policy Chain | OpenClaw | policy-6layer |
 | gap-cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | Claude Code | cost-approval |
+| gap-multi-provider | Anthropic SDK 결합 해제 | Codex | multi-provider |
 
 ### P2 (Medium)
 
 | gap_id | 설명 | 출처 | 관련 task_id |
 |--------|------|------|-------------|
-| gap-multi-provider | Anthropic SDK 결합 해제 | Codex | multi-provider |
 | gap-write-fallback | WRITE 거부 후 대안 경로 | Claude Code | write-fallback |
 | gap-atomic-write | 모든 상태 파일 tmp+rename | OpenClaw | — |
 | gap-webhook | HTTP Webhook Endpoint 완전 구현 | OpenClaw | — |

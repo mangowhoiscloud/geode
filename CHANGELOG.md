@@ -26,7 +26,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.19.1] — 2026-03-18
+
+NL Router 완전 제거, 워크플로우 리서치 + 검증팀 체계화.
 
 ### Changed
 - NL Router 이중 라우팅 제거 — 모든 자유 텍스트 AgenticLoop 직행. ip_names.py, system_prompt.py 분리 추출
@@ -37,6 +39,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `verification-team` 스킬 — 4인 페르소나 검증 (Beck/Karpathy/Steinberger/Cherny)
 - 워크플로우 Step 1d(리서치 검증) + Step 3v(구현 검증) 검증팀 병렬 배치
 - tests/ per-file-ignores에 E501 추가
+- `docs/progress.md` — 세션 진척/계획/GAP 기록
+
+### Removed
+- `core/cli/nl_router.py` — AgenticLoop 직행으로 불필요. ip_names.py, system_prompt.py로 분리 완료
+- `tests/test_nl_router.py` — 1224줄 레거시 테스트 삭제
+- `tests/test_report_cli.py` 내 NL Router 의존 테스트 (TestReportNLRouter 클래스)
 
 ---
 
