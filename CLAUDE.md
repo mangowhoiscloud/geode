@@ -391,12 +391,36 @@ git branch -d feature/<브랜치명>
 
 ### 1. Research → Plan
 
+**모든 기능 구현 전에 프론티어 하네스 리서치를 수행한다.** 주제와 관련된 패턴을 4개 참조 시스템에서 탐색하고, GAP 분석 후 계획을 수립한다.
+
 ```
-1. 기존 코드 탐색 (Explore agent, Grep, Read)
-2. 외부 사례 조사 (Eco², OpenClaw, Claude Code 패턴 참조)
-3. Gap 분석 (AS-IS → TO-BE 정리)
-4. docs/plans/에 계획 문서 작성
+1a. 기존 코드 탐색 (Explore agent, Grep, Read)
+    - AS-IS 구조 파악, 관련 Port/Adapter/Hook/Tool 식별
+
+1b. 프론티어 하네스 리서치 (frontier-harness-research 스킬 참조)
+    - Claude Code: 권한 모델, Hook, Memory, Skill, Context 관리 패턴
+    - Codex: Sandbox 실행, TDD 루프, PR 워크플로우, 코드 리뷰 패턴
+    - OpenClaw: Gateway, Session Key, Binding, Lane Queue, Plugin, Failover 패턴
+    - autoresearch: 제약 기반 설계, 래칫, Context Budget, program.md 패턴
+    - 각 시스템에서 주제 관련 패턴 추출 → GEODE 적용 가능성 판단
+
+1c. Gap 분석 (AS-IS → TO-BE 정리)
+    - 프론티어 대비 빠진 패턴/기능 식별
+    - P0/P1/P2 우선순위 분류
+    - 구현 범위 결정 (전체 적용 vs 핵심만)
+
+1d. docs/plans/에 계획 문서 작성
+    - 리서치 결과 요약 + 설계 판단 근거 포함
 ```
+
+**리서치 판정 기준:**
+
+| 발견 | 조치 |
+|------|------|
+| 프론티어에 동일 패턴 존재 | → 패턴 채택, 구현 방식 참조 |
+| 프론티어에 유사 패턴 존재 | → 핵심만 추출, GEODE 맥락에 맞게 변형 |
+| 프론티어에 패턴 없음 | → 자체 설계, 근거 문서화 |
+| 과잉 엔지니어링 위험 | → Karpathy P10 (Simplicity Selection) 적용 |
 
 ### 2. Implement → Unit Verify (반복)
 
@@ -415,10 +439,12 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
 ```
 3a. Mock E2E: uv run pytest tests/test_agentic_loop.py tests/test_e2e.py tests/test_e2e_orchestration_live.py -v
 3b. CLI dry-run: uv run geode analyze "Berserk" --dry-run  (실제 CLI 동작 확인)
-3c. NL 의도→행동 점검:
+3c. AgenticLoop 의도→행동 점검 (tool_use 직행):
     - "목록 보여줘" → list_ips 호출 확인
     - "Berserk 분석 계획 세워줘" → create_plan 호출 확인
     - "병렬로 처리해" → delegate_task 호출 확인
+    - "Slack에 알림 보내줘" → send_notification 호출 확인
+    - "내일 일정 뭐 있어?" → calendar_list_events 호출 확인
 3d. Live E2E (API 키 필요): set -a && source .env && set +a && uv run pytest tests/test_e2e_live_llm.py -v -m live
 3e. LangSmith 트레이스 확인: smith.langchain.com → geode 프로젝트
     - AgenticLoop 트레이스 존재
@@ -436,7 +462,7 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
 |------|------|
 | 테스트 실패 | → 2번(코드 수정) |
 | CLI 오류/crash | → 2번(코드 수정) |
-| NL 의도 불일치 | → system prompt / tool definitions 수정 → 2번 |
+| 의도→tool 불일치 | → system prompt / tool definitions 수정 → 2번 |
 | LangSmith 트레이스 누락 | → tracing 데코레이터 확인 → 2번 |
 | 품질 저하 (score 이상) | → 해당 노드 로직 점검 → 2번 |
 | 모두 통과 | → 4번 진행 |
@@ -623,6 +649,7 @@ Project-specific skills in `.claude/skills/`:
 | `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget | 자율 에이전트 10대 설계 원칙 (P1-P10) |
 | `openclaw-patterns` | gateway, session, binding, lane, plugin | 에이전트 시스템 설계 패턴 (OpenClaw) |
 | `architecture-patterns` | clean architecture, hexagonal, DDD | Backend 아키텍처 패턴 |
+| `frontier-harness-research` | 리서치, research, gap, frontier, harness, 사례 조사 | 프론티어 하네스 4종 비교 리서치 프로세스 |
 | `tech-blog-writer` | blog, 포스팅, 블로그, tech blog | 기술 블로그 작성 가이드 |
 
 ## Linked Skills (from parent project)
