@@ -2,10 +2,9 @@
 
 Extracted from ``core/cli/__init__.py`` for architectural clarity.
 
-Three routing paths:
+Two routing paths:
   /command  -> deterministic dispatch (commands.py)
   free-text -> agentic loop (AgenticLoop, multi-turn + multi-intent)
-  fallback  -> single-shot NL Router (when agentic unavailable)
 """
 
 from __future__ import annotations
@@ -188,10 +187,9 @@ def _render_agentic_result(result: AgenticResult) -> None:
 def _interactive_loop() -> None:
     """Claude Code / OpenClaw-style interactive REPL.
 
-    Three routing paths:
+    Two routing paths:
       /command  -> deterministic dispatch (commands.py)
       free-text -> agentic loop (AgenticLoop, multi-turn + multi-intent)
-      fallback  -> single-shot NL Router (when agentic unavailable)
     """
     from core.cli import (
         _build_sub_agent_manager,
@@ -432,7 +430,7 @@ def _interactive_loop() -> None:
                 )
                 agentic_ref[0] = agentic
         else:
-            # Agentic loop: multi-turn + multi-intent (online) or offline regex
+            # Agentic loop: multi-turn + multi-intent
             try:
                 result = agentic.run(user_input)
                 _render_agentic_result(result)

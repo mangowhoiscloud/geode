@@ -1,8 +1,8 @@
 """AgenticLoop — while(tool_use) agentic execution loop.
 
-Replaces the single-shot NLRouter classify() → action dispatch pattern
-with a Claude Code-style agentic loop that continues until the LLM
-emits end_turn (no more tool calls).
+Claude Code-style agentic loop that continues until the LLM
+emits end_turn (no more tool calls). All free-text user input
+is routed directly here.
 
 Supports:
 - Multi-intent: "분석하고 비교해줘" → sequential tool calls
@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.cli.conversation import ConversationContext
 from core.cli.error_recovery import ErrorRecoveryStrategy
-from core.cli.nl_router import _build_system_prompt
+from core.cli.system_prompt import build_system_prompt as _build_system_prompt
 from core.cli.tool_executor import (
     AUTO_APPROVED_MCP_SERVERS,
     DANGEROUS_TOOLS,

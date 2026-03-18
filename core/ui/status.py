@@ -1,4 +1,4 @@
-"""Claude Code-style status spinner for NLRouter LLM calls.
+"""Claude Code-style status spinner for AgenticLoop LLM calls.
 
 Shows a braille-dot spinner during API calls, then replaces with a
 permanent summary line including action, token counts, cost and elapsed time.

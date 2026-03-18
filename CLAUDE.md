@@ -38,7 +38,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 6-Layer Architecture based on `architecture-v6.md` SOT.
 
 ```
-L0: CLI & AGENT      — Typer CLI, NL Router, AgenticLoop, SubAgentManager, Batch
+L0: CLI & AGENT      — Typer CLI, AgenticLoop, SubAgentManager, Batch
 L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
 L2: MEMORY           — Organization > Project > Session + User Profile (4-Tier + Hybrid L1/L2)
 L3: ORCHESTRATION    — HookSystem(32), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
@@ -150,11 +150,13 @@ START → router → signals → analyst×4 (Send API)
 
 ```
 core/
-├── cli/                 # CLI + NL Router + Agentic Loop + Sub-Agent
+├── cli/                 # CLI + Agentic Loop + Sub-Agent
 │   ├── agentic_loop.py  # while(tool_use) multi-round + Token Guard
 │   ├── sub_agent.py     # SubAgentManager + SubAgentResult + ErrorCategory
 │   ├── tool_executor.py # Tool dispatch + HITL + delegate_task handler
-│   ├── nl_router.py     # NL intent classification (LLM → regex → help)
+│   ├── nl_router.py     # NL intent classification (legacy, not in main routing path)
+│   ├── system_prompt.py # System prompt builder for AgenticLoop
+│   ├── ip_names.py      # IP name registry (canonical names from fixtures)
 │   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── batch.py         # Batch analysis (ThreadPoolExecutor)
 │   ├── commands.py      # Slash command dispatch (17 commands)
@@ -315,32 +317,14 @@ Decision Tree on D-E-F axes:
 - **Pricing source**: [OpenAI API Pricing](https://developers.openai.com/api/docs/pricing/)
 - **Cache pricing** (Anthropic): creation = input × 1.25, read = input × 0.1
 
-## NL Router (20 Tools)
+## Tool Routing (AgenticLoop Direct)
 
-NLRouter는 Claude Opus 4.6 Tool Use로 자연어 → 도구 호출을 매핑한다. 3단계 fallback: LLM → regex → help.
+모든 자유 텍스트 입력은 AgenticLoop로 직행한다. Claude가 46개 도구 정의를 직접 보고 tool_use로 자율 선택한다.
 
-| Tool | Action | 설명 |
-|------|--------|------|
-| `list_ips` | list | IP 목록 조회 |
-| `analyze_ip` | analyze | IP 분석 실행 |
-| `search_ips` | search | IP 검색 |
-| `compare_ips` | compare | IP 비교 |
-| `show_help` | help | 도움말 |
-| `generate_report` | report | 리포트 생성 |
-| `batch_analyze` | batch | 배치 분석 |
-| `check_status` | status | 시스템 상태 |
-| `switch_model` | model | 모델 전환 |
-| `memory_search` | memory | 메모리 검색 |
-| `memory_save` | memory | 메모리 저장 |
-| `manage_rule` | memory | 규칙 관리 |
-| `set_api_key` | key | API 키 설정 |
-| `manage_auth` | auth | 인증 관리 |
-| `generate_data` | generate | 데이터 생성 |
-| `schedule_job` | schedule | 작업 스케줄링 |
-| `trigger_event` | trigger | 이벤트 트리거 |
-| `create_plan` | plan | 분석 계획 생성 |
-| `approve_plan` | plan | 계획 승인/실행 |
-| `delegate_task` | delegate | 서브에이전트 병렬 위임 |
+- `/command` -> commands.py 슬래시 커맨드 디스패치
+- 자유 텍스트 -> AgenticLoop.run() (while tool_use 루프)
+
+도구 정의는 `core/tools/definitions.json` (46개)에 통합 관리된다.
 
 ### Claude Code-style UI (agentic_ui.py)
 
@@ -452,7 +436,7 @@ Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. 각
 |------|------|
 | 테스트 실패 | → 2번(코드 수정) |
 | CLI 오류/crash | → 2번(코드 수정) |
-| NL 의도 불일치 | → nl_router 패턴/매핑 수정 → 2번 |
+| NL 의도 불일치 | → system prompt / tool definitions 수정 → 2번 |
 | LangSmith 트레이스 누락 | → tracing 데코레이터 확인 → 2번 |
 | 품질 저하 (score 이상) | → 해당 노드 로직 점검 → 2번 |
 | 모두 통과 | → 4번 진행 |
@@ -514,7 +498,7 @@ echo "Tests: $TESTS  Modules: $MODULES  Tools: $TOOLS"
 |----------|---------------|---------------|
 | 테스트 수 | `Tests: XXXX+` | Features 테이블 마지막 행 |
 | 모듈 수 | `Modules: XXX` | Features 테이블 마지막 행 |
-| Tool 수 | NL Router 테이블 | Features 테이블 + Tool 목록 38종 |
+| Tool 수 | Tool Routing 섹션 + definitions.json | Features 테이블 + Tool 목록 |
 | HookSystem 이벤트 수 | Orchestration 섹션 | Sub-Agent Orchestration 테이블 |
 | MCP Adapter 수 | MCP 설정 | MCP & Tool Architecture 섹션 |
 | 프로젝트 구조 | Project Structure 트리 | Project Structure 트리 |
@@ -612,7 +596,7 @@ PR 생성 → CI 실행 → 실패?
 | 새 tool 추가 | `definitions.json` + `_build_tool_handlers()` + `test_e2e_live_llm.py` + E2E 시나리오 문서 |
 | 파이프라인 노드 변경 | `graph.py` + `test_e2e_orchestration_live.py` + `test_e2e_live_llm.py` (§5) |
 | LLM 어댑터 변경 | `client.py` + `test_e2e_live_llm.py` (§4 LangSmith) |
-| Offline 패턴 추가 | `nl_router.py` regex + `test_e2e_live_llm.py` (§C5) |
+| Tool 라우팅 변경 | `definitions.json` tool descriptions + `router.md` system prompt |
 
 ### 품질 게이트
 
