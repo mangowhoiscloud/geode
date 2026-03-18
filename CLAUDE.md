@@ -651,6 +651,25 @@ PR 생성 → CI 실행 → 실패?
 | Mock | `uv run pytest tests/ -q` | 2000+ pass |
 | Live | `uv run pytest tests/test_e2e_live_llm.py -v -m live` | All pass, tool results valid |
 
+### 6. Progress Board 갱신 (세션 종료 시)
+
+**`docs/progress.md`를 칸반 보드로 갱신한다.** 모든 에이전트/세션이 공유하는 SOT.
+
+```
+6a. 완료 작업: In Progress/In Review → Done (날짜별 그룹)
+6b. 신규 작업: Backlog에 추가 (task_id, 우선순위, plan 연결)
+6c. GAP Registry: 새로 발견된 GAP 추가, 해소된 GAP → Resolved
+6d. Metrics: Version, Modules, Tests, Tools 등 수치 갱신
+6e. Blocked: 차단 사유 기록 (blocked_by task_id)
+```
+
+**규칙:**
+- 세션 시작 시 읽기 → 현재 보드 상태 파악 → 이미 할당된 작업 회피
+- 세션 종료 시 쓰기 → 변경 사항 반영
+- task_id는 케밥 케이스, 고유, 변경 불가
+- 담당은 GitHub 계정 (`@username`)
+- plan 연결: `docs/plans/{task_id}.md`
+
 ## Custom Skills
 
 Project-specific skills in `.claude/skills/`:

@@ -1,13 +1,118 @@
-# GEODE Progress Log
+# GEODE Progress Board
 
-> 날짜별 실행 기록. 로드맵은 계획, progress는 실행.
+> 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
+> 마지막 갱신: 2026-03-18
 
 ---
 
-## 2026-03-18
+## Kanban
 
-### 완료
+### Backlog
 
-| # | 작업 | PR | 비고 |
-|---|------|:--:|------|
-| 1 | progress.md 워크플로우 도입 | — | Stop hook + gitflow docs-sync 통합 |
+| task_id | 설명 | 우선순위 | plan | 비고 |
+|---------|------|:--------:|------|------|
+| model-failover | Model Failover 자동화 — FALLBACK_CHAIN 자동 전환 | P1 | — | OpenClaw Failover 패턴 |
+| context-overflow | Context Overflow Detection — Token 초과 자동 압축 | P1 | — | Karpathy P6 Context Budget |
+| subagent-announce | Sub-agent Announce — Parent 결과 자동 주입 | P1 | — | OpenClaw Spawn+Announce |
+| policy-6layer | 6-계층 Policy Chain 확대 | P1 | — | OpenClaw Policy Resolution |
+| mcp-lifecycle | MCP Adapter Lifecycle — startup/shutdown hook | P1 | — | orphan 방지 |
+| multi-provider | AgenticLoop 멀티 프로바이더 — Anthropic SDK 결합 해제 | P2 | — | LLMClientPort 추상화 |
+| write-fallback | WRITE_TOOLS 거부 후 fallback 경로 | P2 | — | Claude Code Permission 패턴 |
+
+### In Progress
+
+| task_id | 설명 | 담당 | 브랜치 | 시작일 | 비고 |
+|---------|------|------|--------|--------|------|
+| — | — | — | — | — | — |
+
+### In Review
+
+| task_id | PR | 담당 | CI | 비고 |
+|---------|-----|------|-----|------|
+| — | — | — | — | — |
+
+### Done (2026-03-18)
+
+| task_id | 설명 | PR | 담당 | 완료일 |
+|---------|------|----|------|--------|
+| messaging-v019 | Slack/Discord/Telegram + Google/Apple Calendar 통합 | #241→#242 | @mangowhoiscloud | 2026-03-18 |
+| gateway-wiring | 검증팀 발견 — GatewayPort + runtime 와이어링 수정 | #241 | @mangowhoiscloud | 2026-03-18 |
+| openclaw-gap6 | OpenClaw GAP 6건 수정 (Lane Queue, Session Key 등) | #241 | @mangowhoiscloud | 2026-03-18 |
+| runtime-wiring5 | 런타임 와이어링 5건 (Gateway, CalendarBridge, Hook) | #241 | @mangowhoiscloud | 2026-03-18 |
+| nl-router-remove | NL Router 제거 → AgenticLoop 직행 | #243→#244 | @mangowhoiscloud | 2026-03-18 |
+| research-workflow | 프론티어 하네스 리서치 워크플로우 + 스킬 | #245→#246 | @mangowhoiscloud | 2026-03-18 |
+| verify-team-wf | 검증팀 워크플로우 배치 (안 C) | #247→#248 | @mangowhoiscloud | 2026-03-18 |
+| verify-team-skill | 검증팀 4인 페르소나 스킬 | #249→#250 | @mangowhoiscloud | 2026-03-18 |
+| docs-sync-final | 문서 싱크 + README 수치 + progress.md | #251→#252 | @mangowhoiscloud | 2026-03-18 |
+| nl-router-delete | nl_router.py 완전 삭제 + v0.19.1 릴리스 | #255→#256 | @mangowhoiscloud | 2026-03-18 |
+
+### Blocked
+
+| task_id | 설명 | blocked_by | 사유 |
+|---------|------|-----------|------|
+| — | — | — | — |
+
+---
+
+## GAP Registry
+
+프론티어 대비 누적 GAP. 해소되면 Done으로 이동.
+
+### P1 (High)
+
+| gap_id | 설명 | 출처 | 관련 task_id |
+|--------|------|------|-------------|
+| gap-failover | Model Failover 자동 전환 | OpenClaw | model-failover |
+| gap-ctx-overflow | Token 초과 자동 압축 | OpenClaw + Karpathy P6 | context-overflow |
+| gap-announce | Sub-agent 결과 자동 주입 | OpenClaw | subagent-announce |
+| gap-policy | 6-계층 Policy Chain | OpenClaw | policy-6layer |
+| gap-mcp-lifecycle | MCP startup/shutdown hook | Claude Code | mcp-lifecycle |
+| gap-cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | Claude Code | — |
+
+### P2 (Medium)
+
+| gap_id | 설명 | 출처 | 관련 task_id |
+|--------|------|------|-------------|
+| gap-multi-provider | Anthropic SDK 결합 해제 | Codex | multi-provider |
+| gap-write-fallback | WRITE 거부 후 대안 경로 | Claude Code | write-fallback |
+| gap-atomic-write | 모든 상태 파일 tmp+rename | OpenClaw | — |
+| gap-webhook | HTTP Webhook Endpoint 완전 구현 | OpenClaw | — |
+
+### Resolved
+
+| gap_id | 해소 PR | 해소일 |
+|--------|---------|--------|
+| gap-gateway | #241→#242 | 2026-03-18 |
+| gap-lane-queue | #241 | 2026-03-18 |
+| gap-session-key | #241 | 2026-03-18 |
+| gap-allowed-tools | #241 | 2026-03-18 |
+| gap-trigger-src | #241 | 2026-03-18 |
+| gap-hook-discovery | #241 | 2026-03-18 |
+| gap-binding-reload | #241 | 2026-03-18 |
+| gap-nl-router | #243→#244, #255→#256 | 2026-03-18 |
+
+---
+
+## Metrics
+
+| 항목 | 값 | 갱신일 |
+|------|-----|--------|
+| Version | 0.19.1 | 2026-03-18 |
+| Modules | 166 | 2026-03-18 |
+| Tests | 2505 | 2026-03-18 |
+| Tools | 46 | 2026-03-18 |
+| MCP Catalog | 42 | 2026-03-18 |
+| HookEvents | 32 | 2026-03-18 |
+| Skills | 14 | 2026-03-18 |
+
+---
+
+## 규칙
+
+1. **task_id**: 케밥 케이스, 고유, 변경 불가
+2. **상태 흐름**: `Backlog → In Progress → In Review → Done` (역방향 이동 시 Blocked 경유)
+3. **담당**: GitHub 계정 (`@username`)
+4. **갱신 시점**: 세션 시작 시 읽기, 세션 종료 시 쓰기
+5. **plan 연결**: `docs/plans/{task_id}.md` 경로로 연결
+6. **GAP 연결**: GAP Registry의 `gap_id`와 Backlog의 `task_id` 매핑
+7. **Done 이력**: 날짜별 그룹핑, 30일 초과 시 아카이브 (`docs/progress-archive/`)
