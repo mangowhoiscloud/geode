@@ -26,6 +26,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+P1 배치: Model Failover, MCP Lifecycle, Sub-agent Announce, Batch Approval + 칸반 정비.
+
+### Added
+- Model Failover — `call_with_failover()` async 체인 + circuit breaker + per-model exponential backoff
+- MCP Lifecycle — `MCPServerManager.startup()/shutdown()` + SIGTERM/atexit 이중방어 + PID 추적
+- Sub-agent Announce — `drain_announced_results()` 큐 기반 비동기 결과 주입 (OpenClaw Spawn+Announce)
+- Tiered Batch Approval — 5단계 안전등급 (SAFE→MCP→EXPENSIVE→WRITE→DANGEROUS) 분류 + 배치 비용 승인
+- `HookEvent.MCP_SERVER_STARTED` / `MCP_SERVER_STOPPED` — MCP 라이프사이클 이벤트 2건 (32→34)
+- Stop Hook `check-progress.sh` — develop→main 격차 감지 추가 (블로그 §5.2 스펙)
+
+### Infrastructure
+- Worktree 좀비 3건 + dangling 브랜치 40건 정리 (alloc/free 누수 해소)
+- GAP Registry `gap-multi-provider` P2→P1 승격 (Backlog 정합)
+
+---
+
 ## [0.19.1] — 2026-03-18
 
 NL Router 완전 제거, 워크플로우 리서치 + 검증팀 체계화.

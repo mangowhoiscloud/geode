@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-18 (세션 2)
+> 마지막 갱신: 2026-03-18 (세션 3)
 
 ---
 
@@ -21,11 +21,7 @@
 
 | task_id | 설명 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|------|------|--------|--------|------|
-| model-failover | Model Failover — call_with_failover + circuit breaker | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | 코드 완료, PR 대기 |
-| mcp-lifecycle | MCP Lifecycle — startup/shutdown + SIGTERM + atexit | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | 코드 완료, PR 대기 |
-| subagent-announce | Sub-agent Announce — drain queue + conversation 주입 | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | 코드 완료, PR 대기 |
-| batch-approval | Tiered Batch Tool Approval — 5단계 안전등급 분류 | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | 신규. 코드 완료, PR 대기 |
-| kanban-cleanup | Worktree 누수 3건 + 좀비 브랜치 40건 + Stop Hook 보강 | @mangowhoiscloud | feature/p1-batch2-kanban-docsync | 2026-03-18 | alloc/free 정리 |
+| — | — | — | — | — | — |
 
 ### In Review
 
@@ -37,6 +33,11 @@
 
 | task_id | 설명 | PR | 담당 | 완료일 |
 |---------|------|----|------|--------|
+| model-failover | Model Failover — call_with_failover + circuit breaker | #269→#270 | @mangowhoiscloud | 2026-03-18 |
+| mcp-lifecycle | MCP Lifecycle — startup/shutdown + SIGTERM + atexit | #269→#270 | @mangowhoiscloud | 2026-03-18 |
+| subagent-announce | Sub-agent Announce — drain queue + conversation 주입 | #269→#270 | @mangowhoiscloud | 2026-03-18 |
+| batch-approval | Tiered Batch Tool Approval — 5단계 안전등급 분류 | #269→#270 | @mangowhoiscloud | 2026-03-18 |
+| kanban-cleanup | Worktree 누수 3건 + 좀비 브랜치 40건 + Stop Hook 보강 | #269→#270 | @mangowhoiscloud | 2026-03-18 |
 | messaging-v019 | Slack/Discord/Telegram + Google/Apple Calendar 통합 (v0.19.0) | #241→#242 | @mangowhoiscloud | 2026-03-18 |
 | gateway-wiring | 검증팀 발견 — GatewayPort + runtime 와이어링 수정 | #241 | @mangowhoiscloud | 2026-03-18 |
 | openclaw-gap6 | OpenClaw GAP 6건 수정 (Lane Queue, Session Key 등) | #241 | @mangowhoiscloud | 2026-03-18 |
