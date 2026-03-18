@@ -275,22 +275,17 @@ def _build_memory_handlers() -> dict[str, Any]:
             return {"error": str(exc)}
 
     def handle_manage_rule(**kwargs: Any) -> dict[str, Any]:
-        from core.cli.nl_router import NLIntent
-
         rule_action = kwargs.get("action", "list")
         name = kwargs.get("name", "")
         if rule_action in ("add", "delete") and not name:
             return _clarify("manage_rule", ["name"], "규칙 이름을 알려주세요.")
-        intent = NLIntent(
-            action="memory",
-            args={
-                "rule_action": rule_action,
-                "name": name,
-                "paths": kwargs.get("paths", []),
-                "content": kwargs.get("content", ""),
-            },
-        )
-        _handle_memory_action(intent, "", False)
+        memory_args = {
+            "rule_action": rule_action,
+            "name": name,
+            "paths": kwargs.get("paths", []),
+            "content": kwargs.get("content", ""),
+        }
+        _handle_memory_action(memory_args, "", False)
         # Return rule list for LLM context
         try:
             mem = ProjectMemory()

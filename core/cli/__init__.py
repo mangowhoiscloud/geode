@@ -2,7 +2,7 @@
 
 Architecture (OpenClaw-inspired):
   /command  → commands.py (Binding Router: deterministic dispatch)
-  free-text → nl_router.py (NL Router: intent classification)
+  free-text → agentic_loop.py (AgenticLoop: multi-turn tool_use loop)
               → search.py (IP Search Engine: keyword matching)
 """
 
@@ -912,7 +912,7 @@ def _resolve_ip_name(ip_name: str) -> str | None:
     3. Substring: fixture key is contained in input
     4. Substring: input is contained in fixture key
     """
-    from core.cli.nl_router import get_ip_name_map
+    from core.cli.ip_names import get_ip_name_map
     from core.fixtures import FIXTURE_MAP
 
     key = ip_name.lower().strip()
@@ -1293,11 +1293,11 @@ def _show_commentary(
 
 
 def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None:
-    """Handle memory-related actions from NL Router (P0-A + P1-B)."""
-    from core.cli.nl_router import NLIntent
+    """Handle memory-related actions (P0-A + P1-B).
 
-    intent = cast(NLIntent, intent)
-    args = intent.args
+    Accepts either an object with an `args` dict attribute, or a plain dict.
+    """
+    args = intent if isinstance(intent, dict) else intent.args
 
     # Determine sub-action from tool routing
     rule_action = args.get("rule_action")
@@ -1800,22 +1800,17 @@ def _build_tool_handlers(
             return {"error": str(exc)}
 
     def handle_manage_rule(**kwargs: Any) -> dict[str, Any]:
-        from core.cli.nl_router import NLIntent
-
         rule_action = kwargs.get("action", "list")
         name = kwargs.get("name", "")
         if rule_action in ("add", "delete") and not name:
             return _clarify("manage_rule", ["name"], "규칙 이름을 알려주세요.")
-        intent = NLIntent(
-            action="memory",
-            args={
-                "rule_action": rule_action,
-                "name": name,
-                "paths": kwargs.get("paths", []),
-                "content": kwargs.get("content", ""),
-            },
-        )
-        _handle_memory_action(intent, "", False)
+        memory_args = {
+            "rule_action": rule_action,
+            "name": name,
+            "paths": kwargs.get("paths", []),
+            "content": kwargs.get("content", ""),
+        }
+        _handle_memory_action(memory_args, "", False)
         # Return rule list for LLM context
         try:
             mem = ProjectMemory()
