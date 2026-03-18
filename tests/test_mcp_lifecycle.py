@@ -37,8 +37,8 @@ class TestMCPHookEvents:
         assert HookEvent.MCP_SERVER_STOPPED.value == "mcp_server_stopped"
 
     def test_hook_event_count_includes_mcp(self) -> None:
-        """Total hook events should be 34 (includes 2 MCP_SERVER_* events)."""
-        assert len(HookEvent) == 34
+        """Total hook events should be 36 (includes 2 MCP_SERVER_* + 2 CONTEXT_* events)."""
+        assert len(HookEvent) == 36
 
 
 # ---------------------------------------------------------------------------

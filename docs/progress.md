@@ -11,9 +11,6 @@
 
 | task_id | 설명 | 우선순위 | plan | 비고 |
 |---------|------|:--------:|------|------|
-| context-overflow | Context Overflow Detection — Token 초과 자동 압축 | P1 | — | Karpathy P6 Context Budget |
-| policy-6layer | 6-계층 Policy Chain 확대 | P1 | — | OpenClaw Policy Resolution |
-| cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | P1 | — | Claude Code Permission 패턴 |
 | multi-provider | AgenticLoop 멀티 프로바이더 — Anthropic SDK 결합 해제 | P1 | — | P2→P1 승격 (GLM-5 버그 발견). LLMClientPort 추상화 |
 | write-fallback | WRITE_TOOLS 거부 후 fallback 경로 | P2 | — | Claude Code Permission 패턴 |
 
@@ -21,7 +18,9 @@
 
 | task_id | 설명 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| context-overflow | Context Overflow Detection — ContextMonitor + Hook | @mangowhoiscloud | feature/p1-context-cost | 2026-03-18 | 코드 완료, PR 대기 |
+| policy-6layer | 6-Layer Policy Chain — Profile + Org 레이어 | @mangowhoiscloud | feature/p1-context-cost | 2026-03-18 | 코드 완료, PR 대기 |
+| cost-approval | /cost 대시보드 — 세션/월간/예산 조회 + 예산 설정 | @mangowhoiscloud | feature/p1-context-cost | 2026-03-18 | 코드 완료, PR 대기 |
 
 ### In Review
 
@@ -73,9 +72,6 @@
 
 | gap_id | 설명 | 출처 | 관련 task_id |
 |--------|------|------|-------------|
-| gap-ctx-overflow | Token 초과 자동 압축 | OpenClaw + Karpathy P6 | context-overflow |
-| gap-policy | 6-계층 Policy Chain | OpenClaw | policy-6layer |
-| gap-cost-approval | EXPENSIVE_TOOLS 비용 조회+승인 UI | Claude Code | cost-approval |
 | gap-multi-provider | Anthropic SDK 결합 해제 | Codex | multi-provider |
 
 ### P2 (Medium)
@@ -101,6 +97,9 @@
 | gap-failover | — | 2026-03-18 |
 | gap-announce | — | 2026-03-18 |
 | gap-mcp-lifecycle | — | 2026-03-18 |
+| gap-ctx-overflow | — | 2026-03-18 |
+| gap-policy | — | 2026-03-18 |
+| gap-cost-approval | — | 2026-03-18 |
 
 ---
 
@@ -109,11 +108,11 @@
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
 | Version | 0.19.1 | 2026-03-18 |
-| Modules | 165 | 2026-03-18 |
-| Tests | 2583 | 2026-03-18 |
+| Modules | 166 | 2026-03-18 |
+| Tests | 2671 | 2026-03-18 |
 | Tools | 46 | 2026-03-18 |
 | MCP Catalog | 42 | 2026-03-18 |
-| HookEvents | 34 | 2026-03-18 |
+| HookEvents | 36 | 2026-03-18 |
 | Skills | 18 | 2026-03-18 |
 
 ---

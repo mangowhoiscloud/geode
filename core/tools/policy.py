@@ -1,9 +1,14 @@
-"""Policy Chain — mode/context-based tool access control.
+"""Policy Chain — 6-layer tool access control.
 
-Inspired by OpenClaw's 6-layer Policy Resolution Chain:
-Profile → Global → Agent → Group → Sandbox → Subagent.
+OpenClaw-inspired 6-layer Policy Resolution Chain:
+  1. Profile (user preferences)
+  2. Organization (team/org overrides)
+  3. Mode-based (pipeline mode: full_pipeline, dry_run, etc.)
+  4. Agent-level (SAFE/WRITE/DANGEROUS classification)
+  5. Node-scope (per-pipeline-node allowlists)
+  6. Sub-agent (auto-approval delegation)
 
-GEODE adapts this to pipeline modes: full_pipeline, evaluation, scoring, dry_run.
+Layers 1-2 are new (v0.20.0), layers 3-6 already existed.
 """
 
 from __future__ import annotations
@@ -155,7 +160,205 @@ class PolicyChain:
 
 
 # ---------------------------------------------------------------------------
-# Node-scoped tool allowlists (Phase 2-D)
+# Layer 1: Profile Policy — user-level preferences
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ProfilePolicy:
+    """User-level tool preferences loaded from ~/.geode/user_profile/.
+
+    Users can restrict themselves from expensive/write/dangerous tools.
+    Profile policies get priority=10 (high) in the PolicyChain.
+    """
+
+    user_id: str = ""
+    allow_expensive: bool = True
+    allow_write: bool = True
+    allow_dangerous: bool = False
+    denied_tools: set[str] = field(default_factory=set)
+
+    def to_policies(self) -> list[ToolPolicy]:
+        """Convert profile preferences into PolicyChain-compatible policies."""
+        policies: list[ToolPolicy] = []
+
+        if not self.allow_expensive:
+            policies.append(
+                ToolPolicy(
+                    name=f"profile:{self.user_id}:no_expensive",
+                    mode="*",
+                    priority=10,
+                    denied_tools={"analyze_ip", "batch_analyze", "compare_ips"},
+                )
+            )
+        if not self.allow_write:
+            policies.append(
+                ToolPolicy(
+                    name=f"profile:{self.user_id}:no_write",
+                    mode="*",
+                    priority=10,
+                    denied_tools={
+                        "memory_save",
+                        "note_save",
+                        "set_api_key",
+                        "profile_update",
+                        "calendar_create_event",
+                        "calendar_sync_scheduler",
+                    },
+                )
+            )
+        if not self.allow_dangerous:
+            policies.append(
+                ToolPolicy(
+                    name=f"profile:{self.user_id}:no_dangerous",
+                    mode="*",
+                    priority=10,
+                    denied_tools={"run_bash"},
+                )
+            )
+        if self.denied_tools:
+            policies.append(
+                ToolPolicy(
+                    name=f"profile:{self.user_id}:custom_deny",
+                    mode="*",
+                    priority=10,
+                    denied_tools=self.denied_tools,
+                )
+            )
+        return policies
+
+
+# ---------------------------------------------------------------------------
+# Layer 2: Organization Policy — team/org overrides
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class OrgPolicy:
+    """Organization-level tool restrictions.
+
+    Loaded from .geode/config.toml [policy.org] section.
+    Org policies get priority=5 (highest) in the PolicyChain.
+    """
+
+    org_id: str = ""
+    denied_tools: set[str] = field(default_factory=set)
+
+    def to_policies(self) -> list[ToolPolicy]:
+        """Convert org restrictions into PolicyChain-compatible policies."""
+        if not self.denied_tools:
+            return []
+        return [
+            ToolPolicy(
+                name=f"org:{self.org_id}:deny",
+                mode="*",
+                priority=5,
+                denied_tools=self.denied_tools,
+            )
+        ]
+
+
+def load_profile_policy(profile_dir: str | None = None) -> ProfilePolicy:
+    """Load user profile policy from ~/.geode/user_profile/preferences.toml.
+
+    Returns a default (permissive) profile if no config exists.
+    """
+    import tomllib
+    from pathlib import Path
+
+    if profile_dir:
+        pref_path = Path(profile_dir) / "preferences.toml"
+    else:
+        pref_path = Path.home() / ".geode" / "user_profile" / "preferences.toml"
+
+    if not pref_path.exists():
+        return ProfilePolicy()
+
+    try:
+        with open(pref_path, "rb") as f:
+            data = tomllib.load(f)
+        policy_section = data.get("policy", {})
+        return ProfilePolicy(
+            user_id=data.get("user_id", ""),
+            allow_expensive=policy_section.get("allow_expensive", True),
+            allow_write=policy_section.get("allow_write", True),
+            allow_dangerous=policy_section.get("allow_dangerous", False),
+            denied_tools=set(policy_section.get("denied_tools", [])),
+        )
+    except Exception:
+        log.debug("Failed to load profile policy from %s", pref_path, exc_info=True)
+        return ProfilePolicy()
+
+
+def load_org_policy(config_path: str | None = None) -> OrgPolicy:
+    """Load org policy from .geode/config.toml [policy.org] section.
+
+    Returns a default (no restrictions) policy if no config exists.
+    """
+    import tomllib
+    from pathlib import Path
+
+    path = Path(config_path) if config_path else Path(".geode") / "config.toml"
+
+    if not path.exists():
+        return OrgPolicy()
+
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+        org_section = data.get("policy", {}).get("org", {})
+        return OrgPolicy(
+            org_id=org_section.get("org_id", ""),
+            denied_tools=set(org_section.get("denied_tools", [])),
+        )
+    except Exception:
+        log.debug("Failed to load org policy from %s", path, exc_info=True)
+        return OrgPolicy()
+
+
+def build_6layer_chain(
+    *,
+    profile: ProfilePolicy | None = None,
+    org: OrgPolicy | None = None,
+    mode_policies: list[ToolPolicy] | None = None,
+) -> PolicyChain:
+    """Build a complete 6-layer PolicyChain.
+
+    Layers:
+      1. Profile (priority 10)
+      2. Organization (priority 5)
+      3. Mode-based (priority 100, from _build_default_policies)
+      4-6. Agent/Node/SubAgent handled at execution time
+
+    Usage::
+
+        chain = build_6layer_chain(
+            profile=load_profile_policy(),
+            org=load_org_policy(),
+        )
+    """
+    chain = PolicyChain()
+
+    # Layer 2: Org (highest priority)
+    if org:
+        for p in org.to_policies():
+            chain.add_policy(p)
+
+    # Layer 1: Profile
+    if profile:
+        for p in profile.to_policies():
+            chain.add_policy(p)
+
+    # Layer 3: Mode-based (default policies from runtime)
+    if mode_policies:
+        for p in mode_policies:
+            chain.add_policy(p)
+
+    return chain
+
+
+# ---------------------------------------------------------------------------
+# Node-scoped tool allowlists (Phase 2-D) — Layer 5
 # ---------------------------------------------------------------------------
 
 # Default per-node tool allowlists.

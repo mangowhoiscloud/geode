@@ -405,6 +405,53 @@ class AgenticLoop:
         messages.extend([first, bridge, *recent])
         log.debug("Pruned messages: kept first + bridge + %d recent", len(recent))
 
+    def _check_context_overflow(self, system: str, messages: list[dict[str, Any]]) -> None:
+        """Check context window usage and emit hooks if near limits."""
+        try:
+            from core.orchestration.context_monitor import (
+                check_context,
+                prune_oldest_messages,
+            )
+
+            metrics = check_context(messages, self.model, system_prompt=system)
+
+            if metrics.is_critical:
+                log.warning(
+                    "Context CRITICAL: %.0f%% (%d/%d tokens)",
+                    metrics.usage_pct,
+                    metrics.estimated_tokens,
+                    metrics.context_window,
+                )
+                if self._hooks:
+                    self._hooks.trigger(
+                        HookEvent.CONTEXT_CRITICAL,
+                        {"metrics": dataclasses.asdict(metrics), "model": self.model},
+                    )
+                # Emergency prune: keep first + last 10 messages
+                pruned = prune_oldest_messages(messages, keep_recent=10)
+                if len(pruned) < len(messages):
+                    messages.clear()
+                    messages.extend(pruned)
+                    log.info(
+                        "Pruned conversation: %d → %d messages",
+                        len(messages) + (len(messages) - len(pruned)),
+                        len(pruned),
+                    )
+            elif metrics.is_warning:
+                log.info(
+                    "Context WARNING: %.0f%% (%d/%d tokens)",
+                    metrics.usage_pct,
+                    metrics.estimated_tokens,
+                    metrics.context_window,
+                )
+                if self._hooks:
+                    self._hooks.trigger(
+                        HookEvent.CONTEXT_WARNING,
+                        {"metrics": dataclasses.asdict(metrics), "model": self.model},
+                    )
+        except Exception:
+            log.debug("Context monitor check failed", exc_info=True)
+
     @staticmethod
     def _repair_messages(messages: list[dict[str, Any]]) -> None:
         """Remove orphaned tool_result messages that lack a preceding tool_use.
@@ -576,6 +623,9 @@ class AgenticLoop:
         if not api_key:
             log.warning("No Anthropic API key for agentic loop")
             return None
+
+        # Context overflow detection (Karpathy P6 Context Budget)
+        self._check_context_overflow(system, messages)
 
         if self._client is None:
             # Use singleton async client with configured httpx connection pool.
