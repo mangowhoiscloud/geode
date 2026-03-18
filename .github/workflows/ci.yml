@@ -13,72 +13,40 @@ concurrency:
 jobs:
   lint:
     name: Lint & Format
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - run: uv sync
       - run: uv run ruff check core/ tests/
       - run: uv run ruff format --check core/ tests/
 
   typecheck:
     name: Type Check
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - run: uv sync
       - run: uv run mypy core/
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
+    name: Test
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
       - run: uv sync
-      - run: uv run pytest --cov=core --cov-report=xml --cov-report=term-missing
-      - uses: actions/upload-artifact@v4
-        if: matrix.python-version == '3.12'
-        with:
-          name: coverage-report
-          path: coverage.xml
+      - run: uv run pytest --cov=core --cov-report=term-missing
 
   security:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - run: uv sync
       - run: uv run bandit -r core/ -c pyproject.toml
 
   gate:
     name: Gate
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [lint, typecheck, test, security]
     steps:
       - run: echo "All checks passed"
