@@ -11,16 +11,14 @@
 
 | task_id | 설명 | 우선순위 | plan | 비고 |
 |---------|------|:--------:|------|------|
-| multi-provider | AgenticLoop 멀티 프로바이더 — Anthropic SDK 결합 해제 | P1 | — | P2→P1 승격 (GLM-5 버그 발견). LLMClientPort 추상화 |
-| write-fallback | WRITE_TOOLS 거부 후 fallback 경로 | P2 | — | Claude Code Permission 패턴 |
+| — | — | — | — | — |
 
 ### In Progress
 
 | task_id | 설명 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|------|------|--------|--------|------|
-| context-overflow | Context Overflow Detection — ContextMonitor + Hook | @mangowhoiscloud | feature/p1-context-cost | 2026-03-18 | 코드 완료, PR 대기 |
-| policy-6layer | 6-Layer Policy Chain — Profile + Org 레이어 | @mangowhoiscloud | feature/p1-context-cost | 2026-03-18 | 코드 완료, PR 대기 |
-| cost-approval | /cost 대시보드 — 세션/월간/예산 조회 + 예산 설정 | @mangowhoiscloud | feature/p1-context-cost | 2026-03-18 | 코드 완료, PR 대기 |
+| multi-provider | Multi-Provider AgenticLoop — AgenticResponse 정규화 + OpenAI 경로 | @mangowhoiscloud | feature/p1-final-multi-write-verify | 2026-03-18 | 코드 완료, PR 대기 |
+| write-fallback | WRITE 거부 후 대안 제안 fallback 메시지 | @mangowhoiscloud | feature/p1-final-multi-write-verify | 2026-03-18 | 코드 완료, PR 대기 |
 
 ### In Review
 
@@ -32,6 +30,9 @@
 
 | task_id | 설명 | PR | 담당 | 완료일 |
 |---------|------|----|------|--------|
+| context-overflow | Context Overflow Detection — ContextMonitor + Hook | #273→#274 | @mangowhoiscloud | 2026-03-18 |
+| policy-6layer | 6-Layer Policy Chain — Profile + Org 레이어 | #273→#274 | @mangowhoiscloud | 2026-03-18 |
+| cost-approval | /cost 대시보드 — 세션/월간/예산 조회 + 예산 설정 | #273→#274 | @mangowhoiscloud | 2026-03-18 |
 | model-failover | Model Failover — call_with_failover + circuit breaker | #269→#270 | @mangowhoiscloud | 2026-03-18 |
 | mcp-lifecycle | MCP Lifecycle — startup/shutdown + SIGTERM + atexit | #269→#270 | @mangowhoiscloud | 2026-03-18 |
 | subagent-announce | Sub-agent Announce — drain queue + conversation 주입 | #269→#270 | @mangowhoiscloud | 2026-03-18 |
@@ -72,13 +73,12 @@
 
 | gap_id | 설명 | 출처 | 관련 task_id |
 |--------|------|------|-------------|
-| gap-multi-provider | Anthropic SDK 결합 해제 | Codex | multi-provider |
+| — | — | — | — |
 
 ### P2 (Medium)
 
 | gap_id | 설명 | 출처 | 관련 task_id |
 |--------|------|------|-------------|
-| gap-write-fallback | WRITE 거부 후 대안 경로 | Claude Code | write-fallback |
 | gap-atomic-write | 모든 상태 파일 tmp+rename | OpenClaw | — |
 | gap-webhook | HTTP Webhook Endpoint 완전 구현 | OpenClaw | — |
 
@@ -100,6 +100,8 @@
 | gap-ctx-overflow | — | 2026-03-18 |
 | gap-policy | — | 2026-03-18 |
 | gap-cost-approval | — | 2026-03-18 |
+| gap-multi-provider | — | 2026-03-18 |
+| gap-write-fallback | — | 2026-03-18 |
 
 ---
 
@@ -108,8 +110,8 @@
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
 | Version | 0.19.1 | 2026-03-18 |
-| Modules | 166 | 2026-03-18 |
-| Tests | 2671 | 2026-03-18 |
+| Modules | 167 | 2026-03-18 |
+| Tests | 2688 | 2026-03-18 |
 | Tools | 46 | 2026-03-18 |
 | MCP Catalog | 42 | 2026-03-18 |
 | HookEvents | 36 | 2026-03-18 |

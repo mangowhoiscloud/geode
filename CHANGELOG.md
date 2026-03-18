@@ -28,9 +28,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-P1 배치: Model Failover, MCP Lifecycle, Sub-agent Announce, Batch Approval, Context Overflow, Cost Dashboard, 6-Layer Policy + 칸반 정비.
+P1 전체 완료: Model Failover, MCP Lifecycle, Sub-agent Announce, Batch Approval, Context Overflow, Cost Dashboard, 6-Layer Policy, Multi-Provider, Write Fallback + 검증팀 감사.
 
 ### Added
+- Multi-Provider AgenticLoop — `AgenticResponse` 정규화 레이어 + Anthropic/OpenAI 이중 경로 (`_call_llm_anthropic`/`_call_llm_openai`)
+- Write Fallback — WRITE 거부 시 도구별 대안 제안 메시지 (`_write_denial_with_fallback`)
+- `agentic_response.py` (신규) — `normalize_anthropic()`, `normalize_openai()`, `AgenticResponse` 프로바이더 비종속 응답 모델
 - Model Failover — `call_with_failover()` async 체인 + circuit breaker + per-model exponential backoff
 - MCP Lifecycle — `MCPServerManager.startup()/shutdown()` + SIGTERM/atexit 이중방어 + PID 추적
 - Sub-agent Announce — `drain_announced_results()` 큐 기반 비동기 결과 주입 (OpenClaw Spawn+Announce)
@@ -44,7 +47,7 @@ P1 배치: Model Failover, MCP Lifecycle, Sub-agent Announce, Batch Approval, Co
 
 ### Infrastructure
 - Worktree 좀비 3건 + dangling 브랜치 40건 정리 (alloc/free 누수 해소)
-- GAP Registry `gap-multi-provider` P2→P1 승격 (Backlog 정합)
+- GAP Registry 전체 P1 해소 (gap-multi-provider 포함)
 
 ---
 
