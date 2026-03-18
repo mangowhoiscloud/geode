@@ -34,7 +34,7 @@
 
 ```mermaid
 flowchart LR
-    NL["NL Router<br/>(LLM tool_use)"]
+    NL["AgenticLoop<br/>(LLM tool_use)"]
 
     NL --> Builtin["Built-in Tools<br/>(46 definitions)"]
     NL --> MCP["MCP Tools<br/>(auto-discovered)"]
@@ -65,11 +65,11 @@ flowchart LR
     style BHitl fill:#7c2d12,stroke:#f97316,color:#fed7aa
 ```
 
-NL Router가 LLM의 tool_use 응답을 3가지 경로로 디스패치합니다:
+AgenticLoop가 LLM의 tool_use 응답을 3가지 경로로 디스패치합니다:
 
 | 경로 | 도구 수 | 승인 방식 |
 |------|--------|----------|
-| Built-in Tools | 42 | SAFE 자동승인, STANDARD 실행, WRITE HITL 승인 |
+| Built-in Tools | 46 | SAFE 자동승인, STANDARD 실행, WRITE HITL 승인 |
 | MCP Tools | 카탈로그 42종 | AUTO_APPROVED 서버 4종 자동승인, 그 외 초회 승인 |
 | Bash | shell 명령 | SAFE_BASH_PREFIXES 41종 자동승인, 9종 차단, 그 외 HITL |
 
@@ -123,7 +123,6 @@ API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다.
 graph TB
     subgraph L0["L0 — CLI & Agentic Interface"]
         CLI["CLI (Typer)"]
-        NLR["NL Router"]
         AL["AgenticLoop<br/>while(tool_use)"]
         SubA["SubAgentManager<br/>parallel delegation"]
         Batch["Batch Analysis"]
@@ -183,7 +182,7 @@ graph TB
 
 | Layer | 구성 요소 | 설명 |
 |-------|----------|------|
-| **L0** CLI & Agent | Typer CLI, NL Router, AgenticLoop, SubAgentManager, Batch | 사용자 인터페이스 + 자율 실행 코어 |
+| **L0** CLI & Agent | Typer CLI, AgenticLoop, SubAgentManager, Batch, Gateway | 사용자 인터페이스 + 자율 실행 코어 |
 | **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입 |
 | **L2** Memory | SOUL → User Profile → Organization → Project → Session (4-Tier), SqliteSaver | 계층적 메모리 + LangGraph 체크포인트 |
 | **L3** Orchestration | HookSystem (30 events), TaskGraph DAG, PlanMode, CoalescingQueue | 라이프사이클 이벤트, 동시성 제어 |
@@ -793,13 +792,13 @@ uv run bandit -r core/ -c pyproject.toml             # Security
 
 ```
 core/
-├── cli/                        # CLI + NL Router + Agentic Loop + Sub-Agent
+├── cli/                        # CLI + Agentic Loop + Sub-Agent
 │   ├── __init__.py             # Typer app, REPL, pipeline execution
 │   ├── agentic_loop.py         # while(tool_use) multi-round execution + Token Guard
 │   ├── error_recovery.py       # ErrorRecoveryStrategy (retry → alternative → fallback → escalate)
 │   ├── sub_agent.py            # SubAgentManager + SubAgentResult + ErrorCategory
 │   ├── tool_executor.py        # Tool dispatch + HITL approval gate
-│   ├── nl_router.py            # Natural language intent classification
+│   ├── nl_router.py            # Legacy NL router (decoupled, AgenticLoop 직행)
 │   ├── conversation.py         # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
