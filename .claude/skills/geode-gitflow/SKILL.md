@@ -95,13 +95,21 @@ DISCOVER (병렬 Agent로 하네스 조사)
 **모든 작업 단위**는 worktree를 열어서 시작한다. 예외 없음.
 
 ```bash
-# 1. develop 최신화 (본 레포에서)
-git checkout develop && git pull origin develop
+# 0. 동기화 검증 게이트 (CANNOT 규칙 — 생략 금지)
+git fetch origin
 
-# 2. worktree 생성 = 작업 공간 할당
+LOCAL_MAIN=$(git rev-parse main)
+REMOTE_MAIN=$(git rev-parse origin/main)
+[ "$LOCAL_MAIN" != "$REMOTE_MAIN" ] && echo "STOP: local main ≠ origin/main" && git checkout main && git pull origin main
+
+LOCAL_DEV=$(git rev-parse develop)
+REMOTE_DEV=$(git rev-parse origin/develop)
+[ "$LOCAL_DEV" != "$REMOTE_DEV" ] && echo "STOP: local develop ≠ origin/develop" && git checkout develop && git pull origin develop
+
+# 1. worktree 생성 = 작업 공간 할당 (develop 기반)
 git worktree add .claude/worktrees/<작업명> -b feature/<브랜치명> develop
 
-# 3. 작업 디렉터리 이동
+# 2. 작업 디렉터리 이동
 cd .claude/worktrees/<작업명>
 
 # → 이후 Step 2~11은 모두 이 worktree 안에서 수행
