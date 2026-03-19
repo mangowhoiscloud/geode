@@ -371,6 +371,11 @@ Decision Tree on D-E-F axes:
 - 타 세션의 worktree 삭제 금지 — `.owner` task_id 불일치 시 절대 제거하지 않음
 - worktree 내 `git checkout` 브랜치 전환 금지
 - `docs/progress.md`를 feature/develop 브랜치에서 수정 금지 — main에서만
+- 원격/로컬 브랜치 동기화 미확인 상태에서 feature 브랜치 생성 금지 — `git fetch origin` 후 main·develop 양쪽 HEAD 일치 확인 필수
+
+**워크플로우:**
+- Plan 없이 구현 착수 금지 — 반드시 EnterPlanMode 진입 → 계획 승인 → ExitPlanMode 경유 (단순 버그 수정·문서 수정 제외)
+- 칸반(progress.md) 필수 컬럼 빈칸 기재 금지 — 모든 필수 컬럼에 값 기입, "—" 허용하되 빈칸 금지
 
 **코드 품질:**
 - lint/type/test 실패 상태에서 커밋 금지
@@ -398,15 +403,36 @@ Decision Tree on D-E-F axes:
 #### 0. Worktree
 
 ```bash
-git worktree add .claude/worktrees/<작업명> -b feature/<브랜치명>
+# 0-a. 원격 fetch
+git fetch origin
+
+# 0-b. main 동기화 확인
+LOCAL_MAIN=$(git rev-parse main)
+REMOTE_MAIN=$(git rev-parse origin/main)
+[ "$LOCAL_MAIN" != "$REMOTE_MAIN" ] && echo "STOP: local main ≠ origin/main" && git checkout main && git pull origin main
+
+# 0-c. develop 동기화 확인
+LOCAL_DEV=$(git rev-parse develop)
+REMOTE_DEV=$(git rev-parse origin/develop)
+[ "$LOCAL_DEV" != "$REMOTE_DEV" ] && echo "STOP: local develop ≠ origin/develop" && git checkout develop && git pull origin develop
+
+# 0-d. worktree 생성 (develop 기반)
+git worktree add .claude/worktrees/<작업명> -b feature/<브랜치명> develop
 echo "session=$(date -Iseconds) task_id=<작업명>" > .claude/worktrees/<작업명>/.owner
 ```
 
 완료 후: `git push origin feature/<브랜치명>` → 소유권 검증 → `git worktree remove`
 
-#### 1. Research → Plan
+#### 1. Plan (필수)
 
-`frontier-harness-research` 스킬 참조. AS-IS 탐색 → 프론티어 4종 리서치 → GAP 분석 → `docs/plans/` 작성. 검증팀 GAP 탐지를 병렬 실행.
+> 단순 버그 수정·문서만 수정은 Plan 생략 가능. 그 외 모든 구현 작업은 Plan 필수.
+
+1. `EnterPlanMode` 진입
+2. Explore Agent로 AS-IS 탐색 + 프론티어 리서치 (해당 시, `frontier-harness-research` 스킬 참조)
+3. Plan Agent로 설계 → 플랜 파일 작성 (`docs/plans/`)
+4. `ExitPlanMode`로 사용자 승인 요청
+5. 승인 후 `TaskCreate`로 작업 항목 등록 — 칸반 In Progress와 1:1 매핑
+6. 구현 착수 (Step 2)
 
 #### 2. Implement → Unit Verify (반복)
 
