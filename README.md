@@ -23,13 +23,14 @@ graph TB
     CANNOT["CANNOT<br/><i>절대 금지 가드레일</i>"]
     CANNOT -.->|"위반 시 즉시 중단"| W
 
-    W["0. Worktree<br/>격리된 작업 공간"] --> Plan["1. Research → Plan<br/>프론티어 4종 리서치<br/>+ GAP 분석"]
+    W["0. Worktree<br/>동기화 검증 → 격리 공간"] --> Plan["1. Plan<br/>EnterPlanMode<br/>→ 설계 → 승인"]
     Plan --> Impl["2. Implement<br/>코드 변경 → lint<br/>→ type → test"]
     Impl --> Verify["3. Verify<br/>E2E + 검증팀<br/>(4인 페르소나 병렬)"]
     Verify -->|"fail"| Impl
     Verify -->|"pass"| Docs["4. Docs-Sync<br/>CHANGELOG + 버전<br/>4곳 동기화"]
     Docs --> PR["5. PR & Merge<br/>feature → develop<br/>→ main"]
     PR -->|"CI fail"| Impl
+    PR -->|"pass"| Board["6. Board<br/>progress.md<br/>칸반 갱신"]
 
     style CANNOT fill:#1e293b,stroke:#ef4444,color:#fca5a5,stroke-width:2px
     style W fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
@@ -38,6 +39,7 @@ graph TB
     style Verify fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
     style Docs fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
     style PR fill:#1e293b,stroke:#ef4444,color:#e2e8f0
+    style Board fill:#1e293b,stroke:#ec4899,color:#e2e8f0
 ```
 
 <details>
@@ -47,7 +49,8 @@ graph TB
 
 | 영역 | 금지 사항 |
 |------|----------|
-| **Git** | worktree 없이 작업 시작 / main·develop 직접 push / 타 세션 worktree 삭제 / feature에서 progress.md 수정 |
+| **Git** | worktree 없이 작업 시작 / main·develop 직접 push / 타 세션 worktree 삭제 / feature에서 progress.md 수정 / **동기화 미확인 상태에서 feature 생성** |
+| **워크플로우** | **Plan 없이 구현 착수** (단순 버그·문서 수정 제외) / **칸반 필수 컬럼 빈칸 기재** |
 | **품질** | lint·type·test 실패 상태 커밋 / 테스트 수치 자리표시자(XXXX) / live 테스트 무단 실행 |
 | **문서** | 코드 커밋에서 CHANGELOG 누락 / main에 `[Unreleased]` 잔류 / 버전 4곳 불일치 |
 | **PR** | 인라인 `--body` 사용 / 변경 파일 Why 근거 누락 / HEREDOC 미사용 |
@@ -56,12 +59,13 @@ graph TB
 
 | 단계 | 게이트 | 재귀 조건 |
 |------|--------|-----------|
-| **0. Worktree** | `git worktree add` + `.owner` 파일 | — |
-| **1. Research → Plan** | 프론티어 리서치 + GAP 분석 → `docs/plans/` | — |
+| **0. Worktree** | `git fetch` → main·develop 동기화 검증 → `git worktree add` + `.owner` | — |
+| **1. Plan** | EnterPlanMode → 설계 → ExitPlanMode → TaskCreate (칸반 연동) | — |
 | **2. Implement** | `ruff check` + `mypy` + `pytest` | 실패 시 수정 반복 |
 | **3. Verify** | Mock E2E + CLI dry-run + 검증팀 4인 병렬 | 실패 시 **2번 복귀** |
 | **4. Docs-Sync** | CHANGELOG + 버전 4곳 + 수치 동기화 | — |
 | **5. PR & Merge** | feature → develop → main (GitFlow) | CI 실패 시 **2번 복귀** |
+| **6. Board** | `docs/progress.md` 칸반 갱신 (main에서만) | — |
 
 **품질 게이트:**
 
@@ -69,7 +73,55 @@ graph TB
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 2800+ pass |
+| Test | `uv run pytest tests/ -q` | 2870+ pass |
+
+### 칸반 보드 (`docs/progress.md`)
+
+멀티 에이전트 공유 칸반. 모든 세션이 읽고 갱신합니다.
+
+```
+Backlog → In Progress → In Review → Done
+```
+
+| 규칙 | 설명 |
+|------|------|
+| **main-only** | progress.md는 main에서만 수정 (feature/develop 금지) |
+| **3-Checkpoint** | alloc(Step 0) → free(PR merge 후) → session-start(교차 검증) |
+| **필수 컬럼** | task_id·작업 내용은 모든 상태에서 필수. 빈칸 금지, "—" 허용 |
+| **Task 연동** | TaskCreate subject ↔ 칸반 task_id 1:1 매핑 |
+
+### `.geode/` — 프로젝트-로컬 컨텍스트
+
+`geode init`으로 생성되는 프로젝트별 영속 저장소. 에이전트의 학습, 실행 기록, 산출물이 여기에 쌓입니다.
+
+```
+.geode/
+├── journal/           # 실행 기록 (append-only JSONL)
+│   ├── runs.jsonl     # 파이프라인 실행 이력
+│   └── errors.jsonl   # 에러 로그
+├── memory/            # 프로젝트 메모리
+│   └── PROJECT.md     # 학습된 인사이트·규칙
+├── rules/             # 도메인별 학습 규칙 (자동 생성)
+│   └── *.md           # anime-ip.md, indie-steam.md 등
+├── vault/             # 산출물 영속 저장소
+│   ├── profile/       # 사용자 프로필 산출물
+│   ├── research/      # 리서치 결과
+│   ├── applications/  # 지원서·트래커
+│   └── general/       # 범용 산출물
+├── reports/           # IP 분석 리포트 (MD/HTML)
+├── result_cache/      # 분석 결과 캐시 (24h TTL + SHA-256)
+├── snapshots/         # 파이프라인 스냅샷 (JSON)
+└── models/            # 모델 레지스트리
+```
+
+| 디렉토리 | 생명주기 | 용도 |
+|----------|---------|------|
+| `journal/` | Append-only | Hook(PIPELINE_END/ERROR)이 자동 기록. 실행 이력 감사 추적 |
+| `memory/` | 누적 (max 50, 회전) | Agent Reflection이 패턴 추출 → `PROJECT.md` 갱신 |
+| `rules/` | 자동 생성 | 도메인별 학습 규칙 (장르 패턴, IP 특성) |
+| `vault/` | 영구 | 분석 리포트·리서치·지원서 등 산출물 보관 |
+| `result_cache/` | 24h TTL | SHA-256 content hash로 무결성 검증. 만료 시 재분석 |
+| `snapshots/` | 자동 | 파이프라인 중간 상태 캡처. 장애 복구용 |
 
 ### 왜 만들었는가
 
@@ -92,8 +144,11 @@ graph TB
 | **`while(tool_use)` Loop** | 모든 자율 행동의 핵심 프리미티브. 서브에이전트, 계획 실행, 배치 분석 전부 AgenticLoop 인스턴스 |
 | **46 Tools + MCP** | 네이티브 46개 도구 + MCP 카탈로그 42종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
 | **Sub-Agent** | 부모 역량 전체 상속, 최대 5 병렬, Token Guard, DAG 의존성 |
+| **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain. 자동 모델 전환 + circuit breaker |
 | **4-Tier Memory** | SOUL → User Profile → Organization → Project → Session. 프로젝트별 컨텍스트 자동 구성 |
+| **`.geode/` Context** | 프로젝트-로컬 영속 저장소 — journal, vault, rules, cache. `geode init`으로 초기화 |
 | **Domain Plugin** | `DomainPort` Protocol로 파이프라인 교체 — Game IP 분석 기본 탑재 |
+| **CANNOT Workflow** | 가드레일 기반 7단계 워크플로우 — 동기화 검증, Plan 강제, 칸반 추적 |
 | **Safety** | 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, Grounding Truth |
 
 ### Tool Execution Hierarchy
@@ -858,10 +913,10 @@ uv run geode batch --top 5                        # 배치 분석
 ## Testing
 
 ```bash
-uv run pytest                                        # 전체 (2780+ passed)
+uv run pytest                                        # 전체 (2870+ passed)
 uv run pytest tests/test_e2e_live_llm.py -v -m live  # Live E2E
 uv run ruff check core/ tests/                       # Lint
-uv run mypy core/                                    # Type check (173 files)
+uv run mypy core/                                    # Type check (175 files)
 uv run bandit -r core/ -c pyproject.toml             # Security
 ```
 
