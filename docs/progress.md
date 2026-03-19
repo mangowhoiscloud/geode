@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-19 (세션 7 — README 칸반 + .geode 구조 추가)
+> 마지막 갱신: 2026-03-19 (세션 8 — v0.20.0 릴리스)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -32,6 +32,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| version-bump | v0.20.0 릴리스 — [Unreleased]→[0.20.0] + 4곳 동기화 + ABOUT 갱신 | #308→#309 | @mangowhoiscloud | 2026-03-19 |
 | readme-update | README 칸반 + .geode/ 구조 + GAP 해소 | #306→#307 | @mangowhoiscloud | 2026-03-19 |
 | workflow-hardening | 워크플로우 고도화 — 동기화 검증 + Plan 강제 + 칸반 규칙 강화 | #304→#305 | @mangowhoiscloud | 2026-03-19 |
 | report-enrich | IP 보고서 DAG 정보 보강 — 4개 섹션 추가 + 테스트 + 보안 수정 | #298+#301→#300+#303 | @mangowhoiscloud | 2026-03-19 |
@@ -131,7 +132,7 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.19.1 | 2026-03-19 |
+| Version | 0.20.0 | 2026-03-19 |
 | Modules | 175 | 2026-03-19 |
 | Tests | 2873 | 2026-03-19 |
 | Tools | 46 | 2026-03-19 |
