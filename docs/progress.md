@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-19 (세션 4 — 칸반 체크포인트 1)
+> 마지막 갱신: 2026-03-19 (세션 6 — 칸반 재설계 + 워크플로우 고도화 반영)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -10,8 +10,8 @@
 
 ### Backlog
 
-| task_id | 설명 | 우선순위 | plan | 비고 |
-|---------|------|:--------:|------|------|
+| task_id | 작업 내용 | 우선순위 | plan | 비고 |
+|---------|----------|:--------:|------|------|
 | career-identity | C0 Identity career.toml 로딩 + 시스템 프롬프트 주입 | P1 | geode-context-hub.md Phase E | UserProfile 확장 |
 | app-tracker | C4 Plan tracker.json 지원 상태 CRUD + /apply 커맨드 | P1 | geode-context-hub.md Phase F | Vault applications 연동 |
 | session-resume | geode resume 커맨드 + AgenticLoop 체크포인트 통합 | P1 | geode-context-hub.md Phase B2-B5 | SessionCheckpoint 활용 |
@@ -19,21 +19,35 @@
 
 ### In Progress
 
-| task_id | 설명 | 담당 | 브랜치 | 시작일 | 비고 |
-|---------|------|------|--------|--------|------|
-| project-local-context | geode init 프로젝트-로컬 컨텍스트 어셈블리 개선 (harness-for-real 참조) | @mangowhoiscloud | feature/project-local-context | 2026-03-19 | 프로젝트 타입 감지 + 범용 템플릿 + Hook |
-| workflow-reode-sync | REODE 워크플로우 6건 이식 (칸반 3-checkpoint, .owner, main-only 등) | @mangowhoiscloud | feature/workflow-reode-sync | 2026-03-18 | CLAUDE.md 워크플로우 갱신 |
+| task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
+|---------|----------|------|--------|--------|------|
+| — | — | — | — | — | — |
 
 ### In Review
 
-| task_id | PR | 담당 | CI | 비고 |
-|---------|-----|------|-----|------|
-| — | — | — | — | — |
+| task_id | 작업 내용 | PR | 담당 | CI | 비고 |
+|---------|----------|-----|------|-----|------|
+| — | — | — | — | — | — |
+
+### Done (2026-03-19)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| workflow-hardening | 워크플로우 고도화 — 동기화 검증 + Plan 강제 + 칸반 규칙 강화 | #304→#305 | @mangowhoiscloud | 2026-03-19 |
+| report-enrich | IP 보고서 DAG 정보 보강 — 4개 섹션 추가 + 테스트 + 보안 수정 | #298+#301→#300+#303 | @mangowhoiscloud | 2026-03-19 |
+| multi-model-gap | 멀티모델 GAP 해소 — .env 자동 생성 + 키 검증 + 테스트 + 보안 수정 | #299+#302→#300+#303 | @mangowhoiscloud | 2026-03-19 |
+| geode-system | .geode/ 시스템 구축 — 에이전트 정체성 분리 + 메모리 계층 정비 | #296→#297 | @mangowhoiscloud | 2026-03-19 |
+| readme-narrative | README '왜 만들었는가' 내러티브 보강 | #294→#295 | @mangowhoiscloud | 2026-03-19 |
+| multi-provider-glm | Multi-Provider GLM + CANNOT 워크플로우 + 모델 최신화 | #291+#292→#293 | @mangowhoiscloud | 2026-03-19 |
+| version-sot | 버전 SOT 일원화 + 하네스 디렉토리 탐지 | #289→#290 | @mangowhoiscloud | 2026-03-19 |
+| project-local-context | geode init 프로젝트-로컬 컨텍스트 어셈블리 개선 | #287→#288 | @mangowhoiscloud | 2026-03-19 |
+| ci-self-hosted | CI self-hosted runner 전환 | #285→#286 | @mangowhoiscloud | 2026-03-19 |
+| workflow-reode-sync | REODE 워크플로우 6건 이식 + 칸반 3-checkpoint | #283→#284 | @mangowhoiscloud | 2026-03-19 |
 
 ### Done (2026-03-18)
 
-| task_id | 설명 | PR | 담당 | 완료일 |
-|---------|------|----|------|--------|
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
 | vault-v0 | Vault (V0) — 산출물 영속 저장소 (profile/research/applications/general) | #279→#280 | @mangowhoiscloud | 2026-03-18 |
 | context-hub-ab | .geode Context Hub Phase A+B — Journal + SessionCheckpoint | #277→#278 | @mangowhoiscloud | 2026-03-18 |
 | multi-provider | Multi-Provider AgenticLoop — AgenticResponse + OpenAI 경로 | #275→#276 | @mangowhoiscloud | 2026-03-18 |
@@ -67,7 +81,7 @@
 
 ### Blocked
 
-| task_id | 설명 | blocked_by | 사유 |
+| task_id | 작업 내용 | blocked_by | 사유 |
 |---------|------|-----------|------|
 | — | — | — | — |
 
@@ -117,13 +131,13 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.19.1 | 2026-03-18 |
-| Modules | 171 | 2026-03-18 |
-| Tests | 2740 | 2026-03-18 |
-| Tools | 46 | 2026-03-18 |
-| MCP Catalog | 42 | 2026-03-18 |
-| HookEvents | 36 | 2026-03-18 |
-| Skills | 18 | 2026-03-18 |
+| Version | 0.19.1 | 2026-03-19 |
+| Modules | 175 | 2026-03-19 |
+| Tests | 2873 | 2026-03-19 |
+| Tools | 46 | 2026-03-19 |
+| MCP Catalog | 42 | 2026-03-19 |
+| HookEvents | 36 | 2026-03-19 |
+| Skills | 18 | 2026-03-19 |
 
 ---
 
@@ -138,3 +152,6 @@
 7. **plan 연결**: `docs/plans/{task_id}.md` 경로로 연결
 8. **GAP 연결**: GAP Registry의 `gap_id`와 Backlog의 `task_id` 매핑
 9. **Done 이력**: 날짜별 그룹핑, 30일 초과 시 아카이브 (`docs/progress-archive/`)
+10. **필수 컬럼 누락 금지** — 모든 컬럼에 값 기입 필수. 해당 없으면 "—"으로 표기. 빈칸 방치 금지.
+11. **컬럼 재선정** — 프로젝트 상황에 따라 컬럼 추가/제거/순서 변경 가능. 단, task_id·작업 내용은 모든 상태에서 필수 유지.
+12. **Claude Code Task 연동** — TaskCreate로 생성한 세션 태스크의 subject를 칸반 task_id와 1:1 매핑. 상태 동기화: TaskUpdate status ↔ 칸반 상태 이동.
