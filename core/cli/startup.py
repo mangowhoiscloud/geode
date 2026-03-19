@@ -59,7 +59,10 @@ def auto_generate_env(project_root: Path | None = None) -> bool:
         else:
             lines.append(line)
 
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    tmp_path = env_path.with_suffix(".tmp")
+    tmp_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    tmp_path.chmod(0o600)
+    tmp_path.replace(env_path)
     log.info(".env auto-generated from .env.example")
     return True
 
@@ -75,11 +78,11 @@ def _is_placeholder(value: str) -> bool:
 
 def _has_any_llm_key() -> bool:
     """Check if ANY LLM provider API key is configured."""
-    if settings.anthropic_api_key and settings.anthropic_api_key != "sk-ant-...":
+    if settings.anthropic_api_key and not _is_placeholder(settings.anthropic_api_key):
         return True
-    if settings.openai_api_key and settings.openai_api_key != "sk-...":
+    if settings.openai_api_key and not _is_placeholder(settings.openai_api_key):
         return True
-    return bool(settings.zai_api_key and settings.zai_api_key != "...")
+    return bool(settings.zai_api_key and not _is_placeholder(settings.zai_api_key))
 
 
 # ---------------------------------------------------------------------------

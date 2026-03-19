@@ -33,6 +33,8 @@ P1 전체 완료 + .geode Context Hub (5-Layer C0-C4) Phase A+B.
 ### Added
 - IP 보고서 상세 섹션 보강 — Analyst Reasoning, Cross-LLM Verification, Rights Risk, Decision Tree Classification 4개 섹션 추가
 - 보고서 하위 섹션 — Scoring Breakdown, BiasBuster, Signals, PSM Engine, Evidence Chain, Axis Breakdown
+- `.env` 자동 생성 — `.env.example` 기반 atomic write (tmp+rename, chmod 0o600), placeholder 자동 제거
+- `/model` 전환 시 프로바이더 키 검증 — 해당 프로바이더 API 키 미설정 시 경고 표시
 - Multi-Provider LLM — ZhipuAI GLM-5 (glm-5, glm-5-turbo, glm-4.7-flash) 프로바이더 추가, OpenAI-compatible API 활용
 - `.env` Setup Wizard — .env 미존재 시 대화형 API 키 입력 (Anthropic/OpenAI/ZhipuAI, Enter 스킵, Ctrl+C 중단)
 - 자연어 API 키 탐지 — REPL 자유 텍스트에 `sk-ant-*`, `sk-*`, `{hex}.{hex}` 패턴 감지 → 자동 키 등록, LLM 전송 방지
@@ -41,6 +43,8 @@ P1 전체 완료 + .geode Context Hub (5-Layer C0-C4) Phase A+B.
 - MODEL_PROFILES에 GLM-5, GLM-5 Turbo, GLM-4.7 Flash 추가
 
 ### Fixed
+- `.env` 파일 보안 — atomic write (tmp+rename) + chmod 0o600 파일 권한 제한
+- placeholder 검증 로직 통일 — `_is_placeholder()` 단일 소스로 `_has_any_llm_key()`/`_check_provider_key()` 일관성 확보
 - AgenticLoop 모델 캐싱 버그 — `/model` 변경이 `_call_llm()`에 반영되지 않던 문제 수정 (`update_model()` 메서드 추가)
 - `check_readiness()` ANY 프로바이더 키 unblock — Anthropic 키 없어도 OpenAI/GLM 키만으로 전체 모드 동작
 
