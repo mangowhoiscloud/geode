@@ -43,6 +43,9 @@ OPENAI_FALLBACK_MODELS = OPENAI_FALLBACK_CHAIN
 _openai_client: Any = None  # openai.OpenAI | None — lazy import
 _openai_lock = threading.Lock()
 
+_glm_client: Any = None  # openai.OpenAI | None — GLM via OpenAI-compatible API
+_glm_lock = threading.Lock()
+
 # Circuit breaker for OpenAI API calls
 _openai_circuit_breaker = CircuitBreaker()
 
@@ -57,6 +60,37 @@ def _get_openai_client() -> Any:
 
                 _openai_client = openai.OpenAI(api_key=settings.openai_api_key)
     return _openai_client
+
+
+def _get_glm_client() -> Any:
+    """Lazy import and return cached GLM client (OpenAI-compatible, thread-safe)."""
+    global _glm_client
+    if _glm_client is None:
+        with _glm_lock:
+            if _glm_client is None:
+                import openai
+
+                from core.config import GLM_BASE_URL
+
+                _glm_client = openai.OpenAI(
+                    api_key=settings.zai_api_key,
+                    base_url=GLM_BASE_URL,
+                )
+    return _glm_client
+
+
+def reset_openai_client() -> None:
+    """Reset cached OpenAI client (e.g. after /key openai changes)."""
+    global _openai_client
+    with _openai_lock:
+        _openai_client = None
+
+
+def reset_glm_client() -> None:
+    """Reset cached GLM client (e.g. after /key glm changes)."""
+    global _glm_client
+    with _glm_lock:
+        _glm_client = None
 
 
 def _get_retryable_errors() -> tuple[type[Exception], ...]:

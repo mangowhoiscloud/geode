@@ -44,6 +44,8 @@ from core.cli.search import IPSearchEngine
 from core.cli.startup import (
     ReadinessReport,
     check_readiness,
+    detect_api_key,
+    env_setup_wizard,
     key_registration_gate,
     render_readiness,
     setup_project_memory,
@@ -506,6 +508,14 @@ def _welcome_screen() -> None:
     """Show Claude Code-style welcome screen with readiness check."""
     _suppress_noisy_warnings()
     _render_welcome_brand()
+
+    # .env setup wizard — runs when .env is absent and no API keys set
+    env_path = Path(".env")
+    if not env_path.exists():
+        from core.cli.startup import _has_any_llm_key
+
+        if not _has_any_llm_key():
+            env_setup_wizard()
 
     # OpenClaw gateway:startup — readiness check
     readiness = check_readiness()
@@ -2738,6 +2748,10 @@ def _interactive_loop() -> None:
             )
             if should_break:
                 break
+            # Sync model/provider to AgenticLoop after /model command
+            # (fixes model caching bug: /model changes were not reflected)
+            if settings.model != agentic.model:
+                agentic.update_model(settings.model)
             # Update handlers if verbose changed
             if verbose != (handlers.get("_verbose_flag") is True):
                 handlers = _build_tool_handlers(
@@ -2765,6 +2779,24 @@ def _interactive_loop() -> None:
                 )
                 agentic_ref[0] = agentic
         else:
+            # API key detection: intercept pasted keys before sending to LLM
+            detected = detect_api_key(user_input)
+            if detected:
+                provider, env_var, key_value = detected
+                from core.cli.commands import cmd_key
+
+                # Route through cmd_key for proper handling
+                if provider == "glm":
+                    cmd_key(f"glm {key_value}")
+                elif provider == "openai":
+                    cmd_key(key_value)
+                else:
+                    cmd_key(key_value)
+                new_readiness = check_readiness()
+                _set_readiness(new_readiness)
+                render_readiness(new_readiness)
+                continue
+
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
             try:
                 result = agentic.run(user_input)

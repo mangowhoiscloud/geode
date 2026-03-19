@@ -15,7 +15,13 @@ from typing import cast
 from simple_term_menu import TerminalMenu
 
 from core.auth.profiles import ProfileStore
-from core.config import ANTHROPIC_BUDGET, ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY, OPENAI_PRIMARY
+from core.config import (
+    ANTHROPIC_BUDGET,
+    ANTHROPIC_PRIMARY,
+    ANTHROPIC_SECONDARY,
+    GLM_PRIMARY,
+    OPENAI_PRIMARY,
+)
 from core.ui.console import console
 
 # ---------------------------------------------------------------------------
@@ -38,6 +44,9 @@ MODEL_PROFILES: list[ModelProfile] = [
     ModelProfile(ANTHROPIC_SECONDARY, "Anthropic", "Sonnet 4.5", "$$"),
     ModelProfile(ANTHROPIC_BUDGET, "Anthropic", "Haiku 4.5", "$"),
     ModelProfile(OPENAI_PRIMARY, "OpenAI", "GPT-5.4", "$$"),
+    ModelProfile(GLM_PRIMARY, "ZhipuAI", "GLM-5", "$"),
+    ModelProfile("glm-5-turbo", "ZhipuAI", "GLM-5 Turbo", "$"),
+    ModelProfile("glm-4.7-flash", "ZhipuAI", "GLM-4.7 Flash", "$"),
 ]
 
 _MODEL_INDEX: dict[str, ModelProfile] = {m.id: m for m in MODEL_PROFILES}
@@ -89,8 +98,9 @@ def show_help() -> None:
     console.print("  [label]/search[/label] <query>     — Search IPs by keyword")
     console.print("  [label]/list[/label]               — Show available IPs")
     console.print("  [label]/verbose[/label]            — Toggle verbose mode")
-    console.print("  [label]/key[/label] <value>        — Set Anthropic API key")
+    console.print("  [label]/key[/label] <value>        — Set API key (auto-detect provider)")
     console.print("  [label]/key openai[/label] <value> — Set OpenAI API key")
+    console.print("  [label]/key glm[/label] <value>    — Set ZhipuAI API key")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
     console.print("  [label]/auth[/label]               — Manage auth profiles")
     console.print("  [label]/generate[/label] [count]   — Generate synthetic demo data")
@@ -167,9 +177,13 @@ def cmd_key(args: str) -> bool:
             if settings.openai_api_key
             else "[muted]not set[/muted]"
         )
+        zhipu = (
+            _mask_key(settings.zai_api_key) if settings.zai_api_key else "[muted]not set[/muted]"
+        )
         console.print()
         console.print(f"  [label]Anthropic[/label]  {anthro}")
         console.print(f"  [label]OpenAI[/label]    {openai}")
+        console.print(f"  [label]ZhipuAI[/label]   {zhipu}")
         console.print()
         return False
 
@@ -181,7 +195,31 @@ def cmd_key(args: str) -> bool:
         value = parts[1].strip()
         settings.openai_api_key = value
         _upsert_env("OPENAI_API_KEY", value)
+        try:
+            from core.infrastructure.adapters.llm.openai_adapter import reset_openai_client
+
+            reset_openai_client()
+        except ImportError:
+            pass
         console.print(f"  [success]OpenAI API key set[/success]  {_mask_key(value)}")
+        console.print()
+        return True
+
+    # /key glm <value>
+    if parts[0].lower() == "glm":
+        if len(parts) < 2:
+            console.print("  [warning]Usage: /key glm <API_KEY>[/warning]")
+            return False
+        value = parts[1].strip()
+        settings.zai_api_key = value
+        _upsert_env("ZAI_API_KEY", value)
+        try:
+            from core.infrastructure.adapters.llm.openai_adapter import reset_glm_client
+
+            reset_glm_client()
+        except ImportError:
+            pass
+        console.print(f"  [success]ZhipuAI API key set[/success]  {_mask_key(value)}")
         console.print()
         return True
 
@@ -194,18 +232,42 @@ def cmd_key(args: str) -> bool:
     elif value.startswith("sk-proj-") or value.startswith("sk-"):
         settings.openai_api_key = value
         _upsert_env("OPENAI_API_KEY", value)
+        try:
+            from core.infrastructure.adapters.llm.openai_adapter import reset_openai_client
+
+            reset_openai_client()
+        except ImportError:
+            pass
         console.print(f"  [success]OpenAI API key set[/success]  {_mask_key(value)}")
+    elif _is_glm_key(value):
+        settings.zai_api_key = value
+        _upsert_env("ZAI_API_KEY", value)
+        try:
+            from core.infrastructure.adapters.llm.openai_adapter import reset_glm_client
+
+            reset_glm_client()
+        except ImportError:
+            pass
+        console.print(f"  [success]ZhipuAI API key set[/success]  {_mask_key(value)}")
     else:
-        # Non-LLM keys (Google, Brave, etc.) — store by explicit name only
         console.print(
             "  [warning]Unrecognized key prefix. Use:[/warning]\n"
             "  [muted]/key <sk-ant-...>          → Anthropic[/muted]\n"
-            "  [muted]/key openai <sk-proj-...>  → OpenAI[/muted]"
+            "  [muted]/key openai <sk-proj-...>  → OpenAI[/muted]\n"
+            "  [muted]/key glm <key>             → ZhipuAI[/muted]"
         )
         console.print()
         return False
     console.print()
     return True
+
+
+def _is_glm_key(value: str) -> bool:
+    """Detect ZhipuAI API key pattern: {hex}.{hex} (e.g. abc123.def456)."""
+    if "." not in value:
+        return False
+    parts = value.split(".", 1)
+    return len(parts) == 2 and all(len(p) >= 4 for p in parts)
 
 
 def _apply_model(selected: ModelProfile) -> None:

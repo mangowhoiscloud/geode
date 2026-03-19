@@ -31,6 +31,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 P1 전체 완료 + .geode Context Hub (5-Layer C0-C4) Phase A+B.
 
 ### Added
+- Multi-Provider LLM — ZhipuAI GLM-5 (glm-5, glm-5-turbo, glm-4.7-flash) 프로바이더 추가, OpenAI-compatible API 활용
+- `.env` Setup Wizard — .env 미존재 시 대화형 API 키 입력 (Anthropic/OpenAI/ZhipuAI, Enter 스킵, Ctrl+C 중단)
+- 자연어 API 키 탐지 — REPL 자유 텍스트에 `sk-ant-*`, `sk-*`, `{hex}.{hex}` 패턴 감지 → 자동 키 등록, LLM 전송 방지
+- `/key glm <value>` 서브커맨드 + GLM 키 자동 탐지 (`{id}.{secret}` 패턴)
+- `_resolve_provider()` 헬퍼 — 모델 ID → 프로바이더 자동 판별 (claude-* → anthropic, glm-* → glm, 그 외 → openai)
+- MODEL_PROFILES에 GLM-5, GLM-5 Turbo, GLM-4.7 Flash 추가
+
+### Fixed
+- AgenticLoop 모델 캐싱 버그 — `/model` 변경이 `_call_llm()`에 반영되지 않던 문제 수정 (`update_model()` 메서드 추가)
+- `check_readiness()` ANY 프로바이더 키 unblock — Anthropic 키 없어도 OpenAI/GLM 키만으로 전체 모드 동작
+
+### Changed
+- check_readiness/key_registration_gate 멀티 프로바이더 지원 — 3사 키 상태 표시 및 ANY 키 unblock
+
 - `.geode` Context Hub — 5-Layer 목적 중심 컨텍스트 계층 (C0 Identity → C1 Project → C2 Journal → C3 Session → C4 Plan)
 - `ProjectJournal` (C2) — `.geode/journal/` append-only 실행 기록 (runs.jsonl, costs.jsonl, learned.md, errors.jsonl)
 - Journal Hook 자동 기록 — PIPELINE_END/ERROR → runs.jsonl + learned.md 자동 침전

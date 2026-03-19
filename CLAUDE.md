@@ -314,10 +314,12 @@ Decision Tree on D-E-F axes:
 | OpenAI | `gpt-5.2` | $1.75 | $14.00 | Fallback 1 |
 | OpenAI | `gpt-4.1` | $3.50 | $14.00 | Fallback 2 |
 | OpenAI | `gpt-4.1-mini` | $0.70 | $2.80 | Budget |
-| OpenAI | `o3` | $3.50 | $14.00 | Reasoning |
-| OpenAI | `o4-mini` | $2.00 | $8.00 | Reasoning (budget) |
+| **ZhipuAI** | `glm-5` | $1.00 | $3.20 | GLM Primary |
+| ZhipuAI | `glm-5-turbo` | $0.50 | $1.60 | GLM Fallback |
+| ZhipuAI | `glm-4.7-flash` | $0.10 | $0.10 | GLM Budget |
 
 - **Fallback chain** (OpenAI): `gpt-5.4` → `gpt-5.2` → `gpt-4.1`
+- **Fallback chain** (GLM): `glm-5` → `glm-5-turbo` → `glm-4.7-flash`
 - **Pricing source**: [OpenAI API Pricing](https://developers.openai.com/api/docs/pricing/)
 - **Cache pricing** (Anthropic): creation = input × 1.25, read = input × 0.1
 
