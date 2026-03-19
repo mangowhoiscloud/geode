@@ -39,11 +39,11 @@ class TestEnsureStructure:
         assert mem.rules_dir.exists()
         assert mem.rules_dir.is_dir()
 
-    def test_creates_sample_rule(self, tmp_path: Path):
+    def test_no_sample_rule_by_default(self, tmp_path: Path):
+        """Generic template does not create domain-specific sample rules."""
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
-        anime_rule = mem.rules_dir / "anime-ip.md"
-        assert anime_rule.exists()
+        assert list(mem.rules_dir.glob("*.md")) == []
 
     def test_idempotent(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
@@ -60,8 +60,8 @@ class TestLoadMemory:
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
         content = mem.load_memory()
-        assert "GEODE Project Memory" in content
-        assert "프로젝트 개요" in content
+        assert "Project Memory" in content
+        assert "Overview" in content
 
     def test_load_respects_max_lines(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
@@ -90,41 +90,58 @@ class TestLoadRules:
         mem = ProjectMemory(tmp_path)
         assert mem.load_rules() == []
 
-    def test_load_all_rules(self, tmp_path: Path):
+    def test_load_all_rules_empty_default(self, tmp_path: Path):
+        """Default template creates no sample rules."""
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
         rules = mem.load_rules()
-        assert len(rules) >= 1
-        assert rules[0]["name"] == "anime-ip"
+        assert len(rules) == 0
+
+    def test_load_user_created_rule(self, tmp_path: Path):
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+        # User creates a rule manually
+        rule_content = '---\nname: my-rule\npaths:\n  - "**/*test*"\n---\n# My Rule\n'
+        (mem.rules_dir / "my-rule.md").write_text(rule_content, encoding="utf-8")
+        rules = mem.load_rules()
+        assert len(rules) == 1
+        assert rules[0]["name"] == "my-rule"
 
     def test_rule_has_paths(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
+        # paths regex needs trailing newline after each item
+        rule = '---\nname: test\npaths:\n  - "**/*api*"\n\n---\n\n# Test\n'
+        (mem.rules_dir / "test.md").write_text(rule, encoding="utf-8")
         rules = mem.load_rules()
-        anime = rules[0]
-        assert len(anime["paths"]) > 0
-        assert any("anime" in p for p in anime["paths"])
+        assert len(rules[0]["paths"]) > 0
+        assert any("api" in p for p in rules[0]["paths"])
 
     def test_rule_has_content(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
+        rule = '---\nname: test\npaths:\n  - "*"\n---\n# My Custom Rule\n'
+        (mem.rules_dir / "test.md").write_text(rule, encoding="utf-8")
         rules = mem.load_rules()
-        assert "애니메이션 IP 분석 규칙" in rules[0]["content"]
+        assert "My Custom Rule" in rules[0]["content"]
 
     def test_filter_by_context(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
-        # "anime" matches the sample rule paths
-        matched = mem.load_rules("anime")
+        rule = '---\nname: api-rule\npaths:\n  - "**/*api*"\n\n---\n\n# API Rule\n'
+        (mem.rules_dir / "api-rule.md").write_text(rule, encoding="utf-8")
+
+        matched = mem.load_rules("api")
         assert len(matched) >= 1
 
-        # "nonexistent" shouldn't match
         no_match = mem.load_rules("nonexistent_xyz_999")
         assert len(no_match) == 0
 
     def test_wildcard_loads_all(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
+        rule = '---\nname: test\npaths:\n  - "*"\n---\n# Test\n'
+        (mem.rules_dir / "test.md").write_text(rule, encoding="utf-8")
         rules = mem.load_rules("*")
         assert len(rules) >= 1
 
@@ -248,7 +265,9 @@ class TestGetContextForIP:
     def test_context_has_matching_rules(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
+        # Create a rule that matches "cowboy"
+        rule = '---\nname: test\npaths:\n  - "*cowboy*"\n---\n# Test\n'
+        (mem.rules_dir / "test.md").write_text(rule, encoding="utf-8")
 
-        # "cowboy" matches the sample rule paths pattern "*cowboy*"
         ctx = mem.get_context_for_ip("cowboy")
         assert len(ctx["rules"]) >= 1
