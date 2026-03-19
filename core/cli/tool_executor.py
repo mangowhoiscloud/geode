@@ -276,7 +276,20 @@ class ToolExecutor:
             for i, t in enumerate(tasks_raw)
         ]
 
-        results = self._sub_agent_manager.delegate(sub_tasks)
+        # P2-C: progress callback — update spinner on each sub-agent completion
+        completed_count = 0
+        total_count = len(sub_tasks)
+
+        def _on_progress(result: Any) -> None:
+            nonlocal completed_count
+            completed_count += 1
+            status_icon = "[green]ok[/green]" if result.success else "[red]err[/red]"
+            console.print(
+                f"  [dim]  sub-agent {completed_count}/{total_count}"
+                f" {status_icon} {result.task_id}[/dim]"
+            )
+
+        results = self._sub_agent_manager.delegate(sub_tasks, on_progress=_on_progress)
 
         # P2-A: unified response format (single and batch identical)
         succeeded = sum(1 for r in results if r.success)
