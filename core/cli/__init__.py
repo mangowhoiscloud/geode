@@ -49,6 +49,7 @@ from core.cli.startup import (
     key_registration_gate,
     render_readiness,
     setup_project_memory,
+    setup_user_profile,
 )
 from core.cli.tool_executor import ToolExecutor
 from core.config import settings
@@ -524,6 +525,9 @@ def _welcome_screen() -> None:
 
     # OpenClaw boot-md — initialize project memory if absent
     setup_project_memory()
+
+    # Tier 0.5 — initialize user profile if absent
+    setup_user_profile()
 
     console.print(
         "  [muted]/help[/muted] for commands  [muted]·[/muted]  [muted]type naturally[/muted]"
@@ -2963,13 +2967,16 @@ def init(
         else ""
     )
 
-    # 2. .claude/ (ProjectMemory)
-    created_claude = project_mem.ensure_structure()
-    if created_claude:
-        console.print("  Created .claude/ structure")
+    # 2. .geode/memory/ + .geode/rules/ (ProjectMemory)
+    created_mem = project_mem.ensure_structure()
+    if created_mem:
+        console.print("  Created .geode/memory/ + .geode/rules/ structure")
 
     # 3. .geode/ directories
     geode_dirs = [
+        # Agent memory (git-tracked)
+        Path(".geode/memory"),
+        Path(".geode/rules"),
         # C1: Project config
         Path(".geode/project"),
         # C2: Journal (append-only execution history)

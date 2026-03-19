@@ -139,16 +139,16 @@ class TestCheckReadiness:
         with patch("core.cli.startup.settings") as mock_settings:
             _no_keys_mock(mock_settings)
 
-            # No .claude/MEMORY.md → unavailable
+            # No .geode/memory/PROJECT.md → unavailable
             report = check_readiness(tmp_path)
             assert report.has_memory is False
             mem_cap = next(c for c in report.capabilities if c.name == "Project Memory")
             assert mem_cap.available is False
 
-            # Create .claude/MEMORY.md → available
-            claude_dir = tmp_path / ".claude"
-            claude_dir.mkdir()
-            (claude_dir / "MEMORY.md").write_text("# Memory\n")
+            # Create .geode/memory/PROJECT.md → available
+            mem_dir = tmp_path / ".geode" / "memory"
+            mem_dir.mkdir(parents=True)
+            (mem_dir / "PROJECT.md").write_text("# Memory\n")
             report = check_readiness(tmp_path)
             assert report.has_memory is True
             mem_cap = next(c for c in report.capabilities if c.name == "Project Memory")
@@ -351,7 +351,7 @@ class TestSetupProjectMemory:
     def test_creates_memory(self, tmp_path: Path):
         created = setup_project_memory(tmp_path)
         assert created is True
-        assert (tmp_path / ".claude" / "MEMORY.md").exists()
+        assert (tmp_path / ".geode" / "memory" / "PROJECT.md").exists()
 
     def test_idempotent(self, tmp_path: Path):
         assert setup_project_memory(tmp_path) is True
