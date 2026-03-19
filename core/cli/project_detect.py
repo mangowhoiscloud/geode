@@ -1,10 +1,14 @@
 """Project type detection — harness-for-real init.sh pattern in Python.
 
-Auto-detects project type, package manager, and build/test/lint commands
-by inspecting files in the project root directory.
+Auto-detects project type, package manager, build/test/lint commands,
+and AI agent harness directories by inspecting the project root.
 
 Supported project types:
   node (npm/yarn/pnpm/bun), python-uv, python-pip, rust, go, java-maven, java-gradle
+
+Detected harness directories:
+  .claude/, .cursor/, .windsurf/, .copilot/, .openclaw/, .codeium/, .aider/,
+  .codex/, .geode/, .devin/
 """
 
 from __future__ import annotations
@@ -12,6 +16,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+# Known AI agent harness directories (name → display label)
+KNOWN_HARNESSES: dict[str, str] = {
+    ".claude": "Claude Code",
+    ".cursor": "Cursor",
+    ".windsurf": "Windsurf",
+    ".copilot": "GitHub Copilot",
+    ".openclaw": "OpenClaw",
+    ".codeium": "Codeium",
+    ".aider": "Aider",
+    ".codex": "Codex",
+    ".geode": "GEODE",
+    ".devin": "Devin",
+}
 
 
 @dataclass
@@ -26,6 +44,7 @@ class ProjectInfo:
     typecheck_cmd: str = ""
     src_dirs: list[str] = field(default_factory=lambda: ["src/", "lib/"])
     test_dirs: list[str] = field(default_factory=lambda: ["tests/", "test/"])
+    harnesses: list[str] = field(default_factory=list)
 
 
 def detect_project_type(root: Path | None = None) -> ProjectInfo:
@@ -47,24 +66,19 @@ def detect_project_type(root: Path | None = None) -> ProjectInfo:
         ProjectInfo with detected type and commands.
     """
     root = root or Path(".")
+    info = _detect_type(root)
+    info.harnesses = _detect_harnesses(root)
+    return info
 
-    # Node.js
-    if (root / "package.json").exists():
-        pkg_mgr = _detect_node_pkg_mgr(root)
-        return ProjectInfo(
-            project_type="node",
-            pkg_mgr=pkg_mgr,
-            build_cmd=f"{pkg_mgr} run build",
-            test_cmd=f"{pkg_mgr} test",
-            lint_cmd=f"{pkg_mgr} run lint",
-            typecheck_cmd=(
-                f"{pkg_mgr} run tsc --noEmit" if (root / "tsconfig.json").exists() else ""
-            ),
-            src_dirs=["src/", "lib/", "app/", "components/"],
-            test_dirs=["tests/", "test/", "__tests__/", "spec/"],
-        )
 
-    # Python (uv)
+def _detect_type(root: Path) -> ProjectInfo:
+    """Detect project type from marker files.
+
+    Priority: pyproject.toml > package.json (Python projects often have
+    incidental package.json for tooling/MCP, so pyproject.toml wins).
+    """
+    # Python (uv) — check before Node.js since many Python projects
+    # have incidental package.json (MCP servers, frontend tooling, etc.)
     if (root / "pyproject.toml").exists():
         return ProjectInfo(
             project_type="python-uv",
@@ -88,6 +102,22 @@ def detect_project_type(root: Path | None = None) -> ProjectInfo:
             typecheck_cmd="mypy . 2>/dev/null || true",
             src_dirs=["src/", "lib/"],
             test_dirs=["tests/", "test/"],
+        )
+
+    # Node.js
+    if (root / "package.json").exists():
+        pkg_mgr = _detect_node_pkg_mgr(root)
+        return ProjectInfo(
+            project_type="node",
+            pkg_mgr=pkg_mgr,
+            build_cmd=f"{pkg_mgr} run build",
+            test_cmd=f"{pkg_mgr} test",
+            lint_cmd=f"{pkg_mgr} run lint",
+            typecheck_cmd=(
+                f"{pkg_mgr} run tsc --noEmit" if (root / "tsconfig.json").exists() else ""
+            ),
+            src_dirs=["src/", "lib/", "app/", "components/"],
+            test_dirs=["tests/", "test/", "__tests__/", "spec/"],
         )
 
     # Rust
@@ -143,6 +173,22 @@ def detect_project_type(root: Path | None = None) -> ProjectInfo:
         )
 
     return ProjectInfo()
+
+
+def _detect_harnesses(root: Path) -> list[str]:
+    """Detect AI agent harness directories present in the project root."""
+    found: list[str] = []
+    for dirname in KNOWN_HARNESSES:
+        if (root / dirname).is_dir():
+            found.append(dirname)
+    return sorted(found)
+
+
+def get_harness_summary(harnesses: list[str]) -> str:
+    """Return a human-readable summary of detected harnesses."""
+    if not harnesses:
+        return "none"
+    return ", ".join(KNOWN_HARNESSES.get(h, h) for h in harnesses)
 
 
 def _detect_node_pkg_mgr(root: Path) -> str:
