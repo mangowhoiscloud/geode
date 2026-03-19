@@ -2,8 +2,8 @@
 
 Tests that exercise the full pipeline with real components (dry-run mode).
 Covers scenarios from:
-  - docs/e2e-orchestration-scenarios.md (Sections 3, 5)
-  - docs/orchestration-operation.md (Sections 3-6)
+  - docs/e2e/e2e-orchestration-scenarios.md (Sections 3, 5)
+  - docs/architecture/orchestration-operation.md (Sections 3-6)
 
 No LLM API calls — all tests use dry-run fixtures.
 """
