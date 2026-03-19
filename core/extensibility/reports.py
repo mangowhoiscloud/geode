@@ -76,10 +76,10 @@ _SUBSCORE_BARS = [
 
 def _tier_class(tier: str) -> str:
     """Map tier string to CSS class."""
-    tier_lower = tier.upper()
-    if tier_lower in ("S", "A"):
+    tier_upper = tier.upper()
+    if tier_upper in ("S", "A"):
         return "tier-high"
-    if tier_lower in ("B",):
+    if tier_upper in ("B",):
         return "tier-mid"
     return "tier-low"
 
