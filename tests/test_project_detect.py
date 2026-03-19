@@ -5,11 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.cli.project_detect import (
+    KNOWN_HARNESSES,
     ProjectInfo,
     detect_project_type,
     generate_config_toml,
     generate_hooks,
     generate_settings_json_hooks,
+    get_harness_summary,
 )
 
 
@@ -204,3 +206,56 @@ class TestGenerateSettingsJsonHooks:
         config = generate_settings_json_hooks()
         assert "PreToolUse" in config["hooks"]
         assert "git commit" in config["hooks"]["PreToolUse"][0]["matcher"]
+
+
+class TestHarnessDetection:
+    """Test AI agent harness directory detection."""
+
+    def test_no_harnesses(self, tmp_path: Path) -> None:
+        info = detect_project_type(tmp_path)
+        assert info.harnesses == []
+
+    def test_detect_claude(self, tmp_path: Path) -> None:
+        (tmp_path / ".claude").mkdir()
+        info = detect_project_type(tmp_path)
+        assert ".claude" in info.harnesses
+
+    def test_detect_multiple_harnesses(self, tmp_path: Path) -> None:
+        for d in [".claude", ".cursor", ".geode"]:
+            (tmp_path / d).mkdir()
+        info = detect_project_type(tmp_path)
+        assert ".claude" in info.harnesses
+        assert ".cursor" in info.harnesses
+        assert ".geode" in info.harnesses
+        assert len(info.harnesses) == 3
+
+    def test_harnesses_sorted(self, tmp_path: Path) -> None:
+        for d in [".geode", ".claude", ".cursor"]:
+            (tmp_path / d).mkdir()
+        info = detect_project_type(tmp_path)
+        assert info.harnesses == sorted(info.harnesses)
+
+    def test_ignores_files_not_dirs(self, tmp_path: Path) -> None:
+        (tmp_path / ".claude").write_text("not a dir")
+        info = detect_project_type(tmp_path)
+        assert ".claude" not in info.harnesses
+
+    def test_harness_with_project_type(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".cursor").mkdir()
+        info = detect_project_type(tmp_path)
+        assert info.project_type == "python-uv"
+        assert ".claude" in info.harnesses
+        assert ".cursor" in info.harnesses
+
+    def test_get_harness_summary_empty(self) -> None:
+        assert get_harness_summary([]) == "none"
+
+    def test_get_harness_summary_labels(self) -> None:
+        result = get_harness_summary([".claude", ".cursor"])
+        assert "Claude Code" in result
+        assert "Cursor" in result
+
+    def test_known_harnesses_complete(self) -> None:
+        assert len(KNOWN_HARNESSES) >= 10

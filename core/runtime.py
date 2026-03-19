@@ -487,6 +487,7 @@ class GeodeRuntime:
             run_log_dir=DEFAULT_LOG_DIR,
             project_journal=project_journal,
             vault=vault,
+            project_root=Path("."),
         )
 
         # Wire ContextAssembler into router node (L2 → L3 bridge)

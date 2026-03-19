@@ -71,6 +71,7 @@ class ContextAssembler:
         run_log_dir: Path | str | None = None,
         project_journal: Any | None = None,
         vault: Any | None = None,
+        project_root: Path | str | None = None,
     ) -> None:
         self._org_memory = organization_memory
         self._project_memory = project_memory
@@ -81,6 +82,7 @@ class ContextAssembler:
         self._run_log_dir: Path | None = Path(run_log_dir) if run_log_dir else None
         self._project_journal = project_journal  # C2: ProjectJournal
         self._vault = vault  # V0: Vault (artifact storage)
+        self._project_root: Path | None = Path(project_root) if project_root else None
 
     def assemble(
         self,
@@ -158,6 +160,9 @@ class ContextAssembler:
             except Exception as e:
                 log.warning("Failed to load session context: %s", e)
                 context["_session_loaded"] = False
+
+        # Project environment: detected project type + harnesses
+        self._inject_project_env(context)
 
         # Run History: inject recent execution summaries (Karpathy P6 L3)
         self._inject_run_history(ip_name, context)
@@ -270,6 +275,25 @@ class ContextAssembler:
                 context["_vault_summary"] = summary
         except Exception:
             log.debug("Failed to inject vault context", exc_info=True)
+
+    def _inject_project_env(self, context: dict[str, Any]) -> None:
+        """Inject detected project type and harness information."""
+        if not self._project_root:
+            return
+        try:
+            from core.cli.project_detect import (
+                detect_project_type,
+                get_harness_summary,
+            )
+
+            info = detect_project_type(self._project_root)
+            context["_project_type"] = info.project_type
+            context["_project_pkg_mgr"] = info.pkg_mgr
+            if info.harnesses:
+                context["_harnesses"] = info.harnesses
+                context["_harness_summary"] = get_harness_summary(info.harnesses)
+        except Exception:
+            log.debug("Failed to inject project env", exc_info=True)
 
     @staticmethod
     def _build_llm_summary(
