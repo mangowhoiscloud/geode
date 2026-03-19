@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-18 (세션 3 — 칸반 체크포인트 2)
+> 마지막 갱신: 2026-03-19 (세션 4 — 칸반 체크포인트 1)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -21,6 +21,7 @@
 
 | task_id | 설명 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|------|------|--------|--------|------|
+| project-local-context | geode init 프로젝트-로컬 컨텍스트 어셈블리 개선 (harness-for-real 참조) | @mangowhoiscloud | feature/project-local-context | 2026-03-19 | 프로젝트 타입 감지 + 범용 템플릿 + Hook |
 | workflow-reode-sync | REODE 워크플로우 6건 이식 (칸반 3-checkpoint, .owner, main-only 등) | @mangowhoiscloud | feature/workflow-reode-sync | 2026-03-18 | CLAUDE.md 워크플로우 갱신 |
 
 ### In Review
