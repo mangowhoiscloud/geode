@@ -241,6 +241,126 @@ class TestEnvSetupWizard:
         assert result is False
 
 
+class TestIsPlaceholder:
+    """Test _is_placeholder helper."""
+
+    def test_ellipsis_exact(self):
+        from core.cli.startup import _is_placeholder
+
+        assert _is_placeholder("...") is True
+
+    def test_prefixed_ellipsis(self):
+        from core.cli.startup import _is_placeholder
+
+        assert _is_placeholder("sk-ant-...") is True
+        assert _is_placeholder("sk-...") is True
+        assert _is_placeholder("lsv2_pt_...") is True
+        assert _is_placeholder("BSA...") is True
+
+    def test_real_value_not_placeholder(self):
+        from core.cli.startup import _is_placeholder
+
+        assert _is_placeholder("sk-ant-api03-realkey123456789") is False
+        assert _is_placeholder("") is False
+        assert _is_placeholder("some-real-key") is False
+        assert _is_placeholder("true") is False
+
+    def test_trailing_dots_not_three(self):
+        from core.cli.startup import _is_placeholder
+
+        # Only exactly "..." at end counts
+        assert _is_placeholder("value..") is False
+        assert _is_placeholder("value.") is False
+
+
+class TestAutoGenerateEnv:
+    """Test auto_generate_env function."""
+
+    def test_creates_env_from_example(self, tmp_path: Path):
+        from core.cli.startup import auto_generate_env
+
+        example = tmp_path / ".env.example"
+        example.write_text("ANTHROPIC_API_KEY=sk-ant-...\nDEBUG=true\n")
+
+        result = auto_generate_env(tmp_path)
+        assert result is True
+
+        env = tmp_path / ".env"
+        assert env.exists()
+        content = env.read_text()
+        assert "ANTHROPIC_API_KEY=" in content
+        # Placeholder should be replaced with empty value
+        assert "sk-ant-..." not in content
+        # Non-placeholder value should remain
+        assert "DEBUG=true" in content
+
+    def test_skips_existing_env(self, tmp_path: Path):
+        from core.cli.startup import auto_generate_env
+
+        example = tmp_path / ".env.example"
+        example.write_text("KEY=sk-...\n")
+        env = tmp_path / ".env"
+        env.write_text("KEY=my-real-key\n")
+
+        result = auto_generate_env(tmp_path)
+        assert result is False
+        # Original .env should be untouched
+        assert env.read_text() == "KEY=my-real-key\n"
+
+    def test_no_example_file(self, tmp_path: Path):
+        from core.cli.startup import auto_generate_env
+
+        # Neither .env nor .env.example exist
+        result = auto_generate_env(tmp_path)
+        assert result is False
+        assert not (tmp_path / ".env").exists()
+
+    def test_replaces_placeholders(self, tmp_path: Path):
+        from core.cli.startup import auto_generate_env
+
+        example = tmp_path / ".env.example"
+        example.write_text(
+            "ANTHROPIC_API_KEY=sk-ant-...\n"
+            "OPENAI_API_KEY=sk-...\n"
+            "ZAI_API_KEY=...\n"
+            "DEBUG=true\n"
+            "# This is a comment\n"
+            "GEODE_MODEL=claude-opus-4-6\n"
+        )
+
+        result = auto_generate_env(tmp_path)
+        assert result is True
+
+        content = (tmp_path / ".env").read_text()
+        lines = content.strip().split("\n")
+
+        # Placeholders become empty
+        assert "ANTHROPIC_API_KEY=" in lines[0]
+        assert "sk-ant-..." not in lines[0]
+        assert "OPENAI_API_KEY=" in lines[1]
+        assert "sk-..." not in lines[1]
+        assert "ZAI_API_KEY=" in lines[2]
+        assert lines[2].endswith("=")
+
+        # Non-placeholders preserved
+        assert "DEBUG=true" in content
+        assert "# This is a comment" in content
+        assert "GEODE_MODEL=claude-opus-4-6" in content
+
+    def test_preserves_comments(self, tmp_path: Path):
+        from core.cli.startup import auto_generate_env
+
+        example = tmp_path / ".env.example"
+        example.write_text(
+            "# Anthropic\nANTHROPIC_API_KEY=sk-ant-...\n\n# OpenAI\nOPENAI_API_KEY=sk-...\n"
+        )
+
+        auto_generate_env(tmp_path)
+        content = (tmp_path / ".env").read_text()
+        assert "# Anthropic" in content
+        assert "# OpenAI" in content
+
+
 class TestResolveProvider:
     """Test _resolve_provider helper."""
 

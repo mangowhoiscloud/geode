@@ -8,8 +8,10 @@ from unittest.mock import patch
 from core.cli.commands import (
     COMMAND_MAP,
     MODEL_PROFILES,
+    ModelProfile,
     _apply_model,
     _budget_bar,
+    _check_provider_key,
     _get_cost_budget,
     _mask_key,
     _set_cost_budget,
@@ -407,3 +409,93 @@ class TestCostBudgetPersistence:
         _set_cost_budget(50.0)
         _set_cost_budget(100.0)
         assert _get_cost_budget() == 100.0
+
+
+class TestCheckProviderKey:
+    """Test _check_provider_key warns when provider API key is missing."""
+
+    def test_warns_missing_anthropic_key(self):
+        """Switching to Anthropic model without key should warn."""
+        from core.config import settings
+
+        profile = ModelProfile(ANTHROPIC_PRIMARY, "Anthropic", "Opus 4.6", "$$$")
+        old = (settings.anthropic_api_key, settings.openai_api_key, settings.zai_api_key)
+        try:
+            settings.anthropic_api_key = ""
+            settings.openai_api_key = "sk-proj-real"
+            settings.zai_api_key = "real-glm-key"
+            with patch("core.cli.commands.console") as mock_console:
+                _check_provider_key(profile)
+                mock_console.print.assert_called_once()
+                call_arg = mock_console.print.call_args[0][0]
+                assert "ANTHROPIC_API_KEY" in call_arg
+                assert "Warning" in call_arg
+        finally:
+            settings.anthropic_api_key, settings.openai_api_key, settings.zai_api_key = old
+
+    def test_warns_placeholder_anthropic_key(self):
+        """Placeholder 'sk-ant-...' should also trigger warning."""
+        from core.config import settings
+
+        profile = ModelProfile(ANTHROPIC_PRIMARY, "Anthropic", "Opus 4.6", "$$$")
+        old = settings.anthropic_api_key
+        try:
+            settings.anthropic_api_key = "sk-ant-..."
+            with patch("core.cli.commands.console") as mock_console:
+                _check_provider_key(profile)
+                mock_console.print.assert_called_once()
+        finally:
+            settings.anthropic_api_key = old
+
+    def test_warns_missing_openai_key(self):
+        """Switching to OpenAI model without key should warn."""
+        from core.config import settings
+
+        profile = ModelProfile(OPENAI_PRIMARY, "OpenAI", "GPT-5.4", "$$")
+        old = settings.openai_api_key
+        try:
+            settings.openai_api_key = ""
+            with patch("core.cli.commands.console") as mock_console:
+                _check_provider_key(profile)
+                mock_console.print.assert_called_once()
+                call_arg = mock_console.print.call_args[0][0]
+                assert "OPENAI_API_KEY" in call_arg
+        finally:
+            settings.openai_api_key = old
+
+    def test_warns_missing_glm_key(self):
+        """Switching to ZhipuAI model without key should warn."""
+        from core.config import GLM_PRIMARY, settings
+
+        profile = ModelProfile(GLM_PRIMARY, "ZhipuAI", "GLM-5", "$")
+        old = settings.zai_api_key
+        try:
+            settings.zai_api_key = ""
+            with patch("core.cli.commands.console") as mock_console:
+                _check_provider_key(profile)
+                mock_console.print.assert_called_once()
+                call_arg = mock_console.print.call_args[0][0]
+                assert "ZAI_API_KEY" in call_arg
+        finally:
+            settings.zai_api_key = old
+
+    def test_no_warning_when_key_present(self):
+        """Valid key present — no warning should be emitted."""
+        from core.config import settings
+
+        profile = ModelProfile(ANTHROPIC_PRIMARY, "Anthropic", "Opus 4.6", "$$$")
+        old = settings.anthropic_api_key
+        try:
+            settings.anthropic_api_key = "sk-ant-real-key-123456"
+            with patch("core.cli.commands.console") as mock_console:
+                _check_provider_key(profile)
+                mock_console.print.assert_not_called()
+        finally:
+            settings.anthropic_api_key = old
+
+    def test_unknown_provider_no_warning(self):
+        """Unknown provider should not crash or warn."""
+        profile = ModelProfile("custom-model", "CustomProvider", "Custom", "$")
+        with patch("core.cli.commands.console") as mock_console:
+            _check_provider_key(profile)
+            mock_console.print.assert_not_called()
