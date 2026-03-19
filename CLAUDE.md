@@ -144,7 +144,7 @@ START → router → signals → analyst×4 (Send API)
 |----------|------|---------|
 | Architecture v6 | `docs/architecture-v6.md` | Full spec (335KB) |
 | LangGraph Flow | `docs/langgraph-flow.md` | StateGraph topology |
-| Layer Plan | `docs/layer-implementation-plan.md` | 6-layer roadmap |
+| Layer Plan | `docs/architecture/layer-implementation-plan.md` | 6-layer roadmap |
 
 ## Project Structure
 
