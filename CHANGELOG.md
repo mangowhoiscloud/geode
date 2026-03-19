@@ -26,9 +26,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.20.0] — 2026-03-19
 
-P1 전체 완료 + .geode Context Hub (5-Layer C0-C4) Phase A+B.
+Multi-Provider LLM (3사 failover) + .geode Context Hub (5-Layer) + CANNOT 워크플로우 고도화.
 
 ### Added
 - IP 보고서 상세 섹션 보강 — Analyst Reasoning, Cross-LLM Verification, Rights Risk, Decision Tree Classification 4개 섹션 추가
