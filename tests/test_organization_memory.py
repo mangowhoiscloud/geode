@@ -58,7 +58,7 @@ class TestSoulMd:
     def test_get_soul_default(self):
         org = MonoLakeOrganizationMemory()
         soul = org.get_soul()
-        # SOUL.md may not exist in CI — only assert if non-empty
+        # GEODE.md may not exist in CI — only assert if non-empty
         if soul:
             assert "GEODE" in soul or "Mission" in soul or "Identity" in soul
 
@@ -76,7 +76,7 @@ class TestSoulMd:
         assert org.get_soul() == ""
 
     def test_get_soul_custom_path(self, tmp_path: Path):
-        soul_file = tmp_path / "SOUL.md"
+        soul_file = tmp_path / "GEODE.md"
         soul_file.write_text("# Test Soul\nTest mission.", encoding="utf-8")
         org = MonoLakeOrganizationMemory(
             fixture_dir=tmp_path,

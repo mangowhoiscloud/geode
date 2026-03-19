@@ -1,14 +1,15 @@
-"""Project Memory — markdown-based persistent memory (OpenClaw SOUL.md pattern).
+"""Project Memory — markdown-based persistent memory.
 
-Loads .claude/MEMORY.md (project-level context) and .claude/rules/*.md
+Loads .geode/memory/PROJECT.md (project-level context) and .geode/rules/*.md
 (modular rules with YAML frontmatter path matching).
 
 Architecture-v6 §3 Layer 2: Project Memory tier.
 
 Directory structure:
-    .claude/
-    ├── MEMORY.md           # Main project memory (first 200 lines → system context)
-    └── rules/              # Modular rules
+    .geode/
+    ├── memory/
+    │   └── PROJECT.md      # GEODE project memory (first 200 lines → system context)
+    └── rules/              # Modular domain rules
         ├── anime-ip.md     # Category-specific rules
         └── ...
 """
@@ -66,9 +67,10 @@ class ProjectMemory:
 
     def __init__(self, project_root: Path | None = None) -> None:
         root = project_root or Path(".")
-        self._claude_dir = root / ".claude"
-        self._memory_file = self._claude_dir / "MEMORY.md"
-        self._rules_dir = self._claude_dir / "rules"
+        self._geode_dir = root / ".geode"
+        self._memory_dir = self._geode_dir / "memory"
+        self._memory_file = self._memory_dir / "PROJECT.md"
+        self._rules_dir = self._geode_dir / "rules"
 
     @property
     def memory_file(self) -> Path:
@@ -239,7 +241,7 @@ class ProjectMemory:
     # ------------------------------------------------------------------
 
     def create_rule(self, name: str, paths: list[str], content: str) -> bool:
-        """Create a new rule file in .claude/rules/.
+        """Create a new rule file in .geode/rules/.
 
         Args:
             name: Rule name (used as filename, e.g. 'dark-fantasy').
@@ -350,15 +352,15 @@ class ProjectMemory:
         }
 
     def ensure_structure(self) -> bool:
-        """Create .claude/MEMORY.md and .claude/rules/ if they don't exist.
+        """Create .geode/memory/PROJECT.md and .geode/rules/ if they don't exist.
 
         Returns True if created, False if already existed.
         """
         if self._memory_file.exists():
             return False
 
-        self._claude_dir.mkdir(parents=True, exist_ok=True)
-        self._rules_dir.mkdir(exist_ok=True)
+        self._memory_dir.mkdir(parents=True, exist_ok=True)
+        self._rules_dir.mkdir(parents=True, exist_ok=True)
 
         default_memory = """\
 # Project Memory
@@ -368,11 +370,11 @@ class ProjectMemory:
 - Commands: see `.geode/config.toml` [commands] section
 
 ## Rules
-- .claude/rules/ 디렉토리의 .md 파일이 자동 로딩됩니다
+- .geode/rules/ 디렉토리의 .md 파일이 자동 로딩됩니다
 
 ## Recent Insights
 """
         self._memory_file.write_text(default_memory, encoding="utf-8")
 
-        log.info("Created .claude/MEMORY.md and .claude/rules/ structure")
+        log.info("Created .geode/memory/PROJECT.md and .geode/rules/ structure")
         return True

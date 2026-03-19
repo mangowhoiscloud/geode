@@ -17,8 +17,8 @@ log = logging.getLogger(__name__)
 
 # Default fixture directory
 DEFAULT_FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
-# SOUL.md lives in .claude/ (project root → .claude/SOUL.md)
-DEFAULT_SOUL_PATH = Path(__file__).parent.parent.parent / ".claude" / "SOUL.md"
+# GEODE.md lives at project root (Karpathy P7: program.md = agent identity)
+DEFAULT_SOUL_PATH = Path(__file__).parent.parent.parent / "GEODE.md"
 
 
 class MonoLakeOrganizationMemory:
@@ -84,24 +84,24 @@ class MonoLakeOrganizationMemory:
         }
 
     def get_soul(self) -> str:
-        """Load SOUL.md — organization identity and mission statement.
+        """Load GEODE.md — agent identity and mission statement.
 
-        Returns empty string if SOUL.md not found (graceful degradation).
+        Returns empty string if GEODE.md not found (graceful degradation).
         Cached after first load.
         """
         if self._soul_cache is not None:
             return self._soul_cache
 
         if not self._soul_path.exists():
-            log.info("SOUL.md not found at %s — using empty soul", self._soul_path)
+            log.info("GEODE.md not found at %s — using empty soul", self._soul_path)
             self._soul_cache = ""
             return ""
 
         try:
             self._soul_cache = self._soul_path.read_text(encoding="utf-8")
-            log.info("Loaded SOUL.md (%d chars)", len(self._soul_cache))
+            log.info("Loaded GEODE.md (%d chars)", len(self._soul_cache))
         except OSError as e:
-            log.warning("Failed to read SOUL.md: %s", e)
+            log.warning("Failed to read GEODE.md: %s", e)
             self._soul_cache = ""
         return self._soul_cache
 
