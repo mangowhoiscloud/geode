@@ -26,6 +26,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.21.0] — 2026-03-19
+
+GAP 7건 해소 — 모델 거버넌스 + 노드 라우팅 + 세션 관리 + 컨텍스트 압축.
+
+### Added
+- Model Policy (`.geode/model-policy.toml`) — allowlist/denylist 기반 모델 거버넌스, `call_with_failover()` / `_retry_with_backoff()` 정책 필터 통합
+- Routing Config (`.geode/routing.toml`) — 파이프라인 노드별 LLM 모델 라우팅 (`get_node_model()`), analysts/evaluators/synthesizer에 `model=` 전달
+- SessionManager + SQLite — `core/memory/session_manager.py` 신규 (WAL 모드, `idx_sessions_updated` 인덱스), `SessionCheckpoint.save()` 자동 동기화
+- `/resume` CLI 커맨드 — 중단된 세션 목록 표시 + 복원, REPL 시작 시 활성 세션 자동 탐지
+- AgentMemoryStore — `core/memory/agent_memory.py` 신규, 서브에이전트별 task_id 격리 메모리 (파일 스코프 + 24h TTL)
+- Context Compaction — `core/orchestration/context_compactor.py` 신규, WARNING(80%) 시 Haiku 기반 LLM 요약 압축, CRITICAL(95%) 시 기존 prune fallback
+
+---
+
 ## [0.20.0] — 2026-03-19
 
 Multi-Provider LLM (3사 failover) + .geode Context Hub (5-Layer) + CANNOT 워크플로우 고도화.

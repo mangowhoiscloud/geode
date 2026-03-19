@@ -107,6 +107,9 @@ class SessionCheckpoint:
             encoding="utf-8",
         )
 
+        # GAP 3: Sync to SQLite index for fast query
+        self._sync_to_index(state, len(trimmed))
+
     def load(self, session_id: str) -> SessionState | None:
         """Load a session checkpoint. Returns None if not found."""
         session_path = self._dir / session_id
@@ -199,6 +202,29 @@ class SessionCheckpoint:
                 removed += 1
 
         return removed
+
+    def _sync_to_index(self, state: SessionState, message_count: int) -> None:
+        """Sync session metadata to SQLite index (GAP 3)."""
+        try:
+            from core.memory.session_manager import SessionManager, SessionMeta
+
+            mgr = SessionManager(self._dir / "sessions.db")
+            mgr.upsert(
+                SessionMeta(
+                    session_id=state.session_id,
+                    created_at=state.created_at,
+                    updated_at=state.updated_at,
+                    status=state.status,
+                    model=state.model,
+                    provider=state.provider,
+                    user_input=state.user_input,
+                    round_count=state.round_idx,
+                    message_count=message_count,
+                )
+            )
+            mgr.close()
+        except Exception:
+            log.debug("Failed to sync session to SQLite index", exc_info=True)
 
     def _clear_active_if_matches(self, session_id: str) -> None:
         active_file = self._dir / "active.json"

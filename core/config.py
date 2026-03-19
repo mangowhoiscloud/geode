@@ -14,6 +14,7 @@ import logging
 import os
 import threading
 import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -310,3 +311,102 @@ def _resolve_provider(model: str) -> str:
 # Pricing — canonical source: core.llm.token_tracker.MODEL_PRICING
 # Re-exported here for backward compatibility.
 from core.llm.token_tracker import MODEL_PRICING as MODEL_PRICING  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Model Policy — allowlist / denylist governance (.geode/model-policy.toml)
+# ---------------------------------------------------------------------------
+
+MODEL_POLICY_PATH = Path(".geode") / "model-policy.toml"
+
+
+@dataclass
+class ModelPolicy:
+    """Model governance policy loaded from .geode/model-policy.toml."""
+
+    allowlist: list[str] = field(default_factory=list)
+    denylist: list[str] = field(default_factory=list)
+    default_model: str = ""
+
+
+def load_model_policy(policy_path: Path | None = None) -> ModelPolicy:
+    """Load .geode/model-policy.toml. Returns empty policy (all allowed) if missing."""
+    path = policy_path or MODEL_POLICY_PATH
+    if not path.exists():
+        return ModelPolicy()
+    try:
+        with open(path, "rb") as f:
+            raw = tomllib.load(f)
+        section = raw.get("policy", {})
+        return ModelPolicy(
+            allowlist=section.get("allowlist", []),
+            denylist=section.get("denylist", []),
+            default_model=section.get("default_model", ""),
+        )
+    except Exception:
+        log.warning("Failed to load model policy from %s, using empty policy", path, exc_info=True)
+        return ModelPolicy()
+
+
+def is_model_allowed(model: str, policy: ModelPolicy | None = None) -> bool:
+    """Check if a model is allowed by the policy. Empty policy = all allowed."""
+    if policy is None:
+        policy = load_model_policy()
+    # allowlist takes precedence: if set, only listed models are allowed
+    if policy.allowlist:
+        return model in policy.allowlist
+    # denylist: if set, listed models are blocked
+    if policy.denylist:
+        return model not in policy.denylist
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Routing Config — per-node model routing (.geode/routing.toml)
+# ---------------------------------------------------------------------------
+
+ROUTING_CONFIG_PATH = Path(".geode") / "routing.toml"
+
+_routing_config_cache: RoutingConfig | None = None
+
+
+@dataclass
+class RoutingConfig:
+    """Per-node model routing loaded from .geode/routing.toml."""
+
+    nodes: dict[str, str] = field(default_factory=dict)
+    agentic: dict[str, str] = field(default_factory=dict)
+
+
+def load_routing_config(path: Path | None = None) -> RoutingConfig:
+    """Load .geode/routing.toml. Returns empty config (default model) if missing."""
+    global _routing_config_cache
+    if _routing_config_cache is not None:
+        return _routing_config_cache
+    cfg_path = path or ROUTING_CONFIG_PATH
+    if not cfg_path.exists():
+        _routing_config_cache = RoutingConfig()
+        return _routing_config_cache
+    try:
+        with open(cfg_path, "rb") as f:
+            raw = tomllib.load(f)
+        _routing_config_cache = RoutingConfig(
+            nodes=raw.get("nodes", {}),
+            agentic=raw.get("agentic", {}),
+        )
+        return _routing_config_cache
+    except Exception:
+        log.warning("Failed to load routing config from %s", cfg_path, exc_info=True)
+        _routing_config_cache = RoutingConfig()
+        return _routing_config_cache
+
+
+def get_node_model(node_name: str) -> str | None:
+    """Return the model for a pipeline node, or None for default fallback."""
+    cfg = load_routing_config()
+    return cfg.nodes.get(node_name) or None
+
+
+def reset_routing_cache() -> None:
+    """Clear the routing config cache (for testing)."""
+    global _routing_config_cache
+    _routing_config_cache = None

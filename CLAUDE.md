@@ -4,12 +4,12 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.20.0
+- **Version**: 0.21.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 172
-- **Tests**: 2759+
+- **Modules**: 178
+- **Tests**: 2930+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -122,7 +122,7 @@ START → router → signals → analyst×4 (Send API)
 - **Typed Evaluator Output**: Per-evaluator Pydantic models enforce required axes in structured output
 - **Confidence Multiplier**: `final = base × (0.7 + 0.3 × confidence/100)`
 
-### Recent Features (v0.15.0 -- v0.19.0)
+### Recent Features (v0.15.0 -- v0.21.0)
 
 | Version | Feature | Description |
 |---------|---------|-------------|
@@ -137,6 +137,11 @@ START → router → signals → analyst×4 (Send API)
 | v0.19.0 | Messaging Integration | Slack/Discord/Telegram 아웃바운드 알림 + 인바운드 Gateway (OpenClaw 패턴) |
 | v0.19.0 | Calendar Integration | Google Calendar + Apple Calendar (CalDAV) 양방향 동기화 |
 | v0.19.0 | Notification Hook Plugin | PIPELINE_END/ERROR → 외부 채널 자동 알림 (YAML auto-discovery) |
+| v0.21.0 | Model Policy | `.geode/model-policy.toml` — allowlist/denylist 기반 모델 거버넌스 |
+| v0.21.0 | Routing Config | `.geode/routing.toml` — 노드별 LLM 모델 라우팅 (비용 최적화) |
+| v0.21.0 | SessionManager + SQLite | 세션 메타 인덱스 (WAL), `/resume` 커맨드 + REPL 시작 탐지 |
+| v0.21.0 | AgentMemoryStore | 서브에이전트별 task_id 격리 메모리 (파일 스코프 + 24h TTL) |
+| v0.21.0 | Context Compaction | WARNING(80%) Haiku 요약 압축, CRITICAL(95%) prune fallback |
 
 ## SOT (Source of Truth)
 
@@ -160,7 +165,7 @@ core/
 │   ├── ip_names.py      # IP name registry (canonical names from fixtures)
 │   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── batch.py         # Batch analysis (ThreadPoolExecutor)
-│   ├── commands.py      # Slash command dispatch (17 commands)
+│   ├── commands.py      # Slash command dispatch (18 commands)
 │   ├── repl.py          # REPL 메인 루프 (prompt_toolkit 기반)
 │   ├── tool_handlers.py # 10개 논리 그룹 tool handler 디스패처
 │   ├── result_cache.py  # ResultCache (24h TTL + SHA-256 content hash)
@@ -195,6 +200,8 @@ core/
 │   ├── session.py       # Session tier — in-memory with TTL
 │   ├── hybrid_session.py # L1(Redis) → L2(PostgreSQL) hybrid store
 │   ├── session_key.py   # Hierarchical key builder (ip:name:phase)
+│   ├── session_manager.py # SessionManager — SQLite session index (WAL)
+│   ├── agent_memory.py  # AgentMemoryStore — sub-agent isolated memory (TTL)
 │   └── context.py       # 4-tier context assembler
 ├── orchestration/
 │   ├── hooks.py         # HookSystem (36 events + async atrigger)
@@ -214,6 +221,7 @@ core/
 │   ├── run_log.py       # Run audit log
 │   ├── stuck_detection.py # Stuck pipeline detection
 │   ├── calendar_bridge.py # CalendarSchedulerBridge (scheduler ↔ calendar sync)
+│   ├── context_compactor.py # Context Compaction — LLM summary (Haiku, WARNING 80%)
 │   └── plugins/
 │       └── notification_hook/ # YAML plugin: 이벤트 → 알림 자동 전송
 ├── gateway/               # Inbound messaging (OpenClaw Gateway pattern)

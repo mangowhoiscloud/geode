@@ -1304,6 +1304,10 @@ def _handle_command(
         else:
             console.print("  [muted]Skills not loaded.[/muted]")
             console.print()
+    elif action == "resume":
+        from core.cli.commands import cmd_resume
+
+        cmd_resume(args)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
