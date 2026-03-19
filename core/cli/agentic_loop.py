@@ -38,7 +38,13 @@ from core.cli.tool_executor import (
     WRITE_TOOLS,
     ToolExecutor,
 )
-from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY, settings
+from core.config import (
+    ANTHROPIC_FALLBACK_CHAIN,
+    ANTHROPIC_PRIMARY,
+    GLM_FALLBACK_CHAIN,
+    _resolve_provider,
+    settings,
+)
 from core.llm.client import (
     LLMBadRequestError,
     call_with_failover,
@@ -195,7 +201,7 @@ class AgenticLoop:
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self.model = model or ANTHROPIC_PRIMARY
-        self._provider = provider  # "anthropic" or "openai"
+        self._provider = provider  # "anthropic", "openai", or "glm"
         self._tool_registry = tool_registry
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
@@ -228,6 +234,20 @@ class AgenticLoop:
         self._tools = get_agentic_tools(self._tool_registry, mcp_tools=mcp_tool_list)
         new_count = len(self._tools)
         return max(0, new_count - old_count)
+
+    def update_model(self, model: str, provider: str | None = None) -> None:
+        """Update model and provider without reconstructing the loop.
+
+        Fixes the model caching bug: ``self.model`` was only set at init,
+        so ``/model`` changes were not reflected in subsequent LLM calls.
+        Resets the cached client so a new one is created for the new provider.
+        """
+        old_provider = self._provider
+        self.model = model
+        self._provider = provider or _resolve_provider(model)
+        if self._provider != old_provider:
+            self._client = None  # force new client for new provider
+        log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
 
     def run(self, user_input: str) -> AgenticResult:
         """Sync wrapper — delegates to ``arun()`` via ``asyncio.run()``."""
@@ -628,6 +648,8 @@ class AgenticLoop:
 
         if self._provider == "openai":
             return await self._call_llm_openai(system, messages, round_idx=round_idx)
+        if self._provider == "glm":
+            return await self._call_llm_glm(system, messages, round_idx=round_idx)
         return await self._call_llm_anthropic(system, messages, round_idx=round_idx)
 
     async def _call_llm_anthropic(
@@ -768,6 +790,67 @@ class AgenticLoop:
 
         if response is None:
             self._last_llm_error = "All OpenAI models exhausted"
+            return None
+
+        if used_model and used_model != self.model:
+            log.warning("Model failover: %s -> %s", self.model, used_model)
+
+        return normalize_openai(response)
+
+    async def _call_llm_glm(
+        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
+    ) -> AgenticResponse | None:
+        """ZhipuAI GLM LLM call — OpenAI-compatible API, separate provider."""
+        if not settings.zai_api_key:
+            log.warning("No ZhipuAI API key for agentic loop")
+            return None
+
+        try:
+            from core.infrastructure.adapters.llm.glm_adapter import (
+                _get_glm_client,
+            )
+        except ImportError:
+            log.error("OpenAI adapter not available (required for GLM)")
+            return None
+
+        if self._client is None:
+            self._client = _get_glm_client()
+
+        remaining = self.max_rounds - round_idx
+        force_text = remaining <= self.WRAP_UP_HEADROOM
+        tool_choice_val = "none" if force_text else "auto"
+
+        oai_tools = self._convert_tools_to_openai()
+        oai_messages = [{"role": "system", "content": system}, *messages]
+
+        failover_models = [self.model] + [m for m in GLM_FALLBACK_CHAIN if m != self.model]
+
+        async def _do_call(model: str) -> Any:
+            import asyncio as _aio
+
+            client = self._client
+            return await _aio.to_thread(
+                client.chat.completions.create,  # type: ignore[union-attr]
+                model=model,
+                messages=oai_messages,
+                tools=oai_tools if oai_tools else None,
+                tool_choice=tool_choice_val if oai_tools else None,
+                max_completion_tokens=self.max_tokens,
+                temperature=0.0,
+                timeout=90.0,
+            )
+
+        try:
+            response, used_model = await call_with_failover(failover_models, _do_call)
+        except KeyboardInterrupt:
+            log.info("LLM call interrupted by user")
+            return None
+        except Exception:
+            log.warning("GLM agentic LLM call failed", exc_info=True)
+            return None
+
+        if response is None:
+            self._last_llm_error = "All GLM models exhausted"
             return None
 
         if used_model and used_model != self.model:

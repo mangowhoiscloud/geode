@@ -1,9 +1,9 @@
 """Startup checks — OpenClaw gateway:startup + hook eligibility pattern.
 
 Detects environment readiness:
-  API key present  → full mode (LLM calls enabled)
-  API key absent   → blocked (key registration gate)
-  .env missing     → guide user to create from .env.example
+  ANY provider key present → full mode (LLM calls enabled)
+  No provider key         → .env setup wizard → key registration gate
+  .env missing            → interactive wizard to create .env
 
 Reports capability status like OpenClaw's `hooks check --json`.
 """
@@ -11,9 +11,12 @@ Reports capability status like OpenClaw's `hooks check --json`.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core.cli._helpers import mask_key as _mask_key
+from core.cli._helpers import upsert_env as _upsert_env
 from core.config import settings
 from core.memory.project import ProjectMemory
 from core.ui.console import console
@@ -21,34 +24,112 @@ from core.ui.console import console
 log = logging.getLogger(__name__)
 
 
-def _mask_key(key: str) -> str:
-    """Mask an API key for display."""
-    if len(key) <= 14:
-        return "***"
-    return key[:10] + "..." + key[-4:]
+def _has_any_llm_key() -> bool:
+    """Check if ANY LLM provider API key is configured."""
+    if settings.anthropic_api_key and settings.anthropic_api_key != "sk-ant-...":
+        return True
+    if settings.openai_api_key and settings.openai_api_key != "sk-...":
+        return True
+    return bool(settings.zai_api_key and settings.zai_api_key != "...")
 
 
-def _upsert_env(var_name: str, value: str) -> None:
-    """Insert or update a variable in .env file. Creates .env if absent."""
-    import re
+# ---------------------------------------------------------------------------
+# .env Setup Wizard
+# ---------------------------------------------------------------------------
 
-    env_path = Path(".env")
-    lines: list[str] = []
-    found = False
 
-    if env_path.exists():
-        raw = env_path.read_text(encoding="utf-8")
-        for line in raw.splitlines():
-            if re.match(rf"^{re.escape(var_name)}\s*=", line):
-                lines.append(f"{var_name}={value}")
-                found = True
-            else:
-                lines.append(line)
+def env_setup_wizard() -> bool:
+    """Interactive .env setup wizard — runs when .env is absent.
 
-    if not found:
-        lines.append(f"{var_name}={value}")
+    Guides user through setting up API keys for available providers.
+    Enter to skip, Ctrl+C to abort. Returns True if any key was set.
+    """
+    from rich.panel import Panel
 
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    console.print(
+        Panel(
+            "[bold]Welcome to GEODE![/bold]\n\n"
+            "No .env file found. Let's set up your API keys.\n"
+            "Enter each key or press Enter to skip.\n"
+            "Press Ctrl+C to abort at any time.",
+            title="Setup Wizard",
+            border_style="cyan",
+        )
+    )
+
+    any_set = False
+    providers = [
+        (
+            "Anthropic",
+            "ANTHROPIC_API_KEY",
+            "anthropic_api_key",
+            "https://console.anthropic.com/settings/keys",
+        ),
+        ("OpenAI", "OPENAI_API_KEY", "openai_api_key", "https://platform.openai.com/api-keys"),
+        ("ZhipuAI", "ZAI_API_KEY", "zai_api_key", "https://open.bigmodel.cn/usercenter/apikeys"),
+    ]
+
+    for label, env_var, settings_field, url in providers:
+        try:
+            console.print(f"\n  [label]{label}[/label] [muted]({url})[/muted]")
+            value = console.input("  API key: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n  [muted]Setup cancelled.[/muted]")
+            break
+
+        if not value:
+            console.print(f"  [muted]{label}: skipped[/muted]")
+            continue
+
+        _upsert_env(env_var, value)
+        object.__setattr__(settings, settings_field, value)
+        console.print(f"  [success]{label} key set[/success]  {_mask_key(value)}")
+        any_set = True
+
+    if any_set:
+        console.print("\n  [success].env created with your API keys.[/success]")
+    console.print()
+    return any_set
+
+
+# ---------------------------------------------------------------------------
+# API Key Detection (natural language input guard)
+# ---------------------------------------------------------------------------
+
+# Patterns: sk-ant-* → anthropic, sk-proj-*/sk-* → openai, hex.hex → glm
+_KEY_PATTERNS: list[tuple[str, str, str]] = [
+    (r"^sk-ant-[A-Za-z0-9_-]{10,}$", "anthropic", "ANTHROPIC_API_KEY"),
+    (r"^sk-proj-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
+    (r"^sk-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
+]
+
+
+def detect_api_key(text: str) -> tuple[str, str, str] | None:
+    """Detect if free-text input is an API key.
+
+    Returns (provider, env_var, key_value) if detected, else None.
+    Only matches single-token inputs (no spaces except leading/trailing).
+    """
+    from core.cli._helpers import is_glm_key
+
+    stripped = text.strip()
+    if " " in stripped or "\n" in stripped:
+        return None
+
+    for pattern, provider, env_var in _KEY_PATTERNS:
+        if re.match(pattern, stripped):
+            return provider, env_var, stripped
+
+    # GLM key: {id}.{secret} pattern — uses shared helper
+    if is_glm_key(stripped):
+        return "glm", "ZAI_API_KEY", stripped
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Key Registration Gate
+# ---------------------------------------------------------------------------
 
 
 def key_registration_gate() -> str | None:
@@ -57,10 +138,12 @@ def key_registration_gate() -> str | None:
 
     console.print(
         Panel(
-            "[bold]GEODE requires an Anthropic API key to operate.[/bold]\n\n"
-            "  [cyan]/key <YOUR_API_KEY>[/cyan]  — set key and continue\n"
-            "  [cyan]/quit[/cyan]               — exit\n\n"
-            "[muted]Get a key at: https://console.anthropic.com/settings/keys[/muted]",
+            "[bold]GEODE requires at least one LLM API key to operate.[/bold]\n\n"
+            "  [cyan]/key <sk-ant-...>[/cyan]        — Anthropic\n"
+            "  [cyan]/key openai <sk-...>[/cyan]     — OpenAI\n"
+            "  [cyan]/key glm <key>[/cyan]           — ZhipuAI (GLM)\n"
+            "  [cyan]/quit[/cyan]                    — exit\n\n"
+            "[muted]Or just paste an API key directly.[/muted]",
             title="API Key Required",
             border_style="yellow",
         )
@@ -72,14 +155,39 @@ def key_registration_gate() -> str | None:
             return None
         if user_input.lower() in ("/quit", "quit", "exit"):
             return None
+
+        # /key command
         if user_input.startswith("/key "):
-            key = user_input[5:].strip()
-            if key:
-                _upsert_env("ANTHROPIC_API_KEY", key)
-                settings.anthropic_api_key = key
-                console.print(f"  [success]API key set[/success]  {_mask_key(key)}")
-                return key
-        console.print("  [muted]Use /key <API_KEY> to set your key[/muted]")
+            from core.cli.commands import cmd_key
+
+            changed = cmd_key(user_input[5:].strip())
+            if changed and _has_any_llm_key():
+                return "configured"
+            continue
+
+        # Direct key paste detection
+        detected = detect_api_key(user_input)
+        if detected:
+            provider, env_var, key_value = detected
+            settings_field_map = {
+                "ANTHROPIC_API_KEY": "anthropic_api_key",
+                "OPENAI_API_KEY": "openai_api_key",
+                "ZAI_API_KEY": "zai_api_key",
+            }
+            _upsert_env(env_var, key_value)
+            field_name = settings_field_map[env_var]
+            object.__setattr__(settings, field_name, key_value)
+            console.print(
+                f"  [success]{provider.capitalize()} API key set[/success]  {_mask_key(key_value)}"
+            )
+            return key_value
+
+        console.print("  [muted]Use /key <API_KEY> or paste a key directly[/muted]")
+
+
+# ---------------------------------------------------------------------------
+# Readiness Report
+# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -110,21 +218,24 @@ class ReadinessReport:
 def check_readiness(project_root: Path | None = None) -> ReadinessReport:
     """Check system readiness (OpenClaw gateway:startup pattern).
 
-    Returns a ReadinessReport with capability status for each feature.
+    ANY provider key (Anthropic/OpenAI/ZhipuAI) unblocks full mode.
     """
     root = project_root or Path(".")
     report = ReadinessReport()
 
-    # 1. API Key check
-    has_key = bool(settings.anthropic_api_key and settings.anthropic_api_key != "sk-ant-...")
+    # 1. API Key check — any provider key suffices
+    has_key = _has_any_llm_key()
     report.has_api_key = has_key
-    report.capabilities.append(
-        Capability(
-            name="LLM Analysis",
-            available=has_key,
-            reason="" if has_key else "ANTHROPIC_API_KEY not set",
+    if has_key:
+        report.capabilities.append(Capability(name="LLM Analysis", available=True))
+    else:
+        report.capabilities.append(
+            Capability(
+                name="LLM Analysis",
+                available=False,
+                reason="No LLM API key set (Anthropic/OpenAI/ZhipuAI)",
+            )
         )
-    )
 
     # 2. .env file check
     env_path = root / ".env"
@@ -154,7 +265,7 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
     report.capabilities.append(Capability(name="Dry-Run Analysis", available=True))
     report.capabilities.append(Capability(name="IP Search", available=True))
 
-    # 5. Block if no API key (was force_dry_run)
+    # 5. Block if no LLM key at all
     report.blocked = not has_key
     report.force_dry_run = not has_key  # backward-compat
 
@@ -173,7 +284,7 @@ def render_readiness(report: ReadinessReport) -> None:
     console.print()
 
     if report.blocked:
-        console.print("  [warning]API key not configured — key registration required[/warning]")
+        console.print("  [warning]No LLM key configured — key registration required[/warning]")
         console.print()
 
 
