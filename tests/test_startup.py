@@ -294,6 +294,29 @@ class TestAutoGenerateEnv:
         # Non-placeholder value should remain
         assert "DEBUG=true" in content
 
+    def test_env_file_permissions(self, tmp_path: Path):
+        """P0-1: .env must have 0o600 permissions (owner read/write only)."""
+        from core.cli.startup import auto_generate_env
+
+        example = tmp_path / ".env.example"
+        example.write_text("KEY=sk-ant-...\n")
+
+        auto_generate_env(tmp_path)
+        env = tmp_path / ".env"
+        mode = env.stat().st_mode & 0o777
+        assert mode == 0o600, f"Expected 0o600, got {oct(mode)}"
+
+    def test_atomic_write_no_partial(self, tmp_path: Path):
+        """P0-2: .env should not exist as .tmp after successful write."""
+        from core.cli.startup import auto_generate_env
+
+        example = tmp_path / ".env.example"
+        example.write_text("KEY=value\n")
+
+        auto_generate_env(tmp_path)
+        assert not (tmp_path / ".env.tmp").exists()
+        assert (tmp_path / ".env").exists()
+
     def test_skips_existing_env(self, tmp_path: Path):
         from core.cli.startup import auto_generate_env
 
@@ -334,13 +357,10 @@ class TestAutoGenerateEnv:
         content = (tmp_path / ".env").read_text()
         lines = content.strip().split("\n")
 
-        # Placeholders become empty
-        assert "ANTHROPIC_API_KEY=" in lines[0]
-        assert "sk-ant-..." not in lines[0]
-        assert "OPENAI_API_KEY=" in lines[1]
-        assert "sk-..." not in lines[1]
-        assert "ZAI_API_KEY=" in lines[2]
-        assert lines[2].endswith("=")
+        # Placeholders become empty — assert value after '=' is empty
+        assert lines[0] == "ANTHROPIC_API_KEY="
+        assert lines[1] == "OPENAI_API_KEY="
+        assert lines[2] == "ZAI_API_KEY="
 
         # Non-placeholders preserved
         assert "DEBUG=true" in content

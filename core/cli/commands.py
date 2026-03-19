@@ -238,6 +238,7 @@ def cmd_key(args: str) -> bool:
 
 def _check_provider_key(selected: ModelProfile) -> None:
     """Warn if the provider's API key is not set for the selected model."""
+    from core.cli.startup import _is_placeholder
     from core.config import settings
 
     provider_key_map: dict[str, tuple[str, str]] = {
@@ -249,7 +250,7 @@ def _check_provider_key(selected: ModelProfile) -> None:
     if entry is None:
         return
     key_value, env_var = entry
-    if not key_value or key_value in ("sk-ant-...", "sk-...", "..."):
+    if not key_value or _is_placeholder(key_value):
         console.print(f"  [warning]Warning: {env_var} not set. Model may not work.[/warning]")
 
 
