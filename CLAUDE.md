@@ -8,8 +8,8 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 172
-- **Tests**: 2759+
+- **Modules**: 175
+- **Tests**: 2873+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -160,7 +160,7 @@ core/
 │   ├── ip_names.py      # IP name registry (canonical names from fixtures)
 │   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── batch.py         # Batch analysis (ThreadPoolExecutor)
-│   ├── commands.py      # Slash command dispatch (17 commands)
+│   ├── commands.py      # Slash command dispatch (20 commands)
 │   ├── repl.py          # REPL 메인 루프 (prompt_toolkit 기반)
 │   ├── tool_handlers.py # 10개 논리 그룹 tool handler 디스패처
 │   ├── result_cache.py  # ResultCache (24h TTL + SHA-256 content hash)

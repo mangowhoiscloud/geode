@@ -73,7 +73,7 @@ graph TB
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 2870+ pass |
+| Test | `uv run pytest tests/ -q` | 2873+ pass |
 
 ### 칸반 보드 (`docs/progress.md`)
 
@@ -913,7 +913,7 @@ uv run geode batch --top 5                        # 배치 분석
 ## Testing
 
 ```bash
-uv run pytest                                        # 전체 (2870+ passed)
+uv run pytest                                        # 전체 (2873+ passed)
 uv run pytest tests/test_e2e_live_llm.py -v -m live  # Live E2E
 uv run ruff check core/ tests/                       # Lint
 uv run mypy core/                                    # Type check (175 files)
@@ -934,7 +934,7 @@ core/
 │   ├── conversation.py         # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
-│   ├── commands.py             # Slash command dispatch (17 commands)
+│   ├── commands.py             # Slash command dispatch (20 commands)
 │   ├── project_detect.py       # Project type auto-detection (7 types)
 │   ├── search.py               # IP search engine (synonym expansion)
 │   └── startup.py              # Readiness check, Graceful Degradation
