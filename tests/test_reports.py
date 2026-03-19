@@ -10,6 +10,14 @@ from core.extensibility.reports import (
     ReportFormat,
     ReportGenerator,
     ReportTemplate,
+    _format_analyst_reasoning_html,
+    _format_analyst_reasoning_md,
+    _format_cross_llm_html,
+    _format_cross_llm_md,
+    _format_decision_tree_html,
+    _format_decision_tree_md,
+    _format_rights_risk_html,
+    _format_rights_risk_md,
 )
 
 # ---------------------------------------------------------------------------
@@ -41,12 +49,18 @@ _SAMPLE_RESULT: dict[str, Any] = {
             "score": 4.2,
             "key_finding": "Strong gameplay loop",
             "confidence": 85.0,
+            "reasoning": "The core loop rewards mastery through progressive difficulty scaling.",
+            "evidence": ["Steam reviews cite 'addictive loop'", "Average session 3.2h"],
+            "model_provider": "claude-opus-4-6",
         },
         {
             "analyst_type": "market_position",
             "score": 3.5,
             "key_finding": "Crowded segment",
             "confidence": 78.0,
+            "reasoning": "Competing against 12 titles in the same sub-genre released this quarter.",
+            "evidence": ["SteamSpy genre overlap 68%", "Metacritic median 74"],
+            "model_provider": "gpt-5.4",
         },
     ],
     "evaluations": {
@@ -61,6 +75,12 @@ _SAMPLE_RESULT: dict[str, Any] = {
             "composite_score": 80.0,
             "rationale": "High production value with polished mechanics.",
             "axes": {"a_score": 4.5, "b_score": 3.9},
+        },
+        "hidden_value": {
+            "evaluator_type": "hidden_value",
+            "composite_score": 71.0,
+            "rationale": "Strong discovery but limited monetization path.",
+            "axes": {"d_score": 3.5, "e_score": 2.8, "f_score": 4.0},
         },
     },
     "psm_result": {
@@ -100,6 +120,22 @@ _SAMPLE_RESULT: dict[str, Any] = {
         "mod_patch_activity": "medium",
         "genre_fit_keywords": ["action RPG", "souls-like"],
         "game_sales_data": "~100K units",
+    },
+    "cross_llm": {
+        "cross_llm_agreement": 0.82,
+        "models_compared": ["claude-opus-4-6", "gpt-5.4"],
+        "passed": True,
+        "verification_mode": "full_rescore",
+        "secondary_score": 76.3,
+    },
+    "rights_risk": {
+        "status": "NEGOTIABLE",
+        "risk_score": 35,
+        "concerns": [
+            "Existing exclusive console license until 2027",
+            "Partial rights held by third-party publisher",
+        ],
+        "recommendation": "Negotiate limited digital distribution rights with current holder.",
     },
 }
 
@@ -369,3 +405,359 @@ class TestHtmlReport:
         )
         assert "Unknown IP" in report
         assert "0.0" in report
+
+
+# ---------------------------------------------------------------------------
+# Cross-LLM Verification formatter tests
+# ---------------------------------------------------------------------------
+
+
+class TestCrossLlmMd:
+    def test_populated_data(self):
+        result = _format_cross_llm_md(_SAMPLE_RESULT["cross_llm"])
+        assert "## Cross-LLM Verification" in result
+        assert "0.82" in result
+        assert "PASS" in result
+        assert "full_rescore" in result
+        assert "claude-opus-4-6" in result
+        assert "gpt-5.4" in result
+        assert "76.3" in result
+
+    def test_empty_data(self):
+        assert _format_cross_llm_md({}) == ""
+
+    def test_failed_agreement(self):
+        data = {
+            "cross_llm_agreement": 0.45,
+            "models_compared": ["claude-opus-4-6", "gpt-5.4"],
+            "passed": False,
+            "verification_mode": "spot_check",
+        }
+        result = _format_cross_llm_md(data)
+        assert "FAIL" in result
+        assert "0.45" in result
+        assert "spot_check" in result
+
+    def test_no_secondary_score(self):
+        data = {
+            "cross_llm_agreement": 0.90,
+            "models_compared": [],
+            "passed": True,
+            "verification_mode": "full_rescore",
+        }
+        result = _format_cross_llm_md(data)
+        assert "Secondary" not in result
+
+
+class TestCrossLlmHtml:
+    def test_populated_data(self):
+        result = _format_cross_llm_html(_SAMPLE_RESULT["cross_llm"])
+        assert "Cross-LLM Verification" in result
+        assert "0.82" in result
+        assert "verify-pass" in result
+        assert "full_rescore" in result
+        assert "claude-opus-4-6, gpt-5.4" in result
+
+    def test_empty_data(self):
+        assert _format_cross_llm_html({}) == ""
+
+    def test_failed_badge(self):
+        data = {
+            "cross_llm_agreement": 0.30,
+            "models_compared": [],
+            "passed": False,
+            "verification_mode": "spot_check",
+        }
+        result = _format_cross_llm_html(data)
+        assert "verify-fail" in result
+
+
+class TestCrossLlmIntegration:
+    """Cross-LLM sections appear in full detailed reports."""
+
+    def test_detailed_md_includes_cross_llm(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Cross-LLM Verification" in report
+        assert "0.82" in report
+
+    def test_detailed_html_includes_cross_llm(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.HTML,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Cross-LLM Verification" in report
+
+    def test_detailed_json_includes_cross_llm(self, generator: ReportGenerator):
+        raw = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.JSON,
+            template=ReportTemplate.DETAILED,
+        )
+        data = json.loads(raw)
+        assert "cross_llm" in data
+        assert data["cross_llm"]["cross_llm_agreement"] == 0.82
+
+
+# ---------------------------------------------------------------------------
+# Rights Risk formatter tests
+# ---------------------------------------------------------------------------
+
+
+class TestRightsRiskMd:
+    def test_populated_data(self):
+        result = _format_rights_risk_md(_SAMPLE_RESULT["rights_risk"])
+        assert "## IP Rights Risk" in result
+        assert "NEGOTIABLE" in result
+        assert "35/100" in result
+        assert "Existing exclusive console license until 2027" in result
+        assert "Partial rights held by third-party publisher" in result
+        assert "Negotiate limited digital distribution" in result
+
+    def test_empty_data(self):
+        assert _format_rights_risk_md({}) == ""
+
+    def test_clear_status(self):
+        data = {"status": "CLEAR", "risk_score": 5, "concerns": []}
+        result = _format_rights_risk_md(data)
+        assert "CLEAR" in result
+        assert "5/100" in result
+        assert "Concerns" not in result
+
+    def test_no_recommendation(self):
+        data = {"status": "RESTRICTED", "risk_score": 90, "concerns": ["All rights held"]}
+        result = _format_rights_risk_md(data)
+        assert "RESTRICTED" in result
+        assert "All rights held" in result
+
+
+class TestRightsRiskHtml:
+    def test_populated_data(self):
+        result = _format_rights_risk_html(_SAMPLE_RESULT["rights_risk"])
+        assert "IP Rights Risk" in result
+        assert "NEGOTIABLE" in result
+        assert "35/100" in result
+        assert "Existing exclusive console license until 2027" in result
+        assert "Negotiate limited digital distribution" in result
+
+    def test_empty_data(self):
+        assert _format_rights_risk_html({}) == ""
+
+    def test_color_coding_clear(self):
+        data = {"status": "CLEAR", "risk_score": 5, "concerns": []}
+        result = _format_rights_risk_html(data)
+        assert "#16a34a" in result  # green
+
+    def test_color_coding_restricted(self):
+        data = {"status": "RESTRICTED", "risk_score": 90, "concerns": []}
+        result = _format_rights_risk_html(data)
+        assert "#dc2626" in result  # red
+
+    def test_color_coding_negotiable(self):
+        data = {"status": "NEGOTIABLE", "risk_score": 40, "concerns": []}
+        result = _format_rights_risk_html(data)
+        assert "#eab308" in result  # yellow
+
+
+class TestRightsRiskIntegration:
+    """Rights risk sections appear in full detailed reports."""
+
+    def test_detailed_md_includes_rights_risk(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "IP Rights Risk" in report
+        assert "NEGOTIABLE" in report
+
+    def test_detailed_html_includes_rights_risk(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.HTML,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "IP Rights Risk" in report
+
+    def test_detailed_json_includes_rights_risk(self, generator: ReportGenerator):
+        raw = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.JSON,
+            template=ReportTemplate.DETAILED,
+        )
+        data = json.loads(raw)
+        assert "rights_risk" in data
+        assert data["rights_risk"]["status"] == "NEGOTIABLE"
+
+
+# ---------------------------------------------------------------------------
+# Analyst Reasoning formatter tests
+# ---------------------------------------------------------------------------
+
+
+class TestAnalystReasoningMd:
+    def test_populated_data(self):
+        result = _format_analyst_reasoning_md(_SAMPLE_RESULT["analyses"])
+        assert "## Analyst Reasoning" in result
+        assert "### game_mechanics" in result
+        assert "(claude-opus-4-6)" in result
+        assert "core loop rewards mastery" in result
+        assert "Steam reviews cite 'addictive loop'" in result
+        assert "Average session 3.2h" in result
+        assert "### market_position" in result
+        assert "(gpt-5.4)" in result
+        assert "Competing against 12 titles" in result
+        assert "SteamSpy genre overlap 68%" in result
+
+    def test_empty_list(self):
+        assert _format_analyst_reasoning_md([]) == ""
+
+    def test_no_reasoning(self):
+        """Analysts without reasoning should produce empty output."""
+        analyses = [
+            {"analyst_type": "test", "score": 3.0, "key_finding": "ok"},
+        ]
+        assert _format_analyst_reasoning_md(analyses) == ""
+
+    def test_partial_reasoning(self):
+        """Only analysts with reasoning/evidence should appear."""
+        analyses = [
+            {
+                "analyst_type": "has_reasoning",
+                "score": 4.0,
+                "reasoning": "Good analysis",
+                "evidence": ["ev1"],
+            },
+            {"analyst_type": "no_reasoning", "score": 3.0},
+        ]
+        result = _format_analyst_reasoning_md(analyses)
+        assert "has_reasoning" in result
+        assert "no_reasoning" not in result
+
+
+class TestAnalystReasoningHtml:
+    def test_populated_data(self):
+        result = _format_analyst_reasoning_html(_SAMPLE_RESULT["analyses"])
+        assert "Analyst Reasoning" in result
+        assert "game_mechanics" in result
+        assert "claude-opus-4-6" in result
+        assert "core loop rewards mastery" in result
+        assert "<li>" in result  # evidence list items
+        assert "Steam reviews" in result
+
+    def test_empty_list(self):
+        assert _format_analyst_reasoning_html([]) == ""
+
+    def test_no_reasoning(self):
+        analyses = [{"analyst_type": "test", "score": 3.0}]
+        assert _format_analyst_reasoning_html(analyses) == ""
+
+
+class TestAnalystReasoningIntegration:
+    """Analyst reasoning sections in full detailed reports."""
+
+    def test_detailed_md_includes_reasoning(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Analyst Reasoning" in report
+        assert "core loop rewards mastery" in report
+
+    def test_detailed_html_includes_reasoning(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.HTML,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Analyst Reasoning" in report
+
+    def test_evidence_chain_in_analyses_md(self, generator: ReportGenerator):
+        """The Evidence Chain sub-section should also appear in _format_analyses_md."""
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Evidence Chain" in report
+        assert "Steam reviews cite 'addictive loop'" in report
+
+
+# ---------------------------------------------------------------------------
+# Decision Tree formatter tests
+# ---------------------------------------------------------------------------
+
+
+class TestDecisionTreeMd:
+    def test_populated_data(self):
+        result = _format_decision_tree_md(
+            _SAMPLE_RESULT["synthesis"],
+            _SAMPLE_RESULT["evaluations"],
+        )
+        assert "## Cause Classification Logic" in result
+        assert "D (Discovery Difficulty): 3.5" in result
+        assert "E (Monetization Capability): 2.8" in result
+        assert "F (Franchise Expandability): 4.0" in result
+        assert "`undermarketed`" in result
+        assert "Decision Tree:" in result
+
+    def test_empty_synthesis(self):
+        assert _format_decision_tree_md({}, _SAMPLE_RESULT["evaluations"]) == ""
+
+    def test_no_cause(self):
+        synthesis = {"action_type": "marketing_boost"}
+        assert _format_decision_tree_md(synthesis, _SAMPLE_RESULT["evaluations"]) == ""
+
+    def test_no_evaluations(self):
+        assert _format_decision_tree_md(_SAMPLE_RESULT["synthesis"], {}) == ""
+
+    def test_missing_hidden_value(self):
+        """When hidden_value evaluator is missing, axes default to '?'."""
+        evals = {"market_evaluator": _SAMPLE_RESULT["evaluations"]["market_evaluator"]}
+        result = _format_decision_tree_md(_SAMPLE_RESULT["synthesis"], evals)
+        assert "D (Discovery Difficulty): ?" in result
+
+
+class TestDecisionTreeHtml:
+    def test_populated_data(self):
+        result = _format_decision_tree_html(
+            _SAMPLE_RESULT["synthesis"],
+            _SAMPLE_RESULT["evaluations"],
+        )
+        assert "Cause Classification Logic" in result
+        assert "3.5" in result  # d_score
+        assert "2.8" in result  # e_score
+        assert "4.0" in result  # f_score
+        assert "<code>undermarketed</code>" in result
+
+    def test_empty_synthesis(self):
+        assert _format_decision_tree_html({}, _SAMPLE_RESULT["evaluations"]) == ""
+
+    def test_no_evaluations(self):
+        assert _format_decision_tree_html(_SAMPLE_RESULT["synthesis"], {}) == ""
+
+
+class TestDecisionTreeIntegration:
+    """Decision tree sections in full detailed reports."""
+
+    def test_detailed_md_includes_decision_tree(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.MARKDOWN,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Cause Classification Logic" in report
+        assert "undermarketed" in report
+
+    def test_detailed_html_includes_decision_tree(self, generator: ReportGenerator):
+        report = generator.generate(
+            _SAMPLE_RESULT,
+            fmt=ReportFormat.HTML,
+            template=ReportTemplate.DETAILED,
+        )
+        assert "Cause Classification Logic" in report

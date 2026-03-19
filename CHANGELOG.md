@@ -31,6 +31,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 P1 전체 완료 + .geode Context Hub (5-Layer C0-C4) Phase A+B.
 
 ### Added
+- IP 보고서 상세 섹션 보강 — Analyst Reasoning, Cross-LLM Verification, Rights Risk, Decision Tree Classification 4개 섹션 추가
+- 보고서 하위 섹션 — Scoring Breakdown, BiasBuster, Signals, PSM Engine, Evidence Chain, Axis Breakdown
 - `.env` 자동 생성 — `.env.example` 기반 atomic write (tmp+rename, chmod 0o600), placeholder 자동 제거
 - `/model` 전환 시 프로바이더 키 검증 — 해당 프로바이더 API 키 미설정 시 경고 표시
 - Multi-Provider LLM — ZhipuAI GLM-5 (glm-5, glm-5-turbo, glm-4.7-flash) 프로바이더 추가, OpenAI-compatible API 활용
