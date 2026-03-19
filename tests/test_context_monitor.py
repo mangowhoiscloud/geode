@@ -100,16 +100,16 @@ class TestCheckContext:
 
     def test_large_context_triggers_warning(self):
         # Build messages that exceed 80% of context window
-        # claude-opus-4-6 = 200k context
-        # 80% = 160k tokens → ~640k chars
-        big_msg = "x" * (640_000)
+        # claude-opus-4-6 = 1M context (updated 2026-03-19)
+        # 80% = 800k tokens → ~3.2M chars
+        big_msg = "x" * (3_200_000)
         msgs = [{"role": "user", "content": big_msg}]
         metrics = check_context(msgs, "claude-opus-4-6")
         assert metrics.is_warning
 
     def test_critical_threshold(self):
-        # 95% of 200k = 190k tokens → ~760k chars
-        big_msg = "x" * (760_000)
+        # 95% of 1M = 950k tokens → ~3.8M chars (opus-4-6 has 1M ctx)
+        big_msg = "x" * (3_800_000)
         msgs = [{"role": "user", "content": big_msg}]
         metrics = check_context(msgs, "claude-opus-4-6")
         assert metrics.is_critical

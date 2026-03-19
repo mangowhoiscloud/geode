@@ -124,7 +124,7 @@ def _oai(
 
 # fmt: off
 MODEL_PRICING: dict[str, ModelPrice] = {
-    # ── Anthropic (2026-03) ─────────────────────────────────────────────
+    # ── Anthropic (verified 2026-03-19) ────────────────────────────────
     # Source: https://platform.claude.com/docs/en/docs/about-claude/pricing
     "claude-opus-4-6":            _ant(5.00,  25.00),
     "claude-opus-4-5":            _ant(5.00,  25.00),
@@ -134,9 +134,8 @@ MODEL_PRICING: dict[str, ModelPrice] = {
     "claude-sonnet-4-5-20250929": _ant(3.00,  15.00),
     "claude-sonnet-4":            _ant(3.00,  15.00),
     "claude-haiku-4-5-20251001":  _ant(1.00,   5.00),
-    "claude-haiku-3-5":           _ant(0.80,   4.00),
 
-    # ── OpenAI GPT-5 family ────────────────────────────────────────────
+    # ── OpenAI GPT-5 family (verified 2026-03-19) ─────────────────────
     # Source: https://developers.openai.com/api/docs/pricing/
     "gpt-5.4":      _oai(2.50, 15.00, cached_mtok=0.25),
     "gpt-5.2":      _oai(1.75, 14.00, cached_mtok=0.175),
@@ -145,17 +144,21 @@ MODEL_PRICING: dict[str, ModelPrice] = {
     "gpt-5-mini":   _oai(0.25,  2.00, cached_mtok=0.025),
     "gpt-5-nano":   _oai(0.05,  0.40, cached_mtok=0.005),
 
-    # ── OpenAI GPT-4 family (updated 2026-03-14) ────────────────────────
-    "gpt-4.1":      _oai(3.50, 14.00, cached_mtok=0.875),
-    "gpt-4.1-mini": _oai(0.70,  2.80, cached_mtok=0.175),
+    # ── OpenAI GPT-4 family (verified 2026-03-19) ─────────────────────
+    "gpt-4.1":      _oai(2.00,  8.00),
+    "gpt-4.1-mini": _oai(0.40,  1.60),
     "gpt-4.1-nano": _oai(0.20,  0.80, cached_mtok=0.05),
-    "gpt-4o":       _oai(4.25, 17.00, cached_mtok=2.125),
-    "gpt-4o-mini":  _oai(0.25,  1.00, cached_mtok=0.125),
 
-    # ── OpenAI Reasoning (updated 2026-03-14) ─────────────────────────
-    "o3":       _oai(3.50, 14.00, cached_mtok=0.875),
-    "o3-mini":  _oai(1.10,  4.40, cached_mtok=0.55),
-    "o4-mini":  _oai(2.00,  8.00, cached_mtok=0.50),
+    # ── OpenAI Reasoning (verified 2026-03-19) ─────────────────────────
+    "o3":       _oai(2.00,  8.00),
+    "o4-mini":  _oai(1.10,  4.40, cached_mtok=0.275),
+
+    # ── ZhipuAI GLM (verified 2026-03-19) ──────────────────────────────
+    # Source: https://open.bigmodel.cn/pricing + https://docs.z.ai
+    "glm-5":           _oai(0.72,  2.30),
+    "glm-5-turbo":     _oai(0.96,  3.20),
+    "glm-4.7":         _oai(0.40,  1.75),
+    "glm-4.7-flash":   _oai(0.00,  0.00),  # free tier
 }
 # fmt: on
 
@@ -167,16 +170,15 @@ MODEL_PRICING: dict[str, ModelPrice] = {
 
 # fmt: off
 MODEL_CONTEXT_WINDOW: dict[str, int] = {
-    "claude-opus-4-6":            200_000,
+    "claude-opus-4-6":          1_000_000,
     "claude-opus-4-5":            200_000,
     "claude-opus-4-1":            200_000,
     "claude-opus-4":              200_000,
-    "claude-sonnet-4-6":          200_000,
+    "claude-sonnet-4-6":        1_000_000,
     "claude-sonnet-4-5-20250929": 200_000,
     "claude-sonnet-4":            200_000,
     "claude-haiku-4-5-20251001":  200_000,
-    "claude-haiku-3-5":           200_000,
-    "gpt-5.4":                    128_000,
+    "gpt-5.4":                  1_047_576,
     "gpt-5.2":                    128_000,
     "gpt-5.1":                    128_000,
     "gpt-5":                      128_000,
@@ -185,11 +187,12 @@ MODEL_CONTEXT_WINDOW: dict[str, int] = {
     "gpt-4.1":                  1_047_576,
     "gpt-4.1-mini":             1_047_576,
     "gpt-4.1-nano":             1_047_576,
-    "gpt-4o":                     128_000,
-    "gpt-4o-mini":                128_000,
     "o3":                         200_000,
-    "o3-mini":                    200_000,
     "o4-mini":                    200_000,
+    "glm-5":                       80_000,
+    "glm-5-turbo":                200_000,
+    "glm-4.7":                    200_000,
+    "glm-4.7-flash":              200_000,
 }
 # fmt: on
 

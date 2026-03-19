@@ -561,12 +561,16 @@ class SubAgentManager:
             auto_approve=True,  # sub-agents skip HITL prompts
         )
 
-        # 5. AgenticLoop (same capabilities as parent)
+        # 5. AgenticLoop (same capabilities + model/provider as parent)
+        from core.config import _resolve_provider
+
         loop = AgenticLoop(
             conversation,
             executor,
             max_rounds=settings.subagent_max_rounds,
             max_tokens=settings.subagent_max_tokens,
+            model=settings.model,
+            provider=_resolve_provider(settings.model),
             mcp_manager=self._mcp_manager,
             skill_registry=self._skill_registry,
         )

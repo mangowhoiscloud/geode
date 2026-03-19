@@ -356,7 +356,7 @@ class TestAgenticLoop:
             assert result is None
 
     def test_key_gate_accepts_valid_key(self) -> None:
-        """Test key_registration_gate accepts /key command."""
+        """Test key_registration_gate accepts pasted API key."""
         from unittest.mock import patch as _patch
 
         from core.cli.startup import key_registration_gate
@@ -366,10 +366,12 @@ class TestAgenticLoop:
             _patch("core.cli.startup._upsert_env"),
             _patch("core.cli.startup.settings") as mock_settings,
         ):
-            mock_console.input.return_value = "/key sk-ant-test-key-12345678"
+            mock_settings.anthropic_api_key = ""
+            mock_settings.openai_api_key = ""
+            mock_settings.zai_api_key = ""
+            mock_console.input.return_value = "sk-ant-test-key-12345678"
             result = key_registration_gate()
             assert result == "sk-ant-test-key-12345678"
-            assert mock_settings.anthropic_api_key == "sk-ant-test-key-12345678"
 
     def test_get_agentic_tools_no_registry(self) -> None:
         """get_agentic_tools without registry returns base tools."""

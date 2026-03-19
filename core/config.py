@@ -125,7 +125,7 @@ def _apply_toml_overlay(s: Settings) -> None:
         if env_key in os.environ:
             continue
         # Also check special alias env vars for API keys
-        if field_name in ("anthropic_api_key", "openai_api_key"):
+        if field_name in ("anthropic_api_key", "openai_api_key", "zai_api_key"):
             continue
         if hasattr(s, field_name):
             object.__setattr__(s, field_name, toml_value)
@@ -145,6 +145,10 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("openai_api_key", "OPENAI_API_KEY"),
+    )
+    zai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("zai_api_key", "ZAI_API_KEY"),
     )
     model: str = "claude-opus-4-6"  # overridden by GEODE_MODEL env var; see ANTHROPIC_PRIMARY
     verbose: bool = False
@@ -277,13 +281,31 @@ settings = _get_settings()
 
 # Anthropic models
 ANTHROPIC_PRIMARY = "claude-opus-4-6"
-ANTHROPIC_SECONDARY = "claude-sonnet-4-5-20250929"
+ANTHROPIC_SECONDARY = "claude-sonnet-4-6"
 ANTHROPIC_BUDGET = "claude-haiku-4-5-20251001"
 ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY]
 
 # OpenAI models
 OPENAI_PRIMARY = "gpt-5.4"
 OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.4", "gpt-5.2", "gpt-4.1"]
+
+# ZhipuAI (GLM) models — OpenAI-compatible API, separate provider
+GLM_PRIMARY = "glm-5"
+GLM_FALLBACK_CHAIN: list[str] = ["glm-5", "glm-5-turbo", "glm-4.7-flash"]
+GLM_BASE_URL = "https://api.z.ai/v1"
+
+
+def _resolve_provider(model: str) -> str:
+    """Resolve provider name from model ID.
+
+    claude-* → anthropic, glm-* → glm, otherwise → openai.
+    """
+    if model.startswith("claude-"):
+        return "anthropic"
+    if model.startswith("glm-"):
+        return "glm"
+    return "openai"
+
 
 # Pricing — canonical source: core.llm.token_tracker.MODEL_PRICING
 # Re-exported here for backward compatibility.

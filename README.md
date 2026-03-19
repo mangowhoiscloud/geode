@@ -14,6 +14,63 @@
 
 범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
 
+## Development Workflow
+
+> **원칙**: 행동 목록이 아닌 **가드레일(CANNOT)**이 품질을 담보한다. (Karpathy P1)
+
+```mermaid
+graph TB
+    CANNOT["CANNOT<br/><i>절대 금지 가드레일</i>"]
+    CANNOT -.->|"위반 시 즉시 중단"| W
+
+    W["0. Worktree<br/>격리된 작업 공간"] --> Plan["1. Research → Plan<br/>프론티어 4종 리서치<br/>+ GAP 분석"]
+    Plan --> Impl["2. Implement<br/>코드 변경 → lint<br/>→ type → test"]
+    Impl --> Verify["3. Verify<br/>E2E + 검증팀<br/>(4인 페르소나 병렬)"]
+    Verify -->|"fail"| Impl
+    Verify -->|"pass"| Docs["4. Docs-Sync<br/>CHANGELOG + 버전<br/>4곳 동기화"]
+    Docs --> PR["5. PR & Merge<br/>feature → develop<br/>→ main"]
+    PR -->|"CI fail"| Impl
+
+    style CANNOT fill:#1e293b,stroke:#ef4444,color:#fca5a5,stroke-width:2px
+    style W fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
+    style Plan fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style Impl fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style Verify fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style Docs fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
+    style PR fill:#1e293b,stroke:#ef4444,color:#e2e8f0
+```
+
+<details>
+<summary><b>CANNOT — 절대 금지 규칙</b></summary>
+
+어떤 단계에서든 위반 불가. 위반 시 즉시 중단하고 수정.
+
+| 영역 | 금지 사항 |
+|------|----------|
+| **Git** | worktree 없이 작업 시작 / main·develop 직접 push / 타 세션 worktree 삭제 / feature에서 progress.md 수정 |
+| **품질** | lint·type·test 실패 상태 커밋 / 테스트 수치 자리표시자(XXXX) / live 테스트 무단 실행 |
+| **문서** | 코드 커밋에서 CHANGELOG 누락 / main에 `[Unreleased]` 잔류 / 버전 4곳 불일치 |
+| **PR** | 인라인 `--body` 사용 / 변경 파일 Why 근거 누락 / HEREDOC 미사용 |
+
+</details>
+
+| 단계 | 게이트 | 재귀 조건 |
+|------|--------|-----------|
+| **0. Worktree** | `git worktree add` + `.owner` 파일 | — |
+| **1. Research → Plan** | 프론티어 리서치 + GAP 분석 → `docs/plans/` | — |
+| **2. Implement** | `ruff check` + `mypy` + `pytest` | 실패 시 수정 반복 |
+| **3. Verify** | Mock E2E + CLI dry-run + 검증팀 4인 병렬 | 실패 시 **2번 복귀** |
+| **4. Docs-Sync** | CHANGELOG + 버전 4곳 + 수치 동기화 | — |
+| **5. PR & Merge** | feature → develop → main (GitFlow) | CI 실패 시 **2번 복귀** |
+
+**품질 게이트:**
+
+| 게이트 | 명령어 | 기준 |
+|--------|--------|------|
+| Lint | `uv run ruff check core/ tests/` | 0 errors |
+| Type | `uv run mypy core/` | 0 errors |
+| Test | `uv run pytest tests/ -q` | 2800+ pass |
+
 ### 왜 만들었는가
 
 기존 AI 코딩 에이전트는 코드 생성에 특화되어 있습니다. 하지만 실제로 필요한 건 **코딩 이외의 자율 실행** — 웹 리서치, 문서 분석, 일정 관리, 알림 전송, 데이터 파이프라인. GEODE는 `while(tool_use)` 루프 하나로 이 모든 것을 수행하는 범용 에이전트입니다. 도메인별 분석 파이프라인은 플러그인으로 교체됩니다.
@@ -857,46 +914,6 @@ core/
 - **도메인은 플러그인.** `DomainPort` Protocol 구현체를 교체하면 게임 IP, 금융, 의료, 콘텐츠 등 어떤 도메인이든 동일한 자율 하네스 위에 탑재할 수 있다.
 - **Safety by default.** 자율 에이전트는 위험하다. DANGEROUS 도구는 항상 사용자 승인, Error Recovery에서도 제외, 서브에이전트에서도 제외. 안전 게이트 우회 경로가 없다.
 - **Graceful degradation.** API 키 없으면 dry-run, MCP 미연결이면 fixture fallback, LLM 실패하면 retry chain. 어떤 상태에서든 에이전트는 멈추지 않는다.
-
-## Development Workflow
-
-기능 구현 시 **재귀개선 루프**를 따릅니다. 각 단계에서 실패/품질 저하 발견 시 이전 단계로 돌아갑니다.
-
-```mermaid
-graph TB
-    W["0. Worktree 분할<br/>(git worktree)"] --> Plan["1. Research → Plan<br/>코드 탐색 → Gap 분석<br/>→ docs/plans/ 문서화"]
-    Plan --> Impl["2. Implement + Unit Verify<br/>코드 변경 → ruff → mypy<br/>→ pytest (반복)"]
-    Impl --> E2E["3. E2E Verify<br/>Mock → CLI dry-run<br/>→ Live → LangSmith"]
-    E2E -->|"fail"| Impl
-    E2E -->|"pass"| Docs["4. Docs-Sync<br/>CHANGELOG + README<br/>+ CLAUDE.md + pyproject.toml"]
-    Docs --> PR["5. PR & Merge<br/>feature → develop → main"]
-    PR -->|"CI fail"| Impl
-
-    style W fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-    style Plan fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
-    style Impl fill:#1e293b,stroke:#10b981,color:#e2e8f0
-    style E2E fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style Docs fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-    style PR fill:#1e293b,stroke:#ef4444,color:#e2e8f0
-```
-
-| 단계 | 활동 | 재귀 조건 |
-|------|------|-----------|
-| **0. Worktree** | `git worktree add`로 격리된 작업 공간 생성 | — |
-| **1. Research → Plan** | 기존 코드 탐색, 외부 패턴 참조, Gap 분석, `docs/plans/`에 계획 문서 | — |
-| **2. Implement + Unit Verify** | 최소 단위 코드 변경 → `ruff check` → `mypy` → `pytest` | 테스트 실패 시 수정 후 반복 |
-| **3. E2E Verify** | Mock E2E → CLI `--dry-run` → Live E2E → LangSmith 트레이스 확인 | 어떤 단계든 실패 시 **2번으로 복귀** |
-| **4. Docs-Sync** | CHANGELOG, README, CLAUDE.md, pyproject.toml 수치/버전 동기화 | — |
-| **5. PR & Merge** | feature → develop → main (GitFlow). CI 실패 시 수정 루프 | CI 실패 시 **2번으로 복귀** |
-
-**품질 게이트** (모두 통과 필수):
-
-| 게이트 | 명령어 | 기준 |
-|--------|--------|------|
-| Lint | `uv run ruff check core/ tests/` | 0 errors |
-| Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 2780+ pass |
-| Live | `uv run pytest tests/test_e2e_live_llm.py -v -m live` | All pass |
 
 ## License
 

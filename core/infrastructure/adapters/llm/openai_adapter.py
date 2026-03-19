@@ -59,6 +59,13 @@ def _get_openai_client() -> Any:
     return _openai_client
 
 
+def reset_openai_client() -> None:
+    """Reset cached OpenAI client (e.g. after /key openai changes)."""
+    global _openai_client
+    with _openai_lock:
+        _openai_client = None
+
+
 def _get_retryable_errors() -> tuple[type[Exception], ...]:
     """Get retryable error types from openai SDK."""
     import openai

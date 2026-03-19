@@ -5,7 +5,6 @@ OpenClaw-inspired Binding Router pattern: static command → handler mapping.
 
 from __future__ import annotations
 
-import re
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,7 +14,16 @@ from typing import cast
 from simple_term_menu import TerminalMenu
 
 from core.auth.profiles import ProfileStore
-from core.config import ANTHROPIC_BUDGET, ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY, OPENAI_PRIMARY
+from core.cli._helpers import is_glm_key as _is_glm_key
+from core.cli._helpers import mask_key as _mask_key
+from core.cli._helpers import upsert_env as _upsert_env
+from core.config import (
+    ANTHROPIC_BUDGET,
+    ANTHROPIC_PRIMARY,
+    ANTHROPIC_SECONDARY,
+    GLM_PRIMARY,
+    OPENAI_PRIMARY,
+)
 from core.ui.console import console
 
 # ---------------------------------------------------------------------------
@@ -35,9 +43,12 @@ class ModelProfile:
 
 MODEL_PROFILES: list[ModelProfile] = [
     ModelProfile(ANTHROPIC_PRIMARY, "Anthropic", "Opus 4.6", "$$$"),
-    ModelProfile(ANTHROPIC_SECONDARY, "Anthropic", "Sonnet 4.5", "$$"),
+    ModelProfile(ANTHROPIC_SECONDARY, "Anthropic", "Sonnet 4.6", "$$"),
     ModelProfile(ANTHROPIC_BUDGET, "Anthropic", "Haiku 4.5", "$"),
     ModelProfile(OPENAI_PRIMARY, "OpenAI", "GPT-5.4", "$$"),
+    ModelProfile(GLM_PRIMARY, "ZhipuAI", "GLM-5", "$"),
+    ModelProfile("glm-5-turbo", "ZhipuAI", "GLM-5 Turbo", "$"),
+    ModelProfile("glm-4.7-flash", "ZhipuAI", "GLM-4.7 Flash", "$"),
 ]
 
 _MODEL_INDEX: dict[str, ModelProfile] = {m.id: m for m in MODEL_PROFILES}
@@ -89,8 +100,9 @@ def show_help() -> None:
     console.print("  [label]/search[/label] <query>     — Search IPs by keyword")
     console.print("  [label]/list[/label]               — Show available IPs")
     console.print("  [label]/verbose[/label]            — Toggle verbose mode")
-    console.print("  [label]/key[/label] <value>        — Set Anthropic API key")
+    console.print("  [label]/key[/label] <value>        — Set API key (auto-detect provider)")
     console.print("  [label]/key openai[/label] <value> — Set OpenAI API key")
+    console.print("  [label]/key glm[/label] <value>    — Set ZhipuAI API key")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
     console.print("  [label]/auth[/label]               — Manage auth profiles")
     console.print("  [label]/generate[/label] [count]   — Generate synthetic demo data")
@@ -121,34 +133,6 @@ def cmd_list() -> None:
     console.print()
 
 
-def _mask_key(key: str) -> str:
-    """Mask an API key for display: sk-ant-abc...xyz → sk-ant-abc...xyz (show first 10 + last 4)."""
-    if len(key) <= 14:
-        return "***"
-    return key[:10] + "..." + key[-4:]
-
-
-def _upsert_env(var_name: str, value: str) -> None:
-    """Insert or update a variable in .env file. Creates .env if absent."""
-    env_path = Path(".env")
-    lines: list[str] = []
-    found = False
-
-    if env_path.exists():
-        raw = env_path.read_text(encoding="utf-8")
-        for line in raw.splitlines():
-            if re.match(rf"^{re.escape(var_name)}\s*=", line):
-                lines.append(f"{var_name}={value}")
-                found = True
-            else:
-                lines.append(line)
-
-    if not found:
-        lines.append(f"{var_name}={value}")
-
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def cmd_key(args: str) -> bool:
     """Handle /key command. Returns True if readiness should be rechecked."""
     from core.config import settings
@@ -167,9 +151,13 @@ def cmd_key(args: str) -> bool:
             if settings.openai_api_key
             else "[muted]not set[/muted]"
         )
+        zhipu = (
+            _mask_key(settings.zai_api_key) if settings.zai_api_key else "[muted]not set[/muted]"
+        )
         console.print()
         console.print(f"  [label]Anthropic[/label]  {anthro}")
         console.print(f"  [label]OpenAI[/label]    {openai}")
+        console.print(f"  [label]ZhipuAI[/label]   {zhipu}")
         console.print()
         return False
 
@@ -181,7 +169,31 @@ def cmd_key(args: str) -> bool:
         value = parts[1].strip()
         settings.openai_api_key = value
         _upsert_env("OPENAI_API_KEY", value)
+        try:
+            from core.infrastructure.adapters.llm.openai_adapter import reset_openai_client
+
+            reset_openai_client()
+        except ImportError:
+            pass
         console.print(f"  [success]OpenAI API key set[/success]  {_mask_key(value)}")
+        console.print()
+        return True
+
+    # /key glm <value>
+    if parts[0].lower() == "glm":
+        if len(parts) < 2:
+            console.print("  [warning]Usage: /key glm <API_KEY>[/warning]")
+            return False
+        value = parts[1].strip()
+        settings.zai_api_key = value
+        _upsert_env("ZAI_API_KEY", value)
+        try:
+            from core.infrastructure.adapters.llm.glm_adapter import reset_glm_client
+
+            reset_glm_client()
+        except ImportError:
+            pass
+        console.print(f"  [success]ZhipuAI API key set[/success]  {_mask_key(value)}")
         console.print()
         return True
 
@@ -194,13 +206,29 @@ def cmd_key(args: str) -> bool:
     elif value.startswith("sk-proj-") or value.startswith("sk-"):
         settings.openai_api_key = value
         _upsert_env("OPENAI_API_KEY", value)
+        try:
+            from core.infrastructure.adapters.llm.openai_adapter import reset_openai_client
+
+            reset_openai_client()
+        except ImportError:
+            pass
         console.print(f"  [success]OpenAI API key set[/success]  {_mask_key(value)}")
+    elif _is_glm_key(value):
+        settings.zai_api_key = value
+        _upsert_env("ZAI_API_KEY", value)
+        try:
+            from core.infrastructure.adapters.llm.glm_adapter import reset_glm_client
+
+            reset_glm_client()
+        except ImportError:
+            pass
+        console.print(f"  [success]ZhipuAI API key set[/success]  {_mask_key(value)}")
     else:
-        # Non-LLM keys (Google, Brave, etc.) — store by explicit name only
         console.print(
             "  [warning]Unrecognized key prefix. Use:[/warning]\n"
             "  [muted]/key <sk-ant-...>          → Anthropic[/muted]\n"
-            "  [muted]/key openai <sk-proj-...>  → OpenAI[/muted]"
+            "  [muted]/key openai <sk-proj-...>  → OpenAI[/muted]\n"
+            "  [muted]/key glm <key>             → ZhipuAI[/muted]"
         )
         console.print()
         return False
@@ -367,8 +395,8 @@ def _auth_add_interactive(store: ProfileStore, add_args: str) -> None:
     from core.auth.profiles import AuthProfile, CredentialType
 
     # Level 1: Provider selection
-    providers = ["anthropic", "openai"]
-    entries = [f"{p.capitalize()}" for p in providers]
+    providers = ["anthropic", "openai", "zhipuai"]
+    entries = ["Anthropic", "OpenAI", "ZhipuAI"]
 
     menu = TerminalMenu(
         entries,
@@ -461,6 +489,15 @@ def _get_profile_store() -> ProfileStore:
                 provider="openai",
                 credential_type=CredentialType.API_KEY,
                 key=settings.openai_api_key,
+            )
+        )
+    if settings.zai_api_key:
+        store.add(
+            AuthProfile(
+                name="zhipuai:default",
+                provider="zhipuai",
+                credential_type=CredentialType.API_KEY,
+                key=settings.zai_api_key,
             )
         )
     _profile_store_ctx.set(store)

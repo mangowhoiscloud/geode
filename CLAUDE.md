@@ -303,23 +303,26 @@ Decision Tree on D-E-F axes:
 4. **Confidence Gate**: ≥ 0.7 → proceed, else loopback (max 5 iter)
 5. **Rights Risk**: CLEAR/NEGOTIABLE/RESTRICTED/EXPIRED/UNKNOWN
 
-## LLM Models (2026-03)
+## LLM Models (verified 2026-03-19)
 
-| Provider | Model | Input $/M | Output $/M | 용도 |
-|----------|-------|-----------|------------|------|
-| **Anthropic** | `claude-opus-4-6` | $5.00 | $25.00 | Primary (Pipeline + Agentic) |
-| Anthropic | `claude-sonnet-4-5-20250929` | $3.00 | $15.00 | Fallback |
-| Anthropic | `claude-haiku-4-5-20251001` | $1.00 | $5.00 | Lightweight |
-| **OpenAI** | `gpt-5.4` | $2.50 | $15.00 | Cross-LLM Secondary (default) |
-| OpenAI | `gpt-5.2` | $1.75 | $14.00 | Fallback 1 |
-| OpenAI | `gpt-4.1` | $3.50 | $14.00 | Fallback 2 |
-| OpenAI | `gpt-4.1-mini` | $0.70 | $2.80 | Budget |
-| OpenAI | `o3` | $3.50 | $14.00 | Reasoning |
-| OpenAI | `o4-mini` | $2.00 | $8.00 | Reasoning (budget) |
+| Provider | Model | Input $/M | Output $/M | Context | 용도 |
+|----------|-------|-----------|------------|---------|------|
+| **Anthropic** | `claude-opus-4-6` | $5.00 | $25.00 | 1M | Primary (Pipeline + Agentic) |
+| Anthropic | `claude-sonnet-4-6` | $3.00 | $15.00 | 1M | Fallback |
+| Anthropic | `claude-haiku-4-5-20251001` | $1.00 | $5.00 | 200K | Budget |
+| **OpenAI** | `gpt-5.4` | $2.50 | $15.00 | 1M | Cross-LLM Secondary (default) |
+| OpenAI | `gpt-5.2` | $1.75 | $14.00 | 128K | Fallback 1 |
+| OpenAI | `gpt-4.1` | $2.00 | $8.00 | 1M | Fallback 2 |
+| OpenAI | `gpt-4.1-mini` | $0.40 | $1.60 | 1M | Budget |
+| **ZhipuAI** | `glm-5` | $0.72 | $2.30 | 80K | GLM Primary |
+| ZhipuAI | `glm-5-turbo` | $0.96 | $3.20 | 200K | GLM Agent |
+| ZhipuAI | `glm-4.7-flash` | Free | Free | 200K | GLM Budget |
 
+- **Fallback chain** (Anthropic): `claude-opus-4-6` → `claude-sonnet-4-6`
 - **Fallback chain** (OpenAI): `gpt-5.4` → `gpt-5.2` → `gpt-4.1`
-- **Pricing source**: [OpenAI API Pricing](https://developers.openai.com/api/docs/pricing/)
+- **Fallback chain** (GLM): `glm-5` → `glm-5-turbo` → `glm-4.7-flash`
 - **Cache pricing** (Anthropic): creation = input × 1.25, read = input × 0.1
+- **Deprecated** (removed): gpt-4o, gpt-4o-mini, o3-mini, claude-haiku-3-5
 
 ## Tool Routing (AgenticLoop Direct)
 
@@ -356,317 +359,93 @@ Decision Tree on D-E-F axes:
 
 ## Implementation Workflow
 
-기능 구현 시 아래 재귀개선 루프를 따른다. 각 단계에서 실패/품질 저하 발견 시 이전 단계로 돌아간다.
+> **설계 원칙** (Karpathy P1): "무엇을 할 수 없는가"를 먼저 정의한다. 행동 목록이 아닌 가드레일이 품질을 담보한다.
 
-### 0. Worktree 작업 공간 분할 + 칸반 체크포인트 1
+### CANNOT — 절대 금지 규칙
 
-**모든 작업은 worktree로 시작한다.** 예외 없음.
+이 규칙은 어떤 단계에서든 위반할 수 없다. 위반 시 즉시 중단하고 수정한다.
+
+**Git/Branch:**
+- worktree 없이 코드 작업 시작 금지 — 모든 작업은 `git worktree add` 로 시작
+- main/develop에 직접 push 금지 — 반드시 PR → CI → merge
+- 타 세션의 worktree 삭제 금지 — `.owner` task_id 불일치 시 절대 제거하지 않음
+- worktree 내 `git checkout` 브랜치 전환 금지
+- `docs/progress.md`를 feature/develop 브랜치에서 수정 금지 — main에서만
+
+**코드 품질:**
+- lint/type/test 실패 상태에서 커밋 금지
+- 테스트 수치에 자리표시자(XXXX) 사용 금지 — 반드시 실제 실행 결과
+- `# type: ignore` 남발 금지 — 타입 에러는 수정이 원칙
+- live 테스트(`-m live`) 무단 실행 금지 — 비용 발생 (메모리 `feedback_test_cost` 참조)
+
+**문서:**
+- 코드 변경 커밋에서 CHANGELOG 누락 금지
+- main에 `[Unreleased]` 항목 잔류 금지 — 머지 시 반드시 버전 부여
+- 버전 번호 4곳(CHANGELOG, CLAUDE.md, README.md, pyproject.toml) 불일치 금지
+
+**PR:**
+- PR body에 인라인 `--body "..."` 사용 금지 — HEREDOC 필수
+- PR body에서 변경 파일의 Why 근거 누락 금지
+
+### 워크플로우 단계
+
+각 단계에서 실패 시 이전 단계로 돌아간다.
+
+```
+0. Worktree Alloc → 1. Research → 2. Implement+Test → 3. Verify → 4. Docs-Sync → 5. PR → 6. Board
+```
+
+#### 0. Worktree
 
 ```bash
-# Step 0a: Worktree alloc + .owner 생성
 git worktree add .claude/worktrees/<작업명> -b feature/<브랜치명>
 echo "session=$(date -Iseconds) task_id=<작업명>" > .claude/worktrees/<작업명>/.owner
-
-# Step 0b: 칸반 체크포인트 1 — main에서 직접 갱신
-#   (feature 브랜치가 아닌 main에서 progress.md를 갱신한다)
-cd /Users/mango/workspace/geode
-# → docs/progress.md: Backlog → In Progress (담당, 브랜치, 시작일)
-git add docs/progress.md && git commit -m "kanban: <task_id> In Progress" && git push
-
-# Step 0c: worktree로 이동
-cd .claude/worktrees/<작업명>
 ```
 
-**작업 완료 후 정리:**
+완료 후: `git push origin feature/<브랜치명>` → 소유권 검증 → `git worktree remove`
 
-```bash
-# 1. 변경사항을 원본 저장소 브랜치로 푸시
-git push origin feature/<브랜치명>
+#### 1. Research → Plan
 
-# 2. 원본 저장소로 돌아가기
-cd /Users/mango/workspace/geode
+`frontier-harness-research` 스킬 참조. AS-IS 탐색 → 프론티어 4종 리서치 → GAP 분석 → `docs/plans/` 작성. 검증팀 GAP 탐지를 병렬 실행.
 
-# 3. .owner 소유권 검증 후 worktree 제거
-cat .claude/worktrees/<작업명>/.owner  # task_id 확인
-git worktree remove .claude/worktrees/<작업명>
-git branch -d feature/<브랜치명>
-```
+#### 2. Implement → Unit Verify (반복)
 
-**소유권 보호 규칙 (REODE 2026-03-18 사고 대응):**
-- alloc 시 `.owner` 파일 필수 생성 (session timestamp + task_id)
-- free 시 `.owner`의 task_id가 자기 작업과 일치하는지 검증 필수
-- **타 세션의 worktree는 일체 삭제 금지** (.owner 존재 여부 무관)
-- orphan 의심 worktree (48시간 경과)도 사용자 확인 없이 삭제 금지
-- `git worktree remove --force`는 소유권 확인 후에만 사용
+코드 변경 → `uv run ruff check` → `uv run mypy core/` → `uv run pytest tests/ -q` → 실패 시 수정 반복.
 
-**주의사항:**
-- worktree 내에서 `git checkout`으로 브랜치 전환 금지
-- `.claude/worktrees/`는 `.gitignore`에 포함
-- **`docs/progress.md`는 feature/develop 브랜치에서 수정 금지** — main에서만 갱신
+#### 3. E2E Verify + 검증팀 (병렬)
 
-### 1. Research → Plan
+`geode-e2e` 스킬 참조. Mock E2E → CLI dry-run → Live E2E(선택) → 검증팀 4인 페르소나 리뷰 병렬 실행. `verification-team` 스킬 참조.
 
-**모든 기능 구현 전에 프론티어 하네스 리서치를 수행한다.** 주제와 관련된 패턴을 4개 참조 시스템에서 탐색하고, GAP 분석 후 계획을 수립한다.
+#### 4. Docs-Sync
 
-```
-1a. 기존 코드 탐색 (Explore agent, Grep, Read)
-    - AS-IS 구조 파악, 관련 Port/Adapter/Hook/Tool 식별
+`geode-changelog` 스킬 참조.
 
-1b. 프론티어 하네스 리서치 (frontier-harness-research 스킬 참조)
-    - Claude Code: 권한 모델, Hook, Memory, Skill, Context 관리 패턴
-    - Codex: Sandbox 실행, TDD 루프, PR 워크플로우, 코드 리뷰 패턴
-    - OpenClaw: Gateway, Session Key, Binding, Lane Queue, Plugin, Failover 패턴
-    - autoresearch: 제약 기반 설계, 래칫, Context Budget, program.md 패턴
-    - 각 시스템에서 주제 관련 패턴 추출 → GEODE 적용 가능성 판단
+**Pre-write** (PR 전): CHANGELOG `[Unreleased]` 항목 추가 + ABOUT 4곳 동기화 + 수치 갱신.
+**Post-verify** (머지 후): 실측값 재대조, 불일치 시 fix 커밋.
 
-1c. Gap 분석 (AS-IS → TO-BE 정리)
-    - 프론티어 대비 빠진 패턴/기능 식별
-    - P0/P1/P2 우선순위 분류
-    - 구현 범위 결정 (전체 적용 vs 핵심만)
+| 검증 포인트 | 동기화 대상 |
+|------------|-----------|
+| 버전 | CHANGELOG, CLAUDE.md, README.md, pyproject.toml |
+| 수치 | Tests, Modules, Tools, HookEvents, MCP — CLAUDE.md + README.md |
+| 시각화 | README.md Mermaid → 코드 상수와 대조 |
 
-1d. ▸ 검증팀 (리서치) — Step 1b~1c와 병렬 실행
-    - 프론티어 GAP 탐지 에이전트: 주제 관련 4종 시스템 대비 누락 패턴 감사
-    - 결과를 1c Gap 분석에 병합
-    - 구현 전 GAP 사전 방지 (사후 발견 → 사전 탐지 전환)
+**버전업 판단**: 새 기능 = MINOR, 버그 수정 = PATCH, 문서만 = 버전업 안 함.
 
-1e. docs/plans/에 계획 문서 작성
-    - 리서치 결과 요약 + 검증팀 GAP 탐지 결과 + 설계 판단 근거 포함
-```
+#### 5. PR & Merge
 
-**리서치 판정 기준:**
+`geode-gitflow` 스킬 참조. feature → develop → main. 한글 HEREDOC PR. CI 실패 시 수정 루프.
 
-| 발견 | 조치 |
-|------|------|
-| 프론티어에 동일 패턴 존재 | → 패턴 채택, 구현 방식 참조 |
-| 프론티어에 유사 패턴 존재 | → 핵심만 추출, GEODE 맥락에 맞게 변형 |
-| 프론티어에 패턴 없음 | → 자체 설계, 근거 문서화 |
-| 과잉 엔지니어링 위험 | → Karpathy P10 (Simplicity Selection) 적용 |
-| 검증팀이 GAP 발견 | → 1c에 병합, 구현 범위 재조정 |
+**변경 연쇄 규칙:**
 
-### 2. Implement → Unit Verify (반복)
+| 변경 | 함께 갱신 |
+|------|----------|
+| 새 tool | `definitions.json` + `_build_tool_handlers()` + E2E 테스트 |
+| 파이프라인 노드 | `graph.py` + E2E 테스트 |
+| LLM 어댑터 | `client.py` + E2E 테스트 |
 
-```
-1. 코드 변경 (최소 단위)
-2. uv run ruff check core/ tests/     # lint
-3. uv run mypy core/                   # type check
-4. uv run pytest tests/ -q             # 전체 regression
-5. 실패 시 → 수정 → 2번으로
-```
+#### 6. Progress Board
 
-### 3. E2E Verify + 검증팀 (병렬)
-
-Mock E2E → CLI dry-run → Live E2E → LangSmith 검증 순서로 점검. **검증팀 에이전트를 E2E와 동시 병렬 실행**하여 시간 추가 없이 품질 확보. 각 단계에서 오류/품질 저하 발견 시 **2번으로 즉시 복귀**.
-
-```
-3a. Mock E2E: uv run pytest tests/test_agentic_loop.py tests/test_e2e.py tests/test_e2e_orchestration_live.py -v
-3b. CLI dry-run: uv run geode analyze "Berserk" --dry-run  (실제 CLI 동작 확인)
-3c. AgenticLoop 의도→행동 점검 (tool_use 직행):
-    - "목록 보여줘" → list_ips 호출 확인
-    - "Berserk 분석 계획 세워줘" → create_plan 호출 확인
-    - "병렬로 처리해" → delegate_task 호출 확인
-    - "Slack에 알림 보내줘" → send_notification 호출 확인
-    - "내일 일정 뭐 있어?" → calendar_list_events 호출 확인
-3d. Live E2E (API 키 필요): set -a && source .env && set +a && uv run pytest tests/test_e2e_live_llm.py -v -m live
-3e. LangSmith 트레이스 확인: smith.langchain.com → geode 프로젝트
-    - AgenticLoop 트레이스 존재
-    - tool call 성공률 확인
-    - 비용(cost_usd) 확인
-
-3v. ▸ 검증팀 (구현) — 3a~3e와 병렬 실행 (Explore agent 다중 투입)
-    - 코드 검증: Port/Adapter 패턴 일관성, contextvars DI 정합성, 에러 핸들링
-    - 와이어링 검증: runtime.py 주입 경로, repl.py 초기화/종료 순서, dead code 탐지
-    - 문서 검증: 수치 동기화 (Modules, Tests, Tools, MCP, HookEvents), ABOUT 4곳 일치
-    - OpenClaw 대조: 해당 기능의 OpenClaw 패턴 준수 여부 (openclaw-patterns 스킬 참조)
-    - 검증팀 발견 이슈 → 즉시 2번 복귀
-
-3f. 품질 판정 (E2E + 검증팀 결과 종합):
-    - tool 실행 결과에 error 없음
-    - 올바른 모드(dry-run vs live) 확인
-    - UI 출력 형식 (▸/✓/✗/✢) 정상
-    - 검증팀 이슈 0건 확인
-```
-
-**재귀 판정 기준:**
-
-| 발견 | 조치 |
-|------|------|
-| 테스트 실패 | → 2번(코드 수정) |
-| CLI 오류/crash | → 2번(코드 수정) |
-| 의도→tool 불일치 | → system prompt / tool definitions 수정 → 2번 |
-| LangSmith 트레이스 누락 | → tracing 데코레이터 확인 → 2번 |
-| 품질 저하 (score 이상) | → 해당 노드 로직 점검 → 2번 |
-| 검증팀: 패턴 불일치 | → 해당 패턴 수정 → 2번 |
-| 검증팀: 와이어링 누락 | → runtime/repl 주입 추가 → 2번 |
-| 검증팀: 문서 불일치 | → 4번에서 동기화 (코드 수정 불필요 시) |
-| 모두 통과 + 검증팀 0건 | → 4번 진행 |
-
-### 4. Docs-Sync (2중 구조: pre-write + post-verify)
-
-**코드 변경과 동일 커밋에 문서를 동기화한다.** PR 생성 전에 반드시 완료. 별도 후속 커밋으로 미루지 않는다.
-
-**2중 구조 (REODE 패턴):**
-- **Pre-write (Step 4)**: PR 생성 전에 CHANGELOG, ABOUT, 수치 동기화
-- **Post-verify (Step 5 머지 후)**: main 머지 완료 후 수치를 **실측값과 재대조**. 불일치 시 별도 fix 커밋
-
-#### 4a. CHANGELOG.md 동기화 (매 커밋)
-
-**모든 코드 변경 커밋에 CHANGELOG 항목을 포함한다.** `[Unreleased]`에 누적 → main 머지 시 반드시 버전 부여.
-
-```bash
-# 변경 유형 판별 → 해당 카테고리에 1줄 추가
-#   Added:    새 기능, 새 모듈, 새 도구
-#   Changed:  기존 동작 변경, 성능 개선, 기본값 변경
-#   Fixed:    버그 수정
-#   Removed:  삭제된 기능
-#   Infrastructure: CI, 의존성, 빌드
-#   Architecture:   구조적 결정
-
-# 예시 — 커밋 메시지가 "fix: MCP orphan 방지" 이면:
-# CHANGELOG.md [Unreleased] → Fixed 에 추가:
-# - MCP orphan 프로세스 방지 — REPL 종료 시 close_all() 호출
-```
-
-**문서/리팩터만 변경 시**: CHANGELOG 항목 불필요 (Scope Rules 참조).
-
-**[Unreleased] 잔류 금지 규칙**: develop → main PR 머지 시 `[Unreleased]` 섹션에 항목이 남아 있으면 **반드시 동일 머지 커밋 또는 직후 릴리스 커밋에서 버전을 부여**한다. main 브랜치에 `[Unreleased]` 항목이 존재하는 상태는 허용하지 않는다.
-
-#### 4b. ABOUT 동기화 (프로젝트 정체성)
-
-프로젝트 정체성 관련 텍스트는 아래 3곳에서 일관성을 유지한다:
-
-| 항목 | CLAUDE.md | README.md | pyproject.toml |
-|------|-----------|-----------|----------------|
-| 프로젝트 이름 | `# GEODE — 범용 자율 실행 에이전트` | `# GEODE vX.Y.Z — Autonomous Research Harness` | `description = "GEODE — ..."` |
-| 한줄 설명 | Project Overview 첫 문장 | 타이틀 아래 첫 문장 | `description` 필드 |
-| 버전 | `Version: X.Y.Z` | 타이틀 `vX.Y.Z` + 뱃지 | `version = "X.Y.Z"` |
-| Highlights | Key Design Decisions | Highlights 리스트 | — |
-
-변경 시 3곳 동시 갱신. 특히 **버전 번호는 CHANGELOG, CLAUDE.md, README.md 타이틀, pyproject.toml 4곳 모두** 일치해야 한다.
-
-#### 4c. README.md + CLAUDE.md 수치·묘사·시각화 동기화 (매 커밋)
-
-```bash
-# 아래 수치가 변경되면 README.md + CLAUDE.md를 같이 갱신
-TESTS=$(uv run pytest tests/ -q 2>&1 | grep -oP '\d+ passed' | grep -oP '\d+')
-MODULES=$(find core/ -name "*.py" | wc -l | tr -d ' ')
-TOOLS=$(python3 -c "import json; print(len(json.load(open('core/tools/definitions.json'))))")
-
-echo "Tests: $TESTS  Modules: $MODULES  Tools: $TOOLS"
-# → CLAUDE.md Tests/Modules, README.md 해당 수치와 대조
-```
-
-**수치 정합성:**
-
-| 검증 항목 | CLAUDE.md 위치 | README.md 위치 |
-|----------|---------------|---------------|
-| 테스트 수 | `Tests: XXXX+` | Features 테이블 마지막 행 |
-| 모듈 수 | `Modules: XXX` | Features 테이블 마지막 행 |
-| Tool 수 | Tool Routing 섹션 + definitions.json | Features 테이블 + Tool 목록 |
-| HookSystem 이벤트 수 | Orchestration 섹션 | Sub-Agent Orchestration 테이블 |
-| MCP Adapter 수 | MCP 설정 | MCP & Tool Architecture 섹션 |
-| 프로젝트 구조 | Project Structure 트리 | Project Structure 트리 |
-| Tier/Score | Expected Test Results | Available IPs 테이블 |
-
-**묘사·시각화 정합성** (코드 동작이 바뀌면 README Mermaid도 갱신):
-
-| 검증 항목 | README.md 섹션 | 확인 방법 |
-|----------|---------------|----------|
-| Pipeline 노드 수/이름 | Pipeline Flow (mermaid) + 테이블 | `graph.py` 노드 등록과 대조 |
-| Agentic Loop 파라미터 | Agentic Loop (mermaid) + 테이블 | `DEFAULT_MAX_ROUNDS`, `WRAP_UP_HEADROOM` 등 상수 대조 |
-| CLI Input 처리 흐름 | CLI Input & Terminal (mermaid) | `_read_multiline_input()`, `_build_prompt_session()` 대조 |
-| BiasBuster Fast Path 조건 | BiasBuster (mermaid) + 테이블 | `verification/biasbuster.py` 임계값 대조 |
-| MCP Adapter 목록 | MCP & Tool Architecture (mermaid) + 테이블 | `.claude/mcp_servers.json` 대조 |
-| Sub-Agent 구성요소 | Sub-Agent Orchestration (mermaid) | `sub_agent.py` 클래스 대조 |
-| External IP Fallback 단계 | External IP Signal Fallback (mermaid) | `router.py`, `signals.py` 대조 |
-
-#### 4d. 버전업 판단 및 릴리스
-
-**main 머지 시 `[Unreleased]` 항목이 있으면 반드시 버전을 부여한다.** `[Unreleased]` 상태로 main에 잔류하는 것은 금지.
-
-| 변경 규모 | 버전 | 판단 기준 | 예시 |
-|----------|------|----------|------|
-| 호환 깨짐 | MAJOR (x.0.0) | API/State 스키마 변경, CLI 인터페이스 변경, 기존 도구 삭제 | GeodeState 필드 삭제, 명령어 rename |
-| 새 기능 추가 | MINOR (0.x.0) | 새 tool/노드/검증 레이어, 새 MCP 어댑터, 새 도메인 플러그인, 새 CLI 커맨드 | `delegate_task` 도구 추가, BiasBuster 신규 bias 유형 |
-| 버그 수정/UI 개선 | PATCH (0.0.x) | 기존 동작 수정, pre-commit/CI 수정, 마커/스피너 변경, 타임아웃 조정 | weekday 변환 버그, 이모지 통일, cache false positive |
-| 문서/리팩터만 | 버전업 안 함 | README 수정, 내부 리팩터, 블로그 추가 | — |
-
-**MINOR vs PATCH 판단 원칙**: "사용자가 새로운 기능을 얻는가?" → MINOR. "기존 기능이 더 잘 동작하는가?" → PATCH.
-
-```
-릴리스 절차:
-1. [Unreleased] → [x.y.z] — YYYY-MM-DD 로 변환
-2. CLAUDE.md Version 필드 업데이트
-3. README.md 타이틀 버전 업데이트
-4. pyproject.toml version 필드 업데이트
-5. Version History 테이블에 행 추가
-6. 비교 링크 업데이트 ([Unreleased] compare URL)
-7. 동일 커밋에 CHANGELOG.md + CLAUDE.md + README.md + pyproject.toml 포함
-```
-
-#### 4e. Skill / E2E 문서 (해당 시)
-
-```
-1. docs/e2e-orchestration-scenarios.md 갱신 (시나리오 추가/변경)
-2. tests/test_e2e_live_llm.py 갱신 (라이브 테스트 추가)
-3. .claude/skills/ 갱신 (시나리오 매핑 테이블)
-```
-
-### 5. PR & Merge
-
-feature → develop → main 순서로 머지한다. **직접 로컬 머지 금지** — 반드시 PR 생성 → CI 통과 → merge 순서.
-
-```
-1. feature 브랜치에서 커밋 + 푸시
-2. feature → develop PR 생성 (한글, assignee: mangowhoiscloud)
-3. CI 통과 대기 → 실패 시 수정 루프 (아래 참조)
-4. CI 통과 → gh pr merge
-5. develop → main PR 생성 (동일 형식)
-6. CI 통과 → gh pr merge
-```
-
-**CI 실패 시 수정 루프:**
-
-```
-PR 생성 → CI 실행 → 실패?
-  ├─ Yes → 로그 확인 (gh pr checks / gh run view)
-  │        → 원인 수정 (lint/type/test/coverage)
-  │        → 커밋 + 푸시 → CI 재실행 → 실패? (반복)
-  └─ No  → gh pr merge --merge
-```
-
-주의사항:
-- `coverage fail_under=75` 미달 시: 커버리지 부족 모듈에 테스트 추가
-- `ruff` 실패 시: `uv run ruff check --fix core/ tests/` 후 포맷 확인
-- `mypy` 실패 시: 타입 에러 수정, `# type: ignore` 최소화
-- pre-commit stash 충돌 시: `git stash` → 커밋 → `git stash pop`
-
-**PR 작성 규칙:** `geode-gitflow` 스킬에 상세 템플릿과 지침 정의. 핵심만 아래 기술.
-
-| 항목 | 규칙 |
-|------|------|
-| 언어 | **한글** (제목 + 본문 모두) |
-| 제목 | `<type>: <한글 설명>` (70자 이내) |
-| 본문 | `## 요약` → `## 변경 사항` (핵심/부수/문서 분리, 각 변경의 **왜?** 포함) → `## 영향 범위` → `## 설계 판단` (해당 시) → `## Pre-PR Quality Gate` (실제 실행 결과 체크리스트) |
-| Assignee | `--assignee mangowhoiscloud` (항상) |
-| Base | feature → `develop`, develop → `main` |
-| 형식 | **HEREDOC 필수** (`--body "$(cat <<'EOF' ... EOF)"`) — 인라인 `--body "..."` 금지 |
-
-**PR Body 엄격 규칙 (REODE 패턴):**
-- PR 생성 전 `git diff develop...HEAD`로 전체 diff 확인
-- 변경된 모든 파일을 핵심/부수/문서로 분류, **각 파일에 왜(Why) 1줄 근거**
-- 테스트 수치는 **실제 실행 출력에서 복사** — XXXX 자리표시자 절대 금지
-- develop→main PR도 포함된 feature PR 번호 + 변경 수치 명시
-
-### E2E 업데이트 규칙 (필수)
-
-**기능 변경 시 반드시 아래 파일을 함께 업데이트:**
-
-| 변경 유형 | 갱신 대상 |
-|----------|----------|
-| 새 tool 추가 | `definitions.json` + `_build_tool_handlers()` + `test_e2e_live_llm.py` + E2E 시나리오 문서 |
-| 파이프라인 노드 변경 | `graph.py` + `test_e2e_orchestration_live.py` + `test_e2e_live_llm.py` (§5) |
-| LLM 어댑터 변경 | `client.py` + `test_e2e_live_llm.py` (§4 LangSmith) |
-| Tool 라우팅 변경 | `definitions.json` tool descriptions + `router.md` system prompt |
+main에서만 `docs/progress.md` 갱신. 3-Checkpoint: Alloc(Step 0) → Free(머지 후) → Session-start(교차 검증). Backlog → In Progress → Done 순서 준수.
 
 ### 품질 게이트
 
@@ -674,46 +453,7 @@ PR 생성 → CI 실행 → 실패?
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Mock | `uv run pytest tests/ -q` | 2000+ pass |
-| Live | `uv run pytest tests/test_e2e_live_llm.py -v -m live` | All pass, tool results valid |
-
-### 6. Progress Board 갱신 (3-Checkpoint 시스템)
-
-**`docs/progress.md`는 main 브랜치에서만 수정한다.** feature/develop 브랜치에서 수정 금지 (merge 충돌 방지).
-
-**3 체크포인트 (REODE 패턴):**
-
-```
-체크포인트 1 — Worktree Alloc (Step 0):
-  - Backlog → In Progress 이동 (담당, 브랜치, 시작일)
-  - main에서 직접 커밋+push
-
-체크포인트 2 — Worktree Free (PR merge 완료 후):
-  - In Progress → Done 이동 (PR 번호, 완료일)
-  - GAP Registry: 해소된 GAP → Resolved
-  - Metrics: Version, Modules, Tests, Tools 수치 갱신 (실측값)
-  - main에서 직접 커밋+push
-
-체크포인트 3 — 세션 시작:
-  - progress.md 읽기 → 현재 보드 상태 파악
-  - git worktree list vs In Progress 교차 검증
-  - 불일치 발견 시 즉시 수정 (main 커밋)
-```
-
-**규칙:**
-- **Backlog → Done 직행 금지** — 반드시 In Progress 경유 (REODE 피드백)
-- **feature/develop에서 progress.md 수정 금지** — main에서만 (REODE 피드백)
-- task_id는 케밥 케이스, 고유, 변경 불가
-- 담당은 GitHub 계정 (`@username`)
-- plan 연결: `docs/plans/{task_id}.md`
-
-```
-6a. 완료 작업: In Progress/In Review → Done (날짜별 그룹)
-6b. 신규 작업: Backlog에 추가 (task_id, 우선순위, plan 연결)
-6c. GAP Registry: 새로 발견된 GAP 추가, 해소된 GAP → Resolved
-6d. Metrics: Version, Modules, Tests, Tools 등 수치 갱신 (실측값 대조)
-6e. Blocked: 차단 사유 기록 (blocked_by task_id)
-```
+| Test | `uv run pytest tests/ -q` | 2000+ pass |
 
 ## Custom Skills
 
