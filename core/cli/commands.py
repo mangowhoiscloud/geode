@@ -88,6 +88,7 @@ COMMAND_MAP: dict[str, str] = {
     "/mcp": "mcp",
     "/skills": "skills",
     "/cost": "cost",
+    "/resume": "resume",
 }
 
 
@@ -115,6 +116,7 @@ def show_help() -> None:
     console.print("  [label]/compare[/label] <A> <B>    — Compare two IPs")
     console.print("  [label]/mcp[/label]                — MCP server status/tools/add")
     console.print("  [label]/skills[/label]             — List/add/reload skills")
+    console.print("  [label]/resume[/label]             — Resume interrupted session")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
     console.print()
@@ -1303,6 +1305,60 @@ def _set_cost_budget(amount: float) -> None:
         lines.append(f"monthly_budget = {amount}")
 
     config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def cmd_resume(args: str) -> str | None:
+    """Handle /resume [session_id] — resume an interrupted session.
+
+    Returns the session_id that was selected (for caller to restore), or None.
+    """
+    from core.cli.session_checkpoint import SessionCheckpoint
+
+    checkpoint = SessionCheckpoint()
+
+    if args.strip():
+        # Explicit session ID
+        state = checkpoint.load(args.strip())
+        if state is None:
+            console.print(f"  [warning]Session not found: {args.strip()}[/warning]")
+            console.print()
+            return None
+        if state.status not in ("active", "paused"):
+            console.print(
+                f"  [warning]Session {args.strip()} is {state.status} (not resumable)[/warning]"
+            )
+            console.print()
+            return None
+        console.print(f"  [success]Resuming session: {state.session_id}[/success]")
+        if state.user_input:
+            console.print(f"  [muted]Original input: {state.user_input[:80]}[/muted]")
+        console.print(
+            f"  [muted]Round: {state.round_idx} | Messages: {len(state.messages)}[/muted]"
+        )
+        console.print()
+        return state.session_id
+
+    # No args: list resumable sessions
+    sessions = checkpoint.list_resumable()
+    if not sessions:
+        console.print("  [muted]No resumable sessions found.[/muted]")
+        console.print()
+        return None
+
+    import time as _time
+
+    console.print()
+    console.print("  [header]Resumable Sessions[/header]")
+    for i, s in enumerate(sessions[:10], 1):
+        age_min = (_time.time() - s.updated_at) / 60
+        age_str = f"{age_min:.0f}m ago" if age_min < 60 else f"{age_min / 60:.1f}h ago"
+        label = s.user_input[:50] if s.user_input else "(no input)"
+        console.print(f"  {i}. [bold]{s.session_id}[/bold] [{s.status}] {age_str}")
+        console.print(f"     [muted]{label}[/muted]")
+    console.print()
+    console.print("  [muted]Usage: /resume <session_id>[/muted]")
+    console.print()
+    return None
 
 
 def resolve_action(cmd: str) -> str | None:

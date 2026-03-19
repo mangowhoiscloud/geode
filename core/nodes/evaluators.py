@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
+from core.config import get_node_model
 from core.infrastructure.ports.domain_port import get_domain_or_none
 from core.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
 from core.infrastructure.ports.tool_port import get_tool_executor
@@ -274,7 +275,12 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
         output_model = EvaluatorResult
 
     try:
-        typed_result: Any = get_llm_parsed()(system, user, output_model=output_model)
+        typed_result: Any = get_llm_parsed()(
+            system,
+            user,
+            output_model=output_model,
+            model=get_node_model("evaluator"),
+        )
         # Convert typed result back to EvaluatorResult for state compatibility
         if isinstance(typed_result, EvaluatorResult):
             result = typed_result
@@ -299,7 +305,7 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
 
     # Fallback: legacy JSON parse (for non-Anthropic providers or SDK issues)
     try:
-        data = get_llm_json()(system, user)
+        data = get_llm_json()(system, user, model=get_node_model("evaluator"))
         return EvaluatorResult(**data)
     except (ValidationError, ValueError) as ve:
         log.warning("Evaluator %s legacy fallback also failed: %s", evaluator_type, ve)

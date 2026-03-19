@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
+from core.config import get_node_model
 from core.infrastructure.ports.domain_port import get_domain_or_none
 from core.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed, get_llm_tool
 from core.infrastructure.ports.tool_port import get_tool_executor
@@ -269,7 +270,12 @@ def _build_llm_synthesis(
 
     # Use Anthropic Structured Output (messages.parse) for guaranteed JSON
     try:
-        result = get_llm_parsed()(system, user, output_model=SynthesisResult)
+        result = get_llm_parsed()(
+            system,
+            user,
+            output_model=SynthesisResult,
+            model=get_node_model("synthesizer"),
+        )
         # Ensure cause/action match (LLM may hallucinate different values)
         if result.undervaluation_cause != cause or result.action_type != action:
             result = result.model_copy(
@@ -287,7 +293,7 @@ def _build_llm_synthesis(
 
     # Fallback: legacy JSON parse
     try:
-        data = get_llm_json()(system, user)
+        data = get_llm_json()(system, user, model=get_node_model("synthesizer"))
         return SynthesisResult(
             undervaluation_cause=cause,
             action_type=action,

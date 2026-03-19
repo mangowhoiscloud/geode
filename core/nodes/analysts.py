@@ -12,6 +12,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from core.config import get_node_model
 from core.infrastructure.ports.domain_port import get_domain_or_none
 from core.infrastructure.ports.llm_port import (
     get_llm_json,
@@ -187,7 +188,13 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     # Analyst temperature 0.5 (higher than default 0.3 for diverse perspectives)
     if parsed_fn is not None:
         try:
-            result = parsed_fn(system, user, output_model=AnalysisResult, temperature=0.5)
+            result = parsed_fn(
+                system,
+                user,
+                output_model=AnalysisResult,
+                temperature=0.5,
+                model=get_node_model("analyst"),
+            )
             # Ensure analyst_type matches
             if result.analyst_type != analyst_type:
                 result = result.model_copy(update={"analyst_type": analyst_type})
@@ -203,7 +210,7 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     # Fallback: legacy JSON parse
     if json_fn is not None:
         try:
-            data = json_fn(system, user, temperature=0.5)
+            data = json_fn(system, user, temperature=0.5, model=get_node_model("analyst"))
             result = AnalysisResult(**data)
             result = result.model_copy(update={"model_provider": model_provider})
             return result
