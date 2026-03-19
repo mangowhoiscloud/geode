@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/geode-mascot.png" alt="GEODE — Autonomous Research Harness" width="360" />
+  <img src="assets/geode-mascot.png" alt="GEODE — Autonomous Execution Harness" width="360" />
 </p>
 
 <p align="center">
@@ -10,25 +10,26 @@
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
-# GEODE v0.19.1 — Autonomous Research Harness
+# GEODE v0.19.1 — Autonomous Execution Harness
 
-범용 자율 실행 에이전트. `while(tool_use)` 루프를 핵심 프리미티브로 하여 리서치, 분석, 자동화, 스케줄링을 자연어 한 줄로 수행합니다.
+범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
 
-> *"AI 에이전트 트렌드 조사해줘", "이 URL 요약해줘", "매주 월요일 뉴스 브리핑 잡아줘" -- 자연어로 요청하면 LLM이 도구를 호출하고, 결과를 관찰하고, 다음 행동을 결정하는 루프를 반복합니다. 복합 요청은 자동 분해하고, 실패는 자동 복구하며, 도메인별 분석 파이프라인은 플러그인으로 교체됩니다.*
+### 왜 만들었는가
+
+기존 AI 코딩 에이전트는 코드 생성에 특화되어 있습니다. 하지만 실제로 필요한 건 **코딩 이외의 자율 실행** — 웹 리서치, 문서 분석, 일정 관리, 알림 전송, 데이터 파이프라인. GEODE는 `while(tool_use)` 루프 하나로 이 모든 것을 수행하는 범용 에이전트입니다. 도메인별 분석 파이프라인은 플러그인으로 교체됩니다.
+
+> *"AI 에이전트 트렌드 조사해줘", "이 URL 요약해줘", "매주 월요일 뉴스 브리핑 잡아줘" — 자연어로 요청하면 LLM이 도구를 호출하고, 결과를 관찰하고, 다음 행동을 결정하는 루프를 반복합니다.*
 
 ### Highlights
 
-- **Natural Language Interface** -- 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링 수행
-- **`while(tool_use)` Loop** -- 모든 자율 행동의 핵심 프리미티브. 도구를 호출하고, 관찰하고, 반복
-- **46 Built-in Tools** -- web_fetch, general_web_search, send_notification, calendar 등 46개 네이티브 도구
-- **MCP Auto-Discovery** -- MCPRegistry가 환경변수 기반 자동 탐지 (DEFAULT 5종 + AUTO_DISCOVER 22종), 카탈로그 42종
-- **Bash Execution** -- shell 명령 실행. SAFE_BASH_PREFIXES 41종 읽기 전용 자동승인, 9종 위험 패턴 차단, 그 외 HITL 승인
-- **Goal Decomposition** -- 복합 요청을 하위 목표 DAG로 자동 분해 (Haiku, ~$0.01/호출)
-- **Error Recovery** -- 실패 시 retry → alternative → fallback → escalate 4단계 자동 복구
-- **Sub-Agent** -- 부모 역량 전체 상속, 병렬 위임, Token Guard, as_completed 수집
-- **4-Tier Memory** -- SOUL → User Profile (Tier 0.5) → Organization → Project → Session 계층적 맥락 조합
-- **Domain Plugin** -- `DomainPort` Protocol로 도메인별 파이프라인 교체 (Game IP 기본 탑재)
-- **Safety** -- 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), Grounding Truth, 9종 bash 차단
+| 기능 | 설명 |
+|------|------|
+| **`while(tool_use)` Loop** | 모든 자율 행동의 핵심 프리미티브. 서브에이전트, 계획 실행, 배치 분석 전부 AgenticLoop 인스턴스 |
+| **46 Tools + MCP** | 네이티브 46개 도구 + MCP 카탈로그 42종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
+| **Sub-Agent** | 부모 역량 전체 상속, 최대 5 병렬, Token Guard, DAG 의존성 |
+| **4-Tier Memory** | SOUL → User Profile → Organization → Project → Session. 프로젝트별 컨텍스트 자동 구성 |
+| **Domain Plugin** | `DomainPort` Protocol로 파이프라인 교체 — Game IP 분석 기본 탑재 |
+| **Safety** | 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, Grounding Truth |
 
 ### Tool Execution Hierarchy
 
@@ -154,11 +155,11 @@ graph TB
     end
 
     subgraph L4["L4 — Extensibility"]
-        Tools["ToolRegistry (42)"]
+        Tools["ToolRegistry (46)"]
         Policy["PolicyChain"]
         Reports["Report Generator"]
         Skills["Skills System"]
-        MCPCat["MCP Catalog (39)"]
+        MCPCat["MCP Catalog (42)"]
     end
 
     subgraph L5["L5 — Domain Plugins"]
@@ -201,7 +202,7 @@ graph TB
 graph TB
     Input["User Input<br/>(한국어/영어)"] --> LLM["Claude Opus 4.6<br/>Tool Use API"]
     LLM --> Decision{stop_reason}
-    Decision -->|tool_use| Exec["ToolExecutor<br/>(42 base + MCP)"]
+    Decision -->|tool_use| Exec["ToolExecutor<br/>(46 base + MCP)"]
     Exec --> Check{clarification<br/>needed?}
     Check -->|Yes| Clarify["LLM asks<br/>clarifying question"]
     Clarify --> Output
@@ -225,12 +226,15 @@ graph TB
 
 | 구성 요소 | 설명 |
 |----------|------|
-| **LLM Tool Use** | Claude Opus 4.6 — base 42 + MCP 20+ tool 정의 전달, `stop_reason` 기반 루프 제어 |
+| **LLM Tool Use** | Claude Opus 4.6 — base 46 + MCP 20+ tool 정의 전달, `stop_reason` 기반 루프 제어 |
 | **ToolExecutor** | 4-tier safety: SAFE / STANDARD / WRITE / DANGEROUS (bash 사용자 승인 필수) |
 | **Clarification** | 필수 파라미터 누락 시 LLM이 사용자에게 되묻기 |
 | **max_rounds** | 기본 50 라운드 — 마지막 2라운드에서 텍스트 응답 강제 (1M 컨텍스트 + `clear_tool_uses` 활용) |
 | **Multi-turn** | 슬라이딩 윈도우 (max 200 turns) — 서버측 `clear_tool_uses`가 주 컨텍스트 관리, 클라이언트 제한은 안전망 |
 | **LangSmith** | 토큰 수/비용을 RunTree에 기록, 세션 합산 |
+
+<details>
+<summary><strong>Advanced: Goal Decomposition / Error Recovery / Dynamic Graph / Signal Liveification / Plan Auto-Execute</strong></summary>
 
 ### Goal Decomposition
 
@@ -349,6 +353,8 @@ graph LR
 - **Partial Success**: step 실패 시 1회 재시도 후 `failed`로 마킹하고 나머지 step 계속 진행
 - **HITL 보존**: AUTO 모드에서도 DANGEROUS/WRITE 도구는 사용자 승인 필수 (ToolExecutor 레이어에서 별도 게이트)
 
+</details>
+
 ### Sub-Agent System
 
 부모 AgenticLoop의 전체 역량(tools, MCP, skills, memory)을 상속받아 독립 컨텍스트에서 병렬 실행합니다.
@@ -425,7 +431,8 @@ graph TB
 
 `ContextAssembler`가 4-tier를 조합하여 `_llm_summary` (280자, SOUL 10% / Org 25% / Project 25% / Session 40% 예산)로 압축합니다.
 
-### Prompt Assembly Pipeline
+<details>
+<summary><strong>Prompt Assembly Pipeline</strong> — 5단계 프롬프트 조합 (ADR-007)</summary>
 
 모든 노드(Analyst, Evaluator, Synthesizer, BiasBuster)는 동일한 5단계 조합 파이프라인(ADR-007)을 거쳐 LLM을 호출합니다.
 
@@ -487,6 +494,8 @@ sequenceDiagram
 
 **무결성 보장**: 모든 템플릿에 SHA-256[:12] 핀 해시 저장. CI `verify_prompt_integrity()`로 의도치 않은 변경 감지 (Karpathy P4 Ratchet).
 
+</details>
+
 ---
 
 ## Safety & HITL
@@ -512,10 +521,10 @@ sequenceDiagram
 ```mermaid
 graph TB
     subgraph GEODE["GEODE Autonomous Core"]
-        Registry["ToolRegistry<br/>42 base tools"]
+        Registry["ToolRegistry<br/>46 base tools"]
         Policy["PolicyChain"]
         SkillReg["SkillRegistry<br/>(auto-inject)"]
-        MCPInstall["MCP Auto-Install<br/>(39 catalog)"]
+        MCPInstall["MCP Auto-Install<br/>(42 catalog)"]
     end
 
     subgraph MCPAdapters["MCP Adapters (4 active)"]
@@ -542,11 +551,11 @@ graph TB
     style MCPServer fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
 ```
 
-- **42 base tools** — `web_fetch`, `general_web_search`, `youtube_search`, `read_document` 등 범용 도구 + `category`/`cost_tier` 메타데이터
+- **46 base tools** — `web_fetch`, `general_web_search`, `youtube_search`, `read_document` 등 범용 도구 + `category`/`cost_tier` 메타데이터
 - **MCP Adapters** — Brave Search, Steam, LinkedIn, Memory (env var 비어있으면 graceful skip)
 - **MCP Server** — `uv run python -m core.mcp_server` 로 GEODE를 외부 에이전트에서 호출 가능 (6 tools, 2 resources)
 - **Skills** — `.claude/skills/` 자동 발견 + YAML frontmatter 기반 도구 핫 리로드
-- **MCP 자동설치** — `install_mcp_server` tool → 39개 카탈로그 검색 + 설치 + `refresh_tools()`
+- **MCP 자동설치** — `install_mcp_server` tool → 42개 카탈로그 검색 + 설치 + `refresh_tools()`
 
 ### Domain Plugin
 
@@ -568,7 +577,8 @@ class DomainPort(Protocol):
 - **동적 로딩**: `load_domain_adapter(name)` — 레지스트리 기반 임포트
 - **확장**: `register_domain(name, path)` 후 `DomainPort` Protocol 구현체 교체
 
-### Game IP Domain (Default Plugin)
+<details>
+<summary><strong>Game IP Domain (Default Plugin)</strong> — 게임 IP 가치 평가 파이프라인 (LangGraph 9-node)</summary>
 
 기본 탑재된 게임 IP 가치 평가 파이프라인. LangGraph StateGraph 기반 9-node 토폴로지.
 
@@ -654,6 +664,8 @@ D-E-F 축 기반 코드 분류 (LLM이 아닌 룰 기반):
 | Ghost in the Shell | B | 51.6 | discovery_failure | Cyberpunk |
 
 **Steam Fixtures**: 201개 추가 게임 데이터 (`core/fixtures/steam/`).
+
+</details>
 
 ### LangSmith Observability
 
@@ -764,7 +776,7 @@ uv run geode batch --top 5                        # 배치 분석
 | `ANTHROPIC_API_KEY` | | Claude API 키 |
 | `OPENAI_API_KEY` | | GPT API 키 (Cross-LLM) |
 | `GEODE_MODEL` | `claude-opus-4-6` | 기본 LLM 모델 |
-| `GEODE_ENSEMBLE_MODE` | `primary_only` | 앙상블 모드 (`primary_only` / `cross`) |
+| `GEODE_ENSEMBLE_MODE` | `single` | 앙상블 모드 (`single` / `cross`) |
 | **Pipeline** | | |
 | `GEODE_CONFIDENCE_THRESHOLD` | `0.7` | 신뢰도 게이트 |
 | `GEODE_MAX_ITERATIONS` | `5` | 최대 재분석 반복 |
@@ -781,10 +793,10 @@ uv run geode batch --top 5                        # 배치 분석
 ## Testing
 
 ```bash
-uv run pytest                                        # 전체 (2530+ passed)
+uv run pytest                                        # 전체 (2780+ passed)
 uv run pytest tests/test_e2e_live_llm.py -v -m live  # Live E2E
 uv run ruff check core/ tests/                       # Lint
-uv run mypy core/                                    # Type check (134 files)
+uv run mypy core/                                    # Type check (173 files)
 uv run bandit -r core/ -c pyproject.toml             # Security
 ```
 
@@ -802,7 +814,8 @@ core/
 │   ├── conversation.py         # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
-│   ├── commands.py             # Slash command dispatch (20 actions)
+│   ├── commands.py             # Slash command dispatch (17 commands)
+│   ├── project_detect.py       # Project type auto-detection (7 types)
 │   ├── search.py               # IP search engine (synonym expansion)
 │   └── startup.py              # Readiness check, Graceful Degradation
 ├── config.py                   # Settings (pydantic-settings, 57 vars)
@@ -813,7 +826,7 @@ core/
 │   ├── ports/                  # LLMClientPort, SignalEnrichmentPort, DomainPort
 │   └── adapters/
 │       ├── llm/                # ClaudeAdapter, OpenAIAdapter
-│       └── mcp/                # Steam, Brave, LinkedIn + CompositeSignalAdapter + catalog (39)
+│       └── mcp/                # Steam, Brave, LinkedIn + CompositeSignalAdapter + catalog (42)
 ├── llm/                        # LLM client (prompt caching, streaming, cost tracking)
 ├── memory/                     # 4-Tier: SOUL → User Profile → Organization → Project → Session
 ├── nodes/                      # Pipeline nodes (router, signals, analyst, evaluator, scoring, verification, gather, synthesizer)
@@ -882,9 +895,9 @@ graph TB
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 2530+ pass |
+| Test | `uv run pytest tests/ -q` | 2780+ pass |
 | Live | `uv run pytest tests/test_e2e_live_llm.py -v -m live` | All pass |
 
 ## License
 
-Internal use only.
+Apache License 2.0 — [LICENSE](./LICENSE) 참조
