@@ -298,3 +298,15 @@ def setup_project_memory(project_root: Path | None = None) -> bool:
     if created:
         log.info("Project memory initialized at %s", mem.memory_file)
     return created
+
+
+def setup_user_profile() -> bool:
+    """Initialize user profile if not present (~/.geode/user_profile/)."""
+    try:
+        from core.memory.user_profile import FileBasedUserProfile
+
+        profile = FileBasedUserProfile()
+        return profile.ensure_structure()
+    except Exception as e:
+        log.debug("User profile setup skipped: %s", e)
+        return False

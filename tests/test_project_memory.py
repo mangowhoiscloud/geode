@@ -19,11 +19,11 @@ class TestProjectMemoryExists:
 
     def test_memory_file_path(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
-        assert mem.memory_file == tmp_path / ".claude" / "MEMORY.md"
+        assert mem.memory_file == tmp_path / ".geode" / "memory" / "PROJECT.md"
 
     def test_rules_dir_path(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
-        assert mem.rules_dir == tmp_path / ".claude" / "rules"
+        assert mem.rules_dir == tmp_path / ".geode" / "rules"
 
 
 class TestEnsureStructure:

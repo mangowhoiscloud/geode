@@ -32,5 +32,8 @@ geode_checkpoints.db
 # Coverage
 .coverage
 
-# Runtime data
-.geode/
+# Runtime data (except tracked config)
+.geode/*
+!.geode/rules/
+!.geode/memory/
+!.geode/config.toml
