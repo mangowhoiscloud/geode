@@ -24,6 +24,55 @@ from core.ui.console import console
 log = logging.getLogger(__name__)
 
 
+def auto_generate_env(project_root: Path | None = None) -> bool:
+    """Auto-generate .env from .env.example if .env is absent.
+
+    Copies .env.example to .env, replacing placeholder values
+    (like ``sk-ant-...`` or ``...``) with empty strings so that
+    the Settings loader does not treat them as real keys.
+
+    Returns True if .env was generated, False otherwise.
+    """
+    root = project_root or Path(".")
+    env_path = root / ".env"
+    example_path = root / ".env.example"
+
+    if env_path.exists():
+        return False
+    if not example_path.exists():
+        return False
+
+    raw = example_path.read_text(encoding="utf-8")
+    lines: list[str] = []
+    for line in raw.splitlines():
+        # Skip commented-out lines — keep as-is
+        stripped = line.lstrip()
+        if stripped.startswith("#") or "=" not in stripped:
+            lines.append(line)
+            continue
+        # Split on first '='
+        key, _, value = line.partition("=")
+        value = value.strip()
+        # Replace placeholder values with empty string
+        if _is_placeholder(value):
+            lines.append(f"{key}=")
+        else:
+            lines.append(line)
+
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    log.info(".env auto-generated from .env.example")
+    return True
+
+
+def _is_placeholder(value: str) -> bool:
+    """Check if a .env value is a placeholder (not a real credential)."""
+    # Exact ellipsis
+    if value == "...":
+        return True
+    # Patterns like sk-ant-..., sk-..., lsv2_pt_..., BSA..., etc.
+    return bool(value.endswith("..."))
+
+
 def _has_any_llm_key() -> bool:
     """Check if ANY LLM provider API key is configured."""
     if settings.anthropic_api_key and settings.anthropic_api_key != "sk-ant-...":
