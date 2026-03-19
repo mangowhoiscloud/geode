@@ -420,7 +420,8 @@ class TestLLMUsageEdgeCases:
 
         for model_name in MODEL_PRICING:
             cost = calculate_cost(model_name, 1000, 1000)
-            assert cost > 0, f"Cost should be positive for {model_name}"
+            # Free-tier models (e.g. glm-4.7-flash) have $0 pricing
+            assert cost >= 0, f"Cost should be non-negative for {model_name}"
 
     def test_langsmith_legacy_key(self):
         env = {"LANGCHAIN_TRACING_V2": "true", "LANGSMITH_API_KEY": "legacy_key"}

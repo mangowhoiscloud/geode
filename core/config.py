@@ -281,7 +281,7 @@ settings = _get_settings()
 
 # Anthropic models
 ANTHROPIC_PRIMARY = "claude-opus-4-6"
-ANTHROPIC_SECONDARY = "claude-sonnet-4-5-20250929"
+ANTHROPIC_SECONDARY = "claude-sonnet-4-6"
 ANTHROPIC_BUDGET = "claude-haiku-4-5-20251001"
 ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY]
 
@@ -292,7 +292,7 @@ OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.4", "gpt-5.2", "gpt-4.1"]
 # ZhipuAI (GLM) models — OpenAI-compatible API, separate provider
 GLM_PRIMARY = "glm-5"
 GLM_FALLBACK_CHAIN: list[str] = ["glm-5", "glm-5-turbo", "glm-4.7-flash"]
-GLM_BASE_URL = "https://api.z.ai/api/paas/v4/"
+GLM_BASE_URL = "https://api.z.ai/v1"
 
 
 def _resolve_provider(model: str) -> str:

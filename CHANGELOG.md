@@ -44,6 +44,13 @@ P1 전체 완료 + .geode Context Hub (5-Layer C0-C4) Phase A+B.
 
 ### Changed
 - check_readiness/key_registration_gate 멀티 프로바이더 지원 — 3사 키 상태 표시 및 ANY 키 unblock
+- LLM 모델 가격/context window 최신화 (2026-03-19 검증) — gpt-4.1 $2.00/$8.00, o4-mini $1.10/$4.40, claude-opus-4-6 1M ctx 등
+- ANTHROPIC_SECONDARY를 `claude-sonnet-4-6` (1M ctx)으로 갱신
+- GLM adapter 독립 분리 (`glm_adapter.py`) — 모델 계열별 adapter 확장 용이
+- deprecated 모델 제거: gpt-4o, gpt-4o-mini, o3-mini, claude-haiku-3-5
+- SubAgent에 부모 model/provider 상속 — GLM 모드에서 자식도 GLM 사용
+- `/auth add`에 ZhipuAI 프로바이더 추가
+- `_mask_key`/`_upsert_env`/`is_glm_key` 공유 헬퍼 추출 (`_helpers.py`) — DRY
 
 - `.geode` Context Hub — 5-Layer 목적 중심 컨텍스트 계층 (C0 Identity → C1 Project → C2 Journal → C3 Session → C4 Plan)
 - `ProjectJournal` (C2) — `.geode/journal/` append-only 실행 기록 (runs.jsonl, costs.jsonl, learned.md, errors.jsonl)

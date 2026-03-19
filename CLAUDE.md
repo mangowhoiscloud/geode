@@ -303,25 +303,26 @@ Decision Tree on D-E-F axes:
 4. **Confidence Gate**: ≥ 0.7 → proceed, else loopback (max 5 iter)
 5. **Rights Risk**: CLEAR/NEGOTIABLE/RESTRICTED/EXPIRED/UNKNOWN
 
-## LLM Models (2026-03)
+## LLM Models (verified 2026-03-19)
 
-| Provider | Model | Input $/M | Output $/M | 용도 |
-|----------|-------|-----------|------------|------|
-| **Anthropic** | `claude-opus-4-6` | $5.00 | $25.00 | Primary (Pipeline + Agentic) |
-| Anthropic | `claude-sonnet-4-5-20250929` | $3.00 | $15.00 | Fallback |
-| Anthropic | `claude-haiku-4-5-20251001` | $1.00 | $5.00 | Lightweight |
-| **OpenAI** | `gpt-5.4` | $2.50 | $15.00 | Cross-LLM Secondary (default) |
-| OpenAI | `gpt-5.2` | $1.75 | $14.00 | Fallback 1 |
-| OpenAI | `gpt-4.1` | $3.50 | $14.00 | Fallback 2 |
-| OpenAI | `gpt-4.1-mini` | $0.70 | $2.80 | Budget |
-| **ZhipuAI** | `glm-5` | $1.00 | $3.20 | GLM Primary |
-| ZhipuAI | `glm-5-turbo` | $0.50 | $1.60 | GLM Fallback |
-| ZhipuAI | `glm-4.7-flash` | $0.10 | $0.10 | GLM Budget |
+| Provider | Model | Input $/M | Output $/M | Context | 용도 |
+|----------|-------|-----------|------------|---------|------|
+| **Anthropic** | `claude-opus-4-6` | $5.00 | $25.00 | 1M | Primary (Pipeline + Agentic) |
+| Anthropic | `claude-sonnet-4-6` | $3.00 | $15.00 | 1M | Fallback |
+| Anthropic | `claude-haiku-4-5-20251001` | $1.00 | $5.00 | 200K | Budget |
+| **OpenAI** | `gpt-5.4` | $2.50 | $15.00 | 1M | Cross-LLM Secondary (default) |
+| OpenAI | `gpt-5.2` | $1.75 | $14.00 | 128K | Fallback 1 |
+| OpenAI | `gpt-4.1` | $2.00 | $8.00 | 1M | Fallback 2 |
+| OpenAI | `gpt-4.1-mini` | $0.40 | $1.60 | 1M | Budget |
+| **ZhipuAI** | `glm-5` | $0.72 | $2.30 | 80K | GLM Primary |
+| ZhipuAI | `glm-5-turbo` | $0.96 | $3.20 | 200K | GLM Agent |
+| ZhipuAI | `glm-4.7-flash` | Free | Free | 200K | GLM Budget |
 
+- **Fallback chain** (Anthropic): `claude-opus-4-6` → `claude-sonnet-4-6`
 - **Fallback chain** (OpenAI): `gpt-5.4` → `gpt-5.2` → `gpt-4.1`
 - **Fallback chain** (GLM): `glm-5` → `glm-5-turbo` → `glm-4.7-flash`
-- **Pricing source**: [OpenAI API Pricing](https://developers.openai.com/api/docs/pricing/)
 - **Cache pricing** (Anthropic): creation = input × 1.25, read = input × 0.1
+- **Deprecated** (removed): gpt-4o, gpt-4o-mini, o3-mini, claude-haiku-3-5
 
 ## Tool Routing (AgenticLoop Direct)
 

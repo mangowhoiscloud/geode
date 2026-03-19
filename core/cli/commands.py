@@ -43,7 +43,7 @@ class ModelProfile:
 
 MODEL_PROFILES: list[ModelProfile] = [
     ModelProfile(ANTHROPIC_PRIMARY, "Anthropic", "Opus 4.6", "$$$"),
-    ModelProfile(ANTHROPIC_SECONDARY, "Anthropic", "Sonnet 4.5", "$$"),
+    ModelProfile(ANTHROPIC_SECONDARY, "Anthropic", "Sonnet 4.6", "$$"),
     ModelProfile(ANTHROPIC_BUDGET, "Anthropic", "Haiku 4.5", "$"),
     ModelProfile(OPENAI_PRIMARY, "OpenAI", "GPT-5.4", "$$"),
     ModelProfile(GLM_PRIMARY, "ZhipuAI", "GLM-5", "$"),
