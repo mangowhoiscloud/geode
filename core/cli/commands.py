@@ -236,6 +236,23 @@ def cmd_key(args: str) -> bool:
     return True
 
 
+def _check_provider_key(selected: ModelProfile) -> None:
+    """Warn if the provider's API key is not set for the selected model."""
+    from core.config import settings
+
+    provider_key_map: dict[str, tuple[str, str]] = {
+        "Anthropic": (settings.anthropic_api_key, "ANTHROPIC_API_KEY"),
+        "OpenAI": (settings.openai_api_key, "OPENAI_API_KEY"),
+        "ZhipuAI": (settings.zai_api_key, "ZAI_API_KEY"),
+    }
+    entry = provider_key_map.get(selected.provider)
+    if entry is None:
+        return
+    key_value, env_var = entry
+    if not key_value or key_value in ("sk-ant-...", "sk-...", "..."):
+        console.print(f"  [warning]Warning: {env_var} not set. Model may not work.[/warning]")
+
+
 def _apply_model(selected: ModelProfile) -> None:
     """Apply a model selection — update settings + .env."""
     from core.config import settings
@@ -245,6 +262,8 @@ def _apply_model(selected: ModelProfile) -> None:
         console.print(f"  [muted]Already using {selected.label}[/muted]")
         console.print()
         return
+
+    _check_provider_key(selected)
 
     settings.model = selected.id
     _upsert_env("GEODE_MODEL", selected.id)

@@ -43,6 +43,7 @@ from core.cli.conversation import ConversationContext
 from core.cli.search import IPSearchEngine
 from core.cli.startup import (
     ReadinessReport,
+    auto_generate_env,
     check_readiness,
     detect_api_key,
     env_setup_wizard,
@@ -509,6 +510,9 @@ def _welcome_screen() -> None:
     """Show Claude Code-style welcome screen with readiness check."""
     _suppress_noisy_warnings()
     _render_welcome_brand()
+
+    # Auto-generate .env from .env.example (placeholder → empty)
+    auto_generate_env()
 
     # .env setup wizard — runs when .env is absent and no API keys set
     env_path = Path(".env")
