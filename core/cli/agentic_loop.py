@@ -806,7 +806,7 @@ class AgenticLoop:
             return None
 
         try:
-            from core.infrastructure.adapters.llm.openai_adapter import (
+            from core.infrastructure.adapters.llm.glm_adapter import (
                 _get_glm_client,
             )
         except ImportError:

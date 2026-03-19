@@ -5,7 +5,6 @@ OpenClaw-inspired Binding Router pattern: static command → handler mapping.
 
 from __future__ import annotations
 
-import re
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +14,9 @@ from typing import cast
 from simple_term_menu import TerminalMenu
 
 from core.auth.profiles import ProfileStore
+from core.cli._helpers import is_glm_key as _is_glm_key
+from core.cli._helpers import mask_key as _mask_key
+from core.cli._helpers import upsert_env as _upsert_env
 from core.config import (
     ANTHROPIC_BUDGET,
     ANTHROPIC_PRIMARY,
@@ -131,34 +133,6 @@ def cmd_list() -> None:
     console.print()
 
 
-def _mask_key(key: str) -> str:
-    """Mask an API key for display: sk-ant-abc...xyz → sk-ant-abc...xyz (show first 10 + last 4)."""
-    if len(key) <= 14:
-        return "***"
-    return key[:10] + "..." + key[-4:]
-
-
-def _upsert_env(var_name: str, value: str) -> None:
-    """Insert or update a variable in .env file. Creates .env if absent."""
-    env_path = Path(".env")
-    lines: list[str] = []
-    found = False
-
-    if env_path.exists():
-        raw = env_path.read_text(encoding="utf-8")
-        for line in raw.splitlines():
-            if re.match(rf"^{re.escape(var_name)}\s*=", line):
-                lines.append(f"{var_name}={value}")
-                found = True
-            else:
-                lines.append(line)
-
-    if not found:
-        lines.append(f"{var_name}={value}")
-
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def cmd_key(args: str) -> bool:
     """Handle /key command. Returns True if readiness should be rechecked."""
     from core.config import settings
@@ -214,7 +188,7 @@ def cmd_key(args: str) -> bool:
         settings.zai_api_key = value
         _upsert_env("ZAI_API_KEY", value)
         try:
-            from core.infrastructure.adapters.llm.openai_adapter import reset_glm_client
+            from core.infrastructure.adapters.llm.glm_adapter import reset_glm_client
 
             reset_glm_client()
         except ImportError:
@@ -243,7 +217,7 @@ def cmd_key(args: str) -> bool:
         settings.zai_api_key = value
         _upsert_env("ZAI_API_KEY", value)
         try:
-            from core.infrastructure.adapters.llm.openai_adapter import reset_glm_client
+            from core.infrastructure.adapters.llm.glm_adapter import reset_glm_client
 
             reset_glm_client()
         except ImportError:
@@ -260,14 +234,6 @@ def cmd_key(args: str) -> bool:
         return False
     console.print()
     return True
-
-
-def _is_glm_key(value: str) -> bool:
-    """Detect ZhipuAI API key pattern: {hex}.{hex} (e.g. abc123.def456)."""
-    if "." not in value:
-        return False
-    parts = value.split(".", 1)
-    return len(parts) == 2 and all(len(p) >= 4 for p in parts)
 
 
 def _apply_model(selected: ModelProfile) -> None:
@@ -429,8 +395,8 @@ def _auth_add_interactive(store: ProfileStore, add_args: str) -> None:
     from core.auth.profiles import AuthProfile, CredentialType
 
     # Level 1: Provider selection
-    providers = ["anthropic", "openai"]
-    entries = [f"{p.capitalize()}" for p in providers]
+    providers = ["anthropic", "openai", "zhipuai"]
+    entries = ["Anthropic", "OpenAI", "ZhipuAI"]
 
     menu = TerminalMenu(
         entries,
@@ -523,6 +489,15 @@ def _get_profile_store() -> ProfileStore:
                 provider="openai",
                 credential_type=CredentialType.API_KEY,
                 key=settings.openai_api_key,
+            )
+        )
+    if settings.zai_api_key:
+        store.add(
+            AuthProfile(
+                name="zhipuai:default",
+                provider="zhipuai",
+                credential_type=CredentialType.API_KEY,
+                key=settings.zai_api_key,
             )
         )
     _profile_store_ctx.set(store)

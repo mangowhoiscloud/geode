@@ -15,39 +15,13 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core.cli._helpers import mask_key as _mask_key
+from core.cli._helpers import upsert_env as _upsert_env
 from core.config import settings
 from core.memory.project import ProjectMemory
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
-
-
-def _mask_key(key: str) -> str:
-    """Mask an API key for display."""
-    if len(key) <= 14:
-        return "***"
-    return key[:10] + "..." + key[-4:]
-
-
-def _upsert_env(var_name: str, value: str) -> None:
-    """Insert or update a variable in .env file. Creates .env if absent."""
-    env_path = Path(".env")
-    lines: list[str] = []
-    found = False
-
-    if env_path.exists():
-        raw = env_path.read_text(encoding="utf-8")
-        for line in raw.splitlines():
-            if re.match(rf"^{re.escape(var_name)}\s*=", line):
-                lines.append(f"{var_name}={value}")
-                found = True
-            else:
-                lines.append(line)
-
-    if not found:
-        lines.append(f"{var_name}={value}")
-
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _has_any_llm_key() -> bool:
@@ -127,7 +101,6 @@ _KEY_PATTERNS: list[tuple[str, str, str]] = [
     (r"^sk-ant-[A-Za-z0-9_-]{10,}$", "anthropic", "ANTHROPIC_API_KEY"),
     (r"^sk-proj-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
     (r"^sk-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
-    (r"^[0-9a-f]{8,}\.[0-9a-zA-Z]{8,}$", "glm", "ZAI_API_KEY"),
 ]
 
 
@@ -137,6 +110,8 @@ def detect_api_key(text: str) -> tuple[str, str, str] | None:
     Returns (provider, env_var, key_value) if detected, else None.
     Only matches single-token inputs (no spaces except leading/trailing).
     """
+    from core.cli._helpers import is_glm_key
+
     stripped = text.strip()
     if " " in stripped or "\n" in stripped:
         return None
@@ -144,6 +119,10 @@ def detect_api_key(text: str) -> tuple[str, str, str] | None:
     for pattern, provider, env_var in _KEY_PATTERNS:
         if re.match(pattern, stripped):
             return provider, env_var, stripped
+
+    # GLM key: {id}.{secret} pattern — uses shared helper
+    if is_glm_key(stripped):
+        return "glm", "ZAI_API_KEY", stripped
 
     return None
 
