@@ -2885,20 +2885,41 @@ def batch(
 def init(
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing config.toml"),
 ) -> None:
-    """Initialize .geode/ project structure with template config."""
-    from core.config import DEFAULT_CONFIG_TOML
+    """Initialize .geode/ project structure with template config.
+
+    Auto-detects project type (Node/Python/Rust/Go/Java) and generates
+    config.toml with build/test/lint commands + Claude Code hook templates.
+    Pattern: harness-for-real init.sh
+    """
+    import json
+
+    from core.cli.project_detect import (
+        detect_project_type,
+        generate_config_toml,
+        generate_hooks,
+        generate_settings_json_hooks,
+    )
     from core.memory.project import ProjectMemory
     from core.memory.user_profile import FileBasedUserProfile
 
     project_mem = ProjectMemory(Path("."))
     user_profile = FileBasedUserProfile()
 
-    # .claude/ (ProjectMemory)
+    # 1. Detect project type (harness-for-real init.sh pattern)
+    project_info = detect_project_type(Path("."))
+    console.print(
+        f"  Detected project type: [bold]{project_info.project_type}[/bold]"
+        f" ({project_info.pkg_mgr})"
+        if project_info.pkg_mgr
+        else ""
+    )
+
+    # 2. .claude/ (ProjectMemory)
     created_claude = project_mem.ensure_structure()
     if created_claude:
         console.print("  Created .claude/ structure")
 
-    # .geode/ directories
+    # 3. .geode/ directories
     geode_dirs = [
         # C1: Project config
         Path(".geode/project"),
@@ -2927,20 +2948,58 @@ def init(
         d.mkdir(parents=True, exist_ok=True)
     console.print("  Created .geode/ directories")
 
-    # config.toml template
+    # 4. config.toml with detected project info
     config_path = Path(".geode/config.toml")
     if not config_path.exists() or force:
-        config_path.write_text(DEFAULT_CONFIG_TOML, encoding="utf-8")
-        console.print("  Created .geode/config.toml")
+        config_content = generate_config_toml(project_info)
+        config_path.write_text(config_content, encoding="utf-8")
+        console.print("  Created .geode/config.toml (with detected commands)")
     else:
         console.print("  .geode/config.toml already exists (use --force to overwrite)")
 
-    # ~/.geode/user_profile
+    # 5. Hook templates (harness-for-real pattern)
+    hooks_dir = Path(".claude/hooks")
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    hooks = generate_hooks(project_info)
+    for filename, content in hooks.items():
+        hook_path = hooks_dir / filename
+        if not hook_path.exists() or force:
+            hook_path.write_text(content, encoding="utf-8")
+            hook_path.chmod(0o755)
+    if hooks:
+        console.print(f"  Created .claude/hooks/ ({len(hooks)} hooks)")
+
+    # 6. Register hooks in .claude/settings.json (merge, not overwrite)
+    settings_path = Path(".claude/settings.json")
+    hook_config = generate_settings_json_hooks()
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+        # Merge hooks (don't overwrite existing permissions/other keys)
+        if "hooks" not in existing:
+            existing.update(hook_config)
+            settings_path.write_text(
+                json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            console.print("  Registered hooks in .claude/settings.json")
+        else:
+            console.print("  .claude/settings.json hooks already configured")
+    else:
+        settings_path.write_text(
+            json.dumps(hook_config, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        console.print("  Created .claude/settings.json with hooks")
+
+    # 7. ~/.geode/user_profile
     created_profile = user_profile.ensure_structure()
     if created_profile:
         console.print("  Created ~/.geode/user_profile/")
 
-    # .gitignore entry
+    # 8. .gitignore entry
     _ensure_gitignore_entry(".geode/", "# GEODE")
     console.print("[green]GEODE project initialized.[/green]")
 

@@ -361,48 +361,18 @@ class ProjectMemory:
         self._rules_dir.mkdir(exist_ok=True)
 
         default_memory = """\
-# GEODE Project Memory
+# Project Memory
 
-## 프로젝트 개요
-- 목적: 범용 자율 실행 에이전트 (리서치, 분석, 자동화). Game IP 분석은 도메인 플러그인
-- 파이프라인: Router → Signals → Analysts → Evaluators → Scoring → Synthesis
+## Overview
+- Type: (auto-detected by `geode init`)
+- Commands: see `.geode/config.toml` [commands] section
 
-## 분석 규칙
-- @rules/ 디렉토리의 .md 파일이 자동 로딩됩니다
+## Rules
+- .claude/rules/ 디렉토리의 .md 파일이 자동 로딩됩니다
 
-## 자주 분석하는 IP
-- Berserk: 다크 판타지, S-tier, conversion_failure
-- Cowboy Bebop: SF 느와르, A-tier, undermarketed
-- Ghost in the Shell: 사이버펑크, B-tier, discovery_failure
-
-## 팀 특화 루브릭 오버라이드
-- (없음 — 기본 14-axis 루브릭 사용)
-
-## 최근 인사이트
+## Recent Insights
 """
         self._memory_file.write_text(default_memory, encoding="utf-8")
-
-        # Create sample rule
-        sample_rule = """\
----
-name: anime-ip-rules
-paths:
-  - "**/*anime*"
-  - "*cowboy*"
-  - "*ghost*"
----
-
-# 애니메이션 IP 분석 규칙
-
-## 데이터 소스 우선순위
-1. YouTube (트레일러, 리뷰 영상)
-2. Reddit (r/anime, r/gaming)
-
-## 특수 고려사항
-- 원작 시즌 방영 중이면 Growth Velocity(J) 가중치 상향
-- 원작 완결 후 2년 이상이면 Expansion Potential(F) 감점
-"""
-        (self._rules_dir / "anime-ip.md").write_text(sample_rule, encoding="utf-8")
 
         log.info("Created .claude/MEMORY.md and .claude/rules/ structure")
         return True
