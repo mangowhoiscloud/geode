@@ -220,6 +220,30 @@ class AgenticLoop:
         self._enable_goal_decomposition = enable_goal_decomposition
         self._goal_decomposer: Any | None = None  # lazy init
 
+        # Tier 1 transcript: append-only JSONL event stream (snapshot-redesign)
+        self._transcript: Any | None = None
+        try:
+            import uuid as _uuid
+
+            from core.cli.transcript import SessionTranscript
+
+            self._transcript = SessionTranscript(f"s-{_uuid.uuid4().hex[:12]}")
+        except Exception:
+            log.debug("Transcript init failed", exc_info=True)
+
+    def _record_transcript_end(self, result: Any) -> None:
+        """Record session end + assistant message to transcript."""
+        if self._transcript is None:
+            return
+        try:
+            text = getattr(result, "text", "") or ""
+            if text:
+                self._transcript.record_assistant_message(text)
+            rounds = getattr(result, "rounds", 0)
+            self._transcript.record_session_end(rounds=rounds)
+        except Exception:
+            log.debug("Transcript end recording failed", exc_info=True)
+
     def refresh_tools(self) -> int:
         """Reload MCP tools into the tool list without reconstructing the loop.
 
@@ -269,6 +293,11 @@ class AgenticLoop:
 
         # Add user message to conversation context
         self.context.add_user_message(user_input)
+
+        # Transcript: session start + user message
+        if self._transcript is not None:
+            self._transcript.record_session_start(model=self.model, provider=self._provider)
+            self._transcript.record_user_message(user_input)
         messages = self.context.get_messages()
 
         system_prompt = self._build_system_prompt()
@@ -315,6 +344,7 @@ class AgenticLoop:
                     self.max_rounds,
                     len(result.tool_calls),
                 )
+                self._record_transcript_end(result)
                 return result
 
             # Track usage + Claude Code-style token display
@@ -342,6 +372,7 @@ class AgenticLoop:
                     self.max_rounds,
                     len(result.tool_calls),
                 )
+                self._record_transcript_end(result)
                 return result
 
             tool_results = await self._process_tool_calls(response)
@@ -375,6 +406,7 @@ class AgenticLoop:
             self.max_rounds,
             len(result.tool_calls),
         )
+        self._record_transcript_end(result)
         return result
 
     def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:
@@ -977,6 +1009,15 @@ class AgenticLoop:
         skip_log = result.get("skipped") or result.get("recovery_attempted")
         if isinstance(result, dict) and not skip_log:
             self._op_logger.log_tool_result(tool_name, result, visible=visible)
+
+        # Transcript: tool_call + tool_result events
+        if self._transcript is not None:
+            self._transcript.record_tool_call(tool_name, tool_input)
+            status = "error" if isinstance(result, dict) and result.get("error") else "ok"
+            summary = ""
+            if isinstance(result, dict):
+                summary = str(result.get("summary", result.get("error", "")))
+            self._transcript.record_tool_result(tool_name, status, summary)
 
         self._tool_log.append(
             {
