@@ -243,6 +243,29 @@ def _format_analyses_md(analyses: list[dict[str, Any]]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Evaluator data extraction helper
+# ---------------------------------------------------------------------------
+
+
+def _extract_eval_fields(ev: Any) -> tuple[float, str, dict[str, Any]]:
+    """Extract (composite_score, rationale, axes) from a dict or Pydantic object.
+
+    Evaluator results may arrive as plain dicts (from JSON deserialization) or
+    as Pydantic model instances.  This helper normalises access so callers
+    don't need to repeat the isinstance/getattr dispatch.
+    """
+    if isinstance(ev, dict):
+        composite: float = ev.get("composite_score", 0)
+        rationale: str = ev.get("rationale", "")
+        axes: dict[str, Any] = ev.get("axes", {})
+    else:
+        composite = getattr(ev, "composite_score", 0)
+        rationale = getattr(ev, "rationale", "")
+        axes = getattr(ev, "axes", {})
+    return composite, rationale, axes
+
+
+# ---------------------------------------------------------------------------
 # Evaluator formatters
 # ---------------------------------------------------------------------------
 
@@ -252,14 +275,7 @@ def _format_evaluators_html(evaluations: dict[str, Any]) -> str:
         return ""
     rows = ""
     for etype, ev in evaluations.items():
-        if isinstance(ev, dict):
-            composite = ev.get("composite_score", 0)
-            rationale = ev.get("rationale", "")
-            axes = ev.get("axes", {})
-        else:
-            composite = getattr(ev, "composite_score", 0)
-            rationale = getattr(ev, "rationale", "")
-            axes = getattr(ev, "axes", {})
+        composite, rationale, axes = _extract_eval_fields(ev)
         axes_str = ", ".join(f"{k}: {v:.1f}" for k, v in axes.items()) if axes else "---"
         rows += (
             f"      <tr><td style='font-weight:600'>{etype}</td>"
@@ -287,14 +303,7 @@ def _format_evaluators_md(evaluations: dict[str, Any]) -> str:
         "| --- | ---: | --- |",
     ]
     for etype, ev in evaluations.items():
-        if isinstance(ev, dict):
-            composite = ev.get("composite_score", 0)
-            rationale = ev.get("rationale", "")
-            axes = ev.get("axes", {})
-        else:
-            composite = getattr(ev, "composite_score", 0)
-            rationale = getattr(ev, "rationale", "")
-            axes = getattr(ev, "axes", {})
+        composite, rationale, axes = _extract_eval_fields(ev)
         lines.append(f"| {etype} | {composite:.1f} | {rationale[:80]} |")
 
     # Axis breakdown per evaluator
@@ -302,7 +311,7 @@ def _format_evaluators_md(evaluations: dict[str, Any]) -> str:
     lines.append("### Axis Breakdown")
     lines.append("")
     for etype, ev in evaluations.items():
-        axes = ev.get("axes", {}) if isinstance(ev, dict) else getattr(ev, "axes", {})
+        _, _, axes = _extract_eval_fields(ev)
         if axes:
             lines.append(f"**{etype}**:")
             for axis_name, axis_val in axes.items():
@@ -796,7 +805,7 @@ def _format_decision_tree_md(synthesis: dict[str, Any], evaluations: dict[str, A
         return ""
     # Extract D/E/F from hidden_value evaluator
     hv = evaluations.get("hidden_value", {})
-    axes = hv.get("axes", {}) if isinstance(hv, dict) else getattr(hv, "axes", {})
+    _, _, axes = _extract_eval_fields(hv)
     d = axes.get("d_score", axes.get("D", "?"))
     e = axes.get("e_score", axes.get("E", "?"))
     f = axes.get("f_score", axes.get("F", "?"))
@@ -826,7 +835,7 @@ def _format_decision_tree_html(synthesis: dict[str, Any], evaluations: dict[str,
     if not cause or not evaluations:
         return ""
     hv = evaluations.get("hidden_value", {})
-    axes = hv.get("axes", {}) if isinstance(hv, dict) else getattr(hv, "axes", {})
+    _, _, axes = _extract_eval_fields(hv)
     d = axes.get("d_score", axes.get("D", "?"))
     e = axes.get("e_score", axes.get("E", "?"))
     f = axes.get("f_score", axes.get("F", "?"))
