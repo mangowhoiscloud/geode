@@ -613,6 +613,244 @@ def _format_signals_md(signals: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Analyst Reasoning formatters (P0: shows WHY each analyst scored as they did)
+# ---------------------------------------------------------------------------
+
+
+def _format_analyst_reasoning_md(analyses: list[dict[str, Any]]) -> str:
+    """Extended analyst section with reasoning + evidence."""
+    has_reasoning = any(a.get("reasoning") for a in analyses)
+    if not analyses or not has_reasoning:
+        return ""
+    lines = ["## Analyst Reasoning", ""]
+    for a in analyses:
+        analyst = a.get("analyst_type", "N/A")
+        reasoning = a.get("reasoning", "")
+        evidence = a.get("evidence", [])
+        provider = a.get("model_provider", "")
+        if not reasoning and not evidence:
+            continue
+        provider_str = f" ({provider})" if provider else ""
+        lines.append(f"### {analyst}{provider_str}")
+        lines.append("")
+        if reasoning:
+            lines.append(f"{reasoning}")
+            lines.append("")
+        if evidence:
+            lines.append("**Evidence:**")
+            for ev in evidence:
+                lines.append(f"- {ev}")
+            lines.append("")
+    return "\n".join(lines)
+
+
+def _format_analyst_reasoning_html(analyses: list[dict[str, Any]]) -> str:
+    has_reasoning = any(a.get("reasoning") for a in analyses)
+    if not analyses or not has_reasoning:
+        return ""
+    items = ""
+    for a in analyses:
+        analyst = a.get("analyst_type", "N/A")
+        reasoning = a.get("reasoning", "")
+        evidence = a.get("evidence", [])
+        provider = a.get("model_provider", "")
+        if not reasoning and not evidence:
+            continue
+        provider_str = (
+            f" <span style='color:var(--muted);font-size:0.85rem'>({provider})</span>"
+            if provider
+            else ""
+        )
+        ev_list = "".join(f"<li>{ev}</li>" for ev in evidence)
+        ev_html = (
+            f"<ul style='margin-top:0.5rem;padding-left:1.5rem'>{ev_list}</ul>" if ev_list else ""
+        )
+        items += f"""<div style="margin-bottom:1rem">
+        <h3 style="margin:0">{analyst}{provider_str}</h3>
+        <p style="margin:0.5rem 0;color:var(--muted)">{reasoning}</p>
+        {ev_html}
+      </div>"""
+    return f"""<div class="section">
+    <h2><span class="icon">&#x1F4DD;</span> Analyst Reasoning</h2>
+    {items}
+  </div>"""
+
+
+# ---------------------------------------------------------------------------
+# Cross-LLM Agreement formatters (P0: shows model consensus)
+# ---------------------------------------------------------------------------
+
+
+def _format_cross_llm_md(cross_llm: dict[str, Any]) -> str:
+    if not cross_llm:
+        return ""
+    agreement = cross_llm.get("cross_llm_agreement", 0.0)
+    models = cross_llm.get("models_compared", [])
+    passed = cross_llm.get("passed", False)
+    mode = cross_llm.get("verification_mode", "N/A")
+    secondary = cross_llm.get("secondary_score")
+    status = "PASS" if passed else "FAIL"
+    lines = [
+        "## Cross-LLM Verification",
+        "",
+        f"- **Agreement Score:** {agreement:.2f} ({status})",
+        f"- **Verification Mode:** {mode}",
+    ]
+    if models:
+        lines.append(f"- **Models Compared:** {', '.join(models)}")
+    if secondary is not None:
+        lines.append(f"- **Secondary Re-score:** {secondary}")
+    return "\n".join(lines)
+
+
+def _format_cross_llm_html(cross_llm: dict[str, Any]) -> str:
+    if not cross_llm:
+        return ""
+    agreement = cross_llm.get("cross_llm_agreement", 0.0)
+    models = cross_llm.get("models_compared", [])
+    passed = cross_llm.get("passed", False)
+    mode = cross_llm.get("verification_mode", "N/A")
+    badge_cls = "verify-pass" if passed else "verify-fail"
+    badge_text = f"AGREEMENT: {agreement:.2f}"
+    models_str = ", ".join(models) if models else "N/A"
+    return f"""<div class="section">
+    <h2><span class="icon">&#x1F91D;</span> Cross-LLM Verification</h2>
+    <p><span class="verify-badge {badge_cls}">{badge_text}</span></p>
+    <div class="synthesis-grid">
+      <div class="synthesis-item">
+        <div class="synthesis-item-label">Verification Mode</div>
+        <div class="synthesis-item-value">{mode}</div>
+      </div>
+      <div class="synthesis-item">
+        <div class="synthesis-item-label">Models Compared</div>
+        <div class="synthesis-item-value">{models_str}</div>
+      </div>
+    </div>
+  </div>"""
+
+
+# ---------------------------------------------------------------------------
+# Rights Risk formatters (P0: shows IP licensing risk)
+# ---------------------------------------------------------------------------
+
+
+def _format_rights_risk_md(rights_risk: dict[str, Any]) -> str:
+    if not rights_risk:
+        return ""
+    status = rights_risk.get("status", "UNKNOWN")
+    risk_score = rights_risk.get("risk_score", 0)
+    concerns = rights_risk.get("concerns", [])
+    recommendation = rights_risk.get("recommendation", "")
+    lines = [
+        "## IP Rights Risk",
+        "",
+        f"- **Status:** {status}",
+        f"- **Risk Score:** {risk_score}/100",
+    ]
+    if concerns:
+        lines.append("- **Concerns:**")
+        for c in concerns:
+            lines.append(f"  - {c}")
+    if recommendation:
+        lines.extend(["", f"> {recommendation}"])
+    return "\n".join(lines)
+
+
+def _format_rights_risk_html(rights_risk: dict[str, Any]) -> str:
+    if not rights_risk:
+        return ""
+    status = rights_risk.get("status", "UNKNOWN")
+    risk_score = rights_risk.get("risk_score", 0)
+    concerns = rights_risk.get("concerns", [])
+    recommendation = rights_risk.get("recommendation", "")
+    if status == "CLEAR":
+        color = "#16a34a"
+    elif status in ("NEGOTIABLE", "UNKNOWN"):
+        color = "#eab308"
+    else:
+        color = "#dc2626"
+    concerns_html = "".join(f"<li>{c}</li>" for c in concerns)
+    rec_html = (
+        f'<p style="margin-top:0.8rem;font-style:italic;color:var(--muted)">{recommendation}</p>'
+        if recommendation
+        else ""
+    )
+    return f"""<div class="section">
+    <h2><span class="icon">&#x2696;</span> IP Rights Risk</h2>
+    <p><span style="color:{color};font-weight:600">{status}</span>
+    (Risk Score: {risk_score}/100)</p>
+    {f'<ul style="margin-top:0.5rem">{concerns_html}</ul>' if concerns_html else ""}
+    {rec_html}
+  </div>"""
+
+
+# ---------------------------------------------------------------------------
+# Decision Tree Path formatters (P1: shows D/E/F axis cause logic)
+# ---------------------------------------------------------------------------
+
+
+def _format_decision_tree_md(synthesis: dict[str, Any], evaluations: dict[str, Any]) -> str:
+    """Show the D/E/F axis values that determined the cause classification."""
+    cause = synthesis.get("undervaluation_cause", "")
+    if not cause or not evaluations:
+        return ""
+    # Extract D/E/F from hidden_value evaluator
+    hv = evaluations.get("hidden_value", {})
+    axes = hv.get("axes", {}) if isinstance(hv, dict) else getattr(hv, "axes", {})
+    d = axes.get("d_score", axes.get("D", "?"))
+    e = axes.get("e_score", axes.get("E", "?"))
+    f = axes.get("f_score", axes.get("F", "?"))
+
+    lines = [
+        "## Cause Classification Logic",
+        "",
+        "**D-E-F Profile:**",
+        f"- D (Discovery Difficulty): {d}",
+        f"- E (Monetization Capability): {e}",
+        f"- F (Franchise Expandability): {f}",
+        "",
+        f"**Classification:** `{cause}`",
+        "",
+        "Decision Tree:",
+        "- D>=3, E>=3 -> conversion_failure",
+        "- D>=3, E<3 -> undermarketed",
+        "- D<=2, E>=3 -> monetization_misfit",
+        "- D<=2, E<=2, F>=3 -> niche_gem",
+        "- else -> discovery_failure",
+    ]
+    return "\n".join(lines)
+
+
+def _format_decision_tree_html(synthesis: dict[str, Any], evaluations: dict[str, Any]) -> str:
+    cause = synthesis.get("undervaluation_cause", "")
+    if not cause or not evaluations:
+        return ""
+    hv = evaluations.get("hidden_value", {})
+    axes = hv.get("axes", {}) if isinstance(hv, dict) else getattr(hv, "axes", {})
+    d = axes.get("d_score", axes.get("D", "?"))
+    e = axes.get("e_score", axes.get("E", "?"))
+    f = axes.get("f_score", axes.get("F", "?"))
+    return f"""<div class="section">
+    <h2><span class="icon">&#x1F333;</span> Cause Classification Logic</h2>
+    <div class="synthesis-grid">
+      <div class="synthesis-item">
+        <div class="synthesis-item-label">D (Discovery)</div>
+        <div class="synthesis-item-value">{d}</div>
+      </div>
+      <div class="synthesis-item">
+        <div class="synthesis-item-label">E (Monetization)</div>
+        <div class="synthesis-item-value">{e}</div>
+      </div>
+      <div class="synthesis-item">
+        <div class="synthesis-item-label">F (Expandability)</div>
+        <div class="synthesis-item-value">{f}</div>
+      </div>
+    </div>
+    <p style="margin-top:0.8rem"><strong>Classification:</strong> <code>{cause}</code></p>
+  </div>"""
+
+
+# ---------------------------------------------------------------------------
 # Report Generator
 # ---------------------------------------------------------------------------
 
@@ -655,6 +893,8 @@ class ReportGenerator:
             "biasbuster": result.get("biasbuster", {}),
             "signals": result.get("signals", {}),
             "analyst_confidence": result.get("analyst_confidence", 0.0),
+            "cross_llm": result.get("cross_llm", {}),
+            "rights_risk": result.get("rights_risk", {}),
         }
 
     def _generate_json(self, result: dict[str, Any], template: ReportTemplate) -> str:
@@ -679,6 +919,8 @@ class ReportGenerator:
             output["biasbuster"] = common["biasbuster"]
             output["signals"] = common["signals"]
             output["analyst_confidence"] = common["analyst_confidence"]
+            output["cross_llm"] = common["cross_llm"]
+            output["rights_risk"] = common["rights_risk"]
 
         return json.dumps(output, indent=2, ensure_ascii=False)
 
@@ -692,11 +934,15 @@ class ReportGenerator:
         subscores_section = ""
         synthesis_section = ""
         analyses_section = ""
+        analyst_reasoning_section = ""
         details_section = ""
         evaluators_section = ""
         psm_section = ""
         scoring_breakdown_section = ""
         biasbuster_section = ""
+        cross_llm_section = ""
+        rights_risk_section = ""
+        decision_tree_section = ""
         signals_section = ""
 
         if template in (ReportTemplate.DETAILED, ReportTemplate.EXECUTIVE):
@@ -705,14 +951,18 @@ class ReportGenerator:
 
         if template == ReportTemplate.DETAILED:
             analyses_section = _format_analyses_html(common["analyses"])
+            analyst_reasoning_section = _format_analyst_reasoning_html(common["analyses"])
             evaluators_section = _format_evaluators_html(common["evaluations"])
             psm_section = _format_psm_html(common["psm_result"])
             scoring_breakdown_section = _format_scoring_breakdown_html(
                 common["subscores"],
                 common["analyst_confidence"],
             )
+            decision_tree_section = _format_decision_tree_html(synthesis, common["evaluations"])
             details_section = self._format_details_html(result)
             biasbuster_section = _format_biasbuster_html(common["biasbuster"])
+            cross_llm_section = _format_cross_llm_html(common["cross_llm"])
+            rights_risk_section = _format_rights_risk_html(common["rights_risk"])
             signals_section = _format_signals_html(common["signals"])
 
         return _HTML_TEMPLATE.substitute(
@@ -732,11 +982,15 @@ class ReportGenerator:
             subscores_section=subscores_section,
             synthesis_section=synthesis_section,
             analyses_section=analyses_section,
+            analyst_reasoning_section=analyst_reasoning_section,
             evaluators_section=evaluators_section,
             psm_section=psm_section,
             scoring_breakdown_section=scoring_breakdown_section,
+            decision_tree_section=decision_tree_section,
             details_section=details_section,
             biasbuster_section=biasbuster_section,
+            cross_llm_section=cross_llm_section,
+            rights_risk_section=rights_risk_section,
             signals_section=signals_section,
         )
 
@@ -747,11 +1001,15 @@ class ReportGenerator:
         subscores_section = ""
         synthesis_section = ""
         analyses_section = ""
+        analyst_reasoning_section = ""
         details_section = ""
         evaluators_section = ""
         psm_section = ""
         scoring_breakdown_section = ""
         biasbuster_section = ""
+        cross_llm_section = ""
+        rights_risk_section = ""
+        decision_tree_section = ""
         signals_section = ""
 
         if template in (ReportTemplate.DETAILED, ReportTemplate.EXECUTIVE):
@@ -760,14 +1018,18 @@ class ReportGenerator:
 
         if template == ReportTemplate.DETAILED:
             analyses_section = _format_analyses_md(common["analyses"])
+            analyst_reasoning_section = _format_analyst_reasoning_md(common["analyses"])
             evaluators_section = _format_evaluators_md(common["evaluations"])
             psm_section = _format_psm_md(common["psm_result"])
             scoring_breakdown_section = _format_scoring_breakdown_md(
                 common["subscores"],
                 common["analyst_confidence"],
             )
+            decision_tree_section = _format_decision_tree_md(synthesis, common["evaluations"])
             details_section = self._format_details_md(result)
             biasbuster_section = _format_biasbuster_md(common["biasbuster"])
+            cross_llm_section = _format_cross_llm_md(common["cross_llm"])
+            rights_risk_section = _format_rights_risk_md(common["rights_risk"])
             signals_section = _format_signals_md(common["signals"])
 
         tpl = _MARKDOWN_DETAILED if template == ReportTemplate.DETAILED else _MARKDOWN_SUMMARY
@@ -780,11 +1042,15 @@ class ReportGenerator:
             subscores_section=subscores_section,
             synthesis_section=synthesis_section,
             analyses_section=analyses_section,
+            analyst_reasoning_section=analyst_reasoning_section,
             evaluators_section=evaluators_section,
             psm_section=psm_section,
             scoring_breakdown_section=scoring_breakdown_section,
+            decision_tree_section=decision_tree_section,
             details_section=details_section,
             biasbuster_section=biasbuster_section,
+            cross_llm_section=cross_llm_section,
+            rights_risk_section=rights_risk_section,
             signals_section=signals_section,
         )
 

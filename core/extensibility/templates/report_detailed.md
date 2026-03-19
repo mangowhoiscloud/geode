@@ -19,13 +19,21 @@ ${synthesis_section}
 
 ${analyses_section}
 
+${analyst_reasoning_section}
+
 ${evaluators_section}
 
 ${psm_section}
 
+${decision_tree_section}
+
 ${details_section}
 
 ${biasbuster_section}
+
+${cross_llm_section}
+
+${rights_risk_section}
 
 ${signals_section}
 
