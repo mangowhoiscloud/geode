@@ -31,7 +31,7 @@ import httpx
 from anthropic.types import TextBlockParam
 from pydantic import BaseModel
 
-from core.config import ANTHROPIC_FALLBACK_CHAIN, settings
+from core.config import ANTHROPIC_FALLBACK_CHAIN, is_model_allowed, settings
 from core.llm.token_tracker import MODEL_PRICING as MODEL_PRICING
 from core.llm.token_tracker import LLMUsage as LLMUsage
 from core.llm.token_tracker import LLMUsageAccumulator as LLMUsageAccumulator
@@ -213,9 +213,15 @@ async def call_with_failover(
     _base_delay = retry_base_delay if retry_base_delay is not None else RETRY_BASE_DELAY
     _max_delay = retry_max_delay if retry_max_delay is not None else RETRY_MAX_DELAY
 
+    # Filter models by policy (GAP 2: model-policy.toml governance)
+    allowed_models = [m for m in models if is_model_allowed(m)]
+    if not allowed_models:
+        log.error("Failover: all models blocked by policy: %s", models)
+        return None, None
+
     last_error: Exception | None = None
 
-    for model_idx, current_model in enumerate(models):
+    for model_idx, current_model in enumerate(allowed_models):
         for attempt in range(_max_retries):
             try:
                 result = await call_fn(current_model)
@@ -252,8 +258,8 @@ async def call_with_failover(
                 break  # break retry loop, try next model
 
         # All retries exhausted for this model
-        if model_idx < len(models) - 1:
-            next_model = models[model_idx + 1]
+        if model_idx < len(allowed_models) - 1:
+            next_model = allowed_models[model_idx + 1]
             log.warning(
                 "Failover: all retries exhausted for model=%s, falling back to %s",
                 current_model,
@@ -467,7 +473,10 @@ def _retry_with_backoff(
             "Too many consecutive failures detected."
         )
 
-    models_to_try = [model] + [m for m in FALLBACK_MODELS if m != model]
+    candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
+    models_to_try = [m for m in candidates if is_model_allowed(m)]
+    if not models_to_try:
+        raise RuntimeError(f"All models blocked by policy: {candidates}")
     last_error: Exception | None = None
 
     for model_idx, current_model in enumerate(models_to_try):

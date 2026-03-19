@@ -361,6 +361,23 @@ def _interactive_loop() -> None:
 
     init_session_meter(model=agentic.model)
 
+    # GAP 5: Detect resumable sessions at startup
+    try:
+        from core.cli.session_checkpoint import SessionCheckpoint
+
+        _resumable = SessionCheckpoint().list_resumable()
+        if _resumable:
+            _top = _resumable[0]
+            _label = _top.user_input[:60] if _top.user_input else _top.session_id
+            console.print(f"  [info]Resumable session detected:[/info] {_label}")
+            console.print(
+                f"  [muted]Type /resume to see details, "
+                f"or /resume {_top.session_id} to restore.[/muted]"
+            )
+            console.print()
+    except Exception:
+        log.debug("Session resume detection skipped", exc_info=True)
+
     while True:
         # Defensive: restore terminal state before each prompt
         # (Rich Status/Live may leave cursor hidden or echo off)

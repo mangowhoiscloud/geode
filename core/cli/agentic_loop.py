@@ -433,7 +433,12 @@ class AgenticLoop:
         log.debug("Pruned messages: kept first + bridge + %d recent", len(recent))
 
     def _check_context_overflow(self, system: str, messages: list[dict[str, Any]]) -> None:
-        """Check context window usage and emit hooks if near limits."""
+        """Check context window usage and emit hooks if near limits.
+
+        GAP 7 strategy:
+        - WARNING (80%): LLM-based compaction (summarize older messages)
+        - CRITICAL (95%): Emergency mechanical prune (fallback)
+        """
         try:
             from core.orchestration.context_monitor import (
                 check_context,
@@ -460,13 +465,13 @@ class AgenticLoop:
                     messages.clear()
                     messages.extend(pruned)
                     log.info(
-                        "Pruned conversation: %d → %d messages",
+                        "Emergency pruned conversation: %d → %d messages",
                         len(messages) + (len(messages) - len(pruned)),
                         len(pruned),
                     )
             elif metrics.is_warning:
                 log.info(
-                    "Context WARNING: %.0f%% (%d/%d tokens)",
+                    "Context WARNING: %.0f%% (%d/%d tokens) — attempting compaction",
                     metrics.usage_pct,
                     metrics.estimated_tokens,
                     metrics.context_window,
@@ -476,6 +481,24 @@ class AgenticLoop:
                         HookEvent.CONTEXT_WARNING,
                         {"metrics": dataclasses.asdict(metrics), "model": self.model},
                     )
+                # GAP 7: LLM-based context compaction
+                try:
+                    from core.orchestration.context_compactor import compact_context
+
+                    result = compact_context(messages, keep_recent=10)
+                    if result.tokens_saved_estimate > 0:
+                        log.info(
+                            "Compaction saved ~%d tokens (%d→%d messages)",
+                            result.tokens_saved_estimate,
+                            result.original_count,
+                            result.compacted_count,
+                        )
+                except Exception:
+                    log.debug("Context compaction failed, falling back to prune", exc_info=True)
+                    pruned = prune_oldest_messages(messages, keep_recent=10)
+                    if len(pruned) < len(messages):
+                        messages.clear()
+                        messages.extend(pruned)
         except Exception:
             log.debug("Context monitor check failed", exc_info=True)
 

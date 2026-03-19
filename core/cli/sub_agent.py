@@ -534,6 +534,11 @@ class SubAgentManager:
         # 1. Propagate ContextVars to child thread
         _propagate_context_vars()
 
+        # GAP 6: Create isolated memory store for this sub-agent task
+        from core.memory.agent_memory import AgentMemoryStore
+
+        agent_memory = AgentMemoryStore(task.task_id)
+
         # 2. Fresh conversation context (independent context window)
         conversation = ConversationContext(max_turns=10)
 
@@ -583,6 +588,12 @@ class SubAgentManager:
 
         # 7. Build SubAgentResult
         text = agentic_result.text if agentic_result else ""
+
+        # GAP 6: Persist sub-agent summary to isolated memory
+        if text:
+            agent_memory.save("summary", text[:500])
+            agent_memory.save("status", "ok")
+
         result = SubAgentResult(
             task_id=task.task_id,
             task_type=task.task_type,
