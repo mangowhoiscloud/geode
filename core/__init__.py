@@ -1,3 +1,5 @@
-"""GEODE v0.18.0 — 범용 자율 실행 에이전트."""
+"""GEODE — 범용 자율 실행 에이전트."""
 
-__version__ = "0.18.0"
+from importlib.metadata import version as _pkg_version
+
+__version__: str = _pkg_version("geode")

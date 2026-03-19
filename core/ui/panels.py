@@ -25,7 +25,7 @@ def header_panel(ip_name: str, pipeline_mode: str, model: str) -> None:
     console.print(
         Panel(
             content,
-            title=f"[header]GEODE v{__version__} — Autonomous Research Harness[/header]",
+            title=f"[header]GEODE v{__version__} — Autonomous Execution Harness[/header]",
             border_style="cyan",
         )
     )
