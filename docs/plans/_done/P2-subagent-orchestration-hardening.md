@@ -1,8 +1,8 @@
 # P2: Sub-Agent Orchestration Hardening
 
-**Status**: IN_PROGRESS
+**Status**: COMPLETE (P2-A/B/C done, P2-D RLM deferred)
 **Created**: 2026-03-15
-**Updated**: 2026-03-15 (RLM 리서치 + Full Inheritance 방향 확정)
+**Updated**: 2026-03-19 (G1-G8,G10 해소, G3 on_progress 완료, G9 보류)
 **Priority**: P2
 **Depends**: P1-subagent-parallel-execution (completed)
 
