@@ -934,7 +934,7 @@ core/
 │   ├── conversation.py         # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── bash_tool.py            # Shell execution + HITL safety gate
 │   ├── batch.py                # Batch analysis (ThreadPoolExecutor)
-│   ├── commands.py             # Slash command dispatch (20 commands)
+│   ├── commands.py             # Slash command dispatch (21 commands)
 │   ├── project_detect.py       # Project type auto-detection (7 types)
 │   ├── search.py               # IP search engine (synonym expansion)
 │   └── startup.py              # Readiness check, Graceful Degradation

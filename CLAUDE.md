@@ -165,7 +165,7 @@ core/
 │   ├── ip_names.py      # IP name registry (canonical names from fixtures)
 │   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
 │   ├── batch.py         # Batch analysis (ThreadPoolExecutor)
-│   ├── commands.py      # Slash command dispatch (20 commands)
+│   ├── commands.py      # Slash command dispatch (21 commands)
 │   ├── repl.py          # REPL 메인 루프 (prompt_toolkit 기반)
 │   ├── tool_handlers.py # 10개 논리 그룹 tool handler 디스패처
 │   ├── result_cache.py  # ResultCache (24h TTL + SHA-256 content hash)
