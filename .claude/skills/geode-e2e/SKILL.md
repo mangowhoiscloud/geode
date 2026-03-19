@@ -23,7 +23,7 @@ uv run pytest tests/test_e2e_live_llm.py::TestAgenticLoopLive::test_1_2_single_t
 uv run pytest tests/test_e2e_live_llm.py::TestOfflineModeLive -v
 ```
 
-## 시나리오 매핑 (docs/e2e-orchestration-scenarios.md)
+## 시나리오 매핑 (docs/e2e/e2e-orchestration-scenarios.md)
 
 ### §1 AgenticLoop (실제 Anthropic API)
 
@@ -134,7 +134,7 @@ LANGCHAIN_PROJECT=geode
 
 기능 변경 시 이 순서로 E2E 테스트를 업데이트:
 
-1. **시나리오 문서** 갱신: `docs/e2e-orchestration-scenarios.md`
+1. **시나리오 문서** 갱신: `docs/e2e/e2e-orchestration-scenarios.md`
 2. **Mock 테스트** 갱신: `test_agentic_loop.py`, `test_e2e.py`, `test_e2e_orchestration_live.py`
 3. **Live 테스트** 갱신: `test_e2e_live_llm.py`
 4. **이 스킬** 갱신: 시나리오 매핑 테이블 + 검증 포인트

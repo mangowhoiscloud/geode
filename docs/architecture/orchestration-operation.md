@@ -1,6 +1,8 @@
 # Geode Orchestration Layer — Operation Guide
 
 > L4 Orchestration + L4.5 Automation 동작 과정 및 아키텍처
+>
+> **Note**: 이 문서는 초기 설계 버전 기준으로 작성됨. `cortex` 노드는 폐기되어 `router`로 대체됨. 정확한 수치는 `CLAUDE.md` 참조.
 
 ## 1. Overview
 
@@ -19,8 +21,8 @@ Geode의 오케스트레이션 레이어는 **L4 Orchestration**과 **L4.5 Autom
 graph TB
     subgraph L4["L4 Orchestration"]
         GR[GeodeRuntime]
-        HS[HookSystem<br/>16 events]
-        TG[TaskGraph<br/>13-task DAG]
+        HS[HookSystem<br/>36 events]
+        TG[TaskGraph<br/>14-task DAG]
         TB[TaskGraphHookBridge]
         SD[StuckDetector]
         RL[RunLog]
@@ -67,11 +69,7 @@ graph TB
 ```mermaid
 graph LR
     S((START)) --> router
-    router -->|"route_after_router"| cortex
-    router -.->|"resume: evaluators"| evaluator
-    router -.->|"resume: scoring"| scoring
-
-    cortex --> signals
+    router --> signals
     signals -->|"Send API x4"| analyst
     analyst -->|"Send API x3"| evaluator
     evaluator --> scoring
@@ -79,7 +77,7 @@ graph LR
 
     verification -->|"pass"| synthesizer
     verification -->|"fail: feedback loop"| gather
-    gather --> cortex
+    gather --> router
 
     synthesizer --> E((END))
 
@@ -94,7 +92,6 @@ graph LR
 | Node | 호출 횟수 | Send API | Hook Wrapping |
 |------|----------|----------|---------------|
 | `router` | 1x | No | `_node()` |
-| `cortex` | 1x | No | `_node()` |
 | `signals` | 1x | No | `_node()` |
 | `analyst` | 4x | Yes (`make_analyst_sends`) | `_node()` + `_analyst_type` injection |
 | `evaluator` | 3x | Yes (`make_evaluator_sends`) | `_node()` + `_evaluator_type` injection |
@@ -107,14 +104,13 @@ graph LR
 
 ```
 START → router                           (direct)
-router → cortex | evaluator | scoring    (conditional: route_after_router)
-cortex → signals                         (direct)
+router → signals                         (direct)
 signals → analyst[]                      (conditional: make_analyst_sends, Send API)
 analyst → evaluator[]                    (conditional: make_evaluator_sends, Send API)
 evaluator → scoring                      (direct)
 scoring → verification                   (direct)
 verification → synthesizer | gather      (conditional: _configured_should_continue)
-gather → cortex                          (direct, feedback loop)
+gather → router                          (direct, feedback loop)
 synthesizer → END                        (direct)
 ```
 
@@ -122,7 +118,7 @@ synthesizer → END                        (direct)
 
 ## 4. HookSystem Event Flow
 
-### 4.1 HookEvent Enum (16 events)
+### 4.1 HookEvent Enum (36 events)
 
 | Category | Event | 설명 |
 |----------|-------|------|
@@ -187,7 +183,7 @@ graph LR
 | **30** | `task_bridge_exit` | NODE_EXIT | TaskGraph → COMPLETED |
 | **30** | `task_bridge_error` | NODE_ERROR | TaskGraph → FAILED + propagate |
 | **40** | `stuck_tracker` | PIPELINE_START/END/ERROR | StuckDetector 추적 |
-| **50** | `run_log_writer` | ALL 16 events | RunLog append |
+| **50** | `run_log_writer` | ALL 36 events | RunLog append |
 | **70** | `drift_pipeline_trigger` | DRIFT_DETECTED | 재실행 트리거 |
 | **80** | `drift_auto_snapshot` | DRIFT_DETECTED | 자동 스냅샷 캡처 |
 | **80** | `pipeline_end_snapshot` | PIPELINE_END | 완료 시 스냅샷 |
@@ -205,7 +201,7 @@ graph LR
 
 ```mermaid
 graph TD
-    cortex["{p}_cortex<br/>Load IP data"]
+    router["{p}_router<br/>Load IP data"]
     signals["{p}_signals<br/>Fetch market signals"]
     a_gm["{p}_analyst_game_mechanics"]
     a_pe["{p}_analyst_player_experience"]
@@ -219,7 +215,7 @@ graph TD
     synth["{p}_synthesis"]
     report["{p}_report"]
 
-    cortex --> signals
+    router --> signals
     signals --> a_gm
     signals --> a_pe
     signals --> a_gp
@@ -237,7 +233,7 @@ graph TD
     cross --> synth
     synth --> report
 
-    style cortex fill:#e8f5e9
+    style router fill:#e8f5e9
     style signals fill:#e8f5e9
     style a_gm fill:#e3f2fd
     style a_pe fill:#e3f2fd
@@ -256,7 +252,7 @@ graph TD
 
 | Batch | Tasks | 병렬도 |
 |-------|-------|--------|
-| 0 | `cortex` | 1 |
+| 0 | `router` | 1 |
 | 1 | `signals` | 1 |
 | 2 | `analyst_game_mechanics`, `analyst_player_experience`, `analyst_growth_potential`, `analyst_discovery` | **4** |
 | 3 | `evaluators` | 1 (내부 3x counted) |
@@ -269,8 +265,7 @@ graph TD
 
 | LangGraph Node | 매핑 패턴 | TaskGraph task_id(s) |
 |----------------|----------|---------------------|
-| `router` | **무시** | (없음) |
-| `cortex` | 1:1 | `{p}_cortex` |
+| `router` | 1:1 | `{p}_router` |
 | `signals` | 1:1 | `{p}_signals` |
 | `analyst` | subtype 분기 | `{p}_analyst_{_analyst_type}` |
 | `evaluator` | 카운팅 (3회) | `{p}_evaluators` |
@@ -301,7 +296,7 @@ sequenceDiagram
     RT->>RT: _build_automation()
     Note over RT: CUSUMDetector, SnapshotManager<br/>TriggerManager, FeedbackLoop<br/>+ hook handlers(priority 70-90)
     RT->>TG: create_geode_task_graph("Berserk")
-    Note over TG: 13 tasks created
+    Note over TG: 14 tasks created
     RT->>TB: TaskGraphHookBridge(graph, prefix="berserk")
     TB->>HS: register(NODE_ENTER/EXIT/ERROR, priority=30)
     RT-->>CLI: GeodeRuntime instance
@@ -457,9 +452,9 @@ graph LR
 
 ```mermaid
 graph TD
-    NE[NODE_ERROR<br/>node=cortex]
+    NE[NODE_ERROR<br/>node=router]
     TB[TaskBridge._on_node_error]
-    MF[mark_failed<br/>cortex → FAILED]
+    MF[mark_failed<br/>router → FAILED]
     PF[propagate_failure]
     SK1[signals → SKIPPED]
     SK2[analyst_* → SKIPPED]
@@ -514,7 +509,7 @@ graph TD
     end
 
     subgraph "Phase 5: Task Tracking"
-        E1[TaskGraph: 13 tasks]
+        E1[TaskGraph: 14 tasks]
         E2[TaskGraphHookBridge → priority 30]
     end
 

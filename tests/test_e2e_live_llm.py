@@ -5,7 +5,7 @@ and excluded from the default test suite. Run explicitly with:
 
     uv run pytest tests/test_e2e_live_llm.py -v -m live
 
-Scenarios mapped from docs/e2e-orchestration-scenarios.md §1, §4, §5, §6.
+Scenarios mapped from docs/e2e/e2e-orchestration-scenarios.md §1, §4, §5, §6.
 """
 
 from __future__ import annotations

@@ -2,6 +2,8 @@
 
 > L4 Orchestration 핵심 하위 시스템에 대한 기술 리포트입니다.
 > ADR-007 Prompt & Skill Injection 반영 기준 (2026-02-27)
+>
+> **Note**: 이 문서는 초기 설계 버전 기준. 이벤트/도구 수 등 수치는 `CLAUDE.md` 참조.
 
 ---
 
@@ -11,7 +13,7 @@ GEODE 오케스트레이션 레이어는 LangGraph `StateGraph` 위에 구축된
 
 | 하위 시스템 | 역할 | 핵심 파일 |
 |---|---|---|
-| **HookSystem** | 이벤트 기반 확장 포인트 (18개 이벤트) | `orchestration/hooks.py` |
+| **HookSystem** | 이벤트 기반 확장 포인트 (36개 이벤트) | `orchestration/hooks.py` |
 | **ToolSystem** | LLM-driven 도구 사용 및 정책 기반 접근 제어 | `tools/base.py`, `tools/registry.py`, `tools/policy.py` |
 | **PlanMode** | 복합 분석 요청의 plan-before-execute 패턴 | `orchestration/plan_mode.py`, `orchestration/planner.py` |
 | **BootstrapManager** | 노드 실행 전 구성 주입 (`NODE_BOOTSTRAP`) | `orchestration/bootstrap.py` |
@@ -55,7 +57,7 @@ graph TB
     HS --> P30 --> P40 --> P50 --> P70 --> P80 --> P90
 ```
 
-### 2.2 HookEvent 열거형 (18개 이벤트)
+### 2.2 HookEvent 열거형 (36개 이벤트)
 
 아래 표는 `orchestration/hooks.py`의 `HookEvent` 열거형 전체 목록입니다. 원본 소스 코드에서 검증된 값입니다.
 
@@ -117,7 +119,7 @@ graph TB
 | **30** | `task_bridge_exit` | `NODE_EXIT` | `TaskGraphHookBridge.register()` |
 | **30** | `task_bridge_error` | `NODE_ERROR` | `TaskGraphHookBridge.register()` |
 | **40** | `stuck_tracker` | `PIPELINE_START`, `PIPELINE_END`, `PIPELINE_ERROR` | `_make_stuck_hook_handler()` |
-| **50** | `run_log_writer` | **전체 18개 이벤트** | `_make_run_log_handler()` |
+| **50** | `run_log_writer` | **전체 36개 이벤트** | `_make_run_log_handler()` |
 | **50** | `drift_scan_on_scoring` | `SCORING_COMPLETE` | `_register_drift_scan_hook()` (graph.py) |
 | **70** | `drift_pipeline_trigger` | `DRIFT_DETECTED` | `TriggerManager.make_event_handler()` |
 | **80** | `drift_auto_snapshot` | `DRIFT_DETECTED` | `_build_automation()` 인라인 |
@@ -530,7 +532,7 @@ sequenceDiagram
 
 | 항목 | 수치 | 근거 |
 |---|---|---|
-| HookEvent 타입 | **18** | `hooks.py` HookEvent 열거형 |
+| HookEvent 타입 | **36** | `hooks.py` HookEvent 열거형 |
 | 등록 핸들러 (기본) | **14** (drift_scan 조건부 포함) | `runtime.py` + `graph.py` |
 | Tool Protocol 구현 파일 | **5** (data, signal, output, analysis, memory) | `tools/*.py` |
 | ToolRegistry 기본 등록 | **3** (RunAnalyst, RunEvaluator, PSMCalculate) | `_build_default_registry()` |
@@ -551,7 +553,7 @@ sequenceDiagram
 
 | 파일 | 역할 | 핵심 요소 |
 |---|---|---|
-| `orchestration/hooks.py` | HookSystem + HookEvent(18) | `HookSystem`, `HookEvent`, `HookResult`, `_RegisteredHook` |
+| `orchestration/hooks.py` | HookSystem + HookEvent(36) | `HookSystem`, `HookEvent`, `HookResult`, `_RegisteredHook` |
 | `orchestration/bootstrap.py` | 노드 실행 전 구성 | `BootstrapManager`, `BootstrapContext` |
 | `orchestration/plan_mode.py` | Plan-before-execute | `PlanStatus`(7), `PlanStep`, `AnalysisPlan` |
 | `orchestration/task_system.py` | TaskGraph DAG | `TaskGraph`, `Task`, `TaskStatus`(6), `_TaskGraphStats` |
