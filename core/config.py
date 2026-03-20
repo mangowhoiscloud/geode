@@ -132,10 +132,13 @@ def _apply_toml_overlay(s: Settings) -> None:
             object.__setattr__(s, field_name, toml_value)
 
 
+GLOBAL_ENV_PATH = Path.home() / ".geode" / ".env"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="GEODE_",
-        env_file=".env",
+        env_file=(".env", str(Path.home() / ".geode" / ".env")),
         extra="ignore",
     )
 

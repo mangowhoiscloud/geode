@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from dotenv import dotenv_values
@@ -120,9 +121,13 @@ class MCPRegistry:
         self._dotenv_path = dotenv_path
         self._defaults = defaults
         self._auto_discover = auto_discover
+        # Cascade: ~/.geode/.env (global) → CWD/.env (project overrides)
         self._dotenv_cache: dict[str, str | None] = {}
+        global_env = Path.home() / ".geode" / ".env"
+        if global_env.exists():
+            self._dotenv_cache.update(dotenv_values(str(global_env)))
         if os.path.exists(dotenv_path):
-            self._dotenv_cache = dotenv_values(dotenv_path)
+            self._dotenv_cache.update(dotenv_values(dotenv_path))
 
     def discover(self) -> dict[str, dict[str, Any]]:
         """Return server configs for all available MCP servers.
