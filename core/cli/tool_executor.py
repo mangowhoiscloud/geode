@@ -145,6 +145,7 @@ _WRITE_FALLBACK_HINTS: dict[str, str] = {
     "memory_save": "Try memory_search to read existing data instead.",
     "note_save": "Try reading existing notes or suggest the content to the user.",
     "set_api_key": "Show the user the /key command to set it themselves.",
+    "manage_auth": "Show the user the /auth command to manage auth profiles.",
     "profile_update": "Show current profile with profile_get instead.",
     "profile_preference": "Show current preferences with profile_get instead.",
     "profile_learn": "Show current learning patterns with profile_get instead.",

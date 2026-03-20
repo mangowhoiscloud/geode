@@ -8,8 +8,11 @@ from __future__ import annotations
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 from typing import Any as _Any
-from typing import cast
+
+if TYPE_CHECKING:
+    from core.cli.session_checkpoint import SessionState
 
 from simple_term_menu import TerminalMenu
 
@@ -1307,10 +1310,11 @@ def _set_cost_budget(amount: float) -> None:
     config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def cmd_resume(args: str) -> str | None:
+def cmd_resume(args: str) -> SessionState | None:
     """Handle /resume [session_id] — resume an interrupted session.
 
-    Returns the session_id that was selected (for caller to restore), or None.
+    Returns the full SessionState (with messages) for the caller to restore
+    into ConversationContext, or None if no session was selected.
     """
     from core.cli.session_checkpoint import SessionCheckpoint
 
@@ -1336,7 +1340,7 @@ def cmd_resume(args: str) -> str | None:
             f"  [muted]Round: {state.round_idx} | Messages: {len(state.messages)}[/muted]"
         )
         console.print()
-        return state.session_id
+        return state
 
     # No args: list resumable sessions
     sessions = checkpoint.list_resumable()

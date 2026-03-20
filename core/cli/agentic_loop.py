@@ -222,14 +222,55 @@ class AgenticLoop:
 
         # Tier 1 transcript: append-only JSONL event stream (snapshot-redesign)
         self._transcript: Any | None = None
+        self._session_id: str = ""
         try:
             import uuid as _uuid
 
             from core.cli.transcript import SessionTranscript
 
-            self._transcript = SessionTranscript(f"s-{_uuid.uuid4().hex[:12]}")
+            self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
+            self._transcript = SessionTranscript(self._session_id)
         except Exception:
             log.debug("Transcript init failed", exc_info=True)
+
+        # C3 checkpoint: full message persistence for /resume (Claude Code pattern)
+        self._checkpoint: Any | None = None
+        try:
+            from core.cli.session_checkpoint import SessionCheckpoint
+
+            self._checkpoint = SessionCheckpoint()
+        except Exception:
+            log.debug("SessionCheckpoint init failed", exc_info=True)
+
+    def _save_checkpoint(self, user_input: str, round_idx: int = 0) -> None:
+        """Persist session checkpoint for resume (per-turn, Claude Code pattern)."""
+        if self._checkpoint is None or not self._session_id:
+            return
+        try:
+            from core.cli.session_checkpoint import SessionState
+
+            state = SessionState(
+                session_id=self._session_id,
+                round_idx=round_idx,
+                model=self.model,
+                provider=self._provider,
+                status="active",
+                messages=self.context.messages,
+                tool_log=self._tool_log,
+                user_input=user_input,
+            )
+            self._checkpoint.save(state)
+        except Exception:
+            log.debug("Checkpoint save failed", exc_info=True)
+
+    def mark_session_completed(self) -> None:
+        """Mark the current session as completed (called on clean REPL exit)."""
+        if self._checkpoint is None or not self._session_id:
+            return
+        try:
+            self._checkpoint.mark_completed(self._session_id)
+        except Exception:
+            log.debug("Checkpoint mark_completed failed", exc_info=True)
 
     def _record_transcript_end(self, result: Any) -> None:
         """Record session end + assistant message to transcript."""
@@ -345,6 +386,7 @@ class AgenticLoop:
                     len(result.tool_calls),
                 )
                 self._record_transcript_end(result)
+                self._save_checkpoint(user_input, round_idx=round_idx + 1)
                 return result
 
             # Track usage + Claude Code-style token display
@@ -373,6 +415,7 @@ class AgenticLoop:
                     len(result.tool_calls),
                 )
                 self._record_transcript_end(result)
+                self._save_checkpoint(user_input, round_idx=round_idx + 1)
                 return result
 
             tool_results = await self._process_tool_calls(response)
@@ -407,6 +450,7 @@ class AgenticLoop:
             len(result.tool_calls),
         )
         self._record_transcript_end(result)
+        self._save_checkpoint(user_input, round_idx=self.max_rounds)
         return result
 
     def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:

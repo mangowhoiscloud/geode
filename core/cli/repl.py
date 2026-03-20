@@ -405,6 +405,7 @@ def _interactive_loop() -> None:
         except (KeyboardInterrupt, EOFError):
             from core.ui.agentic_ui import render_session_cost_summary
 
+            agentic.mark_session_completed()
             render_session_cost_summary()
             console.print("\n  [muted]Goodbye.[/muted]\n")
             break
@@ -416,6 +417,7 @@ def _interactive_loop() -> None:
         if user_input.strip().lower() in ("exit", "quit", "q"):
             from core.ui.agentic_ui import render_session_cost_summary
 
+            agentic.mark_session_completed()
             render_session_cost_summary()
             console.print("  [muted]Goodbye.[/muted]\n")
             break
@@ -426,7 +428,7 @@ def _interactive_loop() -> None:
             # Slash command -> deterministic routing (OpenClaw Binding)
             cmd = user_input.split()[0].lower()
             args = user_input[len(cmd) :].strip()
-            should_break, verbose = _handle_command(
+            should_break, verbose, resume_state = _handle_command(
                 cmd,
                 args,
                 verbose,
@@ -435,6 +437,15 @@ def _interactive_loop() -> None:
             )
             if should_break:
                 break
+            # /resume: inject saved messages into ConversationContext
+            if resume_state is not None:
+                conversation.messages = list(resume_state.messages)
+                agentic._session_id = resume_state.session_id
+                log.info(
+                    "Session restored: %s (%d messages)",
+                    resume_state.session_id,
+                    len(resume_state.messages),
+                )
             # Update handlers if verbose changed
             if verbose != (handlers.get("_verbose_flag") is True):
                 handlers = _build_tool_handlers(
