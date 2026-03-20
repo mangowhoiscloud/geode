@@ -71,7 +71,6 @@ class PromptAssembler:
         max_extra_instructions: int = 5,
         max_extra_instruction_chars: int = 100,
         prompt_warning_chars: int = 4000,
-        prompt_hard_limit_chars: int = 6000,
     ) -> None:
         self._skills = skill_registry or SkillRegistry()
         self._hooks = hooks
@@ -82,7 +81,6 @@ class PromptAssembler:
         self._max_extra_instructions = max_extra_instructions
         self._max_extra_instruction_chars = max_extra_instruction_chars
         self._prompt_warning_chars = prompt_warning_chars
-        self._prompt_hard_limit_chars = prompt_hard_limit_chars
 
     # -- Public API ---------------------------------------------------------
 
@@ -162,19 +160,12 @@ class PromptAssembler:
 
         user = base_user
 
-        # --- Phase 5: Token Budget Enforcement ---
+        # --- Phase 5: Token Budget Observability ---
+        # Frontier consensus: no hard cap on system prompt.
+        # 1M context models handle large prompts natively.
+        # We only warn for observability; never truncate.
         total_system_chars = len(system)
-        if total_system_chars > self._prompt_hard_limit_chars:
-            log.error(
-                "System prompt %d chars exceeds hard limit %d -- trimming",
-                total_system_chars,
-                self._prompt_hard_limit_chars,
-            )
-            truncation_events.append(
-                f"system:{total_system_chars}->{self._prompt_hard_limit_chars}"
-            )
-            system = system[: self._prompt_hard_limit_chars]
-        elif total_system_chars > self._prompt_warning_chars:
+        if total_system_chars > self._prompt_warning_chars:
             log.warning(
                 "System prompt %d chars exceeds warning threshold %d",
                 total_system_chars,

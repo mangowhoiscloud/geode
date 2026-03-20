@@ -302,10 +302,10 @@ class TestPromptOverride:
 
 
 class TestTokenBudget:
-    def test_system_prompt_hard_limit(self, base_user: str) -> None:
-        """System prompt exceeding hard limit is trimmed."""
+    def test_large_system_prompt_not_truncated(self, base_user: str) -> None:
+        """Large system prompt is NOT truncated — frontier consensus: no hard cap."""
         big_system = "S" * 7000
-        assembler = PromptAssembler(prompt_hard_limit_chars=6000)
+        assembler = PromptAssembler()
         result = assembler.assemble(
             base_system=big_system,
             base_user=base_user,
@@ -314,7 +314,8 @@ class TestTokenBudget:
             role_type="game_mechanics",
         )
 
-        assert len(result.system) == 6000
+        # No truncation: full prompt preserved
+        assert len(result.system) >= 7000
 
 
 class TestHashing:
