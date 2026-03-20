@@ -2966,6 +2966,23 @@ def init(
     project_mem = ProjectMemory(Path("."))
     user_profile = FileBasedUserProfile()
 
+    # 0. Global ~/.geode/ directory + .env (API key storage)
+    global_geode = Path.home() / ".geode"
+    global_geode.mkdir(parents=True, exist_ok=True)
+    global_env = global_geode / ".env"
+    if not global_env.exists():
+        global_env.write_text(
+            "# GEODE global API keys (shared across all projects)\n"
+            "# Keys here are used when project-local .env is absent.\n"
+            "# Priority: env vars > CWD/.env > ~/.geode/.env\n\n"
+            "# ANTHROPIC_API_KEY=sk-ant-...\n"
+            "# OPENAI_API_KEY=sk-proj-...\n"
+            "# BRAVE_API_KEY=...\n",
+            encoding="utf-8",
+        )
+        global_env.chmod(0o600)
+        console.print(f"  Created {global_env} (global API keys)")
+
     # 1. Detect project type (harness-for-real init.sh pattern)
     project_info = detect_project_type(Path("."))
     console.print(
