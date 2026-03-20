@@ -3021,6 +3021,41 @@ def init(
     else:
         console.print("  .geode/config.toml already exists (use --force to overwrite)")
 
+    # 4b. routing.toml template
+    routing_path = Path(".geode/routing.toml")
+    if not routing_path.exists():
+        routing_path.write_text(
+            "# Node-level LLM model routing\n"
+            "# Uncomment to override default model per pipeline node.\n\n"
+            "[nodes]\n"
+            '# analyst = "claude-opus-4-6"\n'
+            '# evaluator = "claude-sonnet-4-6"\n'
+            '# scoring = "claude-haiku-4-5-20251001"\n'
+            '# synthesizer = "claude-opus-4-6"\n\n'
+            "[agentic]\n"
+            '# default = "claude-opus-4-6"\n'
+            '# sub_agent = "claude-sonnet-4-6"\n',
+            encoding="utf-8",
+        )
+        console.print("  Created .geode/routing.toml (template)")
+
+    # 4c. model-policy.toml template
+    policy_path = Path(".geode/model-policy.toml")
+    if not policy_path.exists():
+        policy_path.write_text(
+            "# Model governance — allowlist/denylist\n"
+            "# If allowlist is set, only listed models are allowed.\n"
+            "# If only denylist is set, listed models are blocked.\n\n"
+            "[policy]\n"
+            "# allowlist = "
+            '["claude-opus-4-6", "claude-sonnet-4-6", "gpt-5.4"]\n'
+            "# denylist = "
+            '["claude-haiku-4-5-20251001"]\n'
+            '# default_model = "claude-sonnet-4-6"\n',
+            encoding="utf-8",
+        )
+        console.print("  Created .geode/model-policy.toml (template)")
+
     # 5. Hook templates (harness-for-real pattern)
     hooks_dir = Path(".claude/hooks")
     hooks_dir.mkdir(parents=True, exist_ok=True)

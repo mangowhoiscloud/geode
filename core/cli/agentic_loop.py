@@ -493,12 +493,13 @@ class AgenticLoop:
                     )
                 # Emergency prune: keep first + last 10 messages
                 pruned = prune_oldest_messages(messages, keep_recent=10)
-                if len(pruned) < len(messages):
+                original_count = len(messages)
+                if len(pruned) < original_count:
                     messages.clear()
                     messages.extend(pruned)
                     log.info(
                         "Emergency pruned conversation: %d → %d messages",
-                        len(messages) + (len(messages) - len(pruned)),
+                        original_count,
                         len(pruned),
                     )
             elif metrics.is_warning:
