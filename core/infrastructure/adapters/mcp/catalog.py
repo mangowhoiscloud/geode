@@ -93,10 +93,10 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
     ),
     "igdb": MCPCatalogEntry(
         name="igdb",
-        package="bielacki/igdb-mcp-server",
+        package="igdb-mcp-server",
         description="IGDB game metadata (genre, platform, rating, franchise)",
         tags=("igdb", "game", "gaming", "metadata", "twitch"),
-        env_keys=("TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET"),
+        env_keys=("IGDB_CLIENT_ID", "IGDB_CLIENT_SECRET"),
     ),
     # --- Social / Community ---
     "discord": MCPCatalogEntry(
@@ -205,10 +205,10 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
     # --- Messaging ---
     "slack": MCPCatalogEntry(
         name="slack",
-        package="@anthropic/mcp-server-slack",
+        package="@modelcontextprotocol/server-slack",
         description="Slack messaging and channel management",
         tags=("slack", "chat", "messaging", "team"),
-        env_keys=("SLACK_BOT_TOKEN",),
+        env_keys=("SLACK_BOT_TOKEN", "SLACK_TEAM_ID"),
     ),
     "telegram": MCPCatalogEntry(
         name="telegram",
@@ -248,7 +248,7 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
     ),
     "google-maps": MCPCatalogEntry(
         name="google-maps",
-        package="@anthropic/mcp-server-google-maps",
+        package="@modelcontextprotocol/server-google-maps",
         description="Google Maps places, directions, geocoding",
         tags=("google", "maps", "location", "geo"),
         env_keys=("GOOGLE_MAPS_API_KEY",),
@@ -256,7 +256,7 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
     # --- Agent Infrastructure ---
     "e2b": MCPCatalogEntry(
         name="e2b",
-        package="e2b-dev/mcp-server",
+        package="@e2b/mcp-server",
         description="Secure cloud sandbox for code execution (Python/JS)",
         tags=("sandbox", "code", "execution", "e2b", "isolated"),
         env_keys=("E2B_API_KEY",),
@@ -297,7 +297,7 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
     # --- AI / LLM ---
     "langsmith": MCPCatalogEntry(
         name="langsmith",
-        package="langchain-ai/langsmith-mcp-server",
+        package="langsmith-mcp-server",
         description="LangSmith tracing, datasets, and evaluation",
         tags=("langsmith", "tracing", "eval", "langchain"),
         env_keys=("LANGSMITH_API_KEY",),
