@@ -170,7 +170,7 @@ FALLBACK_MODELS = ANTHROPIC_FALLBACK_CHAIN
 # ---------------------------------------------------------------------------
 # Non-retryable errors — these should NOT trigger model failover
 # ---------------------------------------------------------------------------
-_NON_RETRYABLE_ERRORS = (anthropic.AuthenticationError,)
+_NON_RETRYABLE_ERRORS = (anthropic.AuthenticationError, anthropic.BadRequestError)
 
 
 # ---------------------------------------------------------------------------

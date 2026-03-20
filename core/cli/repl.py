@@ -213,6 +213,23 @@ def _interactive_loop() -> None:
         mark = "[bold green]ok[/bold green]" if ok else "[dim]skip[/dim]"
         console.print(f"  {mark} {label}          ")
 
+    # 0. Config validation (routing.toml, model-policy.toml)
+    _init_step("config")
+    try:
+        from core.config import load_model_policy, load_routing_config
+
+        _policy = load_model_policy()
+        _routing = load_routing_config()
+        _has_policy = bool(_policy.allowlist or _policy.denylist)
+        _has_routing = bool(_routing.nodes or _routing.agentic)
+        if _has_policy or _has_routing:
+            _init_done("Config (policy + routing)")
+        else:
+            _init_done("Config (defaults)")
+    except Exception:
+        _init_done("Config", ok=False)
+        log.debug("Config validation skipped", exc_info=True)
+
     # 1. Domain adapter
     _init_step("domain")
     from core.domains.loader import load_domain_adapter

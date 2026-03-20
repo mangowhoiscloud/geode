@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +70,7 @@ class SessionManager:
     def __init__(self, db_path: Path | None = None) -> None:
         self._db_path = db_path or DEFAULT_DB_PATH
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_CREATE_TABLE_SQL)
@@ -77,34 +79,35 @@ class SessionManager:
 
     def upsert(self, meta: SessionMeta) -> None:
         """Insert or update session metadata."""
-        self._conn.execute(
-            """\
-            INSERT INTO sessions
-                (session_id, created_at, updated_at, status, model, provider,
-                 user_input, round_count, message_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(session_id) DO UPDATE SET
-                updated_at    = excluded.updated_at,
-                status        = excluded.status,
-                model         = excluded.model,
-                provider      = excluded.provider,
-                user_input    = excluded.user_input,
-                round_count   = excluded.round_count,
-                message_count = excluded.message_count
-            """,
-            (
-                meta.session_id,
-                meta.created_at,
-                meta.updated_at,
-                meta.status,
-                meta.model,
-                meta.provider,
-                meta.user_input,
-                meta.round_count,
-                meta.message_count,
-            ),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                """\
+                INSERT INTO sessions
+                    (session_id, created_at, updated_at, status, model, provider,
+                     user_input, round_count, message_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    updated_at    = excluded.updated_at,
+                    status        = excluded.status,
+                    model         = excluded.model,
+                    provider      = excluded.provider,
+                    user_input    = excluded.user_input,
+                    round_count   = excluded.round_count,
+                    message_count = excluded.message_count
+                """,
+                (
+                    meta.session_id,
+                    meta.created_at,
+                    meta.updated_at,
+                    meta.status,
+                    meta.model,
+                    meta.provider,
+                    meta.user_input,
+                    meta.round_count,
+                    meta.message_count,
+                ),
+            )
+            self._conn.commit()
 
     def get(self, session_id: str) -> SessionMeta | None:
         """Fetch a single session by ID."""
@@ -136,19 +139,24 @@ class SessionManager:
 
     def delete(self, session_id: str) -> bool:
         """Delete a session from the index. Returns True if deleted."""
-        cursor = self._conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
-        self._conn.commit()
-        return cursor.rowcount > 0
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM sessions WHERE session_id = ?",
+                (session_id,),
+            )
+            self._conn.commit()
+            return cursor.rowcount > 0
 
     def cleanup(self, max_age_hours: float = 72.0) -> int:
         """Remove completed/old sessions. Returns count removed."""
         cutoff = time.time() - (max_age_hours * 3600)
-        cursor = self._conn.execute(
-            "DELETE FROM sessions WHERE status = 'completed' OR updated_at < ?",
-            (cutoff,),
-        )
-        self._conn.commit()
-        return cursor.rowcount
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM sessions WHERE status = 'completed' OR updated_at < ?",
+                (cutoff,),
+            )
+            self._conn.commit()
+            return cursor.rowcount
 
     def close(self) -> None:
         """Close the database connection."""
