@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-19 (세션 8 — v0.20.0 릴리스)
+> 마지막 갱신: 2026-03-21 (세션 10 — session-resume + 테스트 격리)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -14,7 +14,6 @@
 |---------|----------|:--------:|------|------|
 | career-identity | C0 Identity career.toml 로딩 + 시스템 프롬프트 주입 | P1 | geode-context-hub.md Phase E | UserProfile 확장 |
 | app-tracker | C4 Plan tracker.json 지원 상태 CRUD + /apply 커맨드 | P1 | geode-context-hub.md Phase F | Vault applications 연동 |
-| session-resume | geode resume 커맨드 + AgenticLoop 체크포인트 통합 | P1 | geode-context-hub.md Phase B2-B5 | SessionCheckpoint 활용 |
 | context-command | /context 슬래시 커맨드 + Startup 자동 주입 | P2 | geode-context-hub.md Phase C | 전 계층 요약 표시 |
 
 ### In Progress
@@ -27,6 +26,14 @@
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
+
+### Done (2026-03-21)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| session-resume | Session resume — per-turn checkpoint + /resume 와이어링 + --continue/--resume CLI 플래그 | #334 | @mangowhoiscloud | 2026-03-21 |
+| test-isolation | 테스트 세션 격리 — conftest.py에서 checkpoint/transcript 기본 경로 tmp 리다이렉트 | #334 | @mangowhoiscloud | 2026-03-21 |
+| manage-auth-hint | manage_auth WRITE_FALLBACK_HINTS 누락 수정 | #334 | @mangowhoiscloud | 2026-03-21 |
 
 ### Done (2026-03-19)
 
@@ -125,6 +132,9 @@
 | gap-cost-approval | — | 2026-03-18 |
 | gap-multi-provider | — | 2026-03-18 |
 | gap-write-fallback | — | 2026-03-18 |
+| gap-session-resume | #334 | 2026-03-21 |
+| gap-test-isolation | #334 | 2026-03-21 |
+| gap-manage-auth-hint | #334 | 2026-03-21 |
 
 ---
 
@@ -132,9 +142,9 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.20.0 | 2026-03-19 |
-| Modules | 175 | 2026-03-19 |
-| Tests | 2873 | 2026-03-19 |
+| Version | 0.21.0 | 2026-03-21 |
+| Modules | 178 | 2026-03-21 |
+| Tests | 2946 | 2026-03-21 |
 | Tools | 46 | 2026-03-19 |
 | MCP Catalog | 42 | 2026-03-19 |
 | HookEvents | 36 | 2026-03-19 |
