@@ -1140,8 +1140,8 @@ def _handle_command(
     *,
     skill_registry: Any = None,
     mcp_manager: Any = None,
-) -> tuple[bool, bool]:
-    """Handle a slash command. Returns (should_break, new_verbose)."""
+) -> tuple[bool, bool, Any]:
+    """Handle a slash command. Returns (should_break, new_verbose, resume_state)."""
     action = resolve_action(cmd)
 
     if action == "quit":
@@ -1149,7 +1149,7 @@ def _handle_command(
 
         render_session_cost_summary()
         console.print("  [muted]Goodbye.[/muted]\n")
-        return True, verbose
+        return True, verbose, None
 
     if action == "help":
         show_help()
@@ -1307,13 +1307,14 @@ def _handle_command(
     elif action == "resume":
         from core.cli.commands import cmd_resume
 
-        cmd_resume(args)
+        resume_state = cmd_resume(args)
+        return False, verbose, resume_state
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
         console.print()
 
-    return False, verbose
+    return False, verbose, None
 
 
 def _show_commentary(
@@ -2593,13 +2594,17 @@ def _read_multiline_input(prompt: str) -> str:
     return text
 
 
-def _interactive_loop() -> None:
+def _interactive_loop(resume_session_id: str | None = None) -> None:
     """Claude Code / OpenClaw-style interactive REPL.
 
     Three routing paths:
       /command  → deterministic dispatch (commands.py)
       free-text → agentic loop (AgenticLoop, multi-turn + multi-intent)
       fallback  → single-shot NL Router (when agentic unavailable)
+
+    Args:
+        resume_session_id: If provided, auto-resume this session at startup.
+            Use "__latest__" to resume the most recent session (--continue flag).
     """
     verbose = False
     conversation = ConversationContext()
@@ -2720,6 +2725,30 @@ def _interactive_loop() -> None:
 
     init_session_meter(model=agentic.model)
 
+    # Auto-resume: --continue (latest) or --resume <id>
+    if resume_session_id is not None:
+        from core.cli.session_checkpoint import SessionCheckpoint
+
+        _cp = SessionCheckpoint()
+        if resume_session_id == "__latest__":
+            _resumable = _cp.list_resumable()
+            _state = _resumable[0] if _resumable else None
+        else:
+            _state = _cp.load(resume_session_id)
+        if _state is not None and _state.status in ("active", "paused"):
+            conversation.messages = list(_state.messages)
+            agentic._session_id = _state.session_id
+            console.print(f"  [success]Session restored: {_state.session_id}[/success]")
+            if _state.user_input:
+                console.print(f"  [muted]Last input: {_state.user_input[:80]}[/muted]")
+            console.print(f"  [muted]{len(_state.messages)} messages restored[/muted]")
+            console.print()
+        elif resume_session_id != "__latest__":
+            console.print(
+                f"  [warning]Session not found or not resumable: {resume_session_id}[/warning]"
+            )
+            console.print()
+
     while True:
         # Defensive: restore terminal state before each prompt
         # (Rich Status/Live may leave cursor hidden or echo off)
@@ -2730,6 +2759,7 @@ def _interactive_loop() -> None:
         except (KeyboardInterrupt, EOFError):
             from core.ui.agentic_ui import render_session_cost_summary
 
+            agentic.mark_session_completed()
             render_session_cost_summary()
             console.print("\n  [muted]Goodbye.[/muted]\n")
             break
@@ -2741,6 +2771,7 @@ def _interactive_loop() -> None:
         if user_input.strip().lower() in ("exit", "quit", "q"):
             from core.ui.agentic_ui import render_session_cost_summary
 
+            agentic.mark_session_completed()
             render_session_cost_summary()
             console.print("  [muted]Goodbye.[/muted]\n")
             break
@@ -2751,7 +2782,7 @@ def _interactive_loop() -> None:
             # Slash command → deterministic routing (OpenClaw Binding)
             cmd = user_input.split()[0].lower()
             args = user_input[len(cmd) :].strip()
-            should_break, verbose = _handle_command(
+            should_break, verbose, resume_state = _handle_command(
                 cmd,
                 args,
                 verbose,
@@ -2760,6 +2791,15 @@ def _interactive_loop() -> None:
             )
             if should_break:
                 break
+            # /resume: inject saved messages into ConversationContext
+            if resume_state is not None:
+                conversation.messages = list(resume_state.messages)
+                agentic._session_id = resume_state.session_id
+                log.info(
+                    "Session restored: %s (%d messages)",
+                    resume_state.session_id,
+                    len(resume_state.messages),
+                )
             # Sync model/provider to AgenticLoop after /model command
             # (fixes model caching bug: /model changes were not reflected)
             if settings.model != agentic.model:
@@ -2847,11 +2887,22 @@ def _interactive_loop() -> None:
 
 
 @app.callback()
-def main(ctx: typer.Context) -> None:
+def main(
+    ctx: typer.Context,
+    continue_session: bool = typer.Option(
+        False, "--continue", help="Resume the most recent session"
+    ),
+    resume: str = typer.Option("", "--resume", help="Resume a specific session by ID"),
+) -> None:
     """GEODE — Autonomous Research Harness."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
-        _interactive_loop()
+        resume_id: str | None = None
+        if continue_session:
+            resume_id = "__latest__"
+        elif resume:
+            resume_id = resume
+        _interactive_loop(resume_session_id=resume_id)
 
 
 @app.command()
