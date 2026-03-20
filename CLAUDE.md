@@ -9,7 +9,7 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
 - **Modules**: 178
-- **Tests**: 2930+
+- **Tests**: 2941+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -35,7 +35,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 
 ## Architecture
 
-6-Layer Architecture based on `architecture-v6.md` SOT.
+6-Layer Architecture.
 
 ```
 L0: CLI & AGENT      — Typer CLI, AgenticLoop, SubAgentManager, Batch
@@ -147,9 +147,9 @@ START → router → signals → analyst×4 (Send API)
 
 | Document | Path | Content |
 |----------|------|---------|
-| Architecture v6 | `docs/architecture-v6.md` | Full spec (335KB) |
-| LangGraph Flow | `docs/langgraph-flow.md` | StateGraph topology |
 | Layer Plan | `docs/architecture/layer-implementation-plan.md` | 6-layer roadmap |
+| Orchestration | `docs/architecture/orchestration-tools-hooks-plans.md` | L3/L4 설계 |
+| CLAUDE.md | `CLAUDE.md` | Architecture overview + conventions (이 파일) |
 
 ## Project Structure
 
