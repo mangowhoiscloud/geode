@@ -70,6 +70,22 @@ class StdioMCPClient:
                 self._pid,
             )
 
+            # Wait for server to be ready (npx may download packages first)
+            import time
+
+            wait_deadline = time.time() + min(self._timeout_s, 10.0)
+            while time.time() < wait_deadline:
+                if self._process.poll() is not None:
+                    log.warning(
+                        "MCP server exited prematurely (PID %d, code=%s)",
+                        self._pid,
+                        self._process.returncode,
+                    )
+                    self._process = None
+                    self._pid = None
+                    return False
+                time.sleep(0.5)
+
             # Send initialize request
             init_response = self._send_request(
                 "initialize",
@@ -162,7 +178,7 @@ class StdioMCPClient:
         return self._request_id
 
     def _send_request(self, method: str, params: dict[str, Any]) -> dict[str, Any] | None:
-        """Send a JSON-RPC request and wait for response."""
+        """Send a JSON-RPC request and wait for response with timeout."""
         if self._process is None or self._process.stdin is None or self._process.stdout is None:
             return None
 
@@ -178,7 +194,22 @@ class StdioMCPClient:
             self._process.stdin.write(message.encode("utf-8"))
             self._process.stdin.flush()
 
-            # Read response line
+            # Read response with timeout (select-based, fallback to blocking)
+            try:
+                import select
+
+                ready, _, _ = select.select(
+                    [self._process.stdout],
+                    [],
+                    [],
+                    self._timeout_s,
+                )
+                if not ready:
+                    log.warning("MCP timeout waiting for %s response", method)
+                    return None
+            except (TypeError, ValueError):
+                pass  # mock/non-real fd — fall through to blocking read
+
             line = self._process.stdout.readline()
             if not line:
                 return None
