@@ -279,9 +279,9 @@ uv run mypy core/
 ### Expected Test Results
 
 2000+ tests pass. 3 IP fixtures produce tier spread:
-- Berserk: **S** (81.3) — conversion_failure
+- Berserk: **S** (81.2) — conversion_failure
 - Cowboy Bebop: **A** (68.4) — undermarketed
-- Ghost in the Shell: **B** (51.6) — discovery_failure
+- Ghost in the Shell: **B** (51.7) — discovery_failure
 
 ## Domain Plugin: Game IP — Scoring & Classification
 
@@ -345,7 +345,7 @@ Decision Tree on D-E-F axes:
 
 ```
 ▸ analyze_ip(ip_name="Berserk")        # tool call
-✓ analyze_ip → S · 81.3               # tool result
+✓ analyze_ip → S · 81.2               # tool result
 ✗ analyze_ip — Not found              # error
 ✢ claude-opus-4-6 · ↓1.2k ↑350 · 2.1s  # token usage
 ● Plan: Berserk                        # plan steps
