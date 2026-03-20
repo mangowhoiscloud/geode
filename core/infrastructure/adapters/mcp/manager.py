@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 _CONFIG_PATH = _PROJECT_ROOT / ".claude" / "mcp_servers.json"
 _DOTENV_PATH = _PROJECT_ROOT / ".env"
+_GLOBAL_DOTENV_PATH = Path.home() / ".geode" / ".env"
 
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
 
@@ -237,10 +238,15 @@ class MCPServerManager:
         os.environ, so MCP keys defined only in .env would be invisible.
         """
         # Lazy-load .env values (cached after first call)
+        # Cascade: CWD/.env (project) → ~/.geode/.env (global)
         if not hasattr(self, "_dotenv_cache"):
             self._dotenv_cache: dict[str, str | None] = {}
+            # Global first (lower priority)
+            if _GLOBAL_DOTENV_PATH.exists():
+                self._dotenv_cache.update(dotenv_values(str(_GLOBAL_DOTENV_PATH)))
+            # Project .env overrides global
             if _DOTENV_PATH.exists():
-                self._dotenv_cache = dotenv_values(str(_DOTENV_PATH))
+                self._dotenv_cache.update(dotenv_values(str(_DOTENV_PATH)))
 
         resolved: dict[str, str] = {}
         for key, value in env.items():
