@@ -1486,6 +1486,7 @@ def _build_sub_agent_manager(
     Falls back to legacy ``make_pipeline_handler`` if handlers are not provided.
     """
     from core.cli.sub_agent import (
+        SUBAGENT_DENIED_TOOLS,
         SubAgentManager,
         make_pipeline_handler,
     )
@@ -1532,6 +1533,8 @@ def _build_sub_agent_manager(
         skill_registry=skill_registry,
         depth=0,
         max_depth=settings.max_subagent_depth,
+        # Sandbox hardening: restrict sub-agent tool scope
+        denied_tools=SUBAGENT_DENIED_TOOLS,
     )
 
 

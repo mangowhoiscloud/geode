@@ -92,7 +92,7 @@ from core.orchestration.stuck_detection import StuckDetector
 from core.orchestration.task_bridge import TaskGraphHookBridge
 from core.orchestration.task_system import create_geode_task_graph
 from core.tools.analysis import ExplainScoreTool, PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
-from core.tools.policy import NodeScopePolicy, PolicyChain, ToolPolicy
+from core.tools.policy import NodeScopePolicy, ToolPolicy
 from core.tools.registry import ToolRegistry, ToolSearchTool
 
 log = logging.getLogger(__name__)
@@ -160,27 +160,26 @@ def _make_stuck_hook_handler(
 
 
 def _build_default_policies() -> PolicyChainPort:
-    """Build default PolicyChain with mode-specific restrictions."""
-    chain = PolicyChain()
-    # dry_run: block LLM-intensive tools
-    chain.add_policy(
+    """Build default PolicyChain with L1-2 profile/org + L3 mode-based restrictions."""
+    from core.tools.policy import build_6layer_chain, load_org_policy, load_profile_policy
+
+    profile = load_profile_policy()
+    org = load_org_policy()
+    mode_policies = [
         ToolPolicy(
             name="dry_run_block_llm",
             mode="dry_run",
             denied_tools={"run_analyst", "run_evaluator", "send_notification"},
             priority=100,
-        )
-    )
-    # full_pipeline: block notification by default (explicit only)
-    chain.add_policy(
+        ),
         ToolPolicy(
             name="full_block_notification",
             mode="full_pipeline",
             denied_tools={"send_notification"},
             priority=100,
-        )
-    )
-    return chain
+        ),
+    ]
+    return build_6layer_chain(profile=profile, org=org, mode_policies=mode_policies)
 
 
 def _build_default_registry() -> ToolRegistryPort:

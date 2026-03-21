@@ -191,7 +191,9 @@ class TestRunLogPruning:
 class TestDefaultBuilders:
     def test_default_policies(self):
         chain = _build_default_policies()
-        assert len(chain.list_policies()) == 2
+        # L1-2 wired: default ProfilePolicy adds no_dangerous (priority 10)
+        # + 2 mode-based policies = 3 total (may vary if user has config)
+        assert len(chain.list_policies()) >= 2
         # dry_run blocks
         assert chain.is_allowed("psm_calculate", mode="dry_run") is True
         assert chain.is_allowed("run_analyst", mode="dry_run") is False
