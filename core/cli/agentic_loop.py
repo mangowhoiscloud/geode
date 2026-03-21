@@ -42,6 +42,8 @@ from core.config import (
     ANTHROPIC_FALLBACK_CHAIN,
     ANTHROPIC_PRIMARY,
     GLM_FALLBACK_CHAIN,
+    OPENAI_FALLBACK_CHAIN,
+    OPENAI_PRIMARY,
     _resolve_provider,
     settings,
 )
@@ -220,6 +222,16 @@ class AgenticLoop:
         self._enable_goal_decomposition = enable_goal_decomposition
         self._goal_decomposer: Any | None = None  # lazy init
 
+        # Feature 3: Model escalation on consecutive LLM failures
+        self._consecutive_llm_failures: int = 0
+        self._ESCALATION_THRESHOLD: int = 2
+
+        # Feature 5: Backpressure on consecutive tool failures
+        self._total_consecutive_tool_errors: int = 0
+
+        # Feature 6: Convergence detection (stuck loop)
+        self._recent_errors: list[str] = []
+
         # Tier 1 transcript: append-only JSONL event stream (snapshot-redesign)
         self._transcript: Any | None = None
         self._session_id: str = ""
@@ -365,6 +377,19 @@ class AgenticLoop:
                 _spinner.stop()
 
             if response is None:
+                # Feature 3/4: Model escalation on consecutive LLM failures
+                self._consecutive_llm_failures += 1
+                if self._consecutive_llm_failures >= self._ESCALATION_THRESHOLD:
+                    escalated = self._try_model_escalation()
+                    if escalated:
+                        # Retry with escalated model — continue to next round iteration
+                        log.info(
+                            "Model escalated after %d consecutive failures, retrying",
+                            self._consecutive_llm_failures,
+                        )
+                        self._consecutive_llm_failures = 0
+                        continue
+
                 # Persist intermediate tool-use messages so next turn sees them
                 self._sync_messages_to_context(messages)
                 detail = self._last_llm_error or "unknown error"
@@ -388,6 +413,9 @@ class AgenticLoop:
                 self._record_transcript_end(result)
                 self._save_checkpoint(user_input, round_idx=round_idx + 1)
                 return result
+
+            # Successful LLM response — reset failure counter
+            self._consecutive_llm_failures = 0
 
             # Track usage + Claude Code-style token display
             self._track_usage(response)
@@ -419,6 +447,45 @@ class AgenticLoop:
                 return result
 
             tool_results = await self._process_tool_calls(response)
+
+            # Feature 5: Backpressure on consecutive tool failures
+            # Feature 6: Convergence detection (stuck loop)
+            self._update_tool_error_tracking(tool_results)
+
+            if self._check_convergence_break():
+                self._op_logger.finalize()
+                self._sync_messages_to_context(messages)
+                result = AgenticResult(
+                    text=(
+                        "Detected repeating failure pattern. Breaking loop to avoid infinite retry."
+                    ),
+                    tool_calls=self._tool_log,
+                    rounds=round_idx + 1,
+                    error="convergence_detected",
+                    termination_reason="convergence_detected",
+                )
+                log.info(
+                    "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
+                    result.termination_reason,
+                    result.rounds,
+                    self.max_rounds,
+                    len(result.tool_calls),
+                )
+                self._record_transcript_end(result)
+                self._save_checkpoint(user_input, round_idx=round_idx + 1)
+                return result
+
+            if self._total_consecutive_tool_errors >= 3:
+                # Backpressure: inject a cooldown hint
+                await asyncio.sleep(1.0)
+                backpressure_hint = {
+                    "type": "text",
+                    "text": (
+                        "[system] Multiple tools are failing consecutively. "
+                        "Consider a different approach."
+                    ),
+                }
+                tool_results.append(backpressure_hint)
 
             # Accumulate messages for next round
             # Convert content blocks to serializable format
@@ -1405,3 +1472,143 @@ class AgenticLoop:
             )
         except Exception:
             log.debug("Failed to track usage", exc_info=True)
+
+    # ---------------------------------------------------------------------------
+    # Feature 3/4: Model escalation on consecutive LLM failures
+    # ---------------------------------------------------------------------------
+
+    # Cross-provider escalation map: when one provider's chain is exhausted,
+    # fall back to the other provider's primary model.
+    _CROSS_PROVIDER_FALLBACK: dict[str, tuple[str, str]] = {
+        "anthropic": (OPENAI_PRIMARY, "openai"),
+        "openai": (ANTHROPIC_PRIMARY, "anthropic"),
+        "glm": (OPENAI_PRIMARY, "openai"),
+    }
+
+    def _try_model_escalation(self) -> bool:
+        """Attempt to escalate to a higher/fallback model after consecutive failures.
+
+        First tries the next model in the current provider's fallback chain.
+        If exhausted, tries cross-provider escalation (Feature 4).
+        Returns True if escalation succeeded, False if at end of all chains.
+        """
+        provider = self._provider
+        current = self.model
+
+        # Get fallback chain for current provider
+        chain: list[str] = []
+        if provider == "anthropic":
+            chain = ANTHROPIC_FALLBACK_CHAIN
+        elif provider == "openai":
+            chain = OPENAI_FALLBACK_CHAIN
+        elif provider == "glm":
+            chain = GLM_FALLBACK_CHAIN
+
+        # Find current model in chain, try next
+        if current in chain:
+            idx = chain.index(current)
+            if idx + 1 < len(chain):
+                next_model = chain[idx + 1]
+                log.warning(
+                    "Model escalation: %s -> %s (same provider: %s)",
+                    current,
+                    next_model,
+                    provider,
+                )
+                self.update_model(next_model, provider)
+                return True
+
+        # Current provider's chain exhausted — try cross-provider (Feature 4)
+        if provider in self._CROSS_PROVIDER_FALLBACK:
+            fallback_model, fallback_provider = self._CROSS_PROVIDER_FALLBACK[provider]
+            if fallback_model != current:
+                log.warning(
+                    "Cross-provider escalation: %s(%s) -> %s(%s)",
+                    current,
+                    provider,
+                    fallback_model,
+                    fallback_provider,
+                )
+                self.update_model(fallback_model, fallback_provider)
+                return True
+
+        log.warning("Model escalation failed: no more fallback models available")
+        return False
+
+    # ---------------------------------------------------------------------------
+    # Feature 5: Backpressure on tool failures
+    # Feature 6: Convergence detection (stuck loop)
+    # ---------------------------------------------------------------------------
+
+    def _update_tool_error_tracking(self, tool_results: list[dict[str, Any]]) -> None:
+        """Update consecutive tool error tracking and recent error history.
+
+        Processes a batch of tool results from the current round.
+        Resets the consecutive counter on any success, increments on all-error rounds.
+        Appends normalized error keys to _recent_errors for convergence detection.
+        """
+        has_success = False
+        has_error = False
+
+        for tr in tool_results:
+            # Parse content JSON to check for errors
+            content = tr.get("content", "")
+            if isinstance(content, str):
+                try:
+                    parsed = json.loads(content)
+                except (json.JSONDecodeError, ValueError):
+                    parsed = {}
+            else:
+                parsed = content if isinstance(content, dict) else {}
+
+            if isinstance(parsed, dict) and parsed.get("error"):
+                has_error = True
+                # Feature 6: append normalized error key
+                tool_use_id = tr.get("tool_use_id", "")
+                error_str = str(parsed.get("error", ""))[:50]
+                # Extract tool name from tool_log (most recent entries)
+                tool_name = "unknown"
+                for entry in reversed(self._tool_log):
+                    if tool_use_id and entry.get("tool") and isinstance(entry.get("result"), dict):
+                        tool_name = entry["tool"]
+                        break
+                error_key = f"{tool_name}:{error_str}"
+                self._recent_errors.append(error_key)
+                # Keep last 6 entries max
+                if len(self._recent_errors) > 6:
+                    self._recent_errors = self._recent_errors[-6:]
+            else:
+                has_success = True
+
+        if has_success:
+            self._total_consecutive_tool_errors = 0
+        elif has_error:
+            self._total_consecutive_tool_errors += 1
+
+    def _check_convergence_break(self) -> bool:
+        """Check if the loop is stuck in a repeating failure pattern.
+
+        Returns True if 4+ of the last entries are identical errors,
+        indicating the loop should break.
+        Injects a warning into messages if 3 identical errors are detected.
+        """
+        if len(self._recent_errors) < 3:
+            return False
+
+        # Check last 3 entries for identical pattern
+        last_3 = self._recent_errors[-3:]
+        if last_3[0] == last_3[1] == last_3[2]:
+            if len(self._recent_errors) >= 4:
+                last_4 = self._recent_errors[-4:]
+                if last_4[0] == last_4[1] == last_4[2] == last_4[3]:
+                    log.warning(
+                        "Convergence detected: 4+ identical errors '%s'",
+                        last_4[0],
+                    )
+                    return True
+            # 3 identical — log warning (convergence warning injected via backpressure)
+            log.warning(
+                "Convergence warning: 3 identical errors '%s'",
+                last_3[0],
+            )
+        return False

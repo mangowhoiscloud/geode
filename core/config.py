@@ -239,6 +239,11 @@ class Settings(BaseSettings):
     # Calendar — external calendar sync
     calendar_sync_on_trigger: bool = False  # auto-sync on TRIGGER_FIRED
 
+    # HITL Level — Human-in-the-loop control
+    # 0 = autonomous (skip all prompts), 1 = write-only (prompt only for writes),
+    # 2 = all prompts (default, ask everything)
+    hitl_level: int = 2
+
     # Plan Mode — Autonomous Execution
     plan_auto_execute: bool = False  # GEODE_PLAN_AUTO_EXECUTE=true to enable
 
@@ -302,12 +307,31 @@ GLM_BASE_URL = "https://api.z.ai/v1"
 def _resolve_provider(model: str) -> str:
     """Resolve provider name from model ID.
 
-    claude-* → anthropic, glm-* → glm, otherwise → openai.
+    Prefix-based inference with broad model coverage:
+      claude-*   → anthropic
+      glm-*      → glm
+      gpt-*      → openai
+      o3-*/o4-*  → openai
+      gemini-*   → google
+      deepseek-* → deepseek
+      llama-*    → meta
+      qwen-*/qwen3* → alibaba
+      (fallback) → openai
     """
     if model.startswith("claude-"):
         return "anthropic"
     if model.startswith("glm-"):
         return "glm"
+    if model.startswith(("gpt-", "o3-", "o4-")):
+        return "openai"
+    if model.startswith("gemini-"):
+        return "google"
+    if model.startswith("deepseek-"):
+        return "deepseek"
+    if model.startswith("llama-"):
+        return "meta"
+    if model.startswith(("qwen-", "qwen3")):
+        return "alibaba"
     return "openai"
 
 

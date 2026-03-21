@@ -183,14 +183,45 @@ class ToolExecutor:
         auto_approve: bool = False,
         sub_agent_manager: SubAgentManager | None = None,
         mcp_manager: Any | None = None,
+        hitl_level: int = 2,
     ) -> None:
         self._handlers: dict[str, Callable[..., dict[str, Any]]] = action_handlers or {}
         self._bash = bash_tool or BashTool()
         self._auto_approve = auto_approve  # for testing only
         self._sub_agent_manager = sub_agent_manager
         self._mcp_manager = mcp_manager
+        # HITL level: 0=autonomous, 1=write-only, 2=all prompts
+        self._hitl_level = hitl_level
         # Per-server MCP approval cache — approve once per server per session
         self._mcp_approved_servers: set[str] = set()
+        # Session-level "Always" approval sets (Feature: A=Always)
+        self._always_approved_tools: set[str] = set()
+        # Categories: "bash", "write", "cost", "mcp:<server>"
+        self._always_approved_categories: set[str] = set()
+
+    def _prompt_with_always(self, label: str, detail: str) -> str:
+        """Show a [Y/n/A] prompt and return 'y', 'n', or 'a'.
+
+        Args:
+            label: Header text (e.g., "Bash command requires approval")
+            detail: Detail text already printed before this call
+
+        Returns:
+            'y' for yes, 'n' for no, 'a' for always (session-level)
+        """
+        from core.cli import _restore_terminal
+
+        _restore_terminal()
+        try:
+            response = console.input(f"  [header]{label} [Y/n/A][/header] ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            return "n"
+        if response in ("a", "always"):
+            return "a"
+        if response in ("", "y", "yes"):
+            return "y"
+        return "n"
 
     def register(self, tool_name: str, handler: Callable[..., dict[str, Any]]) -> None:
         """Register a tool handler."""
@@ -210,20 +241,28 @@ class ToolExecutor:
 
         # Write tools: HITL gate — always requires approval, even for
         # sub-agents (auto_approve is intentionally ignored here).
+        # hitl_level 0: skip write confirmation (autonomous mode)
         if tool_name in WRITE_TOOLS:
-            if not self._confirm_write(tool_name, tool_input):
+            if self._hitl_level == 0 or "write" in self._always_approved_categories:
+                approved_via_hitl = True  # auto-approved
+            elif not self._confirm_write(tool_name, tool_input):
                 return _write_denial_with_fallback(tool_name)
-            approved_via_hitl = True
+            else:
+                approved_via_hitl = True
 
         # Expensive tools: cost confirmation gate
+        # hitl_level 0: skip cost confirmation (autonomous mode)
         if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
-            cost = EXPENSIVE_TOOLS[tool_name]
-            if not self._confirm_cost(tool_name, cost):
-                return {
-                    "error": "User denied expensive operation",
-                    "denied": True,
-                }
-            approved_via_hitl = True
+            if self._hitl_level == 0 or "cost" in self._always_approved_categories:
+                approved_via_hitl = True  # auto-approved
+            else:
+                cost = EXPENSIVE_TOOLS[tool_name]
+                if not self._confirm_cost(tool_name, cost):
+                    return {
+                        "error": "User denied expensive operation",
+                        "denied": True,
+                    }
+                approved_via_hitl = True
 
         # Sub-agent delegation
         if tool_name == "delegate_task":
@@ -317,6 +356,11 @@ class ToolExecutor:
 
         DANGEROUS tools always require user approval — auto_approve is
         ignored for this category to prevent sub-agent bypass.
+
+        HITL level gating:
+        - hitl_level 0: skip all approval (autonomous)
+        - hitl_level 1: skip bash approval (write-only gate)
+        - hitl_level 2: full approval (default)
         """
         command = tool_input.get("command", "")
         reason = tool_input.get("reason", "")
@@ -335,10 +379,17 @@ class ToolExecutor:
         is_safe_cmd = any(cmd_stripped.startswith(p) for p in SAFE_BASH_PREFIXES)
 
         if not is_safe_cmd:
-            # HITL approval gate — not skipped for non-safe commands.
-            approved = self._request_approval(command, reason)
-            if not approved:
-                return {"error": "User denied execution", "denied": True}
+            # HITL level 0/1: skip bash approval entirely
+            if self._hitl_level <= 1:
+                pass  # auto-approve
+            # Session-level "Always" approval for bash category
+            elif "bash" in self._always_approved_categories:
+                pass  # already approved for session
+            else:
+                # HITL approval gate — not skipped for non-safe commands.
+                approved = self._request_approval(command, reason)
+                if not approved:
+                    return {"error": "User denied execution", "denied": True}
 
         with _tool_spinner(f"Running: {command}"):
             result = self._bash.execute(command)
@@ -357,7 +408,13 @@ class ToolExecutor:
         # MCP tools are external — confirm once per server per session.
         # Read-only servers in AUTO_APPROVED_MCP_SERVERS skip first-call approval.
         # After first approval, subsequent calls to the same server auto-execute.
+        # hitl_level 0/1: auto-approve all MCP tools
         if server in AUTO_APPROVED_MCP_SERVERS:
+            self._mcp_approved_servers.add(server)
+        mcp_category = f"mcp:{server}"
+        if mcp_category in self._always_approved_categories:
+            self._mcp_approved_servers.add(server)
+        if self._hitl_level <= 1:
             self._mcp_approved_servers.add(server)
         if not self._auto_approve and server not in self._mcp_approved_servers:
             if not self._confirm_mcp(server, tool_name):
@@ -377,7 +434,7 @@ class ToolExecutor:
         return result
 
     def _confirm_mcp(self, server: str, tool_name: str) -> bool:
-        """Prompt user for MCP tool confirmation."""
+        """Prompt user for MCP tool confirmation with A=Always option."""
         from core.cli import _restore_terminal
 
         _restore_terminal()
@@ -386,12 +443,12 @@ class ToolExecutor:
         console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
         console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
         console.print()
-        try:
-            response = console.input("  [header]Allow? [Y/n][/header] ").strip().lower()
-        except (KeyboardInterrupt, EOFError):
-            console.print()
-            return False
-        return response in ("", "y", "yes")
+
+        response = self._prompt_with_always("Allow?", f"{server}/{tool_name}")
+        if response == "a":
+            self._always_approved_categories.add(f"mcp:{server}")
+            return True
+        return response == "y"
 
     def _confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         """Prompt user for write operation confirmation."""
@@ -421,15 +478,15 @@ class ToolExecutor:
         if summary:
             console.print(f"  [dim]Summary:[/dim] {summary}")
         console.print()
-        try:
-            response = console.input("  [header]Allow? [Y/n][/header] ").strip().lower()
-        except (KeyboardInterrupt, EOFError):
-            console.print()
-            return False
-        return response in ("", "y", "yes")
+
+        response = self._prompt_with_always("Allow?", tool_name)
+        if response == "a":
+            self._always_approved_categories.add("write")
+            return True
+        return response == "y"
 
     def _confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
-        """Prompt user for cost confirmation on expensive tools."""
+        """Prompt user for cost confirmation on expensive tools with A=Always option."""
         from core.cli import _restore_terminal
 
         _restore_terminal()
@@ -438,15 +495,15 @@ class ToolExecutor:
         console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
         console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
         console.print()
-        try:
-            response = console.input("  [header]Proceed? [Y/n][/header] ").strip().lower()
-        except (KeyboardInterrupt, EOFError):
-            console.print()
-            return False
-        return response in ("", "y", "yes")
+
+        response = self._prompt_with_always("Proceed?", tool_name)
+        if response == "a":
+            self._always_approved_categories.add("cost")
+            return True
+        return response == "y"
 
     def _request_approval(self, command: str, reason: str) -> bool:
-        """Prompt user for bash command approval."""
+        """Prompt user for bash command approval with A=Always option."""
         from core.cli import _restore_terminal
 
         _restore_terminal()
@@ -457,13 +514,11 @@ class ToolExecutor:
             console.print(f"  [dim]Reason:[/dim]  {reason}")
         console.print()
 
-        try:
-            response = console.input("  [header]Allow? [Y/n][/header] ").strip().lower()
-        except (KeyboardInterrupt, EOFError):
-            console.print()
-            return False
-
-        return response in ("", "y", "yes")
+        response = self._prompt_with_always("Allow?", command)
+        if response == "a":
+            self._always_approved_categories.add("bash")
+            return True
+        return response == "y"
 
     @property
     def registered_tools(self) -> list[str]:
