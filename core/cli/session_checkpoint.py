@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.infrastructure.atomic_io import atomic_write_json
+
 log = logging.getLogger(__name__)
 
 DEFAULT_SESSION_DIR = Path(".geode") / "session"
@@ -79,32 +81,24 @@ class SessionCheckpoint:
 
         # Write state.json (metadata)
         state_file = session_path / "state.json"
-        state_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(state_file, data, indent=2)
 
         # Write messages.json (conversation, trimmed)
         msg_file = session_path / "messages.json"
-        msg_file.write_text(
-            json.dumps(trimmed, ensure_ascii=False, default=str),
-            encoding="utf-8",
-        )
+        atomic_write_json(msg_file, trimmed)
 
         # Write tools.json (tool call log)
         if state.tool_log:
             tools_file = session_path / "tools.json"
-            tools_file.write_text(
-                json.dumps(state.tool_log[-50:], ensure_ascii=False, default=str),
-                encoding="utf-8",
-            )
+            atomic_write_json(tools_file, state.tool_log[-50:])
 
         # Update active.json pointer
-        active_file = self._dir / "active.json"
         self._dir.mkdir(parents=True, exist_ok=True)
-        active_file.write_text(
-            json.dumps(
-                {"session_id": state.session_id, "updated_at": state.updated_at},
-                indent=2,
-            ),
-            encoding="utf-8",
+        active_file = self._dir / "active.json"
+        atomic_write_json(
+            active_file,
+            {"session_id": state.session_id, "updated_at": state.updated_at},
+            indent=2,
         )
 
         # GAP 3: Sync to SQLite index for fast query
@@ -156,7 +150,7 @@ class SessionCheckpoint:
             data = json.loads(state_file.read_text(encoding="utf-8"))
             data["status"] = "completed"
             data["updated_at"] = time.time()
-            state_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            atomic_write_json(state_file, data, indent=2)
         except (json.JSONDecodeError, OSError):
             pass
 

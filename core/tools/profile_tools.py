@@ -63,14 +63,19 @@ class ProfileShowTool:
         data = profile.load_profile()
         patterns = profile.get_learned_patterns()
 
-        return {
-            "result": {
-                "profile": data,
-                "learned_patterns_count": len(patterns),
-                "recent_patterns": patterns[:5],
-                "exists": profile.exists(),
-            }
+        result: dict[str, Any] = {
+            "profile": data,
+            "learned_patterns_count": len(patterns),
+            "recent_patterns": patterns[:5],
+            "exists": profile.exists(),
         }
+
+        # Include career identity if available
+        career = profile.load_career()
+        if career:
+            result["career"] = career
+
+        return {"result": result}
 
 
 class ProfileUpdateTool:

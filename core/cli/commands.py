@@ -89,6 +89,8 @@ COMMAND_MAP: dict[str, str] = {
     "/skills": "skills",
     "/cost": "cost",
     "/resume": "resume",
+    "/context": "context",
+    "/ctx": "context",
 }
 
 
@@ -117,6 +119,7 @@ def show_help() -> None:
     console.print("  [label]/mcp[/label]                — MCP server status/tools/add")
     console.print("  [label]/skills[/label]             — List/add/reload skills")
     console.print("  [label]/resume[/label]             — Resume interrupted session")
+    console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
     console.print()
@@ -1359,6 +1362,99 @@ def cmd_resume(args: str) -> str | None:
     console.print("  [muted]Usage: /resume <session_id>[/muted]")
     console.print()
     return None
+
+
+def cmd_context(args: str, *, context_assembler: _Any | None = None) -> None:
+    """Handle /context command — display assembled context tiers.
+
+    /context          → full tier-by-tier display
+    /context summary  → LLM summary one-liner only
+    """
+    if context_assembler is None:
+        console.print("  [muted]ContextAssembler not available.[/muted]")
+        console.print()
+        return
+
+    sub = args.strip().lower()
+    ctx = context_assembler.assemble("_inspect", "_inspect")
+
+    if sub == "summary":
+        summary = ctx.get("_llm_summary", "")
+        if summary:
+            console.print(f"  {summary}")
+        else:
+            console.print("  [muted]No summary available.[/muted]")
+        console.print()
+        return
+
+    # Full tier display
+    console.print()
+    console.print("  [header]Context Tiers[/header]")
+
+    # Tier 0: SOUL
+    _ctx_tier(
+        "Tier 0 — SOUL",
+        ctx.get("_soul_loaded", False),
+        ctx.get("_soul", "")[:120] if ctx.get("_soul") else "",
+    )
+
+    # Tier 0.5: User Profile
+    _ctx_tier(
+        "Tier 0.5 — User Profile",
+        ctx.get("_user_profile_loaded", False),
+        ctx.get("_user_profile_summary", ""),
+    )
+
+    # Tier 1: Organization
+    _ctx_tier(
+        "Tier 1 — Organization",
+        ctx.get("_org_loaded", False),
+        ctx.get("organization_strategy", "")[:120],
+    )
+
+    # Tier 2: Project
+    _ctx_tier(
+        "Tier 2 — Project",
+        ctx.get("_project_loaded", False),
+        ctx.get("project_goal", "")[:120],
+    )
+
+    # Tier 3: Session
+    _ctx_tier(
+        "Tier 3 — Session",
+        ctx.get("_session_loaded", False),
+        str(ctx.get("previous_results", ""))[:120],
+    )
+
+    # Run History
+    history = ctx.get("_run_history", "")
+    if history:
+        console.print(f"  [label]Run History[/label]  {history}")
+
+    # Journal
+    journal = ctx.get("_journal_summary", "")
+    if journal:
+        console.print(f"  [label]Journal[/label]      {journal[:120]}")
+
+    # Vault
+    vault = ctx.get("_vault_summary", "")
+    if vault:
+        console.print(f"  [label]Vault[/label]        {vault}")
+
+    # LLM Summary
+    summary = ctx.get("_llm_summary", "")
+    if summary:
+        console.print()
+        console.print(f"  [label]LLM Summary[/label]  {summary}")
+
+    console.print()
+
+
+def _ctx_tier(label: str, loaded: bool, detail: str) -> None:
+    """Render a single context tier line."""
+    icon = "[success]OK[/success]" if loaded else "[muted]--[/muted]"
+    detail_str = f"  {detail}" if detail else ""
+    console.print(f"  {icon}  [label]{label}[/label]{detail_str}")
 
 
 def resolve_action(cmd: str) -> str | None:
