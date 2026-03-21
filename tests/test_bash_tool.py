@@ -130,3 +130,54 @@ class TestBashToolDefinition:
         assert "reason" in schema["properties"]
         assert "command" in schema["required"]
         assert "reason" in schema["required"]
+
+
+class TestBashResourceLimits:
+    """Test resource limits applied via preexec_fn."""
+
+    def test_set_resource_limits_importable(self) -> None:
+        """_set_resource_limits should be importable as a callable."""
+        from core.cli.bash_tool import _set_resource_limits
+
+        assert callable(_set_resource_limits)
+
+    def test_resource_limit_constants(self) -> None:
+        """Verify resource limit constants are reasonable."""
+        from core.cli.bash_tool import (
+            _BASH_CPU_LIMIT_S,
+            _BASH_FSIZE_LIMIT_B,
+            _BASH_NPROC_LIMIT,
+        )
+
+        assert _BASH_CPU_LIMIT_S == 30
+        assert _BASH_FSIZE_LIMIT_B == 50 * 1024 * 1024
+        assert _BASH_NPROC_LIMIT == 64
+
+    def test_fsize_limit_blocks_large_output(self) -> None:
+        """RLIMIT_FSIZE should prevent writing files larger than 50MB."""
+        import os
+        import tempfile
+
+        bash = BashTool()
+        with tempfile.NamedTemporaryFile(suffix=".tmp", delete=False) as f:
+            tmp = f.name
+        try:
+            # Try to write 60MB — should fail with FSIZE limit
+            bash.execute(
+                f"dd if=/dev/zero of={tmp} bs=1048576 count=60 2>&1",
+                timeout=10,
+            )
+            # Either the file is capped at 50MB or dd reports an error
+            if os.path.exists(tmp):
+                size = os.path.getsize(tmp)
+                assert size <= 50 * 1024 * 1024 + 1024  # small margin
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+
+    def test_normal_command_unaffected(self) -> None:
+        """Normal commands should work fine with resource limits."""
+        bash = BashTool()
+        result = bash.execute("echo resource_limits_ok")
+        assert result.returncode == 0
+        assert "resource_limits_ok" in result.stdout
