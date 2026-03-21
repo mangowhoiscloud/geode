@@ -535,6 +535,11 @@ Project-specific skills in `.claude/skills/`:
 | `frontier-harness-research` | 리서치, research, gap, frontier, harness, 사례 조사 | 프론티어 하네스 4종 비교 리서치 프로세스 |
 | `verification-team` | 검증, 검증팀, review, verify, 점검, 리뷰 | 4인 페르소나 검증 (Beck/Karpathy/Steinberger/Cherny) |
 | `tech-blog-writer` | blog, 포스팅, 블로그, tech blog | 기술 블로그 작성 가이드 |
+| `explore-reason-act` | explore, 탐색, reason, root cause, read before write | 코드 수정 전 탐색-추론-실행 3단계 (REODE 역수입) |
+| `anti-deception-checklist` | deception, 가짜, fake success, regression | 가짜 성공 방지 검증 체크리스트 (REODE 역수입) |
+| `code-review-quality` | quality, 품질, SOLID, dead code, resource leak | Python 코드 품질 6-렌즈 리뷰 (REODE 역수입) |
+| `dependency-review` | dependency, import, 의존성, 레이어, circular, lazy | 6-Layer 의존성 건전성 리뷰 (REODE 역수입) |
+| `kent-beck-review` | kent beck, simple design, simplify, god object, SRP | Simple Design 4규칙 코드 리뷰 (REODE 역수입) |
 
 ## Linked Skills (from parent project)
 
