@@ -73,6 +73,17 @@ _TYPE_AGENT_MAP: dict[str, str] = {
     "compare": "data_analyst",
 }
 
+# Default denied tools for sub-agents (sandbox hardening).
+# These tools should only be invoked by the parent agent.
+SUBAGENT_DENIED_TOOLS: set[str] = {
+    "set_api_key",  # credential changes — parent only
+    "manage_auth",  # auth profile management — parent only
+    "profile_update",  # user profile changes — parent only
+    "calendar_create_event",  # external system mutation — parent only
+    "calendar_sync_scheduler",  # external system mutation — parent only
+    "delegate_task",  # recursive delegation — explicit depth control preferred
+}
+
 
 @dataclass
 class SubTask:
@@ -191,6 +202,8 @@ class SubAgentManager:
         skill_registry: Any | None = None,
         depth: int = 0,
         max_depth: int = 2,
+        # Sandbox hardening: tool scope restriction
+        denied_tools: set[str] | None = None,
     ) -> None:
         self._runner = runner
         self._task_handler = task_handler
@@ -207,6 +220,8 @@ class SubAgentManager:
         self._skill_registry = skill_registry
         self._depth = depth
         self._max_depth = max_depth
+        # Sandbox hardening: filter denied tools from action_handlers
+        self._denied_tools: set[str] = denied_tools or set()
         # Announce mechanism (OpenClaw Spawn+Announce pattern)
         self._announce_enabled = bool(parent_session_key)
 
@@ -542,12 +557,19 @@ class SubAgentManager:
         # 2. Fresh conversation context (independent context window)
         conversation = ConversationContext(max_turns=10)
 
-        # 3. Build child SubAgentManager if depth allows recursion
+        # 3. Filter denied tools from action_handlers (sandbox hardening)
+        filtered_handlers = self._action_handlers
+        if self._denied_tools and self._action_handlers:
+            filtered_handlers = {
+                k: v for k, v in self._action_handlers.items() if k not in self._denied_tools
+            }
+
+        # 4. Build child SubAgentManager if depth allows recursion
         child_sam: SubAgentManager | None = None
         if self._depth < self._max_depth:
             child_sam = SubAgentManager(
                 runner=IsolatedRunner(),
-                action_handlers=self._action_handlers,
+                action_handlers=filtered_handlers,
                 mcp_manager=self._mcp_manager,
                 skill_registry=self._skill_registry,
                 depth=self._depth + 1,
@@ -556,11 +578,12 @@ class SubAgentManager:
                 hooks=self._hooks,
                 agent_registry=self._agent_registry,
                 parent_session_key=self._parent_session_key,
+                denied_tools=self._denied_tools,
             )
 
-        # 4. ToolExecutor with full handler set
+        # 5. ToolExecutor with filtered handler set
         executor = ToolExecutor(
-            action_handlers=self._action_handlers,
+            action_handlers=filtered_handlers,
             sub_agent_manager=child_sam,
             mcp_manager=self._mcp_manager,
             auto_approve=True,  # sub-agents skip HITL prompts

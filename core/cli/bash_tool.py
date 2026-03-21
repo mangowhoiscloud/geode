@@ -3,13 +3,20 @@
 Provides a safe shell execution interface for the agentic loop.
 Dangerous patterns are blocked outright; all other commands require
 explicit user approval before execution.
+
+Sandbox hardening (v0.22.0):
+- preexec_fn with resource.setrlimit for CPU/FSIZE/NPROC caps
+- Secret redaction on stdout/stderr before returning to LLM context
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import os
 import re
+import resource
 import subprocess  # nosec B404 — intentional: BashTool requires shell execution
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +28,24 @@ log = logging.getLogger(__name__)
 _MAX_STDOUT = 10_000
 _MAX_STDERR = 5_000
 _DEFAULT_TIMEOUT = 30
+
+# --- Resource limits for child processes (sandbox hardening) ---
+_BASH_CPU_LIMIT_S = 30  # CPU time hard cap (seconds)
+_BASH_FSIZE_LIMIT_B = 50 * 1024 * 1024  # Max output file size (50 MB)
+_BASH_NPROC_LIMIT = 64  # Max child processes
+
+
+def _set_resource_limits() -> None:
+    """preexec_fn for subprocess: apply hard resource limits.
+
+    Called in the child process after fork, before exec.
+    RLIMIT_NPROC may not be available on all platforms (macOS).
+    """
+    resource.setrlimit(resource.RLIMIT_CPU, (_BASH_CPU_LIMIT_S, _BASH_CPU_LIMIT_S))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (_BASH_FSIZE_LIMIT_B, _BASH_FSIZE_LIMIT_B))
+    with contextlib.suppress(ValueError, OSError):
+        # macOS: RLIMIT_NPROC may not be settable
+        resource.setrlimit(resource.RLIMIT_NPROC, (_BASH_NPROC_LIMIT, _BASH_NPROC_LIMIT))
 
 
 @dataclass
@@ -84,6 +109,7 @@ class BashTool:
                 text=True,
                 timeout=timeout,
                 cwd=self._working_dir,
+                preexec_fn=_set_resource_limits if os.name != "nt" else None,
             )
 
             return BashResult(
@@ -109,7 +135,13 @@ class BashTool:
             )
 
     def to_tool_result(self, result: BashResult) -> dict[str, Any]:
-        """Convert BashResult to a dict suitable for LLM tool_result."""
+        """Convert BashResult to a dict suitable for LLM tool_result.
+
+        Applies secret redaction to stdout/stderr before returning
+        to prevent API keys from leaking into LLM context.
+        """
+        from core.cli.redaction import redact_secrets
+
         if result.blocked:
             return {"error": result.error, "blocked": True}
         if result.denied:
@@ -119,9 +151,9 @@ class BashTool:
 
         out: dict[str, Any] = {"returncode": result.returncode}
         if result.stdout:
-            out["stdout"] = result.stdout
+            out["stdout"] = redact_secrets(result.stdout)
         if result.stderr:
-            out["stderr"] = result.stderr
+            out["stderr"] = redact_secrets(result.stderr)
         return out
 
 

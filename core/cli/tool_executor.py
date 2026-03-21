@@ -367,6 +367,13 @@ class ToolExecutor:
         assert self._mcp_manager is not None  # guaranteed by caller
         with _tool_spinner(f"Calling {server}/{tool_name}..."):
             result: dict[str, Any] = self._mcp_manager.call_tool(server, tool_name, tool_input)
+
+        # Sandbox hardening: redact secrets from MCP tool results
+        from core.cli.redaction import redact_secrets
+
+        for key in ("stdout", "stderr", "output", "content", "text", "result"):
+            if key in result and isinstance(result[key], str):
+                result[key] = redact_secrets(result[key])
         return result
 
     def _confirm_mcp(self, server: str, tool_name: str) -> bool:
