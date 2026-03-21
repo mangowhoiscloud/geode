@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-21 (세션 10 — session-resume + 테스트 격리)
+> 마지막 갱신: 2026-03-21 (세션 11 — sandbox hardening + harness patterns + REODE skill port)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -31,6 +31,9 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| reode-skill-port | REODE 역수입 스킬 5건 — explore-reason-act, anti-deception, code-review-quality, dependency-review, kent-beck-review | #341→#342 | @mangowhoiscloud | 2026-03-21 |
+| harness-patterns | REODE 하네스 패턴 7건 — HITL level 0/1/2, Session approval A=Always, Model/Cross-provider escalation, Backpressure, Convergence detection, Model-first inference | #339→#340 | @mangowhoiscloud | 2026-03-21 |
+| sandbox-hardening | 샌드박스 보안 경계 4건 — PolicyChain L1-2, SubAgent denied_tools, Bash setrlimit, Secret redaction | #338→#340 | @mangowhoiscloud | 2026-03-21 |
 | session-resume | Session resume — per-turn checkpoint + /resume 와이어링 + --continue/--resume CLI 플래그 | #334 | @mangowhoiscloud | 2026-03-21 |
 | test-isolation | 테스트 세션 격리 — conftest.py에서 checkpoint/transcript 기본 경로 tmp 리다이렉트 | #334 | @mangowhoiscloud | 2026-03-21 |
 | manage-auth-hint | manage_auth WRITE_FALLBACK_HINTS 누락 수정 | #334 | @mangowhoiscloud | 2026-03-21 |
@@ -143,12 +146,12 @@
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
 | Version | 0.21.0 | 2026-03-21 |
-| Modules | 178 | 2026-03-21 |
-| Tests | 2946 | 2026-03-21 |
+| Modules | 179 | 2026-03-21 |
+| Tests | 3058 | 2026-03-21 |
 | Tools | 46 | 2026-03-19 |
 | MCP Catalog | 42 | 2026-03-19 |
 | HookEvents | 36 | 2026-03-19 |
-| Skills | 18 | 2026-03-19 |
+| Skills | 25 | 2026-03-21 |
 
 ---
 
