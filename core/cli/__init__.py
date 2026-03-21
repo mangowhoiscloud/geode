@@ -28,6 +28,7 @@ from core.cli.agentic_loop import AgenticLoop, AgenticResult
 from core.cli.commands import (
     cmd_auth,
     cmd_batch,
+    cmd_context,
     cmd_generate,
     cmd_key,
     cmd_list,
@@ -100,6 +101,7 @@ app = typer.Typer(
 _search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
 _readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
 _scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", default=None)
+_context_assembler_ctx: ContextVar[Any] = ContextVar("context_assembler", default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -1308,6 +1310,8 @@ def _handle_command(
         from core.cli.commands import cmd_resume
 
         cmd_resume(args)
+    elif action == "context":
+        cmd_context(args, context_assembler=_context_assembler_ctx.get(None))
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -2632,8 +2636,24 @@ def _interactive_loop() -> None:
     from core.tools.memory_tools import set_org_memory, set_project_memory
 
     try:
-        set_project_memory(ProjectMemory())
-        set_org_memory(MonoLakeOrganizationMemory())
+        _proj_mem = ProjectMemory()
+        _org_mem = MonoLakeOrganizationMemory()
+        set_project_memory(_proj_mem)
+        set_org_memory(_org_mem)
+
+        # Wire ContextAssembler for /context command
+        from core.memory.context import ContextAssembler
+        from core.memory.user_profile import FileBasedUserProfile
+        from core.memory.vault import Vault
+
+        _ctx_asm = ContextAssembler(
+            organization_memory=_org_mem,
+            project_memory=_proj_mem,
+            user_profile=FileBasedUserProfile(),
+            vault=Vault(),
+            project_root=Path("."),
+        )
+        _context_assembler_ctx.set(_ctx_asm)
         _init_done("Memory")
     except Exception:
         _init_done("Memory", ok=False)

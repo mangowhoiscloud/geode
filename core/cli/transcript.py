@@ -267,11 +267,10 @@ class SessionTranscript:
 
         import contextlib
 
+        from core.infrastructure.atomic_io import atomic_write_json
+
         with contextlib.suppress(OSError):
-            index_path.write_text(
-                json.dumps(index, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            atomic_write_json(index_path, index, indent=2)
 
 
 # ---------------------------------------------------------------------------

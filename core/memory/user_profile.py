@@ -19,9 +19,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+import tomllib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from core.infrastructure.atomic_io import atomic_write_text
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +33,26 @@ MAX_LEARNED_PATTERNS = 100
 
 # YAML frontmatter regex (same as project.py)
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+_DEFAULT_CAREER_TOML = """\
+# Career Identity — GEODE reads this to personalize agent behavior.
+# Edit freely; the agent never writes to this file.
+
+[identity]
+title = ""           # e.g. "Senior AI Engineer"
+years_experience = 0
+skills = []          # e.g. ["Python", "ML", "LangGraph"]
+industries = []      # e.g. ["Gaming", "AI/ML"]
+
+[goals]
+short_term = ""      # 3-6 month goal
+long_term = ""       # 1-3 year goal
+
+[preferences]
+job_type = ""        # "full-time" | "contract" | "freelance"
+remote = ""          # "remote" | "hybrid" | "onsite"
+location = ""        # e.g. "Seoul, KR"
+"""
 
 
 def _parse_yaml_frontmatter(text: str) -> dict[str, str]:
@@ -140,7 +163,7 @@ class FileBasedUserProfile:
         content = _build_yaml_frontmatter(fm_data) + "\n" + body if fm_data else body
 
         try:
-            (self._global_dir / "profile.md").write_text(content, encoding="utf-8")
+            atomic_write_text(self._global_dir / "profile.md", content)
             log.info("Saved user profile to %s", self._global_dir / "profile.md")
             return True
         except OSError as e:
@@ -203,7 +226,7 @@ class FileBasedUserProfile:
         # Write
         header = "# Learned Patterns\n\n"
         try:
-            learned_path.write_text(header + "\n".join(existing) + "\n", encoding="utf-8")
+            atomic_write_text(learned_path, header + "\n".join(existing) + "\n")
             log.info("Added learned pattern: %s", pattern[:80])
             return True
         except OSError as e:
@@ -240,11 +263,27 @@ class FileBasedUserProfile:
 
         return unique
 
+    def load_career(self) -> dict[str, Any]:
+        """Load career.toml from global profile directory.
+
+        Returns parsed TOML data as dict, or empty dict if not found / invalid.
+        The file is user-edited; the agent only reads.
+        """
+        career_path = self._global_dir / "career.toml"
+        if not career_path.exists():
+            return {}
+        try:
+            with open(career_path, "rb") as f:
+                return dict(tomllib.load(f))
+        except (tomllib.TOMLDecodeError, OSError) as e:
+            log.warning("Failed to load career.toml: %s", e)
+            return {}
+
     def get_context_summary(self) -> str:
         """Build a concise summary for LLM context injection.
 
         Returns a string like:
-            "User: AI Engineer | Expertise: ML, LLM | Lang: ko"
+            "User: AI Engineer | Expertise: ML, LLM | Lang: ko | Title: Sr Engineer"
         """
         profile = self.load_profile()
         parts: list[str] = []
@@ -265,6 +304,16 @@ class FileBasedUserProfile:
         output_format = prefs.get("output_format", "")
         if output_format:
             parts.append(f"Format: {output_format}")
+
+        # Career identity enrichment
+        career = self.load_career()
+        if career:
+            title = career.get("identity", {}).get("title", "")
+            if title:
+                parts.append(f"Title: {title}")
+            skills = career.get("identity", {}).get("skills", [])
+            if skills:
+                parts.append(f"Skills: {', '.join(skills[:5])}")
 
         return " | ".join(parts)
 
@@ -290,7 +339,7 @@ team: ""
 
 Write your bio, background, or any context you want GEODE to remember here.
 """
-        (self._global_dir / "profile.md").write_text(default_profile, encoding="utf-8")
+        atomic_write_text(self._global_dir / "profile.md", default_profile)
 
         default_prefs: dict[str, Any] = {
             "language": "",
@@ -300,7 +349,15 @@ Write your bio, background, or any context you want GEODE to remember here.
         self._save_preferences(self._global_dir, default_prefs)
 
         # Empty learned.md
-        (self._global_dir / "learned.md").write_text("# Learned Patterns\n\n", encoding="utf-8")
+        atomic_write_text(self._global_dir / "learned.md", "# Learned Patterns\n\n")
+
+        # Career identity template (user-edited, agent reads only)
+        career_path = self._global_dir / "career.toml"
+        if not career_path.exists():
+            atomic_write_text(
+                career_path,
+                _DEFAULT_CAREER_TOML,
+            )
 
         log.info("Created user profile structure at %s", self._global_dir)
         return True
@@ -359,9 +416,9 @@ Write your bio, background, or any context you want GEODE to remember here.
         directory.mkdir(parents=True, exist_ok=True)
         prefs_path = directory / "preferences.json"
         try:
-            prefs_path.write_text(
+            atomic_write_text(
+                prefs_path,
                 json.dumps(prefs, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
             )
             return True
         except (TypeError, ValueError, OSError) as e:
