@@ -73,7 +73,7 @@ graph TB
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 2873+ pass |
+| Test | `uv run pytest tests/ -q` | 3058+ pass |
 
 ### 칸반 보드 (`docs/progress.md`)
 
@@ -225,7 +225,7 @@ uv run geode analyze "Berserk"
 # 1. 환경 변수 설정
 cp .env.example .env
 
-# 2. .env 편집 — API 키 입력
+# 2. .env 편집 — 최소 Anthropic API 키 입력
 ANTHROPIC_API_KEY=sk-ant-...
 
 # 3. REPL 시작
@@ -233,6 +233,94 @@ uv run geode
 ```
 
 API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다.
+
+#### Global Installation (어디서든 `geode` 실행)
+
+```bash
+cd /path/to/geode
+uv tool install . --force
+```
+
+설치 후 `geode`를 아무 디렉토리에서 실행할 수 있습니다.
+프로젝트별 `.env`가 없으면 `~/.geode/.env`에서 글로벌 키를 읽습니다.
+
+#### Global API Keys (`~/.geode/.env`)
+
+```bash
+mkdir -p ~/.geode
+cat > ~/.geode/.env << 'EOF'
+# LLM Providers
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-proj-...
+ZAI_API_KEY=...                    # ZhipuAI GLM (선택)
+
+# Search & Data
+BRAVE_API_KEY=...
+GOOGLE_API_KEY=...
+
+# Messaging (Slack Gateway)
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_TEAM_ID=T...
+
+# Observability (선택)
+LANGSMITH_API_KEY=lsv2_pt_...
+EOF
+chmod 600 ~/.geode/.env
+```
+
+**우선순위**: 환경변수 > 프로젝트 `.env` > `~/.geode/.env` > 코드 기본값
+
+#### Slack Gateway (양방향 소통)
+
+GEODE를 Slack 채널과 연결하면 메시지로 대화할 수 있습니다.
+
+**1. Slack Bot 생성**
+- [api.slack.com/apps](https://api.slack.com/apps) → Create New App
+- Bot Token Scopes: `chat:write`, `channels:history`, `channels:read`
+- Bot Token (`xoxb-...`)과 Team ID를 `~/.geode/.env`에 설정
+
+**2. Gateway 활성화**
+
+```bash
+# ~/.geode/.env에 추가
+GEODE_GATEWAY_ENABLED=true
+```
+
+**3. 채널 바인딩** (`.geode/config.toml`)
+
+```toml
+[[gateway.bindings.rules]]
+channel = "slack"
+channel_id = "C0ALBPUFXL5"    # Slack 채널 ID
+auto_respond = true
+require_mention = false
+max_rounds = 5
+```
+
+**4. 실행**
+
+```bash
+# 포그라운드 (REPL + Gateway 동시)
+geode
+
+# 헤드리스 모드 (Gateway만 백그라운드)
+nohup geode serve > /tmp/geode-gateway.log 2>&1 &
+```
+
+`geode serve`는 REPL 없이 Gateway만 실행합니다. MCP 서버 14종이 순차 연결되므로 시작까지 2-3분 소요됩니다.
+
+#### HITL Level (자율성 조절)
+
+```bash
+# 0 = 완전 자율 (모든 승인 생략)
+GEODE_HITL_LEVEL=0
+
+# 1 = WRITE만 묻기 (bash/MCP는 자동 승인)
+GEODE_HITL_LEVEL=1
+
+# 2 = 전부 묻기 (기본값)
+GEODE_HITL_LEVEL=2
+```
 
 ---
 
@@ -913,7 +1001,7 @@ uv run geode batch --top 5                        # 배치 분석
 ## Testing
 
 ```bash
-uv run pytest                                        # 전체 (2873+ passed)
+uv run pytest                                        # 전체 (3058+ passed)
 uv run pytest tests/test_e2e_live_llm.py -v -m live  # Live E2E
 uv run ruff check core/ tests/                       # Lint
 uv run mypy core/                                    # Type check (175 files)
