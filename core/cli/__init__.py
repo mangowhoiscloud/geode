@@ -3299,6 +3299,19 @@ def serve(
     import signal
     import time as _time
 
+    # Load .env files into os.environ so Pollers can see credentials
+    # (Pydantic Settings loads them internally, but os.environ is not populated)
+    from pathlib import Path as _Path
+
+    from dotenv import load_dotenv
+
+    _global_env = _Path.home() / ".geode" / ".env"
+    if _global_env.exists():
+        load_dotenv(str(_global_env), override=False)
+    _local_env = _Path(".env")
+    if _local_env.exists():
+        load_dotenv(str(_local_env), override=True)
+
     from core.config import settings
 
     if not settings.gateway_enabled:
