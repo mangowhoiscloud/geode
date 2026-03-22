@@ -110,13 +110,21 @@ class SlackPoller(BasePoller):
                 response = self._manager.route_message(inbound)
 
                 # Send response back if auto_respond is enabled
-                if response and self._notification:
-                    self._notification.send_message(
-                        "slack",
-                        channel_id,
-                        response,
-                        thread_ts=inbound.thread_id or ts,
-                    )
+                if response:
+                    self._send_response(channel_id, response, thread_ts=inbound.thread_id or ts)
 
         except Exception as exc:
             log.debug("Slack poll error for %s: %s", channel_id, exc)
+
+    def _send_response(self, channel_id: str, text: str, *, thread_ts: str = "") -> None:
+        """Send response back to Slack via the same MCP connection used for polling."""
+        if self._mcp is None:
+            return
+        try:
+            args: dict[str, Any] = {"channel_id": channel_id, "text": text}
+            if thread_ts:
+                args["thread_ts"] = thread_ts
+            self._mcp.call_tool("slack", "slack_post_message", args)
+            log.info("Slack response sent to %s", channel_id)
+        except Exception as exc:
+            log.warning("Failed to send Slack response: %s", exc)
