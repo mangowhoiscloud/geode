@@ -10,6 +10,7 @@ prompt without depending on the NL Router module.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from core.cli.ip_names import get_ip_name_map
 from core.llm.prompts import ROUTER_SYSTEM
@@ -67,12 +68,30 @@ def build_system_prompt(model: str = "") -> str:
         if model_card:
             base += "\n\n" + model_card
 
+    # Inject current date so LLM uses the correct year for searches
+    base += "\n\n" + _build_date_context()
+
     # P1-C: Inject memory context (recent insights + active rules)
     memory_ctx = _build_memory_context()
     if memory_ctx:
         base += "\n\n" + memory_ctx
 
     return base
+
+
+def _build_date_context() -> str:
+    """Build current date string for system prompt injection.
+
+    Prevents the LLM from defaulting to its knowledge-cutoff year when
+    searching for recent information.
+    """
+    now = datetime.now()
+    return (
+        f"## Current Date\n"
+        f"Today is {now.strftime('%Y-%m-%d (%A)')}. "
+        f"The current year is {now.year}. "
+        f"When searching for recent or latest information, use {now.year} as the base year."
+    )
 
 
 def _build_model_card(model: str) -> str:

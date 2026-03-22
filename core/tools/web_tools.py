@@ -8,6 +8,7 @@ Provides:
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -83,7 +84,11 @@ class GeneralWebSearchTool:
 
     @property
     def description(self) -> str:
-        return "Search the web for current information on any topic."
+        today = date.today()
+        return (
+            f"Search the web for current information on any topic. "
+            f"Today is {today.isoformat()} (year {today.year})."
+        )
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]
@@ -96,6 +101,7 @@ class GeneralWebSearchTool:
             if not settings.anthropic_api_key:
                 return {"error": "No API key configured for web search"}
 
+            today = date.today()
             client = get_anthropic_client()
             response = client.messages.create(
                 model=ANTHROPIC_BUDGET,
@@ -105,6 +111,7 @@ class GeneralWebSearchTool:
                     {
                         "role": "user",
                         "content": (
+                            f"Today is {today.isoformat()}. "
                             f"Search the web for: {query}. "
                             f"Return up to {max_results} relevant results "
                             "with titles, URLs, and brief summaries."
