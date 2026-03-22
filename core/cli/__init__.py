@@ -3312,7 +3312,13 @@ def serve(
     console.print("  [dim]Press Ctrl+C to stop[/dim]")
     console.print()
 
-    # Start MCP servers (required for Slack/Discord/Telegram pollers)
+    # Build runtime first (wires env, notifications, gateway)
+    runtime = _build_runtime_for_serve()
+    if runtime is None:
+        console.print("  [warning]Runtime initialization failed.[/warning]")
+        raise typer.Exit(1)
+
+    # Start MCP servers AFTER runtime (env vars now loaded)
     from core.infrastructure.adapters.mcp.manager import MCPServerManager
 
     try:
@@ -3324,12 +3330,6 @@ def serve(
             console.print("  [dim]MCP: no servers connected[/dim]")
     except Exception as exc:
         console.print(f"  [dim]MCP startup skipped: {exc}[/dim]")
-
-    # Build runtime (wires notifications, gateway)
-    runtime = _build_runtime_for_serve()
-    if runtime is None:
-        console.print("  [warning]Runtime initialization failed.[/warning]")
-        raise typer.Exit(1)
 
     # Wire AgenticLoop as gateway processor
     from core.cli.agentic_loop import AgenticLoop
