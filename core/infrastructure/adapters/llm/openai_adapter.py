@@ -112,7 +112,7 @@ class OpenAIAdapter:
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                timeout=90.0,
+                timeout=120.0,
             )
             # Track usage
             if response.usage:
@@ -175,7 +175,7 @@ class OpenAIAdapter:
                     {"role": "user", "content": user},
                 ],
                 response_format=output_model,
-                timeout=90.0,
+                timeout=120.0,
             )
             # Track usage
             if response.usage:
@@ -214,7 +214,7 @@ class OpenAIAdapter:
                 ],
                 stream=True,
                 stream_options={"include_usage": True},
-                timeout=90.0,
+                timeout=120.0,
             )
             for chunk in response:
                 if chunk.choices and chunk.choices[0].delta.content:
@@ -263,7 +263,7 @@ class OpenAIAdapter:
                     messages=messages,
                     tools=tools,
                     tool_choice=_tc,
-                    timeout=90.0,
+                    timeout=120.0,
                 )
 
             response = self._retry_with_backoff(_do_call, model=target)

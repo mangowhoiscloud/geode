@@ -237,7 +237,7 @@ async def call_with_failover(
             except _RETRYABLE_ERRORS as exc:
                 last_error = exc
                 wait = min(_base_delay * (2**attempt), _max_delay)
-                log.warning(
+                log.debug(
                     "Failover: model=%s attempt=%d/%d error=%s, retrying in %.1fs",
                     current_model,
                     attempt + 1,
@@ -250,7 +250,7 @@ async def call_with_failover(
             except Exception as exc:
                 # Unexpected error: log and move on to next model
                 last_error = exc
-                log.warning(
+                log.debug(
                     "Failover: unexpected error on model=%s: %s",
                     current_model,
                     exc,
@@ -260,8 +260,8 @@ async def call_with_failover(
         # All retries exhausted for this model
         if model_idx < len(allowed_models) - 1:
             next_model = allowed_models[model_idx + 1]
-            log.warning(
-                "Failover: all retries exhausted for model=%s, falling back to %s",
+            log.info(
+                "Failover: model=%s exhausted, falling back to %s",
                 current_model,
                 next_model,
             )
