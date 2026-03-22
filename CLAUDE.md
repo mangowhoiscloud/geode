@@ -4,12 +4,12 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.21.0
+- **Version**: 0.22.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 178
-- **Tests**: 2941+
+- **Modules**: 184
+- **Tests**: 3055+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -250,7 +250,7 @@ core/
 ├── infrastructure/
 │   ├── ports/           # Protocol interfaces (LLM, Memory, Auth, Hook, Tool, Domain, Notification, Calendar, Gateway)
 │   └── adapters/
-│       ├── llm/         # ClaudeAdapter, OpenAIAdapter
+│       ├── llm/         # ClaudeAdapter, OpenAIAdapter + Agentic adapters (P1 Gateway)
 │       └── mcp/         # MCP adapters (9) + Composite adapters (3) + catalog (42 entries)
 ├── tools/               # Tool Protocol + Registry + Policy + definitions.json (46 tools)
 ├── auth/                # API key rotation, cooldown, profiles
