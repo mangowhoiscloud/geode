@@ -12,7 +12,6 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| mcp-parallel-startup | MCP 서버 병렬 연결 — 순차 11×10s→병렬 ~15s (ThreadPoolExecutor) | P0 | — | _connect_all() 병렬화 |
 | mcp-tool-refresh | MCP startup 후 AgenticLoop 도구 목록 갱신 — Playwright 등 MCP 도구 미인식 문제 | P1 | — | MCP 연결 후 refresh_tools() 호출 |
 | mcp-singleton-notify | MCPServerManager 싱글턴 → NotificationAdapter 공유 완성 — Poller 우회 제거 | P1 | — | runtime.py 구조 리팩토링 |
 | youtube-api-key | YouTube MCP 활성화 — YOUTUBE_API_KEY 설정 + fixture↔API 이중 구현 정리 | P2 | — | GOOGLE_API_KEY와 별개 |
@@ -36,6 +35,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| mcp-parallel-startup | MCP 서버 병렬 연결 — 순차 110s→~15s (ThreadPoolExecutor) | #361→#362 | @mangowhoiscloud | 2026-03-22 |
 | glm-failover-noise | Failover 로그 노이즈 제거 (warning→debug) + LLM timeout 90s→120s | #357→#358 | @mangowhoiscloud | 2026-03-22 |
 | gateway-bidirectional | Gateway 양방향 소통 — 로깅 추가, 중복 방지(ts seeding), 메시지별 독립 context, 에러 가시성 | #354→#355 | @mangowhoiscloud | 2026-03-22 |
 | mcp-singleton | MCPServerManager 싱글턴화 — 좀비 프로세스 근절 + 4곳 get_mcp_manager() 전환 | main direct | @mangowhoiscloud | 2026-03-22 |
