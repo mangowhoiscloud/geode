@@ -26,6 +26,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.23.0] — 2026-03-22
+
+P1 Gateway 어댑터 패턴 — 멀티프로바이더 LLM 안정화.
+
+### Architecture
+- **P1 Gateway Adapter Pattern** — AgenticLoop 인라인 프로바이더 코드를 `AgenticLLMPort` Protocol + 3개 어댑터(Claude/OpenAI/GLM)로 분리. `agentic_loop.py` 1720→1378줄 (-342줄)
+- **Adapter Registry** — `resolve_agentic_adapter()` 동적 임포트. 프로바이더 추가 시 단일 파일로 해결
+- **Cross-provider Fallback** — GLM→OpenAI→Anthropic 다단 페일오버 (기존 GLM→OpenAI만)
+
+### Fixed
+- GLM Round 2+ `messages[].content[0].type类型错误` — Anthropic→OpenAI 메시지 포맷 변환 누락
+- KeyboardInterrupt가 모델 에스컬레이션을 트리거하던 문제 — `UserCancelledError` 분리
+- OpenAI/GLM httpx 커넥션 풀 미설정 — Anthropic과 동일 설정 (20conn, 30s keepalive) 적용
+- GLM CircuitBreaker 부재 — OpenAI 어댑터에서 상속
+
+### Infrastructure
+- Tests: 3058 → 3055 (테스트 리팩토링, 커버리지 동등)
+- Modules: 179 → 184 (+5, 어댑터 + 포트 + 레지스트리)
+
+---
+
 ## [0.22.0] — 2026-03-21
 
 Sandbox Hardening + REODE 자율 운행 하네스 패턴 역수입 + 품질 스킬 포팅.
