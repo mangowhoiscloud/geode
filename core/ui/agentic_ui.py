@@ -36,7 +36,7 @@ class SessionMeter:
     """Tracks session-level timing for status line display."""
 
     start_time: float = field(default_factory=time.monotonic)
-    model: str = "claude-opus-4-6"
+    model: str = ""
 
     @property
     def elapsed_s(self) -> float:
@@ -54,11 +54,21 @@ class SessionMeter:
 _session_meter: SessionMeter | None = None
 
 
-def init_session_meter(model: str = "claude-opus-4-6") -> SessionMeter:
+def init_session_meter(model: str = "") -> SessionMeter:
     """Initialize the session meter singleton."""
     global _session_meter
+    if not model:
+        from core.config import ANTHROPIC_PRIMARY
+
+        model = ANTHROPIC_PRIMARY
     _session_meter = SessionMeter(model=model)
     return _session_meter
+
+
+def update_session_model(model: str) -> None:
+    """Update the session meter's model after /model switch."""
+    if _session_meter is not None:
+        _session_meter.model = model
 
 
 def get_session_meter() -> SessionMeter | None:
