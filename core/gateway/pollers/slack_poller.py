@@ -134,10 +134,10 @@ class SlackPoller(BasePoller):
                     thread_id=msg.get("thread_ts", ""),
                 )
 
-                self._set_reaction(channel_id, ts, "hourglass_flowing_sand", add=True)
+                self._add_reaction(channel_id, ts, "hourglass_flowing_sand")
                 response = self._manager.route_message(inbound)
                 log.info("Processor returned: %s", (response or "")[:80])
-                self._set_reaction(channel_id, ts, "hourglass_flowing_sand", add=False)
+                self._add_reaction(channel_id, ts, "white_check_mark")
 
                 if response:
                     self._send_response(channel_id, response, thread_ts=inbound.thread_id or ts)
@@ -147,19 +147,18 @@ class SlackPoller(BasePoller):
         except Exception:
             log.warning("Slack poll error for %s", channel_id, exc_info=True)
 
-    def _set_reaction(
-        self, channel_id: str, message_ts: str, name: str, *, add: bool = True
-    ) -> None:
-        """Add or remove a reaction on a message (non-critical, best-effort)."""
+    def _add_reaction(self, channel_id: str, message_ts: str, emoji: str) -> None:
+        """Add a reaction emoji to a message (best-effort, non-blocking)."""
         if self._mcp is None:
             return
-        action = "slack_add_reaction" if add else "slack_remove_reaction"
         try:
             self._mcp.call_tool(
-                "slack", action, {"channel_id": channel_id, "timestamp": message_ts, "name": name}
+                "slack",
+                "slack_add_reaction",
+                {"channel_id": channel_id, "timestamp": message_ts, "reaction": emoji},
             )
         except Exception:
-            log.debug("Reaction %s failed for %s", action, channel_id)
+            log.debug("add_reaction failed for %s", channel_id)
 
     def _send_response(self, channel_id: str, text: str, *, thread_ts: str = "") -> None:
         """Send response back to Slack via the same MCP connection used for polling."""
