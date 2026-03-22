@@ -183,10 +183,12 @@ class AgenticLoop:
         hooks: HookSystem | None = None,
         enable_goal_decomposition: bool = True,
         parent_session_key: str = "",
+        system_suffix: str = "",
     ) -> None:
         self.context = context
         self.executor = tool_executor
         self._parent_session_key = parent_session_key
+        self._system_suffix = system_suffix
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self.model = model or ANTHROPIC_PRIMARY
@@ -709,7 +711,10 @@ class AgenticLoop:
         if self._skill_registry is not None:
             skill_ctx = self._skill_registry.get_context_block()
         base = base.replace("{skill_context}", skill_ctx or "No skills loaded.")
-        return base + "\n" + AGENTIC_SUFFIX
+        prompt = base + "\n" + AGENTIC_SUFFIX
+        if self._system_suffix:
+            prompt += "\n\n" + self._system_suffix
+        return prompt
 
     def _try_decompose(self, user_input: str) -> str | None:
         """Attempt to decompose a compound user request into sub-goals.
