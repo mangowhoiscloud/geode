@@ -35,7 +35,14 @@ P1 Gateway 어댑터 패턴 — 멀티프로바이더 LLM 안정화.
 - **Adapter Registry** — `resolve_agentic_adapter()` 동적 임포트. 프로바이더 추가 시 단일 파일로 해결
 - **Cross-provider Fallback** — GLM→OpenAI→Anthropic 다단 페일오버 (기존 GLM→OpenAI만)
 
+### Added
+- **System Prompt 날짜 주입** — `_build_date_context()`로 현재 날짜/연도를 시스템 프롬프트에 동적 주입. LLM knowledge cutoff(2025)로 인한 검색 연도 오류 방지
+- **Gateway System Suffix** — `AgenticLoop`에 `system_suffix` 파라미터 추가. Gateway 모드에서 채널별 시스템 프롬프트 확장 가능
+
 ### Fixed
+- **Slack Gateway 메시지 에코 제거** — Slack 응답 시 사용자 메시지를 4회 반복 출력하던 문제. `_GATEWAY_SUFFIX`로 에코/반복 금지 지시 주입
+- **웹 검색 연도 오류** — `GeneralWebSearchTool` description + 검색 쿼리에 현재 날짜 동적 반영
+- **Slack 처리 중 인디케이터** — `_set_reaction()`으로 모래시계 리액션 표시/제거
 - GLM Round 2+ `messages[].content[0].type类型错误` — Anthropic→OpenAI 메시지 포맷 변환 누락
 - KeyboardInterrupt가 모델 에스컬레이션을 트리거하던 문제 — `UserCancelledError` 분리
 - OpenAI/GLM httpx 커넥션 풀 미설정 — Anthropic과 동일 설정 (20conn, 30s keepalive) 적용
