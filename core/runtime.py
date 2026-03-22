@@ -800,11 +800,11 @@ class GeodeRuntime:
             BraveSignalAdapter,
         )
         from core.infrastructure.adapters.mcp.composite_signal import CompositeSignalAdapter
-        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.infrastructure.adapters.mcp.manager import get_mcp_manager
         from core.infrastructure.adapters.mcp.steam_adapter import SteamMCPSignalAdapter
         from core.nodes.signals import set_signal_adapter
 
-        manager = MCPServerManager()
+        manager = get_mcp_manager()
         server_count = manager.load_config()
 
         if server_count == 0:
@@ -845,13 +845,13 @@ class GeodeRuntime:
             CompositeNotificationAdapter,
         )
         from core.infrastructure.adapters.mcp.discord_adapter import DiscordNotificationAdapter
-        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.infrastructure.adapters.mcp.manager import get_mcp_manager
         from core.infrastructure.adapters.mcp.slack_adapter import SlackNotificationAdapter
         from core.infrastructure.adapters.mcp.telegram_adapter import TelegramNotificationAdapter
         from core.infrastructure.ports.notification_port import set_notification
 
         try:
-            manager = MCPServerManager()
+            manager = get_mcp_manager()
             manager.load_config()
         except Exception:
             log.debug("MCPServerManager unavailable — notification adapter skipped")
@@ -892,11 +892,11 @@ class GeodeRuntime:
         from core.infrastructure.adapters.mcp.google_calendar_adapter import (
             GoogleCalendarAdapter,
         )
-        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.infrastructure.adapters.mcp.manager import get_mcp_manager
         from core.infrastructure.ports.calendar_port import set_calendar
 
         try:
-            manager = MCPServerManager()
+            manager = get_mcp_manager()
             manager.load_config()
         except Exception:
             log.debug("MCPServerManager unavailable — calendar adapter skipped")
@@ -969,11 +969,10 @@ class GeodeRuntime:
             log.debug("No gateway bindings in config.toml")
 
         try:
-            from core.infrastructure.adapters.mcp.manager import MCPServerManager
+            from core.infrastructure.adapters.mcp.manager import get_mcp_manager
 
-            mcp = MCPServerManager()
-            n_connected = mcp.startup()
-            log.info("Gateway MCP: %d/%d servers connected", n_connected, len(mcp._servers))
+            mcp = get_mcp_manager(auto_startup=True)
+            log.info("Gateway MCP: %d/%d servers connected", len(mcp._clients), len(mcp._servers))
         except Exception:
             log.debug("MCPServerManager unavailable — gateway skipped")
             set_gateway(None)

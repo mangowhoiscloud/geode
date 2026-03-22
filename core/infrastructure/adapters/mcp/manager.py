@@ -36,6 +36,38 @@ _GLOBAL_DOTENV_PATH = Path.home() / ".geode" / ".env"
 
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
 
+# Singleton instance — prevents duplicate MCP server processes
+_singleton_instance: MCPServerManager | None = None
+_singleton_lock = __import__("threading").Lock()
+
+
+def get_mcp_manager(
+    config_path: Path | None = None,
+    *,
+    auto_startup: bool = False,
+) -> MCPServerManager:
+    """Return the singleton MCPServerManager instance.
+
+    First call creates the instance. If ``auto_startup`` is True and
+    the instance hasn't been started yet, calls ``startup()`` which
+    loads config AND connects all servers.
+
+    Subsequent calls return the same instance regardless of arguments,
+    preventing duplicate MCP server processes.
+    """
+    global _singleton_instance
+    if _singleton_instance is not None:
+        if auto_startup and not _singleton_instance._clients:
+            _singleton_instance.startup()
+        return _singleton_instance
+    with _singleton_lock:
+        if _singleton_instance is None:
+            mgr = MCPServerManager(config_path=config_path)
+            if auto_startup:
+                mgr.startup()
+            _singleton_instance = mgr
+        return _singleton_instance
+
 
 def _normalise_mcp_tool(raw: dict[str, Any]) -> dict[str, Any]:
     """Convert an MCP tool dict to Anthropic API format.
