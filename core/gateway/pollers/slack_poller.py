@@ -66,20 +66,33 @@ class SlackPoller(BasePoller):
     def _poll_channel(self, channel_id: str) -> None:
         """Poll a single Slack channel for new messages."""
         try:
-            args: dict[str, Any] = {"channel": channel_id, "limit": 5}
+            args: dict[str, Any] = {"channel_id": channel_id, "limit": 5}
             oldest = self._last_ts.get(channel_id)
             if oldest:
                 args["oldest"] = oldest
 
             result = self._mcp.call_tool("slack", "slack_get_channel_history", args)  # type: ignore[union-attr]
-            if "error" in result:
+
+            # MCP returns {"content": [{"text": "{\"ok\":true,\"messages\":[...]}"}]}
+            # Parse the nested JSON from MCP content wrapper
+            import json as _json
+
+            parsed = result
+            if "content" in result and isinstance(result["content"], list):
+                try:
+                    text = result["content"][0].get("text", "")
+                    parsed = _json.loads(text) if text else result
+                except (IndexError, _json.JSONDecodeError, KeyError):
+                    parsed = result
+
+            if "error" in parsed or not parsed.get("ok", True):
                 return
 
-            messages = result.get("messages", [])
+            messages = parsed.get("messages", [])
             for msg in messages:
                 ts = msg.get("ts", "")
-                # Skip our own messages (bot messages)
-                if msg.get("subtype") == "bot_message":
+                # Skip bot messages (own messages + other bots)
+                if msg.get("subtype") == "bot_message" or "bot_id" in msg:
                     continue
                 if ts and (not oldest or ts > oldest):
                     self._last_ts[channel_id] = ts
