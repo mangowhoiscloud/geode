@@ -21,11 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.cli.agentic_response import (
-    AgenticResponse,
-    normalize_anthropic,
-    normalize_openai,
-)
+from core.cli.agentic_response import AgenticResponse
 from core.cli.conversation import ConversationContext
 from core.cli.error_recovery import ErrorRecoveryStrategy
 from core.cli.sub_agent import SubAgentResult, drain_announced_results
@@ -39,20 +35,16 @@ from core.cli.tool_executor import (
     ToolExecutor,
 )
 from core.config import (
-    ANTHROPIC_FALLBACK_CHAIN,
     ANTHROPIC_PRIMARY,
-    GLM_FALLBACK_CHAIN,
-    OPENAI_FALLBACK_CHAIN,
-    OPENAI_PRIMARY,
     _resolve_provider,
     settings,
 )
-from core.llm.client import (
-    LLMBadRequestError,
-    call_with_failover,
-    get_async_anthropic_client,
-    maybe_traceable,
+from core.infrastructure.adapters.llm.agentic_registry import (
+    CROSS_PROVIDER_FALLBACK,
+    resolve_agentic_adapter,
 )
+from core.infrastructure.ports.agentic_llm_port import UserCancelledError
+from core.llm.client import maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.ui.agentic_ui import OperationLogger
@@ -66,11 +58,6 @@ log = logging.getLogger(__name__)
 # Load base tool definitions from centralized JSON
 _TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
 _BASE_TOOLS: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
-
-# Anthropic API tool schema allowed keys — fields outside this set cause
-# 400 "Extra inputs are not permitted" errors. Defined at module level
-# to avoid re-creating the frozenset on every LLM call.
-_API_ALLOWED_KEYS = frozenset({"name", "description", "input_schema", "cache_control", "type"})
 
 # Backward-compatible alias
 AGENTIC_TOOLS: list[dict[str, Any]] = _BASE_TOOLS
@@ -214,7 +201,7 @@ class AgenticLoop:
         self._tool_log: list[dict[str, Any]] = []
         self._consecutive_failures: dict[str, int] = {}
         self._last_llm_error: str | None = None  # last error type for user message
-        self._client: Any | None = None
+        self._adapter = resolve_agentic_adapter(self._provider)
         self._op_logger = OperationLogger()
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
@@ -315,15 +302,14 @@ class AgenticLoop:
     def update_model(self, model: str, provider: str | None = None) -> None:
         """Update model and provider without reconstructing the loop.
 
-        Fixes the model caching bug: ``self.model`` was only set at init,
-        so ``/model`` changes were not reflected in subsequent LLM calls.
-        Resets the cached client so a new one is created for the new provider.
+        Resolves a fresh adapter when the provider changes. Within the
+        same provider, the adapter is reused (it owns its own client).
         """
-        old_provider = self._provider
+        new_provider = provider or _resolve_provider(model)
+        if new_provider != self._provider:
+            self._provider = new_provider
+            self._adapter = resolve_agentic_adapter(new_provider)
         self.model = model
-        self._provider = provider or _resolve_provider(model)
-        if self._provider != old_provider:
-            self._client = None  # force new client for new provider
         log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
 
     def run(self, user_input: str) -> AgenticResult:
@@ -373,6 +359,14 @@ class AgenticLoop:
             _spinner.start()
             try:
                 response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
+            except UserCancelledError:
+                _spinner.stop()
+                log.info("LLM call interrupted by user")
+                return AgenticResult(
+                    text="Interrupted.",
+                    rounds=round_idx + 1,
+                    termination_reason="user_cancelled",
+                )
             finally:
                 _spinner.stop()
 
@@ -804,247 +798,34 @@ class AgenticLoop:
     async def _call_llm(
         self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
     ) -> AgenticResponse | None:
-        """Multi-provider LLM call with tools + automatic model failover.
+        """Multi-provider LLM call via adapter (P1 Gateway pattern).
 
-        Dispatches to Anthropic or OpenAI based on ``self._provider``.
-        Returns a normalized ``AgenticResponse`` with provider-agnostic
-        content blocks (.type, .text, .name, .input, .id).
+        Delegates to ``self._adapter.agentic_call()`` which handles
+        provider-specific message/tool conversion, retry, and failover.
+        Returns a normalized ``AgenticResponse`` or None on failure.
+        Raises ``UserCancelledError`` on Ctrl+C (caught by ``arun()``).
         """
         # Context overflow detection (Karpathy P6 Context Budget)
         self._check_context_overflow(system, messages)
-
-        if self._provider == "openai":
-            return await self._call_llm_openai(system, messages, round_idx=round_idx)
-        if self._provider == "glm":
-            return await self._call_llm_glm(system, messages, round_idx=round_idx)
-        return await self._call_llm_anthropic(system, messages, round_idx=round_idx)
-
-    async def _call_llm_anthropic(
-        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
-    ) -> AgenticResponse | None:
-        """Anthropic-specific LLM call with context management beta."""
-        api_key = settings.anthropic_api_key
-        if not api_key:
-            log.warning("No Anthropic API key for agentic loop")
-            return None
-
-        if self._client is None:
-            self._client = get_async_anthropic_client(api_key)
 
         remaining = self.max_rounds - round_idx
         force_text = remaining <= self.WRAP_UP_HEADROOM
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
-        api_tools = [{k: v for k, v in t.items() if k in _API_ALLOWED_KEYS} for t in self._tools]
-        failover_models = [self.model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != self.model]
-
-        async def _do_call(model: str) -> Any:
-            return await self._client.messages.create(  # type: ignore[union-attr]
-                model=model,
-                system=system,
-                messages=messages,
-                tools=api_tools,
-                tool_choice=tool_choice,
-                max_tokens=self.max_tokens,
-                temperature=0.0,
-                extra_headers={
-                    "anthropic-beta": "context-management-2025-06-27",
-                },
-                extra_body={
-                    "context_management": {
-                        "edits": [
-                            {
-                                "type": "clear_tool_uses_20250919",
-                                "keep": {"type": "tool_uses", "value": 5},
-                            }
-                        ]
-                    }
-                },
-            )
-
-        try:
-            response, used_model = await call_with_failover(failover_models, _do_call)
-        except KeyboardInterrupt:
-            log.info("LLM call interrupted by user")
-            return None
-        except LLMBadRequestError as exc:
-            msg = str(exc)
-            log.warning("Anthropic BadRequest in agentic loop: %s", msg)
-            if "tool_use_id" in msg or "tool_result" in msg:
-                self._repair_messages(messages)
-                log.info("Repaired orphaned tool_result in conversation history")
-                try:
-                    response = await _do_call(self.model)
-                    return normalize_anthropic(response)
-                except Exception:
-                    log.warning("Retry after repair failed", exc_info=True)
-                    return None
-            if "input_schema" in msg:
-                log.error(
-                    "Tool schema error — likely an MCP tool missing input_schema. tools count=%d",
-                    len(self._tools),
-                )
-            return None
-        except Exception:
-            log.warning("Agentic LLM call failed", exc_info=True)
-            return None
+        response = await self._adapter.agentic_call(
+            model=self.model,
+            system=system,
+            messages=messages,
+            tools=self._tools,
+            tool_choice=tool_choice,
+            max_tokens=self.max_tokens,
+            temperature=0.0,
+        )
 
         if response is None:
-            self._last_llm_error = "All models in failover chain exhausted"
-            return None
+            self._last_llm_error = f"All {self._provider} models exhausted"
 
-        if used_model and used_model != self.model:
-            log.warning("Model failover: %s -> %s", self.model, used_model)
-
-        return normalize_anthropic(response)
-
-    async def _call_llm_openai(
-        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
-    ) -> AgenticResponse | None:
-        """OpenAI-specific LLM call with tool-use support."""
-        if not settings.openai_api_key:
-            log.warning("No OpenAI API key for agentic loop")
-            return None
-
-        try:
-            from core.infrastructure.adapters.llm.openai_adapter import (
-                _get_openai_client,
-            )
-        except ImportError:
-            log.error("OpenAI adapter not available")
-            return None
-
-        if self._client is None:
-            self._client = _get_openai_client()
-
-        remaining = self.max_rounds - round_idx
-        force_text = remaining <= self.WRAP_UP_HEADROOM
-        tool_choice_val = "none" if force_text else "auto"
-
-        # Convert Anthropic tool format to OpenAI function format
-        oai_tools = self._convert_tools_to_openai()
-
-        # Build messages with system prompt for OpenAI
-        oai_messages = [{"role": "system", "content": system}, *messages]
-
-        from core.config import OPENAI_FALLBACK_CHAIN
-
-        failover_models = [self.model] + [m for m in OPENAI_FALLBACK_CHAIN if m != self.model]
-
-        async def _do_call(model: str) -> Any:
-            import asyncio as _aio
-
-            client = self._client
-            return await _aio.to_thread(
-                client.chat.completions.create,  # type: ignore[union-attr]
-                model=model,
-                messages=oai_messages,
-                tools=oai_tools if oai_tools else None,
-                tool_choice=tool_choice_val if oai_tools else None,
-                max_completion_tokens=self.max_tokens,
-                temperature=0.0,
-                timeout=90.0,
-            )
-
-        try:
-            response, used_model = await call_with_failover(failover_models, _do_call)
-        except KeyboardInterrupt:
-            log.info("LLM call interrupted by user")
-            return None
-        except Exception:
-            log.warning("OpenAI agentic LLM call failed", exc_info=True)
-            return None
-
-        if response is None:
-            self._last_llm_error = "All OpenAI models exhausted"
-            return None
-
-        if used_model and used_model != self.model:
-            log.warning("Model failover: %s -> %s", self.model, used_model)
-
-        return normalize_openai(response)
-
-    async def _call_llm_glm(
-        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
-    ) -> AgenticResponse | None:
-        """ZhipuAI GLM LLM call — OpenAI-compatible API, separate provider."""
-        if not settings.zai_api_key:
-            log.warning("No ZhipuAI API key for agentic loop")
-            return None
-
-        try:
-            from core.infrastructure.adapters.llm.glm_adapter import (
-                _get_glm_client,
-            )
-        except ImportError:
-            log.error("OpenAI adapter not available (required for GLM)")
-            return None
-
-        if self._client is None:
-            self._client = _get_glm_client()
-
-        remaining = self.max_rounds - round_idx
-        force_text = remaining <= self.WRAP_UP_HEADROOM
-        tool_choice_val = "none" if force_text else "auto"
-
-        oai_tools = self._convert_tools_to_openai()
-        oai_messages = [{"role": "system", "content": system}, *messages]
-
-        failover_models = [self.model] + [m for m in GLM_FALLBACK_CHAIN if m != self.model]
-
-        async def _do_call(model: str) -> Any:
-            import asyncio as _aio
-
-            client = self._client
-            return await _aio.to_thread(
-                client.chat.completions.create,  # type: ignore[union-attr]
-                model=model,
-                messages=oai_messages,
-                tools=oai_tools if oai_tools else None,
-                tool_choice=tool_choice_val if oai_tools else None,
-                max_completion_tokens=self.max_tokens,
-                temperature=0.0,
-                timeout=90.0,
-            )
-
-        try:
-            response, used_model = await call_with_failover(failover_models, _do_call)
-        except KeyboardInterrupt:
-            log.info("LLM call interrupted by user")
-            return None
-        except Exception:
-            log.warning("GLM agentic LLM call failed", exc_info=True)
-            return None
-
-        if response is None:
-            self._last_llm_error = "All GLM models exhausted"
-            return None
-
-        if used_model and used_model != self.model:
-            log.warning("Model failover: %s -> %s", self.model, used_model)
-
-        return normalize_openai(response)
-
-    def _convert_tools_to_openai(self) -> list[dict[str, Any]]:
-        """Convert Anthropic-format tool definitions to OpenAI function calling format."""
-        oai_tools: list[dict[str, Any]] = []
-        for tool in self._tools:
-            name = tool.get("name", "")
-            desc = tool.get("description", "")
-            schema = tool.get("input_schema", {})
-            if not name:
-                continue
-            oai_tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "description": desc,
-                        "parameters": schema,
-                    },
-                }
-            )
-        return oai_tools
+        return response
 
     _MAX_CONSECUTIVE_FAILURES = 2  # auto-skip after N consecutive failures per tool
 
@@ -1477,32 +1258,15 @@ class AgenticLoop:
     # Feature 3/4: Model escalation on consecutive LLM failures
     # ---------------------------------------------------------------------------
 
-    # Cross-provider escalation map: when one provider's chain is exhausted,
-    # fall back to the other provider's primary model.
-    _CROSS_PROVIDER_FALLBACK: dict[str, tuple[str, str]] = {
-        "anthropic": (OPENAI_PRIMARY, "openai"),
-        "openai": (ANTHROPIC_PRIMARY, "anthropic"),
-        "glm": (OPENAI_PRIMARY, "openai"),
-    }
-
     def _try_model_escalation(self) -> bool:
         """Attempt to escalate to a higher/fallback model after consecutive failures.
 
-        First tries the next model in the current provider's fallback chain.
-        If exhausted, tries cross-provider escalation (Feature 4).
+        First tries the next model in the current adapter's fallback chain.
+        If exhausted, tries cross-provider escalation via CROSS_PROVIDER_FALLBACK.
         Returns True if escalation succeeded, False if at end of all chains.
         """
-        provider = self._provider
         current = self.model
-
-        # Get fallback chain for current provider
-        chain: list[str] = []
-        if provider == "anthropic":
-            chain = ANTHROPIC_FALLBACK_CHAIN
-        elif provider == "openai":
-            chain = OPENAI_FALLBACK_CHAIN
-        elif provider == "glm":
-            chain = GLM_FALLBACK_CHAIN
+        chain = self._adapter.fallback_chain
 
         # Find current model in chain, try next
         if current in chain:
@@ -1513,19 +1277,19 @@ class AgenticLoop:
                     "Model escalation: %s -> %s (same provider: %s)",
                     current,
                     next_model,
-                    provider,
+                    self._provider,
                 )
-                self.update_model(next_model, provider)
+                self.update_model(next_model, self._provider)
                 return True
 
         # Current provider's chain exhausted — try cross-provider (Feature 4)
-        if provider in self._CROSS_PROVIDER_FALLBACK:
-            fallback_model, fallback_provider = self._CROSS_PROVIDER_FALLBACK[provider]
+        fallbacks = CROSS_PROVIDER_FALLBACK.get(self._provider, [])
+        for fallback_provider, fallback_model in fallbacks:
             if fallback_model != current:
                 log.warning(
                     "Cross-provider escalation: %s(%s) -> %s(%s)",
                     current,
-                    provider,
+                    self._provider,
                     fallback_model,
                     fallback_provider,
                 )
