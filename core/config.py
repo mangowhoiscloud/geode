@@ -223,7 +223,10 @@ class Settings(BaseSettings):
     subagent_max_tokens: int = 8192  # 서브에이전트 출력 토큰 제한
 
     # Token Guard — tool result truncation threshold (0 = unlimited)
-    max_tool_result_tokens: int = 0  # 0 = no limit; frontier consensus: compression > hard cap
+    max_tool_result_tokens: int = 4000  # cap per tool_result to prevent overflow
+
+    # Context Compaction — overflow prevention
+    compact_keep_recent: int = 10  # messages to preserve during compaction/prune
 
     # Notification — external messaging
     notification_channel: str = "slack"  # default notification channel
