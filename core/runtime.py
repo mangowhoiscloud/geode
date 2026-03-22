@@ -972,7 +972,8 @@ class GeodeRuntime:
             from core.infrastructure.adapters.mcp.manager import MCPServerManager
 
             mcp = MCPServerManager()
-            mcp.load_config()
+            n_connected = mcp.startup()
+            log.info("Gateway MCP: %d/%d servers connected", n_connected, len(mcp._servers))
         except Exception:
             log.debug("MCPServerManager unavailable — gateway skipped")
             set_gateway(None)

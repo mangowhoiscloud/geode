@@ -3325,24 +3325,12 @@ def serve(
     console.print("  [dim]Press Ctrl+C to stop[/dim]")
     console.print()
 
-    # Build runtime first (wires env, notifications, gateway)
+    # Build runtime (wires env, notifications, gateway + MCP startup)
+    # MCP startup is now inside _build_gateway() via mcp.startup()
     runtime = _build_runtime_for_serve()
     if runtime is None:
         console.print("  [warning]Runtime initialization failed.[/warning]")
         raise typer.Exit(1)
-
-    # Start MCP servers AFTER runtime (env vars now loaded)
-    from core.infrastructure.adapters.mcp.manager import MCPServerManager
-
-    try:
-        _mgr = MCPServerManager()
-        n_connected = _mgr.startup()
-        if n_connected > 0:
-            console.print(f"  [dim]MCP: {n_connected}/{len(_mgr._servers)} servers[/dim]")
-        else:
-            console.print("  [dim]MCP: no servers connected[/dim]")
-    except Exception as exc:
-        console.print(f"  [dim]MCP startup skipped: {exc}[/dim]")
 
     # Wire AgenticLoop as gateway processor
     from core.cli.agentic_loop import AgenticLoop
