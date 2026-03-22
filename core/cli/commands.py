@@ -337,9 +337,11 @@ def cmd_model(args: str) -> None:
     else:
         selected = _MODEL_INDEX.get(arg)
         if not selected:
-            arg_lower = arg.lower()
+            arg_norm = arg.lower().replace("-", "").replace(" ", "").replace("_", "")
             for p in MODEL_PROFILES:
-                if arg_lower in p.id.lower() or arg_lower in p.label.lower():
+                id_norm = p.id.lower().replace("-", "").replace(" ", "").replace("_", "")
+                label_norm = p.label.lower().replace("-", "").replace(" ", "").replace("_", "")
+                if arg_norm in id_norm or arg_norm in label_norm:
                     selected = p
                     break
 
