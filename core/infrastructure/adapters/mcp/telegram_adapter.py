@@ -44,11 +44,17 @@ class TelegramNotificationAdapter:
                 error="Telegram MCP server not available",
             )
         try:
-            result = self._manager.call_tool(  # type: ignore[union-attr]
+            args: dict[str, Any] = {"chat_id": recipient, "text": message}
+            for key in ("reply_to_message_id",):
+                if key in kwargs:
+                    args[key] = kwargs[key]
+
+            raw = self._manager.call_tool(  # type: ignore[union-attr]
                 self._server_name,
                 "send_message",
-                {"chat_id": recipient, "text": message},
+                args,
             )
+            result = self._parse_mcp_result(raw)
             if "error" in result:
                 return NotificationResult(success=False, channel="telegram", error=result["error"])
             return NotificationResult(
@@ -69,3 +75,16 @@ class TelegramNotificationAdapter:
 
     def list_channels(self) -> list[str]:
         return ["telegram"]
+
+    @staticmethod
+    def _parse_mcp_result(raw: dict[str, Any]) -> dict[str, Any]:
+        """Parse MCP content wrapper."""
+        import json
+
+        if "content" in raw and isinstance(raw["content"], list):
+            try:
+                text = raw["content"][0].get("text", "")
+                return json.loads(text) if text else raw
+            except (IndexError, json.JSONDecodeError, KeyError):
+                pass
+        return raw

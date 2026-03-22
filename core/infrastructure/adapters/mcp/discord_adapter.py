@@ -42,11 +42,17 @@ class DiscordNotificationAdapter:
                 success=False, channel="discord", error="Discord MCP server not available"
             )
         try:
-            result = self._manager.call_tool(  # type: ignore[union-attr]
+            args: dict[str, Any] = {"channel_id": recipient, "content": message}
+            for key in ("message_reference",):
+                if key in kwargs:
+                    args[key] = kwargs[key]
+
+            raw = self._manager.call_tool(  # type: ignore[union-attr]
                 self._server_name,
                 "send_message",
-                {"channel_id": recipient, "content": message},
+                args,
             )
+            result = self._parse_mcp_result(raw)
             if "error" in result:
                 return NotificationResult(success=False, channel="discord", error=result["error"])
             return NotificationResult(
@@ -67,3 +73,16 @@ class DiscordNotificationAdapter:
 
     def list_channels(self) -> list[str]:
         return ["discord"]
+
+    @staticmethod
+    def _parse_mcp_result(raw: dict[str, Any]) -> dict[str, Any]:
+        """Parse MCP content wrapper."""
+        import json
+
+        if "content" in raw and isinstance(raw["content"], list):
+            try:
+                text = raw["content"][0].get("text", "")
+                return json.loads(text) if text else raw
+            except (IndexError, json.JSONDecodeError, KeyError):
+                pass
+        return raw
