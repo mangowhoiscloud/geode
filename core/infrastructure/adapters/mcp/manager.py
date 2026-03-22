@@ -96,6 +96,7 @@ class MCPServerManager:
         self._config_path = config_path or _CONFIG_PATH
         self._servers: dict[str, dict[str, Any]] = {}
         self._clients: dict[str, StdioMCPClient] = {}
+        self._dotenv_cache: dict[str, str | None] = {}
         self._signal_installed = False
         self._prev_sigterm: Any = None
         self._prev_sigint: signal.Handlers | None = None
@@ -131,12 +132,35 @@ class MCPServerManager:
         log.info("MCP shutdown complete")
 
     def _connect_all(self) -> int:
-        """Connect to all configured servers. Returns count of successful connections."""
+        """Connect to all configured servers in parallel.
+
+        Uses ThreadPoolExecutor to start all MCP subprocess connections
+        concurrently. Each server takes ~10s (npx startup + JSON-RPC
+        handshake), so parallel execution reduces total from N×10s to ~10-15s.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        server_names = list(self._servers.keys())
+        if not server_names:
+            return 0
+
         connected = 0
-        for server_name in list(self._servers.keys()):
-            client = self._get_client(server_name)
-            if client is not None:
-                connected += 1
+        max_workers = min(len(server_names), 8)
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(self._get_client, name): name
+                for name in server_names
+            }
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    client = future.result()
+                    if client is not None:
+                        connected += 1
+                except Exception:
+                    log.debug("MCP parallel connect failed: %s", name, exc_info=True)
+
         return connected
 
     def _install_signal_handlers(self) -> None:
@@ -271,8 +295,7 @@ class MCPServerManager:
         """
         # Lazy-load .env values (cached after first call)
         # Cascade: CWD/.env (project) → ~/.geode/.env (global)
-        if not hasattr(self, "_dotenv_cache"):
-            self._dotenv_cache: dict[str, str | None] = {}
+        if not self._dotenv_cache:
             # Global first (lower priority)
             if _GLOBAL_DOTENV_PATH.exists():
                 self._dotenv_cache.update(dotenv_values(str(_GLOBAL_DOTENV_PATH)))
