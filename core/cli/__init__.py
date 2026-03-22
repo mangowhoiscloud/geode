@@ -3296,8 +3296,14 @@ def serve(
     ),
 ) -> None:
     """Run GEODE Gateway in headless mode (no REPL, Slack/Discord/Telegram only)."""
+    import logging as _logging
     import signal
     import time as _time
+
+    _logging.basicConfig(
+        level=_logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
 
     # Load .env files into os.environ so Pollers can see credentials
     # (Pydantic Settings loads them internally, but os.environ is not populated)
@@ -3343,20 +3349,20 @@ def serve(
         console.print("  [warning]No gateway available after runtime init.[/warning]")
         raise typer.Exit(1)
 
-    def _make_processor() -> Any:
-        """Create a fresh AgenticLoop processor for each inbound message."""
+    def _gateway_processor(content: str) -> str:
+        """Process a gateway message with a fresh AgenticLoop per message."""
         ctx = ConversationContext(max_turns=20)
         handlers = _build_tool_handlers()
         executor = ToolExecutor(action_handlers=handlers, hitl_level=0)
         loop = AgenticLoop(ctx, executor, max_rounds=5)
-
-        def _process(content: str) -> str:
+        try:
             result = loop.run(content)
             return result.text if result else ""
+        except Exception as exc:
+            log.warning("Gateway processor error: %s", exc, exc_info=True)
+            return f"Error: {exc}"
 
-        return _process
-
-    gateway.set_processor(_make_processor())
+    gateway.set_processor(_gateway_processor)
 
     # Start pollers
     gateway.start()
