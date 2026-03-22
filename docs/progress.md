@@ -35,6 +35,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| model-match | switch_model 퍼지 매칭 — 하이픈/공백 정규화로 GLM5→glm-5 등 인식 | #369→#371 | @mangowhoiscloud | 2026-03-22 |
 | slack-reaction-ux | Slack リアクション UX — ⏳処理中 + ✅完了マーカー, パラメータ修正 | #370→#371 | @mangowhoiscloud | 2026-03-22 |
 | context-claude-align | Context management Claude Code 정합 — 80% compaction 제거, clear_tool_uses 의존, -54줄 | #367→#368 | @mangowhoiscloud | 2026-03-22 |
 | web-fetch-hardcap | web_fetch max_chars 하드캡 10000 + Token Guard 0 복원 (프론티어 정합) | main direct | @mangowhoiscloud | 2026-03-22 |
