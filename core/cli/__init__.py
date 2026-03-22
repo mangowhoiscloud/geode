@@ -3289,5 +3289,96 @@ def _ensure_gitignore_entry(entry: str, comment: str = "") -> None:
     gitignore.write_text(content, encoding="utf-8")
 
 
+@app.command()
+def serve(
+    poll_interval: float = typer.Option(
+        3.0, "--poll", "-p", help="Gateway poll interval (seconds)"
+    ),
+) -> None:
+    """Run GEODE Gateway in headless mode (no REPL, Slack/Discord/Telegram only)."""
+    import signal
+    import time as _time
+
+    from core.config import settings
+
+    if not settings.gateway_enabled:
+        console.print("  [warning]Gateway is disabled.[/warning]")
+        console.print("  [dim]Set GEODE_GATEWAY_ENABLED=true in ~/.geode/.env[/dim]")
+        raise typer.Exit(1)
+
+    console.print()
+    console.print("  [header]GEODE Gateway — headless mode[/header]")
+    console.print(f"  [dim]Poll interval: {poll_interval}s[/dim]")
+    console.print("  [dim]Press Ctrl+C to stop[/dim]")
+    console.print()
+
+    # Build runtime (wires MCP, notifications, gateway)
+    runtime = _build_runtime_for_serve()
+    if runtime is None:
+        console.print("  [warning]Runtime initialization failed.[/warning]")
+        raise typer.Exit(1)
+
+    # Wire AgenticLoop as gateway processor
+    from core.cli.agentic_loop import AgenticLoop
+    from core.cli.conversation import ConversationContext
+    from core.cli.tool_executor import ToolExecutor
+    from core.infrastructure.ports.gateway_port import get_gateway
+
+    gateway = get_gateway()
+    if gateway is None:
+        console.print("  [warning]No gateway available after runtime init.[/warning]")
+        raise typer.Exit(1)
+
+    def _make_processor() -> Any:
+        """Create a fresh AgenticLoop processor for each inbound message."""
+        ctx = ConversationContext(max_turns=20)
+        handlers = _build_tool_handlers()
+        executor = ToolExecutor(action_handlers=handlers, hitl_level=0)
+        loop = AgenticLoop(ctx, executor, max_rounds=5)
+
+        def _process(content: str) -> str:
+            result = loop.run(content)
+            return result.text if result else ""
+
+        return _process
+
+    gateway.set_processor(_make_processor())
+
+    # Start pollers
+    gateway.start()
+    console.print("  [success]Gateway started. Listening...[/success]")
+    console.print()
+
+    # Block until Ctrl+C
+    stop = False
+
+    def _on_signal(sig: int, frame: Any) -> None:
+        nonlocal stop
+        stop = True
+
+    signal.signal(signal.SIGINT, _on_signal)
+    signal.signal(signal.SIGTERM, _on_signal)
+
+    try:
+        while not stop:
+            _time.sleep(1.0)
+    finally:
+        gateway.stop()
+        console.print()
+        console.print("  [dim]Gateway stopped.[/dim]")
+
+
+def _build_runtime_for_serve() -> Any:
+    """Minimal runtime init for serve mode (no REPL, no domain)."""
+    try:
+        from core.runtime import GeodeRuntime
+
+        runtime = GeodeRuntime.create("gateway", domain_name="game_ip")
+        return runtime
+    except Exception as exc:
+        log.error("Failed to build runtime for serve: %s", exc, exc_info=True)
+        return None
+
+
 if __name__ == "__main__":
     app()
