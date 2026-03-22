@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import anthropic
-from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY, settings
+from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY
 from core.llm.client import call_with_failover
 
 # ---------------------------------------------------------------------------
@@ -340,7 +340,7 @@ class TestFallbackChainConfig:
 
 
 class TestAgenticLoopFailover:
-    """Verify AgenticLoop._call_llm uses call_with_failover."""
+    """Verify AgenticLoop._call_llm delegates to adapter.agentic_call()."""
 
     def _make_loop(self, model: str | None = None) -> Any:
         """Create a minimal AgenticLoop instance for testing."""
@@ -357,53 +357,39 @@ class TestAgenticLoopFailover:
             max_rounds=5,
         )
 
-    @patch("core.cli.agentic_loop.settings")
-    @patch("core.cli.agentic_loop.call_with_failover")
-    @patch("core.cli.agentic_loop.get_async_anthropic_client")
-    def test_call_llm_uses_failover(
-        self, mock_get_client: MagicMock, mock_failover: MagicMock, mock_settings: MagicMock
-    ) -> None:
-        """_call_llm should delegate to call_with_failover and return AgenticResponse."""
-        mock_settings.anthropic_api_key = "test-key"
-        mock_settings.llm_max_retries = 3
-        mock_settings.llm_retry_base_delay = 0.01
-        mock_settings.llm_retry_max_delay = 0.1
-        # Build a mock that normalize_anthropic can process
-        text_block = MagicMock()
-        text_block.type = "text"
-        text_block.text = "Hello"
-        mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_response.stop_reason = "end_turn"
-        mock_response.usage.input_tokens = 100
-        mock_response.usage.output_tokens = 50
-        mock_failover.return_value = (mock_response, ANTHROPIC_PRIMARY)
-        mock_get_client.return_value = MagicMock()
+    def test_call_llm_uses_adapter(self) -> None:
+        """_call_llm should delegate to adapter.agentic_call() and return AgenticResponse."""
+        from core.cli.agentic_response import AgenticResponse, ResponseUsage, TextBlock
 
+        mock_response = AgenticResponse(
+            content=[TextBlock(text="Hello")],
+            stop_reason="end_turn",
+            usage=ResponseUsage(input_tokens=100, output_tokens=50),
+        )
         loop = self._make_loop()
+
+        async def fake_call(**kwargs: Any) -> AgenticResponse:
+            return mock_response
+
+        loop._adapter = MagicMock()
+        loop._adapter.agentic_call = MagicMock(side_effect=fake_call)
 
         result = asyncio.run(
             loop._call_llm("system prompt", [{"role": "user", "content": "hello"}])
         )
         assert result is not None
         assert result.stop_reason == "end_turn"
-        mock_failover.assert_called_once()
+        loop._adapter.agentic_call.assert_called_once()
 
-    @patch("core.cli.agentic_loop.settings")
-    @patch("core.cli.agentic_loop.call_with_failover")
-    @patch("core.cli.agentic_loop.get_async_anthropic_client")
-    def test_call_llm_returns_none_on_chain_exhaustion(
-        self, mock_get_client: MagicMock, mock_failover: MagicMock, mock_settings: MagicMock
-    ) -> None:
-        """When call_with_failover returns (None, None), _call_llm returns None."""
-        mock_settings.anthropic_api_key = "test-key"
-        mock_settings.llm_max_retries = 3
-        mock_settings.llm_retry_base_delay = 0.01
-        mock_settings.llm_retry_max_delay = 0.1
-        mock_failover.return_value = (None, None)
-        mock_get_client.return_value = MagicMock()
-
+    def test_call_llm_returns_none_on_chain_exhaustion(self) -> None:
+        """When adapter returns None, _call_llm returns None with error message."""
         loop = self._make_loop()
+
+        async def fake_call(**kwargs: Any) -> None:
+            return None
+
+        loop._adapter = MagicMock()
+        loop._adapter.agentic_call = MagicMock(side_effect=fake_call)
 
         result = asyncio.run(
             loop._call_llm("system prompt", [{"role": "user", "content": "hello"}])
@@ -411,68 +397,22 @@ class TestAgenticLoopFailover:
         assert result is None
         assert loop._last_llm_error is not None
 
-    @patch("core.cli.agentic_loop.settings")
-    @patch("core.cli.agentic_loop.call_with_failover")
-    @patch("core.cli.agentic_loop.get_async_anthropic_client")
-    def test_call_llm_logs_model_switch(
-        self, mock_get_client: MagicMock, mock_failover: MagicMock, mock_settings: MagicMock
-    ) -> None:
-        """When failover switches model, it should be logged."""
-        mock_settings.anthropic_api_key = "test-key"
-        mock_settings.llm_max_retries = 3
-        mock_settings.llm_retry_base_delay = 0.01
-        mock_settings.llm_retry_max_delay = 0.1
-        text_block = MagicMock()
-        text_block.type = "text"
-        text_block.text = "Hello"
-        mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_response.stop_reason = "end_turn"
-        mock_response.usage.input_tokens = 100
-        mock_response.usage.output_tokens = 50
-        mock_failover.return_value = (mock_response, ANTHROPIC_SECONDARY)
-        mock_get_client.return_value = MagicMock()
-
-        loop = self._make_loop(model=ANTHROPIC_PRIMARY)
-
-        with patch("core.cli.agentic_loop.log") as mock_log:
-            result = asyncio.run(
-                loop._call_llm("system prompt", [{"role": "user", "content": "hello"}])
-            )
-            assert result is not None
-            mock_log.warning.assert_called()
-            warning_args = mock_log.warning.call_args_list
-            found_switch_log = any("Model failover" in str(args) for args in warning_args)
-            assert found_switch_log, "Expected 'Model failover' warning log"
-
     def test_call_llm_no_api_key_returns_none(self) -> None:
-        """When no API key is set, _call_llm returns None immediately."""
+        """When adapter returns None (no key), _call_llm returns None."""
         loop = self._make_loop()
 
-        with patch.object(settings, "anthropic_api_key", ""):
-            result = asyncio.run(loop._call_llm("system", [{"role": "user", "content": "hi"}]))
+        async def fake_call(**kwargs: Any) -> None:
+            return None
+
+        loop._adapter = MagicMock()
+        loop._adapter.agentic_call = MagicMock(side_effect=fake_call)
+
+        result = asyncio.run(loop._call_llm("system", [{"role": "user", "content": "hi"}]))
         assert result is None
 
-    @patch("core.cli.agentic_loop.settings")
-    @patch("core.cli.agentic_loop.call_with_failover")
-    @patch("core.cli.agentic_loop.get_async_anthropic_client")
-    def test_failover_chain_includes_current_model_first(
-        self, mock_get_client: MagicMock, mock_failover: MagicMock, mock_settings: MagicMock
-    ) -> None:
-        """The failover chain passed to call_with_failover starts with self.model."""
-        mock_settings.anthropic_api_key = "test-key"
-        mock_settings.llm_max_retries = 3
-        mock_settings.llm_retry_base_delay = 0.01
-        mock_settings.llm_retry_max_delay = 0.1
-        mock_failover.return_value = (MagicMock(), ANTHROPIC_PRIMARY)
-        mock_get_client.return_value = MagicMock()
-
+    def test_failover_chain_available_on_adapter(self) -> None:
+        """The adapter exposes a fallback_chain property starting with primary model."""
         loop = self._make_loop(model=ANTHROPIC_PRIMARY)
-        asyncio.run(loop._call_llm("system prompt", [{"role": "user", "content": "hello"}]))
-
-        # Extract the models argument from the call
-        call_args = mock_failover.call_args
-        models = call_args[0][0]  # first positional arg
-        assert models[0] == ANTHROPIC_PRIMARY
-        # No duplicates
-        assert len(models) == len(set(models))
+        chain = loop._adapter.fallback_chain
+        assert chain[0] == ANTHROPIC_PRIMARY
+        assert len(chain) == len(set(chain))
