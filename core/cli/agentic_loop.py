@@ -582,14 +582,16 @@ class AgenticLoop:
 
         GAP 7 strategy:
         - WARNING (80%): LLM-based compaction (summarize older messages)
-        - CRITICAL (95%): Emergency mechanical prune (fallback)
+        - CRITICAL (95%): Emergency mechanical prune + tool_result truncation
         """
         try:
+            from core.config import settings
             from core.orchestration.context_monitor import (
                 check_context,
                 prune_oldest_messages,
             )
 
+            keep_recent = settings.compact_keep_recent
             metrics = check_context(messages, self.model, system_prompt=system)
 
             if metrics.is_critical:
@@ -604,8 +606,10 @@ class AgenticLoop:
                         HookEvent.CONTEXT_CRITICAL,
                         {"metrics": dataclasses.asdict(metrics), "model": self.model},
                     )
-                # Emergency prune: keep first + last 10 messages
-                pruned = prune_oldest_messages(messages, keep_recent=10)
+                # Emergency: truncate large tool_result content in remaining messages
+                self._truncate_tool_results(messages, max_chars=2000)
+                # Emergency prune: keep first + last N messages
+                pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
                 original_count = len(messages)
                 if len(pruned) < original_count:
                     messages.clear()
@@ -631,7 +635,7 @@ class AgenticLoop:
                 try:
                     from core.orchestration.context_compactor import compact_context
 
-                    result = compact_context(messages, keep_recent=10)
+                    result = compact_context(messages, keep_recent=keep_recent)
                     if result.tokens_saved_estimate > 0:
                         log.info(
                             "Compaction saved ~%d tokens (%d→%d messages)",
@@ -641,12 +645,38 @@ class AgenticLoop:
                         )
                 except Exception:
                     log.debug("Context compaction failed, falling back to prune", exc_info=True)
-                    pruned = prune_oldest_messages(messages, keep_recent=10)
+                    pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
                     if len(pruned) < len(messages):
                         messages.clear()
                         messages.extend(pruned)
         except Exception:
             log.debug("Context monitor check failed", exc_info=True)
+
+    @staticmethod
+    def _truncate_tool_results(messages: list[dict[str, Any]], *, max_chars: int = 2000) -> None:
+        """Truncate large tool_result content blocks to free context space.
+
+        Extractive pattern: preserves first max_chars of text content,
+        appends [truncated] marker. Only modifies tool_result blocks.
+        """
+        for msg in messages:
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if block.get("type") != "tool_result":
+                    continue
+                inner = block.get("content")
+                if isinstance(inner, str) and len(inner) > max_chars:
+                    block["content"] = inner[:max_chars] + "\n[truncated]"
+                elif isinstance(inner, list):
+                    for sub in inner:
+                        if isinstance(sub, dict) and sub.get("type") == "text":
+                            text = sub.get("text", "")
+                            if len(text) > max_chars:
+                                sub["text"] = text[:max_chars] + "\n[truncated]"
 
     @staticmethod
     def _repair_messages(messages: list[dict[str, Any]]) -> None:
