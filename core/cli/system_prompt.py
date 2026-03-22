@@ -39,8 +39,8 @@ _NOTABLE_IPS = {
 }
 
 
-def build_system_prompt() -> str:
-    """Build system prompt with notable IP examples and memory context (P1-C)."""
+def build_system_prompt(model: str = "") -> str:
+    """Build system prompt with model card, IP examples, and memory context."""
     from core.fixtures import FIXTURE_MAP, load_fixture
 
     name_map = get_ip_name_map()
@@ -61,12 +61,73 @@ def build_system_prompt() -> str:
         ip_examples=", ".join(sorted(examples)),
     )
 
+    # Model card: inject current model info so LLM can answer model questions directly
+    if model:
+        model_card = _build_model_card(model)
+        if model_card:
+            base += "\n\n" + model_card
+
     # P1-C: Inject memory context (recent insights + active rules)
     memory_ctx = _build_memory_context()
     if memory_ctx:
         base += "\n\n" + memory_ctx
 
     return base
+
+
+def _build_model_card(model: str) -> str:
+    """Build a model card string for system prompt injection.
+
+    Reads from MODEL_PRICING and MODEL_CONTEXT_WINDOW so the LLM
+    can answer model-related questions directly without tool calls.
+    """
+    try:
+        from core.config import _resolve_provider
+        from core.llm.token_tracker import MODEL_CONTEXT_WINDOW, MODEL_PRICING
+
+        provider = _resolve_provider(model)
+        pricing = MODEL_PRICING.get(model)
+        ctx_window = MODEL_CONTEXT_WINDOW.get(model, 0)
+
+        parts: list[str] = [f"## Current Model\nYou are powered by **{model}** ({provider})."]
+
+        if ctx_window:
+            if ctx_window < 1_000_000:
+                ctx_str = f"{ctx_window // 1000}K"
+            else:
+                ctx_str = f"{ctx_window / 1_000_000:.0f}M"
+            parts.append(f"Context window: {ctx_str} tokens.")
+
+        if pricing:
+            parts.append(
+                f"Cost: ${pricing.input:.2f} input / ${pricing.output:.2f} output per 1M tokens."
+            )
+
+        # Fallback chain
+        from core.config import (
+            ANTHROPIC_FALLBACK_CHAIN,
+            GLM_FALLBACK_CHAIN,
+            OPENAI_FALLBACK_CHAIN,
+        )
+
+        chains = {
+            "anthropic": ANTHROPIC_FALLBACK_CHAIN,
+            "openai": OPENAI_FALLBACK_CHAIN,
+            "glm": GLM_FALLBACK_CHAIN,
+        }
+        chain = chains.get(provider, [])
+        if chain:
+            parts.append(f"Fallback chain: {' -> '.join(chain)}.")
+
+        parts.append(
+            "For model-related questions, answer directly from this context. "
+            "Do NOT call check_status for model info."
+        )
+
+        return "\n".join(parts)
+    except Exception:
+        log.debug("Failed to build model card", exc_info=True)
+        return ""
 
 
 def _build_memory_context() -> str:

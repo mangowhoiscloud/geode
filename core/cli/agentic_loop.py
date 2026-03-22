@@ -318,12 +318,18 @@ class AgenticLoop:
         Fixes the model caching bug: ``self.model`` was only set at init,
         so ``/model`` changes were not reflected in subsequent LLM calls.
         Resets the cached client so a new one is created for the new provider.
+        Also syncs the SessionMeter so status lines show the correct model.
         """
         old_provider = self._provider
         self.model = model
         self._provider = provider or _resolve_provider(model)
         if self._provider != old_provider:
             self._client = None  # force new client for new provider
+
+        # Sync SessionMeter so "Worked for" status line shows the correct model
+        from core.ui.agentic_ui import update_session_model
+
+        update_session_model(model)
         log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
 
     def run(self, user_input: str) -> AgenticResult:
@@ -703,7 +709,7 @@ class AgenticLoop:
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt with skill context and agentic suffix."""
-        base = _build_system_prompt()
+        base = _build_system_prompt(model=self.model)
         # Inject skill context into placeholder
         skill_ctx = ""
         if self._skill_registry is not None:
