@@ -35,6 +35,8 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| context-claude-align | Context management Claude Code 정합 — 80% compaction 제거, clear_tool_uses 의존, -54줄 | #367→#368 | @mangowhoiscloud | 2026-03-22 |
+| web-fetch-hardcap | web_fetch max_chars 하드캡 10000 + Token Guard 0 복원 (프론티어 정합) | main direct | @mangowhoiscloud | 2026-03-22 |
 | mention-gate | Slack @멘션 전용 응답 게이트 + 멘션 태그 제거 | #363→#364 | @mangowhoiscloud | 2026-03-22 |
 | slack-echo-fix | Slack Gateway 사용자 메시지 반복 에코 제거 + 리액션 인디케이터 | #359→#360 | @mangowhoiscloud | 2026-03-22 |
 | date-injection | 시스템 프롬프트 현재 날짜 주입 — LLM 연도 오류 방지 | #353→#356 | @mangowhoiscloud | 2026-03-22 |
