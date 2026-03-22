@@ -170,8 +170,8 @@ class ChannelManager:
         import re
 
         content = message.content
-        # Slack encodes @mentions as <@USER_ID> — match any user mention
-        if re.search(r"<@U[A-Z0-9]+>", content):
+        # Slack encodes @mentions as <@USER_ID> or <@BOT_ID>
+        if re.search(r"<@[UB][A-Z0-9]+>", content):
             return True
         content_lower = content.lower()
         return any(mention in content_lower for mention in ("@geode", "geode"))
@@ -181,8 +181,8 @@ class ChannelManager:
         """Remove mention tags so the LLM receives clean user intent."""
         import re
 
-        # Remove Slack-style <@USER_ID> mentions
-        cleaned = re.sub(r"<@U[A-Z0-9]+>\s*", "", content)
+        # Remove Slack-style <@USER_ID> and <@BOT_ID> mentions
+        cleaned = re.sub(r"<@[UB][A-Z0-9]+>\s*", "", content)
         # Remove @geode / @GEODE prefix
         cleaned = re.sub(r"@geode\s*", "", cleaned, flags=re.IGNORECASE)
         return cleaned.strip()

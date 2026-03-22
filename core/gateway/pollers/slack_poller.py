@@ -137,7 +137,7 @@ class SlackPoller(BasePoller):
                 # 리액션은 @멘션 메시지에만 (일반 메시지는 리액션 없이 처리)
                 is_mention = "<@" in content
                 if is_mention:
-                    self._add_reaction(channel_id, ts, "hourglass_flowing_sand")
+                    self._add_reaction(channel_id, ts, "eyes")
                 response = self._manager.route_message(inbound)
                 log.info("Processor returned: %s", (response or "")[:80])
                 if is_mention:
