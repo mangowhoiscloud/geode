@@ -250,7 +250,7 @@ class Settings(BaseSettings):
     # LLM Connection — httpx pool & timeout tuning
     llm_max_connections: int = 20  # httpx pool: max total connections
     llm_max_keepalive_connections: int = 5  # httpx pool: max idle keep-alive connections
-    llm_keepalive_expiry: float = 15.0  # idle conn TTL (shorter = fewer stale)
+    llm_keepalive_expiry: float = 30.0  # idle conn TTL (match API server timeout)
     llm_connect_timeout: float = 5.0  # TCP connect timeout (fail fast)
     llm_read_timeout: float = 300.0  # response read timeout (5min for 1M context)
     llm_write_timeout: float = 30.0  # request write timeout (seconds)
@@ -301,7 +301,7 @@ OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.4", "gpt-5.2", "gpt-4.1"]
 # ZhipuAI (GLM) models — OpenAI-compatible API, separate provider
 GLM_PRIMARY = "glm-5"
 GLM_FALLBACK_CHAIN: list[str] = ["glm-5", "glm-5-turbo", "glm-4.7-flash"]
-GLM_BASE_URL = "https://api.z.ai/v1"
+GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
 
 
 def _resolve_provider(model: str) -> str:
