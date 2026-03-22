@@ -133,10 +133,13 @@ class TestMCPRegistry:
     def test_discover_excludes_auto_servers_when_env_missing(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("BRAVE_API_KEY", None)
-            registry = MCPRegistry(dotenv_path="/nonexistent/.env")
-            result = registry.discover()
-            # brave-search requires BRAVE_API_KEY
-            assert "brave-search" not in result
+            # Also mock global .env to prevent cascade loading
+            with patch("core.infrastructure.adapters.mcp.registry.Path") as mock_path:
+                mock_path.home.return_value = Path("/nonexistent_home")
+                registry = MCPRegistry(dotenv_path="/nonexistent/.env")
+                result = registry.discover()
+                # brave-search requires BRAVE_API_KEY
+                assert "brave-search" not in result
 
     def test_discover_server_config_structure(self) -> None:
         registry = MCPRegistry(dotenv_path="/nonexistent/.env")
@@ -154,10 +157,13 @@ class TestMCPRegistry:
     def test_list_missing_env(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("BRAVE_API_KEY", None)
-            registry = MCPRegistry(dotenv_path="/nonexistent/.env")
-            missing = registry.list_missing_env()
-            assert "brave-search" in missing
-            assert "BRAVE_API_KEY" in missing["brave-search"]
+            # Mock global .env to prevent cascade loading
+            with patch("core.infrastructure.adapters.mcp.registry.Path") as mock_path:
+                mock_path.home.return_value = Path("/nonexistent_home")
+                registry = MCPRegistry(dotenv_path="/nonexistent/.env")
+                missing = registry.list_missing_env()
+                assert "brave-search" in missing
+                assert "BRAVE_API_KEY" in missing["brave-search"]
 
     def test_defaults_all_in_catalog(self) -> None:
         """All DEFAULT_SERVERS must exist in MCP_CATALOG."""

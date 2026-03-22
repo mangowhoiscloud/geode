@@ -26,7 +26,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.22.0] — 2026-03-22
+## [0.23.0] — 2026-03-22
 
 P1 Gateway 어댑터 패턴 — 멀티프로바이더 LLM 안정화.
 
@@ -40,6 +40,45 @@ P1 Gateway 어댑터 패턴 — 멀티프로바이더 LLM 안정화.
 - KeyboardInterrupt가 모델 에스컬레이션을 트리거하던 문제 — `UserCancelledError` 분리
 - OpenAI/GLM httpx 커넥션 풀 미설정 — Anthropic과 동일 설정 (20conn, 30s keepalive) 적용
 - GLM CircuitBreaker 부재 — OpenAI 어댑터에서 상속
+
+### Infrastructure
+- Tests: 3058 → 3055 (테스트 리팩토링, 커버리지 동등)
+- Modules: 179 → 184 (+5, 어댑터 + 포트 + 레지스트리)
+
+---
+
+## [0.22.0] — 2026-03-21
+
+Sandbox Hardening + REODE 자율 운행 하네스 패턴 역수입 + 품질 스킬 포팅.
+
+### Added
+
+#### Sandbox Hardening
+- PolicyChain L1-2 와이어링 — `load_profile_policy()` + `load_org_policy()` → `build_6layer_chain()`으로 Profile/Org/Mode 통합 체인 구성
+- SubAgent Tool Scope — `denied_tools` 파라미터 + `SUBAGENT_DENIED_TOOLS` 상수 (6개 민감 도구 서브에이전트 접근 차단)
+- Bash Resource Limits — `preexec_fn`으로 `resource.setrlimit` 적용 (CPU 30s, FSIZE 50MB, NPROC 64)
+- Secret Redaction — `core/cli/redaction.py` 신규, 8개 API 키 패턴(Anthropic/OpenAI/ZhipuAI/GitHub/Slack) 감지 및 마스킹, BashTool + MCP tool result에 자동 적용
+
+#### Harness Patterns (REODE 역수입)
+- Session-level tool approval (A=Always) — HITL 프롬프트에 `[Y/n/A]` 옵션, 세션 동안 카테고리별 자동 승인
+- HITL Level (0/1/2) — `GEODE_HITL_LEVEL` 환경변수 (0=자율, 1=WRITE만 묻기, 2=전부 묻기)
+- Model Escalation — LLM 연속 2회 실패 시 fallback chain 다음 모델 자동 전환
+- Cross-Provider Escalation — provider chain 소진 시 secondary provider로 자동 전환 (anthropic↔openai, glm→openai)
+- Backpressure — tool 연속 3회 에러 시 1s 쿨다운 + "다른 접근 고려" 힌트 주입
+- Convergence Detection — 동일 에러 4회 반복 → `convergence_detected`로 루프 자동 중단
+- Model-first Provider Inference — `_resolve_provider()` 강화 (gpt/o3/o4→openai, gemini→google, deepseek→deepseek, llama→meta, qwen→alibaba)
+
+#### Skills (REODE 역수입)
+- `explore-reason-act` — 코드 수정 전 탐색-추론-실행 3단계 워크플로우
+- `anti-deception-checklist` — 가짜 성공 방지 5-check 검증
+- `code-review-quality` — Python 6-렌즈 코드 품질 리뷰
+- `dependency-review` — GEODE 6-Layer 의존성 건전성 리뷰
+- `kent-beck-review` — Simple Design 4규칙 코드 리뷰
+
+### Infrastructure
+- Tests: 2946 → 3058 (+112)
+- Modules: 178 → 179 (+1, `core/cli/redaction.py`)
+- Skills: 18 → 25 (+7)
 
 ---
 
