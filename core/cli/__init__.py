@@ -3349,12 +3349,20 @@ def serve(
         console.print("  [warning]No gateway available after runtime init.[/warning]")
         raise typer.Exit(1)
 
+    _GATEWAY_SUFFIX = (
+        "## Gateway response rules\n"
+        "This message comes from an external messaging channel (Slack/Discord/Telegram).\n"
+        "- Do NOT echo, repeat, or quote the user's message in your response.\n"
+        "- Do NOT prefix your response with 'GEODE:' or the user's original text.\n"
+        "- Respond directly with the answer only. Be concise."
+    )
+
     def _gateway_processor(content: str) -> str:
         """Process a gateway message with a fresh AgenticLoop per message."""
         ctx = ConversationContext(max_turns=20)
         handlers = _build_tool_handlers()
         executor = ToolExecutor(action_handlers=handlers, hitl_level=0)
-        loop = AgenticLoop(ctx, executor, max_rounds=5)
+        loop = AgenticLoop(ctx, executor, max_rounds=5, system_suffix=_GATEWAY_SUFFIX)
         try:
             result = loop.run(content)
             return result.text if result else ""
