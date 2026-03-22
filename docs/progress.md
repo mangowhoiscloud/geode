@@ -12,7 +12,6 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| context-overflow-fix | 100% context stuck 방지 — Token Guard 기본 4000, extractive fallback, keep_recent 설정 | P0 | — | tool_result 무제한이 근본 원인 |
 | mcp-tool-refresh | MCP startup 후 AgenticLoop 도구 목록 갱신 — Playwright 등 MCP 도구 미인식 문제 | P1 | — | MCP 연결 후 refresh_tools() 호출 |
 | mcp-singleton-notify | MCPServerManager 싱글턴 → NotificationAdapter 공유 완성 — Poller 우회 제거 | P1 | — | runtime.py 구조 리팩토링 |
 | youtube-api-key | YouTube MCP 활성화 — YOUTUBE_API_KEY 설정 + fixture↔API 이중 구현 정리 | P2 | — | GOOGLE_API_KEY와 별개 |
@@ -36,6 +35,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| context-overflow-fix | Context overflow 방지 — Token Guard 4000 + tool_result 절삭 + keep_recent 설정 | #365→#366 | @mangowhoiscloud | 2026-03-22 |
 | mcp-parallel-startup | MCP 서버 병렬 연결 — 순차 110s→~15s (ThreadPoolExecutor) | #361→#362 | @mangowhoiscloud | 2026-03-22 |
 | glm-failover-noise | Failover 로그 노이즈 제거 (warning→debug) + LLM timeout 90s→120s | #357→#358 | @mangowhoiscloud | 2026-03-22 |
 | gateway-bidirectional | Gateway 양방향 소통 — 로깅 추가, 중복 방지(ts seeding), 메시지별 독립 context, 에러 가시성 | #354→#355 | @mangowhoiscloud | 2026-03-22 |
