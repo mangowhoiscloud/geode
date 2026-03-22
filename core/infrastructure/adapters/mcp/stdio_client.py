@@ -76,7 +76,7 @@ class StdioMCPClient:
             wait_deadline = time.time() + min(self._timeout_s, 10.0)
             while time.time() < wait_deadline:
                 if self._process.poll() is not None:
-                    log.warning(
+                    log.debug(
                         "MCP server exited prematurely (PID %d, code=%s)",
                         self._pid,
                         self._process.returncode,
@@ -118,7 +118,7 @@ class StdioMCPClient:
             return True
 
         except (OSError, FileNotFoundError) as exc:
-            log.warning("Failed to start MCP server '%s': %s", self._command, exc)
+            log.debug("Failed to start MCP server '%s': %s", self._command, exc)
             self._pid = None
             return False
 
