@@ -26,6 +26,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.24.0] — 2026-03-22
+
+Slack Gateway 양방향 소통 + MCPServerManager 싱글턴 + GLM/Failover 안정화.
+
+### Added
+- **`geode serve`** 커맨드 — headless Gateway 데몬 모드. REPL 없이 Slack 폴링만 백그라운드 실행 (`nohup geode serve &`)
+- **MCPServerManager 싱글턴** — `get_mcp_manager()` 팩토리. 4곳(signal/notification/calendar/gateway)에서 동일 인스턴스 공유, 좀비 MCP 프로세스 근절
+
+### Fixed
+- **Gateway 양방향 소통** — SlackPoller가 유저 메시지를 수신하지만 응답을 보내지 못하던 5건 수정: 로깅 설정, oldest ts seeding(중복 방지), 메시지별 독립 AgenticLoop, 에러 가시성(debug→warning)
+- **Slack MCP tool 이름 정합성** — `get_channel_history` → `slack_get_channel_history`, `send_message` → `slack_post_message`, `channel` → `channel_id` 파라미터명
+- **NotificationAdapter kwargs 전달** — 3채널(Slack/Discord/Telegram) `**kwargs`(thread_ts 등) MCP call args에 포함 + `_parse_mcp_result()` content wrapper 파싱
+- **GLM base URL** — `api.z.ai/v1` → `open.bigmodel.cn/api/paas/v4/` (nginx 404 해소)
+- **httpx keepalive** — 15s → 30s (APIConnectionError 빈도 감소)
+- **Failover 로그 노이즈** — retry/fallback 로그 warning→debug/info (유저 콘솔 노출 방지)
+- **LLM timeout** — OpenAI/GLM 90s → 120s (ZhipuAI 응답 지연 대응)
+- **MCP startup 로그** — warning→debug (서버 연결 실패 메시지 유저 불가시)
+- **MCP 테스트 격리** — global .env Path.home() mock으로 환경 독립성 확보
+
+### Infrastructure
+- Modules: 184
+- Tests: 3055
+
+---
+
 ## [0.23.0] — 2026-03-22
 
 P1 Gateway 어댑터 패턴 — 멀티프로바이더 LLM 안정화.
