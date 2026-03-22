@@ -119,7 +119,7 @@ class OpenAIAgenticAdapter:
                 tool_choice=tc_val if oai_tools else None,
                 max_completion_tokens=max_tokens,
                 temperature=temperature,
-                timeout=90.0,
+                timeout=120.0,
             )
 
         try:
