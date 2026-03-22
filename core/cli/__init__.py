@@ -3357,12 +3357,46 @@ def serve(
         "- Respond directly with the answer only. Be concise."
     )
 
+    # Build shared MCP + Skills (same as REPL)
+    from core.infrastructure.adapters.mcp.manager import get_mcp_manager
+    from core.llm.skill_registry import SkillRegistry
+
+    mcp_mgr = get_mcp_manager()
+    skill_registry = SkillRegistry()
+    skill_registry.discover()
+
     def _gateway_processor(content: str) -> str:
-        """Process a gateway message with a fresh AgenticLoop per message."""
+        """Process a gateway message with a fresh AgenticLoop per message.
+
+        Mirrors REPL setup: MCP tools, sub-agent, skills all available.
+        """
         ctx = ConversationContext(max_turns=20)
-        handlers = _build_tool_handlers()
-        executor = ToolExecutor(action_handlers=handlers, hitl_level=0)
-        loop = AgenticLoop(ctx, executor, max_rounds=5, system_suffix=_GATEWAY_SUFFIX)
+        agentic_ref: list[Any] = [None]
+        handlers = _build_tool_handlers(
+            mcp_manager=mcp_mgr,
+            agentic_ref=agentic_ref,
+            skill_registry=skill_registry,
+        )
+        sub_mgr = _build_sub_agent_manager(
+            action_handlers=handlers,
+            mcp_manager=mcp_mgr,
+            skill_registry=skill_registry,
+        )
+        executor = ToolExecutor(
+            action_handlers=handlers,
+            mcp_manager=mcp_mgr,
+            sub_agent_manager=sub_mgr,
+            hitl_level=0,
+        )
+        loop = AgenticLoop(
+            ctx,
+            executor,
+            max_rounds=10,
+            mcp_manager=mcp_mgr,
+            skill_registry=skill_registry,
+            system_suffix=_GATEWAY_SUFFIX,
+        )
+        agentic_ref[0] = loop
         try:
             result = loop.run(content)
             return result.text if result else ""
