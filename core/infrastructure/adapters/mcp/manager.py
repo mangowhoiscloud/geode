@@ -148,10 +148,7 @@ class MCPServerManager:
         max_workers = min(len(server_names), 8)
 
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {
-                pool.submit(self._get_client, name): name
-                for name in server_names
-            }
+            futures = {pool.submit(self._get_client, name): name for name in server_names}
             for future in as_completed(futures):
                 name = futures[future]
                 try:
