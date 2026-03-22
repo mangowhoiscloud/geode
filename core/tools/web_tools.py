@@ -27,7 +27,7 @@ class WebFetchTool:
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         url: str = kwargs["url"]
-        max_chars: int = kwargs.get("max_chars", 8000)
+        max_chars: int = min(kwargs.get("max_chars", 8000), 10000)
 
         try:
             import httpx
