@@ -423,9 +423,9 @@ class TestUpdateModel:
         loop.update_model(GLM_PRIMARY)
         assert loop.model == GLM_PRIMARY
         assert loop._provider == "glm"
-        assert loop._client is None  # reset on provider change
+        assert loop._adapter.provider_name == "glm"  # adapter re-created
 
-    def test_update_model_same_provider_keeps_client(self):
+    def test_update_model_same_provider_keeps_adapter(self):
         from unittest.mock import MagicMock
 
         from core.cli.agentic_loop import AgenticLoop
@@ -435,12 +435,12 @@ class TestUpdateModel:
         ctx = ConversationContext()
         executor = MagicMock(spec=ToolExecutor)
         loop = AgenticLoop(ctx, executor)
-        loop._client = "fake_client"
+        original_adapter = loop._adapter
 
         loop.update_model("claude-sonnet-4-6")
         assert loop.model == "claude-sonnet-4-6"
         assert loop._provider == "anthropic"
-        assert loop._client == "fake_client"  # kept
+        assert loop._adapter is original_adapter  # kept — same provider
 
 
 class TestGlmClient:

@@ -839,12 +839,13 @@ class TestAgenticLoopEdgeCases:
         response.content = [block1, block2]
         assert loop._extract_text(response) == "Part 1\nPart 2"
 
-    def test_client_cached_across_rounds(
+    def test_adapter_initialized_at_construction(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """Verify Anthropic client is created once and reused."""
+        """Verify agentic adapter is created at construction time."""
         loop = AgenticLoop(context, executor)
-        assert loop._client is None  # not yet created
+        assert loop._adapter is not None
+        assert loop._adapter.provider_name == "anthropic"
 
 
 class TestSubAgentEdgeCases:

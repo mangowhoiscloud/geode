@@ -267,20 +267,23 @@ def _interactive_loop() -> None:
 
     # 4. MCP servers (slowest -- npx subprocess spawn)
     #    Uses startup() for full lifecycle: config + connect + signal handlers + atexit
-    _init_step("MCP servers")
+    #    TextSpinner blocks visual input during the slow npx subprocess phase.
     from core.infrastructure.adapters.mcp.manager import MCPServerManager
+    from core.ui.status import TextSpinner
 
     mcp_mgr: MCPServerManager | None = None
+    _mcp_spinner = TextSpinner("MCP servers")
+    _mcp_spinner.start()
     try:
         _mgr = MCPServerManager()
         n_connected = _mgr.startup()
         if len(_mgr._servers) > 0:
             mcp_mgr = _mgr
-            _init_done(f"MCP ({n_connected}/{len(_mgr._servers)} servers)")
+            _mcp_spinner.stop(f"  ok MCP ({n_connected}/{len(_mgr._servers)} servers)")
         else:
-            _init_done("MCP (none)", ok=False)
+            _mcp_spinner.stop("  skip MCP (none)")
     except Exception:
-        _init_done("MCP", ok=False)
+        _mcp_spinner.stop("  skip MCP")
         log.debug("MCP initialization skipped", exc_info=True)
 
     # 5. Skills
