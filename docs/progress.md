@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-22 (세션 12 — Gateway 양방향 + GLM failover + MCP 싱글턴)
+> 마지막 갱신: 2026-03-22 (세션 12 — 날짜 주입 + Slack 에코 제거 + @멘션 게이트)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -35,6 +35,9 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| mention-gate | Slack @멘션 전용 응답 게이트 + 멘션 태그 제거 | #363→#364 | @mangowhoiscloud | 2026-03-22 |
+| slack-echo-fix | Slack Gateway 사용자 메시지 반복 에코 제거 + 리액션 인디케이터 | #359→#360 | @mangowhoiscloud | 2026-03-22 |
+| date-injection | 시스템 프롬프트 현재 날짜 주입 — LLM 연도 오류 방지 | #353→#356 | @mangowhoiscloud | 2026-03-22 |
 | context-overflow-fix | Context overflow 방지 — Token Guard 4000 + tool_result 절삭 + keep_recent 설정 | #365→#366 | @mangowhoiscloud | 2026-03-22 |
 | mcp-parallel-startup | MCP 서버 병렬 연결 — 순차 110s→~15s (ThreadPoolExecutor) | #361→#362 | @mangowhoiscloud | 2026-03-22 |
 | glm-failover-noise | Failover 로그 노이즈 제거 (warning→debug) + LLM timeout 90s→120s | #357→#358 | @mangowhoiscloud | 2026-03-22 |
