@@ -203,7 +203,7 @@ class MCPServerManager:
             if registry_count > 0:
                 log.info("MCP registry: %d servers auto-discovered", registry_count)
         except Exception as exc:
-            log.warning("MCP registry discovery failed: %s", exc)
+            log.debug("MCP registry discovery failed: %s", exc)
 
         # Layer 2: file overrides (merge on top)
         file_count = 0
@@ -221,7 +221,7 @@ class MCPServerManager:
                         self._config_path,
                     )
             except (json.JSONDecodeError, OSError) as exc:
-                log.warning("Failed to load MCP config file: %s", exc)
+                log.debug("Failed to load MCP config file: %s", exc)
 
         total = len(self._servers)
         if total > 0:
