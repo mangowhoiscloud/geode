@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-22 (세션 12 — P1 Gateway adapter + MCP spinner + model awareness)
+> 마지막 갱신: 2026-03-22 (세션 12 — 날짜 주입 + Slack 에코 제거 + @멘션 게이트)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -12,6 +12,10 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
+| mcp-tool-refresh | MCP startup 후 AgenticLoop 도구 목록 갱신 — Playwright 등 MCP 도구 미인식 문제 | P1 | — | MCP 연결 후 refresh_tools() 호출 |
+| mcp-singleton-notify | MCPServerManager 싱글턴 → NotificationAdapter 공유 완성 — Poller 우회 제거 | P1 | — | runtime.py 구조 리팩토링 |
+| youtube-api-key | YouTube MCP 활성화 — YOUTUBE_API_KEY 설정 + fixture↔API 이중 구현 정리 | P2 | — | GOOGLE_API_KEY와 별개 |
+| playwright-catalog-sync | Playwright catalog 패키지명 @playwright/mcp로 갱신 | P3 | — | JSON override와 정합성 |
 | career-identity | C0 Identity career.toml 로딩 + 시스템 프롬프트 주입 | P1 | geode-context-hub.md Phase E | UserProfile 확장 |
 | app-tracker | C4 Plan tracker.json 지원 상태 CRUD + /apply 커맨드 | P1 | geode-context-hub.md Phase F | Vault applications 연동 |
 | context-command | /context 슬래시 커맨드 + Startup 자동 주입 | P2 | geode-context-hub.md Phase C | 전 계층 요약 표시 |
@@ -31,9 +35,21 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
-| llm-gateway-adapter | P1 Gateway 어댑터 패턴 — 멀티프로바이더 LLM 리팩토링 (v0.23.0). agentic_loop.py -342줄, 어댑터 5파일 추출 | #347→#348 | @mangowhoiscloud | 2026-03-22 |
-| mcp-spinner | MCP 로딩 중 TextSpinner 적용 — 사용자 입력 시각적 차단 | #349→#350 | @mangowhoiscloud | 2026-03-22 |
-| model-awareness | 모델 자기 인식 — SessionMeter 하드코딩 제거 + 모델 카드 시스템 프롬프트 주입 + /model 전환 동기화 | #351→#352 | @mangowhoiscloud | 2026-03-22 |
+| mention-gate | Slack @멘션 전용 응답 게이트 + 멘션 태그 제거 | #363→#364 | @mangowhoiscloud | 2026-03-22 |
+| slack-echo-fix | Slack Gateway 사용자 메시지 반복 에코 제거 + 리액션 인디케이터 | #359→#360 | @mangowhoiscloud | 2026-03-22 |
+| date-injection | 시스템 프롬프트 현재 날짜 주입 — LLM 연도 오류 방지 | #353→#356 | @mangowhoiscloud | 2026-03-22 |
+| context-overflow-fix | Context overflow 방지 — Token Guard 4000 + tool_result 절삭 + keep_recent 설정 | #365→#366 | @mangowhoiscloud | 2026-03-22 |
+| mcp-parallel-startup | MCP 서버 병렬 연결 — 순차 110s→~15s (ThreadPoolExecutor) | #361→#362 | @mangowhoiscloud | 2026-03-22 |
+| glm-failover-noise | Failover 로그 노이즈 제거 (warning→debug) + LLM timeout 90s→120s | #357→#358 | @mangowhoiscloud | 2026-03-22 |
+| gateway-bidirectional | Gateway 양방향 소통 — 로깅 추가, 중복 방지(ts seeding), 메시지별 독립 context, 에러 가시성 | #354→#355 | @mangowhoiscloud | 2026-03-22 |
+| mcp-singleton | MCPServerManager 싱글턴화 — 좀비 프로세스 근절 + 4곳 get_mcp_manager() 전환 | main direct | @mangowhoiscloud | 2026-03-22 |
+| slack-adapter-fix | Slack MCP tool 이름 정합성 + NotificationAdapter kwargs 전달 + MCP content wrapper 파싱 | main direct | @mangowhoiscloud | 2026-03-22 |
+| slack-poller-fix | SlackPoller channel→channel_id + MCP JSON wrapper 파싱 + bot_id 필터 | main direct | @mangowhoiscloud | 2026-03-22 |
+| geode-serve | geode serve 커맨드 — headless Gateway 데몬 모드 (nohup 실행 가능) | main direct | @mangowhoiscloud | 2026-03-22 |
+| glm-url-fix | GLM base URL api.z.ai→open.bigmodel.cn + keepalive 15s→30s + MCP 테스트 격리 | #343→#344 | @mangowhoiscloud | 2026-03-22 |
+| mcp-log-noise | MCP startup 로그 warning→debug — 유저 콘솔 노출 방지 | #345→#346 | @mangowhoiscloud | 2026-03-22 |
+| slack-echo-fix | Slack Gateway 사용자 메시지 반복 에코 제거 + 리액션 인디케이터 | #359→#360 | @mangowhoiscloud | 2026-03-22 |
+| date-injection | 시스템 프롬프트 현재 날짜 주입 — LLM 연도 오류 방지 | #353→#356 | @mangowhoiscloud | 2026-03-22 |
 
 ### Done (2026-03-21)
 
@@ -146,11 +162,6 @@
 | gap-session-resume | #334 | 2026-03-21 |
 | gap-test-isolation | #334 | 2026-03-21 |
 | gap-manage-auth-hint | #334 | 2026-03-21 |
-| gap-glm-tool-result | #347→#348 | 2026-03-22 |
-| gap-httpx-pool-parity | #347→#348 | 2026-03-22 |
-| gap-glm-circuit-breaker | #347→#348 | 2026-03-22 |
-| gap-cross-provider-glm | #347→#348 | 2026-03-22 |
-| gap-model-hardcode | #351→#352 | 2026-03-22 |
 
 ---
 
@@ -158,10 +169,10 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.23.0 | 2026-03-22 |
+| Version | 0.24.0 | 2026-03-22 |
 | Modules | 184 | 2026-03-22 |
-| Tests | 3057 | 2026-03-22 |
-| Tools | 46 | 2026-03-19 |
+| Tests | 3055 | 2026-03-22 |
+| Tools | 46 (+MCP 86) | 2026-03-22 |
 | MCP Catalog | 42 | 2026-03-19 |
 | HookEvents | 36 | 2026-03-19 |
 | Skills | 25 | 2026-03-21 |
