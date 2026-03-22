@@ -317,7 +317,15 @@
       "properties": {
         "sub_action": {
           "type": "string",
-          "enum": ["list", "create", "delete", "status", "enable", "disable", "run"],
+          "enum": [
+            "list",
+            "create",
+            "delete",
+            "status",
+            "enable",
+            "disable",
+            "run"
+          ],
           "description": "수행할 작업. create: 새 스케줄 생성, delete: 삭제, status: 상태 조회, list: 목록."
         },
         "target_id": {
@@ -406,11 +414,26 @@
           "items": {
             "type": "object",
             "properties": {
-              "task_description": {"type": "string"},
-              "task_type": {"type": "string", "enum": ["analyze", "search", "compare"]},
-              "args": {"type": "object"}
+              "task_description": {
+                "type": "string"
+              },
+              "task_type": {
+                "type": "string",
+                "enum": [
+                  "analyze",
+                  "search",
+                  "compare"
+                ]
+              },
+              "args": {
+                "type": "object"
+              }
             },
-            "required": ["task_description", "task_type", "args"]
+            "required": [
+              "task_description",
+              "task_type",
+              "args"
+            ]
           }
         }
       },
@@ -559,7 +582,7 @@
         },
         "max_chars": {
           "type": "integer",
-          "description": "Maximum characters to return (default: 8000)"
+          "description": "Maximum characters to return (default: 8000, max: 10000). Do not exceed 10000."
         }
       },
       "required": [
@@ -929,7 +952,13 @@
       "properties": {
         "channel": {
           "type": "string",
-          "enum": ["slack", "discord", "telegram", "email", "webhook"],
+          "enum": [
+            "slack",
+            "discord",
+            "telegram",
+            "email",
+            "webhook"
+          ],
           "description": "Notification channel"
         },
         "message": {
@@ -938,7 +967,11 @@
         },
         "severity": {
           "type": "string",
-          "enum": ["info", "warning", "critical"],
+          "enum": [
+            "info",
+            "warning",
+            "critical"
+          ],
           "description": "Severity level (default: info)"
         },
         "recipient": {
@@ -946,7 +979,10 @@
           "description": "Target recipient (channel name, chat ID, URL)"
         }
       },
-      "required": ["channel", "message"]
+      "required": [
+        "channel",
+        "message"
+      ]
     }
   },
   {
@@ -1010,7 +1046,10 @@
           "description": "Target calendar name (optional)"
         }
       },
-      "required": ["title", "start_datetime"]
+      "required": [
+        "title",
+        "start_datetime"
+      ]
     }
   },
   {
@@ -1023,7 +1062,11 @@
       "properties": {
         "direction": {
           "type": "string",
-          "enum": ["push", "pull", "both"],
+          "enum": [
+            "push",
+            "pull",
+            "both"
+          ],
           "description": "Sync direction: push (scheduler→calendar), pull (calendar→scheduler), both"
         }
       },
