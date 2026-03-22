@@ -44,8 +44,8 @@ class SlackNotificationAdapter:
         try:
             result = self._manager.call_tool(  # type: ignore[union-attr]
                 self._server_name,
-                "send_message",
-                {"channel": recipient, "text": message},
+                "slack_post_message",
+                {"channel_id": recipient, "text": message},
             )
             if "error" in result:
                 return NotificationResult(success=False, channel="slack", error=result["error"])

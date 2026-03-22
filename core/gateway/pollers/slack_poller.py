@@ -71,7 +71,7 @@ class SlackPoller(BasePoller):
             if oldest:
                 args["oldest"] = oldest
 
-            result = self._mcp.call_tool("slack", "get_channel_history", args)  # type: ignore[union-attr]
+            result = self._mcp.call_tool("slack", "slack_get_channel_history", args)  # type: ignore[union-attr]
             if "error" in result:
                 return
 
