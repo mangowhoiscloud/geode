@@ -12,7 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| — | — | — | — | — |
+| serve-repl-unify | serve/REPL 초기화 단일 소스화 — ContextVar 전파 + 메모리/프로필 공유 경로 통합 | P0 | serve-repl-unify.md | 데몬 스레드 ContextVar 미전파 근본 해결 |
 
 ### In Progress
 
