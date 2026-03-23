@@ -12,7 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| gmail-integration | Gmail MCP 통합 — 이메일 읽기/전송 + MCP catalog 등록 | P1 | — | @gongrzhe/server-gmail-autoauth-mcp |
+| — | — | — | — | — |
 
 ### In Progress
 
@@ -29,6 +29,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| gmail-integration | Gmail MCP 통합 — OAuth 기반, DEFAULT_SERVERS 등록, catalog 43개 | #396→#397 | @mangowhoiscloud | 2026-03-24 |
 | serve-repl-unify | bootstrap_geode() 단일 초기화 + ContextVar 전파 (14 tests) | #394→#395 | @mangowhoiscloud | 2026-03-24 |
 | web-fetch-ssl | web_fetch SSL fallback — Python 3.14 certifi 호환 | #392→#393 | @mangowhoiscloud | 2026-03-24 |
 | wrapper-removal | _build_tool_handlers wrapper 삭제 — 상단 re-export + Beck/Karpathy 검증 | main direct | @mangowhoiscloud | 2026-03-24 |
