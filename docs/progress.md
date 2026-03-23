@@ -35,6 +35,10 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| gateway-exclusive | Gateway를 geode serve 전용으로 분리 — REPL 이중 폴링 제거 (OpenClaw 패턴) | #372→#373 | @mangowhoiscloud | 2026-03-23 |
+| serve-full-capability | geode serve processor REPL 동등 역량 — MCP 86 + SubAgent + Skills 추가 | main direct | @mangowhoiscloud | 2026-03-23 |
+| slack-mention-botid | Slack Bot ID 멘션 인식 + 리액션 눈알 이모지 | main direct | @mangowhoiscloud | 2026-03-23 |
+| slack-reaction-mention | Slack 리액션을 @멘션 메시지에만 추가 | main direct | @mangowhoiscloud | 2026-03-23 |
 | model-match | switch_model 퍼지 매칭 — 하이픈/공백 정규화로 GLM5→glm-5 등 인식 | #369→#371 | @mangowhoiscloud | 2026-03-22 |
 | slack-reaction-ux | Slack 리액션 UX — 처리 중 모래시계 + 완료 체크마크, 파라미터 수정 | #370→#371 | @mangowhoiscloud | 2026-03-22 |
 | context-claude-align | Context management Claude Code 정합 — 80% compaction 제거, clear_tool_uses 의존, -54줄 | #367→#368 | @mangowhoiscloud | 2026-03-22 |
