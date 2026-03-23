@@ -76,6 +76,11 @@ def build_system_prompt(model: str = "") -> str:
     if memory_ctx:
         base += "\n\n" + memory_ctx
 
+    # Career identity context (Tier 0.5 extension)
+    career_ctx = _build_career_context()
+    if career_ctx:
+        base += "\n\n" + career_ctx
+
     return base
 
 
@@ -146,6 +151,21 @@ def _build_model_card(model: str) -> str:
         return "\n".join(parts)
     except Exception:
         log.debug("Failed to build model card", exc_info=True)
+        return ""
+
+
+def _build_career_context() -> str:
+    """Build career identity context from ~/.geode/identity/career.toml."""
+    try:
+        from core.memory.user_profile import FileBasedUserProfile
+
+        profile = FileBasedUserProfile()
+        summary = profile.get_career_summary()
+        if summary:
+            return f"## User Career\n{summary}"
+        return ""
+    except Exception:
+        log.debug("Failed to build career context", exc_info=True)
         return ""
 
 
