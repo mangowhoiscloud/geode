@@ -3357,7 +3357,8 @@ def serve(
         "- Respond directly with the answer only. Be concise."
     )
 
-    # Build shared MCP + Skills (same as REPL)
+    # Build shared MCP + Skills — REPL과 동일한 경로 사용
+    from core.cli.tool_handlers import _build_tool_handlers as _build_handlers
     from core.extensibility.skills import SkillLoader, SkillRegistry
     from core.infrastructure.adapters.mcp.manager import get_mcp_manager
 
@@ -3365,14 +3366,19 @@ def serve(
     skill_registry = SkillRegistry()
     SkillLoader().load_all(registry=skill_registry)
 
+    # Readiness 설정 (REPL에서는 startup에서 수행)
+    from core.cli.startup import check_readiness
+
+    _set_readiness(check_readiness())
+
     def _gateway_processor(content: str) -> str:
         """Process a gateway message with a fresh AgenticLoop per message.
 
-        Mirrors REPL setup: MCP tools, sub-agent, skills all available.
+        Uses tool_handlers._build_tool_handlers() — REPL과 동일한 빌더.
         """
         ctx = ConversationContext(max_turns=20)
         agentic_ref: list[Any] = [None]
-        handlers = _build_tool_handlers(
+        handlers = _build_handlers(
             mcp_manager=mcp_mgr,
             agentic_ref=agentic_ref,
             skill_registry=skill_registry,
