@@ -1700,7 +1700,8 @@ def serve(
         "- Respond directly with the answer only. Be concise."
     )
 
-    # Build shared MCP + Skills
+    # Build shared MCP + Skills — 직접 import (wrapper 우회)
+    from core.cli.tool_handlers import _build_tool_handlers as _build_serve_handlers
     from core.extensibility.skills import SkillLoader, SkillRegistry
     from core.infrastructure.adapters.mcp.manager import get_mcp_manager
 
@@ -1720,7 +1721,7 @@ def serve(
         """
         ctx = ConversationContext(max_turns=20)
         agentic_ref: list[Any] = [None]
-        handlers = _build_tool_handlers(
+        handlers = _build_serve_handlers(
             mcp_manager=mcp_mgr,
             agentic_ref=agentic_ref,
             skill_registry=skill_registry,
