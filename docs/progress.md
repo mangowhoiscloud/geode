@@ -29,6 +29,8 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| wrapper-removal | _build_tool_handlers wrapper 삭제 — 상단 re-export + Beck/Karpathy 검증 | main direct | @mangowhoiscloud | 2026-03-24 |
+| slack-mrkdwn | Slack mrkdwn 변환 — Markdown→Slack 포맷 자동 변환 (22 tests) | #390→#391 | @mangowhoiscloud | 2026-03-24 |
 | context-hub | Context Hub 3건 — career.toml + /context + /apply (26 tests) | #388→#389 | @mangowhoiscloud | 2026-03-23 |
 | backlog-sweep | Backlog 4건 일괄 — MCP lazy refresh + Playwright sync + YouTube key + API 발급 링크 | #386→#387 | @mangowhoiscloud | 2026-03-23 |
 | runtime-builder | GeodeRuntime 30→3 params — RuntimeCoreConfig/AutomationConfig/MemoryConfig 데이터클래스 | #384→#385 | @mangowhoiscloud | 2026-03-23 |
