@@ -263,7 +263,7 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
     ),
     "playwright": MCPCatalogEntry(
         name="playwright",
-        package="executeautomation/mcp-playwright",
+        package="@playwright/mcp",
         description="Browser automation via Playwright (navigate, click, scrape)",
         tags=("browser", "playwright", "automation", "scrape"),
     ),

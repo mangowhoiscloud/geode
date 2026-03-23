@@ -250,20 +250,21 @@ uv tool install . --force
 mkdir -p ~/.geode
 cat > ~/.geode/.env << 'EOF'
 # LLM Providers
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-proj-...
-ZAI_API_KEY=...                    # ZhipuAI GLM (선택)
+ANTHROPIC_API_KEY=sk-ant-...       # https://console.anthropic.com/settings/keys
+OPENAI_API_KEY=sk-proj-...         # https://platform.openai.com/api-keys
+ZAI_API_KEY=...                    # https://open.bigmodel.cn/usercenter/apikeys (선택)
 
 # Search & Data
-BRAVE_API_KEY=...
-GOOGLE_API_KEY=...
+BRAVE_API_KEY=...                  # https://brave.com/search/api/
+GOOGLE_API_KEY=...                 # https://console.cloud.google.com/apis/credentials
+YOUTUBE_API_KEY=...                # 위 Google API Key와 동일 (YouTube Data API v3 활성화)
 
 # Messaging (Slack Gateway)
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_TEAM_ID=T...
+SLACK_BOT_TOKEN=xoxb-...           # https://api.slack.com/apps → OAuth & Permissions
+SLACK_TEAM_ID=T...                 # Slack 워크스페이스 설정에서 확인
 
 # Observability (선택)
-LANGSMITH_API_KEY=lsv2_pt_...
+LANGSMITH_API_KEY=lsv2_pt_...      # https://smith.langchain.com/settings
 EOF
 chmod 600 ~/.geode/.env
 ```
