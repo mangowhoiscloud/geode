@@ -12,7 +12,6 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| deadcode-handler-unify | __init__.py 구버전 _build_tool_handlers 삭제 + tool_handlers.py 단일 소스화 + serve 정합성 | P0 | deadcode-handler-unify.md | 설계 결함 — 동일 함수 2곳 중복 정의 |
 | mcp-tool-refresh | MCP startup 후 AgenticLoop 도구 목록 갱신 — Playwright 등 MCP 도구 미인식 문제 | P1 | — | MCP 연결 후 refresh_tools() 호출 |
 | mcp-singleton-notify | MCPServerManager 싱글턴 → NotificationAdapter 공유 완성 — Poller 우회 제거 | P1 | — | runtime.py 구조 리팩토링 |
 | youtube-api-key | YouTube MCP 활성화 — YOUTUBE_API_KEY 설정 + fixture↔API 이중 구현 정리 | P2 | — | GOOGLE_API_KEY와 별개 |
@@ -36,6 +35,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| deadcode-handler-unify | 인라인 handler 898줄 삭제 + tool_handlers.py 단일 소스화 (__init__.py -26%) | #376→#377 | @mangowhoiscloud | 2026-03-23 |
 | serve-e2e-parity | serve CLI 완전 동등성 — tool_handlers.py 빌더 + readiness 초기화 + 44 handlers E2E 검증 | #374→#375 | @mangowhoiscloud | 2026-03-23 |
 | gateway-exclusive | Gateway를 geode serve 전용으로 분리 — REPL 이중 폴링 제거 (OpenClaw 패턴) | #372→#373 | @mangowhoiscloud | 2026-03-23 |
 | serve-full-capability | geode serve processor REPL 동등 역량 — MCP 86 + SubAgent + Skills 추가 | main direct | @mangowhoiscloud | 2026-03-23 |
