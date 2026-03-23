@@ -203,6 +203,12 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         env_keys=("ZEP_API_KEY",),
     ),
     # --- Messaging ---
+    "gmail": MCPCatalogEntry(
+        name="gmail",
+        package="@gongrzhe/server-gmail-autoauth-mcp",
+        description="Gmail email read, send, search, label, and attachment management",
+        tags=("email", "gmail", "messaging", "notification", "google"),
+    ),
     "slack": MCPCatalogEntry(
         name="slack",
         package="@modelcontextprotocol/server-slack",
