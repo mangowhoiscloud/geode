@@ -73,6 +73,9 @@ from core.cli.startup import (
     setup_user_profile,
 )
 from core.cli.tool_executor import ToolExecutor
+from core.cli.tool_handlers import (
+    _build_tool_handlers as _build_tool_handlers,
+)
 from core.config import settings
 from core.infrastructure.ports.hook_port import HookSystemPort
 from core.llm.commentary import (
@@ -758,23 +761,6 @@ def _build_sub_agent_manager(
         denied_tools=SUBAGENT_DENIED_TOOLS,
     )
 
-
-def _build_tool_handlers(
-    verbose: bool = False,
-    *,
-    mcp_manager: Any = None,
-    agentic_ref: list[Any] | None = None,
-    skill_registry: Any = None,
-) -> dict[str, Any]:
-    """Delegate to tool_handlers module (single source of truth, 44 handlers)."""
-    from core.cli.tool_handlers import _build_tool_handlers as _build
-
-    return _build(
-        verbose=verbose,
-        mcp_manager=mcp_manager,
-        agentic_ref=agentic_ref,
-        skill_registry=skill_registry,
-    )
 
 
 def _render_agentic_result(result: AgenticResult) -> None:
@@ -1700,8 +1686,7 @@ def serve(
         "- Respond directly with the answer only. Be concise."
     )
 
-    # Build shared MCP + Skills — 직접 import (wrapper 우회)
-    from core.cli.tool_handlers import _build_tool_handlers as _build_serve_handlers
+    # Build shared MCP + Skills
     from core.extensibility.skills import SkillLoader, SkillRegistry
     from core.infrastructure.adapters.mcp.manager import get_mcp_manager
 
@@ -1721,7 +1706,7 @@ def serve(
         """
         ctx = ConversationContext(max_turns=20)
         agentic_ref: list[Any] = [None]
-        handlers = _build_serve_handlers(
+        handlers = _build_tool_handlers(
             mcp_manager=mcp_mgr,
             agentic_ref=agentic_ref,
             skill_registry=skill_registry,
