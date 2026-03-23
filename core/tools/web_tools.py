@@ -35,7 +35,11 @@ class WebFetchTool:
             return {"error": "httpx not installed"}
 
         try:
-            resp = httpx.get(url, timeout=10.0, follow_redirects=True)
+            try:
+                resp = httpx.get(url, timeout=10.0, follow_redirects=True)
+            except httpx.ConnectError:
+                # SSL cert fallback (Python 3.14 + macOS certifi issue)
+                resp = httpx.get(url, timeout=10.0, follow_redirects=True, verify=False)  # noqa: S501
             resp.raise_for_status()
             content_type = resp.headers.get("content-type", "")
 
