@@ -540,6 +540,7 @@ Project-specific skills in `.claude/skills/`:
 | `code-review-quality` | quality, 품질, SOLID, dead code, resource leak | Python 코드 품질 6-렌즈 리뷰 (REODE 역수입) |
 | `dependency-review` | dependency, import, 의존성, 레이어, circular, lazy | 6-Layer 의존성 건전성 리뷰 (REODE 역수입) |
 | `kent-beck-review` | kent beck, simple design, simplify, god object, SRP | Simple Design 4규칙 코드 리뷰 (REODE 역수입) |
+| `codebase-audit` | audit, 감사, dead code, refactor, god object, 중복 | 코드 감사 + 리팩토링 워크플로우 (v0.24.0 실증) |
 
 ## Linked Skills (from parent project)
 
