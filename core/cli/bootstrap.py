@@ -1,0 +1,146 @@
+"""Unified bootstrap for REPL and serve modes.
+
+Single initialization path ensures both modes get identical:
+- Memory contextvars (ProjectMemory, OrgMemory)
+- Domain adapter
+- Readiness check
+- MCP manager
+- Skills
+- Tool handlers
+
+The returned GeodeBootstrap carries all initialized components
+and provides propagate_to_thread() for daemon thread ContextVar injection.
+"""
+
+from __future__ import annotations
+
+import contextvars
+import logging
+from dataclasses import dataclass, field
+from typing import Any
+
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class GeodeBootstrap:
+    """Initialized GEODE context — shared between REPL and serve."""
+
+    mcp_manager: Any = None
+    skill_registry: Any = None
+    tool_handlers: dict[str, Any] = field(default_factory=dict)
+    readiness: Any = None
+
+    # Snapshot of ContextVars for thread propagation
+    _context: contextvars.Context = field(default_factory=contextvars.copy_context)
+
+    def propagate_to_thread(self) -> None:
+        """Re-set ContextVars in current (daemon) thread.
+
+        Python ``contextvars`` do not automatically inherit across threads.
+        Call this at the start of ``_gateway_processor`` or any function
+        running in a non-main thread so that tools like ``note_read``,
+        ``memory_search``, and ``analyze_ip`` work correctly.
+        """
+        from core.memory.organization import MonoLakeOrganizationMemory
+        from core.memory.project import ProjectMemory
+        from core.tools.memory_tools import set_org_memory, set_project_memory
+
+        set_project_memory(ProjectMemory())
+        set_org_memory(MonoLakeOrganizationMemory())
+
+        if self.readiness is not None:
+            from core.cli import _set_readiness
+
+            _set_readiness(self.readiness)
+
+        # Domain adapter
+        try:
+            from core.domains.loader import load_domain_adapter
+            from core.infrastructure.ports.domain_port import set_domain
+
+            set_domain(load_domain_adapter("game_ip"))
+        except Exception:
+            log.debug("Domain propagation skipped", exc_info=True)
+
+
+def bootstrap_geode(
+    *,
+    verbose: bool = False,
+    load_env: bool = False,
+) -> GeodeBootstrap:
+    """Single initialization for both REPL and serve.
+
+    Args:
+        verbose: Enable verbose logging.
+        load_env: Load .env files into ``os.environ``
+            (serve needs this; REPL typically does not).
+    """
+    if load_env:
+        from pathlib import Path
+
+        from dotenv import load_dotenv
+
+        global_env = Path.home() / ".geode" / ".env"
+        if global_env.exists():
+            load_dotenv(str(global_env), override=False)
+        local_env = Path(".env")
+        if local_env.exists():
+            load_dotenv(str(local_env), override=True)
+
+    # 1. Domain adapter
+    try:
+        from core.domains.loader import load_domain_adapter
+        from core.infrastructure.ports.domain_port import set_domain
+
+        set_domain(load_domain_adapter("game_ip"))
+    except Exception:
+        log.debug("Domain adapter skipped", exc_info=True)
+
+    # 2. Memory contextvars
+    try:
+        from core.memory.organization import MonoLakeOrganizationMemory
+        from core.memory.project import ProjectMemory
+        from core.tools.memory_tools import set_org_memory, set_project_memory
+
+        set_project_memory(ProjectMemory())
+        set_org_memory(MonoLakeOrganizationMemory())
+    except Exception:
+        log.debug("Memory context skipped", exc_info=True)
+
+    # 3. Readiness
+    from core.cli import _set_readiness
+    from core.cli.startup import check_readiness
+
+    readiness = check_readiness()
+    _set_readiness(readiness)
+
+    # 4. MCP
+    from core.infrastructure.adapters.mcp.manager import get_mcp_manager
+
+    mcp_mgr = get_mcp_manager()
+
+    # 5. Skills
+    from core.extensibility.skills import SkillLoader, SkillRegistry
+
+    skill_registry = SkillRegistry()
+    try:
+        SkillLoader().load_all(registry=skill_registry)
+    except Exception:
+        log.debug("Skill loading skipped", exc_info=True)
+
+    # 6. Tool handlers
+    from core.cli.tool_handlers import _build_tool_handlers
+
+    handlers = _build_tool_handlers(
+        verbose=verbose,
+        mcp_manager=mcp_mgr,
+        skill_registry=skill_registry,
+    )
+
+    return GeodeBootstrap(
+        mcp_manager=mcp_mgr,
+        skill_registry=skill_registry,
+        tool_handlers=handlers,
+        readiness=readiness,
+    )
