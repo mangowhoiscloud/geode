@@ -3358,12 +3358,12 @@ def serve(
     )
 
     # Build shared MCP + Skills (same as REPL)
+    from core.extensibility.skills import SkillLoader, SkillRegistry
     from core.infrastructure.adapters.mcp.manager import get_mcp_manager
-    from core.llm.skill_registry import SkillRegistry
 
     mcp_mgr = get_mcp_manager()
     skill_registry = SkillRegistry()
-    skill_registry.discover()
+    SkillLoader().load_all(registry=skill_registry)
 
     def _gateway_processor(content: str) -> str:
         """Process a gateway message with a fresh AgenticLoop per message.
