@@ -50,6 +50,7 @@ DEFAULT_SERVERS: tuple[str, ...] = (
     "sequential-thinking",
     "playwright",
     "arxiv",
+    "gmail",
 )
 
 # ---------------------------------------------------------------------------
