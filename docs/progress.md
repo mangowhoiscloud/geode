@@ -12,9 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| career-identity | C0 Identity career.toml 로딩 + 시스템 프롬프트 주입 | P1 | geode-context-hub.md Phase E | UserProfile 확장 |
-| app-tracker | C4 Plan tracker.json 지원 상태 CRUD + /apply 커맨드 | P1 | geode-context-hub.md Phase F | Vault applications 연동 |
-| context-command | /context 슬래시 커맨드 + Startup 자동 주입 | P2 | geode-context-hub.md Phase C | 전 계층 요약 표시 |
+| — | — | — | — | — |
 
 ### In Progress
 
@@ -31,6 +29,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| context-hub | Context Hub 3건 — career.toml + /context + /apply (26 tests) | #388→#389 | @mangowhoiscloud | 2026-03-23 |
 | backlog-sweep | Backlog 4건 일괄 — MCP lazy refresh + Playwright sync + YouTube key + API 발급 링크 | #386→#387 | @mangowhoiscloud | 2026-03-23 |
 | runtime-builder | GeodeRuntime 30→3 params — RuntimeCoreConfig/AutomationConfig/MemoryConfig 데이터클래스 | #384→#385 | @mangowhoiscloud | 2026-03-23 |
 | codebase-audit-skill | codebase-audit 스킬 증류 — 감사+리팩토링 워크플로우 (v0.24.0 실증) | #382→#383 | @mangowhoiscloud | 2026-03-23 |
