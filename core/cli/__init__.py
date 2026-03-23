@@ -1634,18 +1634,10 @@ def serve(
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
-    # Load .env files into os.environ so Pollers can see credentials
-    # (Pydantic Settings loads them internally, but os.environ is not populated)
-    from pathlib import Path as _Path
+    # Unified bootstrap (same init as REPL: domain, memory, readiness, MCP, skills, handlers)
+    from core.cli.bootstrap import bootstrap_geode
 
-    from dotenv import load_dotenv
-
-    _global_env = _Path.home() / ".geode" / ".env"
-    if _global_env.exists():
-        load_dotenv(str(_global_env), override=False)
-    _local_env = _Path(".env")
-    if _local_env.exists():
-        load_dotenv(str(_local_env), override=True)
+    boot = bootstrap_geode(load_env=True)
 
     from core.config import settings
 
@@ -1686,39 +1678,29 @@ def serve(
         "- Respond directly with the answer only. Be concise."
     )
 
-    # Build shared MCP + Skills
-    from core.extensibility.skills import SkillLoader, SkillRegistry
-    from core.infrastructure.adapters.mcp.manager import get_mcp_manager
-
-    mcp_mgr = get_mcp_manager()
-    skill_registry = SkillRegistry()
-    SkillLoader().load_all(registry=skill_registry)
-
-    # Readiness 설정 (REPL에서는 startup에서 수행)
-    from core.cli.startup import check_readiness
-
-    _set_readiness(check_readiness())
-
     def _gateway_processor(content: str) -> str:
         """Process a gateway message with a fresh AgenticLoop per message.
 
-        Uses tool_handlers._build_tool_handlers() — REPL과 동일한 빌더.
+        Uses bootstrap.propagate_to_thread() to fix ContextVar visibility
+        in daemon threads, then builds a per-message AgenticLoop with
+        the same MCP/skills/handlers as the REPL.
         """
+        boot.propagate_to_thread()  # Fix ContextVar propagation for daemon thread
         ctx = ConversationContext(max_turns=20)
         agentic_ref: list[Any] = [None]
         handlers = _build_tool_handlers(
-            mcp_manager=mcp_mgr,
+            mcp_manager=boot.mcp_manager,
             agentic_ref=agentic_ref,
-            skill_registry=skill_registry,
+            skill_registry=boot.skill_registry,
         )
         sub_mgr = _build_sub_agent_manager(
             action_handlers=handlers,
-            mcp_manager=mcp_mgr,
-            skill_registry=skill_registry,
+            mcp_manager=boot.mcp_manager,
+            skill_registry=boot.skill_registry,
         )
         executor = ToolExecutor(
             action_handlers=handlers,
-            mcp_manager=mcp_mgr,
+            mcp_manager=boot.mcp_manager,
             sub_agent_manager=sub_mgr,
             hitl_level=0,
         )
@@ -1726,8 +1708,8 @@ def serve(
             ctx,
             executor,
             max_rounds=50,
-            mcp_manager=mcp_mgr,
-            skill_registry=skill_registry,
+            mcp_manager=boot.mcp_manager,
+            skill_registry=boot.skill_registry,
             system_suffix=_GATEWAY_SUFFIX,
         )
         agentic_ref[0] = loop
