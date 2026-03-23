@@ -1438,9 +1438,7 @@ def cmd_apply(args: str) -> None:
         status = parts[2].lower()
         if status not in ApplicationTracker.VALID_STATUSES:
             console.print(f"  [warning]Invalid status: {status}[/warning]")
-            console.print(
-                f"  [muted]Valid: {', '.join(ApplicationTracker.VALID_STATUSES)}[/muted]"
-            )
+            console.print(f"  [muted]Valid: {', '.join(ApplicationTracker.VALID_STATUSES)}[/muted]")
             console.print()
             return
         if tracker.update_status(company, status):
@@ -1548,9 +1546,9 @@ def cmd_context(args: str) -> None:
         profile = FileBasedUserProfile()
         summary = profile.get_context_summary()
         console.print(f"  [label]T0.5 Profile:[/label] {summary or '[muted]empty[/muted]'}")
-        career = profile.get_career_summary()
-        if career:
-            console.print(f"  [label]T0.5 Career:[/label] {career}")
+        career_summary = profile.get_career_summary()
+        if career_summary:
+            console.print(f"  [label]T0.5 Career:[/label] {career_summary}")
     except Exception:
         console.print("  [label]T0.5 Profile:[/label] [muted]unavailable[/muted]")
 
