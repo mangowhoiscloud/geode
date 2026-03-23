@@ -1693,6 +1693,13 @@ def serve(
             agentic_ref=agentic_ref,
             skill_registry=boot.skill_registry,
         )
+        log.info(
+            "Gateway processor: %d handlers, web_fetch=%s, search=%s, executor_fn=%s",
+            len(handlers),
+            "web_fetch" in handlers,
+            "general_web_search" in handlers,
+            _build_tool_handlers.__module__,
+        )
         sub_mgr = _build_sub_agent_manager(
             action_handlers=handlers,
             mcp_manager=boot.mcp_manager,
