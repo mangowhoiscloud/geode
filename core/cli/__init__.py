@@ -3397,7 +3397,7 @@ def serve(
         loop = AgenticLoop(
             ctx,
             executor,
-            max_rounds=10,
+            max_rounds=50,
             mcp_manager=mcp_mgr,
             skill_registry=skill_registry,
             system_suffix=_GATEWAY_SUFFIX,
