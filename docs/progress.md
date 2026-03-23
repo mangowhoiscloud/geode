@@ -12,10 +12,6 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| mcp-tool-refresh | MCP startup 후 AgenticLoop 도구 목록 갱신 — Playwright 등 MCP 도구 미인식 문제 | P1 | — | MCP 연결 후 refresh_tools() 호출 |
-| mcp-singleton-notify | MCPServerManager 싱글턴 → NotificationAdapter 공유 완성 — Poller 우회 제거 | P1 | — | runtime.py 구조 리팩토링 |
-| youtube-api-key | YouTube MCP 활성화 — YOUTUBE_API_KEY 설정 + fixture↔API 이중 구현 정리 | P2 | — | GOOGLE_API_KEY와 별개 |
-| playwright-catalog-sync | Playwright catalog 패키지명 @playwright/mcp로 갱신 | P3 | — | JSON override와 정합성 |
 | career-identity | C0 Identity career.toml 로딩 + 시스템 프롬프트 주입 | P1 | geode-context-hub.md Phase E | UserProfile 확장 |
 | app-tracker | C4 Plan tracker.json 지원 상태 CRUD + /apply 커맨드 | P1 | geode-context-hub.md Phase F | Vault applications 연동 |
 | context-command | /context 슬래시 커맨드 + Startup 자동 주입 | P2 | geode-context-hub.md Phase C | 전 계층 요약 표시 |
@@ -35,6 +31,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| backlog-sweep | Backlog 4건 일괄 — MCP lazy refresh + Playwright sync + YouTube key + API 발급 링크 | #386→#387 | @mangowhoiscloud | 2026-03-23 |
 | runtime-builder | GeodeRuntime 30→3 params — RuntimeCoreConfig/AutomationConfig/MemoryConfig 데이터클래스 | #384→#385 | @mangowhoiscloud | 2026-03-23 |
 | codebase-audit-skill | codebase-audit 스킬 증류 — 감사+리팩토링 워크플로우 (v0.24.0 실증) | #382→#383 | @mangowhoiscloud | 2026-03-23 |
 | init-god-object | __init__.py God Object 분할 — pipeline_executor + report_renderer 추출 (-786줄, -31%) | #380→#383 | @mangowhoiscloud | 2026-03-23 |
