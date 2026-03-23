@@ -12,7 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| serve-repl-unify | serve/REPL 초기화 단일 소스화 — ContextVar 전파 + 메모리/프로필 공유 경로 통합 | P0 | serve-repl-unify.md | 데몬 스레드 ContextVar 미전파 근본 해결 |
+| — | — | — | — | — |
 
 ### In Progress
 
@@ -29,6 +29,8 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| serve-repl-unify | bootstrap_geode() 단일 초기화 + ContextVar 전파 (14 tests) | #394→#395 | @mangowhoiscloud | 2026-03-24 |
+| web-fetch-ssl | web_fetch SSL fallback — Python 3.14 certifi 호환 | #392→#393 | @mangowhoiscloud | 2026-03-24 |
 | wrapper-removal | _build_tool_handlers wrapper 삭제 — 상단 re-export + Beck/Karpathy 검증 | main direct | @mangowhoiscloud | 2026-03-24 |
 | slack-mrkdwn | Slack mrkdwn 변환 — Markdown→Slack 포맷 자동 변환 (22 tests) | #390→#391 | @mangowhoiscloud | 2026-03-24 |
 | context-hub | Context Hub 3건 — career.toml + /context + /apply (26 tests) | #388→#389 | @mangowhoiscloud | 2026-03-23 |
