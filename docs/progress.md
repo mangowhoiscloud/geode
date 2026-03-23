@@ -12,7 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| — | — | — | — | — |
+| gmail-integration | Gmail MCP 통합 — 이메일 읽기/전송 + MCP catalog 등록 | P1 | — | @gongrzhe/server-gmail-autoauth-mcp |
 
 ### In Progress
 
