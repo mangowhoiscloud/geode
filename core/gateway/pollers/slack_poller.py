@@ -169,6 +169,9 @@ class SlackPoller(BasePoller):
         if self._mcp is None:
             return
         try:
+            from core.gateway.slack_formatter import markdown_to_slack_mrkdwn
+
+            text = markdown_to_slack_mrkdwn(text)
             args: dict[str, Any] = {"channel_id": channel_id, "text": text}
             if thread_ts:
                 args["thread_ts"] = thread_ts
