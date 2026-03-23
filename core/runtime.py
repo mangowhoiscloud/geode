@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -298,6 +299,58 @@ def _make_tool_executor(
 
 
 # ---------------------------------------------------------------------------
+# Config dataclasses — group __init__ parameters by concern
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RuntimeCoreConfig:
+    """Essential infrastructure parameters (always required)."""
+
+    hooks: HookSystemPort
+    session_store: SessionStorePort
+    policy_chain: PolicyChainPort
+    tool_registry: ToolRegistryPort
+    run_log: RunLogPort
+    llm_adapter: LLMClientPort
+    coalescing: CoalescingQueuePort
+    config_watcher: ConfigWatcherPort
+    stuck_detector: StuckDetectorPort
+    lane_queue: LaneQueuePort
+    project_memory: ProjectMemoryPort
+    session_key: str
+    ip_name: str
+    secondary_adapter: LLMClientPort | None = None
+    profile_store: ProfileStorePort | None = None
+    profile_rotator: ProfileRotatorPort | None = None
+    cooldown_tracker: CooldownTrackerPort | None = None
+
+
+@dataclass
+class RuntimeAutomationConfig:
+    """L4.5 Automation components (all optional)."""
+
+    drift_detector: DriftDetectorPort | None = None
+    model_registry: ModelRegistryPort | None = None
+    expert_panel: ExpertPanelPort | None = None
+    correlation_analyzer: CorrelationAnalyzerPort | None = None
+    outcome_tracker: OutcomeTrackerPort | None = None
+    snapshot_manager: SnapshotManagerPort | None = None
+    trigger_manager: TriggerManagerPort | None = None
+    scheduler_service: Any | None = None
+    feedback_loop: FeedbackLoopPort | None = None
+
+
+@dataclass
+class RuntimeMemoryConfig:
+    """L2 Memory + Prompt assembly components (all optional)."""
+
+    organization_memory: OrganizationMemoryPort | None = None
+    context_assembler: ContextAssembler | None = None
+    prompt_assembler: Any | None = field(default=None)  # PromptAssembler (TYPE_CHECKING)
+
+
+# ---------------------------------------------------------------------------
 # GeodeRuntime — the main integration class
 # ---------------------------------------------------------------------------
 
@@ -313,75 +366,47 @@ class GeodeRuntime:
 
     def __init__(
         self,
-        *,
-        hooks: HookSystemPort,
-        session_store: SessionStorePort,
-        policy_chain: PolicyChainPort,
-        tool_registry: ToolRegistryPort,
-        run_log: RunLogPort,
-        llm_adapter: LLMClientPort,
-        secondary_adapter: LLMClientPort | None = None,
-        profile_store: ProfileStorePort | None = None,
-        profile_rotator: ProfileRotatorPort | None = None,
-        cooldown_tracker: CooldownTrackerPort | None = None,
-        coalescing: CoalescingQueuePort,
-        config_watcher: ConfigWatcherPort,
-        stuck_detector: StuckDetectorPort,
-        lane_queue: LaneQueuePort,
-        project_memory: ProjectMemoryPort,
-        session_key: str,
-        ip_name: str,
-        # L4.5 Automation components
-        drift_detector: DriftDetectorPort | None = None,
-        model_registry: ModelRegistryPort | None = None,
-        expert_panel: ExpertPanelPort | None = None,
-        correlation_analyzer: CorrelationAnalyzerPort | None = None,
-        outcome_tracker: OutcomeTrackerPort | None = None,
-        snapshot_manager: SnapshotManagerPort | None = None,
-        trigger_manager: TriggerManagerPort | None = None,
-        scheduler_service: Any | None = None,
-        feedback_loop: FeedbackLoopPort | None = None,
-        # L2 Memory components
-        organization_memory: OrganizationMemoryPort | None = None,
-        context_assembler: ContextAssembler | None = None,
-        # ADR-007: Prompt Assembly
-        prompt_assembler: PromptAssembler | None = None,
+        core: RuntimeCoreConfig,
+        automation: RuntimeAutomationConfig | None = None,
+        memory: RuntimeMemoryConfig | None = None,
     ) -> None:
-        self.hooks = hooks
-        self.session_store = session_store
-        self.policy_chain = policy_chain
-        self.tool_registry = tool_registry
-        self.run_log = run_log
-        self.llm_adapter = llm_adapter
-        self.secondary_adapter = secondary_adapter
-        self.profile_store = profile_store
-        self.profile_rotator = profile_rotator
-        self.cooldown_tracker = cooldown_tracker or CooldownTracker()
-        self.coalescing = coalescing
-        self.config_watcher = config_watcher
-        self.stuck_detector = stuck_detector
-        self.lane_queue = lane_queue
-        self.project_memory = project_memory
-        self.session_key = session_key
-        self.ip_name = ip_name
+        # Unpack core (flat attributes for backward compat)
+        self.hooks = core.hooks
+        self.session_store = core.session_store
+        self.policy_chain = core.policy_chain
+        self.tool_registry = core.tool_registry
+        self.run_log = core.run_log
+        self.llm_adapter = core.llm_adapter
+        self.secondary_adapter = core.secondary_adapter
+        self.profile_store = core.profile_store
+        self.profile_rotator = core.profile_rotator
+        self.cooldown_tracker = core.cooldown_tracker or CooldownTracker()
+        self.coalescing = core.coalescing
+        self.config_watcher = core.config_watcher
+        self.stuck_detector = core.stuck_detector
+        self.lane_queue = core.lane_queue
+        self.project_memory = core.project_memory
+        self.session_key = core.session_key
+        self.ip_name = core.ip_name
         self.run_id = ""
         self.is_subagent: bool = False
         self._compiled_graph: CompiledStateGraph[Any, None, Any, Any] | None = None
-        # L4.5 Automation
-        self.drift_detector = drift_detector
-        self.model_registry = model_registry
-        self.expert_panel = expert_panel
-        self.correlation_analyzer = correlation_analyzer
-        self.outcome_tracker = outcome_tracker
-        self.snapshot_manager = snapshot_manager
-        self.trigger_manager = trigger_manager
-        self.scheduler_service = scheduler_service
-        self.feedback_loop = feedback_loop
-        # L2 Memory
-        self.organization_memory = organization_memory
-        self.context_assembler = context_assembler
-        # ADR-007: Prompt Assembly
-        self.prompt_assembler: PromptAssembler | None = prompt_assembler
+        # Unpack automation (L4.5)
+        auto = automation or RuntimeAutomationConfig()
+        self.drift_detector = auto.drift_detector
+        self.model_registry = auto.model_registry
+        self.expert_panel = auto.expert_panel
+        self.correlation_analyzer = auto.correlation_analyzer
+        self.outcome_tracker = auto.outcome_tracker
+        self.snapshot_manager = auto.snapshot_manager
+        self.trigger_manager = auto.trigger_manager
+        self.scheduler_service = auto.scheduler_service
+        self.feedback_loop = auto.feedback_loop
+        # Unpack memory (L2 + ADR-007)
+        mem = memory or RuntimeMemoryConfig()
+        self.organization_memory = mem.organization_memory
+        self.context_assembler = mem.context_assembler
+        self.prompt_assembler: PromptAssembler | None = mem.prompt_assembler
         # L4 Task tracking
         self.task_graph: TaskGraphPort | None = None
         self._task_bridge: TaskGraphHookBridge | None = None
@@ -1221,17 +1246,13 @@ class GeodeRuntime:
             lane_queue.list_lanes(),
         )
 
-        instance = cls(
+        core_config = RuntimeCoreConfig(
             hooks=hooks,
             session_store=session_store,
             policy_chain=policy_chain,
             tool_registry=tool_registry,
             run_log=run_log,
             llm_adapter=llm_adapter,
-            secondary_adapter=secondary_adapter,
-            profile_store=profile_store,
-            profile_rotator=profile_rotator,
-            cooldown_tracker=cooldown_tracker,
             coalescing=coalescing,
             config_watcher=config_watcher,
             stuck_detector=stuck_detector,
@@ -1239,11 +1260,18 @@ class GeodeRuntime:
             project_memory=project_memory,
             session_key=session_key,
             ip_name=ip_name,
+            secondary_adapter=secondary_adapter,
+            profile_store=profile_store,
+            profile_rotator=profile_rotator,
+            cooldown_tracker=cooldown_tracker,
+        )
+        automation_config = RuntimeAutomationConfig(**automation)
+        memory_config = RuntimeMemoryConfig(
             organization_memory=organization_memory,
             context_assembler=context_assembler,
             prompt_assembler=prompt_assembler,
-            **automation,
         )
+        instance = cls(core_config, automation_config, memory_config)
         instance.run_id = run_id
         instance.task_graph = task_graph
         instance._task_bridge = task_bridge
