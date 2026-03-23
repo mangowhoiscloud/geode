@@ -25,8 +25,10 @@ import typer
 from core import __version__
 from core.cli.agentic_loop import AgenticLoop, AgenticResult
 from core.cli.commands import (
+    cmd_apply,
     cmd_auth,
     cmd_batch,
+    cmd_context,
     cmd_generate,
     cmd_key,
     cmd_list,
@@ -523,6 +525,10 @@ def _handle_command(
 
         resume_state = cmd_resume(args)
         return False, verbose, resume_state
+    elif action == "context":
+        cmd_context(args)
+    elif action == "apply":
+        cmd_apply(args)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -1485,6 +1491,26 @@ def init(
     created_profile = user_profile.ensure_structure()
     if created_profile:
         console.print("  Created ~/.geode/user_profile/")
+
+    # 7b. ~/.geode/identity/career.toml template
+    identity_dir = Path.home() / ".geode" / "identity"
+    career_toml = identity_dir / "career.toml"
+    if not career_toml.exists():
+        identity_dir.mkdir(parents=True, exist_ok=True)
+        career_toml.write_text(
+            '# Career identity — injected into system prompt context\n'
+            '# Edit this file to personalize GEODE for job search / career tasks.\n\n'
+            '[identity]\n'
+            'title = ""\n'
+            'experience = ""\n'
+            'skills = []\n\n'
+            '[goals]\n'
+            'seeking = ""\n'
+            'target_companies = []\n'
+            'preferred_location = ""\n',
+            encoding="utf-8",
+        )
+        console.print("  Created ~/.geode/identity/career.toml (template)")
 
     # 8. .gitignore entry
     _ensure_gitignore_entry(".geode/", "# GEODE")

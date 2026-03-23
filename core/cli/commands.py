@@ -92,6 +92,9 @@ COMMAND_MAP: dict[str, str] = {
     "/skills": "skills",
     "/cost": "cost",
     "/resume": "resume",
+    "/context": "context",
+    "/ctx": "context",
+    "/apply": "apply",
 }
 
 
@@ -120,6 +123,8 @@ def show_help() -> None:
     console.print("  [label]/mcp[/label]                — MCP server status/tools/add")
     console.print("  [label]/skills[/label]             — List/add/reload skills")
     console.print("  [label]/resume[/label]             — Resume interrupted session")
+    console.print("  [label]/context[/label]            — Show assembled context tiers")
+    console.print("  [label]/apply[/label]              — Manage job applications")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
     console.print()
@@ -1365,6 +1370,216 @@ def cmd_resume(args: str) -> SessionState | None:
     console.print("  [muted]Usage: /resume <session_id>[/muted]")
     console.print()
     return None
+
+
+def cmd_apply(args: str) -> None:
+    """Manage job applications via tracker.json.
+
+    /apply                          -> list all applications
+    /apply add <company> <position> -> add new application
+    /apply status <company> <status> -> update status
+    /apply remove <company>         -> remove application
+    """
+    from core.memory.vault import ApplicationEntry, ApplicationTracker
+
+    tracker = ApplicationTracker()
+    parts = args.strip().split() if args.strip() else []
+
+    # /apply (no args) -> list
+    if not parts:
+        entries = tracker.list()
+        if not entries:
+            console.print("  [muted]No applications tracked.[/muted]")
+            console.print("  [muted]Usage: /apply add <company> <position>[/muted]")
+            console.print()
+            return
+        console.print()
+        console.print(f"  [header]Applications ({len(entries)})[/header]")
+        for e in entries:
+            status_style = {
+                "draft": "muted",
+                "applied": "label",
+                "interview": "warning",
+                "offer": "success",
+                "rejected": "error",
+            }.get(e.status, "muted")
+            console.print(
+                f"  [{status_style}]{e.status:<12}[/{status_style}] "
+                f"[value]{e.company}[/value] — {e.position}"
+            )
+        console.print()
+        return
+
+    sub = parts[0].lower()
+
+    # /apply add <company> <position>
+    if sub == "add":
+        if len(parts) < 3:
+            console.print("  [warning]Usage: /apply add <company> <position>[/warning]")
+            console.print()
+            return
+        company = parts[1]
+        position = " ".join(parts[2:])
+        tracker.add(ApplicationEntry(company=company, position=position))
+        console.print(f"  [success]Added: {company} — {position}[/success]")
+        console.print()
+        return
+
+    # /apply status <company> <status>
+    if sub == "status":
+        if len(parts) < 3:
+            console.print("  [warning]Usage: /apply status <company> <status>[/warning]")
+            console.print(
+                f"  [muted]Valid statuses: {', '.join(ApplicationTracker.VALID_STATUSES)}[/muted]"
+            )
+            console.print()
+            return
+        company = parts[1]
+        status = parts[2].lower()
+        if status not in ApplicationTracker.VALID_STATUSES:
+            console.print(f"  [warning]Invalid status: {status}[/warning]")
+            console.print(
+                f"  [muted]Valid: {', '.join(ApplicationTracker.VALID_STATUSES)}[/muted]"
+            )
+            console.print()
+            return
+        if tracker.update_status(company, status):
+            console.print(f"  [success]{company}: {status}[/success]")
+        else:
+            console.print(f"  [warning]Not found: {company}[/warning]")
+        console.print()
+        return
+
+    # /apply remove <company>
+    if sub == "remove":
+        if len(parts) < 2:
+            console.print("  [warning]Usage: /apply remove <company>[/warning]")
+            console.print()
+            return
+        company = parts[1]
+        if tracker.remove(company):
+            console.print(f"  [success]Removed: {company}[/success]")
+        else:
+            console.print(f"  [warning]Not found: {company}[/warning]")
+        console.print()
+        return
+
+    console.print("  [warning]Usage: /apply [add|status|remove] ...[/warning]")
+    console.print()
+
+
+def cmd_context(args: str) -> None:
+    """Show assembled context from all tiers.
+
+    /context           -> show all tier summaries
+    /context career    -> show career identity
+    /context profile   -> show user profile
+    """
+    sub = args.strip().lower()
+
+    # Career sub-command
+    if sub == "career":
+        from core.memory.user_profile import FileBasedUserProfile
+
+        profile = FileBasedUserProfile()
+        career = profile.load_career()
+        if not career:
+            console.print("  [muted]No career data. Edit ~/.geode/identity/career.toml[/muted]")
+            console.print()
+            return
+        console.print()
+        console.print("  [header]Career Identity[/header]")
+        identity = career.get("identity", {})
+        for k, v in identity.items():
+            console.print(f"  [label]{k}:[/label] {v}")
+        goals = career.get("goals", {})
+        if goals:
+            console.print()
+            console.print("  [header]Goals[/header]")
+            for k, v in goals.items():
+                console.print(f"  [label]{k}:[/label] {v}")
+        console.print()
+        return
+
+    # Profile sub-command
+    if sub == "profile":
+        from core.memory.user_profile import FileBasedUserProfile
+
+        profile = FileBasedUserProfile()
+        data = profile.load_profile()
+        if not data:
+            console.print("  [muted]No profile data. Run `geode init`.[/muted]")
+            console.print()
+            return
+        console.print()
+        console.print("  [header]User Profile[/header]")
+        for k, v in data.items():
+            if k == "preferences":
+                continue
+            if k == "learned_patterns":
+                continue
+            if v:
+                console.print(f"  [label]{k}:[/label] {v}")
+        console.print()
+        return
+
+    # Default: show all tier summaries
+    console.print()
+    console.print("  [header]Context Tiers[/header]")
+
+    # Tier 0: SOUL
+    try:
+        from core.memory.organization import MonoLakeOrganizationMemory
+
+        org = MonoLakeOrganizationMemory()
+        soul = org.get_soul()
+        if soul:
+            preview = soul.split("\n")[0][:80] if soul else "(empty)"
+            console.print(f"  [label]T0 SOUL:[/label] {preview}")
+        else:
+            console.print("  [label]T0 SOUL:[/label] [muted]not found[/muted]")
+    except Exception:
+        console.print("  [label]T0 SOUL:[/label] [muted]unavailable[/muted]")
+
+    # Tier 0.5: User Profile
+    try:
+        from core.memory.user_profile import FileBasedUserProfile
+
+        profile = FileBasedUserProfile()
+        summary = profile.get_context_summary()
+        console.print(f"  [label]T0.5 Profile:[/label] {summary or '[muted]empty[/muted]'}")
+        career = profile.get_career_summary()
+        if career:
+            console.print(f"  [label]T0.5 Career:[/label] {career}")
+    except Exception:
+        console.print("  [label]T0.5 Profile:[/label] [muted]unavailable[/muted]")
+
+    # Tier 1: Project Memory
+    try:
+        from core.memory.project import ProjectMemory
+
+        mem = ProjectMemory()
+        if mem.exists():
+            rules = mem.list_rules()
+            console.print(f"  [label]T1 Project:[/label] {len(rules)} rules")
+        else:
+            console.print("  [label]T1 Project:[/label] [muted]not initialized[/muted]")
+    except Exception:
+        console.print("  [label]T1 Project:[/label] [muted]unavailable[/muted]")
+
+    # Vault
+    try:
+        from core.memory.vault import Vault
+
+        vault = Vault()
+        vs = vault.get_context_summary()
+        console.print(f"  [label]V0 Vault:[/label] {vs or '[muted]empty[/muted]'}")
+    except Exception:
+        console.print("  [label]V0 Vault:[/label] [muted]unavailable[/muted]")
+
+    console.print()
+    console.print("  [muted]Subcommands: /context career | /context profile[/muted]")
+    console.print()
 
 
 def resolve_action(cmd: str) -> str | None:

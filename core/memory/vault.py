@@ -19,6 +19,7 @@ import json
 import logging
 import re
 import time
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -295,6 +296,81 @@ class Vault:
             else:
                 parts.append(f"{count} {cat}")
         return "Vault: " + ", ".join(parts)
+
+
+@dataclass
+class ApplicationEntry:
+    """A job application entry."""
+
+    company: str
+    position: str
+    status: str = "draft"  # draft -> applied -> interview -> offer -> rejected
+    applied_at: str = ""
+    url: str = ""
+    notes: str = ""
+
+
+class ApplicationTracker:
+    """CRUD for .geode/vault/applications/tracker.json."""
+
+    VALID_STATUSES = ("draft", "applied", "interview", "offer", "rejected")
+
+    def __init__(self, vault_dir: Path | None = None) -> None:
+        self._path = (vault_dir or DEFAULT_VAULT_DIR) / "applications" / "tracker.json"
+
+    def _load(self) -> list[dict[str, Any]]:
+        if not self._path.exists():
+            return []
+        try:
+            return json.loads(self._path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+        except (json.JSONDecodeError, OSError):
+            return []
+
+    def _save(self, entries: list[dict[str, Any]]) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(
+            json.dumps(entries, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    def list(self) -> list[ApplicationEntry]:
+        """List all application entries."""
+        raw = self._load()
+        return [ApplicationEntry(**e) for e in raw]
+
+    def add(self, entry: ApplicationEntry) -> None:
+        """Add a new application entry."""
+        raw = self._load()
+        raw.append({
+            "company": entry.company,
+            "position": entry.position,
+            "status": entry.status,
+            "applied_at": entry.applied_at,
+            "url": entry.url,
+            "notes": entry.notes,
+        })
+        self._save(raw)
+
+    def update_status(self, company: str, status: str) -> bool:
+        """Update the status of an application by company name. Returns True on success."""
+        raw = self._load()
+        company_lower = company.lower()
+        for entry in raw:
+            if entry["company"].lower() == company_lower:
+                entry["status"] = status
+                self._save(raw)
+                return True
+        return False
+
+    def remove(self, company: str) -> bool:
+        """Remove an application by company name. Returns True on success."""
+        raw = self._load()
+        company_lower = company.lower()
+        new = [e for e in raw if e["company"].lower() != company_lower]
+        if len(new) == len(raw):
+            return False
+        self._save(new)
+        return True
 
 
 def _slugify(text: str) -> str:
