@@ -12,7 +12,6 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| runtime-builder | GeodeRuntime 30 params → Builder 패턴 전환 | P1 | — | Parameter Bloat |
 | mcp-tool-refresh | MCP startup 후 AgenticLoop 도구 목록 갱신 — Playwright 등 MCP 도구 미인식 문제 | P1 | — | MCP 연결 후 refresh_tools() 호출 |
 | mcp-singleton-notify | MCPServerManager 싱글턴 → NotificationAdapter 공유 완성 — Poller 우회 제거 | P1 | — | runtime.py 구조 리팩토링 |
 | youtube-api-key | YouTube MCP 활성화 — YOUTUBE_API_KEY 설정 + fixture↔API 이중 구현 정리 | P2 | — | GOOGLE_API_KEY와 별개 |
@@ -36,6 +35,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| runtime-builder | GeodeRuntime 30→3 params — RuntimeCoreConfig/AutomationConfig/MemoryConfig 데이터클래스 | #384→#385 | @mangowhoiscloud | 2026-03-23 |
 | codebase-audit-skill | codebase-audit 스킬 증류 — 감사+리팩토링 워크플로우 (v0.24.0 실증) | #382→#383 | @mangowhoiscloud | 2026-03-23 |
 | init-god-object | __init__.py God Object 분할 — pipeline_executor + report_renderer 추출 (-786줄, -31%) | #380→#383 | @mangowhoiscloud | 2026-03-23 |
 | codebase-cleanup | 데드코드 6모듈 1,243줄 삭제 + 의존 테스트 5개 삭제 (Modules 184→178, Tests 3057→2972) | #378→#379 | @mangowhoiscloud | 2026-03-23 |
