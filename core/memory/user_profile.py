@@ -305,6 +305,53 @@ Write your bio, background, or any context you want GEODE to remember here.
         log.info("Created user profile structure at %s", self._global_dir)
         return True
 
+    def load_career(self) -> dict[str, Any]:
+        """Load career identity from ~/.geode/identity/career.toml.
+
+        Returns parsed TOML dict, or empty dict if not found / parse error.
+        """
+        import tomllib
+
+        career_path = Path.home() / ".geode" / "identity" / "career.toml"
+        if not career_path.exists():
+            return {}
+        try:
+            with open(career_path, "rb") as f:
+                return tomllib.load(f)
+        except Exception:
+            log.debug("Failed to load career.toml", exc_info=True)
+            return {}
+
+    def get_career_summary(self) -> str:
+        """Build a 1-line career summary for system prompt injection.
+
+        Returns e.g. "Senior AI Engineer (5y), skills: Python/LangGraph, seeking: remote AI roles"
+        or empty string if no career data.
+        """
+        career = self.load_career()
+        if not career:
+            return ""
+
+        identity = career.get("identity", {})
+        parts: list[str] = []
+
+        title = identity.get("title", "")
+        experience = identity.get("experience", "")
+        if title:
+            label = f"{title} ({experience})" if experience else title
+            parts.append(label)
+
+        skills = identity.get("skills", [])
+        if skills:
+            parts.append(f"skills: {'/'.join(skills[:5])}")
+
+        goals = career.get("goals", {})
+        seeking = goals.get("seeking", "")
+        if seeking:
+            parts.append(f"seeking: {seeking}")
+
+        return ", ".join(parts)
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
