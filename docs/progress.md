@@ -12,6 +12,9 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
+| init-god-object | __init__.py 2554줄 God Object 분할 — 5개 모듈로 분리 | P0 | init-god-object.md | SRP 위반, Kent Beck 기준 |
+| runtime-builder | GeodeRuntime 30 params → Builder 패턴 전환 | P1 | — | Parameter Bloat |
+| codebase-audit-skill | 코드 감사+리팩토링 워크플로우 스킬 증류 | P1 | — | 이번 세션 절차 |
 | mcp-tool-refresh | MCP startup 후 AgenticLoop 도구 목록 갱신 — Playwright 등 MCP 도구 미인식 문제 | P1 | — | MCP 연결 후 refresh_tools() 호출 |
 | mcp-singleton-notify | MCPServerManager 싱글턴 → NotificationAdapter 공유 완성 — Poller 우회 제거 | P1 | — | runtime.py 구조 리팩토링 |
 | youtube-api-key | YouTube MCP 활성화 — YOUTUBE_API_KEY 설정 + fixture↔API 이중 구현 정리 | P2 | — | GOOGLE_API_KEY와 별개 |
