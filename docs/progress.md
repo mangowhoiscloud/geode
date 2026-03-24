@@ -12,13 +12,13 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| — | — | — | — | — |
+| portfolio-v024-redesign | GEODE 포트폴리오 v0.8.0 디자인(CSS+레이아웃) 유지 + v0.24.0 콘텐츠 전면 교체 (8섹션, 9,421줄) | P0 | 아래 참조 | 원본: `resume/portfolio/public/geode.html`, 현행 5-Slide 버전은 `portfolio/geode.html`에 보존 |
 
 ### In Progress
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| portfolio-v024-redesign | GEODE 포트폴리오 v0.8.0 디자인 유지 + v0.24.0 콘텐츠 재설정 | @mangowhoiscloud | resume repo | 2026-03-24 | 배포 페이지 기준, 디자인 보존 |
+| — | — | — | — | — | — |
 
 ### In Review
 
