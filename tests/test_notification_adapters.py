@@ -107,7 +107,7 @@ class TestSlackNotificationAdapter:
         assert result.channel == "slack"
         assert result.message_id == "1234567890.123456"
         mock_manager.call_tool.assert_called_once_with(
-            "slack", "send_message", {"channel": "#general", "text": "Hello!"}
+            "slack", "slack_post_message", {"channel_id": "#general", "text": "Hello!"}
         )
 
     def test_send_message_error(

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 from typing import TYPE_CHECKING, Any
 
 from core.gateway.models import InboundMessage
@@ -65,45 +64,124 @@ class SlackPoller(BasePoller):
 
     def _poll_channel(self, channel_id: str) -> None:
         """Poll a single Slack channel for new messages."""
+        import json as _json
+
         try:
-            args: dict[str, Any] = {"channel": channel_id, "limit": 5}
+            args: dict[str, Any] = {"channel_id": channel_id, "limit": 5}
             oldest = self._last_ts.get(channel_id)
             if oldest:
                 args["oldest"] = oldest
 
-            result = self._mcp.call_tool("slack", "get_channel_history", args)  # type: ignore[union-attr]
-            if "error" in result:
+            result = self._mcp.call_tool("slack", "slack_get_channel_history", args)  # type: ignore[union-attr]
+
+            # MCP returns {"content": [{"text": "{\"ok\":true,\"messages\":[...]}"}]}
+            parsed = result
+            if "content" in result and isinstance(result["content"], list):
+                try:
+                    text = result["content"][0].get("text", "")
+                    parsed = _json.loads(text) if text else result
+                except (IndexError, _json.JSONDecodeError, KeyError):
+                    parsed = result
+
+            if "error" in parsed or not parsed.get("ok", True):
+                log.debug("Slack history error: %s", parsed.get("error", "unknown"))
                 return
 
-            messages = result.get("messages", [])
+            messages = parsed.get("messages", [])
+            if not messages:
+                return
+
+            # First poll: seed oldest ts and skip all existing messages
+            if not oldest:
+                latest_ts = max(m.get("ts", "0") for m in messages)
+                self._last_ts[channel_id] = latest_ts
+                log.info(
+                    "Slack poller seeded ts=%s for %s (%d skipped)",
+                    latest_ts,
+                    channel_id,
+                    len(messages),
+                )
+                return
+
+            # Process only new messages (newer than oldest)
+            # Update ts BEFORE processing to prevent duplicate reads
+            # (processing takes 5-30s, next poll is 3s)
+            all_ts = [m.get("ts", "0") for m in messages if m.get("ts", "0") > oldest]
+            if all_ts:
+                self._last_ts[channel_id] = max(all_ts)
+
+            new_max_ts = self._last_ts[channel_id]
             for msg in messages:
                 ts = msg.get("ts", "")
-                # Skip our own messages (bot messages)
-                if msg.get("subtype") == "bot_message":
+                if not ts or ts <= oldest:
                     continue
-                if ts and (not oldest or ts > oldest):
-                    self._last_ts[channel_id] = ts
+                # Skip bot messages (own messages + other bots)
+                if msg.get("subtype") == "bot_message" or "bot_id" in msg:
+                    if ts > new_max_ts:
+                        new_max_ts = ts
+                    continue
+
+                if ts > new_max_ts:
+                    new_max_ts = ts
+
+                content = msg.get("text", "").strip()
+                if not content:
+                    continue
+
+                log.info("Slack message from %s: %s", msg.get("user", "?"), content[:80])
 
                 inbound = InboundMessage(
                     channel="slack",
                     channel_id=channel_id,
                     sender_id=msg.get("user", ""),
                     sender_name=msg.get("username", msg.get("user", "")),
-                    content=msg.get("text", ""),
-                    timestamp=float(ts) if ts else time.time(),
+                    content=content,
+                    timestamp=float(ts),
                     thread_id=msg.get("thread_ts", ""),
                 )
 
+                # 리액션은 @멘션 메시지에만 (일반 메시지는 리액션 없이 처리)
+                is_mention = "<@" in content
+                if is_mention:
+                    self._add_reaction(channel_id, ts, "eyes")
                 response = self._manager.route_message(inbound)
+                log.info("Processor returned: %s", (response or "")[:80])
+                if is_mention:
+                    self._add_reaction(channel_id, ts, "white_check_mark")
 
-                # Send response back if auto_respond is enabled
-                if response and self._notification:
-                    self._notification.send_message(
-                        "slack",
-                        channel_id,
-                        response,
-                        thread_ts=inbound.thread_id or ts,
-                    )
+                if response:
+                    self._send_response(channel_id, response, thread_ts=inbound.thread_id or ts)
 
+            self._last_ts[channel_id] = new_max_ts
+
+        except Exception:
+            log.warning("Slack poll error for %s", channel_id, exc_info=True)
+
+    def _add_reaction(self, channel_id: str, message_ts: str, emoji: str) -> None:
+        """Add a reaction emoji to a message (best-effort, non-blocking)."""
+        if self._mcp is None:
+            return
+        try:
+            self._mcp.call_tool(
+                "slack",
+                "slack_add_reaction",
+                {"channel_id": channel_id, "timestamp": message_ts, "reaction": emoji},
+            )
+        except Exception:
+            log.debug("add_reaction failed for %s", channel_id)
+
+    def _send_response(self, channel_id: str, text: str, *, thread_ts: str = "") -> None:
+        """Send response back to Slack via the same MCP connection used for polling."""
+        if self._mcp is None:
+            return
+        try:
+            from core.gateway.slack_formatter import markdown_to_slack_mrkdwn
+
+            text = markdown_to_slack_mrkdwn(text)
+            args: dict[str, Any] = {"channel_id": channel_id, "text": text}
+            if thread_ts:
+                args["thread_ts"] = thread_ts
+            self._mcp.call_tool("slack", "slack_post_message", args)
+            log.info("Slack response sent to %s", channel_id)
         except Exception as exc:
-            log.debug("Slack poll error for %s: %s", channel_id, exc)
+            log.warning("Failed to send Slack response: %s", exc)

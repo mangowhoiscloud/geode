@@ -115,8 +115,8 @@ class ChannelManager:
             message.channel, message.channel_id, message.sender_id
         )
 
-        # Prepare content with allowed_tools constraint
-        content = message.content
+        # Strip mention tags so the LLM receives clean content
+        content = self._strip_mentions(message.content)
         if binding.allowed_tools:
             # Prefix with tool constraint hint for AgenticLoop
             tools_hint = ", ".join(binding.allowed_tools)
@@ -161,9 +161,31 @@ class ChannelManager:
 
     @staticmethod
     def _is_mentioned(message: InboundMessage) -> bool:
-        """Check if GEODE is mentioned in the message."""
-        content_lower = message.content.lower()
-        return any(mention in content_lower for mention in ("@geode", "geode", "<@geode>"))
+        """Check if GEODE is mentioned in the message.
+
+        Detects:
+        - Slack user mention format: ``<@U...>`` (bot's actual user ID)
+        - Display name variants: ``@geode``, ``geode``, ``@GEODE``
+        """
+        import re
+
+        content = message.content
+        # Slack encodes @mentions as <@USER_ID> or <@BOT_ID>
+        if re.search(r"<@[UB][A-Z0-9]+>", content):
+            return True
+        content_lower = content.lower()
+        return any(mention in content_lower for mention in ("@geode", "geode"))
+
+    @staticmethod
+    def _strip_mentions(content: str) -> str:
+        """Remove mention tags so the LLM receives clean user intent."""
+        import re
+
+        # Remove Slack-style <@USER_ID> and <@BOT_ID> mentions
+        cleaned = re.sub(r"<@[UB][A-Z0-9]+>\s*", "", content)
+        # Remove @geode / @GEODE prefix
+        cleaned = re.sub(r"@geode\s*", "", cleaned, flags=re.IGNORECASE)
+        return cleaned.strip()
 
     def get_stats(self) -> dict[str, int]:
         """Return routing statistics."""

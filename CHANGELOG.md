@@ -26,6 +26,103 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.24.0] — 2026-03-22
+
+Slack Gateway 양방향 소통 + MCPServerManager 싱글턴 + GLM/Failover 안정화.
+
+### Added
+- **`geode serve`** 커맨드 — headless Gateway 데몬 모드. REPL 없이 Slack 폴링만 백그라운드 실행 (`nohup geode serve &`)
+- **MCPServerManager 싱글턴** — `get_mcp_manager()` 팩토리. 4곳(signal/notification/calendar/gateway)에서 동일 인스턴스 공유, 좀비 MCP 프로세스 근절
+- **MCP 병렬 연결** — `_connect_all()` ThreadPoolExecutor 병렬화. 순차 11×10s(110s) → 병렬 ~15s
+- **Context Overflow 방지** — `max_tool_result_tokens` 기본 4000 활성화, CRITICAL 시 tool_result 2000자 절삭, `compact_keep_recent` 설정 노출
+- **System Prompt 날짜 주입** — `_build_date_context()`로 현재 날짜/연도를 시스템 프롬프트에 동적 주입. LLM knowledge cutoff 연도 오류 방지
+- **Gateway System Suffix** — `AgenticLoop`에 `system_suffix` 파라미터 추가. Gateway 모드 전용 시스템 프롬프트 확장
+- **@멘션 전용 응답 게이트** — `_is_mentioned()`에 Slack `<@U...>` 포맷 감지 + `_strip_mentions()`로 멘션 태그 정리 + `require_mention=true` 활성화
+
+### Fixed
+- **switch_model 퍼지 매칭** — 하이픈/공백/언더스코어 정규화. "GLM5"→`glm-5`, "gpt5"→`gpt-5.4` 등 자연어 힌트 인식
+- **Slack 메시지 에코 제거** — Gateway 응답 시 사용자 메시지를 4회 반복 출력하던 문제. `_GATEWAY_SUFFIX`로 에코/반복 금지 지시 주입
+- **웹 검색 연도 오류** — `GeneralWebSearchTool` description + 검색 쿼리에 현재 날짜 동적 반영
+- **Slack 처리 중 인디케이터** — `_set_reaction()`으로 모래시계 리액션 표시/제거
+- **Gateway 양방향 소통** — SlackPoller가 유저 메시지를 수신하지만 응답을 보내지 못하던 5건 수정: 로깅 설정, oldest ts seeding(중복 방지), 메시지별 독립 AgenticLoop, 에러 가시성(debug→warning)
+- **Slack MCP tool 이름 정합성** — `get_channel_history` → `slack_get_channel_history`, `send_message` → `slack_post_message`, `channel` → `channel_id` 파라미터명
+- **NotificationAdapter kwargs 전달** — 3채널(Slack/Discord/Telegram) `**kwargs`(thread_ts 등) MCP call args에 포함 + `_parse_mcp_result()` content wrapper 파싱
+- **GLM base URL** — `api.z.ai/v1` → `open.bigmodel.cn/api/paas/v4/` (nginx 404 해소)
+- **httpx keepalive** — 15s → 30s (APIConnectionError 빈도 감소)
+- **Failover 로그 노이즈** — retry/fallback 로그 warning→debug/info (유저 콘솔 노출 방지)
+- **LLM timeout** — OpenAI/GLM 90s → 120s (ZhipuAI 응답 지연 대응)
+- **MCP startup 로그** — warning→debug (서버 연결 실패 메시지 유저 불가시)
+- **MCP 테스트 격리** — global .env Path.home() mock으로 환경 독립성 확보
+
+### Infrastructure
+- Modules: 184
+- Tests: 3055
+
+---
+
+## [0.23.0] — 2026-03-22
+
+P1 Gateway 어댑터 패턴 — 멀티프로바이더 LLM 안정화.
+
+### Architecture
+- **P1 Gateway Adapter Pattern** — AgenticLoop 인라인 프로바이더 코드를 `AgenticLLMPort` Protocol + 3개 어댑터(Claude/OpenAI/GLM)로 분리. `agentic_loop.py` 1720→1378줄 (-342줄)
+- **Adapter Registry** — `resolve_agentic_adapter()` 동적 임포트. 프로바이더 추가 시 단일 파일로 해결
+- **Cross-provider Fallback** — GLM→OpenAI→Anthropic 다단 페일오버 (기존 GLM→OpenAI만)
+
+### Added
+- **System Prompt 날짜 주입** — `_build_date_context()`로 현재 날짜/연도를 시스템 프롬프트에 동적 주입. LLM knowledge cutoff(2025)로 인한 검색 연도 오류 방지
+- **Gateway System Suffix** — `AgenticLoop`에 `system_suffix` 파라미터 추가. Gateway 모드에서 채널별 시스템 프롬프트 확장 가능
+
+### Fixed
+- **Slack Gateway 메시지 에코 제거** — Slack 응답 시 사용자 메시지를 4회 반복 출력하던 문제. `_GATEWAY_SUFFIX`로 에코/반복 금지 지시 주입
+- **웹 검색 연도 오류** — `GeneralWebSearchTool` description + 검색 쿼리에 현재 날짜 동적 반영
+- **Slack 처리 중 인디케이터** — `_set_reaction()`으로 모래시계 리액션 표시/제거
+- GLM Round 2+ `messages[].content[0].type类型错误` — Anthropic→OpenAI 메시지 포맷 변환 누락
+- KeyboardInterrupt가 모델 에스컬레이션을 트리거하던 문제 — `UserCancelledError` 분리
+- OpenAI/GLM httpx 커넥션 풀 미설정 — Anthropic과 동일 설정 (20conn, 30s keepalive) 적용
+- GLM CircuitBreaker 부재 — OpenAI 어댑터에서 상속
+
+### Infrastructure
+- Tests: 3058 → 3055 (테스트 리팩토링, 커버리지 동등)
+- Modules: 179 → 184 (+5, 어댑터 + 포트 + 레지스트리)
+
+---
+
+## [0.22.0] — 2026-03-21
+
+Sandbox Hardening + REODE 자율 운행 하네스 패턴 역수입 + 품질 스킬 포팅.
+
+### Added
+
+#### Sandbox Hardening
+- PolicyChain L1-2 와이어링 — `load_profile_policy()` + `load_org_policy()` → `build_6layer_chain()`으로 Profile/Org/Mode 통합 체인 구성
+- SubAgent Tool Scope — `denied_tools` 파라미터 + `SUBAGENT_DENIED_TOOLS` 상수 (6개 민감 도구 서브에이전트 접근 차단)
+- Bash Resource Limits — `preexec_fn`으로 `resource.setrlimit` 적용 (CPU 30s, FSIZE 50MB, NPROC 64)
+- Secret Redaction — `core/cli/redaction.py` 신규, 8개 API 키 패턴(Anthropic/OpenAI/ZhipuAI/GitHub/Slack) 감지 및 마스킹, BashTool + MCP tool result에 자동 적용
+
+#### Harness Patterns (REODE 역수입)
+- Session-level tool approval (A=Always) — HITL 프롬프트에 `[Y/n/A]` 옵션, 세션 동안 카테고리별 자동 승인
+- HITL Level (0/1/2) — `GEODE_HITL_LEVEL` 환경변수 (0=자율, 1=WRITE만 묻기, 2=전부 묻기)
+- Model Escalation — LLM 연속 2회 실패 시 fallback chain 다음 모델 자동 전환
+- Cross-Provider Escalation — provider chain 소진 시 secondary provider로 자동 전환 (anthropic↔openai, glm→openai)
+- Backpressure — tool 연속 3회 에러 시 1s 쿨다운 + "다른 접근 고려" 힌트 주입
+- Convergence Detection — 동일 에러 4회 반복 → `convergence_detected`로 루프 자동 중단
+- Model-first Provider Inference — `_resolve_provider()` 강화 (gpt/o3/o4→openai, gemini→google, deepseek→deepseek, llama→meta, qwen→alibaba)
+
+#### Skills (REODE 역수입)
+- `explore-reason-act` — 코드 수정 전 탐색-추론-실행 3단계 워크플로우
+- `anti-deception-checklist` — 가짜 성공 방지 5-check 검증
+- `code-review-quality` — Python 6-렌즈 코드 품질 리뷰
+- `dependency-review` — GEODE 6-Layer 의존성 건전성 리뷰
+- `kent-beck-review` — Simple Design 4규칙 코드 리뷰
+
+### Infrastructure
+- Tests: 2946 → 3058 (+112)
+- Modules: 178 → 179 (+1, `core/cli/redaction.py`)
+- Skills: 18 → 25 (+7)
+
+---
+
 ## [0.21.0] — 2026-03-19
 
 GAP 7건 해소 — 모델 거버넌스 + 노드 라우팅 + 세션 관리 + 컨텍스트 압축.

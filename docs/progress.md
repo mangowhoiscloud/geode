@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-19 (세션 4 — 칸반 체크포인트 1)
+> 마지막 갱신: 2026-03-24 (세션 14 — Slack E2E 3시나리오 + mrkdwn 개선 + REPL bootstrap 통합)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -10,30 +10,99 @@
 
 ### Backlog
 
-| task_id | 설명 | 우선순위 | plan | 비고 |
-|---------|------|:--------:|------|------|
-| career-identity | C0 Identity career.toml 로딩 + 시스템 프롬프트 주입 | P1 | geode-context-hub.md Phase E | UserProfile 확장 |
-| app-tracker | C4 Plan tracker.json 지원 상태 CRUD + /apply 커맨드 | P1 | geode-context-hub.md Phase F | Vault applications 연동 |
-| session-resume | geode resume 커맨드 + AgenticLoop 체크포인트 통합 | P1 | geode-context-hub.md Phase B2-B5 | SessionCheckpoint 활용 |
-| context-command | /context 슬래시 커맨드 + Startup 자동 주입 | P2 | geode-context-hub.md Phase C | 전 계층 요약 표시 |
+| task_id | 작업 내용 | 우선순위 | plan | 비고 |
+|---------|----------|:--------:|------|------|
+| portfolio-v024-redesign | GEODE 포트폴리오 v0.8.0 디자인(CSS+레이아웃) 유지 + v0.24.0 콘텐츠 전면 교체 (8섹션, 9,421줄) | P0 | 아래 참조 | 원본: `resume/portfolio/public/geode.html`, 현행 5-Slide 버전은 `portfolio/geode.html`에 보존 |
 
 ### In Progress
 
-| task_id | 설명 | 담당 | 브랜치 | 시작일 | 비고 |
-|---------|------|------|--------|--------|------|
-| project-local-context | geode init 프로젝트-로컬 컨텍스트 어셈블리 개선 (harness-for-real 참조) | @mangowhoiscloud | feature/project-local-context | 2026-03-19 | 프로젝트 타입 감지 + 범용 템플릿 + Hook |
-| workflow-reode-sync | REODE 워크플로우 6건 이식 (칸반 3-checkpoint, .owner, main-only 등) | @mangowhoiscloud | feature/workflow-reode-sync | 2026-03-18 | CLAUDE.md 워크플로우 갱신 |
+| task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
+|---------|----------|------|--------|--------|------|
+| — | — | — | — | — | — |
 
 ### In Review
 
-| task_id | PR | 담당 | CI | 비고 |
-|---------|-----|------|-----|------|
-| — | — | — | — | — |
+| task_id | 작업 내용 | PR | 담당 | CI | 비고 |
+|---------|----------|-----|------|-----|------|
+| — | — | — | — | — | — |
+
+### Done (2026-03-24)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| repl-bootstrap-unify | REPL→bootstrap_geode() 통합 — 인라인 6단계→bootstrap 호출 (serve/REPL 단일 경로) | main direct | @mangowhoiscloud | 2026-03-24 |
+| slack-mrkdwn-v2 | Slack mrkdwn 개선 — ZWS 경계 수정 + 테이블→섹션 + 코드블록 보호 (33 tests) | main direct | @mangowhoiscloud | 2026-03-24 |
+| slack-e2e-scenarios | Slack @GEODE 3시나리오 E2E — web_fetch + web_search + memory_save 실증 | main direct | @mangowhoiscloud | 2026-03-24 |
+| context-quality-review | .geode/ + CLAUDE.md 컨텍스트 품질 — 3인 검증팀, -132줄 블로트 제거 | #400→#401 | @mangowhoiscloud | 2026-03-24 |
+| gmail-integration | Gmail MCP 통합 — OAuth 기반, DEFAULT_SERVERS 등록, catalog 43개 | #396→#397 | @mangowhoiscloud | 2026-03-24 |
+| serve-repl-unify | bootstrap_geode() 단일 초기화 + ContextVar 전파 (14 tests) | #394→#395 | @mangowhoiscloud | 2026-03-24 |
+| web-fetch-ssl | web_fetch SSL fallback — Python 3.14 certifi 호환 | #392→#393 | @mangowhoiscloud | 2026-03-24 |
+| wrapper-removal | _build_tool_handlers wrapper 삭제 — 상단 re-export + Beck/Karpathy 검증 | main direct | @mangowhoiscloud | 2026-03-24 |
+| slack-mrkdwn | Slack mrkdwn 변환 — Markdown→Slack 포맷 자동 변환 (22 tests) | #390→#391 | @mangowhoiscloud | 2026-03-24 |
+| context-hub | Context Hub 3건 — career.toml + /context + /apply (26 tests) | #388→#389 | @mangowhoiscloud | 2026-03-23 |
+| backlog-sweep | Backlog 4건 일괄 — MCP lazy refresh + Playwright sync + YouTube key + API 발급 링크 | #386→#387 | @mangowhoiscloud | 2026-03-23 |
+| runtime-builder | GeodeRuntime 30→3 params — RuntimeCoreConfig/AutomationConfig/MemoryConfig 데이터클래스 | #384→#385 | @mangowhoiscloud | 2026-03-23 |
+| codebase-audit-skill | codebase-audit 스킬 증류 — 감사+리팩토링 워크플로우 (v0.24.0 실증) | #382→#383 | @mangowhoiscloud | 2026-03-23 |
+| init-god-object | __init__.py God Object 분할 — pipeline_executor + report_renderer 추출 (-786줄, -31%) | #380→#383 | @mangowhoiscloud | 2026-03-23 |
+| codebase-cleanup | 데드코드 6모듈 1,243줄 삭제 + 의존 테스트 5개 삭제 (Modules 184→178, Tests 3057→2972) | #378→#379 | @mangowhoiscloud | 2026-03-23 |
+| deadcode-handler-unify | 인라인 handler 898줄 삭제 + tool_handlers.py 단일 소스화 (__init__.py -26%) | #376→#377 | @mangowhoiscloud | 2026-03-23 |
+| serve-e2e-parity | serve CLI 완전 동등성 — tool_handlers.py 빌더 + readiness 초기화 + 44 handlers E2E 검증 | #374→#375 | @mangowhoiscloud | 2026-03-23 |
+| gateway-exclusive | Gateway를 geode serve 전용으로 분리 — REPL 이중 폴링 제거 (OpenClaw 패턴) | #372→#373 | @mangowhoiscloud | 2026-03-23 |
+| serve-full-capability | geode serve processor REPL 동등 역량 — MCP 86 + SubAgent + Skills 추가 | main direct | @mangowhoiscloud | 2026-03-23 |
+| slack-mention-botid | Slack Bot ID 멘션 인식 + 리액션 눈알 이모지 | main direct | @mangowhoiscloud | 2026-03-23 |
+| slack-reaction-mention | Slack 리액션을 @멘션 메시지에만 추가 | main direct | @mangowhoiscloud | 2026-03-23 |
+| model-match | switch_model 퍼지 매칭 — 하이픈/공백 정규화로 GLM5→glm-5 등 인식 | #369→#371 | @mangowhoiscloud | 2026-03-22 |
+| slack-reaction-ux | Slack 리액션 UX — 처리 중 모래시계 + 완료 체크마크, 파라미터 수정 | #370→#371 | @mangowhoiscloud | 2026-03-22 |
+| context-claude-align | Context management Claude Code 정합 — 80% compaction 제거, clear_tool_uses 의존, -54줄 | #367→#368 | @mangowhoiscloud | 2026-03-22 |
+| web-fetch-hardcap | web_fetch max_chars 하드캡 10000 + Token Guard 0 복원 (프론티어 정합) | main direct | @mangowhoiscloud | 2026-03-22 |
+| mention-gate | Slack @멘션 전용 응답 게이트 + 멘션 태그 제거 | #363→#364 | @mangowhoiscloud | 2026-03-22 |
+| slack-echo-fix | Slack Gateway 사용자 메시지 반복 에코 제거 + 리액션 인디케이터 | #359→#360 | @mangowhoiscloud | 2026-03-22 |
+| date-injection | 시스템 프롬프트 현재 날짜 주입 — LLM 연도 오류 방지 | #353→#356 | @mangowhoiscloud | 2026-03-22 |
+| context-overflow-fix | Context overflow 방지 — Token Guard 4000 + tool_result 절삭 + keep_recent 설정 | #365→#366 | @mangowhoiscloud | 2026-03-22 |
+| mcp-parallel-startup | MCP 서버 병렬 연결 — 순차 110s→~15s (ThreadPoolExecutor) | #361→#362 | @mangowhoiscloud | 2026-03-22 |
+| glm-failover-noise | Failover 로그 노이즈 제거 (warning→debug) + LLM timeout 90s→120s | #357→#358 | @mangowhoiscloud | 2026-03-22 |
+| gateway-bidirectional | Gateway 양방향 소통 — 로깅 추가, 중복 방지(ts seeding), 메시지별 독립 context, 에러 가시성 | #354→#355 | @mangowhoiscloud | 2026-03-22 |
+| mcp-singleton | MCPServerManager 싱글턴화 — 좀비 프로세스 근절 + 4곳 get_mcp_manager() 전환 | main direct | @mangowhoiscloud | 2026-03-22 |
+| slack-adapter-fix | Slack MCP tool 이름 정합성 + NotificationAdapter kwargs 전달 + MCP content wrapper 파싱 | main direct | @mangowhoiscloud | 2026-03-22 |
+| slack-poller-fix | SlackPoller channel→channel_id + MCP JSON wrapper 파싱 + bot_id 필터 | main direct | @mangowhoiscloud | 2026-03-22 |
+| geode-serve | geode serve 커맨드 — headless Gateway 데몬 모드 (nohup 실행 가능) | main direct | @mangowhoiscloud | 2026-03-22 |
+| glm-url-fix | GLM base URL api.z.ai→open.bigmodel.cn + keepalive 15s→30s + MCP 테스트 격리 | #343→#344 | @mangowhoiscloud | 2026-03-22 |
+| mcp-log-noise | MCP startup 로그 warning→debug — 유저 콘솔 노출 방지 | #345→#346 | @mangowhoiscloud | 2026-03-22 |
+| slack-echo-fix | Slack Gateway 사용자 메시지 반복 에코 제거 + 리액션 인디케이터 | #359→#360 | @mangowhoiscloud | 2026-03-22 |
+| date-injection | 시스템 프롬프트 현재 날짜 주입 — LLM 연도 오류 방지 | #353→#356 | @mangowhoiscloud | 2026-03-22 |
+
+### Done (2026-03-21)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| reode-skill-port | REODE 역수입 스킬 5건 — explore-reason-act, anti-deception, code-review-quality, dependency-review, kent-beck-review | #341→#342 | @mangowhoiscloud | 2026-03-21 |
+| harness-patterns | REODE 하네스 패턴 7건 — HITL level 0/1/2, Session approval A=Always, Model/Cross-provider escalation, Backpressure, Convergence detection, Model-first inference | #339→#340 | @mangowhoiscloud | 2026-03-21 |
+| sandbox-hardening | 샌드박스 보안 경계 4건 — PolicyChain L1-2, SubAgent denied_tools, Bash setrlimit, Secret redaction | #338→#340 | @mangowhoiscloud | 2026-03-21 |
+| session-resume | Session resume — per-turn checkpoint + /resume 와이어링 + --continue/--resume CLI 플래그 | #334 | @mangowhoiscloud | 2026-03-21 |
+| test-isolation | 테스트 세션 격리 — conftest.py에서 checkpoint/transcript 기본 경로 tmp 리다이렉트 | #334 | @mangowhoiscloud | 2026-03-21 |
+| manage-auth-hint | manage_auth WRITE_FALLBACK_HINTS 누락 수정 | #334 | @mangowhoiscloud | 2026-03-21 |
+
+### Done (2026-03-19)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| version-bump | v0.20.0 릴리스 — [Unreleased]→[0.20.0] + 4곳 동기화 + ABOUT 갱신 | #308→#309 | @mangowhoiscloud | 2026-03-19 |
+| readme-update | README 칸반 + .geode/ 구조 + GAP 해소 | #306→#307 | @mangowhoiscloud | 2026-03-19 |
+| workflow-hardening | 워크플로우 고도화 — 동기화 검증 + Plan 강제 + 칸반 규칙 강화 | #304→#305 | @mangowhoiscloud | 2026-03-19 |
+| report-enrich | IP 보고서 DAG 정보 보강 — 4개 섹션 추가 + 테스트 + 보안 수정 | #298+#301→#300+#303 | @mangowhoiscloud | 2026-03-19 |
+| multi-model-gap | 멀티모델 GAP 해소 — .env 자동 생성 + 키 검증 + 테스트 + 보안 수정 | #299+#302→#300+#303 | @mangowhoiscloud | 2026-03-19 |
+| geode-system | .geode/ 시스템 구축 — 에이전트 정체성 분리 + 메모리 계층 정비 | #296→#297 | @mangowhoiscloud | 2026-03-19 |
+| readme-narrative | README '왜 만들었는가' 내러티브 보강 | #294→#295 | @mangowhoiscloud | 2026-03-19 |
+| multi-provider-glm | Multi-Provider GLM + CANNOT 워크플로우 + 모델 최신화 | #291+#292→#293 | @mangowhoiscloud | 2026-03-19 |
+| version-sot | 버전 SOT 일원화 + 하네스 디렉토리 탐지 | #289→#290 | @mangowhoiscloud | 2026-03-19 |
+| project-local-context | geode init 프로젝트-로컬 컨텍스트 어셈블리 개선 | #287→#288 | @mangowhoiscloud | 2026-03-19 |
+| ci-self-hosted | CI self-hosted runner 전환 | #285→#286 | @mangowhoiscloud | 2026-03-19 |
+| workflow-reode-sync | REODE 워크플로우 6건 이식 + 칸반 3-checkpoint | #283→#284 | @mangowhoiscloud | 2026-03-19 |
 
 ### Done (2026-03-18)
 
-| task_id | 설명 | PR | 담당 | 완료일 |
-|---------|------|----|------|--------|
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
 | vault-v0 | Vault (V0) — 산출물 영속 저장소 (profile/research/applications/general) | #279→#280 | @mangowhoiscloud | 2026-03-18 |
 | context-hub-ab | .geode Context Hub Phase A+B — Journal + SessionCheckpoint | #277→#278 | @mangowhoiscloud | 2026-03-18 |
 | multi-provider | Multi-Provider AgenticLoop — AgenticResponse + OpenAI 경로 | #275→#276 | @mangowhoiscloud | 2026-03-18 |
@@ -67,7 +136,7 @@
 
 ### Blocked
 
-| task_id | 설명 | blocked_by | 사유 |
+| task_id | 작업 내용 | blocked_by | 사유 |
 |---------|------|-----------|------|
 | — | — | — | — |
 
@@ -110,6 +179,9 @@
 | gap-cost-approval | — | 2026-03-18 |
 | gap-multi-provider | — | 2026-03-18 |
 | gap-write-fallback | — | 2026-03-18 |
+| gap-session-resume | #334 | 2026-03-21 |
+| gap-test-isolation | #334 | 2026-03-21 |
+| gap-manage-auth-hint | #334 | 2026-03-21 |
 
 ---
 
@@ -117,13 +189,13 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.19.1 | 2026-03-18 |
-| Modules | 171 | 2026-03-18 |
-| Tests | 2740 | 2026-03-18 |
-| Tools | 46 | 2026-03-18 |
-| MCP Catalog | 42 | 2026-03-18 |
-| HookEvents | 36 | 2026-03-18 |
-| Skills | 18 | 2026-03-18 |
+| Version | 0.24.0 | 2026-03-22 |
+| Modules | 178 | 2026-03-23 |
+| Tests | 3051 | 2026-03-24 |
+| Tools | 46 (+MCP 86) | 2026-03-22 |
+| MCP Catalog | 43 | 2026-03-24 |
+| HookEvents | 36 | 2026-03-19 |
+| Skills | 25 | 2026-03-21 |
 
 ---
 
@@ -138,3 +210,6 @@
 7. **plan 연결**: `docs/plans/{task_id}.md` 경로로 연결
 8. **GAP 연결**: GAP Registry의 `gap_id`와 Backlog의 `task_id` 매핑
 9. **Done 이력**: 날짜별 그룹핑, 30일 초과 시 아카이브 (`docs/progress-archive/`)
+10. **필수 컬럼 누락 금지** — 모든 컬럼에 값 기입 필수. 해당 없으면 "—"으로 표기. 빈칸 방치 금지.
+11. **컬럼 재선정** — 프로젝트 상황에 따라 컬럼 추가/제거/순서 변경 가능. 단, task_id·작업 내용은 모든 상태에서 필수 유지.
+12. **Claude Code Task 연동** — TaskCreate로 생성한 세션 태스크의 subject를 칸반 task_id와 1:1 매핑. 상태 동기화: TaskUpdate status ↔ 칸반 상태 이동.

@@ -193,3 +193,63 @@ class TestLoadOrgPolicy:
         o = load_org_policy(str(config))
         assert o.org_id == "nexon"
         assert "run_bash" in o.denied_tools
+
+
+# ---------------------------------------------------------------------------
+# L1-2 integration: PolicyChain wired with profile + org filtering
+# ---------------------------------------------------------------------------
+
+
+class TestPolicyChainIntegration:
+    """Test that L1-2 policies actually filter tools through the chain."""
+
+    def test_org_denied_tools_block_in_chain(self):
+        """Org-denied tools should be blocked regardless of mode."""
+        org = OrgPolicy(org_id="strict", denied_tools={"run_bash", "set_api_key"})
+        chain = build_6layer_chain(org=org)
+        all_tools = ["run_bash", "set_api_key", "memory_search", "web_search"]
+        filtered = chain.filter_tools(all_tools, mode="full_pipeline")
+        assert "run_bash" not in filtered
+        assert "set_api_key" not in filtered
+        assert "memory_search" in filtered
+
+    def test_profile_no_expensive_blocks_analyze(self):
+        """Profile with allow_expensive=False should block analyze_ip."""
+        profile = ProfilePolicy(user_id="dev", allow_expensive=False)
+        chain = build_6layer_chain(profile=profile)
+        tools = ["analyze_ip", "batch_analyze", "memory_search"]
+        filtered = chain.filter_tools(tools, mode="full_pipeline")
+        assert "analyze_ip" not in filtered
+        assert "batch_analyze" not in filtered
+        assert "memory_search" in filtered
+
+    def test_org_overrides_profile(self):
+        """Org (priority 5) takes effect alongside profile (priority 10)."""
+        profile = ProfilePolicy(user_id="dev", allow_dangerous=True)
+        org = OrgPolicy(org_id="corp", denied_tools={"run_bash"})
+        chain = build_6layer_chain(profile=profile, org=org)
+        # Even though profile allows dangerous, org blocks run_bash
+        assert not chain.is_allowed("run_bash", mode="full_pipeline")
+
+    def test_mode_policy_combined_with_org(self):
+        """Mode-based + org policies combine: both restrictions apply."""
+        org = OrgPolicy(org_id="team", denied_tools={"set_api_key"})
+        mode_pol = ToolPolicy(
+            name="dry_run_block",
+            mode="dry_run",
+            denied_tools={"run_analyst"},
+            priority=100,
+        )
+        chain = build_6layer_chain(org=org, mode_policies=[mode_pol])
+        # In dry_run mode: set_api_key blocked by org, run_analyst by mode
+        tools = ["set_api_key", "run_analyst", "memory_search"]
+        filtered = chain.filter_tools(tools, mode="dry_run")
+        assert filtered == ["memory_search"]
+
+    def test_audit_check_shows_blocking_policy(self):
+        """audit_check should identify which policy blocked the tool."""
+        org = OrgPolicy(org_id="audit_test", denied_tools={"run_bash"})
+        chain = build_6layer_chain(org=org)
+        audit = chain.audit_check("run_bash", mode="full_pipeline")
+        assert not audit.allowed
+        assert any("org:audit_test" in p for p in audit.blocking_policies)

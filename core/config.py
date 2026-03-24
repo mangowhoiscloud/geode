@@ -223,7 +223,10 @@ class Settings(BaseSettings):
     subagent_max_tokens: int = 8192  # 서브에이전트 출력 토큰 제한
 
     # Token Guard — tool result truncation threshold (0 = unlimited)
-    max_tool_result_tokens: int = 0  # 0 = no limit; frontier consensus: compression > hard cap
+    max_tool_result_tokens: int = 0  # 0 = no limit; clear_tool_uses handles overflow
+
+    # Context Compaction — overflow prevention
+    compact_keep_recent: int = 10  # messages to preserve during compaction/prune
 
     # Notification — external messaging
     notification_channel: str = "slack"  # default notification channel
@@ -239,13 +242,18 @@ class Settings(BaseSettings):
     # Calendar — external calendar sync
     calendar_sync_on_trigger: bool = False  # auto-sync on TRIGGER_FIRED
 
+    # HITL Level — Human-in-the-loop control
+    # 0 = autonomous (skip all prompts), 1 = write-only (prompt only for writes),
+    # 2 = all prompts (default, ask everything)
+    hitl_level: int = 2
+
     # Plan Mode — Autonomous Execution
     plan_auto_execute: bool = False  # GEODE_PLAN_AUTO_EXECUTE=true to enable
 
     # LLM Connection — httpx pool & timeout tuning
     llm_max_connections: int = 20  # httpx pool: max total connections
     llm_max_keepalive_connections: int = 5  # httpx pool: max idle keep-alive connections
-    llm_keepalive_expiry: float = 15.0  # idle conn TTL (shorter = fewer stale)
+    llm_keepalive_expiry: float = 30.0  # idle conn TTL (match API server timeout)
     llm_connect_timeout: float = 5.0  # TCP connect timeout (fail fast)
     llm_read_timeout: float = 300.0  # response read timeout (5min for 1M context)
     llm_write_timeout: float = 30.0  # request write timeout (seconds)
@@ -296,18 +304,37 @@ OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.4", "gpt-5.2", "gpt-4.1"]
 # ZhipuAI (GLM) models — OpenAI-compatible API, separate provider
 GLM_PRIMARY = "glm-5"
 GLM_FALLBACK_CHAIN: list[str] = ["glm-5", "glm-5-turbo", "glm-4.7-flash"]
-GLM_BASE_URL = "https://api.z.ai/v1"
+GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
 
 
 def _resolve_provider(model: str) -> str:
     """Resolve provider name from model ID.
 
-    claude-* → anthropic, glm-* → glm, otherwise → openai.
+    Prefix-based inference with broad model coverage:
+      claude-*   → anthropic
+      glm-*      → glm
+      gpt-*      → openai
+      o3-*/o4-*  → openai
+      gemini-*   → google
+      deepseek-* → deepseek
+      llama-*    → meta
+      qwen-*/qwen3* → alibaba
+      (fallback) → openai
     """
     if model.startswith("claude-"):
         return "anthropic"
     if model.startswith("glm-"):
         return "glm"
+    if model.startswith(("gpt-", "o3-", "o4-")):
+        return "openai"
+    if model.startswith("gemini-"):
+        return "google"
+    if model.startswith("deepseek-"):
+        return "deepseek"
+    if model.startswith("llama-"):
+        return "meta"
+    if model.startswith(("qwen-", "qwen3")):
+        return "alibaba"
     return "openai"
 
 

@@ -117,6 +117,11 @@ class ContextAssembler:
                     profile_summary = self._user_profile.get_context_summary()
                     if profile_summary:
                         context["_user_profile_summary"] = profile_summary
+                    # Career identity (if available)
+                    if hasattr(self._user_profile, "get_career_summary"):
+                        career_summary = self._user_profile.get_career_summary()
+                        if career_summary:
+                            context["_career_summary"] = career_summary
                     context["_user_profile_loaded"] = True
                 else:
                     context["_user_profile_loaded"] = False

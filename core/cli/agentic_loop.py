@@ -21,11 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.cli.agentic_response import (
-    AgenticResponse,
-    normalize_anthropic,
-    normalize_openai,
-)
+from core.cli.agentic_response import AgenticResponse
 from core.cli.conversation import ConversationContext
 from core.cli.error_recovery import ErrorRecoveryStrategy
 from core.cli.sub_agent import SubAgentResult, drain_announced_results
@@ -39,18 +35,16 @@ from core.cli.tool_executor import (
     ToolExecutor,
 )
 from core.config import (
-    ANTHROPIC_FALLBACK_CHAIN,
     ANTHROPIC_PRIMARY,
-    GLM_FALLBACK_CHAIN,
     _resolve_provider,
     settings,
 )
-from core.llm.client import (
-    LLMBadRequestError,
-    call_with_failover,
-    get_async_anthropic_client,
-    maybe_traceable,
+from core.infrastructure.adapters.llm.agentic_registry import (
+    CROSS_PROVIDER_FALLBACK,
+    resolve_agentic_adapter,
 )
+from core.infrastructure.ports.agentic_llm_port import UserCancelledError
+from core.llm.client import maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.ui.agentic_ui import OperationLogger
@@ -64,11 +58,6 @@ log = logging.getLogger(__name__)
 # Load base tool definitions from centralized JSON
 _TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
 _BASE_TOOLS: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
-
-# Anthropic API tool schema allowed keys — fields outside this set cause
-# 400 "Extra inputs are not permitted" errors. Defined at module level
-# to avoid re-creating the frozenset on every LLM call.
-_API_ALLOWED_KEYS = frozenset({"name", "description", "input_schema", "cache_control", "type"})
 
 # Backward-compatible alias
 AGENTIC_TOOLS: list[dict[str, Any]] = _BASE_TOOLS
@@ -194,10 +183,12 @@ class AgenticLoop:
         hooks: HookSystem | None = None,
         enable_goal_decomposition: bool = True,
         parent_session_key: str = "",
+        system_suffix: str = "",
     ) -> None:
         self.context = context
         self.executor = tool_executor
         self._parent_session_key = parent_session_key
+        self._system_suffix = system_suffix
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self.model = model or ANTHROPIC_PRIMARY
@@ -212,7 +203,7 @@ class AgenticLoop:
         self._tool_log: list[dict[str, Any]] = []
         self._consecutive_failures: dict[str, int] = {}
         self._last_llm_error: str | None = None  # last error type for user message
-        self._client: Any | None = None
+        self._adapter = resolve_agentic_adapter(self._provider)
         self._op_logger = OperationLogger()
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
@@ -220,16 +211,67 @@ class AgenticLoop:
         self._enable_goal_decomposition = enable_goal_decomposition
         self._goal_decomposer: Any | None = None  # lazy init
 
+        # Feature 3: Model escalation on consecutive LLM failures
+        self._consecutive_llm_failures: int = 0
+        self._ESCALATION_THRESHOLD: int = 2
+
+        # Feature 5: Backpressure on consecutive tool failures
+        self._total_consecutive_tool_errors: int = 0
+
+        # Feature 6: Convergence detection (stuck loop)
+        self._recent_errors: list[str] = []
+
         # Tier 1 transcript: append-only JSONL event stream (snapshot-redesign)
         self._transcript: Any | None = None
+        self._session_id: str = ""
         try:
             import uuid as _uuid
 
             from core.cli.transcript import SessionTranscript
 
-            self._transcript = SessionTranscript(f"s-{_uuid.uuid4().hex[:12]}")
+            self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
+            self._transcript = SessionTranscript(self._session_id)
         except Exception:
             log.debug("Transcript init failed", exc_info=True)
+
+        # C3 checkpoint: full message persistence for /resume (Claude Code pattern)
+        self._checkpoint: Any | None = None
+        try:
+            from core.cli.session_checkpoint import SessionCheckpoint
+
+            self._checkpoint = SessionCheckpoint()
+        except Exception:
+            log.debug("SessionCheckpoint init failed", exc_info=True)
+
+    def _save_checkpoint(self, user_input: str, round_idx: int = 0) -> None:
+        """Persist session checkpoint for resume (per-turn, Claude Code pattern)."""
+        if self._checkpoint is None or not self._session_id:
+            return
+        try:
+            from core.cli.session_checkpoint import SessionState
+
+            state = SessionState(
+                session_id=self._session_id,
+                round_idx=round_idx,
+                model=self.model,
+                provider=self._provider,
+                status="active",
+                messages=self.context.messages,
+                tool_log=self._tool_log,
+                user_input=user_input,
+            )
+            self._checkpoint.save(state)
+        except Exception:
+            log.debug("Checkpoint save failed", exc_info=True)
+
+    def mark_session_completed(self) -> None:
+        """Mark the current session as completed (called on clean REPL exit)."""
+        if self._checkpoint is None or not self._session_id:
+            return
+        try:
+            self._checkpoint.mark_completed(self._session_id)
+        except Exception:
+            log.debug("Checkpoint mark_completed failed", exc_info=True)
 
     def _record_transcript_end(self, result: Any) -> None:
         """Record session end + assistant message to transcript."""
@@ -262,15 +304,20 @@ class AgenticLoop:
     def update_model(self, model: str, provider: str | None = None) -> None:
         """Update model and provider without reconstructing the loop.
 
-        Fixes the model caching bug: ``self.model`` was only set at init,
-        so ``/model`` changes were not reflected in subsequent LLM calls.
-        Resets the cached client so a new one is created for the new provider.
+        Resolves a fresh adapter when the provider changes. Within the
+        same provider, the adapter is reused (it owns its own client).
+        Also syncs the SessionMeter so status lines show the correct model.
         """
-        old_provider = self._provider
+        new_provider = provider or _resolve_provider(model)
+        if new_provider != self._provider:
+            self._provider = new_provider
+            self._adapter = resolve_agentic_adapter(new_provider)
         self.model = model
-        self._provider = provider or _resolve_provider(model)
-        if self._provider != old_provider:
-            self._client = None  # force new client for new provider
+
+        # Sync SessionMeter so "Worked for" status line shows the correct model
+        from core.ui.agentic_ui import update_session_model
+
+        update_session_model(model)
         log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
 
     def run(self, user_input: str) -> AgenticResult:
@@ -288,6 +335,13 @@ class AgenticLoop:
 
         # Goal decomposition: try to decompose compound requests into sub-goal DAGs.
         # If successful, inject the decomposition plan into the system prompt so the
+        # Lazy MCP tool refresh: if tools were empty at init (MCP not yet connected),
+        # try to load them now. This handles the startup timing gap.
+        if self._mcp_manager is not None and len(self._tools) < 50:
+            added = self.refresh_tools()
+            if added > 0:
+                log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
+
         # LLM executes sub-goals in the correct dependency order.
         decomposition_hint = self._try_decompose(user_input)
 
@@ -320,10 +374,31 @@ class AgenticLoop:
             _spinner.start()
             try:
                 response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
+            except UserCancelledError:
+                _spinner.stop()
+                log.info("LLM call interrupted by user")
+                return AgenticResult(
+                    text="Interrupted.",
+                    rounds=round_idx + 1,
+                    termination_reason="user_cancelled",
+                )
             finally:
                 _spinner.stop()
 
             if response is None:
+                # Feature 3/4: Model escalation on consecutive LLM failures
+                self._consecutive_llm_failures += 1
+                if self._consecutive_llm_failures >= self._ESCALATION_THRESHOLD:
+                    escalated = self._try_model_escalation()
+                    if escalated:
+                        # Retry with escalated model — continue to next round iteration
+                        log.info(
+                            "Model escalated after %d consecutive failures, retrying",
+                            self._consecutive_llm_failures,
+                        )
+                        self._consecutive_llm_failures = 0
+                        continue
+
                 # Persist intermediate tool-use messages so next turn sees them
                 self._sync_messages_to_context(messages)
                 detail = self._last_llm_error or "unknown error"
@@ -345,7 +420,11 @@ class AgenticLoop:
                     len(result.tool_calls),
                 )
                 self._record_transcript_end(result)
+                self._save_checkpoint(user_input, round_idx=round_idx + 1)
                 return result
+
+            # Successful LLM response — reset failure counter
+            self._consecutive_llm_failures = 0
 
             # Track usage + Claude Code-style token display
             self._track_usage(response)
@@ -373,9 +452,49 @@ class AgenticLoop:
                     len(result.tool_calls),
                 )
                 self._record_transcript_end(result)
+                self._save_checkpoint(user_input, round_idx=round_idx + 1)
                 return result
 
             tool_results = await self._process_tool_calls(response)
+
+            # Feature 5: Backpressure on consecutive tool failures
+            # Feature 6: Convergence detection (stuck loop)
+            self._update_tool_error_tracking(tool_results)
+
+            if self._check_convergence_break():
+                self._op_logger.finalize()
+                self._sync_messages_to_context(messages)
+                result = AgenticResult(
+                    text=(
+                        "Detected repeating failure pattern. Breaking loop to avoid infinite retry."
+                    ),
+                    tool_calls=self._tool_log,
+                    rounds=round_idx + 1,
+                    error="convergence_detected",
+                    termination_reason="convergence_detected",
+                )
+                log.info(
+                    "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
+                    result.termination_reason,
+                    result.rounds,
+                    self.max_rounds,
+                    len(result.tool_calls),
+                )
+                self._record_transcript_end(result)
+                self._save_checkpoint(user_input, round_idx=round_idx + 1)
+                return result
+
+            if self._total_consecutive_tool_errors >= 3:
+                # Backpressure: inject a cooldown hint
+                await asyncio.sleep(1.0)
+                backpressure_hint = {
+                    "type": "text",
+                    "text": (
+                        "[system] Multiple tools are failing consecutively. "
+                        "Consider a different approach."
+                    ),
+                }
+                tool_results.append(backpressure_hint)
 
             # Accumulate messages for next round
             # Convert content blocks to serializable format
@@ -407,6 +526,7 @@ class AgenticLoop:
             len(result.tool_calls),
         )
         self._record_transcript_end(result)
+        self._save_checkpoint(user_input, round_idx=self.max_rounds)
         return result
 
     def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:
@@ -465,13 +585,14 @@ class AgenticLoop:
         log.debug("Pruned messages: kept first + bridge + %d recent", len(recent))
 
     def _check_context_overflow(self, system: str, messages: list[dict[str, Any]]) -> None:
-        """Check context window usage and emit hooks if near limits.
+        """Check context window usage and emergency prune if critical.
 
-        GAP 7 strategy:
-        - WARNING (80%): LLM-based compaction (summarize older messages)
-        - CRITICAL (95%): Emergency mechanical prune (fallback)
+        Claude Code pattern: trust server-side clear_tool_uses as primary.
+        Client-side only intervenes at CRITICAL (95%) as safety net.
+        No 80% compaction — clear_tool_uses handles gradual cleanup.
         """
         try:
+            from core.config import settings
             from core.orchestration.context_monitor import (
                 check_context,
                 prune_oldest_messages,
@@ -481,7 +602,7 @@ class AgenticLoop:
 
             if metrics.is_critical:
                 log.warning(
-                    "Context CRITICAL: %.0f%% (%d/%d tokens)",
+                    "Context CRITICAL: %.0f%% (%d/%d tokens) — emergency prune",
                     metrics.usage_pct,
                     metrics.estimated_tokens,
                     metrics.context_window,
@@ -491,47 +612,22 @@ class AgenticLoop:
                         HookEvent.CONTEXT_CRITICAL,
                         {"metrics": dataclasses.asdict(metrics), "model": self.model},
                     )
-                # Emergency prune: keep first + last 10 messages
-                pruned = prune_oldest_messages(messages, keep_recent=10)
+                keep_recent = settings.compact_keep_recent
+                pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
                 original_count = len(messages)
                 if len(pruned) < original_count:
                     messages.clear()
                     messages.extend(pruned)
                     log.info(
-                        "Emergency pruned conversation: %d → %d messages",
+                        "Emergency pruned: %d → %d messages",
                         original_count,
                         len(pruned),
                     )
             elif metrics.is_warning:
                 log.info(
-                    "Context WARNING: %.0f%% (%d/%d tokens) — attempting compaction",
+                    "Context at %.0f%% — clear_tool_uses will handle cleanup",
                     metrics.usage_pct,
-                    metrics.estimated_tokens,
-                    metrics.context_window,
                 )
-                if self._hooks:
-                    self._hooks.trigger(
-                        HookEvent.CONTEXT_WARNING,
-                        {"metrics": dataclasses.asdict(metrics), "model": self.model},
-                    )
-                # GAP 7: LLM-based context compaction
-                try:
-                    from core.orchestration.context_compactor import compact_context
-
-                    result = compact_context(messages, keep_recent=10)
-                    if result.tokens_saved_estimate > 0:
-                        log.info(
-                            "Compaction saved ~%d tokens (%d→%d messages)",
-                            result.tokens_saved_estimate,
-                            result.original_count,
-                            result.compacted_count,
-                        )
-                except Exception:
-                    log.debug("Context compaction failed, falling back to prune", exc_info=True)
-                    pruned = prune_oldest_messages(messages, keep_recent=10)
-                    if len(pruned) < len(messages):
-                        messages.clear()
-                        messages.extend(pruned)
         except Exception:
             log.debug("Context monitor check failed", exc_info=True)
 
@@ -592,13 +688,16 @@ class AgenticLoop:
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt with skill context and agentic suffix."""
-        base = _build_system_prompt()
+        base = _build_system_prompt(model=self.model)
         # Inject skill context into placeholder
         skill_ctx = ""
         if self._skill_registry is not None:
             skill_ctx = self._skill_registry.get_context_block()
         base = base.replace("{skill_context}", skill_ctx or "No skills loaded.")
-        return base + "\n" + AGENTIC_SUFFIX
+        prompt = base + "\n" + AGENTIC_SUFFIX
+        if self._system_suffix:
+            prompt += "\n\n" + self._system_suffix
+        return prompt
 
     def _try_decompose(self, user_input: str) -> str | None:
         """Attempt to decompose a compound user request into sub-goals.
@@ -693,247 +792,34 @@ class AgenticLoop:
     async def _call_llm(
         self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
     ) -> AgenticResponse | None:
-        """Multi-provider LLM call with tools + automatic model failover.
+        """Multi-provider LLM call via adapter (P1 Gateway pattern).
 
-        Dispatches to Anthropic or OpenAI based on ``self._provider``.
-        Returns a normalized ``AgenticResponse`` with provider-agnostic
-        content blocks (.type, .text, .name, .input, .id).
+        Delegates to ``self._adapter.agentic_call()`` which handles
+        provider-specific message/tool conversion, retry, and failover.
+        Returns a normalized ``AgenticResponse`` or None on failure.
+        Raises ``UserCancelledError`` on Ctrl+C (caught by ``arun()``).
         """
         # Context overflow detection (Karpathy P6 Context Budget)
         self._check_context_overflow(system, messages)
-
-        if self._provider == "openai":
-            return await self._call_llm_openai(system, messages, round_idx=round_idx)
-        if self._provider == "glm":
-            return await self._call_llm_glm(system, messages, round_idx=round_idx)
-        return await self._call_llm_anthropic(system, messages, round_idx=round_idx)
-
-    async def _call_llm_anthropic(
-        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
-    ) -> AgenticResponse | None:
-        """Anthropic-specific LLM call with context management beta."""
-        api_key = settings.anthropic_api_key
-        if not api_key:
-            log.warning("No Anthropic API key for agentic loop")
-            return None
-
-        if self._client is None:
-            self._client = get_async_anthropic_client(api_key)
 
         remaining = self.max_rounds - round_idx
         force_text = remaining <= self.WRAP_UP_HEADROOM
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
-        api_tools = [{k: v for k, v in t.items() if k in _API_ALLOWED_KEYS} for t in self._tools]
-        failover_models = [self.model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != self.model]
-
-        async def _do_call(model: str) -> Any:
-            return await self._client.messages.create(  # type: ignore[union-attr]
-                model=model,
-                system=system,
-                messages=messages,
-                tools=api_tools,
-                tool_choice=tool_choice,
-                max_tokens=self.max_tokens,
-                temperature=0.0,
-                extra_headers={
-                    "anthropic-beta": "context-management-2025-06-27",
-                },
-                extra_body={
-                    "context_management": {
-                        "edits": [
-                            {
-                                "type": "clear_tool_uses_20250919",
-                                "keep": {"type": "tool_uses", "value": 5},
-                            }
-                        ]
-                    }
-                },
-            )
-
-        try:
-            response, used_model = await call_with_failover(failover_models, _do_call)
-        except KeyboardInterrupt:
-            log.info("LLM call interrupted by user")
-            return None
-        except LLMBadRequestError as exc:
-            msg = str(exc)
-            log.warning("Anthropic BadRequest in agentic loop: %s", msg)
-            if "tool_use_id" in msg or "tool_result" in msg:
-                self._repair_messages(messages)
-                log.info("Repaired orphaned tool_result in conversation history")
-                try:
-                    response = await _do_call(self.model)
-                    return normalize_anthropic(response)
-                except Exception:
-                    log.warning("Retry after repair failed", exc_info=True)
-                    return None
-            if "input_schema" in msg:
-                log.error(
-                    "Tool schema error — likely an MCP tool missing input_schema. tools count=%d",
-                    len(self._tools),
-                )
-            return None
-        except Exception:
-            log.warning("Agentic LLM call failed", exc_info=True)
-            return None
+        response = await self._adapter.agentic_call(
+            model=self.model,
+            system=system,
+            messages=messages,
+            tools=self._tools,
+            tool_choice=tool_choice,
+            max_tokens=self.max_tokens,
+            temperature=0.0,
+        )
 
         if response is None:
-            self._last_llm_error = "All models in failover chain exhausted"
-            return None
+            self._last_llm_error = f"All {self._provider} models exhausted"
 
-        if used_model and used_model != self.model:
-            log.warning("Model failover: %s -> %s", self.model, used_model)
-
-        return normalize_anthropic(response)
-
-    async def _call_llm_openai(
-        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
-    ) -> AgenticResponse | None:
-        """OpenAI-specific LLM call with tool-use support."""
-        if not settings.openai_api_key:
-            log.warning("No OpenAI API key for agentic loop")
-            return None
-
-        try:
-            from core.infrastructure.adapters.llm.openai_adapter import (
-                _get_openai_client,
-            )
-        except ImportError:
-            log.error("OpenAI adapter not available")
-            return None
-
-        if self._client is None:
-            self._client = _get_openai_client()
-
-        remaining = self.max_rounds - round_idx
-        force_text = remaining <= self.WRAP_UP_HEADROOM
-        tool_choice_val = "none" if force_text else "auto"
-
-        # Convert Anthropic tool format to OpenAI function format
-        oai_tools = self._convert_tools_to_openai()
-
-        # Build messages with system prompt for OpenAI
-        oai_messages = [{"role": "system", "content": system}, *messages]
-
-        from core.config import OPENAI_FALLBACK_CHAIN
-
-        failover_models = [self.model] + [m for m in OPENAI_FALLBACK_CHAIN if m != self.model]
-
-        async def _do_call(model: str) -> Any:
-            import asyncio as _aio
-
-            client = self._client
-            return await _aio.to_thread(
-                client.chat.completions.create,  # type: ignore[union-attr]
-                model=model,
-                messages=oai_messages,
-                tools=oai_tools if oai_tools else None,
-                tool_choice=tool_choice_val if oai_tools else None,
-                max_completion_tokens=self.max_tokens,
-                temperature=0.0,
-                timeout=90.0,
-            )
-
-        try:
-            response, used_model = await call_with_failover(failover_models, _do_call)
-        except KeyboardInterrupt:
-            log.info("LLM call interrupted by user")
-            return None
-        except Exception:
-            log.warning("OpenAI agentic LLM call failed", exc_info=True)
-            return None
-
-        if response is None:
-            self._last_llm_error = "All OpenAI models exhausted"
-            return None
-
-        if used_model and used_model != self.model:
-            log.warning("Model failover: %s -> %s", self.model, used_model)
-
-        return normalize_openai(response)
-
-    async def _call_llm_glm(
-        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
-    ) -> AgenticResponse | None:
-        """ZhipuAI GLM LLM call — OpenAI-compatible API, separate provider."""
-        if not settings.zai_api_key:
-            log.warning("No ZhipuAI API key for agentic loop")
-            return None
-
-        try:
-            from core.infrastructure.adapters.llm.glm_adapter import (
-                _get_glm_client,
-            )
-        except ImportError:
-            log.error("OpenAI adapter not available (required for GLM)")
-            return None
-
-        if self._client is None:
-            self._client = _get_glm_client()
-
-        remaining = self.max_rounds - round_idx
-        force_text = remaining <= self.WRAP_UP_HEADROOM
-        tool_choice_val = "none" if force_text else "auto"
-
-        oai_tools = self._convert_tools_to_openai()
-        oai_messages = [{"role": "system", "content": system}, *messages]
-
-        failover_models = [self.model] + [m for m in GLM_FALLBACK_CHAIN if m != self.model]
-
-        async def _do_call(model: str) -> Any:
-            import asyncio as _aio
-
-            client = self._client
-            return await _aio.to_thread(
-                client.chat.completions.create,  # type: ignore[union-attr]
-                model=model,
-                messages=oai_messages,
-                tools=oai_tools if oai_tools else None,
-                tool_choice=tool_choice_val if oai_tools else None,
-                max_completion_tokens=self.max_tokens,
-                temperature=0.0,
-                timeout=90.0,
-            )
-
-        try:
-            response, used_model = await call_with_failover(failover_models, _do_call)
-        except KeyboardInterrupt:
-            log.info("LLM call interrupted by user")
-            return None
-        except Exception:
-            log.warning("GLM agentic LLM call failed", exc_info=True)
-            return None
-
-        if response is None:
-            self._last_llm_error = "All GLM models exhausted"
-            return None
-
-        if used_model and used_model != self.model:
-            log.warning("Model failover: %s -> %s", self.model, used_model)
-
-        return normalize_openai(response)
-
-    def _convert_tools_to_openai(self) -> list[dict[str, Any]]:
-        """Convert Anthropic-format tool definitions to OpenAI function calling format."""
-        oai_tools: list[dict[str, Any]] = []
-        for tool in self._tools:
-            name = tool.get("name", "")
-            desc = tool.get("description", "")
-            schema = tool.get("input_schema", {})
-            if not name:
-                continue
-            oai_tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "description": desc,
-                        "parameters": schema,
-                    },
-                }
-            )
-        return oai_tools
+        return response
 
     _MAX_CONSECUTIVE_FAILURES = 2  # auto-skip after N consecutive failures per tool
 
@@ -1361,3 +1247,126 @@ class AgenticLoop:
             )
         except Exception:
             log.debug("Failed to track usage", exc_info=True)
+
+    # ---------------------------------------------------------------------------
+    # Feature 3/4: Model escalation on consecutive LLM failures
+    # ---------------------------------------------------------------------------
+
+    def _try_model_escalation(self) -> bool:
+        """Attempt to escalate to a higher/fallback model after consecutive failures.
+
+        First tries the next model in the current adapter's fallback chain.
+        If exhausted, tries cross-provider escalation via CROSS_PROVIDER_FALLBACK.
+        Returns True if escalation succeeded, False if at end of all chains.
+        """
+        current = self.model
+        chain = self._adapter.fallback_chain
+
+        # Find current model in chain, try next
+        if current in chain:
+            idx = chain.index(current)
+            if idx + 1 < len(chain):
+                next_model = chain[idx + 1]
+                log.warning(
+                    "Model escalation: %s -> %s (same provider: %s)",
+                    current,
+                    next_model,
+                    self._provider,
+                )
+                self.update_model(next_model, self._provider)
+                return True
+
+        # Current provider's chain exhausted — try cross-provider (Feature 4)
+        fallbacks = CROSS_PROVIDER_FALLBACK.get(self._provider, [])
+        for fallback_provider, fallback_model in fallbacks:
+            if fallback_model != current:
+                log.warning(
+                    "Cross-provider escalation: %s(%s) -> %s(%s)",
+                    current,
+                    self._provider,
+                    fallback_model,
+                    fallback_provider,
+                )
+                self.update_model(fallback_model, fallback_provider)
+                return True
+
+        log.warning("Model escalation failed: no more fallback models available")
+        return False
+
+    # ---------------------------------------------------------------------------
+    # Feature 5: Backpressure on tool failures
+    # Feature 6: Convergence detection (stuck loop)
+    # ---------------------------------------------------------------------------
+
+    def _update_tool_error_tracking(self, tool_results: list[dict[str, Any]]) -> None:
+        """Update consecutive tool error tracking and recent error history.
+
+        Processes a batch of tool results from the current round.
+        Resets the consecutive counter on any success, increments on all-error rounds.
+        Appends normalized error keys to _recent_errors for convergence detection.
+        """
+        has_success = False
+        has_error = False
+
+        for tr in tool_results:
+            # Parse content JSON to check for errors
+            content = tr.get("content", "")
+            if isinstance(content, str):
+                try:
+                    parsed = json.loads(content)
+                except (json.JSONDecodeError, ValueError):
+                    parsed = {}
+            else:
+                parsed = content if isinstance(content, dict) else {}
+
+            if isinstance(parsed, dict) and parsed.get("error"):
+                has_error = True
+                # Feature 6: append normalized error key
+                tool_use_id = tr.get("tool_use_id", "")
+                error_str = str(parsed.get("error", ""))[:50]
+                # Extract tool name from tool_log (most recent entries)
+                tool_name = "unknown"
+                for entry in reversed(self._tool_log):
+                    if tool_use_id and entry.get("tool") and isinstance(entry.get("result"), dict):
+                        tool_name = entry["tool"]
+                        break
+                error_key = f"{tool_name}:{error_str}"
+                self._recent_errors.append(error_key)
+                # Keep last 6 entries max
+                if len(self._recent_errors) > 6:
+                    self._recent_errors = self._recent_errors[-6:]
+            else:
+                has_success = True
+
+        if has_success:
+            self._total_consecutive_tool_errors = 0
+        elif has_error:
+            self._total_consecutive_tool_errors += 1
+
+    def _check_convergence_break(self) -> bool:
+        """Check if the loop is stuck in a repeating failure pattern.
+
+        Returns True if 4+ of the last entries are identical errors,
+        indicating the loop should break.
+        Injects a warning into messages if 3 identical errors are detected.
+        """
+        if len(self._recent_errors) < 3:
+            return False
+
+        # Check last 3 entries for identical pattern
+        last_3 = self._recent_errors[-3:]
+        if last_3[0] == last_3[1] == last_3[2]:
+            if len(self._recent_errors) >= 4:
+                last_4 = self._recent_errors[-4:]
+                if last_4[0] == last_4[1] == last_4[2] == last_4[3]:
+                    log.warning(
+                        "Convergence detected: 4+ identical errors '%s'",
+                        last_4[0],
+                    )
+                    return True
+            # 3 identical — log warning (convergence warning injected via backpressure)
+            log.warning(
+                "Convergence warning: 3 identical errors '%s'",
+                last_3[0],
+            )
+        return False
