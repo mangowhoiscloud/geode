@@ -1,4 +1,5 @@
 """DEPRECATED: Use core.cli.ui.status instead."""
+
 import importlib as _il
 import sys as _sys
 

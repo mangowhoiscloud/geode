@@ -1,4 +1,5 @@
 """DEPRECATED: Use core.domains.game_ip.nodes.scoring instead."""
+
 import importlib as _il
 import sys as _sys
 

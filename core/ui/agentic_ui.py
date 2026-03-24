@@ -1,4 +1,5 @@
 """DEPRECATED: Use core.cli.ui.agentic_ui instead."""
+
 import importlib as _il
 import sys as _sys
 
