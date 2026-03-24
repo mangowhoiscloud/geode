@@ -762,7 +762,6 @@ def _build_sub_agent_manager(
     )
 
 
-
 def _render_agentic_result(result: AgenticResult) -> None:
     """Render the final result from an agentic loop execution."""
     if result.error == "llm_call_failed":
@@ -1484,15 +1483,15 @@ def init(
     if not career_toml.exists():
         identity_dir.mkdir(parents=True, exist_ok=True)
         career_toml.write_text(
-            '# Career identity — injected into system prompt context\n'
-            '# Edit this file to personalize GEODE for job search / career tasks.\n\n'
-            '[identity]\n'
+            "# Career identity — injected into system prompt context\n"
+            "# Edit this file to personalize GEODE for job search / career tasks.\n\n"
+            "[identity]\n"
             'title = ""\n'
             'experience = ""\n'
-            'skills = []\n\n'
-            '[goals]\n'
+            "skills = []\n\n"
+            "[goals]\n"
             'seeking = ""\n'
-            'target_companies = []\n'
+            "target_companies = []\n"
             'preferred_location = ""\n',
             encoding="utf-8",
         )

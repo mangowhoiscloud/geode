@@ -261,7 +261,9 @@ class TestApplicationTracker:
         from core.memory.vault import ApplicationEntry, ApplicationTracker
 
         tracker = ApplicationTracker(vault_dir=tmp_path)
-        tracker.add(ApplicationEntry(company="Anthropic", position="Engineer", url="https://example.com"))
+        tracker.add(
+            ApplicationEntry(company="Anthropic", position="Engineer", url="https://example.com")
+        )
 
         json_path = tmp_path / "applications" / "tracker.json"
         assert json_path.exists()
@@ -291,8 +293,10 @@ class TestCmdApply:
         from core.cli.commands import cmd_apply
         from core.memory.vault import ApplicationTracker
 
-        with patch.object(ApplicationTracker, "__init__", return_value=None), \
-             patch.object(ApplicationTracker, "add") as mock_add:
+        with (
+            patch.object(ApplicationTracker, "__init__", return_value=None),
+            patch.object(ApplicationTracker, "add") as mock_add,
+        ):
             # Need _path for __init__ bypass
             cmd_apply("add Anthropic AI Engineer")
             mock_add.assert_called_once()
@@ -304,16 +308,20 @@ class TestCmdApply:
         from core.cli.commands import cmd_apply
         from core.memory.vault import ApplicationTracker
 
-        with patch.object(ApplicationTracker, "__init__", return_value=None), \
-             patch.object(ApplicationTracker, "update_status", return_value=True):
+        with (
+            patch.object(ApplicationTracker, "__init__", return_value=None),
+            patch.object(ApplicationTracker, "update_status", return_value=True),
+        ):
             cmd_apply("status Anthropic interview")
 
     def test_apply_remove(self) -> None:
         from core.cli.commands import cmd_apply
         from core.memory.vault import ApplicationTracker
 
-        with patch.object(ApplicationTracker, "__init__", return_value=None), \
-             patch.object(ApplicationTracker, "remove", return_value=True):
+        with (
+            patch.object(ApplicationTracker, "__init__", return_value=None),
+            patch.object(ApplicationTracker, "remove", return_value=True),
+        ):
             cmd_apply("remove Anthropic")
 
 
@@ -340,9 +348,7 @@ class TestContextAssemblerCareer:
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
         # Create minimal profile so exists() returns True
         (tmp_path / "profile").mkdir(parents=True, exist_ok=True)
-        (tmp_path / "profile" / "profile.md").write_text(
-            "---\nrole: dev\n---\n", encoding="utf-8"
-        )
+        (tmp_path / "profile" / "profile.md").write_text("---\nrole: dev\n---\n", encoding="utf-8")
 
         assembler = ContextAssembler(user_profile=profile)
 
