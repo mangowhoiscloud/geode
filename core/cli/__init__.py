@@ -1693,10 +1693,6 @@ def serve(
             agentic_ref=agentic_ref,
             skill_registry=boot.skill_registry,
         )
-
-        print(
-            file=sys.stderr, flush=True,
-        )
         sub_mgr = _build_sub_agent_manager(
             action_handlers=handlers,
             mcp_manager=boot.mcp_manager,
