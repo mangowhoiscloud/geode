@@ -669,7 +669,7 @@ class TestAgenticLoopPruning:
     """Karpathy P10 — message pruning for context budget."""
 
     def test_no_pruning_under_threshold(self):
-        from core.cli.agentic_loop import AgenticLoop
+        from core.agent.agentic_loop import AgenticLoop
 
         loop = AgenticLoop.__new__(AgenticLoop)
         messages: list[dict[str, Any]] = [{"role": "user", "content": f"msg{i}"} for i in range(8)]
@@ -677,7 +677,7 @@ class TestAgenticLoopPruning:
         assert len(messages) == 8  # No change
 
     def test_pruning_at_threshold(self):
-        from core.cli.agentic_loop import AgenticLoop
+        from core.agent.agentic_loop import AgenticLoop
 
         loop = AgenticLoop.__new__(AgenticLoop)
         messages: list[dict[str, Any]] = [{"role": "user", "content": f"msg{i}"} for i in range(30)]
@@ -685,7 +685,7 @@ class TestAgenticLoopPruning:
         assert len(messages) == 30  # Exactly 30 = no prune
 
     def test_pruning_above_threshold(self):
-        from core.cli.agentic_loop import AgenticLoop
+        from core.agent.agentic_loop import AgenticLoop
 
         loop = AgenticLoop.__new__(AgenticLoop)
         # Build alternating user/assistant (32 msgs = 16 rounds)
@@ -709,7 +709,7 @@ class TestAgenticLoopPruning:
             )
 
     def test_pruning_preserves_recent_and_alternation(self):
-        from core.cli.agentic_loop import AgenticLoop
+        from core.agent.agentic_loop import AgenticLoop
 
         loop = AgenticLoop.__new__(AgenticLoop)
         # Build proper alternating conversation (13 msgs: 6 turns + current user)

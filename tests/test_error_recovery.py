@@ -14,15 +14,15 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.cli.agentic_loop import AgenticLoop
-from core.cli.conversation import ConversationContext
-from core.cli.error_recovery import (
+from core.agent.agentic_loop import AgenticLoop
+from core.agent.conversation import ConversationContext
+from core.agent.error_recovery import (
     _EXCLUDED_TOOLS,
     ErrorRecoveryStrategy,
     RecoveryResult,
     RecoveryStrategy,
 )
-from core.cli.tool_executor import ToolExecutor
+from core.agent.tool_executor import ToolExecutor
 from core.orchestration.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------

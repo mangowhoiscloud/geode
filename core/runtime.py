@@ -858,13 +858,13 @@ class GeodeRuntime:
         and signals_node falls back to fixtures.
         """
         from core.domains.game_ip.nodes.signals import set_signal_adapter
-        from core.infrastructure.adapters.mcp.brave_adapter import (
+        from core.mcp.brave_adapter import (
             BraveSearchAdapter,
             BraveSignalAdapter,
         )
-        from core.infrastructure.adapters.mcp.composite_signal import CompositeSignalAdapter
-        from core.infrastructure.adapters.mcp.manager import get_mcp_manager
-        from core.infrastructure.adapters.mcp.steam_adapter import SteamMCPSignalAdapter
+        from core.mcp.composite_signal import CompositeSignalAdapter
+        from core.mcp.manager import get_mcp_manager
+        from core.mcp.steam_adapter import SteamMCPSignalAdapter
 
         manager = get_mcp_manager()
         server_count = manager.load_config()
@@ -903,14 +903,14 @@ class GeodeRuntime:
         Chains Slack + Discord + Telegram adapters. If no messaging MCP servers
         are available, notification tools fall back to stub responses.
         """
-        from core.infrastructure.adapters.mcp.composite_notification import (
+        from core.mcp.composite_notification import (
             CompositeNotificationAdapter,
         )
-        from core.infrastructure.adapters.mcp.discord_adapter import DiscordNotificationAdapter
-        from core.infrastructure.adapters.mcp.manager import get_mcp_manager
-        from core.infrastructure.adapters.mcp.slack_adapter import SlackNotificationAdapter
-        from core.infrastructure.adapters.mcp.telegram_adapter import TelegramNotificationAdapter
-        from core.infrastructure.ports.notification_port import set_notification
+        from core.mcp.discord_adapter import DiscordNotificationAdapter
+        from core.mcp.manager import get_mcp_manager
+        from core.mcp.notification_port import set_notification
+        from core.mcp.slack_adapter import SlackNotificationAdapter
+        from core.mcp.telegram_adapter import TelegramNotificationAdapter
 
         try:
             manager = get_mcp_manager()
@@ -946,17 +946,17 @@ class GeodeRuntime:
         Chains Google Calendar + CalDAV (Apple Calendar) adapters.
         If no calendar MCP servers are available, calendar tools return empty.
         """
-        from core.infrastructure.adapters.mcp.apple_calendar_adapter import (
+        from core.mcp.apple_calendar_adapter import (
             AppleCalendarAdapter,
         )
-        from core.infrastructure.adapters.mcp.composite_calendar import (
+        from core.mcp.calendar_port import set_calendar
+        from core.mcp.composite_calendar import (
             CompositeCalendarAdapter,
         )
-        from core.infrastructure.adapters.mcp.google_calendar_adapter import (
+        from core.mcp.google_calendar_adapter import (
             GoogleCalendarAdapter,
         )
-        from core.infrastructure.adapters.mcp.manager import get_mcp_manager
-        from core.infrastructure.ports.calendar_port import set_calendar
+        from core.mcp.manager import get_mcp_manager
 
         try:
             manager = get_mcp_manager()
@@ -998,7 +998,7 @@ class GeodeRuntime:
         from core.gateway.pollers.slack_poller import SlackPoller
         from core.gateway.pollers.telegram_poller import TelegramPoller
         from core.infrastructure.ports.gateway_port import set_gateway
-        from core.infrastructure.ports.notification_port import get_notification
+        from core.mcp.notification_port import get_notification
 
         if not settings.gateway_enabled:
             log.debug("Gateway disabled (GEODE_GATEWAY_ENABLED=false)")
@@ -1035,7 +1035,7 @@ class GeodeRuntime:
             log.warning("Plugin gateway_bindings: config load failed (%s)", exc)
 
         try:
-            from core.infrastructure.adapters.mcp.manager import get_mcp_manager
+            from core.mcp.manager import get_mcp_manager
 
             mcp = get_mcp_manager(auto_startup=True)
             log.info("Gateway MCP: %d/%d servers connected", len(mcp._clients), len(mcp._servers))
@@ -1244,7 +1244,7 @@ class GeodeRuntime:
 
         # Calendar ↔ Scheduler bridge
         try:
-            from core.infrastructure.ports.calendar_port import get_calendar
+            from core.mcp.calendar_port import get_calendar
             from core.orchestration.calendar_bridge import set_calendar_bridge
 
             cal = get_calendar()

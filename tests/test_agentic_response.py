@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from core.agent.tool_executor import _write_denial_with_fallback
 from core.cli.agentic_response import (
     AgenticResponse,
     TextBlock,
@@ -11,7 +12,6 @@ from core.cli.agentic_response import (
     normalize_anthropic,
     normalize_openai,
 )
-from core.cli.tool_executor import _write_denial_with_fallback
 
 
 class TestAgenticResponse:
@@ -220,7 +220,7 @@ class TestWriteDenialWithFallback:
         assert "/key" in result["fallback_hint"]
 
     def test_all_write_tools_have_fallbacks(self):
-        from core.cli.tool_executor import WRITE_TOOLS
+        from core.agent.tool_executor import WRITE_TOOLS
 
         for tool in WRITE_TOOLS:
             result = _write_denial_with_fallback(tool)

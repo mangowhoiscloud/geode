@@ -9,8 +9,8 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from core.infrastructure.adapters.mcp.catalog import MCP_CATALOG
-from core.infrastructure.adapters.mcp.registry import (
+from core.mcp.catalog import MCP_CATALOG
+from core.mcp.registry import (
     AUTO_DISCOVER_SERVERS,
     DEFAULT_SERVERS,
     MCPRegistry,
@@ -70,7 +70,7 @@ class TestCatalogEntryToConfig:
         assert config.env == {"BRAVE_API_KEY": "${BRAVE_API_KEY}"}
 
     def test_converts_entry_with_extra_args(self) -> None:
-        from core.infrastructure.adapters.mcp.catalog import MCPCatalogEntry
+        from core.mcp.catalog import MCPCatalogEntry
 
         entry = MCPCatalogEntry(
             name="test",
@@ -203,7 +203,7 @@ class TestMCPRegistry:
 class TestManagerRegistryIntegration:
     def test_load_config_uses_registry(self, tmp_path: Path) -> None:
         """Manager.load_config() should include registry-discovered servers."""
-        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.mcp.manager import MCPServerManager
 
         config_path = tmp_path / "mcp_servers.json"
         # No config file exists
@@ -214,7 +214,7 @@ class TestManagerRegistryIntegration:
 
     def test_file_overrides_registry(self, tmp_path: Path) -> None:
         """File config should override registry defaults."""
-        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.mcp.manager import MCPServerManager
 
         config_path = tmp_path / "mcp_servers.json"
         # Write a file override for steam with custom args
@@ -235,7 +235,7 @@ class TestManagerRegistryIntegration:
 
     def test_file_adds_extra_servers(self, tmp_path: Path) -> None:
         """File config can add servers not in the registry."""
-        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.mcp.manager import MCPServerManager
 
         config_path = tmp_path / "mcp_servers.json"
         override: dict[str, Any] = {
@@ -253,7 +253,7 @@ class TestManagerRegistryIntegration:
 
     def test_load_config_no_file_still_works(self, tmp_path: Path) -> None:
         """Without a config file, registry defaults should still load."""
-        from core.infrastructure.adapters.mcp.manager import MCPServerManager
+        from core.mcp.manager import MCPServerManager
 
         config_path = tmp_path / "nonexistent.json"
         manager = MCPServerManager(config_path=config_path)

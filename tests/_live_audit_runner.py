@@ -19,11 +19,11 @@ from core.cli.ui.console import console
 
 console.file = io.StringIO()
 
+from core.agent.agentic_loop import AgenticLoop  # noqa: E402
+from core.agent.conversation import ConversationContext  # noqa: E402
+from core.agent.tool_executor import ToolExecutor  # noqa: E402
 from core.cli import _build_tool_handlers, _set_readiness  # noqa: E402
-from core.cli.agentic_loop import AgenticLoop  # noqa: E402
-from core.cli.conversation import ConversationContext  # noqa: E402
 from core.cli.startup import check_readiness  # noqa: E402
-from core.cli.tool_executor import ToolExecutor  # noqa: E402
 
 readiness = check_readiness()
 readiness.force_dry_run = True

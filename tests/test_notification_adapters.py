@@ -8,18 +8,18 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from core.infrastructure.adapters.mcp.composite_notification import (
+from core.mcp.composite_notification import (
     CompositeNotificationAdapter,
 )
-from core.infrastructure.adapters.mcp.discord_adapter import DiscordNotificationAdapter
-from core.infrastructure.adapters.mcp.slack_adapter import SlackNotificationAdapter
-from core.infrastructure.adapters.mcp.telegram_adapter import TelegramNotificationAdapter
-from core.infrastructure.ports.notification_port import (
+from core.mcp.discord_adapter import DiscordNotificationAdapter
+from core.mcp.notification_port import (
     NotificationPort,
     NotificationResult,
     get_notification,
     set_notification,
 )
+from core.mcp.slack_adapter import SlackNotificationAdapter
+from core.mcp.telegram_adapter import TelegramNotificationAdapter
 
 # ---------------------------------------------------------------------------
 # Fixtures

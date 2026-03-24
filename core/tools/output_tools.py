@@ -193,7 +193,7 @@ class SendNotificationTool:
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
-        from core.infrastructure.ports.notification_port import get_notification
+        from core.mcp.notification_port import get_notification
 
         channel: str = kwargs["channel"]
         message: str = kwargs["message"]

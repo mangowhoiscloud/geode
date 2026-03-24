@@ -23,7 +23,9 @@ from typing import Any, cast
 import typer
 
 from core import __version__
-from core.cli.agentic_loop import AgenticLoop, AgenticResult
+from core.agent.agentic_loop import AgenticLoop, AgenticResult
+from core.agent.conversation import ConversationContext
+from core.agent.tool_executor import ToolExecutor
 from core.cli.commands import (
     cmd_apply,
     cmd_auth,
@@ -40,7 +42,6 @@ from core.cli.commands import (
     resolve_action,
     show_help,
 )
-from core.cli.conversation import ConversationContext
 from core.cli.pipeline_executor import _build_initial_state as _build_initial_state
 from core.cli.pipeline_executor import _execute_pipeline as _execute_pipeline
 from core.cli.pipeline_executor import _execute_pipeline_streaming as _execute_pipeline_streaming
@@ -72,7 +73,6 @@ from core.cli.startup import (
     setup_project_memory,
     setup_user_profile,
 )
-from core.cli.tool_executor import ToolExecutor
 from core.cli.tool_handlers import (
     _build_tool_handlers as _build_tool_handlers,
 )
@@ -475,7 +475,7 @@ def _handle_command(
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
 
         # MCP status section
-        from core.infrastructure.adapters.mcp.registry import MCPRegistry as _MCPReg
+        from core.mcp.registry import MCPRegistry as _MCPReg
 
         _reg = _MCPReg()
         _json_servers = None
@@ -709,7 +709,7 @@ def _build_sub_agent_manager(
     AgenticLoop with the same tool set, MCP servers, and skills as the parent.
     Falls back to legacy ``make_pipeline_handler`` if handlers are not provided.
     """
-    from core.cli.sub_agent import (
+    from core.agent.sub_agent import (
         SUBAGENT_DENIED_TOOLS,
         SubAgentManager,
         make_pipeline_handler,
@@ -1603,9 +1603,9 @@ def serve(
         raise typer.Exit(1)
 
     # Wire AgenticLoop as gateway processor
-    from core.cli.agentic_loop import AgenticLoop
-    from core.cli.conversation import ConversationContext
-    from core.cli.tool_executor import ToolExecutor
+    from core.agent.agentic_loop import AgenticLoop
+    from core.agent.conversation import ConversationContext
+    from core.agent.tool_executor import ToolExecutor
     from core.infrastructure.ports.gateway_port import get_gateway
 
     gateway = get_gateway()

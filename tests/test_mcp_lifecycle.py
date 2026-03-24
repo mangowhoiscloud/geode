@@ -16,8 +16,8 @@ import signal
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from core.infrastructure.adapters.mcp.manager import MCPServerManager
-from core.infrastructure.adapters.mcp.stdio_client import _CLOSE_TIMEOUT_S, StdioMCPClient
+from core.mcp.manager import MCPServerManager
+from core.mcp.stdio_client import _CLOSE_TIMEOUT_S, StdioMCPClient
 from core.orchestration.hooks import HookEvent
 
 # ---------------------------------------------------------------------------

@@ -410,9 +410,9 @@ class TestUpdateModel:
     def test_update_model_changes_provider(self):
         from unittest.mock import MagicMock
 
-        from core.cli.agentic_loop import AgenticLoop
-        from core.cli.conversation import ConversationContext
-        from core.cli.tool_executor import ToolExecutor
+        from core.agent.agentic_loop import AgenticLoop
+        from core.agent.conversation import ConversationContext
+        from core.agent.tool_executor import ToolExecutor
 
         ctx = ConversationContext()
         executor = MagicMock(spec=ToolExecutor)
@@ -428,9 +428,9 @@ class TestUpdateModel:
     def test_update_model_same_provider_keeps_adapter(self):
         from unittest.mock import MagicMock
 
-        from core.cli.agentic_loop import AgenticLoop
-        from core.cli.conversation import ConversationContext
-        from core.cli.tool_executor import ToolExecutor
+        from core.agent.agentic_loop import AgenticLoop
+        from core.agent.conversation import ConversationContext
+        from core.agent.tool_executor import ToolExecutor
 
         ctx = ConversationContext()
         executor = MagicMock(spec=ToolExecutor)
