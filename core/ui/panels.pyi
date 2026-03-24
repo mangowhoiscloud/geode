@@ -1,1 +1,1 @@
-from core.cli.ui.panels import *
+from core.cli.ui.panels import *  # noqa: F403

@@ -1,1 +1,1 @@
-from core.domains.game_ip.nodes.signals import *
+from core.domains.game_ip.nodes.signals import *  # noqa: F403
