@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.fixtures import load_fixture
+from core.domains.game_ip.fixtures import load_fixture
 
 log = logging.getLogger(__name__)
 

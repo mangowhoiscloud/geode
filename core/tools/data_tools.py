@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.fixtures import FIXTURE_MAP, load_fixture
+from core.domains.game_ip.fixtures import FIXTURE_MAP, load_fixture
 
 
 class QueryMonoLakeTool:

@@ -19,7 +19,7 @@ from core.infrastructure.ports.llm_port import (
     get_secondary_llm_parsed,
     set_llm_callable,
 )
-from core.nodes.analysts import (
+from core.domains.game_ip.nodes.analysts import (
     _DEFAULT_PRIMARY_ANALYSTS,
     _DEFAULT_SECONDARY_ANALYSTS,
     _run_analyst,

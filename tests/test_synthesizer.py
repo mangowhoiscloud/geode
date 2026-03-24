@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.nodes.synthesizer import (
+from core.domains.game_ip.nodes.synthesizer import (
     ACTION_DESCRIPTIONS,
     CAUSE_DESCRIPTIONS,
     CAUSE_TO_ACTION,

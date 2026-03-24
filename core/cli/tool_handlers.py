@@ -22,7 +22,7 @@ import logging
 from typing import Any
 
 from core.config import settings
-from core.ui.console import console
+from core.cli.ui.console import console
 
 log = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def _build_analysis_handlers(
 
     def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
         from core.cli.commands import cmd_list
-        from core.fixtures import FIXTURE_MAP as _FM
+        from core.domains.game_ip.fixtures import FIXTURE_MAP as _FM
 
         cmd_list()
         names = [n.title() for n in _FM]
@@ -657,7 +657,7 @@ def _build_system_handlers(
         return {"status": "ok", "action": "help", "commands": commands}
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
-        from core.fixtures import FIXTURE_MAP as _FM
+        from core.domains.game_ip.fixtures import FIXTURE_MAP as _FM
         from core.infrastructure.adapters.mcp.registry import MCPRegistry
 
         ant_ok = bool(settings.anthropic_api_key)

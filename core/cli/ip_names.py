@@ -17,7 +17,7 @@ def _load_ip_names() -> dict[str, str]:
     Returns a mapping of lowercased canonical name -> fixture key.
     Example: {"ghost in the shell": "ghost in shell", "berserk": "berserk"}
     """
-    from core.fixtures import FIXTURE_MAP, load_fixture
+    from core.domains.game_ip.fixtures import FIXTURE_MAP, load_fixture
 
     name_to_key: dict[str, str] = {}
     for fk in FIXTURE_MAP:

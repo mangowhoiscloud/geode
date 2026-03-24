@@ -12,7 +12,7 @@ import uuid
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
-from core.fixtures import load_fixture
+from core.domains.game_ip.fixtures import load_fixture
 from core.state import GeodeState
 
 if TYPE_CHECKING:

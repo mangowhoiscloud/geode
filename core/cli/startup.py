@@ -19,7 +19,7 @@ from core.cli._helpers import mask_key as _mask_key
 from core.cli._helpers import upsert_env as _upsert_env
 from core.config import settings
 from core.memory.project import ProjectMemory
-from core.ui.console import console
+from core.cli.ui.console import console
 
 log = logging.getLogger(__name__)
 

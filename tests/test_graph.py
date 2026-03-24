@@ -1,7 +1,7 @@
 """Tests for graph construction and dry-run execution."""
 
 from core.graph import build_graph, compile_graph
-from core.nodes.synthesizer import CAUSE_TO_ACTION, _classify_cause
+from core.domains.game_ip.nodes.synthesizer import CAUSE_TO_ACTION, _classify_cause
 
 
 class TestGraphBuild:

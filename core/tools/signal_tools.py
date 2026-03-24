@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from core.config import ANTHROPIC_BUDGET
-from core.fixtures import load_fixture
+from core.domains.game_ip.fixtures import load_fixture
 
 # Load parameter schemas from centralized JSON
 _SCHEMAS_PATH = Path(__file__).resolve().parent / "tool_schemas.json"

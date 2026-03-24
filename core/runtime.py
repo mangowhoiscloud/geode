@@ -552,7 +552,7 @@ class GeodeRuntime:
         )
 
         # Wire ContextAssembler into router node (L2 → L3 bridge)
-        from core.nodes.router import set_context_assembler
+        from core.domains.game_ip.nodes.router import set_context_assembler
 
         set_context_assembler(context_assembler)
 
@@ -864,7 +864,7 @@ class GeodeRuntime:
         from core.infrastructure.adapters.mcp.composite_signal import CompositeSignalAdapter
         from core.infrastructure.adapters.mcp.manager import get_mcp_manager
         from core.infrastructure.adapters.mcp.steam_adapter import SteamMCPSignalAdapter
-        from core.nodes.signals import set_signal_adapter
+        from core.domains.game_ip.nodes.signals import set_signal_adapter
 
         manager = get_mcp_manager()
         server_count = manager.load_config()

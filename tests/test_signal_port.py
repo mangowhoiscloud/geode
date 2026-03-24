@@ -10,7 +10,7 @@ from core.infrastructure.adapters.signal_adapter import (
     create_signal_adapter,
 )
 from core.infrastructure.ports.signal_port import SignalEnrichmentPort
-from core.nodes.signals import set_signal_adapter, signals_node
+from core.domains.game_ip.nodes.signals import set_signal_adapter, signals_node
 from core.state import GeodeState
 
 

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from core.config import ANTHROPIC_PRIMARY
 from core.llm.client import LLMUsage, LLMUsageAccumulator
-from core.ui.status import GeodeStatus, TextSpinner, _snapshot, _UsageSnapshot
+from core.cli.ui.status import GeodeStatus, TextSpinner, _snapshot, _UsageSnapshot
 
 # ---------------------------------------------------------------------------
 # _snapshot / _UsageSnapshot
@@ -73,8 +73,8 @@ class TestTextSpinner:
 class TestGeodeStatusContextManager:
     """Enter/exit lifecycle, update, and stop."""
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_enter_exit(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """Context manager enters and exits without error."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -87,8 +87,8 @@ class TestGeodeStatusContextManager:
         printed = str(mock_console.print.call_args)
         assert "done" in printed
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_update_changes_spinner(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """update() changes the internal spinner message."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -100,8 +100,8 @@ class TestGeodeStatusContextManager:
             assert status._spinner._message == "✢ Step 2"
             status.stop("done")
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_stop_prints_summary(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """stop() prints a line with checkmark and summary."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -114,8 +114,8 @@ class TestGeodeStatusContextManager:
         summary_found = any("analyze · Berserk" in p for p in printed)
         assert summary_found, f"Summary not found in prints: {printed}"
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_stop_idempotent(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """Calling stop() twice does not double-print."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -130,8 +130,8 @@ class TestGeodeStatusContextManager:
         summary_count = sum(1 for c in print_calls if "result" in str(c))
         assert summary_count == 1
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_auto_exit_summary(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """If stop() is never called, __exit__ prints a generic summary."""
         mock_acc_fn.return_value = LLMUsageAccumulator()
@@ -152,8 +152,8 @@ class TestGeodeStatusContextManager:
 class TestTokenDelta:
     """Verify _get_token_delta computes before/after difference."""
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_delta_calculation(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         """Token delta = after - before."""
         acc = LLMUsageAccumulator()
@@ -169,8 +169,8 @@ class TestTokenDelta:
         assert delta.output_tokens == 50
         assert delta.cost_usd == pytest.approx(0.010)
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_delta_zero_when_no_calls(
         self, mock_acc_fn: MagicMock, mock_console: MagicMock
     ) -> None:
@@ -194,8 +194,8 @@ class TestTokenDelta:
 class TestSummaryFormatting:
     """Verify the summary line includes token info and elapsed time."""
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_summary_includes_tokens_and_cost(
         self, mock_acc_fn: MagicMock, mock_console: MagicMock
     ) -> None:
@@ -214,8 +214,8 @@ class TestSummaryFormatting:
         assert "↑30" in summary_line  # output tokens
         assert "$0.004" in summary_line
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_summary_no_tokens_still_shows_time(
         self, mock_acc_fn: MagicMock, mock_console: MagicMock
     ) -> None:
@@ -242,8 +242,8 @@ class TestSummaryFormatting:
 class TestModelDisplay:
     """Spinner message includes model name when provided."""
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_model_in_spinner(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         mock_acc_fn.return_value = LLMUsageAccumulator()
 
@@ -253,8 +253,8 @@ class TestModelDisplay:
             assert ANTHROPIC_PRIMARY in fmt
             status.stop("done")
 
-    @patch("core.ui.status.console")
-    @patch("core.ui.status.get_usage_accumulator")
+    @patch("core.cli.ui.status.console")
+    @patch("core.cli.ui.status.get_usage_accumulator")
     def test_no_model(self, mock_acc_fn: MagicMock, mock_console: MagicMock) -> None:
         mock_acc_fn.return_value = LLMUsageAccumulator()
 

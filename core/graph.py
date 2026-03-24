@@ -47,12 +47,12 @@ from langgraph.graph.state import CompiledStateGraph
 
 from core.config import settings
 from core.infrastructure.ports.hook_port import HookSystemPort
-from core.nodes.analysts import analyst_node, make_analyst_sends
-from core.nodes.evaluators import evaluator_node, make_evaluator_sends
-from core.nodes.router import route_after_router, router_node
-from core.nodes.scoring import scoring_node
-from core.nodes.signals import signals_node
-from core.nodes.synthesizer import synthesizer_node
+from core.domains.game_ip.nodes.analysts import analyst_node, make_analyst_sends
+from core.domains.game_ip.nodes.evaluators import evaluator_node, make_evaluator_sends
+from core.domains.game_ip.nodes.router import route_after_router, router_node
+from core.domains.game_ip.nodes.scoring import scoring_node
+from core.domains.game_ip.nodes.signals import signals_node
+from core.domains.game_ip.nodes.synthesizer import synthesizer_node
 from core.orchestration.bootstrap import BootstrapManager
 from core.orchestration.hooks import HookEvent
 from core.state import (

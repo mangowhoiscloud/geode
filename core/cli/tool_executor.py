@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from core.cli.sub_agent import SubAgentManager
 
 from core.cli.bash_tool import BashTool
-from core.ui.console import console
+from core.cli.ui.console import console
 
 log = logging.getLogger(__name__)
 

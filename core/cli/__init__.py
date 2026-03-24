@@ -81,8 +81,8 @@ from core.infrastructure.ports.hook_port import HookSystemPort
 from core.llm.commentary import (
     generate_commentary,
 )
-from core.ui.console import console
-from core.ui.status import GeodeStatus
+from core.cli.ui.console import console
+from core.cli.ui.status import GeodeStatus
 
 log = logging.getLogger(__name__)
 
@@ -226,7 +226,7 @@ def _set_last_result(result: dict[str, Any] | None) -> None:
 
 def _render_welcome_brand() -> None:
     """Render animated Claude Code-style branding with axolotl mascot."""
-    from core.ui.mascot import play_mascot_animation
+    from core.cli.ui.mascot import play_mascot_animation
 
     cwd = str(Path.cwd())
     play_mascot_animation(version=__version__, model=settings.model, cwd=cwd)
@@ -364,7 +364,7 @@ def _handle_command(
     action = resolve_action(cmd)
 
     if action == "quit":
-        from core.ui.agentic_ui import render_session_cost_summary
+        from core.cli.ui.agentic_ui import render_session_cost_summary
 
         render_session_cost_summary()
         console.print("  [muted]Goodbye.[/muted]\n")
@@ -470,7 +470,7 @@ def _handle_command(
         if readiness:
             mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
             console.print(f"  Mode: [bold]{mode}[/bold]")
-        from core.fixtures import FIXTURE_MAP as _FM
+        from core.domains.game_ip.fixtures import FIXTURE_MAP as _FM
 
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
 
@@ -976,7 +976,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
     agentic_ref[0] = agentic
 
     # Initialize session meter for status line
-    from core.ui.agentic_ui import init_session_meter
+    from core.cli.ui.agentic_ui import init_session_meter
 
     init_session_meter(model=agentic.model)
 
@@ -1012,7 +1012,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         try:
             user_input = _read_multiline_input("[header]>[/header] ")
         except (KeyboardInterrupt, EOFError):
-            from core.ui.agentic_ui import render_session_cost_summary
+            from core.cli.ui.agentic_ui import render_session_cost_summary
 
             agentic.mark_session_completed()
             render_session_cost_summary()
@@ -1024,7 +1024,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
 
         # Bare exit/quit → immediate shutdown (no LLM round-trip)
         if user_input.strip().lower() in ("exit", "quit", "q"):
-            from core.ui.agentic_ui import render_session_cost_summary
+            from core.cli.ui.agentic_ui import render_session_cost_summary
 
             agentic.mark_session_completed()
             render_session_cost_summary()
@@ -1109,7 +1109,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 result = agentic.run(user_input)
                 _render_agentic_result(result)
                 # Claude Code-style status line after each result
-                from core.ui.agentic_ui import render_status_line
+                from core.cli.ui.agentic_ui import render_status_line
 
                 render_status_line()
             except KeyboardInterrupt:
@@ -1226,7 +1226,7 @@ def version() -> None:
 @app.command(name="list")
 def list_ips() -> None:
     """List available IP fixtures."""
-    from core.fixtures import FIXTURE_MAP as _FIXTURE_MAP
+    from core.domains.game_ip.fixtures import FIXTURE_MAP as _FIXTURE_MAP
 
     console.print("[header]Available IPs:[/header]")
     for name in _FIXTURE_MAP:

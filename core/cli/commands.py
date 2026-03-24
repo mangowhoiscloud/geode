@@ -27,7 +27,7 @@ from core.config import (
     GLM_PRIMARY,
     OPENAI_PRIMARY,
 )
-from core.ui.console import console
+from core.cli.ui.console import console
 
 # ---------------------------------------------------------------------------
 # Model Registry (OpenClaw Auth Profile Rotation pattern)
@@ -134,7 +134,7 @@ def show_help() -> None:
 
 def cmd_list() -> None:
     """List available IP fixtures."""
-    from core.fixtures import FIXTURE_MAP as _FIXTURE_MAP
+    from core.domains.game_ip.fixtures import FIXTURE_MAP as _FIXTURE_MAP
 
     console.print()
     console.print("  [header]Available IPs[/header]")
@@ -543,7 +543,7 @@ def cmd_generate(args: str) -> None:
     /generate 10      → generate 10 IPs
     /generate 3 mecha → generate 3 IPs of specific genre
     """
-    from core.fixtures.generator import GENRE_PARAMS, generate_batch
+    from core.domains.game_ip.fixtures.generator import GENRE_PARAMS, generate_batch
 
     parts = args.strip().split() if args.strip() else []
 

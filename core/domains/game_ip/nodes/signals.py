@@ -19,7 +19,7 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
-from core.fixtures import load_fixture
+from core.domains.game_ip.fixtures import load_fixture
 from core.infrastructure.ports.signal_port import SignalEnrichmentPort
 from core.state import GeodeState
 
