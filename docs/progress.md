@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-24 (세션 14 — Slack E2E 3시나리오 + mrkdwn 개선 + REPL bootstrap 통합)
+> 마지막 갱신: 2026-03-24 (세션 16 — bootstrap 통합 + mrkdwn v2 PR flow + CI 수정)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -12,7 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| portfolio-v024-redesign | GEODE 포트폴리오 v0.8.0 디자인(CSS+레이아웃) 유지 + v0.24.0 콘텐츠 전면 교체 (8섹션, 9,421줄) | P0 | 아래 참조 | 원본: `resume/portfolio/public/geode.html`, 현행 5-Slide 버전은 `portfolio/geode.html`에 보존 |
+| — | — | — | — | — |
 
 ### In Progress
 
@@ -26,7 +26,13 @@
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
 
-### Done (2026-03-24)
+### Done (2026-03-24 — 세션 16)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| slack-bootstrap-pr | REPL bootstrap 통합 + Slack mrkdwn v2 — PR flow 정규화 (#402→#403) + CI 수정 (import 정렬 + flaky 격리) | #402→#403 | @mangowhoiscloud | 2026-03-24 |
+
+### Done (2026-03-24 — 세션 14)
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
