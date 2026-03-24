@@ -104,7 +104,13 @@ class SlackPoller(BasePoller):
                 return
 
             # Process only new messages (newer than oldest)
-            new_max_ts = oldest
+            # Update ts BEFORE processing to prevent duplicate reads
+            # (processing takes 5-30s, next poll is 3s)
+            all_ts = [m.get("ts", "0") for m in messages if m.get("ts", "0") > oldest]
+            if all_ts:
+                self._last_ts[channel_id] = max(all_ts)
+
+            new_max_ts = self._last_ts[channel_id]
             for msg in messages:
                 ts = msg.get("ts", "")
                 if not ts or ts <= oldest:
