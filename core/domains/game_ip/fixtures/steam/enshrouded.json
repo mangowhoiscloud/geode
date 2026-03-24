@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Enshrouded",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Keen Games",
+    "genre": [
+      "survival",
+      "open world",
+      "base building"
+    ],
+    "synopsis": "Enshrouded — a Survival RPG game developed by Keen Games, released in 2024 on Steam.",
+    "proof_of_game": "Enshrouded (2024, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 91200,
+    "dau_current": 37392,
+    "revenue_ltm": 11966010,
+    "revenue_lifetime": 52650444,
+    "retention_d30": 31,
+    "metacritic_score": 77,
+    "store_page_score": 82,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 4674000,
+    "reddit_subscribers": 77900,
+    "fan_art_yoy_pct": 22.0,
+    "google_trends_index": 82,
+    "twitter_mentions_monthly": 24928,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "high",
+    "genre_fit_keywords": [
+      "survival",
+      "open world",
+      "base building",
+      "co-op",
+      "rpg"
+    ],
+    "game_sales_data": "~1,140,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "survival",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 77,
+    "store_page_score": 82,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 81.7,
+    "cause": "timing_mismatch",
+    "quality_score": 82.5,
+    "momentum_score": 75.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 31.1,
+    "psm_z_value": 2.59,
+    "psm_gamma": 2.0
+  }
+}

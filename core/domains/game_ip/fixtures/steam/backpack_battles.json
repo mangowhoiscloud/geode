@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Backpack Battles",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "PlayWithFurcifer",
+    "genre": [
+      "auto battler",
+      "pvp",
+      "strategy"
+    ],
+    "synopsis": "Backpack Battles — a Auto Battler game developed by PlayWithFurcifer, released in 2024 on Steam.",
+    "proof_of_game": "Backpack Battles (2024, Steam/PC)",
+    "franchise_size": 5,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 34800,
+    "dau_current": 12180,
+    "revenue_ltm": 1216477,
+    "revenue_lifetime": 5352501,
+    "retention_d30": 26,
+    "metacritic_score": 66,
+    "store_page_score": 70,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "A"
+  },
+  "signals": {
+    "youtube_views": 1522500,
+    "reddit_subscribers": 25375,
+    "fan_art_yoy_pct": 10.0,
+    "google_trends_index": 74,
+    "twitter_mentions_monthly": 8119,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "auto battler",
+      "pvp",
+      "strategy",
+      "inventory management",
+      "roguelike"
+    ],
+    "game_sales_data": "~435,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "auto battler",
+    "dev_tier": "A",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 5,
+    "metacritic_score": 66,
+    "store_page_score": 70,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 71.0,
+    "cause": "timing_mismatch",
+    "quality_score": 70.5,
+    "momentum_score": 65.4,
+    "developer_track_record": 75,
+    "psm_att_pct": 18.9,
+    "psm_z_value": 1.57,
+    "psm_gamma": 1.8
+  }
+}

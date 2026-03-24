@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Animal Well",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Shared Memory",
+    "genre": [
+      "metroidvania",
+      "puzzle",
+      "pixel graphics"
+    ],
+    "synopsis": "Animal Well — a Metroidvania Puzzle game developed by Shared Memory, released in 2024 on Steam.",
+    "proof_of_game": "Animal Well (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 17280,
+    "dau_current": 8208,
+    "revenue_ltm": 1889244,
+    "revenue_lifetime": 8312673,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 1026000,
+    "reddit_subscribers": 17100,
+    "fan_art_yoy_pct": 35.0,
+    "google_trends_index": 69,
+    "twitter_mentions_monthly": 5472,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "metroidvania",
+      "puzzle",
+      "pixel graphics",
+      "atmospheric",
+      "exploration"
+    ],
+    "game_sales_data": "~216,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "metroidvania",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 81.0,
+    "cause": "timing_mismatch",
+    "quality_score": 95.5,
+    "momentum_score": 68.4,
+    "developer_track_record": 25,
+    "psm_att_pct": 34.9,
+    "psm_z_value": 2.91,
+    "psm_gamma": 2.4
+  }
+}

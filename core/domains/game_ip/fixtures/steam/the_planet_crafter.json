@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "The Planet Crafter",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Miju Games",
+    "genre": [
+      "survival",
+      "open world",
+      "crafting"
+    ],
+    "synopsis": "The Planet Crafter — a Survival Terraforming game developed by Miju Games, released in 2024 on Steam.",
+    "proof_of_game": "The Planet Crafter (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 62400,
+    "dau_current": 29640,
+    "revenue_ltm": 6822270,
+    "revenue_lifetime": 30017988,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 3705000,
+    "reddit_subscribers": 61750,
+    "fan_art_yoy_pct": 35.0,
+    "google_trends_index": 79,
+    "twitter_mentions_monthly": 19760,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "high",
+    "genre_fit_keywords": [
+      "survival",
+      "open world",
+      "crafting",
+      "sci-fi",
+      "base building"
+    ],
+    "game_sales_data": "~780,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "survival",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 85.1,
+    "cause": "timing_mismatch",
+    "quality_score": 95.5,
+    "momentum_score": 76.7,
+    "developer_track_record": 25,
+    "psm_att_pct": 37.7,
+    "psm_z_value": 3.14,
+    "psm_gamma": 2.4
+  }
+}

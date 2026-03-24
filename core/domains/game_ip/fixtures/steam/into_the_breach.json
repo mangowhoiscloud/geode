@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Into the Breach",
+    "media_type": "game",
+    "release_year": 2018,
+    "studio": "Subset Games",
+    "genre": [
+      "strategy",
+      "turn-based",
+      "roguelike"
+    ],
+    "synopsis": "Into the Breach — a Tactical Strategy game developed by Subset Games, released in 2018 on Steam.",
+    "proof_of_game": "Into the Breach (2018, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 8
+  },
+  "monolake": {
+    "dau_peak": 36000,
+    "dau_current": 6768,
+    "revenue_ltm": 708277,
+    "revenue_lifetime": 18887400,
+    "retention_d30": 36,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "active_game_count": 1,
+    "last_game_year": 2018,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 2115000,
+    "reddit_subscribers": 35250,
+    "fan_art_yoy_pct": 26.5,
+    "google_trends_index": 75,
+    "twitter_mentions_monthly": 11280,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "strategy",
+      "turn-based",
+      "roguelike",
+      "tactical",
+      "indie"
+    ],
+    "game_sales_data": "~450,000 owners (Steam, 2018-present)"
+  },
+  "psm_covariates": {
+    "genre": "strategy",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2018,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "ip_age_years": 8
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 82.5,
+    "cause": "timing_mismatch",
+    "quality_score": 94.5,
+    "momentum_score": 70.6,
+    "developer_track_record": 50,
+    "psm_att_pct": 34.8,
+    "psm_z_value": 2.9,
+    "psm_gamma": 2.3
+  }
+}

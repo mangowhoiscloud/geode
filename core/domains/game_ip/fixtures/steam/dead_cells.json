@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Dead Cells",
+    "media_type": "game",
+    "release_year": 2018,
+    "studio": "Motion Twin",
+    "genre": [
+      "roguelike",
+      "metroidvania",
+      "action"
+    ],
+    "synopsis": "Dead Cells — a Roguelike Metroidvania game developed by Motion Twin, released in 2018 on Steam.",
+    "proof_of_game": "Dead Cells (2018, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 8
+  },
+  "monolake": {
+    "dau_peak": 208800,
+    "dau_current": 39672,
+    "revenue_ltm": 6848509,
+    "revenue_lifetime": 182626920,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2018,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "T",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 12397500,
+    "reddit_subscribers": 206625,
+    "fan_art_yoy_pct": 27.5,
+    "google_trends_index": 88,
+    "twitter_mentions_monthly": 66120,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "roguelike",
+      "metroidvania",
+      "action",
+      "pixel graphics",
+      "difficult"
+    ],
+    "game_sales_data": "~2,610,000 owners (Steam, 2018-present)"
+  },
+  "psm_covariates": {
+    "genre": "roguelike",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2018,
+    "region": "global",
+    "age_rating": "T",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 8
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 90.4,
+    "cause": "timing_mismatch",
+    "quality_score": 95.5,
+    "momentum_score": 82.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 40.3,
+    "psm_z_value": 3.36,
+    "psm_gamma": 2.4
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Stormgate",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Frost Giant Studios",
+    "genre": [
+      "rts",
+      "strategy",
+      "multiplayer"
+    ],
+    "synopsis": "Stormgate — a RTS game developed by Frost Giant Studios, released in 2024 on Steam.",
+    "proof_of_game": "Stormgate (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 17280,
+    "dau_current": 4752,
+    "revenue_ltm": 378000,
+    "revenue_lifetime": 1663200,
+    "retention_d30": 20,
+    "metacritic_score": 53,
+    "store_page_score": 55,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "free_to_play",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "C"
+  },
+  "signals": {
+    "youtube_views": 594000,
+    "reddit_subscribers": 9900,
+    "fan_art_yoy_pct": -5.0,
+    "google_trends_index": 69,
+    "twitter_mentions_monthly": 3168,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "rts",
+      "strategy",
+      "multiplayer",
+      "sci-fi",
+      "competitive"
+    ],
+    "game_sales_data": "~216,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "rts",
+    "dev_tier": "C",
+    "platform": "pc",
+    "price_tier": "free_to_play",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 53,
+    "store_page_score": 55,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 61.6,
+    "cause": "conversion_failure",
+    "quality_score": 55.5,
+    "momentum_score": 56.4,
+    "developer_track_record": 0,
+    "psm_att_pct": 7.4,
+    "psm_z_value": 0.62,
+    "psm_gamma": 1.4
+  }
+}

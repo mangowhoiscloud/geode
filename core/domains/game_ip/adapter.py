@@ -17,8 +17,8 @@ log = logging.getLogger(__name__)
 
 # Paths relative to this adapter file
 _ADAPTER_DIR = Path(__file__).resolve().parent
-_CONFIG_DIR = _ADAPTER_DIR.parents[1] / "config"
-_FIXTURES_DIR = _ADAPTER_DIR.parents[1] / "fixtures"
+_CONFIG_DIR = _ADAPTER_DIR / "config"
+_FIXTURES_DIR = _ADAPTER_DIR / "fixtures"
 
 
 def _load_axes_yaml() -> dict[str, Any]:

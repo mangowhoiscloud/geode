@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Chained Echoes",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "Matthias Linda",
+    "genre": [
+      "jrpg",
+      "turn-based",
+      "pixel graphics"
+    ],
+    "synopsis": "Chained Echoes — a JRPG game developed by Matthias Linda, released in 2022 on Steam.",
+    "proof_of_game": "Chained Echoes (2022, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 17280,
+    "dau_current": 5126,
+    "revenue_ltm": 566773,
+    "revenue_lifetime": 12846859,
+    "retention_d30": 34,
+    "metacritic_score": 83,
+    "store_page_score": 89,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 961200,
+    "reddit_subscribers": 16020,
+    "fan_art_yoy_pct": 24.0,
+    "google_trends_index": 69,
+    "twitter_mentions_monthly": 5126,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "jrpg",
+      "turn-based",
+      "pixel graphics",
+      "fantasy",
+      "story rich"
+    ],
+    "game_sales_data": "~216,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "jrpg",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 83,
+    "store_page_score": 89,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 78.6,
+    "cause": "timing_mismatch",
+    "quality_score": 89.5,
+    "momentum_score": 65.1,
+    "developer_track_record": 25,
+    "psm_att_pct": 31.3,
+    "psm_z_value": 2.61,
+    "psm_gamma": 2.2
+  }
+}

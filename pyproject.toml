@@ -120,3 +120,16 @@ module = [
     "mcp.*",
 ]
 ignore_missing_imports = true
+
+# Strangler Fig proxy modules — runtime sys.modules redirect, mypy can't follow
+[[tool.mypy.overrides]]
+module = [
+    "core.nodes",
+    "core.nodes.*",
+    "core.ui",
+    "core.ui.*",
+    "core.fixtures",
+    "core.fixtures.*",
+]
+ignore_errors = true
+follow_imports = "silent"

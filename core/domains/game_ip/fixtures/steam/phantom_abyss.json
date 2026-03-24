@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Phantom Abyss",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Team WIBY",
+    "genre": [
+      "action",
+      "roguelike",
+      "first-person"
+    ],
+    "synopsis": "Phantom Abyss — a Asynchronous Runner game developed by Team WIBY, released in 2023 on Steam.",
+    "proof_of_game": "Phantom Abyss (2023, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 3600,
+    "dau_current": 1108,
+    "revenue_ltm": 118077,
+    "revenue_lifetime": 2204118,
+    "retention_d30": 29,
+    "metacritic_score": 72,
+    "store_page_score": 77,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 173250,
+    "reddit_subscribers": 2887,
+    "fan_art_yoy_pct": 13.7,
+    "google_trends_index": 57,
+    "twitter_mentions_monthly": 924,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "action",
+      "roguelike",
+      "first-person",
+      "indie",
+      "multiplayer"
+    ],
+    "game_sales_data": "~45,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 72,
+    "store_page_score": 77,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 67.5,
+    "cause": "timing_mismatch",
+    "quality_score": 77.5,
+    "momentum_score": 51.8,
+    "developer_track_record": 25,
+    "psm_att_pct": 20.7,
+    "psm_z_value": 1.72,
+    "psm_gamma": 1.9
+  }
+}

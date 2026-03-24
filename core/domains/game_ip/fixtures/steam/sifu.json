@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Sifu",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "Sloclap",
+    "genre": [
+      "beat-em-up",
+      "martial arts",
+      "difficult"
+    ],
+    "synopsis": "Sifu — a Beat-em-up game developed by Sloclap, released in 2022 on Steam.",
+    "proof_of_game": "Sifu (2022, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 60000,
+    "dau_current": 17400,
+    "revenue_ltm": 3149212,
+    "revenue_lifetime": 71382150,
+    "retention_d30": 33,
+    "metacritic_score": 81,
+    "store_page_score": 87,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "premium",
+    "region": "global",
+    "age_rating": "T",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 3262500,
+    "reddit_subscribers": 54375,
+    "fan_art_yoy_pct": 22.0,
+    "google_trends_index": 79,
+    "twitter_mentions_monthly": 17400,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "beat-em-up",
+      "martial arts",
+      "difficult",
+      "third-person",
+      "action"
+    ],
+    "game_sales_data": "~750,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "beat-em-up",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "premium",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "T",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 81,
+    "store_page_score": 87,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 83.3,
+    "cause": "timing_mismatch",
+    "quality_score": 87.5,
+    "momentum_score": 72.6,
+    "developer_track_record": 50,
+    "psm_att_pct": 33.8,
+    "psm_z_value": 2.82,
+    "psm_gamma": 2.2
+  }
+}

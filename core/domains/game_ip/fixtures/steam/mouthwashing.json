@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Mouthwashing",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Wrong Organ",
+    "genre": [
+      "horror",
+      "psychological",
+      "story rich"
+    ],
+    "synopsis": "Mouthwashing — a Psychological Horror game developed by Wrong Organ, released in 2024 on Steam.",
+    "proof_of_game": "Mouthwashing (2024, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 52800,
+    "dau_current": 25608,
+    "revenue_ltm": 2307690,
+    "revenue_lifetime": 10153836,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "M",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 3201000,
+    "reddit_subscribers": 53350,
+    "fan_art_yoy_pct": 37.0,
+    "google_trends_index": 78,
+    "twitter_mentions_monthly": 17072,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "horror",
+      "psychological",
+      "story rich",
+      "short",
+      "indie"
+    ],
+    "game_sales_data": "~660,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "horror",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "M",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 84.5,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 76.2,
+    "developer_track_record": 25,
+    "psm_att_pct": 36.5,
+    "psm_z_value": 3.04,
+    "psm_gamma": 2.4
+  }
+}

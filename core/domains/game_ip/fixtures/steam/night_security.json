@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Night Security",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Chilla's Art",
+    "genre": [
+      "horror",
+      "psychological",
+      "first-person"
+    ],
+    "synopsis": "Night Security — a Japanese Horror game developed by Chilla's Art, released in 2023 on Steam.",
+    "proof_of_game": "Night Security (2023, Steam/PC)",
+    "franchise_size": 25,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 1968,
+    "dau_current": 700,
+    "revenue_ltm": 25804,
+    "revenue_lifetime": 481677,
+    "retention_d30": 34,
+    "metacritic_score": 83,
+    "store_page_score": 89,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "M",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "S"
+  },
+  "signals": {
+    "youtube_views": 109470,
+    "reddit_subscribers": 1824,
+    "fan_art_yoy_pct": 25.7,
+    "google_trends_index": 52,
+    "twitter_mentions_monthly": 583,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "horror",
+      "psychological",
+      "first-person",
+      "short",
+      "indie"
+    ],
+    "game_sales_data": "~24,600 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "horror",
+    "dev_tier": "S",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "M",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 25,
+    "metacritic_score": 83,
+    "store_page_score": 89,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 68.8,
+    "cause": "niche_gem",
+    "quality_score": 89.5,
+    "momentum_score": 51.4,
+    "developer_track_record": 100,
+    "psm_att_pct": 24.6,
+    "psm_z_value": 2.05,
+    "psm_gamma": 2.2
+  }
+}

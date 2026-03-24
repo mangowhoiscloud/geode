@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Tunic",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "TUNIC Team",
+    "genre": [
+      "action",
+      "adventure",
+      "metroidvania"
+    ],
+    "synopsis": "Tunic — a Action Adventure game developed by TUNIC Team, released in 2022 on Steam.",
+    "proof_of_game": "Tunic (2022, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 28800,
+    "dau_current": 8928,
+    "revenue_ltm": 1133622,
+    "revenue_lifetime": 25695432,
+    "retention_d30": 36,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "T",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 1674000,
+    "reddit_subscribers": 27900,
+    "fan_art_yoy_pct": 28.0,
+    "google_trends_index": 73,
+    "twitter_mentions_monthly": 8928,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "action",
+      "adventure",
+      "metroidvania",
+      "souls-like",
+      "isometric"
+    ],
+    "game_sales_data": "~360,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "T",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 82.4,
+    "cause": "timing_mismatch",
+    "quality_score": 93.5,
+    "momentum_score": 69.6,
+    "developer_track_record": 25,
+    "psm_att_pct": 35.2,
+    "psm_z_value": 2.93,
+    "psm_gamma": 2.3
+  }
+}
