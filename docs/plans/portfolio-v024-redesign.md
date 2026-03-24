@@ -61,6 +61,30 @@
 - harness-for-real: 4-Phase FSM, Backpressure hooks, LEARNINGS.md 축적, Token budget 자동 정지
 - GEODE→REODE 2-Protocol 재설계로 클라이언트 납품
 
+## 산출물 구분
+
+| 매체 | 파일 | 용도 | 상태 |
+|------|------|------|------|
+| **Web (GitHub Pages)** | `resume/portfolio/public/geode.html` | 배포 포트폴리오 — v0.8.0 디자인 보존 + v0.24.0 콘텐츠 | Backlog |
+| **PPTX** | `portfolio/geode/GEODE-Portfolio.pptx` | 발표/공유용 — 33 슬라이드 | Backlog (수치 갱신) |
+| **5-Slide HTML (보존)** | `resume/portfolio/geode.html` | resume 스타일 — 배포하지 않음 | 보존 |
+
+## PPTX Outdated (12건)
+
+| 파일 | 현재값 | 정확값 |
+|------|--------|--------|
+| s00-cover.html | 178 modules | **182** |
+| s00-cover.html | 2930+ tests | **3,055+** |
+| s01-intro.html | 178 모듈, 21 릴리스 | **182 모듈, 25+ 릴리스** |
+| s13-results.html | Berserk 81.3 | **81.2** |
+| s13-results.html | GitS 51.6 | **51.7** |
+| s16-summary.html | 184 modules | **182** |
+| s16-summary.html | 3058+ tests | **3,055+** |
+| s16-summary.html | 24 releases | **25+** |
+| s17-tools.html | 48 tools (2곳) | **46** |
+| s19-skills.html | 21+ skills | **25** |
+| s20-mcp.html | 42 MCP servers | **43 catalog** |
+
 ## CSS/디자인 보존 규칙
 - `:root` CSS 변수 전체 유지 (Deep Sea Discovery Theme)
 - 섹션 구조 (`section.slide`, `.hero`, `.nav`) 유지
