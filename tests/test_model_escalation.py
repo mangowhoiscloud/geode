@@ -13,9 +13,9 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from core.cli.agentic_loop import AgenticLoop
-from core.cli.conversation import ConversationContext
-from core.cli.tool_executor import ToolExecutor
+from core.agent.agentic_loop import AgenticLoop
+from core.agent.conversation import ConversationContext
+from core.agent.tool_executor import ToolExecutor
 from core.config import (
     ANTHROPIC_FALLBACK_CHAIN,
     ANTHROPIC_PRIMARY,

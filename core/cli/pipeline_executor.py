@@ -541,7 +541,7 @@ def _run_analysis(
     runtime = GeodeRuntime.create(ip_name, domain_name=domain_name)
 
     # Subagent session isolation: force MemorySaver fallback (G7 fix)
-    from core.cli.sub_agent import get_subagent_context
+    from core.agent.sub_agent import get_subagent_context
 
     is_subagent, _child_key = get_subagent_context()
     if is_subagent:

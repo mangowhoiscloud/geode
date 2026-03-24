@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.cli.conversation import ConversationContext
+from core.agent.conversation import ConversationContext
 
 
 class TestConversationContext:

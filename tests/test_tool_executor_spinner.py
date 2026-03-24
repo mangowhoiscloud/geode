@@ -10,7 +10,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.cli.tool_executor import ToolExecutor, _tool_spinner
+from core.agent.tool_executor import ToolExecutor, _tool_spinner
 
 # ---------------------------------------------------------------------------
 # _tool_spinner context manager unit tests

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from core.cli.tool_executor import ToolExecutor
+from core.agent.tool_executor import ToolExecutor
 
 # ---------------------------------------------------------------------------
 # Feature 1: Session-level tool approval (A=Always)

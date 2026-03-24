@@ -16,9 +16,9 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from core.cli.agentic_loop import AgenticLoop
-from core.cli.conversation import ConversationContext
-from core.cli.sub_agent import (
+from core.agent.agentic_loop import AgenticLoop
+from core.agent.conversation import ConversationContext
+from core.agent.sub_agent import (
     SubAgentManager,
     SubAgentResult,
     SubTask,
@@ -26,7 +26,7 @@ from core.cli.sub_agent import (
     _announce_queue,
     drain_announced_results,
 )
-from core.cli.tool_executor import ToolExecutor
+from core.agent.tool_executor import ToolExecutor
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import IsolatedRunner
 
