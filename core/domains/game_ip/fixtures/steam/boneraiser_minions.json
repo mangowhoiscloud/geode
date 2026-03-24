@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Boneraiser Minions",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "caiys",
+    "genre": [
+      "action",
+      "casual",
+      "indie"
+    ],
+    "synopsis": "Boneraiser Minions — a Auto-Battler Roguelite game developed by caiys, released in 2022 on Steam.",
+    "proof_of_game": "Boneraiser Minions (2022, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 9600,
+    "dau_current": 3072,
+    "revenue_ltm": 62874,
+    "revenue_lifetime": 1425144,
+    "retention_d30": 37,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 576000,
+    "reddit_subscribers": 9600,
+    "fan_art_yoy_pct": 31.0,
+    "google_trends_index": 64,
+    "twitter_mentions_monthly": 3072,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "action",
+      "casual",
+      "indie",
+      "rpg",
+      "roguelite"
+    ],
+    "game_sales_data": "~120,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 76.2,
+    "cause": "discovery_failure",
+    "quality_score": 96.3,
+    "momentum_score": 63.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 30.7,
+    "psm_z_value": 2.56,
+    "psm_gamma": 2.4
+  }
+}

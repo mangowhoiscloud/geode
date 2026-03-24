@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Buckshot Roulette",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Mike Klubnika",
+    "genre": [
+      "horror",
+      "short",
+      "tabletop"
+    ],
+    "synopsis": "Buckshot Roulette — a Horror Tabletop game developed by Mike Klubnika, released in 2024 on Steam.",
+    "proof_of_game": "Buckshot Roulette (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 112800,
+    "dau_current": 54708,
+    "revenue_ltm": 1475565,
+    "revenue_lifetime": 6492486,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "M",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 6838500,
+    "reddit_subscribers": 113975,
+    "fan_art_yoy_pct": 37.0,
+    "google_trends_index": 84,
+    "twitter_mentions_monthly": 36472,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "horror",
+      "short",
+      "tabletop",
+      "strategy",
+      "indie"
+    ],
+    "game_sales_data": "~1,410,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "horror",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "M",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 85.4,
+    "cause": "undermarketed",
+    "quality_score": 97.1,
+    "momentum_score": 81.2,
+    "developer_track_record": 25,
+    "psm_att_pct": 35.5,
+    "psm_z_value": 2.96,
+    "psm_gamma": 2.4
+  }
+}

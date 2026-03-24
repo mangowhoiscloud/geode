@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Disco Elysium",
+    "media_type": "game",
+    "release_year": 2019,
+    "studio": "ZA/UM",
+    "genre": [
+      "rpg",
+      "story rich",
+      "detective"
+    ],
+    "synopsis": "Disco Elysium — a Narrative RPG game developed by ZA/UM, released in 2019 on Steam.",
+    "proof_of_game": "Disco Elysium (2019, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 7
+  },
+  "monolake": {
+    "dau_peak": 187200,
+    "dau_current": 39520,
+    "revenue_ltm": 9825543,
+    "revenue_lifetime": 262014480,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2019,
+    "platform": "pc",
+    "price_tier": "premium",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 11115000,
+    "reddit_subscribers": 185250,
+    "fan_art_yoy_pct": 27.9,
+    "google_trends_index": 88,
+    "twitter_mentions_monthly": 59280,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "rpg",
+      "story rich",
+      "detective",
+      "choices matter",
+      "atmospheric"
+    ],
+    "game_sales_data": "~2,340,000 owners (Steam, 2019-present)"
+  },
+  "psm_covariates": {
+    "genre": "rpg",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "premium",
+    "release_year": 2019,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 7
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 90.8,
+    "cause": "timing_mismatch",
+    "quality_score": 95.5,
+    "momentum_score": 81.8,
+    "developer_track_record": 25,
+    "psm_att_pct": 41.1,
+    "psm_z_value": 3.43,
+    "psm_gamma": 2.4
+  }
+}

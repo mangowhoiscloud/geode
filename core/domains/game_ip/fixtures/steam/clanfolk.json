@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Clanfolk",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "MinMax Games",
+    "genre": [
+      "colony sim",
+      "strategy",
+      "simulation"
+    ],
+    "synopsis": "Clanfolk — a Colony Sim game developed by MinMax Games, released in 2022 on Steam.",
+    "proof_of_game": "Clanfolk (2022, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 2880,
+    "dau_current": 787,
+    "revenue_ltm": 94462,
+    "revenue_lifetime": 2141143,
+    "retention_d30": 31,
+    "metacritic_score": 77,
+    "store_page_score": 82,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 147600,
+    "reddit_subscribers": 2460,
+    "fan_art_yoy_pct": 17.0,
+    "google_trends_index": 55,
+    "twitter_mentions_monthly": 787,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "colony sim",
+      "strategy",
+      "simulation",
+      "medieval",
+      "base building"
+    ],
+    "game_sales_data": "~36,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "colony sim",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 77,
+    "store_page_score": 82,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 68.2,
+    "cause": "timing_mismatch",
+    "quality_score": 82.5,
+    "momentum_score": 51.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 23.2,
+    "psm_z_value": 1.93,
+    "psm_gamma": 2.0
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Neon Abyss",
+    "media_type": "game",
+    "release_year": 2020,
+    "studio": "Veewo Games",
+    "genre": [
+      "roguelite",
+      "action",
+      "platformer"
+    ],
+    "synopsis": "Neon Abyss — a Roguelite Platformer game developed by Veewo Games, released in 2020 on Steam.",
+    "proof_of_game": "Neon Abyss (2020, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 6
+  },
+  "monolake": {
+    "dau_peak": 19680,
+    "dau_current": 4034,
+    "revenue_ltm": 516341,
+    "revenue_lifetime": 13769112,
+    "retention_d30": 31,
+    "metacritic_score": 77,
+    "store_page_score": 82,
+    "active_game_count": 1,
+    "last_game_year": 2020,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 1008599,
+    "reddit_subscribers": 16810,
+    "fan_art_yoy_pct": 15.3,
+    "google_trends_index": 70,
+    "twitter_mentions_monthly": 5379,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "roguelite",
+      "action",
+      "platformer",
+      "bullet hell",
+      "indie"
+    ],
+    "game_sales_data": "~246,000 owners (Steam, 2020-present)"
+  },
+  "psm_covariates": {
+    "genre": "roguelite",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2020,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 77,
+    "store_page_score": 82,
+    "ip_age_years": 6
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 75.6,
+    "cause": "timing_mismatch",
+    "quality_score": 82.5,
+    "momentum_score": 63.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 26.9,
+    "psm_z_value": 2.24,
+    "psm_gamma": 2.0
+  }
+}

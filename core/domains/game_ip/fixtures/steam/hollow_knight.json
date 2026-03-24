@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Hollow Knight",
+    "media_type": "game",
+    "release_year": 2017,
+    "studio": "Team Cherry",
+    "genre": [
+      "metroidvania",
+      "souls-like",
+      "indie"
+    ],
+    "synopsis": "Hollow Knight — a Metroidvania game developed by Team Cherry, released in 2017 on Steam.",
+    "proof_of_game": "Hollow Knight (2017, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 9
+  },
+  "monolake": {
+    "dau_peak": 816000,
+    "dau_current": 143912,
+    "revenue_ltm": 16054290,
+    "revenue_lifetime": 428114400,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2017,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "T",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 49470000,
+    "reddit_subscribers": 824500,
+    "fan_art_yoy_pct": 29.2,
+    "google_trends_index": 99,
+    "twitter_mentions_monthly": 263840,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "metroidvania",
+      "souls-like",
+      "indie",
+      "atmospheric",
+      "dark fantasy"
+    ],
+    "game_sales_data": "~10,200,000 owners (Steam, 2017-present)"
+  },
+  "psm_covariates": {
+    "genre": "metroidvania",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2017,
+    "region": "global",
+    "age_rating": "T",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 9
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 95.6,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 91.7,
+    "developer_track_record": 25,
+    "psm_att_pct": 43.3,
+    "psm_z_value": 3.61,
+    "psm_gamma": 2.4
+  }
+}

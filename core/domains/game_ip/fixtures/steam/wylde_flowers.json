@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Wylde Flowers",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Studio Drydock",
+    "genre": [
+      "farming sim",
+      "life sim",
+      "witchcraft"
+    ],
+    "synopsis": "Wylde Flowers — a Farming Sim game developed by Studio Drydock, released in 2023 on Steam.",
+    "proof_of_game": "Wylde Flowers (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 3360,
+    "dau_current": 1209,
+    "revenue_ltm": 110205,
+    "revenue_lifetime": 2057176,
+    "retention_d30": 34,
+    "metacritic_score": 84,
+    "store_page_score": 90,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 189000,
+    "reddit_subscribers": 3150,
+    "fan_art_yoy_pct": 26.7,
+    "google_trends_index": 56,
+    "twitter_mentions_monthly": 1008,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "farming sim",
+      "life sim",
+      "witchcraft",
+      "casual",
+      "story rich"
+    ],
+    "game_sales_data": "~42,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "farming sim",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 84,
+    "store_page_score": 90,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 72.4,
+    "cause": "discovery_failure",
+    "quality_score": 90.5,
+    "momentum_score": 55.2,
+    "developer_track_record": 25,
+    "psm_att_pct": 28.3,
+    "psm_z_value": 2.36,
+    "psm_gamma": 2.2
+  }
+}

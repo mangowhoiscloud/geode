@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Crawl",
+    "media_type": "game",
+    "release_year": 2017,
+    "studio": "Powerhoof",
+    "genre": [
+      "local co-op",
+      "dungeon crawler",
+      "pixel graphics"
+    ],
+    "synopsis": "Crawl — a Local Multiplayer Dungeon game developed by Powerhoof, released in 2017 on Steam.",
+    "proof_of_game": "Crawl (2017, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 9
+  },
+  "monolake": {
+    "dau_peak": 10080,
+    "dau_current": 1686,
+    "revenue_ltm": 198317,
+    "revenue_lifetime": 5288472,
+    "retention_d30": 35,
+    "metacritic_score": 85,
+    "store_page_score": 92,
+    "active_game_count": 1,
+    "last_game_year": 2017,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 579600,
+    "reddit_subscribers": 9660,
+    "fan_art_yoy_pct": 24.2,
+    "google_trends_index": 65,
+    "twitter_mentions_monthly": 3091,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "local co-op",
+      "dungeon crawler",
+      "pixel graphics",
+      "pvp",
+      "action"
+    ],
+    "game_sales_data": "~126,000 owners (Steam, 2017-present)"
+  },
+  "psm_covariates": {
+    "genre": "local co-op",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2017,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 85,
+    "store_page_score": 92,
+    "ip_age_years": 9
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 76.9,
+    "cause": "discovery_failure",
+    "quality_score": 92.5,
+    "momentum_score": 61.6,
+    "developer_track_record": 25,
+    "psm_att_pct": 30.8,
+    "psm_z_value": 2.57,
+    "psm_gamma": 2.3
+  }
+}

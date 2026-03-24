@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Frostpunk",
+    "media_type": "game",
+    "release_year": 2018,
+    "studio": "11 bit studios",
+    "genre": [
+      "city builder",
+      "survival",
+      "strategy"
+    ],
+    "synopsis": "Frostpunk — a City Builder Survival game developed by 11 bit studios, released in 2018 on Steam.",
+    "proof_of_game": "Frostpunk (2018, Steam/PC)",
+    "franchise_size": 5,
+    "ip_age_years": 8
+  },
+  "monolake": {
+    "dau_peak": 172800,
+    "dau_current": 32140,
+    "revenue_ltm": 6801732,
+    "revenue_lifetime": 181379520,
+    "retention_d30": 36,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "active_game_count": 1,
+    "last_game_year": 2018,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "M",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "A"
+  },
+  "signals": {
+    "youtube_views": 10044000,
+    "reddit_subscribers": 167400,
+    "fan_art_yoy_pct": 25.5,
+    "google_trends_index": 87,
+    "twitter_mentions_monthly": 53568,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "city builder",
+      "survival",
+      "strategy",
+      "post-apocalyptic",
+      "dark"
+    ],
+    "game_sales_data": "~2,160,000 owners (Steam, 2018-present)"
+  },
+  "psm_covariates": {
+    "genre": "city builder",
+    "dev_tier": "A",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2018,
+    "region": "global",
+    "age_rating": "M",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 5,
+    "metacritic_score": 86,
+    "store_page_score": 93,
+    "ip_age_years": 8
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 89.2,
+    "cause": "timing_mismatch",
+    "quality_score": 93.5,
+    "momentum_score": 80.5,
+    "developer_track_record": 75,
+    "psm_att_pct": 39.1,
+    "psm_z_value": 3.26,
+    "psm_gamma": 2.3
+  }
+}

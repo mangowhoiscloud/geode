@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Celeste",
+    "media_type": "game",
+    "release_year": 2018,
+    "studio": "Extremely OK Games",
+    "genre": [
+      "platformer",
+      "difficult",
+      "pixel graphics"
+    ],
+    "synopsis": "Celeste — a Precision Platformer game developed by Extremely OK Games, released in 2018 on Steam.",
+    "proof_of_game": "Celeste (2018, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 8
+  },
+  "monolake": {
+    "dau_peak": 103200,
+    "dau_current": 20020,
+    "revenue_ltm": 2707645,
+    "revenue_lifetime": 72203880,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2018,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "T",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 6256500,
+    "reddit_subscribers": 104275,
+    "fan_art_yoy_pct": 29.5,
+    "google_trends_index": 83,
+    "twitter_mentions_monthly": 33368,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "platformer",
+      "difficult",
+      "pixel graphics",
+      "indie",
+      "precision"
+    ],
+    "game_sales_data": "~1,290,000 owners (Steam, 2018-present)"
+  },
+  "psm_covariates": {
+    "genre": "platformer",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2018,
+    "region": "global",
+    "age_rating": "T",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 8
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 88.2,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 78.4,
+    "developer_track_record": 25,
+    "psm_att_pct": 39.5,
+    "psm_z_value": 3.29,
+    "psm_gamma": 2.4
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Thronefall",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "GrizzlyGames",
+    "genre": [
+      "strategy",
+      "tower defense",
+      "minimalist"
+    ],
+    "synopsis": "Thronefall — a Minimalist Strategy game developed by GrizzlyGames, released in 2023 on Steam.",
+    "proof_of_game": "Thronefall (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 20400,
+    "dau_current": 7752,
+    "revenue_ltm": 213932,
+    "revenue_lifetime": 3993401,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 1211250,
+    "reddit_subscribers": 20187,
+    "fan_art_yoy_pct": 31.7,
+    "google_trends_index": 70,
+    "twitter_mentions_monthly": 6460,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "strategy",
+      "tower defense",
+      "minimalist",
+      "base building",
+      "action"
+    ],
+    "game_sales_data": "~255,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "strategy",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 79.4,
+    "cause": "undermarketed",
+    "quality_score": 95.5,
+    "momentum_score": 68.5,
+    "developer_track_record": 25,
+    "psm_att_pct": 32.8,
+    "psm_z_value": 2.73,
+    "psm_gamma": 2.4
+  }
+}

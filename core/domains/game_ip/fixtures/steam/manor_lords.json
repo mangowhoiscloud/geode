@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Manor Lords",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Slavic Magic",
+    "genre": [
+      "city builder",
+      "strategy",
+      "medieval"
+    ],
+    "synopsis": "Manor Lords — a City Builder game developed by Slavic Magic, released in 2024 on Steam.",
+    "proof_of_game": "Manor Lords (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 67200,
+    "dau_current": 23856,
+    "revenue_ltm": 11757060,
+    "revenue_lifetime": 51731064,
+    "retention_d30": 26,
+    "metacritic_score": 67,
+    "store_page_score": 71,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "premium",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 2982000,
+    "reddit_subscribers": 49700,
+    "fan_art_yoy_pct": 11.0,
+    "google_trends_index": 80,
+    "twitter_mentions_monthly": 15904,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "city builder",
+      "strategy",
+      "medieval",
+      "base building",
+      "simulation"
+    ],
+    "game_sales_data": "~840,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "city builder",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "premium",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 67,
+    "store_page_score": 71,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 76.6,
+    "cause": "timing_mismatch",
+    "quality_score": 71.5,
+    "momentum_score": 70.0,
+    "developer_track_record": 25,
+    "psm_att_pct": 24.5,
+    "psm_z_value": 2.04,
+    "psm_gamma": 1.8
+  }
+}

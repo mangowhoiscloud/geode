@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Overcooked! 2",
+    "media_type": "game",
+    "release_year": 2018,
+    "studio": "Ghost Town Games",
+    "genre": [
+      "co-op",
+      "cooking",
+      "local co-op"
+    ],
+    "synopsis": "Overcooked! 2 — a Co-op Cooking game developed by Ghost Town Games, released in 2018 on Steam.",
+    "proof_of_game": "Overcooked! 2 (2018, Steam/PC)",
+    "franchise_size": 2,
+    "ip_age_years": 8
+  },
+  "monolake": {
+    "dau_peak": 74400,
+    "dau_current": 12796,
+    "revenue_ltm": 2440273,
+    "revenue_lifetime": 65073960,
+    "retention_d30": 33,
+    "metacritic_score": 80,
+    "store_page_score": 86,
+    "active_game_count": 1,
+    "last_game_year": 2018,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 3999000,
+    "reddit_subscribers": 66650,
+    "fan_art_yoy_pct": 18.5,
+    "google_trends_index": 80,
+    "twitter_mentions_monthly": 21328,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "co-op",
+      "cooking",
+      "local co-op",
+      "multiplayer",
+      "casual"
+    ],
+    "game_sales_data": "~930,000 owners (Steam, 2018-present)"
+  },
+  "psm_covariates": {
+    "genre": "co-op",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2018,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 2,
+    "metacritic_score": 80,
+    "store_page_score": 86,
+    "ip_age_years": 8
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 82.9,
+    "cause": "timing_mismatch",
+    "quality_score": 86.5,
+    "momentum_score": 72.9,
+    "developer_track_record": 50,
+    "psm_att_pct": 32.7,
+    "psm_z_value": 2.73,
+    "psm_gamma": 2.1
+  }
+}
