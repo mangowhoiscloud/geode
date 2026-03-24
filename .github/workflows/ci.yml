@@ -27,6 +27,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: uv sync
       - run: uv run mypy core/
+      - name: Prompt integrity check
+        run: uv run python -c "from core.llm.prompts import verify_prompt_integrity; verify_prompt_integrity(raise_on_drift=True)"
 
   test:
     name: Test
@@ -34,7 +36,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: uv sync
-      - run: uv run pytest --cov=core --cov-report=term-missing
+      - name: Run tests with coverage
+        run: uv run pytest --cov=core --cov-report=term-missing
+      - name: Ratchet — minimum test count
+        run: |
+          count=$(uv run pytest --co -q 2>/dev/null | tail -1 | grep -oE '[0-9]+' | head -1)
+          echo "Test count: $count"
+          if [ "$count" -lt 2900 ]; then
+            echo "::error::Test count $count < 2900 (ratchet). Do not delete tests without justification."
+            exit 1
+          fi
 
   security:
     name: Security Scan

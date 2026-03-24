@@ -214,7 +214,9 @@ class ProjectJournal:
             # Rotation: keep most recent MAX entries
             if len(existing_lines) > MAX_LEARNED_PATTERNS:
                 existing_lines = existing_lines[-MAX_LEARNED_PATTERNS:]
-            learned_path.write_text("\n".join(existing_lines) + "\n", encoding="utf-8")
+            from core.infrastructure.atomic_io import atomic_write_text
+
+            atomic_write_text(learned_path, "\n".join(existing_lines) + "\n")
 
     def get_learned_patterns(self) -> list[str]:
         """Read all learned patterns."""
@@ -279,6 +281,10 @@ class ProjectJournal:
             try:
                 with open(fpath, "a", encoding="utf-8") as f:
                     f.write(line + "\n")
+                    f.flush()
+                    import os
+
+                    os.fsync(f.fileno())
             except OSError as e:
                 log.warning("Failed to write journal %s: %s", filename, e)
 

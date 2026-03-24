@@ -282,8 +282,15 @@ class ToolExecutor:
         try:
             if approved_via_hitl:
                 with _tool_spinner(f"Executing {tool_name}..."):
-                    return handler(**tool_input)
-            return handler(**tool_input)
+                    raw: Any = handler(**tool_input)
+            else:
+                raw = handler(**tool_input)
+            # Guard: ensure result is always a dict (handlers may return None or non-dict)
+            if raw is None:
+                return {"error": f"Tool {tool_name} returned None", "status": "failure"}
+            if not isinstance(raw, dict):
+                return {"result": raw}
+            return raw
         except Exception as exc:
             log.error("Tool %s failed: %s", tool_name, exc, exc_info=True)
             return {"error": str(exc)}
