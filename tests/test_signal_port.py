@@ -10,7 +10,7 @@ from core.infrastructure.adapters.signal_adapter import (
     LiveSignalAdapter,
     create_signal_adapter,
 )
-from core.infrastructure.ports.signal_port import SignalEnrichmentPort
+from core.mcp.signal_port import SignalEnrichmentPort
 from core.state import GeodeState
 
 

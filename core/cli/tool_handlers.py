@@ -658,7 +658,7 @@ def _build_system_handlers(
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
         from core.domains.game_ip.fixtures import FIXTURE_MAP as _FM
-        from core.infrastructure.adapters.mcp.registry import MCPRegistry
+        from core.mcp.registry import MCPRegistry
 
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
@@ -1004,7 +1004,7 @@ def _build_mcp_handler(
     def handle_install_mcp_server(**kwargs: Any) -> dict[str, Any]:
         import os as _os
 
-        from core.infrastructure.adapters.mcp.catalog import search_catalog
+        from core.mcp.catalog import search_catalog
 
         query = kwargs.get("query", "")
         matches = search_catalog(query)

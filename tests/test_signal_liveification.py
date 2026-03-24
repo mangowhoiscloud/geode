@@ -12,9 +12,9 @@ from __future__ import annotations
 from typing import Any
 
 from core.domains.game_ip.nodes.signals import set_signal_adapter, signals_node
-from core.infrastructure.adapters.mcp.brave_adapter import BraveSignalAdapter
-from core.infrastructure.adapters.mcp.composite_signal import CompositeSignalAdapter
-from core.infrastructure.adapters.mcp.steam_adapter import SteamMCPSignalAdapter
+from core.mcp.brave_adapter import BraveSignalAdapter
+from core.mcp.composite_signal import CompositeSignalAdapter
+from core.mcp.steam_adapter import SteamMCPSignalAdapter
 from core.state import GeodeState
 
 # ---------------------------------------------------------------------------

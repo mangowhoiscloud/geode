@@ -899,7 +899,7 @@ def cmd_mcp(arg: str, *, mcp_manager: _Any | None = None) -> None:
     /mcp tools           → list all MCP tool names
     /mcp reload          → reload config and reconnect
     """
-    from core.infrastructure.adapters.mcp.manager import MCPServerManager
+    from core.mcp.manager import MCPServerManager
 
     mgr: MCPServerManager
     if mcp_manager is not None:

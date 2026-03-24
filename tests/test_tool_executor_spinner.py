@@ -20,7 +20,7 @@ from core.cli.tool_executor import ToolExecutor, _tool_spinner
 class TestToolSpinner:
     """Test the _tool_spinner context manager itself."""
 
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor.console")
     def test_spinner_starts_and_stops(self, mock_console: MagicMock) -> None:
         """Spinner calls status.start() on enter and status.stop() on exit."""
         mock_status = MagicMock()
@@ -33,7 +33,7 @@ class TestToolSpinner:
 
         mock_status.stop.assert_called_once()
 
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor.console")
     def test_spinner_stops_on_exception(self, mock_console: MagicMock) -> None:
         """Spinner stops even if the wrapped block raises."""
         mock_status = MagicMock()
@@ -44,7 +44,7 @@ class TestToolSpinner:
 
         mock_status.stop.assert_called_once()
 
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor.console")
     def test_spinner_label_in_status(self, mock_console: MagicMock) -> None:
         """Spinner label is passed to console.status()."""
         mock_status = MagicMock()
@@ -65,8 +65,8 @@ class TestToolSpinner:
 class TestBashSpinner:
     """Test spinner activation during bash command execution."""
 
-    @patch("core.cli.tool_executor._tool_spinner")
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor.console")
     def test_bash_spinner_after_approval(
         self, mock_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
@@ -82,8 +82,8 @@ class TestBashSpinner:
         label = mock_spinner.call_args[0][0]
         assert "echo hello" in label
 
-    @patch("core.cli.tool_executor._tool_spinner")
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor.console")
     def test_bash_no_spinner_when_denied(
         self, mock_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
@@ -106,8 +106,8 @@ class TestBashSpinner:
 class TestMcpSpinner:
     """Test spinner activation during MCP tool execution."""
 
-    @patch("core.cli.tool_executor._tool_spinner")
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor.console")
     def test_mcp_spinner_after_approval(
         self, mock_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
@@ -128,8 +128,8 @@ class TestMcpSpinner:
         assert "my-server" in label
         assert "mcp_tool_x" in label
 
-    @patch("core.cli.tool_executor._tool_spinner")
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor.console")
     def test_mcp_no_spinner_when_denied(
         self, mock_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
@@ -144,7 +144,7 @@ class TestMcpSpinner:
         mock_spinner.assert_not_called()
         assert result.get("denied") is True
 
-    @patch("core.cli.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor._tool_spinner")
     def test_mcp_no_spinner_when_auto_approved(self, mock_spinner: MagicMock) -> None:
         """When auto_approve is True, spinner wraps execution without HITL prompt."""
         mock_spinner.return_value.__enter__ = MagicMock(return_value=None)
@@ -169,8 +169,8 @@ class TestMcpSpinner:
 class TestWriteToolSpinner:
     """Test spinner activation during write tool execution."""
 
-    @patch("core.cli.tool_executor._tool_spinner")
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor.console")
     def test_write_spinner_after_approval(
         self, mock_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
@@ -187,8 +187,8 @@ class TestWriteToolSpinner:
         label = mock_spinner.call_args[0][0]
         assert "memory_save" in label
 
-    @patch("core.cli.tool_executor._tool_spinner")
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor.console")
     def test_write_no_spinner_when_denied(
         self, mock_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
@@ -212,8 +212,8 @@ class TestWriteToolSpinner:
 class TestExpensiveToolSpinner:
     """Test spinner activation during expensive tool execution."""
 
-    @patch("core.cli.tool_executor._tool_spinner")
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor.console")
     def test_expensive_spinner_after_approval(
         self, mock_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
@@ -230,8 +230,8 @@ class TestExpensiveToolSpinner:
         label = mock_spinner.call_args[0][0]
         assert "analyze_ip" in label
 
-    @patch("core.cli.tool_executor._tool_spinner")
-    @patch("core.cli.tool_executor.console")
+    @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor.console")
     def test_expensive_no_spinner_when_denied(
         self, mock_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
@@ -246,7 +246,7 @@ class TestExpensiveToolSpinner:
         assert result.get("denied") is True
         handler.assert_not_called()
 
-    @patch("core.cli.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor._tool_spinner")
     def test_expensive_no_spinner_when_auto_approved(self, mock_spinner: MagicMock) -> None:
         """When auto_approve is True, expensive tools skip HITL and spinner."""
         handler = MagicMock(return_value={"tier": "A"})
@@ -266,7 +266,7 @@ class TestExpensiveToolSpinner:
 class TestNoSpinnerForSafeTools:
     """Safe and standard tools should not show a post-HITL spinner."""
 
-    @patch("core.cli.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor._tool_spinner")
     def test_safe_tool_no_spinner(self, mock_spinner: MagicMock) -> None:
         """Safe tools execute without any spinner."""
         handler = MagicMock(return_value={"ips": []})
@@ -276,7 +276,7 @@ class TestNoSpinnerForSafeTools:
         mock_spinner.assert_not_called()
         handler.assert_called_once()
 
-    @patch("core.cli.tool_executor._tool_spinner")
+    @patch("core.agent.tool_executor._tool_spinner")
     def test_standard_tool_no_spinner(self, mock_spinner: MagicMock) -> None:
         """Standard (non-gated) tools execute without spinner."""
         handler = MagicMock(return_value={"report": "done"})

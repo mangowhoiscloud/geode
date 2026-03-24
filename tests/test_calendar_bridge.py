@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
-from core.infrastructure.ports.calendar_port import CalendarEvent
+from core.mcp.calendar_port import CalendarEvent
 from core.orchestration.calendar_bridge import (
     CalendarSchedulerBridge,
     get_calendar_bridge,

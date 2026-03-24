@@ -116,7 +116,7 @@ def bootstrap_geode(
     _set_readiness(readiness)
 
     # 4. MCP
-    from core.infrastructure.adapters.mcp.manager import get_mcp_manager
+    from core.mcp.manager import get_mcp_manager
 
     mcp_mgr = get_mcp_manager()
 

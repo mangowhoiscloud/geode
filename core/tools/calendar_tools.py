@@ -55,7 +55,7 @@ class CalendarListEventsTool:
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
-        from core.infrastructure.ports.calendar_port import get_calendar
+        from core.mcp.calendar_port import get_calendar
 
         adapter = get_calendar()
         if adapter is None or not adapter.is_available():
@@ -146,7 +146,7 @@ class CalendarCreateEventTool:
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
-        from core.infrastructure.ports.calendar_port import get_calendar
+        from core.mcp.calendar_port import get_calendar
 
         adapter = get_calendar()
         if adapter is None or not adapter.is_available():

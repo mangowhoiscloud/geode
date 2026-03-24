@@ -475,7 +475,7 @@ def _handle_command(
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
 
         # MCP status section
-        from core.infrastructure.adapters.mcp.registry import MCPRegistry as _MCPReg
+        from core.mcp.registry import MCPRegistry as _MCPReg
 
         _reg = _MCPReg()
         _json_servers = None

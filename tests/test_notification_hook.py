@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from core.infrastructure.ports.notification_port import NotificationResult, set_notification
+from core.mcp.notification_port import NotificationResult, set_notification
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.plugins.notification_hook.hook import (
     _format_message,

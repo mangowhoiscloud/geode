@@ -91,7 +91,7 @@ class TestSendNotificationTool:
 
     def test_execute_slack_no_adapter(self):
         """Without adapter, falls back to stub response."""
-        from core.infrastructure.ports.notification_port import set_notification
+        from core.mcp.notification_port import set_notification
 
         set_notification(None)
         tool = SendNotificationTool()
@@ -112,7 +112,7 @@ class TestSendNotificationTool:
         """With adapter available, sends via NotificationPort."""
         from unittest.mock import MagicMock
 
-        from core.infrastructure.ports.notification_port import (
+        from core.mcp.notification_port import (
             NotificationResult,
             set_notification,
         )
@@ -136,7 +136,7 @@ class TestSendNotificationTool:
         set_notification(None)
 
     def test_execute_default_severity(self):
-        from core.infrastructure.ports.notification_port import set_notification
+        from core.mcp.notification_port import set_notification
 
         set_notification(None)
         tool = SendNotificationTool()
@@ -144,7 +144,7 @@ class TestSendNotificationTool:
         assert result["result"]["severity"] == "info"
 
     def test_execute_message_preview_truncated(self):
-        from core.infrastructure.ports.notification_port import set_notification
+        from core.mcp.notification_port import set_notification
 
         set_notification(None)
         tool = SendNotificationTool()
