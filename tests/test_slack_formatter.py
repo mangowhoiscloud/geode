@@ -77,7 +77,10 @@ class TestHeadingConversion:
 
 class TestLinkConversion:
     def test_basic_link(self) -> None:
-        assert markdown_to_slack_mrkdwn("[Google](https://google.com)") == "<https://google.com|Google>"
+        assert (
+            markdown_to_slack_mrkdwn("[Google](https://google.com)")
+            == "<https://google.com|Google>"
+        )
 
     def test_link_in_sentence(self) -> None:
         result = markdown_to_slack_mrkdwn("Visit [docs](https://docs.example.com) for info")
@@ -137,7 +140,9 @@ class TestMixedContent:
         assert "<https://x.com|link>" in result
 
     def test_realistic_response(self) -> None:
-        text = "## 비교\n\n| 항목 | A | B |\n| --- | --- | --- |\n| 점수 | 90 | 80 |\n\n**A**가 높다."
+        text = (
+            "## 비교\n\n| 항목 | A | B |\n| --- | --- | --- |\n| 점수 | 90 | 80 |\n\n**A**가 높다."
+        )
         result = markdown_to_slack_mrkdwn(text)
         assert "**" not in result
         assert "##" not in result

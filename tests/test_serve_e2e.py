@@ -17,6 +17,7 @@ class TestServeToolExecution:
 
     def test_bootstrap_handlers_count(self) -> None:
         from core.cli.bootstrap import bootstrap_geode
+
         boot = bootstrap_geode(load_env=True)
         assert len(boot.tool_handlers) >= 44
         assert "web_fetch" in boot.tool_handlers
@@ -24,6 +25,7 @@ class TestServeToolExecution:
 
     def test_web_fetch_http(self) -> None:
         from core.cli.bootstrap import bootstrap_geode
+
         boot = bootstrap_geode(load_env=True)
         result = boot.tool_handlers["web_fetch"](url="http://example.com", max_chars=200)
         assert "result" in result
@@ -31,6 +33,7 @@ class TestServeToolExecution:
 
     def test_web_fetch_https_ssl_fallback(self) -> None:
         from core.cli.bootstrap import bootstrap_geode
+
         boot = bootstrap_geode(load_env=True)
         result = boot.tool_handlers["web_fetch"](url="https://example.com", max_chars=200)
         # Should succeed via SSL fallback
@@ -42,6 +45,7 @@ class TestServeToolExecution:
     )
     def test_general_web_search(self) -> None:
         from core.cli.bootstrap import bootstrap_geode
+
         boot = bootstrap_geode(load_env=True)
         result = boot.tool_handlers["general_web_search"](query="test", max_results=1)
         assert "result" in result
@@ -49,6 +53,7 @@ class TestServeToolExecution:
     def test_executor_web_fetch(self) -> None:
         from core.cli.bootstrap import bootstrap_geode
         from core.cli.tool_executor import ToolExecutor
+
         boot = bootstrap_geode(load_env=True)
         executor = ToolExecutor(
             action_handlers=boot.tool_handlers,

@@ -930,9 +930,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
 
     n_mcp = len(mcp_mgr._servers) if mcp_mgr and hasattr(mcp_mgr, "_servers") else 0
     n_skills = len(skill_registry._skills) if hasattr(skill_registry, "_skills") else 0
-    console.print(
-        f"  [bold green]ok[/bold green] Bootstrap (MCP {n_mcp}, Skills {n_skills})"
-    )
+    console.print(f"  [bold green]ok[/bold green] Bootstrap (MCP {n_mcp}, Skills {n_skills})")
 
     # Key gate (REPL-only: interactive prompt if API key missing)
     readiness = boot.readiness
