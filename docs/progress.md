@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-22 (세션 12 — 날짜 주입 + Slack 에코 제거 + @멘션 게이트)
+> 마지막 갱신: 2026-03-24 (세션 13 — .geode/+CLAUDE.md 컨텍스트 품질 점검)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -12,12 +12,13 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| gmail-integration | Gmail MCP 통합 — 이메일 읽기/전송 + MCP catalog 등록 | P1 | — | @gongrzhe/server-gmail-autoauth-mcp |
+| — | — | — | — | — |
 
 ### In Progress
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
-|---------|----------|------|--------|--------|------| — | — | — | — | — | — |
+|---------|----------|------|--------|--------|------|
+| context-quality-review | .geode/ + CLAUDE.md 컨텍스트 품질 점검 — 3인 검증팀(Karpathy/OpenClaw/Claude Code) | @mangowhoiscloud | feature/context-quality-review | 2026-03-24 | 리서치+플랜→구현 |
 
 ### In Review
 
@@ -29,6 +30,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| gmail-integration | Gmail MCP 통합 — OAuth 기반, DEFAULT_SERVERS 등록, catalog 43개 | #396→#397 | @mangowhoiscloud | 2026-03-24 |
 | serve-repl-unify | bootstrap_geode() 단일 초기화 + ContextVar 전파 (14 tests) | #394→#395 | @mangowhoiscloud | 2026-03-24 |
 | web-fetch-ssl | web_fetch SSL fallback — Python 3.14 certifi 호환 | #392→#393 | @mangowhoiscloud | 2026-03-24 |
 | wrapper-removal | _build_tool_handlers wrapper 삭제 — 상단 re-export + Beck/Karpathy 검증 | main direct | @mangowhoiscloud | 2026-03-24 |
