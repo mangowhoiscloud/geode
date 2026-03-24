@@ -46,7 +46,7 @@ class TestMCPToolFunctions:
     """Test tool logic by exercising the same code paths the MCP tools use."""
 
     def test_get_ip_signals_returns_fixture_data(self) -> None:
-        from core.fixtures import FIXTURE_MAP, load_fixture
+        from core.domains.game_ip.fixtures import FIXTURE_MAP, load_fixture
 
         ip_key = sorted(FIXTURE_MAP.keys())[0]
         fixture = load_fixture(ip_key)
@@ -59,12 +59,12 @@ class TestMCPToolFunctions:
         assert result["source"] == "fixture"
 
     def test_get_ip_signals_unknown_ip(self) -> None:
-        from core.fixtures import FIXTURE_MAP
+        from core.domains.game_ip.fixtures import FIXTURE_MAP
 
         assert "zzz_nonexistent_ip" not in FIXTURE_MAP
 
     def test_list_fixtures_returns_count_and_ips(self) -> None:
-        from core.fixtures import FIXTURE_MAP
+        from core.domains.game_ip.fixtures import FIXTURE_MAP
 
         result = {"count": len(FIXTURE_MAP), "ips": sorted(FIXTURE_MAP.keys())}
         assert result["count"] > 0
@@ -85,7 +85,7 @@ class TestMCPToolFunctions:
     def test_fixtures_resource_returns_json(self) -> None:
         import json
 
-        from core.fixtures import FIXTURE_MAP
+        from core.domains.game_ip.fixtures import FIXTURE_MAP
 
         data = json.dumps({"count": len(FIXTURE_MAP), "ips": sorted(FIXTURE_MAP.keys())})
         parsed = json.loads(data)

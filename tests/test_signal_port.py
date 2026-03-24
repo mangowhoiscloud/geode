@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.domains.game_ip.nodes.signals import set_signal_adapter, signals_node
 from core.infrastructure.adapters.signal_adapter import (
     FixtureSignalAdapter,
     LiveSignalAdapter,
     create_signal_adapter,
 )
 from core.infrastructure.ports.signal_port import SignalEnrichmentPort
-from core.nodes.signals import set_signal_adapter, signals_node
 from core.state import GeodeState
 
 

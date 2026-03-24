@@ -208,7 +208,7 @@ class TestPromptOverridesWire:
 
 class TestAnalystSendsPropagation:
     def test_sends_contain_adr007_keys(self) -> None:
-        from core.nodes.analysts import make_analyst_sends
+        from core.domains.game_ip.nodes.analysts import make_analyst_sends
 
         state: dict[str, Any] = {
             "ip_name": "Berserk",
@@ -235,7 +235,7 @@ class TestAnalystSendsPropagation:
 
 class TestEvaluatorSendsPropagation:
     def test_sends_contain_adr007_keys(self) -> None:
-        from core.nodes.evaluators import make_evaluator_sends
+        from core.domains.game_ip.nodes.evaluators import make_evaluator_sends
 
         state: dict[str, Any] = {
             "ip_name": "Berserk",
@@ -409,8 +409,8 @@ class TestAnalystSpecificMigration:
         assembler = PromptAssembler(skill_registry=registry)
 
         # Build a minimal state that _build_analyst_prompt() expects
+        from core.domains.game_ip.nodes.analysts import _build_analyst_prompt
         from core.llm.prompts import ANALYST_SPECIFIC
-        from core.nodes.analysts import _build_analyst_prompt
 
         state: dict[str, Any] = {
             "ip_info": {
@@ -447,8 +447,8 @@ class TestAnalystSpecificMigration:
 
     def test_analyst_specific_used_when_no_skill(self) -> None:
         """When no skill .md exists, ANALYST_SPECIFIC should appear in user prompt."""
+        from core.domains.game_ip.nodes.analysts import _build_analyst_prompt
         from core.llm.prompts import ANALYST_SPECIFIC
-        from core.nodes.analysts import _build_analyst_prompt
 
         assembler = PromptAssembler(skill_registry=SkillRegistry())
 

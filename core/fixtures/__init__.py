@@ -1,4 +1,4 @@
-"""DEPRECATED: Fixtures moved to core.domains.game_ip.fixtures."""
+"""Fixture utilities — re-exported from domains.game_ip.fixtures for backward compat."""
 
 from core.domains.game_ip.fixtures import (
     FIXTURE_MAP as FIXTURE_MAP,

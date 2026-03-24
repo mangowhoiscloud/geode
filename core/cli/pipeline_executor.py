@@ -12,11 +12,8 @@ import re as _re
 import shutil
 from typing import Any
 
-from core.config import settings
-from core.runtime import GeodeRuntime
-from core.state import AnalysisResult, EvaluatorResult, GeodeState
-from core.ui.console import console
-from core.ui.panels import (
+from core.cli.ui.console import console
+from core.cli.ui.panels import (
     analyst_panel,
     evaluator_panel,
     gather_panel,
@@ -25,6 +22,9 @@ from core.ui.panels import (
     score_panel,
     verify_panel,
 )
+from core.config import settings
+from core.runtime import GeodeRuntime
+from core.state import AnalysisResult, EvaluatorResult, GeodeState
 
 log = logging.getLogger(__name__)
 
@@ -478,7 +478,7 @@ def _resolve_ip_name(ip_name: str) -> str | None:
     4. Substring: input is contained in fixture key
     """
     from core.cli.ip_names import get_ip_name_map
-    from core.fixtures import FIXTURE_MAP
+    from core.domains.game_ip.fixtures import FIXTURE_MAP
 
     key = ip_name.lower().strip()
 
@@ -520,7 +520,7 @@ def _run_analysis(
 ) -> dict[str, Any] | None:
     """Core analysis logic shared by interactive and CLI modes."""
     from core.cli import _hooks_ctx, _set_last_result
-    from core.fixtures import FIXTURE_MAP
+    from core.domains.game_ip.fixtures import FIXTURE_MAP
 
     resolved = _resolve_ip_name(ip_name)
     if resolved is None:

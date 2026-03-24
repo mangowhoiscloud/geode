@@ -33,7 +33,7 @@ def create_mcp_server() -> Any:
     @mcp.tool(description=_TOOL_DESCRIPTIONS["analyze_ip"])  # type: ignore[untyped-decorator]
     def analyze_ip(ip_name: str, dry_run: bool = False) -> dict[str, Any]:
         """Run GEODE analysis pipeline on an IP."""
-        from core.fixtures import FIXTURE_MAP
+        from core.domains.game_ip.fixtures import FIXTURE_MAP
 
         key = ip_name.lower().strip()
         if key not in FIXTURE_MAP:
@@ -102,7 +102,7 @@ def create_mcp_server() -> Any:
     @mcp.tool(description=_TOOL_DESCRIPTIONS["get_ip_signals"])  # type: ignore[untyped-decorator]
     def get_ip_signals(ip_name: str) -> dict[str, Any]:
         """Get community signals for an IP."""
-        from core.fixtures import FIXTURE_MAP, load_fixture
+        from core.domains.game_ip.fixtures import FIXTURE_MAP, load_fixture
 
         key = ip_name.lower().strip()
         if key not in FIXTURE_MAP:
@@ -118,7 +118,7 @@ def create_mcp_server() -> Any:
     @mcp.tool(description=_TOOL_DESCRIPTIONS["list_fixtures"])  # type: ignore[untyped-decorator]
     def list_fixtures() -> dict[str, Any]:
         """List all available IP fixtures."""
-        from core.fixtures import FIXTURE_MAP
+        from core.domains.game_ip.fixtures import FIXTURE_MAP
 
         return {
             "count": len(FIXTURE_MAP),
@@ -155,7 +155,7 @@ def create_mcp_server() -> Any:
     @mcp.resource("geode://fixtures")  # type: ignore[untyped-decorator]
     def fixtures_resource() -> str:
         """List all available IP fixtures."""
-        from core.fixtures import FIXTURE_MAP
+        from core.domains.game_ip.fixtures import FIXTURE_MAP
 
         return json.dumps({"count": len(FIXTURE_MAP), "ips": sorted(FIXTURE_MAP.keys())})
 
