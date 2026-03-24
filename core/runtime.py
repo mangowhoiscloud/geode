@@ -28,9 +28,6 @@ if TYPE_CHECKING:
 
     from core.llm.prompt_assembler import PromptAssembler
 
-from core.auth.cooldown import CooldownTracker
-from core.auth.profiles import ProfileStore
-from core.auth.rotation import ProfileRotator
 from core.automation.correlation import CorrelationAnalyzer
 from core.automation.drift import CUSUMDetector
 from core.automation.expert_panel import ExpertPanel
@@ -41,6 +38,9 @@ from core.automation.snapshot import SnapshotManager
 from core.automation.triggers import TriggerManager, TriggerType
 from core.config import settings
 from core.domains.loader import load_domain_adapter
+from core.gateway.auth.cooldown import CooldownTracker
+from core.gateway.auth.profiles import ProfileStore
+from core.gateway.auth.rotation import ProfileRotator
 from core.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
 from core.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
 from core.infrastructure.ports.auth_port import (
@@ -792,7 +792,7 @@ class GeodeRuntime:
     @staticmethod
     def _build_auth() -> tuple[ProfileStorePort, ProfileRotatorPort, CooldownTrackerPort]:
         """Build auth profile system with API key profiles."""
-        from core.auth.profiles import AuthProfile, CredentialType
+        from core.gateway.auth.profiles import AuthProfile, CredentialType
 
         profile_store = ProfileStore()
         if settings.anthropic_api_key:

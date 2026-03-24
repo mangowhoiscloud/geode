@@ -23,24 +23,27 @@ LEGACY_PATTERNS: list[tuple[str, str]] = [
     (r"import core\.fixtures\b", "core.domains.game_ip.fixtures"),
     (r"from core\.ui\b", "core.cli.ui"),
     (r"import core\.ui\b", "core.cli.ui"),
+    (r"from core\.auth\b", "core.gateway.auth"),
+    (r"import core\.auth\b", "core.gateway.auth"),
+    (r"from core\.extensibility\b", "core.skills"),
+    (r"import core\.extensibility\b", "core.skills"),
 ]
 
 # Bridge proxy files are exempt (they ARE the re-export layer)
 EXEMPT_FILES = {
     "core/nodes/__init__.py",
-    "core/nodes/analysts.py",
-    "core/nodes/evaluators.py",
-    "core/nodes/router.py",
-    "core/nodes/scoring.py",
-    "core/nodes/signals.py",
-    "core/nodes/synthesizer.py",
     "core/fixtures/__init__.py",
     "core/ui/__init__.py",
-    "core/ui/agentic_ui.py",
-    "core/ui/console.py",
-    "core/ui/mascot.py",
-    "core/ui/panels.py",
-    "core/ui/status.py",
+    "core/auth/__init__.py",
+    "core/auth/cooldown.py",
+    "core/auth/profiles.py",
+    "core/auth/rotation.py",
+    "core/extensibility/__init__.py",
+    "core/extensibility/_frontmatter.py",
+    "core/extensibility/agents.py",
+    "core/extensibility/plugins.py",
+    "core/extensibility/reports.py",
+    "core/extensibility/skills.py",
 }
 
 

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from core.auth.cooldown import CooldownTracker
-from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
-from core.auth.rotation import ProfileRotator
+from core.gateway.auth.cooldown import CooldownTracker
+from core.gateway.auth.profiles import AuthProfile, CredentialType, ProfileStore
+from core.gateway.auth.rotation import ProfileRotator
 from core.graph import compile_graph
 from core.infrastructure.ports.llm_port import LLMClientPort
 from core.orchestration.hooks import HookEvent, HookSystem

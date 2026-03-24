@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from core.config import ANTHROPIC_SECONDARY
-from core.extensibility.agents import (
+from core.skills.agents import (
     AgentDefinition,
     AgentRegistry,
     SubagentLoader,

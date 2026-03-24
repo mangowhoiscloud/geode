@@ -34,7 +34,7 @@ from core.orchestration.isolated_execution import (
 from core.orchestration.task_system import Task, TaskGraph
 
 if TYPE_CHECKING:
-    from core.extensibility.agents import AgentRegistry
+    from core.skills.agents import AgentRegistry
 
 log = logging.getLogger(__name__)
 
