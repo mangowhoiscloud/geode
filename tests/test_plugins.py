@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from core.extensibility.plugins import (
+from core.skills.plugins import (
     Plugin,
     PluginManager,
     PluginMetadata,

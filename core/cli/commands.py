@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
 from simple_term_menu import TerminalMenu
 
-from core.auth.profiles import ProfileStore
 from core.cli._helpers import is_glm_key as _is_glm_key
 from core.cli._helpers import mask_key as _mask_key
 from core.cli._helpers import upsert_env as _upsert_env
@@ -28,6 +27,7 @@ from core.config import (
     GLM_PRIMARY,
     OPENAI_PRIMARY,
 )
+from core.gateway.auth.profiles import ProfileStore
 
 # ---------------------------------------------------------------------------
 # Model Registry (OpenClaw Auth Profile Rotation pattern)
@@ -369,7 +369,7 @@ def cmd_auth(args: str) -> None:
     /auth add         → interactive add profile
     /auth remove <n>  → remove a profile
     """
-    from core.auth.rotation import ProfileRotator
+    from core.gateway.auth.rotation import ProfileRotator
 
     # Module-level singleton (lazy init)
     store = _get_profile_store()
@@ -424,7 +424,7 @@ def cmd_auth(args: str) -> None:
 
 def _auth_add_interactive(store: ProfileStore, add_args: str) -> None:
     """Interactive auth profile addition."""
-    from core.auth.profiles import AuthProfile, CredentialType
+    from core.gateway.auth.profiles import AuthProfile, CredentialType
 
     # Level 1: Provider selection
     providers = ["anthropic", "openai", "zhipuai"]
@@ -494,7 +494,7 @@ _profile_store_ctx: ContextVar[_Any] = ContextVar("profile_store", default=None)
 
 def _get_profile_store() -> ProfileStore:
     """Get or create the context-local profile store, seeded from settings."""
-    from core.auth.profiles import AuthProfile, CredentialType
+    from core.gateway.auth.profiles import AuthProfile, CredentialType
 
     store = _profile_store_ctx.get()
     if store is not None:
@@ -997,7 +997,7 @@ def cmd_skills(skill_registry: _Any, arg: str) -> None:
     /skills reload    → reload from disk
     /skills <name>    → show skill detail
     """
-    from core.extensibility.skills import SkillLoader, SkillRegistry
+    from core.skills.skills import SkillLoader, SkillRegistry
 
     reg: SkillRegistry = skill_registry
     sub = arg.strip() if arg else ""
@@ -1068,7 +1068,7 @@ def _skills_add(reg: _Any, raw: str) -> None:
     """
     import shutil
 
-    from core.extensibility.skills import SkillLoader
+    from core.skills.skills import SkillLoader
 
     path_str = raw.strip()
     if not path_str:

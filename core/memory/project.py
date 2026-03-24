@@ -22,8 +22,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from core.extensibility._frontmatter import _FRONTMATTER_RE
 from core.infrastructure.atomic_io import atomic_write_text
+from core.skills._frontmatter import _FRONTMATTER_RE
 
 log = logging.getLogger(__name__)
 

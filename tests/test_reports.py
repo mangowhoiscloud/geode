@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 import pytest
-from core.extensibility.reports import (
+from core.skills.reports import (
     ReportFormat,
     ReportGenerator,
     ReportTemplate,

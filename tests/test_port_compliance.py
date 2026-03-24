@@ -88,18 +88,18 @@ class TestOrchestrationPortCompliance:
 
 class TestAuthPortCompliance:
     def test_profile_store_satisfies_port(self):
-        from core.auth.profiles import ProfileStore
+        from core.gateway.auth.profiles import ProfileStore
 
         assert isinstance(ProfileStore(), ProfileStorePort)
 
     def test_profile_rotator_satisfies_port(self):
-        from core.auth.profiles import ProfileStore
-        from core.auth.rotation import ProfileRotator
+        from core.gateway.auth.profiles import ProfileStore
+        from core.gateway.auth.rotation import ProfileRotator
 
         assert isinstance(ProfileRotator(ProfileStore()), ProfileRotatorPort)
 
     def test_cooldown_tracker_satisfies_port(self):
-        from core.auth.cooldown import CooldownTracker
+        from core.gateway.auth.cooldown import CooldownTracker
 
         assert isinstance(CooldownTracker(), CooldownTrackerPort)
 

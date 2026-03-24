@@ -430,10 +430,10 @@ class TestSubAgentLive:
     def test_6_5_agent_registry_resolve(self) -> None:
         """E5: AgentRegistry + _resolve_agent integration."""
         from core.cli.sub_agent import SubAgentManager, SubTask
-        from core.extensibility.agents import AgentRegistry
         from core.orchestration.isolated_execution import (
             IsolatedRunner,
         )
+        from core.skills.agents import AgentRegistry
 
         registry = AgentRegistry()
         registry.load_defaults()

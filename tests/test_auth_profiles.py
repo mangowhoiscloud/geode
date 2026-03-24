@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import time
 
-from core.auth.cooldown import CooldownTracker
-from core.auth.profiles import (
+from core.gateway.auth.cooldown import CooldownTracker
+from core.gateway.auth.profiles import (
     TYPE_PRIORITY,
     AuthProfile,
     CredentialType,
     ProfileStore,
 )
-from core.auth.rotation import ProfileRotator, calculate_cooldown_ms
+from core.gateway.auth.rotation import ProfileRotator, calculate_cooldown_ms
 
 # ---------------------------------------------------------------------------
 # CredentialType + Priority
