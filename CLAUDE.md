@@ -391,6 +391,7 @@ Decision Tree on D-E-F axes:
 | | 버전 4곳 불일치 금지 | 단일 진실 |
 | **PR** | HEREDOC 없이 PR body 금지 | 형식 일관성 |
 | | Why 근거 없이 PR 금지 | 의사결정 기록 |
+| | CI 가드레일 미통과 PR 머지 금지 | 래칫 (P4) |
 
 ### CAN — 허용된 자유도
 
@@ -407,19 +408,23 @@ CANNOT에 없는 것은 자유롭게 할 수 있다. 특히:
 ### 워크플로우 단계
 
 ```
-0. Worktree → 1. GAP Audit → 2. Plan + Socratic Gate → 3. Implement+Test → 4. E2E Verify → 5. Docs-Sync → 6. PR → 7. Board
+0. Board + Worktree → 1. GAP Audit → 2. Plan + Socratic Gate → 3. Implement+Test → 4. E2E Verify → 5. Docs-Sync → 6. PR → 7. Board
 ```
 
-#### 0. Worktree Alloc
+#### 0. Board + Worktree Alloc
 
 ```bash
+# 1) Progress Board에 Backlog → In Progress 기록 (main에서)
+# docs/progress.md에 작업 항목 추가/이동
+
+# 2) Worktree 할당
 git fetch origin
 # main·develop 동기화 확인 (불일치 시 pull)
 git worktree add .claude/worktrees/<작업명> -b feature/<브랜치명> develop
 echo "session=$(date -Iseconds) task_id=<작업명>" > .claude/worktrees/<작업명>/.owner
 ```
 
-완료 후: `git push` → `git worktree remove`
+Progress Board 기록 후 Worktree 할당. 완료 후: `git push` → `git worktree remove`
 
 #### 1. GAP Audit (신규)
 
