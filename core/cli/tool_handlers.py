@@ -21,8 +21,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.config import settings
 from core.cli.ui.console import console
+from core.config import settings
 
 log = logging.getLogger(__name__)
 

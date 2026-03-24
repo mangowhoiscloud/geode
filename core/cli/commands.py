@@ -20,6 +20,7 @@ from core.auth.profiles import ProfileStore
 from core.cli._helpers import is_glm_key as _is_glm_key
 from core.cli._helpers import mask_key as _mask_key
 from core.cli._helpers import upsert_env as _upsert_env
+from core.cli.ui.console import console
 from core.config import (
     ANTHROPIC_BUDGET,
     ANTHROPIC_PRIMARY,
@@ -27,7 +28,6 @@ from core.config import (
     GLM_PRIMARY,
     OPENAI_PRIMARY,
 )
-from core.cli.ui.console import console
 
 # ---------------------------------------------------------------------------
 # Model Registry (OpenClaw Auth Profile Rotation pattern)

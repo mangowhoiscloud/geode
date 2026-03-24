@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from core.cli.ui.status import GeodeStatus, TextSpinner, _snapshot, _UsageSnapshot
 from core.config import ANTHROPIC_PRIMARY
 from core.llm.client import LLMUsage, LLMUsageAccumulator
-from core.cli.ui.status import GeodeStatus, TextSpinner, _snapshot, _UsageSnapshot
 
 # ---------------------------------------------------------------------------
 # _snapshot / _UsageSnapshot

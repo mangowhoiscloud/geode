@@ -14,16 +14,16 @@ from typing import Any, TypeVar
 
 import pytest
 from core.config import Settings
-from core.infrastructure.ports.llm_port import (
-    get_secondary_llm_json,
-    get_secondary_llm_parsed,
-    set_llm_callable,
-)
 from core.domains.game_ip.nodes.analysts import (
     _DEFAULT_PRIMARY_ANALYSTS,
     _DEFAULT_SECONDARY_ANALYSTS,
     _run_analyst,
     _should_use_secondary,
+)
+from core.infrastructure.ports.llm_port import (
+    get_secondary_llm_json,
+    get_secondary_llm_parsed,
+    set_llm_callable,
 )
 from core.state import AnalysisResult, GeodeState
 from pydantic import BaseModel

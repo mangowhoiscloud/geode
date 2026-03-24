@@ -34,6 +34,8 @@ from core.cli.tool_executor import (
     WRITE_TOOLS,
     ToolExecutor,
 )
+from core.cli.ui.agentic_ui import OperationLogger
+from core.cli.ui.status import TextSpinner
 from core.config import (
     ANTHROPIC_PRIMARY,
     _resolve_provider,
@@ -47,8 +49,6 @@ from core.infrastructure.ports.agentic_llm_port import UserCancelledError
 from core.llm.client import maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.orchestration.hooks import HookEvent, HookSystem
-from core.cli.ui.agentic_ui import OperationLogger
-from core.cli.ui.status import TextSpinner
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
@@ -1231,8 +1231,8 @@ class AgenticLoop:
         if not response.usage:
             return
         try:
-            from core.llm.token_tracker import get_tracker
             from core.cli.ui.agentic_ui import render_tokens
+            from core.llm.token_tracker import get_tracker
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens

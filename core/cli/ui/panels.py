@@ -10,8 +10,8 @@ from rich.text import Text
 from rich.tree import Tree
 
 from core import __version__
-from core.state import AnalysisResult, EvaluatorResult, PSMResult, SynthesisResult
 from core.cli.ui.console import console
+from core.state import AnalysisResult, EvaluatorResult, PSMResult, SynthesisResult
 
 
 def header_panel(ip_name: str, pipeline_mode: str, model: str) -> None:

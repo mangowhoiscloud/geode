@@ -12,9 +12,6 @@ import re as _re
 import shutil
 from typing import Any
 
-from core.config import settings
-from core.runtime import GeodeRuntime
-from core.state import AnalysisResult, EvaluatorResult, GeodeState
 from core.cli.ui.console import console
 from core.cli.ui.panels import (
     analyst_panel,
@@ -25,6 +22,9 @@ from core.cli.ui.panels import (
     score_panel,
     verify_panel,
 )
+from core.config import settings
+from core.runtime import GeodeRuntime
+from core.state import AnalysisResult, EvaluatorResult, GeodeState
 
 log = logging.getLogger(__name__)
 

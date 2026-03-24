@@ -857,6 +857,7 @@ class GeodeRuntime:
         are configured or available, the adapter will report is_available()=False
         and signals_node falls back to fixtures.
         """
+        from core.domains.game_ip.nodes.signals import set_signal_adapter
         from core.infrastructure.adapters.mcp.brave_adapter import (
             BraveSearchAdapter,
             BraveSignalAdapter,
@@ -864,7 +865,6 @@ class GeodeRuntime:
         from core.infrastructure.adapters.mcp.composite_signal import CompositeSignalAdapter
         from core.infrastructure.adapters.mcp.manager import get_mcp_manager
         from core.infrastructure.adapters.mcp.steam_adapter import SteamMCPSignalAdapter
-        from core.domains.game_ip.nodes.signals import set_signal_adapter
 
         manager = get_mcp_manager()
         server_count = manager.load_config()
