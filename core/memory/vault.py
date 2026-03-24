@@ -24,6 +24,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from core.infrastructure.atomic_io import atomic_write_text
+
 log = logging.getLogger(__name__)
 
 DEFAULT_VAULT_DIR = Path(".geode") / "vault"
@@ -189,7 +191,7 @@ class Vault:
         if target_file.exists():
             target_file = _next_version(target_file)
 
-        target_file.write_text(content, encoding="utf-8")
+        atomic_write_text(target_file, content)
         log.info("Vault: saved %s → %s", filename, target_file)
 
         # Write meta.json for applications
@@ -207,9 +209,9 @@ class Vault:
                 existing["files"] = []
             if target_file.name not in existing["files"]:
                 existing["files"].append(target_file.name)
-            meta_path.write_text(
+            atomic_write_text(
+                meta_path,
                 json.dumps(existing, ensure_ascii=False, indent=2),
-                encoding="utf-8",
             )
 
         return target_file

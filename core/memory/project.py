@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from core.extensibility._frontmatter import _FRONTMATTER_RE
+from core.infrastructure.atomic_io import atomic_write_text
 
 log = logging.getLogger(__name__)
 
@@ -229,7 +230,7 @@ class ProjectMemory:
         content = before + insight_block + "\n" + remainder
 
         try:
-            self._memory_file.write_text(content, encoding="utf-8")
+            atomic_write_text(self._memory_file, content)
             log.info("Added insight to MEMORY.md: %s", insight)
             return True
         except OSError as e:
@@ -261,7 +262,7 @@ class ProjectMemory:
         paths_yaml = "\n".join(f'  - "{p}"' for p in paths)
         frontmatter = f"---\nname: {safe_name}\npaths:\n{paths_yaml}\n---\n\n"
         try:
-            rule_path.write_text(frontmatter + content, encoding="utf-8")
+            atomic_write_text(rule_path, frontmatter + content)
             log.info("Created rule: %s", rule_path)
             return True
         except OSError as e:
@@ -289,7 +290,7 @@ class ProjectMemory:
         frontmatter_block = raw[: fm_match.start(2)] if fm_match else ""
 
         try:
-            rule_path.write_text(frontmatter_block + content, encoding="utf-8")
+            atomic_write_text(rule_path, frontmatter_block + content)
             log.info("Updated rule: %s", rule_path)
             return True
         except OSError as e:
@@ -374,7 +375,7 @@ class ProjectMemory:
 
 ## Recent Insights
 """
-        self._memory_file.write_text(default_memory, encoding="utf-8")
+        atomic_write_text(self._memory_file, default_memory)
 
         log.info("Created .geode/memory/PROJECT.md and .geode/rules/ structure")
         return True

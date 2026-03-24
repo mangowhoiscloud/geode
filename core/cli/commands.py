@@ -1580,6 +1580,7 @@ def cmd_context(args: str) -> None:
     console.print()
 
 
+
 def resolve_action(cmd: str) -> str | None:
     """Resolve a slash command to its action name. Returns None if unknown."""
     return COMMAND_MAP.get(cmd)
