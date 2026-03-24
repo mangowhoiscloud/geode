@@ -715,8 +715,8 @@ def _build_sub_agent_manager(
         make_pipeline_handler,
     )
     from core.config import settings
-    from core.extensibility.agents import AgentRegistry
     from core.orchestration.isolated_execution import IsolatedRunner
+    from core.skills.agents import AgentRegistry
 
     readiness = _get_readiness()
     force_dry = readiness.force_dry_run if readiness else True

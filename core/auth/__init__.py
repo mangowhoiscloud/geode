@@ -1,24 +1,6 @@
-"""Auth Profile System — multi-profile credential management.
+"""DEPRECATED: Use core.gateway.auth instead."""
 
-OpenClaw-inspired: type priority rotation + cooldown + failover.
-"""
+import importlib as _il
+import sys as _sys
 
-from core.auth.cooldown import CooldownEntry, CooldownTracker
-from core.auth.profiles import (
-    TYPE_PRIORITY,
-    AuthProfile,
-    CredentialType,
-    ProfileStore,
-)
-from core.auth.rotation import ProfileRotator, calculate_cooldown_ms
-
-__all__ = [
-    "TYPE_PRIORITY",
-    "AuthProfile",
-    "CooldownEntry",
-    "CooldownTracker",
-    "CredentialType",
-    "ProfileRotator",
-    "ProfileStore",
-    "calculate_cooldown_ms",
-]
+_sys.modules[__name__] = _il.import_module("core.gateway.auth.__init__")

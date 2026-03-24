@@ -121,7 +121,7 @@ def bootstrap_geode(
     mcp_mgr = get_mcp_manager()
 
     # 5. Skills
-    from core.extensibility.skills import SkillLoader, SkillRegistry
+    from core.skills.skills import SkillLoader, SkillRegistry
 
     skill_registry = SkillRegistry()
     try:
