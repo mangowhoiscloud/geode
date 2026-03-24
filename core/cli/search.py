@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.fixtures import FIXTURE_MAP, load_fixture
+from core.domains.game_ip.fixtures import FIXTURE_MAP, load_fixture
 
 
 @dataclass

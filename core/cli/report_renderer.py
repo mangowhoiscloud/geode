@@ -13,10 +13,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from core.cli.ui.console import console
+from core.cli.ui.status import GeodeStatus
 from core.config import settings
 from core.extensibility.reports import ReportFormat, ReportGenerator, ReportTemplate
-from core.ui.console import console
-from core.ui.status import GeodeStatus
 
 log = logging.getLogger(__name__)
 

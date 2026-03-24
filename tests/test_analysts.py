@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from core.nodes.analysts import ANALYST_TYPES, _build_analyst_prompt, _run_analyst
-from core.nodes.analysts import get_dry_run_result as _dry_run_result
+from core.domains.game_ip.nodes.analysts import ANALYST_TYPES, _build_analyst_prompt, _run_analyst
+from core.domains.game_ip.nodes.analysts import get_dry_run_result as _dry_run_result
 
 
 class TestAnalystTypes:

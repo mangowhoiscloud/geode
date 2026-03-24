@@ -1,6 +1,6 @@
 """Tests for scoring formulas."""
 
-from core.nodes.scoring import (
+from core.domains.game_ip.nodes.scoring import (
     _calc_analyst_confidence,
     _calc_community_momentum,
     _calc_final_score,

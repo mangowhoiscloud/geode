@@ -16,9 +16,13 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - run: uv sync
       - run: uv run ruff check core/ tests/
       - run: uv run ruff format --check core/ tests/
+      - name: Legacy import ratchet
+        run: uv run python scripts/check_legacy_imports.py --base-ref origin/develop
 
   typecheck:
     name: Type Check
