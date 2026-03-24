@@ -69,21 +69,43 @@
 | **PPTX** | `portfolio/geode/GEODE-Portfolio.pptx` | 발표/공유용 — 33 슬라이드 | Backlog (수치 갱신) |
 | **5-Slide HTML (보존)** | `resume/portfolio/geode.html` | resume 스타일 — 배포하지 않음 | 보존 |
 
-## PPTX Outdated (12건)
+## PPTX Outdated
+
+### 1. 구조 변경 (v0.8.0에 없거나 근본적으로 바뀐 것)
+
+| 영역 | v0.8.0 PPTX | v0.24.0 현재 | 슬라이드 |
+|------|-------------|-------------|----------|
+| **아이덴티티** | "Autonomous IP Discovery Agent" | 범용 자율 실행 에이전트 하네스 — 도메인 피봇 완료 | s00, s01 |
+| **레이어** | L1-L5, 11 Hook | L0-L5, 36 Hook — L0(CLI & Agent) 신설, Hook 3배 | s07, s10 |
+| **메모리** | 3-Tier (Org > Project > Session) | 5-Layer Context Hub (C0-C4) + Context Compaction | s11 |
+| **도메인 분리** | 없음 (게임 IP 하드코딩) | DomainPort Protocol — 플러그인 교체 가능, REODE 이식 검증 | 신규 슬라이드 필요 |
+| **LLM** | Claude Opus 4.5, GPT-5.2, Gemini 3.0 | Opus 4.6, Sonnet 4.6, GPT-5.4, GLM-5 — 3사 Failover | s05, s17 |
+| **Sub-Agent** | 기본 병렬 실행 | CoalescingQueue + TaskGraph DAG + IsolatedRunner + 메모리 격리 | s18b |
+| **프레이밍** | 없음 | Karpathy/Beck 프레이밍 적용 (PPTX harness-for-real에서 검증) | 전체 |
+
+### 2. 기능 추가 (v0.8.0에 완전히 없던 것)
+
+| 기능 | 설명 | 후보 슬라이드 |
+|------|------|-------------|
+| **geode serve Gateway** | Slack 헤드리스 데몬, ChannelBinding, LaneQueue, Echo Prevention 3중 | s18c~s18f (이미 추가됨, 내용 점검) |
+| **Security Envelope** | Secret Redaction 8패턴, Bash 3-Layer, PolicyChain 6-layer, Tool permission 3단계 | s21b (이미 추가됨, 내용 점검) |
+| **REODE 피봇** | DomainPort 삭제 → 2-Protocol 재설계, 프리랜스 계약, 산업 현장 도입 | 신규 슬라이드 또는 s14-connection에 통합 |
+| **외부 하네스 구축** | Claude Code로 GEODE 생산, harness-for-real, REODE 납품 | 신규 또는 s16-summary에 통합 |
+| **장애 시나리오** | 7건 Failure Mode + ContextVar 전파 | s15-tradeoffs에 통합 검토 |
+| **Cross-Project Loop** | Eco²→GEODE→REODE 패턴 전이 테이블 | 신규 또는 s14-connection에 통합 |
+| **.geode Context Hub** | config.toml, model-policy.toml, routing.toml, career.toml | s11b (이미 추가됨, 내용 점검) |
+
+### 3. 수치 갱신 (12건)
 
 | 파일 | 현재값 | 정확값 |
 |------|--------|--------|
-| s00-cover.html | 178 modules | **182** |
-| s00-cover.html | 2930+ tests | **3,055+** |
-| s01-intro.html | 178 모듈, 21 릴리스 | **182 모듈, 25+ 릴리스** |
-| s13-results.html | Berserk 81.3 | **81.2** |
-| s13-results.html | GitS 51.6 | **51.7** |
-| s16-summary.html | 184 modules | **182** |
-| s16-summary.html | 3058+ tests | **3,055+** |
-| s16-summary.html | 24 releases | **25+** |
-| s17-tools.html | 48 tools (2곳) | **46** |
-| s19-skills.html | 21+ skills | **25** |
-| s20-mcp.html | 42 MCP servers | **43 catalog** |
+| s00-cover | 178 modules, 2930+ tests | **182, 3,055+** |
+| s01-intro | 178 모듈, 21 릴리스 | **182, 25+** |
+| s13-results | Berserk 81.3, GitS 51.6 | **81.2, 51.7** |
+| s16-summary | 184 modules, 3058+ tests, 24 releases | **182, 3,055+, 25+** |
+| s17-tools | 48 tools (2곳) | **46** |
+| s19-skills | 21+ skills | **25** |
+| s20-mcp | 42 MCP | **43 catalog** |
 
 ## CSS/디자인 보존 규칙
 - `:root` CSS 변수 전체 유지 (Deep Sea Discovery Theme)
