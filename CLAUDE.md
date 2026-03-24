@@ -8,7 +8,7 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 184
+- **Modules**: 182
 - **Tests**: 3055+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -48,39 +48,14 @@ L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 
 ### Sub-Agent System
 
-서브에이전트는 부모 AgenticLoop의 전체 역량(tools, MCP, skills, memory)을 상속받아 독립 컨텍스트에서 병렬 실행.
+서브에이전트는 부모의 tools/MCP/skills/memory를 상속받아 독립 컨텍스트에서 병렬 실행.
+`SubAgentManager` → `CoalescingQueue`(250ms dedup) → `TaskGraph`(DAG) → `IsolatedRunner`(MAX_CONCURRENT=5).
+제어: max_depth=2, max_total=15, timeout=120s, auto_approve=True(STANDARD만), max_rounds=10, max_tokens=8192.
 
-```
-Parent AgenticLoop → delegate_task → SubAgentManager
-  → CoalescingQueue (250ms dedup) → TaskGraph (DAG)
-  → IsolatedRunner (MAX_CONCURRENT=5) → Worker×N
-  → SubAgentResult (summary 보존) → Token Guard (default: unlimited) → parent
-```
-
-| 구성 요소 | 설명 |
-|----------|------|
-| **SubAgentManager** | 병렬 위임 오케스트레이터. `action_handlers`/`mcp_manager`/`skill_registry` 자식 전달. 재귀 depth 제어 |
-| **SubTask** | 입력 스펙 — `task_id`, `description`, `task_type` (analyze/search/compare), `args` |
-| **SubAgentResult** | 표준 출력 — `status` (ok/error/timeout/partial), 필수 `summary`, `error_category`, `duration_ms`, `children_count` |
-| **ErrorCategory** | `TIMEOUT`/`API_ERROR` (retryable) vs `VALIDATION`/`RESOURCE`/`DEPTH_EXCEEDED`/`UNKNOWN` (not retryable) |
-| **IsolatedRunner** | 스레드 풀 격리 실행. `MAX_CONCURRENT=5`, 타임아웃 + 에러 격리 |
-| **CoalescingQueue** | 250ms 윈도우 내 동일 task_id 중복 요청 병합 |
-| **TaskGraph** | DAG 기반 실행 순서 결정, 순환 감지, 실패 전파 (`propagate_failure`) |
-| **Token Guard** | tool_result 절단 (기본: 무제한, `GEODE_MAX_TOOL_RESULT_TOKENS`로 상한 설정 가능). `clear_tool_uses` 서버측 정리가 누적 방지 |
-
-**제어 파라미터:**
-
-| 항목 | 값 | 설명 |
-|------|-----|------|
-| `max_depth` | 2 | 재귀 위임 최대 깊이 (Root=0 → depth 2까지) |
-| `max_total` | 15 | 세션당 최대 서브에이전트 수 |
-| `MAX_CONCURRENT` | 5 | 동시 병렬 워커 수 |
-| `timeout_s` | 120s | 개별 태스크 타임아웃 |
-| `auto_approve` | True | 서브에이전트 STANDARD 도구 승인 생략 (DANGEROUS/WRITE는 항상 승인 필수) |
-| `subagent_max_rounds` | 10 | 서브에이전트 AgenticLoop 라운드 제한 |
-| `subagent_max_tokens` | 8192 | 서브에이전트 출력 토큰 제한 |
-
-**Hook 이벤트**: `SUBAGENT_STARTED`, `SUBAGENT_COMPLETED`, `SUBAGENT_FAILED`
+**메모리 격리 규칙:**
+- 서브에이전트는 부모 메모리 스냅샷을 읽기 전용으로 상속
+- 서브에이전트 쓰기는 task_id 스코프 버퍼에 기록 (공유 메모리 직접 수정 금지)
+- 부모는 태스크 완료 후 summary만 병합 — 두 에이전트가 동시에 공유 메모리에 쓰지 않음
 
 ### Domain Plugin System
 
@@ -122,27 +97,6 @@ START → router → signals → analyst×4 (Send API)
 - **Typed Evaluator Output**: Per-evaluator Pydantic models enforce required axes in structured output
 - **Confidence Multiplier**: `final = base × (0.7 + 0.3 × confidence/100)`
 
-### Recent Features (v0.15.0 -- v0.21.0)
-
-| Version | Feature | Description |
-|---------|---------|-------------|
-| v0.15.0 | Tier 0.5 User Profile | `~/.geode/user_profile/` + `.geode/user_profile/` -- 프로필/선호/학습 패턴 영속 저장 |
-| v0.16.0 | Config Cascade (TOML) | 4-level 우선순위: CLI > env > project TOML > global TOML > default |
-| v0.16.0 | `geode init` | `.geode/` 디렉토리 구조 + 템플릿 config.toml + .gitignore 자동 생성 |
-| v0.16.0 | Run History Context | ContextAssembler에 최근 실행 이력 3건 자동 주입 (Karpathy P6) |
-| v0.17.0 | Cost Tracker / UsageStore | `~/.geode/usage/YYYY-MM.jsonl`에 LLM 비용 영속 저장 |
-| v0.17.0 | Agent Reflection | `PIPELINE_END` Hook으로 `learned.md` 자동 패턴 추출 (Karpathy P4 Ratchet) |
-| v0.17.0 | Cache Expiry 24h+hash | ResultCache 24h TTL + SHA-256 content hash 검증 |
-| v0.17.0 | `geode history` | 실행 이력 + 모델별 비용 요약 조회 서브커맨드 |
-| v0.19.0 | Messaging Integration | Slack/Discord/Telegram 아웃바운드 알림 + 인바운드 Gateway (OpenClaw 패턴) |
-| v0.19.0 | Calendar Integration | Google Calendar + Apple Calendar (CalDAV) 양방향 동기화 |
-| v0.19.0 | Notification Hook Plugin | PIPELINE_END/ERROR → 외부 채널 자동 알림 (YAML auto-discovery) |
-| v0.21.0 | Model Policy | `.geode/model-policy.toml` — allowlist/denylist 기반 모델 거버넌스 |
-| v0.21.0 | Routing Config | `.geode/routing.toml` — 노드별 LLM 모델 라우팅 (비용 최적화) |
-| v0.21.0 | SessionManager + SQLite | 세션 메타 인덱스 (WAL), `/resume` 커맨드 + REPL 시작 탐지 |
-| v0.21.0 | AgentMemoryStore | 서브에이전트별 task_id 격리 메모리 (파일 스코프 + 24h TTL) |
-| v0.21.0 | Context Compaction | WARNING(80%) Haiku 요약 압축, CRITICAL(95%) prune fallback |
-
 ## SOT (Source of Truth)
 
 | Document | Path | Content |
@@ -153,115 +107,8 @@ START → router → signals → analyst×4 (Send API)
 
 ## Project Structure
 
-```
-core/
-├── cli/                 # CLI + Agentic Loop + Sub-Agent
-│   ├── agentic_loop.py  # while(tool_use) multi-round + Token Guard + multi-provider
-│   ├── agentic_response.py # AgenticResponse — provider-agnostic response normalization
-│   ├── sub_agent.py     # SubAgentManager + SubAgentResult + ErrorCategory
-│   ├── tool_executor.py # Tool dispatch + HITL + delegate_task + write fallback
-│   ├── session_checkpoint.py # C3 Session checkpoint — save/restore/resume
-│   ├── system_prompt.py # System prompt builder for AgenticLoop
-│   ├── ip_names.py      # IP name registry (canonical names from fixtures)
-│   ├── conversation.py  # Multi-turn sliding-window (max 200 turns, server-side clear_tool_uses)
-│   ├── batch.py         # Batch analysis (ThreadPoolExecutor)
-│   ├── commands.py      # Slash command dispatch (21 commands)
-│   ├── repl.py          # REPL 메인 루프 (prompt_toolkit 기반)
-│   ├── tool_handlers.py # 10개 논리 그룹 tool handler 디스패처
-│   ├── result_cache.py  # ResultCache (24h TTL + SHA-256 content hash)
-│   ├── error_recovery.py # ErrorRecoveryStrategy (retry → alternative → fallback → escalate)
-│   └── search.py        # IP search engine (synonym expansion)
-├── config.py            # Pydantic Settings (.env)
-├── state.py             # GeodeState TypedDict + Pydantic models
-├── graph.py             # StateGraph build + compile
-├── runtime.py           # GeodeRuntime — DI wiring + graph execution
-├── domains/             # Domain plugin adapters
-│   ├── loader.py        # load_domain_adapter(), register_domain()
-│   └── game_ip/         # GameIPDomain — DomainPort 구현
-├── nodes/
-│   ├── router.py        # 6-mode routing + fixture loading + memory assembly
-│   ├── signals.py       # External signals fixture
-│   ├── analysts.py      # 4 Analysts (Send API, Clean Context)
-│   ├── evaluators.py    # 3+1 Evaluators (14-axis rubric, typed output models)
-│   ├── scoring.py       # PSM Engine + 6-weighted composite + Tier
-│   └── synthesizer.py   # Decision Tree + Narrative
-├── llm/
-│   ├── client.py        # Anthropic Claude wrapper (retry, circuit breaker, failover)
-│   ├── prompts.py       # All prompt templates (versioned SHA-256)
-│   ├── prompt_assembler.py  # ADR-007 prompt assembly
-│   ├── skill_registry.py   # Skill definition + registry
-│   ├── usage_store.py     # UsageStore — ~/.geode/usage/ LLM 비용 영속 저장
-│   └── commentary.py       # LLM commentary generation
-├── memory/
-│   ├── organization.py  # Org tier — fixture-based, read-only
-│   ├── project.py       # Project tier — .claude/MEMORY.md, rules, insights
-│   ├── project_journal.py # C2 Journal — .geode/journal/ append-only execution record
-│   ├── journal_hooks.py # Hook handlers for auto-recording to Journal
-│   ├── session.py       # Session tier — in-memory with TTL
-│   ├── hybrid_session.py # L1(Redis) → L2(PostgreSQL) hybrid store
-│   ├── session_key.py   # Hierarchical key builder (ip:name:phase)
-│   ├── session_manager.py # SessionManager — SQLite session index (WAL)
-│   ├── agent_memory.py  # AgentMemoryStore — sub-agent isolated memory (TTL)
-│   └── context.py       # 4-tier context assembler
-├── orchestration/
-│   ├── hooks.py         # HookSystem (36 events + async atrigger)
-│   ├── context_monitor.py # Context Overflow Detection (Karpathy P6 Context Budget)
-│   ├── bootstrap.py     # Node bootstrap (pre-execution context injection)
-│   ├── goal_decomposer.py # GoalDecomposer (compound request → sub-goal DAG)
-│   ├── planner.py       # Planner (multi-step plan generation)
-│   ├── plan_mode.py     # Plan mode state machine
-│   ├── task_system.py   # TaskGraph DAG (dependency, cycle detection)
-│   ├── task_bridge.py   # Task ↔ pipeline bridge
-│   ├── coalescing.py    # CoalescingQueue (250ms dedup window)
-│   ├── lane_queue.py    # Priority lane queue
-│   ├── hook_discovery.py # Auto-discovery of hook handlers
-│   ├── hot_reload.py    # Hot reload support
-│   ├── isolated_execution.py # IsolatedRunner (MAX_CONCURRENT=5, thread pool)
-│   ├── agent_reflection.py # Agent Reflection — PIPELINE_END 학습 패턴 추출
-│   ├── run_log.py       # Run audit log
-│   ├── stuck_detection.py # Stuck pipeline detection
-│   ├── calendar_bridge.py # CalendarSchedulerBridge (scheduler ↔ calendar sync)
-│   ├── context_compactor.py # Context Compaction — LLM summary (Haiku, WARNING 80%)
-│   └── plugins/
-│       └── notification_hook/ # YAML plugin: 이벤트 → 알림 자동 전송
-├── gateway/               # Inbound messaging (OpenClaw Gateway pattern)
-│   ├── models.py          # InboundMessage, ChannelBinding
-│   ├── channel_manager.py # Binding-based routing + Lane Queue
-│   └── pollers/           # Slack/Discord/Telegram daemon pollers
-├── automation/
-│   ├── triggers.py      # TriggerManager + unified dispatch
-│   ├── predefined.py    # 10 predefined automation templates (§12.4)
-│   ├── drift.py         # CUSUM drift detection
-│   ├── snapshot.py      # Pipeline snapshot capture
-│   ├── feedback_loop.py # 5-Phase RLHF cycle (incl. RLAIF)
-│   ├── scheduler.py     # Cron-based scheduler
-│   ├── nl_scheduler.py  # Natural language schedule parsing
-│   ├── outcome_tracking.py # Outcome tracking + correlation
-│   ├── correlation.py   # Statistical correlation analysis
-│   ├── model_registry.py # Model version registry
-│   ├── expert_panel.py  # Expert panel management
-│   └── trigger_endpoint.py # HTTP trigger endpoint
-├── verification/
-│   ├── guardrails.py    # G1-G4 checks (schema, range, grounding, consistency)
-│   ├── biasbuster.py    # 6 bias types (REAE framework)
-│   ├── cross_llm.py     # Cross-LLM agreement + Krippendorff's α
-│   ├── stats.py         # Statistical utilities (Krippendorff's α, shared)
-│   └── rights_risk.py   # IP rights risk assessment
-├── infrastructure/
-│   ├── ports/           # Protocol interfaces (LLM, Memory, Auth, Hook, Tool, Domain, Notification, Calendar, Gateway)
-│   └── adapters/
-│       ├── llm/         # ClaudeAdapter, OpenAIAdapter + Agentic adapters (P1 Gateway)
-│       └── mcp/         # MCP adapters (9) + Composite adapters (3) + catalog (43 entries)
-├── tools/               # Tool Protocol + Registry + Policy + definitions.json (46 tools)
-├── auth/                # API key rotation, cooldown, profiles
-├── extensibility/       # Report generation + Skills + AgentRegistry (3 defaults)
-├── fixtures/            # JSON test data (3 core IPs + 201 Steam)
-└── ui/
-    ├── console.py       # Rich Console singleton (dynamic width 80-160, GEODE theme)
-    ├── agentic_ui.py    # Claude Code-style renderer (▸/✓/✗/✢/● markers)
-    ├── panels.py        # Rich Panel builders
-    └── status.py        # TextSpinner + GeodeStatus (non-invasive, no raw mode)
-```
+코드는 `core/` 하위에 6-Layer로 구성. `find core/ -name "*.py" | wc -l`로 모듈 수 확인.
+주요 진입점: `core/cli/agentic_loop.py`(AgenticLoop), `core/graph.py`(StateGraph), `core/runtime.py`(DI wiring).
 
 ## Development
 
@@ -311,7 +158,7 @@ Decision Tree on D-E-F axes:
 4. **Confidence Gate**: ≥ 0.7 → proceed, else loopback (max 5 iter)
 5. **Rights Risk**: CLEAR/NEGOTIABLE/RESTRICTED/EXPIRED/UNKNOWN
 
-## LLM Models (verified 2026-03-19)
+## LLM Models (verified 2026-03-24)
 
 | Provider | Model | Input $/M | Output $/M | Context | 용도 |
 |----------|-------|-----------|------------|---------|------|
@@ -340,6 +187,11 @@ Decision Tree on D-E-F axes:
 - 자유 텍스트 -> AgenticLoop.run() (while tool_use 루프)
 
 도구 정의는 `core/tools/definitions.json` (46개)에 통합 관리된다.
+
+**도구 권한 수준** (PolicyChain 6-layer 관통):
+- **STANDARD**: 읽기·분석 도구 — Sub-Agent auto_approve 대상
+- **WRITE**: 상태 변경 도구 (memory_save, profile_update, manage_rule) — 승인 필요
+- **DANGEROUS**: 시스템 접근 도구 (run_bash, delegate_task) — 항상 HITL 승인 필수
 
 ### Claude Code-style UI (agentic_ui.py)
 
@@ -405,6 +257,24 @@ CANNOT에 없는 것은 자유롭게 할 수 있다. 특히:
 | 커밋 메시지 언어 | 한글/영어 자유 (일관성만 유지) |
 | 도구 선택 | 동일 결과면 더 빠른 도구 자유 선택 |
 
+### 장애 시나리오 (Failure Modes)
+
+| 시나리오 | 감지 | 조치 |
+|----------|------|------|
+| 네트워크 다운 | `git fetch` 실패 | 작업 중단, 사용자에게 보고 |
+| `.owner` 파일 부재 | worktree stat 실패 | 실행 거부 — 격리 위반 |
+| CI 30분+ 타임아웃 | `gh pr checks` 미응답 | 잡 취소, 테스트 진단 후 에스컬레이션 |
+| 메모리 파일 부패 | `tier=?`, `score=0.00` 등 파싱 에러 | 해당 레코드 삭제 후 재실행 |
+| Confidence 미달 (5회 반복) | loopback max 5 도달, confidence < 0.7 | 사용자에게 에스컬레이션 — 자율 override 금지 |
+| LLM 프로바이더 전체 장애 | 3사 fallback chain 소진 | Degraded Response(is_degraded=True + 기본값) — 파이프라인 중단 없음 |
+| MCP 서버 스폰 실패 | subprocess 타임아웃 | 해당 MCP 없이 계속 (Graceful Degradation) |
+
+### ContextVar 스레드 전파 (Gateway)
+
+`geode serve`의 Gateway 폴러는 데몬 스레드에서 실행됨. 데몬 스레드는 부모의 contextvars를 상속하지 않음.
+해결: `boot.propagate_to_thread()`를 각 Gateway 핸들러 진입 시 호출하여 domain/gateway/hooks를 재주입.
+이 호출이 없으면 `get_domain()` → None → AgenticLoop 크래시.
+
 ### 워크플로우 단계
 
 ```
@@ -455,7 +325,7 @@ Progress Board 기록 후 Worktree 할당. 완료 후: `git push` → `git workt
 | Q2 | **이걸 안 하면 무엇이 깨지는가?** (실제 장애 시나리오) | 답 없으면 → 제거 |
 | Q3 | **효과를 어떻게 측정하는가?** (테스트, 메트릭, dry-run) | 측정 불가 → 보류 |
 | Q4 | **가장 단순한 구현은?** (P10 Simplicity Selection) | 최소 변경만 채택 |
-| Q5 | **프론티어 3종 이상에서 동일 패턴인가?** | 1종만 → 필요성 재검증 |
+| Q5 | **프론티어 3종 이상에서 동일 패턴인가?** (Claude Code, Codex CLI, OpenClaw, autoresearch) | 1종만 → 필요성 재검증 |
 
 **프로세스**:
 1. GAP Audit 결과에서 "미구현" 항목만 추출
