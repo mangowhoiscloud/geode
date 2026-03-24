@@ -1,7 +1,7 @@
 [
   {
     "name": "list_ips",
-    "description": "사용 가능한 IP 목록을 표시합니다. 사용자가 어떤 IP가 있는지 물어볼 때 사용하세요. Examples: 'IP 목록', '리스트 보여줘', '뭐가 있어?', 'show all', 'list available IPs'",
+    "description": "사용 가능한 IP 목록을 표시합니다. 사용자가 어떤 IP가 있는지 물어볼 때 사용하세요.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -12,7 +12,7 @@
   },
   {
     "name": "analyze_ip",
-    "description": "특정 IP를 분석합니다. 사용자가 IP 이름을 말하거나 분석을 요청할 때 사용하세요. IP 이름만 단독으로 입력한 경우에도 이 도구를 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이', 'fixture로만' 등을 명시하면 반드시 dry_run=true로 설정하세요. Examples: 'Berserk 분석해', 'analyze Cowboy Bebop', 'Berserk', 'Berserk dry-run으로 분석해'",
+    "description": "특정 IP를 분석합니다. 사용자가 IP 이름을 말하거나 분석을 요청할 때 사용하세요. IP 이름만 단독으로 입력한 경우에도 이 도구를 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이', 'fixture로만' 등을 명시하면 반드시 dry_run=true로 설정하세요.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -34,7 +34,7 @@
   },
   {
     "name": "search_ips",
-    "description": "키워드나 장르로 IP를 검색합니다. 사용자가 특정 장르나 키워드로 IP를 찾을 때 사용하세요. Examples: '다크 판타지 게임 찾아줘', 'search soulslike', 'SF 장르 있어?', 'find cyberpunk games'",
+    "description": "키워드나 장르로 IP를 검색합니다. 사용자가 특정 장르나 키워드로 IP를 찾을 때 사용하세요.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -52,7 +52,7 @@
   },
   {
     "name": "compare_ips",
-    "description": "두 IP를 비교 분석합니다. 사용자가 두 IP를 비교하고 싶을 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true. Examples: 'Berserk vs Cowboy Bebop', '버서크랑 공각기동대 비교해줘', 'dry-run으로 비교해'",
+    "description": "두 IP를 비교 분석합니다. 사용자가 두 IP를 비교하고 싶을 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -79,7 +79,7 @@
   },
   {
     "name": "show_help",
-    "description": "슬래시 명령어 목록을 표시합니다. 사용자가 명령어 목록이나 도움말 메뉴를 명시적으로 요청할 때만 사용하세요. 일반적인 질문(분석 방식, 역할, 의견 등)에는 이 도구를 사용하지 마세요 — 그런 경우 텍스트로 직접 응답하세요. Examples: '도움말', 'help', '명령어 목록', 'show commands'",
+    "description": "슬래시 명령어 목록을 표시합니다. 사용자가 명령어 목록이나 도움말 메뉴를 명시적으로 요청할 때만 사용하세요. 일반적인 질문(분석 방식, 역할, 의견 등)에는 이 도구를 사용하지 마세요 — 그런 경우 텍스트로 직접 응답하세요.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -90,7 +90,7 @@
   },
   {
     "name": "generate_report",
-    "description": "IP 분석 결과를 리포트로 생성합니다. 사용자가 리포트, 보고서, report 생성을 요청할 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true. Examples: 'Berserk 리포트 생성해', 'generate a report for Cowboy Bebop', '보고서 만들어줘', 'dry-run 리포트 생성'",
+    "description": "IP 분석 결과를 리포트로 생성합니다. 사용자가 리포트, 보고서, report 생성을 요청할 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -112,7 +112,7 @@
   },
   {
     "name": "batch_analyze",
-    "description": "여러 IP를 동시에 배치 분석합니다. 사용자가 전체/다수 IP를 한번에 분석하거나 순위를 보고 싶을 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true. Examples: '전체 IP 분석해줘', '배치 돌려', 'batch analyze all', '모든 IP 점수 보여줘', '상위 5개 분석해', 'top 10 dry-run'",
+    "description": "여러 IP를 동시에 배치 분석합니다. 사용자가 전체/다수 IP를 한번에 분석하거나 순위를 보고 싶을 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -140,7 +140,7 @@
   },
   {
     "name": "check_status",
-    "description": "GEODE 시스템 상태와 MCP 서버 목록을 확인합니다. 사용자가 시스템 상태, MCP 서버 목록/연결 상태, 건강 체크, 모델 정보, 설정을 물어볼 때 사용하세요. Examples: '시스템 상태', 'health check', '지금 모델 뭐야?', '상태 확인', 'status', '설정 보여줘', 'what model are you using?', 'MCP 리스트 보여줘', 'MCP 상태', 'Slack MCP 연결은 있어?'",
+    "description": "GEODE 시스템 상태와 MCP 서버 목록을 확인합니다. 사용자가 시스템 상태, MCP 서버 목록/연결 상태, 건강 체크, 모델 정보, 설정을 물어볼 때 사용하세요.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -151,7 +151,7 @@
   },
   {
     "name": "switch_model",
-    "description": "LLM 모델이나 앙상블 모드를 변경합니다. 사용자가 모델 변경, 앙상블 모드 전환을 요청할 때 사용하세요. Examples: '모델 바꿔', 'switch to GPT', '앙상블 모드로', 'cross 모드 켜줘', 'change model', 'use Haiku'",
+    "description": "LLM 모델이나 앙상블 모드를 변경합니다. 사용자가 모델 변경, 앙상블 모드 전환을 요청할 때 사용하세요.",
     "category": "model",
     "cost_tier": "free",
     "input_schema": {
@@ -167,7 +167,7 @@
   },
   {
     "name": "memory_search",
-    "description": "메모리에서 과거 분석 결과, 인사이트, 규칙을 검색합니다. 사용자가 이전 분석 기록이나 학습된 패턴을 물어볼 때 사용하세요. Examples: '지난번 Berserk 결과 알려줘', '다크판타지 관련 규칙 있어?', '이전에 분석한 거 뭐 있어?', 'what did we learn about anime IPs?'",
+    "description": "메모리에서 과거 분석 결과, 인사이트, 규칙을 검색합니다. 사용자가 이전 분석 기록이나 학습된 패턴을 물어볼 때 사용하세요.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -195,7 +195,7 @@
   },
   {
     "name": "memory_save",
-    "description": "메모리에 정보를 저장합니다. 사용자가 '이거 기억해', '저장해둬' 같은 요청을 할 때 사용하세요. Examples: '이 결과 기억해', 'remember this', '다음에 참고할 수 있게 저장해줘'",
+    "description": "메모리에 정보를 저장합니다. 사용자가 '이거 기억해', '저장해둬' 같은 요청을 할 때 사용하세요.",
     "category": "memory",
     "cost_tier": "cheap",
     "input_schema": {
@@ -218,7 +218,7 @@
   },
   {
     "name": "manage_rule",
-    "description": "분석 규칙을 생성, 수정, 삭제, 조회합니다. 사용자가 분석 규칙을 관리하거나, 패턴을 학습시키려 할 때 사용하세요. Examples: '애니메이션 IP 규칙 만들어', '규칙 목록 보여줘', 'anime 규칙 수정해', 'create a rule for dark fantasy IPs', 'delete the old rule', '규칙 삭제해'",
+    "description": "분석 규칙을 생성, 수정, 삭제, 조회합니다. 사용자가 분석 규칙을 관리하거나, 패턴을 학습시키려 할 때 사용하세요.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -257,7 +257,7 @@
   },
   {
     "name": "set_api_key",
-    "description": "API 키를 설정합니다. 사용자가 API 키 설정, 변경을 요청할 때 사용하세요. Examples: 'API 키 설정해', 'set my API key', '키 바꿔줘', '인증 키 입력'",
+    "description": "API 키를 설정합니다. 사용자가 API 키 설정, 변경을 요청할 때 사용하세요.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -273,7 +273,7 @@
   },
   {
     "name": "manage_auth",
-    "description": "인증 프로필을 관리합니다. 사용자가 인증, 프로필, 자격증명을 관리하려 할 때 사용하세요. Examples: '인증 프로필 보여줘', 'show auth profiles', '인증 추가해', 'manage credentials'",
+    "description": "인증 프로필을 관리합니다. 사용자가 인증, 프로필, 자격증명을 관리하려 할 때 사용하세요.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -289,7 +289,7 @@
   },
   {
     "name": "generate_data",
-    "description": "테스트/데모용 합성 IP 데이터를 생성합니다. 사용자가 테스트 데이터, 샘플 데이터, 데모 데이터 생성을 요청할 때 사용하세요. Examples: '테스트 데이터 생성해', 'generate sample data', '데모 데이터 만들어줘', '합성 IP 생성'",
+    "description": "테스트/데모용 합성 IP 데이터를 생성합니다. 사용자가 테스트 데이터, 샘플 데이터, 데모 데이터 생성을 요청할 때 사용하세요.",
     "category": "data",
     "cost_tier": "cheap",
     "input_schema": {
@@ -309,7 +309,7 @@
   },
   {
     "name": "schedule_job",
-    "description": "배치 분석 스케줄을 관리합니다. 자연어로 스케줄 생성/삭제/상태조회가 가능합니다. Examples: '5분마다 분석 스케줄 만들어', 'every 10 minutes 스케줄 생성', '스케줄 목록', '예약 작업 삭제해줘', 'schedule status'",
+    "description": "배치 분석 스케줄을 관리합니다. 자연어로 스케줄 생성/삭제/상태조회가 가능합니다.",
     "category": "scheduling",
     "cost_tier": "cheap",
     "input_schema": {
@@ -342,7 +342,7 @@
   },
   {
     "name": "trigger_event",
-    "description": "이벤트 또는 크론 트리거를 관리하거나 수동 실행합니다. 사용자가 트리거, 이벤트 발생, 수동 실행을 요청할 때 사용하세요. Examples: 'drift scan 트리거해', 'fire an event', '트리거 목록 보여줘', '수동으로 이벤트 발생'",
+    "description": "이벤트 또는 크론 트리거를 관리하거나 수동 실행합니다. 사용자가 트리거, 이벤트 발생, 수동 실행을 요청할 때 사용하세요.",
     "category": "scheduling",
     "cost_tier": "cheap",
     "input_schema": {
@@ -385,7 +385,7 @@
   },
   {
     "name": "delegate_task",
-    "description": "서브에이전트에게 작업을 위임하여 병렬로 실행합니다. 사용자가 여러 IP를 동시에 분석하거나, 병렬 작업을 요청할 때 사용하세요. Examples: '3개 IP 동시 분석해', 'Berserk, Cowboy Bebop 병렬로 분석', 'parallel analysis', '서브에이전트 돌려'",
+    "description": "서브에이전트에게 작업을 위임하여 병렬로 실행합니다. 사용자가 여러 IP를 동시에 분석하거나, 병렬 작업을 요청할 때 사용하세요.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -442,7 +442,7 @@
   },
   {
     "name": "create_plan",
-    "description": "분석 실행 계획을 생성합니다. 사용자가 계획을 세우거나 사전 검토를 요청할 때 사용하세요. Examples: '계획 세워줘', 'plan this', 'Berserk 분석 계획', '먼저 계획부터', 'plan before executing', '어떤 순서로 분석할지 보여줘'",
+    "description": "분석 실행 계획을 생성합니다. 사용자가 계획을 세우거나 사전 검토를 요청할 때 사용하세요.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -468,7 +468,7 @@
   },
   {
     "name": "approve_plan",
-    "description": "생성된 분석 계획을 승인하고 실행합니다. create_plan으로 계획을 먼저 생성한 후 사용하세요. Examples: '승인', 'approve', '계획 실행해', 'go ahead', '진행해'",
+    "description": "생성된 분석 계획을 승인하고 실행합니다. create_plan으로 계획을 먼저 생성한 후 사용하세요.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -486,7 +486,7 @@
   },
   {
     "name": "youtube_search",
-    "description": "YouTube에서 IP 관련 영상과 참여 지표를 검색합니다. IP의 YouTube 인기도를 확인할 때 사용하세요. Examples: 'Berserk YouTube 인기도', 'YouTube views for Cowboy Bebop'",
+    "description": "YouTube에서 IP 관련 영상과 참여 지표를 검색합니다. IP의 YouTube 인기도를 확인할 때 사용하세요.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -508,7 +508,7 @@
   },
   {
     "name": "reddit_sentiment",
-    "description": "Reddit에서 IP 관련 커뮤니티 감성을 분석합니다. IP의 Reddit 커뮤니티 반응을 확인할 때 사용하세요. Examples: 'Berserk Reddit 반응', 'Reddit sentiment for Ghost in the Shell'",
+    "description": "Reddit에서 IP 관련 커뮤니티 감성을 분석합니다. IP의 Reddit 커뮤니티 반응을 확인할 때 사용하세요.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -530,7 +530,7 @@
   },
   {
     "name": "steam_info",
-    "description": "Steam 상점에서 IP 관련 게임 정보와 리뷰를 조회합니다. IP의 Steam 데이터를 확인할 때 사용하세요. Examples: 'Berserk Steam 정보', 'Steam reviews for Hollow Knight'",
+    "description": "Steam 상점에서 IP 관련 게임 정보와 리뷰를 조회합니다. IP의 Steam 데이터를 확인할 때 사용하세요.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -548,7 +548,7 @@
   },
   {
     "name": "google_trends",
-    "description": "Google Trends에서 IP의 검색 관심도를 조회합니다. IP의 트렌드를 확인할 때 사용하세요. Examples: 'Berserk Google 트렌드', 'Google Trends for Cowboy Bebop'",
+    "description": "Google Trends에서 IP의 검색 관심도를 조회합니다. IP의 트렌드를 확인할 때 사용하세요.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -570,7 +570,7 @@
   },
   {
     "name": "web_fetch",
-    "description": "URL에서 텍스트 콘텐츠를 가져옵니다. 사용자가 URL을 제공하거나 웹 페이지 내용을 요청할 때 사용하세요. Examples: 'https://example.com 내용 알려줘', 'fetch this URL', '이 링크 읽어봐'",
+    "description": "URL에서 텍스트 콘텐츠를 가져옵니다. 사용자가 URL을 제공하거나 웹 페이지 내용을 요청할 때 사용하세요.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -592,7 +592,7 @@
   },
   {
     "name": "general_web_search",
-    "description": "웹에서 최신 정보를 검색합니다. 사용자가 현재 정보, 뉴스, 트렌드를 물어볼 때 사용하세요. Examples: '오늘 날씨', 'latest news about...', '최신 정보 찾아줘'",
+    "description": "웹에서 최신 정보를 검색합니다. 사용자가 현재 정보, 뉴스, 트렌드를 물어볼 때 사용하세요.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -614,7 +614,7 @@
   },
   {
     "name": "read_document",
-    "description": "로컬 파일을 읽습니다 (markdown, text, JSON). 사용자가 파일 내용을 보고 싶을 때 사용하세요. Examples: '이 파일 읽어줘', 'read this file', '문서 내용 보여줘'",
+    "description": "로컬 파일을 읽습니다 (markdown, text, JSON). 사용자가 파일 내용을 보고 싶을 때 사용하세요.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -636,7 +636,7 @@
   },
   {
     "name": "note_save",
-    "description": "사용자 메모를 영구 저장합니다. 사용자가 '기억해', '저장해', 'remember this' 등을 요청할 때 사용하세요. Examples: '이거 기억해: 다음 미팅은 금요일', 'remember my preference', '메모 저장해'",
+    "description": "사용자 메모를 영구 저장합니다. 사용자가 '기억해', '저장해', 'remember this' 등을 요청할 때 사용하세요.",
     "category": "memory",
     "cost_tier": "cheap",
     "input_schema": {
@@ -659,7 +659,7 @@
   },
   {
     "name": "note_read",
-    "description": "저장된 메모를 읽습니다. 사용자가 이전에 저장한 정보를 물어볼 때 사용하세요. Examples: '이전에 저장한 거 뭐 있어?', 'what did I save?', '메모 보여줘'",
+    "description": "저장된 메모를 읽습니다. 사용자가 이전에 저장한 정보를 물어볼 때 사용하세요.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -675,7 +675,7 @@
   },
   {
     "name": "reject_plan",
-    "description": "생성된 분석 계획을 거부합니다. 계획이 마음에 들지 않을 때 사용하세요. Examples: '계획 거부', 'reject plan', '이 계획 안 할래'",
+    "description": "생성된 분석 계획을 거부합니다. 계획이 마음에 들지 않을 때 사용하세요.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -695,7 +695,7 @@
   },
   {
     "name": "modify_plan",
-    "description": "생성된 분석 계획을 수정합니다. 템플릿 변경, 단계 제거 가능. Examples: '계획 수정해', 'modify plan', '이 단계 빼줘'",
+    "description": "생성된 분석 계획을 수정합니다. 템플릿 변경, 단계 제거 가능.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -726,7 +726,7 @@
   },
   {
     "name": "list_plans",
-    "description": "생성된 분석 계획 목록을 조회합니다. Examples: '계획 목록', 'list plans', '어떤 계획들이 있어?'",
+    "description": "생성된 분석 계획 목록을 조회합니다.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -737,7 +737,7 @@
   },
   {
     "name": "rate_result",
-    "description": "분석 결과에 대해 평점을 매깁니다. 사용자 피드백 수집용. Examples: '이 결과 4점', 'rate 5 stars', '평가해줄게'",
+    "description": "분석 결과에 대해 평점을 매깁니다. 사용자 피드백 수집용.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -764,7 +764,7 @@
   },
   {
     "name": "accept_result",
-    "description": "분석 결과를 수락합니다. Examples: '결과 수락', 'accept', '이 결과 괜찮아'",
+    "description": "분석 결과를 수락합니다.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -782,7 +782,7 @@
   },
   {
     "name": "reject_result",
-    "description": "분석 결과를 거부합니다. 재분석이 필요할 때. Examples: '결과 거부', 'reject result', '이건 다시 해줘'",
+    "description": "분석 결과를 거부합니다. 재분석이 필요할 때.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -804,7 +804,7 @@
   },
   {
     "name": "rerun_node",
-    "description": "파이프라인의 특정 노드를 재실행합니다. scoring, verification, synthesizer만 가능. Examples: '스코어링 다시 해', 'rerun scoring', '검증 재실행'",
+    "description": "파이프라인의 특정 노드를 재실행합니다. scoring, verification, synthesizer만 가능.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -832,7 +832,7 @@
   },
   {
     "name": "install_mcp_server",
-    "description": "MCP 서버를 검색하고 설치합니다. 외부 도구/서비스 연결 요청 시 사용. Examples: 'LinkedIn MCP 달아줘', 'Steam MCP 설치해', 'web search 추가해', 'Reddit MCP 연결해'",
+    "description": "MCP 서버를 검색하고 설치합니다. 외부 도구/서비스 연결 요청 시 사용.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -850,7 +850,7 @@
   },
   {
     "name": "profile_show",
-    "description": "사용자 프로필을 표시합니다. 사용자가 프로필, 내 정보, 설정된 역할을 물어볼 때 사용하세요. Examples: '내 프로필 보여줘', 'show my profile', '내 정보', 'who am I?', 'my profile'",
+    "description": "사용자 프로필을 표시합니다. 사용자가 프로필, 내 정보, 설정된 역할을 물어볼 때 사용하세요.",
     "category": "profile",
     "cost_tier": "free",
     "input_schema": {
@@ -861,7 +861,7 @@
   },
   {
     "name": "profile_update",
-    "description": "사용자 프로필을 업데이트합니다. 사용자가 역할, 전문 분야, 이름, 팀 정보를 설정하거나 변경할 때 사용하세요. Examples: '내 역할은 AI 엔지니어야', 'set my expertise to ML', '이름 설정해줘', '프로필 업데이트'",
+    "description": "사용자 프로필을 업데이트합니다. 사용자가 역할, 전문 분야, 이름, 팀 정보를 설정하거나 변경할 때 사용하세요.",
     "category": "profile",
     "cost_tier": "cheap",
     "input_schema": {
@@ -893,7 +893,7 @@
   },
   {
     "name": "profile_preference",
-    "description": "사용자 선호 설정을 조회하거나 변경합니다. 언어, 출력 형식, 관심 도메인 등. Examples: '언어 한국어로 설정해', 'set language to ko', '출력 형식 바꿔줘', '내 선호 설정 보여줘', 'change preference'",
+    "description": "사용자 선호 설정을 조회하거나 변경합니다. 언어, 출력 형식, 관심 도메인 등.",
     "category": "profile",
     "cost_tier": "cheap",
     "input_schema": {
@@ -915,7 +915,7 @@
   },
   {
     "name": "profile_learn",
-    "description": "사용자의 패턴이나 인사이트를 학습합니다. 반복되는 선호, 워크플로우 패턴, 도메인 관심사를 자동 기억할 때 사용하세요. Examples: '이 패턴 기억해', 'learn this pattern', '사용자가 항상 dry-run을 먼저 사용함'",
+    "description": "사용자의 패턴이나 인사이트를 학습합니다. 반복되는 선호, 워크플로우 패턴, 도메인 관심사를 자동 기억할 때 사용하세요.",
     "category": "profile",
     "cost_tier": "cheap",
     "input_schema": {
@@ -944,7 +944,7 @@
   },
   {
     "name": "send_notification",
-    "description": "외부 메시징 서비스로 알림을 보냅니다. Slack, Discord, Telegram 채널에 메시지를 전송합니다. Examples: 'Slack에 메시지 보내줘', 'Discord로 알림 전송', 'send notification to Telegram'",
+    "description": "외부 메시징 서비스로 알림을 보냅니다. Slack, Discord, Telegram 채널에 메시지를 전송합니다.",
     "category": "notification",
     "cost_tier": "free",
     "input_schema": {
@@ -987,7 +987,7 @@
   },
   {
     "name": "calendar_list_events",
-    "description": "캘린더 일정을 조회합니다. Google Calendar, Apple Calendar에서 일정을 가져옵니다. Examples: '내일 일정 뭐 있어?', '이번 주 스케줄', 'show my calendar', 'upcoming events'",
+    "description": "캘린더 일정을 조회합니다. Google Calendar, Apple Calendar에서 일정을 가져옵니다.",
     "category": "calendar",
     "cost_tier": "free",
     "input_schema": {
@@ -1015,7 +1015,7 @@
   },
   {
     "name": "calendar_create_event",
-    "description": "캘린더에 새 일정을 생성합니다. Google Calendar 또는 Apple Calendar에 이벤트를 추가합니다. Examples: '금요일 3시에 미팅 잡아줘', 'schedule meeting tomorrow 2pm', '일정 추가해줘'",
+    "description": "캘린더에 새 일정을 생성합니다. Google Calendar 또는 Apple Calendar에 이벤트를 추가합니다.",
     "category": "calendar",
     "cost_tier": "free",
     "input_schema": {
@@ -1054,7 +1054,7 @@
   },
   {
     "name": "calendar_sync_scheduler",
-    "description": "GEODE 스케줄러와 외부 캘린더를 동기화합니다. 스케줄러 작업을 캘린더에 반영하거나, 캘린더 일정을 스케줄러로 가져옵니다. Examples: '캘린더 동기화', 'sync calendar', '스케줄러 캘린더 연동'",
+    "description": "GEODE 스케줄러와 외부 캘린더를 동기화합니다. 스케줄러 작업을 캘린더에 반영하거나, 캘린더 일정을 스케줄러로 가져옵니다.",
     "category": "calendar",
     "cost_tier": "free",
     "input_schema": {
