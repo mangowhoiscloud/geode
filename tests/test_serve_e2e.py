@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import os
 import threading
+from pathlib import Path
 
 import pytest
-
-# Load env before any imports
 from dotenv import load_dotenv
-from pathlib import Path
+
 load_dotenv(str(Path.home() / ".geode" / ".env"), override=False)
 
 

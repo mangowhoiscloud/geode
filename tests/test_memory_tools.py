@@ -54,6 +54,11 @@ class TestMemorySearchTool:
 
     def test_search_empty_store(self):
         store = InMemorySessionStore()
+        # Isolate from global project/org contextvars that may leak from other tests
+        from core.tools.memory_tools import set_org_memory as _set_org
+
+        set_project_memory(None)
+        _set_org(None)
         tool = MemorySearchTool(session_store=store)
         result = tool.execute(query="anything")
         assert result["result"]["total_found"] == 0
