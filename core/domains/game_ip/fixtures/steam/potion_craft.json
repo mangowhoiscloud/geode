@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Potion Craft",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "niceplay games",
+    "genre": [
+      "simulation",
+      "crafting",
+      "indie"
+    ],
+    "synopsis": "Potion Craft — a Alchemy Sim game developed by niceplay games, released in 2022 on Steam.",
+    "proof_of_game": "Potion Craft (2022, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 21120,
+    "dau_current": 6476,
+    "revenue_ltm": 498682,
+    "revenue_lifetime": 11303476,
+    "retention_d30": 35,
+    "metacritic_score": 85,
+    "store_page_score": 92,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 1214400,
+    "reddit_subscribers": 20240,
+    "fan_art_yoy_pct": 27.0,
+    "google_trends_index": 71,
+    "twitter_mentions_monthly": 6476,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "simulation",
+      "crafting",
+      "indie",
+      "relaxing",
+      "medieval"
+    ],
+    "game_sales_data": "~264,000 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "simulation",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 85,
+    "store_page_score": 92,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 79.7,
+    "cause": "undermarketed",
+    "quality_score": 92.5,
+    "momentum_score": 67.3,
+    "developer_track_record": 25,
+    "psm_att_pct": 32.8,
+    "psm_z_value": 2.73,
+    "psm_gamma": 2.3
+  }
+}

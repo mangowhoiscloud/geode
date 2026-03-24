@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Turbo Golf Racing",
+    "media_type": "game",
+    "release_year": 2022,
+    "studio": "Hugecalf Studios",
+    "genre": [
+      "racing",
+      "sports",
+      "multiplayer"
+    ],
+    "synopsis": "Turbo Golf Racing — a Arcade Racing game developed by Hugecalf Studios, released in 2022 on Steam.",
+    "proof_of_game": "Turbo Golf Racing (2022, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 4
+  },
+  "monolake": {
+    "dau_peak": 1728,
+    "dau_current": 414,
+    "revenue_ltm": 45337,
+    "revenue_lifetime": 1027645,
+    "retention_d30": 27,
+    "metacritic_score": 68,
+    "store_page_score": 72,
+    "active_game_count": 1,
+    "last_game_year": 2022,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "C"
+  },
+  "signals": {
+    "youtube_views": 77760,
+    "reddit_subscribers": 1296,
+    "fan_art_yoy_pct": 7.0,
+    "google_trends_index": 51,
+    "twitter_mentions_monthly": 414,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "racing",
+      "sports",
+      "multiplayer",
+      "arcade",
+      "casual"
+    ],
+    "game_sales_data": "~21,600 owners (Steam, 2022-present)"
+  },
+  "psm_covariates": {
+    "genre": "racing",
+    "dev_tier": "C",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2022,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 68,
+    "store_page_score": 72,
+    "ip_age_years": 4
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 61.9,
+    "cause": "timing_mismatch",
+    "quality_score": 72.5,
+    "momentum_score": 45.0,
+    "developer_track_record": 0,
+    "psm_att_pct": 15.6,
+    "psm_z_value": 1.3,
+    "psm_gamma": 1.8
+  }
+}

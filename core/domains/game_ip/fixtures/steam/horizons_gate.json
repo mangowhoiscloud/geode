@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Horizon's Gate",
+    "media_type": "game",
+    "release_year": 2020,
+    "studio": "Rad Codex",
+    "genre": [
+      "rpg",
+      "tactical",
+      "open world"
+    ],
+    "synopsis": "Horizon's Gate — a Tactical RPG game developed by Rad Codex, released in 2020 on Steam.",
+    "proof_of_game": "Horizon's Gate (2020, Steam/PC)",
+    "franchise_size": 3,
+    "ip_age_years": 6
+  },
+  "monolake": {
+    "dau_peak": 1488,
+    "dau_current": 349,
+    "revenue_ltm": 29275,
+    "revenue_lifetime": 780679,
+    "retention_d30": 36,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "active_game_count": 1,
+    "last_game_year": 2020,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 87420,
+    "reddit_subscribers": 1457,
+    "fan_art_yoy_pct": 27.3,
+    "google_trends_index": 50,
+    "twitter_mentions_monthly": 466,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "rpg",
+      "tactical",
+      "open world",
+      "naval",
+      "pixel graphics"
+    ],
+    "game_sales_data": "~18,600 owners (Steam, 2020-present)"
+  },
+  "psm_covariates": {
+    "genre": "rpg",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2020,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 3,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "ip_age_years": 6
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 70.1,
+    "cause": "discovery_failure",
+    "quality_score": 94.5,
+    "momentum_score": 50.1,
+    "developer_track_record": 50,
+    "psm_att_pct": 27.9,
+    "psm_z_value": 2.32,
+    "psm_gamma": 2.3
+  }
+}

@@ -13,7 +13,13 @@ from typing import Any
 
 import yaml
 
-_YAML_PATH = Path(__file__).resolve().parents[2] / "config" / "evaluator_axes.yaml"
+_YAML_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "domains"
+    / "game_ip"
+    / "config"
+    / "evaluator_axes.yaml"
+)
 _data = yaml.safe_load(_YAML_PATH.read_text(encoding="utf-8"))
 
 ANALYST_SPECIFIC: dict[str, str] = _data["analyst_specific"]

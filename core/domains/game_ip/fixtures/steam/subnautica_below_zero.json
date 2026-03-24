@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Subnautica: Below Zero",
+    "media_type": "game",
+    "release_year": 2021,
+    "studio": "Unknown Worlds",
+    "genre": [
+      "survival",
+      "open world",
+      "underwater"
+    ],
+    "synopsis": "Subnautica: Below Zero — a Survival Exploration game developed by Unknown Worlds, released in 2021 on Steam.",
+    "proof_of_game": "Subnautica: Below Zero (2021, Steam/PC)",
+    "franchise_size": 3,
+    "ip_age_years": 5
+  },
+  "monolake": {
+    "dau_peak": 100800,
+    "dau_current": 24768,
+    "revenue_ltm": 3967677,
+    "revenue_lifetime": 105804720,
+    "retention_d30": 33,
+    "metacritic_score": 80,
+    "store_page_score": 86,
+    "active_game_count": 1,
+    "last_game_year": 2021,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 5418000,
+    "reddit_subscribers": 90300,
+    "fan_art_yoy_pct": 20.0,
+    "google_trends_index": 83,
+    "twitter_mentions_monthly": 28896,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "high",
+    "genre_fit_keywords": [
+      "survival",
+      "open world",
+      "underwater",
+      "exploration",
+      "crafting"
+    ],
+    "game_sales_data": "~1,260,000 owners (Steam, 2021-present)"
+  },
+  "psm_covariates": {
+    "genre": "survival",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2021,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 3,
+    "metacritic_score": 80,
+    "store_page_score": 86,
+    "ip_age_years": 5
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 84.4,
+    "cause": "timing_mismatch",
+    "quality_score": 86.5,
+    "momentum_score": 75.3,
+    "developer_track_record": 50,
+    "psm_att_pct": 33.7,
+    "psm_z_value": 2.81,
+    "psm_gamma": 2.1
+  }
+}

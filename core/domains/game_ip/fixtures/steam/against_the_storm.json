@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Against the Storm",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Eremite Games",
+    "genre": [
+      "city builder",
+      "roguelite",
+      "strategy"
+    ],
+    "synopsis": "Against the Storm — a Roguelite City Builder game developed by Eremite Games, released in 2023 on Steam.",
+    "proof_of_game": "Against the Storm (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 45600,
+    "dau_current": 17145,
+    "revenue_ltm": 1794901,
+    "revenue_lifetime": 33504827,
+    "retention_d30": 36,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "medium",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 2679000,
+    "reddit_subscribers": 44650,
+    "fan_art_yoy_pct": 30.7,
+    "google_trends_index": 77,
+    "twitter_mentions_monthly": 14288,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "city builder",
+      "roguelite",
+      "strategy",
+      "fantasy",
+      "resource management"
+    ],
+    "game_sales_data": "~570,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "city builder",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "medium",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 87,
+    "store_page_score": 94,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 84.2,
+    "cause": "timing_mismatch",
+    "quality_score": 94.5,
+    "momentum_score": 73.4,
+    "developer_track_record": 25,
+    "psm_att_pct": 36.8,
+    "psm_z_value": 3.07,
+    "psm_gamma": 2.3
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Cassette Beasts",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "Bytten Studio",
+    "genre": [
+      "turn-based",
+      "creature collector",
+      "open world"
+    ],
+    "synopsis": "Cassette Beasts — a Creature Collector RPG game developed by Bytten Studio, released in 2023 on Steam.",
+    "proof_of_game": "Cassette Beasts (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 14160,
+    "dau_current": 5380,
+    "revenue_ltm": 371514,
+    "revenue_lifetime": 6934930,
+    "retention_d30": 36,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 840750,
+    "reddit_subscribers": 14012,
+    "fan_art_yoy_pct": 31.7,
+    "google_trends_index": 67,
+    "twitter_mentions_monthly": 4484,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "turn-based",
+      "creature collector",
+      "open world",
+      "rpg",
+      "pixel graphics"
+    ],
+    "game_sales_data": "~177,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "turn-based",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 88,
+    "store_page_score": 95,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 79.5,
+    "cause": "undermarketed",
+    "quality_score": 95.5,
+    "momentum_score": 66.1,
+    "developer_track_record": 25,
+    "psm_att_pct": 34.0,
+    "psm_z_value": 2.83,
+    "psm_gamma": 2.4
+  }
+}

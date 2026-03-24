@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "SlavicPunk: Oldtimer",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "Red Square Games",
+    "genre": [
+      "isometric",
+      "shooter",
+      "cyberpunk"
+    ],
+    "synopsis": "SlavicPunk: Oldtimer — a Isometric Shooter game developed by Red Square Games, released in 2024 on Steam.",
+    "proof_of_game": "SlavicPunk: Oldtimer (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 432,
+    "dau_current": 97,
+    "revenue_ltm": 37781,
+    "revenue_lifetime": 166236,
+    "retention_d30": 15,
+    "metacritic_score": 44,
+    "store_page_score": 45,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "medium",
+    "dev_tier": "C"
+  },
+  "signals": {
+    "youtube_views": 12150,
+    "reddit_subscribers": 202,
+    "fan_art_yoy_pct": -10,
+    "google_trends_index": 40,
+    "twitter_mentions_monthly": 64,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "isometric",
+      "shooter",
+      "cyberpunk",
+      "action",
+      "indie"
+    ],
+    "game_sales_data": "~5,400 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "isometric",
+    "dev_tier": "C",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 44,
+    "store_page_score": 45,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "C",
+    "final_score": 46.6,
+    "cause": "conversion_failure",
+    "quality_score": 45.5,
+    "momentum_score": 30.8,
+    "developer_track_record": 0,
+    "psm_att_pct": 5,
+    "psm_z_value": 0.5,
+    "psm_gamma": 1.1
+  }
+}

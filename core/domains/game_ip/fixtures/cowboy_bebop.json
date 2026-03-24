@@ -1,0 +1,69 @@
+{
+  "ip_info": {
+    "ip_name": "Cowboy Bebop",
+    "media_type": "anime",
+    "release_year": 1998,
+    "studio": "Sunrise",
+    "genre": ["action", "sci-fi", "noir"],
+    "synopsis": "In 2071, bounty hunters aboard the spaceship Bebop chase criminals across the solar system while dealing with their pasts.",
+    "proof_of_game": "Cowboy Bebop: Tsuioku no Serenade (2005, PS2, JP-only)",
+    "franchise_size": 1,
+    "ip_age_years": 27
+  },
+  "monolake": {
+    "dau_peak": 0,
+    "dau_current": 0,
+    "revenue_ltm": 0,
+    "revenue_lifetime": 0,
+    "retention_d30": 0,
+    "metacritic_score": 0,
+    "store_page_score": 0,
+    "active_game_count": 0,
+    "last_game_year": 2005,
+    "platform": "none",
+    "price_tier": "none",
+    "region": "global",
+    "age_rating": "T",
+    "marketing_spend_tier": "zero",
+    "competitor_density": "low",
+    "dev_tier": "unknown"
+  },
+  "signals": {
+    "youtube_views": 12000000,
+    "reddit_subscribers": 180000,
+    "fan_art_yoy_pct": 42.0,
+    "google_trends_index": 65,
+    "twitter_mentions_monthly": 45000,
+    "cosplay_events_annual": 120,
+    "mod_patch_activity": "none",
+    "genre_fit_keywords": ["action RPG", "bounty hunter", "space", "noir"],
+    "game_sales_data": "JP-only, ~50K units (2005)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "unknown",
+    "platform": "none",
+    "price_tier": "none",
+    "release_year": 1998,
+    "region": "global",
+    "age_rating": "T",
+    "competitor_density": "low",
+    "marketing_spend_tier": "zero",
+    "ip_origin_media": "anime",
+    "ip_franchise_size": 1,
+    "metacritic_score": 0,
+    "store_page_score": 0,
+    "ip_age_years": 27
+  },
+  "expected_results": {
+    "tier": "A",
+    "final_score": 68.4,
+    "cause": "undermarketed",
+    "quality_score": 82,
+    "momentum_score": 78,
+    "developer_track_record": 45,
+    "psm_att_pct": 31.2,
+    "psm_z_value": 2.67,
+    "psm_gamma": 1.8
+  }
+}

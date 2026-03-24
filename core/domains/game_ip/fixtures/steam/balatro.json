@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Balatro",
+    "media_type": "game",
+    "release_year": 2024,
+    "studio": "LocalThunk",
+    "genre": [
+      "card game",
+      "roguelike",
+      "deckbuilding"
+    ],
+    "synopsis": "Balatro — a Roguelike Deckbuilder game developed by LocalThunk, released in 2024 on Steam.",
+    "proof_of_game": "Balatro (2024, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 2
+  },
+  "monolake": {
+    "dau_peak": 355200,
+    "dau_current": 172272,
+    "revenue_ltm": 23294460,
+    "revenue_lifetime": 102495624,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2024,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 21534000,
+    "reddit_subscribers": 358900,
+    "fan_art_yoy_pct": 37.0,
+    "google_trends_index": 93,
+    "twitter_mentions_monthly": 114848,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "card game",
+      "roguelike",
+      "deckbuilding",
+      "strategy",
+      "singleplayer"
+    ],
+    "game_sales_data": "~4,440,000 owners (Steam, 2024-present)"
+  },
+  "psm_covariates": {
+    "genre": "card game",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2024,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 2
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 92.4,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 88.7,
+    "developer_track_record": 25,
+    "psm_att_pct": 41.5,
+    "psm_z_value": 3.46,
+    "psm_gamma": 2.4
+  }
+}

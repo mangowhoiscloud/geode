@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Dungeon Munchies",
+    "media_type": "game",
+    "release_year": 2023,
+    "studio": "maJAJa",
+    "genre": [
+      "action",
+      "platformer",
+      "cooking"
+    ],
+    "synopsis": "Dungeon Munchies — a Action Platformer game developed by maJAJa, released in 2023 on Steam.",
+    "proof_of_game": "Dungeon Munchies (2023, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 3
+  },
+  "monolake": {
+    "dau_peak": 13200,
+    "dau_current": 4752,
+    "revenue_ltm": 259701,
+    "revenue_lifetime": 4847766,
+    "retention_d30": 34,
+    "metacritic_score": 84,
+    "store_page_score": 90,
+    "active_game_count": 1,
+    "last_game_year": 2023,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "low",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 742500,
+    "reddit_subscribers": 12375,
+    "fan_art_yoy_pct": 26.7,
+    "google_trends_index": 67,
+    "twitter_mentions_monthly": 3960,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "low",
+    "genre_fit_keywords": [
+      "action",
+      "platformer",
+      "cooking",
+      "pixel graphics",
+      "funny"
+    ],
+    "game_sales_data": "~165,000 owners (Steam, 2023-present)"
+  },
+  "psm_covariates": {
+    "genre": "action",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2023,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "low",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 84,
+    "store_page_score": 90,
+    "ip_age_years": 3
+  },
+  "expected_results": {
+    "tier": "B",
+    "final_score": 76.8,
+    "cause": "undermarketed",
+    "quality_score": 90.5,
+    "momentum_score": 64.1,
+    "developer_track_record": 25,
+    "psm_att_pct": 30.2,
+    "psm_z_value": 2.52,
+    "psm_gamma": 2.2
+  }
+}

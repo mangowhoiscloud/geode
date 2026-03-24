@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "R.E.P.O.",
+    "media_type": "game",
+    "release_year": 2025,
+    "studio": "semiwork",
+    "genre": [
+      "co-op",
+      "horror",
+      "action roguelike"
+    ],
+    "synopsis": "R.E.P.O. — a Co-op Horror game developed by semiwork, released in 2025 on Steam.",
+    "proof_of_game": "R.E.P.O. (2025, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 1
+  },
+  "monolake": {
+    "dau_peak": 852000,
+    "dau_current": 545280,
+    "revenue_ltm": 49650300,
+    "revenue_lifetime": 119160720,
+    "retention_d30": 37,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "active_game_count": 1,
+    "last_game_year": 2025,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "M",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 51120000,
+    "reddit_subscribers": 852000,
+    "fan_art_yoy_pct": 46.0,
+    "google_trends_index": 99,
+    "twitter_mentions_monthly": 272640,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "co-op",
+      "horror",
+      "action roguelike",
+      "comedy",
+      "multiplayer"
+    ],
+    "game_sales_data": "~10,650,000 owners (Steam, 2025-present)"
+  },
+  "psm_covariates": {
+    "genre": "co-op",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2025,
+    "region": "global",
+    "age_rating": "M",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 89,
+    "store_page_score": 96,
+    "ip_age_years": 1
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 94.7,
+    "cause": "timing_mismatch",
+    "quality_score": 96.3,
+    "momentum_score": 95,
+    "developer_track_record": 25,
+    "psm_att_pct": 42.0,
+    "psm_z_value": 3.5,
+    "psm_gamma": 2.4
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "ip_info": {
+    "ip_name": "Schedule I",
+    "media_type": "game",
+    "release_year": 2025,
+    "studio": "TVGS",
+    "genre": [
+      "simulation",
+      "strategy",
+      "indie"
+    ],
+    "synopsis": "Schedule I — a Simulation Strategy game developed by TVGS, released in 2025 on Steam.",
+    "proof_of_game": "Schedule I (2025, Steam/PC)",
+    "franchise_size": 1,
+    "ip_age_years": 1
+  },
+  "monolake": {
+    "dau_peak": 669600,
+    "dau_current": 433008,
+    "revenue_ltm": 78080940,
+    "revenue_lifetime": 187394256,
+    "retention_d30": 37,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "active_game_count": 1,
+    "last_game_year": 2025,
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "region": "global",
+    "age_rating": "E",
+    "marketing_spend_tier": "high",
+    "competitor_density": "medium",
+    "dev_tier": "B"
+  },
+  "signals": {
+    "youtube_views": 40594500,
+    "reddit_subscribers": 676575,
+    "fan_art_yoy_pct": 47.0,
+    "google_trends_index": 98,
+    "twitter_mentions_monthly": 216504,
+    "cosplay_events_annual": 0,
+    "mod_patch_activity": "medium",
+    "genre_fit_keywords": [
+      "simulation",
+      "strategy",
+      "indie",
+      "action",
+      "open world"
+    ],
+    "game_sales_data": "~8,370,000 owners (Steam, 2025-present)"
+  },
+  "psm_covariates": {
+    "genre": "simulation",
+    "dev_tier": "B",
+    "platform": "pc",
+    "price_tier": "mid_tier",
+    "release_year": 2025,
+    "region": "global",
+    "age_rating": "E",
+    "competitor_density": "medium",
+    "marketing_spend_tier": "high",
+    "ip_origin_media": "game",
+    "ip_franchise_size": 1,
+    "metacritic_score": 90,
+    "store_page_score": 97,
+    "ip_age_years": 1
+  },
+  "expected_results": {
+    "tier": "S",
+    "final_score": 95.3,
+    "cause": "timing_mismatch",
+    "quality_score": 97.1,
+    "momentum_score": 95,
+    "developer_track_record": 25,
+    "psm_att_pct": 43.5,
+    "psm_z_value": 3.62,
+    "psm_gamma": 2.4
+  }
+}
