@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-24 (세션 13 — .geode/+CLAUDE.md 컨텍스트 품질 점검)
+> 마지막 갱신: 2026-03-24 (세션 14 — Slack E2E 3시나리오 + mrkdwn 개선 + REPL bootstrap 통합)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -18,7 +18,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| portfolio-v024-redesign | GEODE 포트폴리오 v0.8.0 디자인 유지 + v0.24.0 콘텐츠 재설정 | @mangowhoiscloud | resume repo | 2026-03-24 | 배포 페이지 기준, 디자인 보존 |
 
 ### In Review
 
@@ -30,6 +30,9 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| repl-bootstrap-unify | REPL→bootstrap_geode() 통합 — 인라인 6단계→bootstrap 호출 (serve/REPL 단일 경로) | main direct | @mangowhoiscloud | 2026-03-24 |
+| slack-mrkdwn-v2 | Slack mrkdwn 개선 — ZWS 경계 수정 + 테이블→섹션 + 코드블록 보호 (33 tests) | main direct | @mangowhoiscloud | 2026-03-24 |
+| slack-e2e-scenarios | Slack @GEODE 3시나리오 E2E — web_fetch + web_search + memory_save 실증 | main direct | @mangowhoiscloud | 2026-03-24 |
 | context-quality-review | .geode/ + CLAUDE.md 컨텍스트 품질 — 3인 검증팀, -132줄 블로트 제거 | #400→#401 | @mangowhoiscloud | 2026-03-24 |
 | gmail-integration | Gmail MCP 통합 — OAuth 기반, DEFAULT_SERVERS 등록, catalog 43개 | #396→#397 | @mangowhoiscloud | 2026-03-24 |
 | serve-repl-unify | bootstrap_geode() 단일 초기화 + ContextVar 전파 (14 tests) | #394→#395 | @mangowhoiscloud | 2026-03-24 |
@@ -188,9 +191,9 @@
 |------|-----|--------|
 | Version | 0.24.0 | 2026-03-22 |
 | Modules | 178 | 2026-03-23 |
-| Tests | 2972 | 2026-03-23 |
+| Tests | 3051 | 2026-03-24 |
 | Tools | 46 (+MCP 86) | 2026-03-22 |
-| MCP Catalog | 42 | 2026-03-19 |
+| MCP Catalog | 43 | 2026-03-24 |
 | HookEvents | 36 | 2026-03-19 |
 | Skills | 25 | 2026-03-21 |
 
