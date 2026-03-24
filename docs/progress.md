@@ -18,7 +18,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| context-quality-review | .geode/ + CLAUDE.md 컨텍스트 품질 점검 — 3인 검증팀(Karpathy/OpenClaw/Claude Code) | @mangowhoiscloud | feature/context-quality-review | 2026-03-24 | 리서치+플랜→구현 |
+| — | — | — | — | — | — |
 
 ### In Review
 
@@ -26,10 +26,11 @@
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
 
-### Done (2026-03-22)
+### Done (2026-03-24)
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| context-quality-review | .geode/ + CLAUDE.md 컨텍스트 품질 — 3인 검증팀, -132줄 블로트 제거 | #400→#401 | @mangowhoiscloud | 2026-03-24 |
 | gmail-integration | Gmail MCP 통합 — OAuth 기반, DEFAULT_SERVERS 등록, catalog 43개 | #396→#397 | @mangowhoiscloud | 2026-03-24 |
 | serve-repl-unify | bootstrap_geode() 단일 초기화 + ContextVar 전파 (14 tests) | #394→#395 | @mangowhoiscloud | 2026-03-24 |
 | web-fetch-ssl | web_fetch SSL fallback — Python 3.14 certifi 호환 | #392→#393 | @mangowhoiscloud | 2026-03-24 |
