@@ -341,14 +341,16 @@ class ApplicationTracker:
     def add(self, entry: ApplicationEntry) -> None:
         """Add a new application entry."""
         raw = self._load()
-        raw.append({
-            "company": entry.company,
-            "position": entry.position,
-            "status": entry.status,
-            "applied_at": entry.applied_at,
-            "url": entry.url,
-            "notes": entry.notes,
-        })
+        raw.append(
+            {
+                "company": entry.company,
+                "position": entry.position,
+                "status": entry.status,
+                "applied_at": entry.applied_at,
+                "url": entry.url,
+                "notes": entry.notes,
+            }
+        )
         self._save(raw)
 
     def update_status(self, company: str, status: str) -> bool:
