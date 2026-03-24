@@ -36,11 +36,30 @@
 - Beck: "테스트 없는 코드는 레거시 코드다", "모든 설계는 트레이드오프다"
 
 ## 신규 추가 콘텐츠
-- **DomainPort → REODE 피봇**: 게임 IP → 범용 하네스 → 코드 마이그레이션 도메인 이식
-- **geode serve Gateway**: Slack 데몬, ChannelBinding, LaneQueue, Echo Prevention
-- **Security Envelope**: Secret Redaction 8패턴, Bash 3-Layer, PolicyChain 6-layer
-- **MCP 42 카탈로그**: 병렬 연결 110s→15s, Deferred Loading
-- **외부 하네스 구축 축**: Claude Code로 GEODE 생산, harness-for-real, REODE 납품
+
+### 핵심 서사 (v0.8.0에 없던 것)
+- **DomainPort → REODE 피봇**: 게임 IP → 범용 하네스 → 코드 마이그레이션 도메인 이식, 실제 산업 현장 레거시 Java 마이그레이션에 도입 운영 중
+- **REODE 재설계 상세**: DomainPort 삭제 → PipelineTemplate(L1) + LanguageAdapter(L2) 2-Protocol 직교 분리, DI 3점, 그래프 정의 L0→L1 이동
+- **Cross-Project Loop**: Eco²→GEODE→REODE 패턴 전이 테이블 (메모리, 평가, 컨텍스트, Resilience, 루프 제어)
+
+### 시스템 신규
+- **geode serve Gateway**: Slack 데몬, ChannelBinding, LaneQueue, Echo Prevention 3중
+- **Security Envelope**: Secret Redaction 8패턴, Bash 3-Layer, PolicyChain 6-layer, Tool permission 3단계(STANDARD/WRITE/DANGEROUS)
+- **MCP 42 카탈로그**: 병렬 연결 110s→15s, Deferred Loading, Singleton MCPServerManager
+- **5-Layer Context Hub (C0-C4)**: System Prompt → Org → Project → Session → User Profile, Context Compaction (80% WARNING → Haiku 압축)
+- **Sub-Agent 메모리 격리**: 부모 스냅샷 읽기 전용, task_id 스코프 버퍼, summary만 병합
+- **장애 시나리오 7건**: 네트워크 다운, CI 타임아웃, 메모리 부패, Confidence 미달, LLM 전체 장애, MCP 실패, .owner 부재
+
+### REODE 관련 (포트폴리오에 섹션 추가 검토)
+- **Migration Scorecard 3-Tier**: 5 Gate(Reward Hacking 방지) + S/A/B/C 4등급 + Insight
+- **Fix Node**: Explore→Reason→Act 재귀 수정, 수렴 감지(동일 에러 3회 → 에스컬레이션)
+- **AgentRole 4종**: ARCHITECT(Opus)/ENGINEER(Sonnet)/REVIEWER(Haiku)/SCOUT(Haiku) 노드별 비용 라우팅
+- **OpenRewrite(결정적 70%) + LLM(확률적 30%)**: 확률적 시스템 개입 범위 최소화
+
+### 외부 하네스 구축 (5축)
+- Claude Code(.claude/ Skills·Hooks·CLAUDE.md)로 GEODE를 생산
+- harness-for-real: 4-Phase FSM, Backpressure hooks, LEARNINGS.md 축적, Token budget 자동 정지
+- GEODE→REODE 2-Protocol 재설계로 클라이언트 납품
 
 ## CSS/디자인 보존 규칙
 - `:root` CSS 변수 전체 유지 (Deep Sea Discovery Theme)
