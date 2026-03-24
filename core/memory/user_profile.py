@@ -362,23 +362,6 @@ Write your bio, background, or any context you want GEODE to remember here.
         log.info("Created user profile structure at %s", self._global_dir)
         return True
 
-    def load_career(self) -> dict[str, Any]:
-        """Load career identity from ~/.geode/identity/career.toml.
-
-        Returns parsed TOML dict, or empty dict if not found / parse error.
-        """
-        import tomllib
-
-        career_path = Path.home() / ".geode" / "identity" / "career.toml"
-        if not career_path.exists():
-            return {}
-        try:
-            with open(career_path, "rb") as f:
-                return tomllib.load(f)
-        except Exception:
-            log.debug("Failed to load career.toml", exc_info=True)
-            return {}
-
     def get_career_summary(self) -> str:
         """Build a 1-line career summary for system prompt injection.
 

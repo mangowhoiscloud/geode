@@ -18,27 +18,23 @@ class TestLoadCareer:
         from core.memory.user_profile import FileBasedUserProfile
 
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        # Patch Path.home to return tmp_path so career.toml won't exist
-        with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
-            result = profile.load_career()
+        result = profile.load_career()
         assert result == {}
 
     def test_load_career_valid_toml(self, tmp_path: Path) -> None:
         from core.memory.user_profile import FileBasedUserProfile
 
-        identity_dir = tmp_path / ".geode" / "identity"
-        identity_dir.mkdir(parents=True)
-        career_toml = identity_dir / "career.toml"
-        career_toml.write_text(
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        (gdir / "career.toml").write_text(
             '[identity]\ntitle = "AI Engineer"\nexperience = "5y"\n'
             'skills = ["Python", "LangGraph"]\n\n'
             '[goals]\nseeking = "remote AI roles"\n',
             encoding="utf-8",
         )
 
-        profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
-            result = profile.load_career()
+        profile = FileBasedUserProfile(global_dir=gdir)
+        result = profile.load_career()
 
         assert result["identity"]["title"] == "AI Engineer"
         assert result["identity"]["experience"] == "5y"
@@ -48,31 +44,28 @@ class TestLoadCareer:
     def test_load_career_invalid_toml(self, tmp_path: Path) -> None:
         from core.memory.user_profile import FileBasedUserProfile
 
-        identity_dir = tmp_path / ".geode" / "identity"
-        identity_dir.mkdir(parents=True)
-        career_toml = identity_dir / "career.toml"
-        career_toml.write_text("not valid toml {{{}}", encoding="utf-8")
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        (gdir / "career.toml").write_text("not valid toml {{{}}", encoding="utf-8")
 
-        profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
-            result = profile.load_career()
+        profile = FileBasedUserProfile(global_dir=gdir)
+        result = profile.load_career()
         assert result == {}
 
     def test_get_career_summary(self, tmp_path: Path) -> None:
         from core.memory.user_profile import FileBasedUserProfile
 
-        identity_dir = tmp_path / ".geode" / "identity"
-        identity_dir.mkdir(parents=True)
-        (identity_dir / "career.toml").write_text(
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        (gdir / "career.toml").write_text(
             '[identity]\ntitle = "Senior AI Engineer"\nexperience = "5y"\n'
             'skills = ["Python", "LangGraph", "MLOps"]\n\n'
             '[goals]\nseeking = "remote AI roles"\n',
             encoding="utf-8",
         )
 
-        profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
-            summary = profile.get_career_summary()
+        profile = FileBasedUserProfile(global_dir=gdir)
+        summary = profile.get_career_summary()
 
         assert "Senior AI Engineer" in summary
         assert "5y" in summary
@@ -83,8 +76,7 @@ class TestLoadCareer:
         from core.memory.user_profile import FileBasedUserProfile
 
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
-            summary = profile.get_career_summary()
+        summary = profile.get_career_summary()
         assert summary == ""
 
 
@@ -99,9 +91,9 @@ class TestCareerSystemPrompt:
     def test_build_career_context_with_data(self, tmp_path: Path) -> None:
         from core.cli.system_prompt import _build_career_context
 
-        identity_dir = tmp_path / ".geode" / "identity"
-        identity_dir.mkdir(parents=True)
-        (identity_dir / "career.toml").write_text(
+        profile_dir = tmp_path / ".geode" / "user_profile"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "career.toml").write_text(
             '[identity]\ntitle = "ML Engineer"\nexperience = "3y"\n'
             'skills = ["Python"]\n\n[goals]\nseeking = "startup"\n',
             encoding="utf-8",
@@ -337,23 +329,18 @@ class TestContextAssemblerCareer:
         from core.memory.context import ContextAssembler
         from core.memory.user_profile import FileBasedUserProfile
 
-        identity_dir = tmp_path / ".geode" / "identity"
-        identity_dir.mkdir(parents=True)
-        (identity_dir / "career.toml").write_text(
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        (gdir / "career.toml").write_text(
             '[identity]\ntitle = "AI Engineer"\nskills = ["Python"]\n'
             '[goals]\nseeking = "startup"\n',
             encoding="utf-8",
         )
+        (gdir / "profile.md").write_text("---\nrole: dev\n---\n", encoding="utf-8")
 
-        profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        # Create minimal profile so exists() returns True
-        (tmp_path / "profile").mkdir(parents=True, exist_ok=True)
-        (tmp_path / "profile" / "profile.md").write_text("---\nrole: dev\n---\n", encoding="utf-8")
-
+        profile = FileBasedUserProfile(global_dir=gdir)
         assembler = ContextAssembler(user_profile=profile)
-
-        with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
-            ctx = assembler.assemble("test-session", "test-ip")
+        ctx = assembler.assemble("test-session", "test-ip")
 
         assert "_career_summary" in ctx
         assert "AI Engineer" in ctx["_career_summary"]
