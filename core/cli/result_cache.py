@@ -106,15 +106,14 @@ class ResultCache:
             fpath = self._cache_dir / f"{safe}.json"
             from pydantic import BaseModel
 
+            from core.infrastructure.atomic_io import atomic_write_json
+
             def _default(obj: Any) -> Any:
                 if isinstance(obj, BaseModel):
                     return obj.model_dump()
                 return str(obj)
 
-            fpath.write_text(
-                _json.dumps(result, ensure_ascii=False, default=_default),
-                encoding="utf-8",
-            )
+            atomic_write_json(fpath, result, default=_default)
         except Exception:
             log.debug("Failed to persist result cache for %s", key, exc_info=True)
 

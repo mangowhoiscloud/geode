@@ -14,6 +14,8 @@ import logging
 import time
 from pathlib import Path
 
+from core.infrastructure.atomic_io import atomic_write_json
+
 log = logging.getLogger(__name__)
 
 DEFAULT_BASE_DIR = Path(".geode") / "agent-memory"
@@ -62,7 +64,7 @@ class AgentMemoryStore:
             "task_id": self._task_id,
         }
         file_path = self._task_dir / f"{key}.json"
-        file_path.write_text(json.dumps(entry, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(file_path, entry)
 
     def get(self, key: str) -> str | None:
         """Get a value by key. Returns None if not found or expired."""

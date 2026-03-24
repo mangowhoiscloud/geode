@@ -282,6 +282,103 @@ class TestProfileLearnTool:
 
 
 # ---------------------------------------------------------------------------
+# Career Identity (career.toml)
+# ---------------------------------------------------------------------------
+
+
+class TestCareerIdentity:
+    def test_load_career_empty_when_no_file(self, tmp_path):
+        profile = FileBasedUserProfile(global_dir=tmp_path / "noprofile")
+        assert profile.load_career() == {}
+
+    def test_load_career_valid_toml(self, tmp_path):
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        (gdir / "career.toml").write_text(
+            '[identity]\ntitle = "AI Engineer"\nskills = ["Python", "ML"]\n',
+            encoding="utf-8",
+        )
+        profile = FileBasedUserProfile(global_dir=gdir)
+        career = profile.load_career()
+        assert career["identity"]["title"] == "AI Engineer"
+        assert "Python" in career["identity"]["skills"]
+
+    def test_load_career_invalid_toml(self, tmp_path):
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        (gdir / "career.toml").write_text("invalid [[ toml", encoding="utf-8")
+        profile = FileBasedUserProfile(global_dir=gdir)
+        assert profile.load_career() == {}
+
+    def test_load_career_empty_file(self, tmp_path):
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        (gdir / "career.toml").write_text("", encoding="utf-8")
+        profile = FileBasedUserProfile(global_dir=gdir)
+        assert profile.load_career() == {}
+
+    def test_ensure_structure_creates_career_toml(self, tmp_path):
+        profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
+        profile.ensure_structure()
+        assert (tmp_path / "profile" / "career.toml").exists()
+        content = (tmp_path / "profile" / "career.toml").read_text()
+        assert "[identity]" in content
+        assert "title" in content
+
+    def test_context_summary_includes_career(self, tmp_path):
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        (gdir / "career.toml").write_text(
+            '[identity]\ntitle = "Senior AI Engineer"\nskills = ["Python", "LangGraph"]\n',
+            encoding="utf-8",
+        )
+        profile = FileBasedUserProfile(global_dir=gdir)
+        profile.save_profile({"role": "Engineer"})
+        summary = profile.get_context_summary()
+        assert "Senior AI Engineer" in summary
+        assert "Python" in summary
+
+    def test_context_summary_no_career(self, tmp_path):
+        """Career fields absent should not appear in summary."""
+        profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
+        profile.save_profile({"role": "Tester"})
+        summary = profile.get_context_summary()
+        assert "Title:" not in summary
+        assert "Skills:" not in summary
+
+    def test_career_not_overwritten_by_ensure_structure(self, tmp_path):
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        custom = '[identity]\ntitle = "Custom"\n'
+        (gdir / "career.toml").write_text(custom, encoding="utf-8")
+        # ensure_structure won't overwrite profile.md since it exists check is on profile.md
+        # But career.toml should also not be overwritten
+        (gdir / "profile.md").write_text("---\nrole: X\n---\n", encoding="utf-8")
+        profile = FileBasedUserProfile(global_dir=gdir)
+        profile.ensure_structure()  # returns False (already exists)
+        assert (gdir / "career.toml").read_text() == custom
+
+
+class TestProfileShowToolWithCareer:
+    def test_show_includes_career(self, tmp_path):
+        from core.tools.profile_tools import ProfileShowTool, set_user_profile
+
+        gdir = tmp_path / "profile"
+        gdir.mkdir(parents=True)
+        (gdir / "career.toml").write_text(
+            '[identity]\ntitle = "ML Engineer"\n',
+            encoding="utf-8",
+        )
+        profile = FileBasedUserProfile(global_dir=gdir)
+        profile.ensure_structure()
+        set_user_profile(profile)
+        tool = ProfileShowTool()
+        result = tool.execute()
+        assert "career" in result["result"]
+        assert result["result"]["career"]["identity"]["title"] == "ML Engineer"
+
+
+# ---------------------------------------------------------------------------
 # UserProfilePort Protocol Conformance
 # ---------------------------------------------------------------------------
 
