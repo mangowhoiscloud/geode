@@ -6,10 +6,10 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.cli.agentic_loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
-from core.cli.conversation import ConversationContext
-from core.cli.sub_agent import SubAgentManager, SubTask
-from core.cli.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, WRITE_TOOLS, ToolExecutor
+from core.agent.agentic_loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
+from core.agent.conversation import ConversationContext
+from core.agent.sub_agent import SubAgentManager, SubTask
+from core.agent.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, WRITE_TOOLS, ToolExecutor
 from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import IsolatedRunner
@@ -1192,7 +1192,7 @@ class TestSubAgentSessionIsolation:
 
     def test_subagent_context_threadlocal(self) -> None:
         """Verify thread-local context is set during handler execution and cleared after."""
-        from core.cli.sub_agent import SubAgentManager, SubTask, get_subagent_context
+        from core.agent.sub_agent import SubAgentManager, SubTask, get_subagent_context
 
         captured: list[tuple[bool, str]] = []
 
@@ -1219,7 +1219,7 @@ class TestSubAgentSessionIsolation:
 
     def test_subagent_run_records(self) -> None:
         """Verify run records are created and updated for delegated tasks."""
-        from core.cli.sub_agent import SubAgentManager, SubTask
+        from core.agent.sub_agent import SubAgentManager, SubTask
 
         def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
             return {"result": "done"}

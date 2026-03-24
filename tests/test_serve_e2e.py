@@ -51,8 +51,8 @@ class TestServeToolExecution:
         assert "result" in result
 
     def test_executor_web_fetch(self) -> None:
+        from core.agent.tool_executor import ToolExecutor
         from core.cli.bootstrap import bootstrap_geode
-        from core.cli.tool_executor import ToolExecutor
 
         boot = bootstrap_geode(load_env=True)
         executor = ToolExecutor(
@@ -92,8 +92,8 @@ class TestServeToolExecution:
 
     def test_executor_in_daemon_thread(self) -> None:
         """Full executor path in daemon thread — matches actual serve execution."""
+        from core.agent.tool_executor import ToolExecutor
         from core.cli.bootstrap import bootstrap_geode
-        from core.cli.tool_executor import ToolExecutor
         from core.cli.tool_handlers import _build_tool_handlers
 
         boot = bootstrap_geode(load_env=True)

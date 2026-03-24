@@ -89,7 +89,7 @@ class TestCareerSystemPrompt:
     """_build_career_context() injects career data."""
 
     def test_build_career_context_with_data(self, tmp_path: Path) -> None:
-        from core.cli.system_prompt import _build_career_context
+        from core.agent.system_prompt import _build_career_context
 
         profile_dir = tmp_path / ".geode" / "user_profile"
         profile_dir.mkdir(parents=True)
@@ -106,7 +106,7 @@ class TestCareerSystemPrompt:
         assert "ML Engineer" in result
 
     def test_build_career_context_no_data(self, tmp_path: Path) -> None:
-        from core.cli.system_prompt import _build_career_context
+        from core.agent.system_prompt import _build_career_context
 
         with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
             result = _build_career_context()

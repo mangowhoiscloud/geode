@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.cli.sub_agent import SubAgentManager, SubTask
+from core.agent.sub_agent import SubAgentManager, SubTask
 from core.graph import compile_graph
 from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.hooks import HookEvent, HookSystem

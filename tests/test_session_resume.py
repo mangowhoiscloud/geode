@@ -6,8 +6,8 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from core.agent.conversation import ConversationContext
 from core.cli.commands import cmd_resume, resolve_action
-from core.cli.conversation import ConversationContext
 from core.cli.session_checkpoint import SessionCheckpoint, SessionState
 
 
@@ -113,7 +113,7 @@ class TestCheckpointSaveFromAgenticLoop:
 
     def test_save_checkpoint_creates_files(self, session_dir: Path) -> None:
         """_save_checkpoint writes state.json + messages.json."""
-        from core.cli.agentic_loop import AgenticLoop
+        from core.agent.agentic_loop import AgenticLoop
 
         ctx = ConversationContext()
         ctx.add_user_message("hello")
@@ -133,7 +133,7 @@ class TestCheckpointSaveFromAgenticLoop:
 
     def test_mark_session_completed(self, session_dir: Path) -> None:
         """mark_session_completed marks checkpoint as completed."""
-        from core.cli.agentic_loop import AgenticLoop
+        from core.agent.agentic_loop import AgenticLoop
 
         ctx = ConversationContext()
         ctx.add_user_message("test")

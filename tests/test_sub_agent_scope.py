@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from core.cli.sub_agent import SUBAGENT_DENIED_TOOLS, SubAgentManager
+from core.agent.sub_agent import SUBAGENT_DENIED_TOOLS, SubAgentManager
 from core.orchestration.isolated_execution import IsolatedRunner
 
 

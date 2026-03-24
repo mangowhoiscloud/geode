@@ -483,7 +483,7 @@ class TestHITLGatePreservation:
 
     def test_dangerous_tools_remain_gated(self) -> None:
         """DANGEROUS_TOOLS should still require user approval in auto-execute."""
-        from core.cli.tool_executor import DANGEROUS_TOOLS, WRITE_TOOLS
+        from core.agent.tool_executor import DANGEROUS_TOOLS, WRITE_TOOLS
 
         # HITL gates are defined at ToolExecutor level, not plan level.
         # Verify they are not empty (regression guard).
@@ -492,7 +492,7 @@ class TestHITLGatePreservation:
 
     def test_write_tools_remain_gated(self) -> None:
         """WRITE_TOOLS should still require user approval."""
-        from core.cli.tool_executor import WRITE_TOOLS
+        from core.agent.tool_executor import WRITE_TOOLS
 
         assert "memory_save" in WRITE_TOOLS
         assert "note_save" in WRITE_TOOLS

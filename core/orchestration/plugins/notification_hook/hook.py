@@ -63,7 +63,7 @@ def _make_notification_handler(
     """Create a hook handler that sends notifications for mapped events."""
 
     def handler(event: HookEvent, data: dict[str, Any]) -> None:
-        from core.infrastructure.ports.notification_port import get_notification
+        from core.mcp.notification_port import get_notification
 
         adapter = get_notification()
         if adapter is None or not adapter.is_available(channel):
@@ -95,7 +95,7 @@ def handle(event: HookEvent, data: dict[str, Any]) -> None:
     Uses default channel/recipient from config. For custom channels,
     use register_notification_hooks() directly.
     """
-    from core.infrastructure.ports.notification_port import get_notification
+    from core.mcp.notification_port import get_notification
 
     adapter = get_notification()
     if adapter is None:

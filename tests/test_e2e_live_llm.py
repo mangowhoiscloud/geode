@@ -37,15 +37,15 @@ def _make_loop(
 
     Returns (loop, context, executor, sub_mgr) 4-tuple.
     """
+    from core.agent.agentic_loop import AgenticLoop
+    from core.agent.conversation import ConversationContext
+    from core.agent.tool_executor import ToolExecutor
     from core.cli import (
         _build_sub_agent_manager,
         _build_tool_handlers,
         _set_readiness,
     )
-    from core.cli.agentic_loop import AgenticLoop
-    from core.cli.conversation import ConversationContext
     from core.cli.startup import check_readiness
-    from core.cli.tool_executor import ToolExecutor
 
     readiness = check_readiness()
     if not force_dry_run:
@@ -380,7 +380,7 @@ class TestSubAgentLive:
 
     def test_6_4_subagent_hook_events(self) -> None:
         """E4: SUBAGENT_STARTED/COMPLETED hooks fire."""
-        from core.cli.sub_agent import SubAgentManager, SubTask
+        from core.agent.sub_agent import SubAgentManager, SubTask
         from core.orchestration.hooks import HookEvent, HookSystem
         from core.orchestration.isolated_execution import (
             IsolatedRunner,
@@ -429,7 +429,7 @@ class TestSubAgentLive:
 
     def test_6_5_agent_registry_resolve(self) -> None:
         """E5: AgentRegistry + _resolve_agent integration."""
-        from core.cli.sub_agent import SubAgentManager, SubTask
+        from core.agent.sub_agent import SubAgentManager, SubTask
         from core.orchestration.isolated_execution import (
             IsolatedRunner,
         )

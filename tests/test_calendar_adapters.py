@@ -9,14 +9,14 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
-from core.infrastructure.adapters.mcp.apple_calendar_adapter import AppleCalendarAdapter
-from core.infrastructure.adapters.mcp.composite_calendar import CompositeCalendarAdapter
-from core.infrastructure.adapters.mcp.google_calendar_adapter import GoogleCalendarAdapter
-from core.infrastructure.ports.calendar_port import (
+from core.mcp.apple_calendar_adapter import AppleCalendarAdapter
+from core.mcp.calendar_port import (
     CalendarEvent,
     get_calendar,
     set_calendar,
 )
+from core.mcp.composite_calendar import CompositeCalendarAdapter
+from core.mcp.google_calendar_adapter import GoogleCalendarAdapter
 from core.tools.calendar_tools import CalendarCreateEventTool, CalendarListEventsTool
 
 # ---------------------------------------------------------------------------

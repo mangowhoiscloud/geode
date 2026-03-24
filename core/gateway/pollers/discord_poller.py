@@ -14,8 +14,8 @@ log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from core.gateway.channel_manager import ChannelManager
-    from core.infrastructure.adapters.mcp.manager import MCPServerManager
-    from core.infrastructure.ports.notification_port import NotificationPort
+    from core.mcp.manager import MCPServerManager
+    from core.mcp.notification_port import NotificationPort
 
 
 class DiscordPoller(BasePoller):

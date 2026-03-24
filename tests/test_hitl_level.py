@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from core.cli.tool_executor import ToolExecutor
+from core.agent.tool_executor import ToolExecutor
 
 # ---------------------------------------------------------------------------
 # Feature 1: Session-level tool approval (A=Always)
@@ -32,49 +32,49 @@ class TestAlwaysApproval:
 
     def test_prompt_with_always_returns_y(self) -> None:
         executor = ToolExecutor()
-        with patch("core.cli.tool_executor.console") as mock_console:
+        with patch("core.agent.tool_executor.console") as mock_console:
             mock_console.input.return_value = "y"
-            with patch("core.cli.tool_executor._restore_terminal", create=True):
+            with patch("core.agent.tool_executor._restore_terminal", create=True):
                 result = executor._prompt_with_always("Allow?", "test detail")
         assert result == "y"
 
     def test_prompt_with_always_returns_n(self) -> None:
         executor = ToolExecutor()
-        with patch("core.cli.tool_executor.console") as mock_console:
+        with patch("core.agent.tool_executor.console") as mock_console:
             mock_console.input.return_value = "n"
-            with patch("core.cli.tool_executor._restore_terminal", create=True):
+            with patch("core.agent.tool_executor._restore_terminal", create=True):
                 result = executor._prompt_with_always("Allow?", "test detail")
         assert result == "n"
 
     def test_prompt_with_always_returns_a(self) -> None:
         executor = ToolExecutor()
-        with patch("core.cli.tool_executor.console") as mock_console:
+        with patch("core.agent.tool_executor.console") as mock_console:
             mock_console.input.return_value = "a"
-            with patch("core.cli.tool_executor._restore_terminal", create=True):
+            with patch("core.agent.tool_executor._restore_terminal", create=True):
                 result = executor._prompt_with_always("Allow?", "test detail")
         assert result == "a"
 
     def test_prompt_with_always_accepts_always_word(self) -> None:
         executor = ToolExecutor()
-        with patch("core.cli.tool_executor.console") as mock_console:
+        with patch("core.agent.tool_executor.console") as mock_console:
             mock_console.input.return_value = "always"
-            with patch("core.cli.tool_executor._restore_terminal", create=True):
+            with patch("core.agent.tool_executor._restore_terminal", create=True):
                 result = executor._prompt_with_always("Allow?", "test detail")
         assert result == "a"
 
     def test_prompt_with_always_empty_is_yes(self) -> None:
         executor = ToolExecutor()
-        with patch("core.cli.tool_executor.console") as mock_console:
+        with patch("core.agent.tool_executor.console") as mock_console:
             mock_console.input.return_value = ""
-            with patch("core.cli.tool_executor._restore_terminal", create=True):
+            with patch("core.agent.tool_executor._restore_terminal", create=True):
                 result = executor._prompt_with_always("Allow?", "test detail")
         assert result == "y"
 
     def test_prompt_with_always_keyboard_interrupt_is_no(self) -> None:
         executor = ToolExecutor()
-        with patch("core.cli.tool_executor.console") as mock_console:
+        with patch("core.agent.tool_executor.console") as mock_console:
             mock_console.input.side_effect = KeyboardInterrupt
-            with patch("core.cli.tool_executor._restore_terminal", create=True):
+            with patch("core.agent.tool_executor._restore_terminal", create=True):
                 result = executor._prompt_with_always("Allow?", "test detail")
         assert result == "n"
 
@@ -100,7 +100,7 @@ class TestAlwaysApproval:
         executor = ToolExecutor()
         with (
             patch.object(executor, "_prompt_with_always", return_value="a"),
-            patch("core.cli.tool_executor.console"),
+            patch("core.agent.tool_executor.console"),
         ):
             approved = executor._confirm_write("memory_save", {"content": "test"})
         assert approved is True
@@ -121,7 +121,7 @@ class TestAlwaysApproval:
         executor = ToolExecutor()
         with (
             patch.object(executor, "_prompt_with_always", return_value="a"),
-            patch("core.cli.tool_executor.console"),
+            patch("core.agent.tool_executor.console"),
         ):
             approved = executor._confirm_cost("analyze_ip", 1.50)
         assert approved is True
@@ -142,7 +142,7 @@ class TestAlwaysApproval:
         executor = ToolExecutor()
         with (
             patch.object(executor, "_prompt_with_always", return_value="a"),
-            patch("core.cli.tool_executor.console"),
+            patch("core.agent.tool_executor.console"),
         ):
             approved = executor._confirm_mcp("custom-server", "some_tool")
         assert approved is True
@@ -180,7 +180,7 @@ class TestHITLLevel:
         executor = ToolExecutor(hitl_level=2)
         with (
             patch.object(executor, "_prompt_with_always", return_value="y") as mock_prompt,
-            patch("core.cli.tool_executor.console"),
+            patch("core.agent.tool_executor.console"),
         ):
             executor.execute("run_bash", {"command": "npm install foo", "reason": "test"})
             mock_prompt.assert_called_once()
@@ -200,7 +200,7 @@ class TestHITLLevel:
         executor = ToolExecutor(action_handlers={"memory_save": handler}, hitl_level=1)
         with (
             patch.object(executor, "_prompt_with_always", return_value="y"),
-            patch("core.cli.tool_executor.console"),
+            patch("core.agent.tool_executor.console"),
         ):
             executor.execute("memory_save", {"content": "data"})
             # Write tools at hitl_level=1 should still prompt (write-only)
