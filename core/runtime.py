@@ -156,6 +156,43 @@ def _make_stuck_hook_handler(
 
 
 # ---------------------------------------------------------------------------
+# Plugin registration helper (DRY: replaces 8 bare except blocks)
+# ---------------------------------------------------------------------------
+
+_plugin_status: dict[str, str] = {}
+
+
+def _register_plugin(name: str, fn: Any, *args: Any, **kwargs: Any) -> bool:
+    """Call *fn* and record plugin status. Returns True on success.
+
+    Replaces repeated try/except Exception patterns with structured logging:
+    - ImportError  → warning (module not installed)
+    - ValueError   → warning (config invalid)
+    - Other        → error with traceback
+    """
+    try:
+        fn(*args, **kwargs)
+        _plugin_status[name] = "enabled"
+        log.info("Plugin %s: enabled", name)
+        return True
+    except ImportError as exc:
+        _plugin_status[name] = "unavailable"
+        log.warning("Plugin %s: module not available (%s)", name, exc)
+    except ValueError as exc:
+        _plugin_status[name] = "config_error"
+        log.warning("Plugin %s: config invalid (%s)", name, exc)
+    except Exception as exc:
+        _plugin_status[name] = "error"
+        log.error("Plugin %s: failed (%s)", name, exc, exc_info=True)
+    return False
+
+
+def get_plugin_status() -> dict[str, str]:
+    """Return plugin registration status dict for CLI reporting."""
+    return _plugin_status.copy()
+
+
+# ---------------------------------------------------------------------------
 # Default builders
 # ---------------------------------------------------------------------------
 
@@ -439,7 +476,7 @@ class GeodeRuntime:
             hooks.register(event, stuck_fn, name=stuck_name, priority=40)
 
         # Notification hook plugin (events → external messaging)
-        try:
+        def _reg_notification() -> None:
             from core.orchestration.plugins.notification_hook.hook import (
                 register_notification_hooks,
             )
@@ -449,11 +486,11 @@ class GeodeRuntime:
                 channel=settings.notification_channel,
                 recipient=settings.notification_recipient,
             )
-        except Exception:
-            log.debug("Notification hook registration skipped", exc_info=True)
+
+        _register_plugin("notification_hook", _reg_notification)
 
         # C2: Journal auto-record hooks (PIPELINE_END → runs.jsonl, errors.jsonl)
-        try:
+        def _reg_journal() -> None:
             from core.memory.journal_hooks import make_journal_handlers
             from core.memory.project_journal import get_project_journal
 
@@ -466,8 +503,8 @@ class GeodeRuntime:
                 }
                 for evt in target_events.get(handler_name, []):
                     hooks.register(evt, handler_fn, name=handler_name, priority=60)
-        except Exception:
-            log.debug("Journal hook registration skipped", exc_info=True)
+
+        _register_plugin("journal_hook", _reg_journal)
 
         return hooks, run_log, stuck_detector
 
@@ -878,8 +915,9 @@ class GeodeRuntime:
         try:
             manager = get_mcp_manager()
             manager.load_config()
-        except Exception:
-            log.debug("MCPServerManager unavailable — notification adapter skipped")
+        except Exception as exc:
+            _plugin_status["notification_adapter"] = "unavailable"
+            log.warning("Plugin notification_adapter: MCP manager failed (%s)", exc)
             set_notification(None)
             return
 
@@ -923,8 +961,9 @@ class GeodeRuntime:
         try:
             manager = get_mcp_manager()
             manager.load_config()
-        except Exception:
-            log.debug("MCPServerManager unavailable — calendar adapter skipped")
+        except Exception as exc:
+            _plugin_status["calendar_adapter"] = "unavailable"
+            log.warning("Plugin calendar_adapter: MCP manager failed (%s)", exc)
             set_calendar(None)
             return
 
@@ -973,8 +1012,9 @@ class GeodeRuntime:
 
             lane_queue = LaneQueue()
             lane_queue.add_lane("gateway", max_concurrent=2, timeout_s=120.0)
-        except Exception:
-            log.debug("LaneQueue unavailable — gateway runs without concurrency control")
+        except Exception as exc:
+            _plugin_status["gateway_lane_queue"] = "unavailable"
+            log.warning("Plugin gateway_lane_queue: %s", exc)
 
         manager = ChannelManager(lane_queue=lane_queue)
         notification = get_notification()
@@ -990,16 +1030,18 @@ class GeodeRuntime:
                 with open(config_path, "rb") as f:
                     toml_config = tomllib.load(f)
                 manager.load_bindings_from_config(toml_config)
-        except Exception:
-            log.debug("No gateway bindings in config.toml")
+        except Exception as exc:
+            _plugin_status["gateway_bindings"] = "skipped"
+            log.warning("Plugin gateway_bindings: config load failed (%s)", exc)
 
         try:
             from core.infrastructure.adapters.mcp.manager import get_mcp_manager
 
             mcp = get_mcp_manager(auto_startup=True)
             log.info("Gateway MCP: %d/%d servers connected", len(mcp._clients), len(mcp._servers))
-        except Exception:
-            log.debug("MCPServerManager unavailable — gateway skipped")
+        except Exception as exc:
+            _plugin_status["gateway_mcp"] = "unavailable"
+            log.warning("Plugin gateway_mcp: MCP manager failed (%s)", exc)
             set_gateway(None)
             return
 
@@ -1212,8 +1254,9 @@ class GeodeRuntime:
                 log.debug("Calendar adapter available — bridge will wire in REPL")
             else:
                 set_calendar_bridge(None)
-        except Exception:
-            log.debug("Calendar bridge setup skipped", exc_info=True)
+        except Exception as exc:
+            _plugin_status["calendar_bridge"] = "error"
+            log.warning("Plugin calendar_bridge: setup failed (%s)", exc)
 
         # Memory subsystem
         project_memory, organization_memory, context_assembler, user_profile = cls._build_memory(
