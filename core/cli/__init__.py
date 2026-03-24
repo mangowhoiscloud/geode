@@ -920,43 +920,22 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
     verbose = False
     conversation = ConversationContext()
 
-    # --- Startup initialization with progressive status ---
-    def _init_step(label: str) -> None:
-        """Print a compact startup progress indicator."""
-        console.print(f"  [dim]Loading {label}...[/dim]", end="\r")
+    # --- Unified bootstrap (domain, memory, readiness, MCP, skills) ---
+    from core.cli.bootstrap import bootstrap_geode
 
-    def _init_done(label: str, ok: bool = True) -> None:
-        mark = "[bold green]ok[/bold green]" if ok else "[dim]skip[/dim]"
-        console.print(f"  {mark} {label}          ")
+    console.print("  [dim]Initializing...[/dim]", end="\r")
+    boot = bootstrap_geode()
+    mcp_mgr = boot.mcp_manager
+    skill_registry = boot.skill_registry
 
-    # 1. Domain adapter
-    _init_step("domain")
-    from core.domains.loader import load_domain_adapter
-    from core.infrastructure.ports.domain_port import set_domain
+    n_mcp = len(mcp_mgr._servers) if mcp_mgr and hasattr(mcp_mgr, "_servers") else 0
+    n_skills = len(skill_registry._skills) if hasattr(skill_registry, "_skills") else 0
+    console.print(
+        f"  [bold green]ok[/bold green] Bootstrap (MCP {n_mcp}, Skills {n_skills})"
+    )
 
-    try:
-        set_domain(load_domain_adapter("game_ip"))
-        _init_done("Domain")
-    except Exception:
-        _init_done("Domain", ok=False)
-        log.debug("Domain adapter initialization skipped", exc_info=True)
-
-    # 2. Memory contextvars
-    _init_step("memory")
-    from core.memory.organization import MonoLakeOrganizationMemory
-    from core.memory.project import ProjectMemory
-    from core.tools.memory_tools import set_org_memory, set_project_memory
-
-    try:
-        set_project_memory(ProjectMemory())
-        set_org_memory(MonoLakeOrganizationMemory())
-        _init_done("Memory")
-    except Exception:
-        _init_done("Memory", ok=False)
-        log.debug("Memory context initialization skipped", exc_info=True)
-
-    # 3. Key gate
-    readiness = _get_readiness()
+    # Key gate (REPL-only: interactive prompt if API key missing)
+    readiness = boot.readiness
     if readiness is None or readiness.blocked:
         key = key_registration_gate()
         if key is None:
@@ -964,38 +943,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         readiness = check_readiness()
         _set_readiness(readiness)
 
-    # 4. MCP servers (slowest — npx subprocess spawn)
-    #    Uses startup() for full lifecycle: config + connect + signal handlers + atexit
-    _init_step("MCP servers")
-    from core.infrastructure.adapters.mcp.manager import MCPServerManager
-
-    mcp_mgr: MCPServerManager | None = None
-    try:
-        _mgr = MCPServerManager()
-        n_connected = _mgr.startup()
-        if len(_mgr._servers) > 0:
-            mcp_mgr = _mgr
-            _init_done(f"MCP ({n_connected}/{len(_mgr._servers)} servers)")
-        else:
-            _init_done("MCP (none)", ok=False)
-    except Exception:
-        _init_done("MCP", ok=False)
-        log.debug("MCP initialization skipped", exc_info=True)
-
-    # 5. Skills
-    _init_step("skills")
-    from core.extensibility.skills import SkillLoader, SkillRegistry
-
-    skill_registry = SkillRegistry()
-    try:
-        loaded_skills = SkillLoader().load_all(registry=skill_registry)
-        _init_done(f"Skills ({len(loaded_skills)})" if loaded_skills else "Skills (0)")
-    except Exception:
-        _init_done("Skills", ok=False)
-        log.debug("Skill loading skipped", exc_info=True)
-
-    # 6. Scheduler
-    _init_step("scheduler")
+    # Scheduler (REPL-only: cron + /schedule command)
     try:
         from core.automation.scheduler import SchedulerService
 
@@ -1003,9 +951,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         _sched_svc.load()
         _sched_svc.start()
         _scheduler_service_ctx.set(_sched_svc)
-        _init_done("Scheduler")
     except Exception:
-        _init_done("Scheduler", ok=False)
         log.debug("SchedulerService initialization skipped", exc_info=True)
 
     console.print()  # blank line before prompt

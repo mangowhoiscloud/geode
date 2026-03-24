@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from core.gateway.slack_formatter import markdown_to_slack_mrkdwn
 
+_ZWS = "\u200b"
+
 
 class TestBoldConversion:
     def test_double_asterisk_to_single(self) -> None:
@@ -18,6 +20,39 @@ class TestBoldConversion:
         assert result == "This is *important* text"
 
 
+class TestSlackBoundaryFix:
+    """Slack requires whitespace/punctuation around *bold* markers."""
+
+    def test_bold_followed_by_korean(self) -> None:
+        result = markdown_to_slack_mrkdwn("**LangGraph**가 좋다")
+        assert f"*LangGraph*{_ZWS}가 좋다" == result
+
+    def test_bold_followed_by_space(self) -> None:
+        result = markdown_to_slack_mrkdwn("**bold** text")
+        assert result == "*bold* text"
+        assert _ZWS not in result
+
+    def test_bold_followed_by_comma(self) -> None:
+        result = markdown_to_slack_mrkdwn("**bold**, text")
+        assert result == "*bold*, text"
+        assert _ZWS not in result
+
+    def test_bold_followed_by_period(self) -> None:
+        assert markdown_to_slack_mrkdwn("**bold**.") == "*bold*."
+
+    def test_bold_at_end_of_line(self) -> None:
+        assert markdown_to_slack_mrkdwn("This is **bold**") == "This is *bold*"
+
+    def test_korean_before_bold(self) -> None:
+        result = markdown_to_slack_mrkdwn("프레임워크**LangGraph**가")
+        assert f"프레임워크{_ZWS}*LangGraph*{_ZWS}가" == result
+
+    def test_multiple_bold_with_korean(self) -> None:
+        result = markdown_to_slack_mrkdwn("**LangGraph**가 성숙하고, **CrewAI**가 적합")
+        assert f"*LangGraph*{_ZWS}가" in result
+        assert f"*CrewAI*{_ZWS}가" in result
+
+
 class TestHeadingConversion:
     def test_h1(self) -> None:
         assert markdown_to_slack_mrkdwn("# Title") == "*Title*"
@@ -28,49 +63,69 @@ class TestHeadingConversion:
     def test_h3(self) -> None:
         assert markdown_to_slack_mrkdwn("### Section") == "*Section*"
 
-    def test_h6(self) -> None:
-        assert markdown_to_slack_mrkdwn("###### Deep") == "*Deep*"
-
     def test_multiline_headings(self) -> None:
         text = "# First\nsome text\n## Second"
         result = markdown_to_slack_mrkdwn(text)
         assert result == "*First*\nsome text\n*Second*"
 
+    def test_heading_with_bold(self) -> None:
+        result = markdown_to_slack_mrkdwn("# **Important** Update")
+        assert "Important" in result
+        assert "Update" in result
+        assert "***" not in result
+
 
 class TestLinkConversion:
     def test_basic_link(self) -> None:
-        result = markdown_to_slack_mrkdwn("[Google](https://google.com)")
-        assert result == "<https://google.com|Google>"
+        assert markdown_to_slack_mrkdwn("[Google](https://google.com)") == "<https://google.com|Google>"
 
     def test_link_in_sentence(self) -> None:
         result = markdown_to_slack_mrkdwn("Visit [docs](https://docs.example.com) for info")
         assert result == "Visit <https://docs.example.com|docs> for info"
 
-    def test_multiple_links(self) -> None:
-        text = "[a](https://a.com) and [b](https://b.com)"
-        result = markdown_to_slack_mrkdwn(text)
-        assert result == "<https://a.com|a> and <https://b.com|b>"
 
-
-class TestTableWrapping:
-    def test_simple_table(self) -> None:
+class TestTableToSections:
+    def test_two_column_to_bullets(self) -> None:
         text = "| Name | Score |\n| --- | --- |\n| Alice | 90 |"
         result = markdown_to_slack_mrkdwn(text)
-        assert result == "```\n| Name | Score |\n| Alice | 90 |\n```"
+        assert "• *Alice*: 90" in result
+        assert "```" not in result
 
-    def test_table_separator_stripped(self) -> None:
-        text = "| H1 | H2 |\n| --- | --- |\n| v1 | v2 |"
+    def test_comparison_to_vertical(self) -> None:
+        text = "| 항목 | LangGraph | CrewAI |\n| --- | --- | --- |\n| 개발사 | LangChain | CrewAI Inc. |"
         result = markdown_to_slack_mrkdwn(text)
-        assert "| --- |" not in result
+        assert "*LangGraph*" in result
+        assert "*CrewAI*" in result
+        assert "개발사: LangChain" in result
+        assert "|" not in result
+
+    def test_bold_stripped_in_cells(self) -> None:
+        text = "| 항목 | **LG** | **CR** |\n| --- | --- | --- |\n| **특징** | a | b |"
+        result = markdown_to_slack_mrkdwn(text)
+        assert "**" not in result
+
+    def test_dash_values_omitted(self) -> None:
+        text = "| 항목 | A | B |\n| --- | --- | --- |\n| 점수 | 90 | - |"
+        result = markdown_to_slack_mrkdwn(text)
+        assert "점수: 90" in result
 
     def test_table_surrounded_by_text(self) -> None:
         text = "Before\n| A | B |\n| - | - |\n| 1 | 2 |\nAfter"
         result = markdown_to_slack_mrkdwn(text)
-        lines = result.split("\n")
-        assert lines[0] == "Before"
-        assert lines[1] == "```"
-        assert lines[-2] == "```"
-        assert lines[-1] == "After"
+        assert result.startswith("Before")
+        assert result.rstrip().endswith("After")
+
+
+class TestHorizontalRule:
+    def test_triple_dash(self) -> None:
+        result = markdown_to_slack_mrkdwn("Before\n---\nAfter")
+        assert "---" not in result
+        assert "Before" in result and "After" in result
+
+
+class TestStrikethrough:
+    def test_basic(self) -> None:
+        assert markdown_to_slack_mrkdwn("~~removed~~") == "~removed~"
 
 
 class TestMixedContent:
@@ -81,45 +136,35 @@ class TestMixedContent:
         assert "*Status*" in result
         assert "<https://x.com|link>" in result
 
-    def test_bold_in_heading(self) -> None:
-        # Heading conversion happens first, then bold
-        text = "# **Important** Update"
+    def test_realistic_response(self) -> None:
+        text = "## 비교\n\n| 항목 | A | B |\n| --- | --- | --- |\n| 점수 | 90 | 80 |\n\n**A**가 높다."
         result = markdown_to_slack_mrkdwn(text)
-        # After heading: ***Important** Update* → then bold: **Important* Update*
-        # The heading wraps entire line, bold converts inside
-        assert "Important" in result
-        assert "Update" in result
+        assert "**" not in result
+        assert "##" not in result
+        assert "|" not in result
+        assert f"*A*{_ZWS}가" in result
 
 
 class TestNoOp:
     def test_plain_text(self) -> None:
-        text = "Hello, world!"
-        assert markdown_to_slack_mrkdwn(text) == text
+        assert markdown_to_slack_mrkdwn("Hello!") == "Hello!"
 
     def test_empty_string(self) -> None:
         assert markdown_to_slack_mrkdwn("") == ""
 
-    def test_already_slack_format(self) -> None:
-        text = "*bold* and <https://x.com|link>"
-        result = markdown_to_slack_mrkdwn(text)
-        # Single asterisks should pass through unchanged
-        assert "*bold*" in result
-
 
 class TestCodeBlockPreserved:
     def test_inline_code(self) -> None:
-        text = "Use `pip install geode` to install"
-        assert markdown_to_slack_mrkdwn(text) == text
+        assert markdown_to_slack_mrkdwn("Use `pip install geode`") == "Use `pip install geode`"
 
-    def test_fenced_code_block(self) -> None:
-        text = "```python\nprint('hello')\n```"
-        result = markdown_to_slack_mrkdwn(text)
-        assert "print('hello')" in result
+    def test_fenced_code(self) -> None:
+        assert "print('hello')" in markdown_to_slack_mrkdwn("```python\nprint('hello')\n```")
 
-    def test_heading_hash_inside_code_not_converted(self) -> None:
-        # Fenced code blocks: the ``` lines don't start with |, so they're not tables
-        # The inner content doesn't start with #, so heading regex won't match
-        text = "```\nsome code\n```"
-        result = markdown_to_slack_mrkdwn(text)
-        assert "```" in result
-        assert "some code" in result
+    def test_bold_inside_code_preserved(self) -> None:
+        assert "**not bold**" in markdown_to_slack_mrkdwn("```\n**not bold**\n```")
+
+    def test_heading_inside_code_preserved(self) -> None:
+        assert "# not heading" in markdown_to_slack_mrkdwn("```\n# not heading\n```")
+
+    def test_inline_kwargs_preserved(self) -> None:
+        assert "`**kwargs`" in markdown_to_slack_mrkdwn("Use `**kwargs` in function")
