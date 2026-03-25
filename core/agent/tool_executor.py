@@ -559,6 +559,21 @@ class ToolExecutor:
 # ---------------------------------------------------------------------------
 
 
+def _compute_model_tool_limit(model: str) -> int:
+    """Compute per-tool-result token limit based on model context window.
+
+    For large-context models (>=200K), returns 0 (unlimited — server-side handles it).
+    For small-context models (<200K, e.g. GLM-5 80K), caps each tool result at 5% of
+    the context window to prevent a single result from consuming the budget.
+    """
+    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+
+    ctx = MODEL_CONTEXT_WINDOW.get(model, 200_000)
+    if ctx >= 200_000:
+        return 0  # trust server-side clear_tool_uses
+    return ctx // 20  # 5% of context window
+
+
 def _guard_tool_result(
     result: dict[str, Any],
     max_tokens: int | None = None,
@@ -622,6 +637,7 @@ class ToolCallProcessor:
         hooks: HookSystem | None = None,
         mcp_manager: Any | None = None,
         transcript: Any | None = None,
+        model: str = "",
     ) -> None:
         self._executor = executor
         self._op_logger = op_logger
@@ -629,6 +645,7 @@ class ToolCallProcessor:
         self._hooks = hooks
         self._mcp_manager = mcp_manager
         self._transcript = transcript
+        self._model = model
 
         # Per-run mutable state — reset via reset()
         self._consecutive_failures: dict[str, int] = {}
@@ -733,8 +750,10 @@ class ToolCallProcessor:
         )
 
         # Token guard: truncate oversized results to prevent context explosion
+        # For small-context models (e.g. GLM-5 80K), apply model-aware limit
         if isinstance(result, dict):
-            result = _guard_tool_result(result)
+            model_limit = _compute_model_tool_limit(self._model) if self._model else 0
+            result = _guard_tool_result(result, max_tokens=model_limit or None)
 
         # Serialize result as JSON for LLM (not Python repr)
         try:
