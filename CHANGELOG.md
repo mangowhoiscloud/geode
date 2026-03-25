@@ -26,6 +26,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.27.1] — 2026-03-26
+
+모델 스위칭 컨텍스트 가드 — Opus→GLM-5 전환 시 overflow 방지.
+
+### Added
+- **모델 스위칭 선제적 적응** — `update_model()` 시 Phase 1(도구 결과 요약) + Phase 2(토큰 기반 adaptive prune) 자동 실행
+- **`summarize_tool_results()`** — tool_result 중 5% 초과분을 `[summarized]`로 대체
+- **`adaptive_prune()`** — 예산(70%) 내에서 최신 메시지 우선 유지하는 토큰 기반 pruning
+
+### Fixed
+- **`usage_pct` 100% 캡 제거** — 240%와 95%는 심각도가 다르므로 실제값 유지
+
 ## [0.27.0] — 2026-03-26
 
 GLM-5 컨텍스트 방어 + Gateway 리소스 공유 + UI 스피너 정돈.

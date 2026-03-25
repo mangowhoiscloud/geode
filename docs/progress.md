@@ -36,6 +36,7 @@
 |---------|----------|----|------|--------|
 | ui-parallel-spinner | 서브에이전트 병렬 실행 시 UI 스피너 과다 출력 정돈 | #441→#442 | @mangowhoiscloud | 2026-03-26 |
 | docs-sync | v0.27.0 릴리스 docs-sync — 버전 4곳 + Tests 3088 + CHANGELOG | main direct | @mangowhoiscloud | 2026-03-26 |
+| model-switch-guard | 모델 스위칭 컨텍스트 가드 — 선제적 적응 (방안 E 하이브리드) | #443→#444 | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-25 — 세션 25)
 
@@ -262,9 +263,9 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.27.0 | 2026-03-26 |
+| Version | 0.27.1 | 2026-03-26 |
 | Modules | 221 | 2026-03-26 |
-| Tests | 3088 | 2026-03-26 |
+| Tests | 3109 | 2026-03-26 |
 | Tools | 46 (+MCP 86) | 2026-03-22 |
 | MCP Catalog | 43 | 2026-03-24 |
 | HookEvents | 36 | 2026-03-19 |
