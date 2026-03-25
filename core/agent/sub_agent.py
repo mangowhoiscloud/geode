@@ -601,6 +601,7 @@ class SubAgentManager:
             provider=_resolve_provider(settings.model),
             mcp_manager=self._mcp_manager,
             skill_registry=self._skill_registry,
+            quiet=True,  # suppress spinner — parent handles UI
         )
 
         # 6. Run: use task description as user prompt

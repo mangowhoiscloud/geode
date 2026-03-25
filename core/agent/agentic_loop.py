@@ -140,11 +140,13 @@ class AgenticLoop:
         enable_goal_decomposition: bool = True,
         parent_session_key: str = "",
         system_suffix: str = "",
+        quiet: bool = False,
     ) -> None:
         self.context = context
         self.executor = tool_executor
         self._parent_session_key = parent_session_key
         self._system_suffix = system_suffix
+        self._quiet = quiet  # suppress spinner (sub-agent, headless)
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self.model = model or ANTHROPIC_PRIMARY
@@ -343,7 +345,7 @@ class AgenticLoop:
 
             # Show spinner while waiting for LLM response
             label = "Thinking..." if round_idx == 0 else f"Thinking... (round {round_idx + 1})"
-            _spinner = TextSpinner(f"✢ {label}")
+            _spinner = TextSpinner(f"✢ {label}", quiet=self._quiet)
             _spinner.start()
             try:
                 response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
