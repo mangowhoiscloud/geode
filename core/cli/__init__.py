@@ -1621,7 +1621,8 @@ def serve(
             sub_agent_manager=sub_mgr,
             hitl_level=0,
         )
-        from core.config import _resolve_provider, settings as _gw_settings
+        from core.config import _resolve_provider
+        from core.config import settings as _gw_settings
 
         gw_model = _gw_settings.model
         gw_provider = _resolve_provider(gw_model)
