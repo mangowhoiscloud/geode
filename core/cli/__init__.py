@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json as _json
 import logging
-import re as _re
 import signal
 import sys
 import termios
@@ -67,7 +66,6 @@ from core.cli.startup import (
     ReadinessReport,
     auto_generate_env,
     check_readiness,
-    detect_api_key,
     env_setup_wizard,
     key_registration_gate,
     render_readiness,
@@ -689,17 +687,6 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
         console.print()
 
 
-_DRY_RUN_PATTERN = _re.compile(
-    r"(?:dry[-_\s]?run|드라이런|LLM\s*(?:호출\s*)?없이|without\s+LLM|no[-_\s]?LLM|fixture로만|간단히)",
-    _re.IGNORECASE,
-)
-
-
-def _text_requests_dry_run(text: str) -> bool:
-    """Detect if user text explicitly requests dry-run mode."""
-    return bool(_DRY_RUN_PATTERN.search(text))
-
-
 def _build_sub_agent_manager(
     verbose: bool = False,
     *,
@@ -1090,25 +1077,8 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 )
                 agentic_ref[0] = agentic
         else:
-            # API key detection: intercept pasted keys before sending to LLM
-            detected = detect_api_key(user_input)
-            if detected:
-                provider, env_var, key_value = detected
-                from core.cli.commands import cmd_key
-
-                # Route through cmd_key for proper handling
-                if provider == "glm":
-                    cmd_key(f"glm {key_value}")
-                elif provider == "openai":
-                    cmd_key(key_value)
-                else:
-                    cmd_key(key_value)
-                new_readiness = check_readiness()
-                _set_readiness(new_readiness)
-                render_readiness(new_readiness)
-                continue
-
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
+            # Key management is handled via /key command or set_api_key tool.
             try:
                 result = agentic.run(user_input)
                 _render_agentic_result(result)
