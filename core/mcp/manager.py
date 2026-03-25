@@ -322,6 +322,7 @@ class MCPServerManager:
 
         command = config.get("command", "")
         args = config.get("args", [])
+        # SECURITY: resolved env may contain API keys — never log env values.
         env = self._resolve_env(config.get("env", {}))
 
         # Skip server if any required env var resolved to empty string

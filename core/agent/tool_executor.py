@@ -193,6 +193,10 @@ class ToolExecutor:
         # HITL level: 0=autonomous, 1=write-only, 2=all prompts
         self._hitl_level = hitl_level
         # Per-server MCP approval cache — approve once per server per session
+        # Thread-safe: ToolExecutor is per-AgenticLoop, but sub-agents may share.
+        import threading
+
+        self._approval_lock = threading.Lock()
         self._mcp_approved_servers: set[str] = set()
         # Session-level "Always" approval sets (Feature: A=Always)
         self._always_approved_tools: set[str] = set()
@@ -277,7 +281,7 @@ class ToolExecutor:
                 if server is not None:
                     return self._execute_mcp(server, tool_name, tool_input)
             log.warning("No handler for tool: %s", tool_name)
-            return {"error": f"Unknown tool: {tool_name}"}
+            return {"error": f"Unknown tool: '{tool_name}'. Use 'show_help' for available tools."}
 
         try:
             if approved_via_hitl:
@@ -287,7 +291,11 @@ class ToolExecutor:
                 raw = handler(**tool_input)
             # Guard: ensure result is always a dict (handlers may return None or non-dict)
             if raw is None:
-                return {"error": f"Tool {tool_name} returned None", "status": "failure"}
+                return {
+                    "error": f"Tool '{tool_name}' returned None instead of a dict. "
+                    "This is likely a bug in the tool handler implementation.",
+                    "status": "failure",
+                }
             if not isinstance(raw, dict):
                 return {"result": raw}
             return raw

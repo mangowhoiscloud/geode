@@ -333,8 +333,6 @@ class AgenticLoop:
         self._consecutive_failures.clear()
         self._op_logger.reset()
 
-        # Goal decomposition: try to decompose compound requests into sub-goal DAGs.
-        # If successful, inject the decomposition plan into the system prompt so the
         # Lazy MCP tool refresh: if tools were empty at init (MCP not yet connected),
         # try to load them now. This handles the startup timing gap.
         if self._mcp_manager is not None and len(self._tools) < 50:
@@ -342,7 +340,8 @@ class AgenticLoop:
             if added > 0:
                 log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
 
-        # LLM executes sub-goals in the correct dependency order.
+        # Goal decomposition: try to break compound requests into sub-goal DAGs.
+        # Returns a hint string appended to the system prompt, or None if not compound.
         decomposition_hint = self._try_decompose(user_input)
 
         # Add user message to conversation context
