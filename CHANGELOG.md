@@ -26,6 +26,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.24.1] — 2026-03-25
+
+메모리 경로 표시 수정.
+
+### Fixed
+- **Startup readiness 메시지** — `.claude/MEMORY.md not found` → `.geode/memory/PROJECT.md not found` (실제 참조 경로와 일치)
+- **memory_tools 도구 설명** — rule_create/update/delete/list 5곳의 `.claude/rules/` → `.geode/rules/` 수정
+
 ## [0.24.0] — 2026-03-22
 
 Slack Gateway 양방향 소통 + MCPServerManager 싱글턴 + GLM/Failover 안정화.

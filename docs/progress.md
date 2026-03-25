@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-25 (세션 20 — 코드 품질 + 폴더 구조 + E2E 검증)
+> 마지막 갱신: 2026-03-25 (세션 21 — 메모리 경로 수정)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -12,7 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| docs-sync | CLAUDE.md 수치 갱신 (Modules/Tests 실측) + CHANGELOG 이번 세션 기록 | P1 | — | 버전 4곳 동기화 |
+| docs-sync | CLAUDE.md 수치 갱신 (Modules/Tests 실측) + CHANGELOG 이번 세션 기록 | P1 | — | v0.24.1 완료 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | proxy-cleanup | 구 경로 proxy 파일 최종 삭제 (nodes/ui/auth/extensibility/cli/mcp) | P3 | — | CI 래칫이 차단 중 |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
@@ -28,6 +28,13 @@
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
+
+### Done (2026-03-25 — 세션 21)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| fix-memory-path | 메모리 경로 표시 .claude/ → .geode/ 수정 (startup + memory_tools + docstring) | #425→#426 | @mangowhoiscloud | 2026-03-25 |
+| docs-sync | v0.24.1 docs-sync — CHANGELOG + 버전 4곳 + 수치 실측 갱신 | main direct | @mangowhoiscloud | 2026-03-25 |
 
 ### Done (2026-03-25 — 세션 20)
 
