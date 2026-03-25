@@ -59,7 +59,7 @@ class TestBackpressure:
                 "content": json.dumps({"error": "Not found"}),
             },
         ]
-        loop._tool_log.append({"tool": "test_tool", "input": {}, "result": {"error": "Not found"}})
+        loop._tool_processor._tool_log.append({"tool": "test_tool", "input": {}, "result": {"error": "Not found"}})
         loop._update_tool_error_tracking(tool_results)
         assert loop._total_consecutive_tool_errors == 1
 
@@ -93,7 +93,7 @@ class TestBackpressure:
                 "content": json.dumps({"status": "ok"}),
             },
         ]
-        loop._tool_log.append({"tool": "test_tool", "input": {}, "result": {"error": "fail"}})
+        loop._tool_processor._tool_log.append({"tool": "test_tool", "input": {}, "result": {"error": "fail"}})
         loop._update_tool_error_tracking(tool_results)
         assert loop._total_consecutive_tool_errors == 0
 
@@ -108,7 +108,7 @@ class TestBackpressure:
                     "content": json.dumps({"error": "timeout"}),
                 },
             ]
-            loop._tool_log.append(
+            loop._tool_processor._tool_log.append(
                 {"tool": "test_tool", "input": {}, "result": {"error": "timeout"}}
             )
             loop._update_tool_error_tracking(tool_results)
@@ -200,7 +200,7 @@ class TestConvergenceDetection:
                     "content": json.dumps({"error": f"error_{i}"}),
                 },
             ]
-            loop._tool_log.append(
+            loop._tool_processor._tool_log.append(
                 {"tool": f"tool_{i}", "input": {}, "result": {"error": f"error_{i}"}}
             )
             loop._update_tool_error_tracking(tool_results)
@@ -209,7 +209,7 @@ class TestConvergenceDetection:
     def test_error_key_format(self) -> None:
         """Error keys follow 'tool_name:error_message' format."""
         loop = _make_loop()
-        loop._tool_log.append(
+        loop._tool_processor._tool_log.append(
             {"tool": "run_bash", "input": {}, "result": {"error": "command not found"}}
         )
         tool_results = [
@@ -267,8 +267,8 @@ class TestConvergenceDetection:
         with (
             patch.object(loop, "_call_llm", side_effect=fake_call_llm),
             patch.object(
-                loop,
-                "_process_tool_calls",
+                loop._tool_processor,
+                "process",
                 side_effect=fake_process_tool_calls,
             ),
             patch.object(loop, "_build_system_prompt", return_value="system"),

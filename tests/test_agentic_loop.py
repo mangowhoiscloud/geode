@@ -973,7 +973,6 @@ class TestAgenticLoopToolCallRendering:
         handler = MagicMock(return_value={"status": "ok", "tier": "S", "score": 81.3})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
         loop = AgenticLoop(ctx, executor)
-        loop._consecutive_failures = {}  # normally set in run()
 
         # Build a response with tool_use
         tool_block = MagicMock()
@@ -987,8 +986,10 @@ class TestAgenticLoopToolCallRendering:
 
         import asyncio
 
-        with patch.object(loop._op_logger, "log_tool_call", return_value=True) as mock_log:
-            asyncio.run(loop._process_tool_calls(mock_response))
+        with patch.object(
+            loop._tool_processor._op_logger, "log_tool_call", return_value=True
+        ) as mock_log:
+            asyncio.run(loop._tool_processor.process(mock_response))
             mock_log.assert_called_once_with("analyze_ip", {"ip_name": "Berserk"})
 
     def test_tool_result_renders_dict(self) -> None:
@@ -997,7 +998,6 @@ class TestAgenticLoopToolCallRendering:
         handler = MagicMock(return_value={"tier": "S", "score": 81.3})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
         loop = AgenticLoop(ctx, executor)
-        loop._consecutive_failures = {}  # normally set in run()
 
         tool_block = MagicMock()
         tool_block.type = "tool_use"
@@ -1009,12 +1009,16 @@ class TestAgenticLoopToolCallRendering:
         mock_response.content = [tool_block]
 
         with (
-            patch.object(loop._op_logger, "log_tool_call", return_value=True),
-            patch.object(loop._op_logger, "log_tool_result") as mock_log_result,
+            patch.object(
+                loop._tool_processor._op_logger, "log_tool_call", return_value=True
+            ),
+            patch.object(
+                loop._tool_processor._op_logger, "log_tool_result"
+            ) as mock_log_result,
         ):
             import asyncio
 
-            asyncio.run(loop._process_tool_calls(mock_response))
+            asyncio.run(loop._tool_processor.process(mock_response))
             mock_log_result.assert_called_once_with(
                 "analyze_ip", {"tier": "S", "score": 81.3}, visible=True
             )
