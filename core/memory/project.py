@@ -69,9 +69,13 @@ class ProjectMemory:
     def __init__(self, project_root: Path | None = None) -> None:
         root = project_root or Path(".")
         self._geode_dir = root / ".geode"
+        self._global_geode_dir = Path.home() / ".geode"
         self._memory_dir = self._geode_dir / "memory"
         self._memory_file = self._memory_dir / "PROJECT.md"
         self._rules_dir = self._geode_dir / "rules"
+        # Global fallback dirs
+        self._global_memory_dir = self._global_geode_dir / "memory"
+        self._global_rules_dir = self._global_geode_dir / "rules"
 
     @property
     def memory_file(self) -> Path:
@@ -86,11 +90,19 @@ class ProjectMemory:
         return self._memory_file.exists()
 
     def load_memory(self, max_lines: int = MAX_MEMORY_LINES) -> str:
-        """Load MEMORY.md content (first N lines for context window efficiency)."""
-        if not self._memory_file.exists():
-            return ""
+        """Load MEMORY.md content (first N lines for context window efficiency).
+
+        Cascade: project .geode/memory/ → global ~/.geode/memory/
+        """
+        target = self._memory_file
+        if not target.exists():
+            global_file = self._global_memory_dir / "PROJECT.md"
+            if global_file.exists():
+                target = global_file
+            else:
+                return ""
         try:
-            content = self._memory_file.read_text(encoding="utf-8")
+            content = target.read_text(encoding="utf-8")
             lines = content.split("\n")[:max_lines]
             return "\n".join(lines)
         except OSError as e:
@@ -100,17 +112,27 @@ class ProjectMemory:
     def load_rules(self, context: str = "*") -> list[dict[str, Any]]:
         """Load matching rules from .geode/rules/*.md.
 
+        Cascade: global ~/.geode/rules/ → project .geode/rules/
+        Global rules are loaded first, project rules override by name.
+
         Args:
             context: Context string to match against rule paths (e.g. "anime", "berserk").
 
         Returns:
             List of dicts with 'name', 'paths', 'content' for each matching rule.
         """
-        if not self._rules_dir.exists():
+        # Collect rule files: global first, project overrides
+        rule_files: dict[str, Path] = {}
+        for rules_dir in (self._global_rules_dir, self._rules_dir):
+            if rules_dir.exists():
+                for f in sorted(rules_dir.glob("*.md")):
+                    rule_files[f.stem] = f  # project overrides global by name
+
+        if not rule_files:
             return []
 
         matched: list[dict[str, Any]] = []
-        for rule_file in sorted(self._rules_dir.glob("*.md")):
+        for rule_file in rule_files.values():
             try:
                 raw = rule_file.read_text(encoding="utf-8")
             except OSError:
