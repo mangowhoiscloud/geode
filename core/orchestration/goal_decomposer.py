@@ -251,7 +251,12 @@ class GoalDecomposer:
             )
             return result
 
-        except Exception:
+        except Exception as exc:
+            # Billing errors must propagate for clean UI handling
+            from core.infrastructure.ports.agentic_llm_port import BillingError
+
+            if isinstance(exc, BillingError):
+                raise
             log.warning("GoalDecomposer LLM call failed", exc_info=True)
             return None
 
