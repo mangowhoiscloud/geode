@@ -455,41 +455,65 @@ def _system_with_cache(system: str) -> list[TextBlockParam]:
     ]
 
 
-def _retry_with_backoff(
+def retry_with_backoff_generic(
     fn: Any,
     *,
     model: str,
+    fallback_models: list[str],
+    circuit_breaker: CircuitBreaker,
+    retryable_errors: tuple[type[Exception], ...],
+    bad_request_error: type[Exception] | None = None,
+    billing_message: str = "API billing/credit error.",
     max_retries: int = MAX_RETRIES,
+    retry_base_delay: float = RETRY_BASE_DELAY,
+    retry_max_delay: float = RETRY_MAX_DELAY,
+    provider_label: str = "LLM",
 ) -> Any:
-    """Execute fn with retry + exponential backoff + model fallback.
+    """Generic retry with exponential backoff + model fallback + circuit breaker.
+
+    Shared by Anthropic (``_retry_with_backoff``) and OpenAI
+    (``OpenAIAdapter._retry_with_backoff``) to eliminate DRY violation.
 
     Stage 1: Retry same model with exponential backoff.
     Stage 2: On persistent failure, try fallback models.
     Stage 3: Circuit breaker prevents calls when API is down.
+
+    Args:
+        fn: Callable accepting ``model`` keyword argument.
+        model: Primary model name.
+        fallback_models: Ordered fallback model chain.
+        circuit_breaker: CircuitBreaker instance for this provider.
+        retryable_errors: Tuple of exception types that trigger retry.
+        bad_request_error: Exception type for bad-request errors (e.g.
+            ``anthropic.BadRequestError``, ``openai.BadRequestError``).
+            If None, bad-request handling is skipped.
+        billing_message: Error message for billing/credit errors.
+        max_retries: Per-model retry count.
+        retry_base_delay: Base delay in seconds.
+        retry_max_delay: Max delay cap in seconds.
+        provider_label: Label for log messages (e.g. "LLM", "OpenAI").
     """
-    if not _circuit_breaker.can_execute():
+    if not circuit_breaker.can_execute():
         raise RuntimeError(
-            "Circuit breaker is open — LLM API calls are temporarily blocked. "
+            f"Circuit breaker is open — {provider_label} API calls are temporarily blocked. "
             "Too many consecutive failures detected."
         )
 
-    candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
-    models_to_try = [m for m in candidates if is_model_allowed(m)]
-    if not models_to_try:
-        raise RuntimeError(f"All models blocked by policy: {candidates}")
+    models_to_try = [model] + [m for m in fallback_models if m != model]
     last_error: Exception | None = None
 
     for model_idx, current_model in enumerate(models_to_try):
         for attempt in range(max_retries):
             try:
                 result = fn(model=current_model)
-                _circuit_breaker.record_success()
+                circuit_breaker.record_success()
                 return result
-            except _RETRYABLE_ERRORS as exc:
+            except retryable_errors as exc:
                 last_error = exc
-                delay = min(RETRY_BASE_DELAY * (2**attempt), RETRY_MAX_DELAY)
+                delay = min(retry_base_delay * (2**attempt), retry_max_delay)
                 log.warning(
-                    "LLM call failed (model=%s, attempt=%d/%d): %s. Retrying in %.1fs",
+                    "%s call failed (model=%s, attempt=%d/%d): %s. Retrying in %.1fs",
+                    provider_label,
                     current_model,
                     attempt + 1,
                     max_retries,
@@ -497,19 +521,19 @@ def _retry_with_backoff(
                     delay,
                 )
                 time.sleep(delay)
-            except anthropic.BadRequestError as exc:
-                error_msg = str(exc)
-                # Credit balance / billing error — no retry, clear message
-                if "credit balance" in error_msg.lower() or "billing" in error_msg.lower():
-                    from core.infrastructure.ports.agentic_llm_port import BillingError
+            except Exception as exc:
+                if bad_request_error is not None and isinstance(exc, bad_request_error):
+                    error_msg = str(exc)
+                    if "billing" in error_msg.lower() or "credit" in error_msg.lower():
+                        from core.infrastructure.ports.agentic_llm_port import BillingError
 
-                    raise BillingError(
-                        "Anthropic API credit balance too low. "
-                        "Visit https://console.anthropic.com/settings/billing to add credits."
-                    ) from exc
-                # Context overflow or invalid request — no retry
-                if "token" in error_msg.lower() or "context" in error_msg.lower():
-                    log.error("Context overflow detected (model=%s): %s", current_model, error_msg)
+                        raise BillingError(billing_message) from exc
+                    if "token" in error_msg.lower() or "context" in error_msg.lower():
+                        log.error(
+                            "Context overflow detected (model=%s): %s",
+                            current_model,
+                            error_msg,
+                        )
                 raise
 
         if model_idx < len(models_to_try) - 1:
@@ -522,9 +546,41 @@ def _retry_with_backoff(
 
     if last_error is None:
         raise RuntimeError("All retries exhausted with no error recorded")
-    _circuit_breaker.record_failure()
-    log.error("All models and retries exhausted. Last error: %s", last_error)
+    circuit_breaker.record_failure()
+    log.error("All %s models and retries exhausted. Last error: %s", provider_label, last_error)
     raise last_error
+
+
+def _retry_with_backoff(
+    fn: Any,
+    *,
+    model: str,
+    max_retries: int = MAX_RETRIES,
+) -> Any:
+    """Execute fn with retry + exponential backoff + model fallback (Anthropic).
+
+    Delegates to ``retry_with_backoff_generic`` with Anthropic-specific config.
+    """
+    candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
+    models_to_try = [m for m in candidates if is_model_allowed(m)]
+    if not models_to_try:
+        raise RuntimeError(f"All models blocked by policy: {candidates}")
+
+    return retry_with_backoff_generic(
+        fn,
+        model=models_to_try[0],
+        fallback_models=models_to_try[1:],
+        circuit_breaker=_circuit_breaker,
+        retryable_errors=_RETRYABLE_ERRORS,
+        bad_request_error=anthropic.BadRequestError,
+        billing_message=(
+            "Anthropic API credit balance too low. "
+            "Visit https://console.anthropic.com/settings/billing to add credits, "
+            "or use --dry-run mode."
+        ),
+        max_retries=max_retries,
+        provider_label="LLM",
+    )
 
 
 @maybe_traceable(run_type="llm", name="call_llm")  # type: ignore[untyped-decorator]

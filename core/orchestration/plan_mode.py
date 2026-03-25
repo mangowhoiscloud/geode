@@ -92,11 +92,16 @@ class AnalysisPlan:
                 return step
         return None
 
-    def execution_order(self) -> list[list[PlanStep]]:
+    def execution_order(self, *, strict: bool = False) -> list[list[PlanStep]]:
         """Compute execution order as batches of parallelizable steps.
 
         Returns a list of batches. Steps within each batch can run in parallel.
         Each batch's dependencies are satisfied by previous batches.
+
+        Args:
+            strict: If True, raise ``ValueError`` when unresolvable
+                dependencies (circular or missing) are detected instead
+                of forcing them into the final batch.
         """
         completed: set[str] = set()
         remaining = list(self.steps)
@@ -107,6 +112,12 @@ class AnalysisPlan:
                 step for step in remaining if all(dep in completed for dep in step.dependencies)
             ]
             if not batch:
+                step_ids = [s.step_id for s in remaining]
+                if strict:
+                    raise ValueError(
+                        f"Unresolvable dependencies in plan '{self.plan_id}': "
+                        f"steps {step_ids} have circular or missing dependencies"
+                    )
                 # Circular dependency or missing dependency — add all remaining
                 log.warning(
                     "Plan '%s': unresolvable dependencies, forcing remaining %d steps",

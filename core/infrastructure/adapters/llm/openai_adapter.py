@@ -21,6 +21,7 @@ from core.llm.client import (
     CircuitBreaker,
     ToolCallRecord,
     ToolUseResult,
+    retry_with_backoff_generic,
 )
 from core.llm.token_tracker import LLMUsage, get_tracker
 
@@ -327,65 +328,25 @@ class OpenAIAdapter:
         )
 
     def _retry_with_backoff(self, fn: Any, *, model: str) -> Any:
-        """Retry with exponential backoff + model fallback + circuit breaker."""
+        """Retry with exponential backoff + model fallback + circuit breaker.
+
+        Delegates to the shared ``retry_with_backoff_generic`` from client.py.
+        """
         import openai
 
-        if not _openai_circuit_breaker.can_execute():
-            raise RuntimeError(
-                "Circuit breaker is open — OpenAI API calls are temporarily blocked. "
-                "Too many consecutive failures detected."
-            )
-
-        retryable = _get_retryable_errors()
-        models_to_try = [model] + [m for m in OPENAI_FALLBACK_MODELS if m != model]
-        last_error: Exception | None = None
-
-        for model_idx, current_model in enumerate(models_to_try):
-            for attempt in range(_MAX_RETRIES):
-                try:
-                    result = fn(model=current_model)
-                    _openai_circuit_breaker.record_success()
-                    return result
-                except retryable as exc:
-                    last_error = exc
-                    delay = min(_RETRY_BASE_DELAY * (2**attempt), _RETRY_MAX_DELAY)
-                    log.warning(
-                        "OpenAI call failed (model=%s, attempt=%d/%d): %s",
-                        current_model,
-                        attempt + 1,
-                        _MAX_RETRIES,
-                        type(exc).__name__,
-                    )
-                    time.sleep(delay)
-                except openai.BadRequestError as exc:
-                    error_msg = str(exc)
-                    # Credit balance / billing error — no retry, clear message
-                    if "billing" in error_msg.lower() or "credit" in error_msg.lower():
-                        from core.infrastructure.ports.agentic_llm_port import BillingError
-
-                        raise BillingError(
-                            "OpenAI API billing/credit error. "
-                            "Check your OpenAI account billing settings."
-                        ) from exc
-                    # Context overflow or token limit — no retry, log details
-                    if "token" in error_msg.lower() or "context" in error_msg.lower():
-                        log.error(
-                            "Context overflow (model=%s): %s",
-                            current_model,
-                            error_msg,
-                        )
-                    raise
-
-            if model_idx < len(models_to_try) - 1:
-                next_model = models_to_try[model_idx + 1]
-                log.warning(
-                    "All retries exhausted for model=%s. Falling back to %s",
-                    current_model,
-                    next_model,
-                )
-
-        if last_error is None:
-            raise RuntimeError("All retries exhausted with no error recorded")
-        _openai_circuit_breaker.record_failure()
-        log.error("All OpenAI models and retries exhausted. Last error: %s", last_error)
-        raise last_error
+        return retry_with_backoff_generic(
+            fn,
+            model=model,
+            fallback_models=list(OPENAI_FALLBACK_MODELS),
+            circuit_breaker=_openai_circuit_breaker,
+            retryable_errors=_get_retryable_errors(),
+            bad_request_error=openai.BadRequestError,
+            billing_message=(
+                "OpenAI API billing/credit error. "
+                "Check your OpenAI account billing settings."
+            ),
+            max_retries=_MAX_RETRIES,
+            retry_base_delay=_RETRY_BASE_DELAY,
+            retry_max_delay=_RETRY_MAX_DELAY,
+            provider_label="OpenAI",
+        )

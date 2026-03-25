@@ -144,6 +144,11 @@ class OpenAIAgenticAdapter:
 
     def reset_client(self) -> None:
         with self._client_lock:
+            if self._client is not None:
+                try:
+                    self._client.close()
+                except Exception:
+                    log.debug("Error closing %s httpx client", self.provider_name, exc_info=True)
             self._client = None
 
 

@@ -247,11 +247,16 @@ class TaskGraph:
             },
         }
 
-    def topological_order(self) -> list[list[str]]:
+    def topological_order(self, *, strict: bool = False) -> list[list[str]]:
         """Compute topological execution order as parallelizable batches.
 
         Returns batches of task IDs. Tasks within the same batch
         have no interdependencies and can run in parallel.
+
+        Args:
+            strict: If True, raise ``ValueError`` when unresolvable
+                dependencies (circular or missing) are detected instead
+                of forcing them into the final batch.
         """
         completed: set[str] = set()
         remaining = list(self._tasks.keys())
@@ -264,6 +269,11 @@ class TaskGraph:
                 if all(dep in completed for dep in self._tasks[tid].dependencies)
             ]
             if not batch:
+                if strict:
+                    raise ValueError(
+                        f"Unresolvable dependencies in task graph: "
+                        f"tasks {remaining} have circular or missing dependencies"
+                    )
                 log.warning(
                     "Unresolvable dependencies detected, forcing remaining %d tasks",
                     len(remaining),

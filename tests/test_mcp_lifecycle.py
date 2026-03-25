@@ -203,7 +203,7 @@ class TestMCPManagerSignalHandlers:
         mgr = MCPServerManager()
 
         with (
-            patch("core.infrastructure.adapters.mcp.manager._is_main_thread", return_value=True),
+            patch("core.mcp.manager._is_main_thread", return_value=True),
             patch("signal.getsignal", return_value=signal.SIG_DFL),
             patch("signal.signal") as mock_signal,
             patch("atexit.register") as mock_atexit,
@@ -219,7 +219,7 @@ class TestMCPManagerSignalHandlers:
     def test_signal_handler_not_installed_in_non_main_thread(self) -> None:
         mgr = MCPServerManager()
 
-        with patch("core.infrastructure.adapters.mcp.manager._is_main_thread", return_value=False):
+        with patch("core.mcp.manager._is_main_thread", return_value=False):
             mgr._install_signal_handlers()
 
         assert mgr._signal_installed is False
@@ -240,7 +240,7 @@ class TestMCPManagerSignalHandlers:
         mgr._prev_sigterm = signal.SIG_DFL
 
         with (
-            patch("core.infrastructure.adapters.mcp.manager._is_main_thread", return_value=True),
+            patch("core.mcp.manager._is_main_thread", return_value=True),
             patch("signal.signal") as mock_signal,
         ):
             mgr._uninstall_signal_handlers()
