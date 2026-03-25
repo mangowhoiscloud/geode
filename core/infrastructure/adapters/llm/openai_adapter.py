@@ -361,11 +361,11 @@ class OpenAIAdapter:
                     error_msg = str(exc)
                     # Credit balance / billing error — no retry, clear message
                     if "billing" in error_msg.lower() or "credit" in error_msg.lower():
-                        log.error("OpenAI billing error: %s", error_msg)
-                        raise RuntimeError(
+                        from core.infrastructure.ports.agentic_llm_port import BillingError
+
+                        raise BillingError(
                             "OpenAI API billing/credit error. "
-                            "Check your OpenAI account billing settings, "
-                            "or use --dry-run mode."
+                            "Check your OpenAI account billing settings."
                         ) from exc
                     # Context overflow or token limit — no retry, log details
                     if "token" in error_msg.lower() or "context" in error_msg.lower():

@@ -501,11 +501,11 @@ def _retry_with_backoff(
                 error_msg = str(exc)
                 # Credit balance / billing error — no retry, clear message
                 if "credit balance" in error_msg.lower() or "billing" in error_msg.lower():
-                    log.error("Billing error: %s", error_msg)
-                    raise RuntimeError(
+                    from core.infrastructure.ports.agentic_llm_port import BillingError
+
+                    raise BillingError(
                         "Anthropic API credit balance too low. "
-                        "Visit https://console.anthropic.com/settings/billing to add credits, "
-                        "or use --dry-run mode."
+                        "Visit https://console.anthropic.com/settings/billing to add credits."
                     ) from exc
                 # Context overflow or invalid request — no retry
                 if "token" in error_msg.lower() or "context" in error_msg.lower():
