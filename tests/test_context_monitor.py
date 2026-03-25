@@ -170,3 +170,68 @@ class TestPruneOldestMessages:
         result = prune_oldest_messages(msgs)
         # Default keep_recent=10 → first + last 10 = 11
         assert len(result) == 11
+
+
+# ---------------------------------------------------------------------------
+# _compute_model_tool_limit
+# ---------------------------------------------------------------------------
+
+
+class TestComputeModelToolLimit:
+    def test_large_model_unlimited(self):
+        from core.agent.tool_executor import _compute_model_tool_limit
+
+        # 1M context → unlimited (server-side handles it)
+        assert _compute_model_tool_limit("claude-opus-4-6") == 0
+
+    def test_glm5_capped(self):
+        from core.agent.tool_executor import _compute_model_tool_limit
+
+        # GLM-5: 80K context → 5% = 4000 tokens
+        limit = _compute_model_tool_limit("glm-5")
+        assert limit == 4000
+
+    def test_200k_model_unlimited(self):
+        from core.agent.tool_executor import _compute_model_tool_limit
+
+        # 200K context → unlimited (threshold boundary)
+        assert _compute_model_tool_limit("glm-5-turbo") == 0
+
+    def test_unknown_model_unlimited(self):
+        from core.agent.tool_executor import _compute_model_tool_limit
+
+        # Unknown → default 200K → unlimited
+        assert _compute_model_tool_limit("unknown-xyz") == 0
+
+
+# ---------------------------------------------------------------------------
+# _guard_tool_result with model limits
+# ---------------------------------------------------------------------------
+
+
+class TestGuardToolResultModelAware:
+    def test_small_result_not_truncated(self):
+        from core.agent.tool_executor import _guard_tool_result
+
+        result = {"data": "short text"}
+        guarded = _guard_tool_result(result, max_tokens=4000)
+        assert "_truncated" not in guarded
+        assert guarded == result
+
+    def test_large_result_truncated(self):
+        from core.agent.tool_executor import _guard_tool_result
+
+        # 100K chars ≈ 25K tokens, limit = 4K tokens
+        result = {"content": "x" * 100_000}
+        guarded = _guard_tool_result(result, max_tokens=4000)
+        assert guarded.get("_truncated") is True
+        assert guarded["_original_tokens"] > 4000
+
+    def test_summary_preserved_on_truncation(self):
+        from core.agent.tool_executor import _guard_tool_result
+
+        result = {"summary": "key info", "content": "x" * 100_000, "task_id": "t1"}
+        guarded = _guard_tool_result(result, max_tokens=4000)
+        assert guarded["summary"] == "key info"
+        assert guarded["task_id"] == "t1"
+        assert guarded["_truncated"] is True

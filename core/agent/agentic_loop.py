@@ -182,6 +182,7 @@ class AgenticLoop:
             hooks=hooks,
             mcp_manager=mcp_manager,
             transcript=self._transcript,
+            model=self.model,
         )
 
         # Goal decomposition: auto-decompose compound requests into sub-goal DAGs
@@ -277,6 +278,7 @@ class AgenticLoop:
             self._provider = new_provider
             self._adapter = resolve_agentic_adapter(new_provider)
         self.model = model
+        self._tool_processor._model = model
 
         # Sync SessionMeter so "Worked for" status line shows the correct model
         from core.cli.ui.agentic_ui import update_session_model
@@ -593,7 +595,10 @@ class AgenticLoop:
                         HookEvent.CONTEXT_CRITICAL,
                         {"metrics": dataclasses.asdict(metrics), "model": self.model},
                     )
+                # Small-context models need more aggressive pruning
                 keep_recent = settings.compact_keep_recent
+                if metrics.context_window < 200_000:
+                    keep_recent = min(keep_recent, 5)
                 pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
                 original_count = len(messages)
                 if len(pruned) < original_count:
