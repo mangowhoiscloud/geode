@@ -3,6 +3,12 @@
 Builds the base system prompt from the router.md template, enriched with
 domain plugin IP examples and project memory context.
 
+Memory hierarchy injected into the system prompt (G1-G3):
+  G1: GEODE.md  — Agent identity (Core Principles + CANNOT + Defaults, ~20 lines)
+  G2: .geode/MEMORY.md — Project meta-index (architecture, pipelines, key files)
+  G3: .geode/LEARNING.md — Agent learning (patterns, corrections, domain knowledge)
+  G4: .geode/memory/PROJECT.md — Runtime insights + rules (existing _build_memory_context)
+
 Extracted from ``nl_router.py`` so that the AgenticLoop can use the system
 prompt without depending on the NL Router module.
 """
@@ -11,11 +17,18 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from pathlib import Path
 
 from core.cli.ip_names import get_ip_name_map
 from core.llm.prompts import ROUTER_SYSTEM
 
 log = logging.getLogger(__name__)
+
+# Project root resolved from __file__ (CWD-independent)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Max lines per memory hierarchy section to control context budget
+_MAX_SECTION_LINES = 20
 
 _SYSTEM_PROMPT_TEMPLATE = ROUTER_SYSTEM
 
@@ -170,7 +183,185 @@ def _build_career_context() -> str:
 
 
 def _build_memory_context() -> str:
-    """Build memory context string from ProjectMemory (recent insights + rules)."""
+    """Build memory context string from the 4-tier memory hierarchy.
+
+    Injects G1-G4 into the system prompt:
+      G1: GEODE.md identity (Core Principles + CANNOT + Defaults)
+      G2: .geode/MEMORY.md project meta-index
+      G3: .geode/LEARNING.md agent learning records
+      G4: .geode/memory/PROJECT.md runtime insights + rules (existing)
+
+    Each section is capped at ``_MAX_SECTION_LINES`` lines.
+    Missing files are silently skipped (graceful degradation).
+    """
+    parts: list[str] = []
+
+    # --- G1: Agent Identity (GEODE.md) ---
+    identity_ctx = _build_identity_context()
+    if identity_ctx:
+        parts.append(identity_ctx)
+
+    # --- G2: Project Memory Index (.geode/MEMORY.md) ---
+    geode_memory_ctx = _build_geode_memory_context()
+    if geode_memory_ctx:
+        parts.append(geode_memory_ctx)
+
+    # --- G3: Agent Learning (.geode/LEARNING.md) ---
+    learning_ctx = _build_learning_context()
+    if learning_ctx:
+        parts.append(learning_ctx)
+
+    # --- G4: Runtime Project Memory (.geode/memory/PROJECT.md) ---
+    project_ctx = _build_project_memory_context()
+    if project_ctx:
+        parts.append(project_ctx)
+
+    return "\n\n".join(parts)
+
+
+def _build_identity_context() -> str:
+    """G1: Extract core identity from GEODE.md (Core Principles + CANNOT + Defaults).
+
+    Reads GEODE.md via OrganizationMemory.get_soul() and extracts only the
+    essential sections to stay within context budget (~20 lines).
+    """
+    try:
+        from core.memory.organization import MonoLakeOrganizationMemory
+
+        org = MonoLakeOrganizationMemory()
+        soul = org.get_soul()
+        if not soul:
+            return ""
+
+        # Extract targeted sections: Core Principles, CANNOT, Defaults
+        target_sections = {"## Core Principles", "## CANNOT", "## Defaults"}
+        extracted_lines: list[str] = []
+
+        current_in_target = False
+        for line in soul.split("\n"):
+            stripped = line.strip()
+            # Detect section headers
+            if stripped.startswith("## "):
+                current_in_target = stripped in target_sections
+                if current_in_target:
+                    extracted_lines.append(stripped)
+                continue
+            if current_in_target and stripped:
+                extracted_lines.append(stripped)
+
+        if not extracted_lines:
+            return ""
+
+        # Cap at budget
+        capped = extracted_lines[:_MAX_SECTION_LINES]
+        return "## Agent Identity\n" + "\n".join(capped)
+    except Exception:
+        log.debug("Failed to build identity context (G1)", exc_info=True)
+        return ""
+
+
+def _build_geode_memory_context() -> str:
+    """G2: Load .geode/MEMORY.md project meta-index.
+
+    Reads the file and extracts non-empty content lines (skipping blank
+    placeholder sections). Capped at ``_MAX_SECTION_LINES`` lines.
+    """
+    try:
+        memory_path = _PROJECT_ROOT / ".geode" / "MEMORY.md"
+        if not memory_path.exists():
+            return ""
+
+        content = memory_path.read_text(encoding="utf-8")
+        # Extract meaningful lines (headers + content, skip empty placeholders)
+        meaningful: list[str] = []
+        for line in content.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Skip placeholder lines like "(실행 결과가 여기에 기록됩니다)"
+            if stripped.startswith("(") and stripped.endswith(")"):
+                continue
+            meaningful.append(stripped)
+
+        if len(meaningful) <= 1:
+            # Only title, no real content
+            return ""
+
+        capped = meaningful[:_MAX_SECTION_LINES]
+        return "## Project Memory\n" + "\n".join(capped)
+    except Exception:
+        log.debug("Failed to build geode memory context (G2)", exc_info=True)
+        return ""
+
+
+def _build_learning_context() -> str:
+    """G3: Load .geode/LEARNING.md agent learning records.
+
+    Extracts only Patterns, Corrections, and Domain Knowledge sections
+    that have actual content (not just placeholder text).
+    Capped at ``_MAX_SECTION_LINES`` lines.
+    """
+    try:
+        learning_path = _PROJECT_ROOT / ".geode" / "LEARNING.md"
+        if not learning_path.exists():
+            return ""
+
+        content = learning_path.read_text(encoding="utf-8")
+
+        # Extract sections with real content (not placeholders)
+        target_sections = {"## Patterns", "## Corrections", "## Domain Knowledge"}
+        extracted_lines: list[str] = []
+        current_in_target = False
+
+        for line in content.split("\n"):
+            stripped = line.strip()
+
+            if stripped.startswith("## "):
+                current_in_target = stripped in target_sections
+                if current_in_target:
+                    extracted_lines.append(stripped)
+                continue
+
+            if current_in_target and stripped:
+                # Skip placeholder lines
+                if stripped.startswith("(") and stripped.endswith(")"):
+                    continue
+                extracted_lines.append(stripped)
+
+        # Remove section headers that ended up with no content
+        cleaned: list[str] = []
+        i = 0
+        while i < len(extracted_lines):
+            line = extracted_lines[i]
+            if line.startswith("## "):
+                # Check if next non-header line exists
+                has_body = False
+                for j in range(i + 1, len(extracted_lines)):
+                    if extracted_lines[j].startswith("## "):
+                        break
+                    has_body = True
+                    break
+                if has_body:
+                    cleaned.append(line)
+            else:
+                cleaned.append(line)
+            i += 1
+
+        if not cleaned:
+            return ""
+
+        capped = cleaned[:_MAX_SECTION_LINES]
+        return "## Agent Learning\n" + "\n".join(capped)
+    except Exception:
+        log.debug("Failed to build learning context (G3)", exc_info=True)
+        return ""
+
+
+def _build_project_memory_context() -> str:
+    """G4: Build runtime project memory (insights + rules) from ProjectMemory.
+
+    This is the original _build_memory_context logic, now isolated as G4.
+    """
     try:
         from core.memory.project import ProjectMemory
 
@@ -180,7 +371,7 @@ def _build_memory_context() -> str:
 
         parts: list[str] = []
 
-        # Recent insights (last 5 lines from MEMORY.md's recent insights section)
+        # Recent insights (last 5 lines from PROJECT.md's recent insights section)
         content = mem.load_memory()
         if "## 최근 인사이트" in content:
             section = content.split("## 최근 인사이트")[1]
@@ -198,5 +389,5 @@ def _build_memory_context() -> str:
 
         return "\n\n".join(parts)
     except Exception:
-        log.debug("Failed to build memory context for system prompt", exc_info=True)
+        log.debug("Failed to build project memory context (G4)", exc_info=True)
         return ""
