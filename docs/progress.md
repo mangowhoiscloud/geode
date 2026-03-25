@@ -12,6 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
+| portfolio-carousel | 포트폴리오 REPL 유즈케이스 캐러셀 — GLM-5 실측 응답, 좌우 네비게이션 | P1 | portfolio-usecase-carousel.md | 세션 25 핸드오프 |
 | docs-sync | CLAUDE.md 수치 갱신 (Modules/Tests 실측) + CHANGELOG 이번 세션 기록 | P1 | — | v0.26.0 완료 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | proxy-cleanup | 구 경로 proxy 파일 최종 삭제 (nodes/ui/auth/extensibility/cli/mcp) | P3 | — | CI 래칫이 차단 중 |
