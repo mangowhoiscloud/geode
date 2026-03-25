@@ -317,10 +317,7 @@ def _apply_model(selected: ModelProfile) -> None:
                 f"exceeds {selected.label} limit "
                 f"({target_window:,} x 80% = {threshold:,})[/warning]"
             )
-            console.print(
-                "  [muted]Run /compact or /clear first, "
-                "then retry /model.[/muted]"
-            )
+            console.print("  [muted]Run /compact or /clear first, then retry /model.[/muted]")
             console.print()
             return
 
@@ -1677,11 +1674,7 @@ def cmd_compact(args: str) -> None:
 
     hard = "--hard" in args
     if hard:
-        last_pair = (
-            ctx.messages[-2:]
-            if len(ctx.messages) >= 2
-            else list(ctx.messages)
-        )
+        last_pair = ctx.messages[-2:] if len(ctx.messages) >= 2 else list(ctx.messages)
         ctx.messages.clear()
         ctx.messages.extend(last_pair)
     else:
@@ -1726,9 +1719,7 @@ def cmd_clear(args: str) -> None:
     console.print()
 
     if "--force" not in args:
-        console.print(
-            f"  Clear all {msg_count} messages? (y/N): ", end=""
-        )
+        console.print(f"  Clear all {msg_count} messages? (y/N): ", end="")
         try:
             answer = input().strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -1739,10 +1730,7 @@ def cmd_clear(args: str) -> None:
             return
 
     ctx.clear()
-    console.print(
-        f"  [success]Conversation cleared[/success] "
-        f"({msg_count} messages removed)"
-    )
+    console.print(f"  [success]Conversation cleared[/success] ({msg_count} messages removed)")
     console.print()
 
 
