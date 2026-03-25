@@ -26,6 +26,29 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.26.0] — 2026-03-25
+
+코드 품질 전면 개선 — Thread Safety, Error Handling, DRY, ToolCallProcessor 추출.
+
+### Fixed
+- **Thread safety** — HookSystem/ResultCache/Stats Lock 추가 (race condition 방지)
+- **Error handling** — synthesizer KeyError 방어, MemoryTools 경고 로그, scoring 가중치 검증
+- **DRY** — OpenAI retry_with_backoff_generic 통합 (openai_adapter -63줄)
+- **Resource** — httpx client lifecycle 관리 (reset_client close 추가)
+- **DAG** — 순환 의존 무성 실행 → strict 모드 ValueError
+- **REPL** — detect_api_key + dry-run regex 가로채기 제거 (이메일/간단히 오탐 방지)
+- **Flaky test** — SnapshotManager 테스트 격리 (tmp_path)
+- **is_glm_key 강화** — @/비ASCII/숫자 필수 조건
+
+### Removed
+- **MCP deprecated shims** (base.py, manager.py) 삭제
+- **REPL detect_api_key** 자동 감지 (LLM set_api_key 도구로 대체)
+- **_text_requests_dry_run** regex (LLM dry_run 파라미터로 대체)
+
+### Changed
+- **AgenticLoop → ToolCallProcessor 추출** (agentic_loop -477줄)
+- **BillingError** — retry_with_backoff_generic에서 통합 raise
+
 ## [0.25.1] — 2026-03-25
 
 MCP REPL 프롬프트 지연 해소.
