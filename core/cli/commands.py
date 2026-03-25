@@ -328,6 +328,7 @@ def cmd_model(args: str) -> None:
         import sys
 
         if not sys.stdin.isatty():
+            # Non-interactive: show model list instead of crashing
             from core.config import settings
 
             console.print()

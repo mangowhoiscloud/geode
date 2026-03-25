@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-24 (세션 16 — bootstrap 통합 + mrkdwn v2 PR flow + CI 수정)
+> 마지막 갱신: 2026-03-25 (세션 20 — 코드 품질 + 폴더 구조 + E2E 검증)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -12,7 +12,10 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| — | — | — | — | — |
+| docs-sync | CLAUDE.md 수치 갱신 (Modules/Tests 실측) + CHANGELOG 이번 세션 기록 | P1 | — | 버전 4곳 동기화 |
+| graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
+| proxy-cleanup | 구 경로 proxy 파일 최종 삭제 (nodes/ui/auth/extensibility/cli/mcp) | P3 | — | CI 래칫이 차단 중 |
+| e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
 
 ### In Progress
 
@@ -25,6 +28,21 @@
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
+
+### Done (2026-03-25 — 세션 20)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| atomic-context-career | Atomic write + /context + career.toml 병합 | #337→#406 | @mangowhoiscloud | 2026-03-24 |
+| verification-remediation | 검증팀 P0/P1 — tool guard, fsync, CI ratchet, prompt integrity | #407→#408 | @mangowhoiscloud | 2026-03-24 |
+| god-object-logging | Runtime DRY + 로깅 구조화 + tool desc -47% | #409→#410 | @mangowhoiscloud | 2026-03-24 |
+| folder-phase1 | 폴더 구조 Phase 1 — nodes/fixtures/config/ui 이동 + Strangler Fig proxy | #411→#412 | @mangowhoiscloud | 2026-03-24 |
+| folder-phase2-4 | 폴더 구조 Phase 2-4 — import 마이그레이션 + proxy 제거 + CI 래칫 | #413→#414 | @mangowhoiscloud | 2026-03-24 |
+| folder-phase5 | auth→gateway/auth + extensibility→skills | #415→#416 | @mangowhoiscloud | 2026-03-24 |
+| folder-agent-mcp | agent/ 분리 + mcp/ 통합 — 폴더 구조 최종 수렴 | #417→#418 | @mangowhoiscloud | 2026-03-24 |
+| quality-p0 | 코드 품질 P0 6건 — 거짓 주석, path traversal, race condition, redaction, 에러 메시지, env 보안 | #419→#420 | @mangowhoiscloud | 2026-03-25 |
+| quality-p1 | 코드 품질 P1 6건 — 매직 넘버, safety gates, 약어, 로그 승격, 디렉토리 권한 | #421→#422 | @mangowhoiscloud | 2026-03-25 |
+| model-nontty | /model non-tty graceful fallback + 테스트 mock | #423→#424 | @mangowhoiscloud | 2026-03-25 |
 
 ### Done (2026-03-24 — 세션 16)
 
