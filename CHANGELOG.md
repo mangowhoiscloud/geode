@@ -26,6 +26,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.25.1] — 2026-03-25
+
+MCP REPL 프롬프트 지연 해소.
+
+### Fixed
+- **MCP lazy parallel 연결** — `get_all_tools()` 최초 호출 시 `_connect_all()`(ThreadPoolExecutor) 병렬 연결 선행. 기존 10서버 순차 ~100s → 병렬 ~15s
+
 ## [0.25.0] — 2026-03-25
 
 메모리 계층 4-tier 시스템 프롬프트 주입 + MCP 부트스트랩 수정.

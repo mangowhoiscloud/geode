@@ -35,6 +35,7 @@
 |---------|----------|----|------|--------|
 | memory-hierarchy-prompt | 메모리 계층 4-tier 시스템 프롬프트 주입 (GEODE.md + MEMORY.md + LEARNING.md) | #429→#431 | @mangowhoiscloud | 2026-03-25 |
 | mcp-bootstrap-fix | MCP 부트스트랩 수정 — 외부 디렉토리 MCP 0 이슈 + load_config 추가 | #430→#431 | @mangowhoiscloud | 2026-03-25 |
+| mcp-lazy-parallel | MCP get_all_tools() lazy parallel 연결 — REPL ~100s 멈춤 해소 | #432→#433 | @mangowhoiscloud | 2026-03-25 |
 
 ### Done (2026-03-25 — 세션 22)
 
@@ -234,7 +235,7 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.25.0 | 2026-03-25 |
+| Version | 0.25.1 | 2026-03-25 |
 | Modules | 223 | 2026-03-25 |
 | Tests | 3078 | 2026-03-25 |
 | Tools | 46 (+MCP 86) | 2026-03-22 |
