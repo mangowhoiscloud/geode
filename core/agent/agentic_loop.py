@@ -288,6 +288,58 @@ class AgenticLoop:
         update_session_model(model)
         log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
 
+        # Proactively adapt context for the new model's context window
+        self._adapt_context_for_model(model)
+
+    def _adapt_context_for_model(self, target_model: str) -> None:
+        """Proactively adapt conversation context when switching to a smaller model.
+
+        Hybrid approach (Research 방안 E):
+        Phase 1: Summarize large tool_result blocks (most effective)
+        Phase 2: Token-aware adaptive pruning
+        Phase 3: Log warning if still over budget (minimal mode)
+        """
+        from core.orchestration.context_monitor import (
+            adaptive_prune,
+            check_context,
+            summarize_tool_results,
+        )
+
+        if self.context.is_empty:
+            return
+
+        metrics = check_context(self.context.messages, target_model)
+        if not metrics.is_warning:
+            return  # Under 80% — no adaptation needed
+
+        original_tokens = metrics.estimated_tokens
+        log.info(
+            "Context adaptation: %.0f%% (%d/%d tokens) for %s",
+            metrics.usage_pct,
+            metrics.estimated_tokens,
+            metrics.context_window,
+            target_model,
+        )
+
+        # Phase 1: Summarize large tool results (preserves conversation structure)
+        summarize_tool_results(self.context.messages, metrics.context_window)
+
+        # Phase 2: Token-aware pruning if still over budget
+        metrics = check_context(self.context.messages, target_model)
+        if metrics.is_critical:
+            pruned = adaptive_prune(self.context.messages, metrics.context_window)
+            self.context.messages = pruned
+
+        # Phase 3: Final check — log result
+        metrics = check_context(self.context.messages, target_model)
+        log.info(
+            "Context adapted: %d → %d tokens (%.0f%% of %s window)",
+            original_tokens,
+            metrics.estimated_tokens,
+            metrics.usage_pct,
+            target_model,
+        )
+
     def run(self, user_input: str) -> AgenticResult:
         """Sync wrapper — delegates to ``arun()`` via ``asyncio.run()``."""
         result: AgenticResult = asyncio.run(self.arun(user_input))

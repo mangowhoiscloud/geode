@@ -5,9 +5,11 @@ from __future__ import annotations
 from core.orchestration.context_monitor import (
     WARNING_THRESHOLD,
     ContextMetrics,
+    adaptive_prune,
     check_context,
     estimate_message_tokens,
     prune_oldest_messages,
+    summarize_tool_results,
 )
 
 # ---------------------------------------------------------------------------
@@ -136,10 +138,12 @@ class TestCheckContext:
         assert isinstance(metrics.is_warning, bool)
         assert isinstance(metrics.is_critical, bool)
 
-    def test_usage_pct_capped_at_100(self):
+    def test_usage_pct_not_capped(self):
+        """usage_pct should reflect actual value, even above 100%."""
         huge_msg = "x" * 2_000_000
-        metrics = check_context([{"role": "user", "content": huge_msg}], "claude-opus-4-6")
-        assert metrics.usage_pct <= 100.0
+        metrics = check_context([{"role": "user", "content": huge_msg}], "glm-5")
+        # 2M chars / 4 = 500K tokens vs 80K window → well above 100%
+        assert metrics.usage_pct > 100.0
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +174,153 @@ class TestPruneOldestMessages:
         result = prune_oldest_messages(msgs)
         # Default keep_recent=10 → first + last 10 = 11
         assert len(result) == 11
+
+
+# ---------------------------------------------------------------------------
+# summarize_tool_results
+# ---------------------------------------------------------------------------
+
+
+class TestSummarizeToolResults:
+    def test_no_tool_results(self):
+        msgs = [{"role": "user", "content": "hello"}]
+        count = summarize_tool_results(msgs, target_window=80_000)
+        assert count == 0
+
+    def test_small_tool_result_untouched(self):
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tu_1",
+                        "content": "small result",
+                    }
+                ],
+            }
+        ]
+        count = summarize_tool_results(msgs, target_window=80_000)
+        assert count == 0
+        assert msgs[0]["content"][0]["content"] == "small result"
+
+    def test_large_tool_result_summarized(self):
+        # 80K window → 5% threshold = 4K tokens = 16K chars
+        big_content = "x" * 100_000  # ~25K tokens, well above threshold
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tu_1",
+                        "content": big_content,
+                    }
+                ],
+            }
+        ]
+        count = summarize_tool_results(msgs, target_window=80_000)
+        assert count == 1
+        assert "[summarized:" in msgs[0]["content"][0]["content"]
+
+    def test_multiple_results_mixed(self):
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tu_1",
+                        "content": "x" * 100_000,
+                    },
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tu_2",
+                        "content": "small",
+                    },
+                ],
+            }
+        ]
+        count = summarize_tool_results(msgs, target_window=80_000)
+        assert count == 1
+
+    def test_assistant_messages_skipped(self):
+        msgs = [{"role": "assistant", "content": [{"type": "text", "text": "x" * 100_000}]}]
+        count = summarize_tool_results(msgs, target_window=80_000)
+        assert count == 0
+
+    def test_non_list_content_skipped(self):
+        msgs = [{"role": "user", "content": "x" * 100_000}]
+        count = summarize_tool_results(msgs, target_window=80_000)
+        assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# adaptive_prune
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptivePrune:
+    def test_tiny_conversation_unchanged(self):
+        msgs = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ]
+        result = adaptive_prune(msgs, target_tokens=80_000)
+        assert len(result) == 2
+
+    def test_fits_in_budget(self):
+        msgs = [{"role": "user", "content": f"msg{i}"} for i in range(10)]
+        result = adaptive_prune(msgs, target_tokens=80_000)
+        # All should fit — short messages
+        assert len(result) == 10
+
+    def test_prunes_to_fit_budget(self):
+        # Each message ~2500 tokens (10K chars / 4)
+        msgs = [{"role": "user", "content": f"{'x' * 10_000} msg{i}"} for i in range(50)]
+        # Budget: 80K * 0.7 = 56K → can fit ~22 messages
+        result = adaptive_prune(msgs, target_tokens=80_000)
+        assert len(result) < 50
+        # First message preserved
+        assert "msg0" in result[0]["content"]
+        # Last 2 preserved
+        assert "msg49" in result[-1]["content"]
+        assert "msg48" in result[-2]["content"]
+
+    def test_preserves_first_and_last(self):
+        msgs = [
+            {"role": "user", "content": "FIRST"},
+            {"role": "assistant", "content": "x" * 100_000},
+            {"role": "user", "content": "x" * 100_000},
+            {"role": "assistant", "content": "SECOND_LAST"},
+            {"role": "user", "content": "LAST"},
+        ]
+        result = adaptive_prune(msgs, target_tokens=10_000)
+        assert result[0]["content"] == "FIRST"
+        assert result[-1]["content"] == "LAST"
+        assert result[-2]["content"] == "SECOND_LAST"
+
+    def test_minimal_when_base_exceeds_budget(self):
+        msgs = [
+            {"role": "user", "content": "x" * 100_000},
+            {"role": "assistant", "content": "mid"},
+            {"role": "user", "content": "x" * 100_000},
+            {"role": "assistant", "content": "last_a"},
+            {"role": "user", "content": "x" * 100_000},
+        ]
+        # Very tight budget: first + last 2 already exceed it
+        result = adaptive_prune(msgs, target_tokens=1_000)
+        # Should still return first + last 2 (minimal)
+        assert len(result) == 3
+        assert result[0] == msgs[0]
+        assert result[-1] == msgs[-1]
+
+    def test_chronological_order_preserved(self):
+        msgs = [{"role": "user", "content": f"msg{i:02d}"} for i in range(20)]
+        result = adaptive_prune(msgs, target_tokens=80_000)
+        # Verify chronological order
+        contents = [m["content"] for m in result]
+        assert contents == sorted(contents)
 
 
 # ---------------------------------------------------------------------------
