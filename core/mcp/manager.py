@@ -353,7 +353,14 @@ class MCPServerManager:
         MCP spec uses camelCase (``inputSchema``), but Anthropic API
         requires snake_case (``input_schema``).  This method normalises
         each tool dict so it can be passed directly to ``messages.create(tools=...)``.
+
+        If servers haven't been connected yet, triggers parallel connection
+        via ``_connect_all()`` to avoid sequential ~10s-per-server latency.
         """
+        # Lazy parallel connect: avoid sequential _get_client() per server
+        if self._servers and not self._clients:
+            self._connect_all()
+
         all_tools: list[dict[str, Any]] = []
         for server_name in self._servers:
             client = self._get_client(server_name)
