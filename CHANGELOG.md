@@ -26,6 +26,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.27.0] — 2026-03-26
+
+GLM-5 컨텍스트 방어 + Gateway 리소스 공유 + UI 스피너 정돈.
+
+### Added
+- **GLM-5 컨텍스트 오버플로우 방어** — 모델별 동적 tool result 가드 (max_chars 자동 산출, 컨텍스트 80K 이하 모델 보호)
+- **Gateway 리소스 공유** — env cascade + 글로벌 메모리 fallback + User Context 주입 (Slack/Gateway 경로에서 .geode 리소스 접근)
+
+### Fixed
+- **서브에이전트 UI 스피너** — 병렬 실행 시 Thinking 스피너 과다 출력 정돈 (stdout isatty 가드 + suppress 컨텍스트)
+
 ## [0.26.0] — 2026-03-25
 
 코드 품질 전면 개선 — Thread Safety, Error Handling, DRY, ToolCallProcessor 추출.

@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-25 (세션 24 — 코드 품질 전면 개선)
+> 마지막 갱신: 2026-03-26 (세션 26 — UI 스피너 정돈 + docs-sync)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -13,7 +13,7 @@
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
 | portfolio-carousel | 포트폴리오 REPL 유즈케이스 캐러셀 — GLM-5 실측 응답, 좌우 네비게이션 | P1 | portfolio-usecase-carousel.md | 세션 25 핸드오프 |
-| docs-sync | CLAUDE.md 수치 갱신 (Modules/Tests 실측) + CHANGELOG 이번 세션 기록 | P1 | — | v0.26.0 완료 |
+| — | — | — | — | — |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | proxy-cleanup | 구 경로 proxy 파일 최종 삭제 (nodes/ui/auth/extensibility/cli/mcp) | P3 | — | CI 래칫이 차단 중 |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
@@ -22,13 +22,26 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| docs-sync | CLAUDE.md 수치 갱신 + CHANGELOG 기록 | @mangowhoiscloud | — | 2026-03-26 | v0.26.0 |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
+
+### Done (2026-03-26 — 세션 26)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| ui-parallel-spinner | 서브에이전트 병렬 실행 시 UI 스피너 과다 출력 정돈 | #441→#442 | @mangowhoiscloud | 2026-03-26 |
+
+### Done (2026-03-25 — 세션 25)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| glm-context-guard | GLM-5 컨텍스트 오버플로우 방어 — 모델별 동적 tool result 가드 | #439→#440 | @mangowhoiscloud | 2026-03-25 |
+| gateway-resource-sharing | Gateway 리소스 공유 — env cascade + 글로벌 메모리 fallback + User Context 주입 | #437→#438 | @mangowhoiscloud | 2026-03-25 |
 
 ### Done (2026-03-25 — 세션 24)
 
@@ -248,9 +261,9 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.26.0 | 2026-03-25 |
-| Modules | 221 | 2026-03-25 |
-| Tests | 3080 | 2026-03-25 |
+| Version | 0.27.0 | 2026-03-26 |
+| Modules | 221 | 2026-03-26 |
+| Tests | 3088 | 2026-03-26 |
 | Tools | 46 (+MCP 86) | 2026-03-22 |
 | MCP Catalog | 43 | 2026-03-24 |
 | HookEvents | 36 | 2026-03-19 |
