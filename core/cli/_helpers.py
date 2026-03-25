@@ -37,9 +37,16 @@ def upsert_env(var_name: str, value: str) -> None:
 def is_glm_key(value: str) -> bool:
     """Detect ZhipuAI API key pattern: {id}.{secret} (e.g. abc12345.def67890).
 
-    GLM keys consist of two dot-separated segments, each at least 4 chars.
+    GLM keys consist of two dot-separated ASCII alphanumeric segments,
+    each at least 4 chars. Rejects emails, URLs, and natural-language text.
     """
     if "." not in value:
         return False
+    # GLM keys are pure ASCII alphanumeric + dot — reject @, non-ASCII, etc.
+    if "@" in value or not value.isascii():
+        return False
     parts = value.split(".", 1)
-    return len(parts) == 2 and all(len(p) >= 4 for p in parts)
+    if len(parts) != 2 or not all(len(p) >= 4 for p in parts):
+        return False
+    # Each segment must be alphanumeric with at least one digit (machine-generated)
+    return all(p.isalnum() and any(c.isdigit() for c in p) for p in parts)

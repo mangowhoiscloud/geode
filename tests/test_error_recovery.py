@@ -253,10 +253,10 @@ class TestAgenticLoopRecovery:
 
         executor = ToolExecutor(action_handlers={"list_ips": sometimes_fails}, auto_approve=True)
         loop = AgenticLoop(context, executor, hooks=hooks)
-        loop._consecutive_failures = {"list_ips": 2}  # simulate 2 prior failures
+        loop._tool_processor._consecutive_failures = {"list_ips": 2}  # simulate 2 prior failures
 
         response = self._make_tool_response("list_ips", {})
-        results = asyncio.run(loop._process_tool_calls(response))
+        results = asyncio.run(loop._tool_processor.process(response))
 
         assert len(results) == 1
         content = results[0]["content"]
@@ -273,13 +273,13 @@ class TestAgenticLoopRecovery:
             auto_approve=True,
         )
         loop = AgenticLoop(context, executor)
-        loop._consecutive_failures = {"list_ips": 2}
+        loop._tool_processor._consecutive_failures = {"list_ips": 2}
 
         response = self._make_tool_response("list_ips", {})
-        asyncio.run(loop._process_tool_calls(response))
+        asyncio.run(loop._tool_processor.process(response))
 
         # After successful recovery, counter should be reset
-        assert loop._consecutive_failures.get("list_ips", 0) == 0
+        assert loop._tool_processor._consecutive_failures.get("list_ips", 0) == 0
 
     def test_hook_events_emitted_on_recovery(
         self, context: ConversationContext, hooks: HookSystem
@@ -301,10 +301,10 @@ class TestAgenticLoopRecovery:
             auto_approve=True,
         )
         loop = AgenticLoop(context, executor, hooks=hooks)
-        loop._consecutive_failures = {"list_ips": 2}
+        loop._tool_processor._consecutive_failures = {"list_ips": 2}
 
         response = self._make_tool_response("list_ips", {})
-        asyncio.run(loop._process_tool_calls(response))
+        asyncio.run(loop._tool_processor.process(response))
 
         assert HookEvent.TOOL_RECOVERY_ATTEMPTED in events_received
         # Either succeeded or failed should be emitted
@@ -317,12 +317,12 @@ class TestAgenticLoopRecovery:
         """DANGEROUS tools bypass recovery and return error directly."""
         executor = ToolExecutor(auto_approve=True)
         loop = AgenticLoop(context, executor)
-        loop._consecutive_failures = {"run_bash": 2}
+        loop._tool_processor._consecutive_failures = {"run_bash": 2}
 
         response = self._make_tool_response("run_bash", {"command": "echo hi", "reason": "test"})
 
         with patch.object(executor, "_request_approval", return_value=False):
-            results = asyncio.run(loop._process_tool_calls(response))
+            results = asyncio.run(loop._tool_processor.process(response))
 
         assert len(results) == 1
         content = results[0]["content"]
@@ -337,10 +337,10 @@ class TestAgenticLoopRecovery:
             auto_approve=True,
         )
         loop = AgenticLoop(context, executor)
-        loop._consecutive_failures = {"list_ips": 0}  # first failure
+        loop._tool_processor._consecutive_failures = {"list_ips": 0}  # first failure
 
         response = self._make_tool_response("list_ips", {})
-        results = asyncio.run(loop._process_tool_calls(response))
+        results = asyncio.run(loop._tool_processor.process(response))
 
         content = results[0]["content"]
         # Should be normal error, not recovery
@@ -356,10 +356,10 @@ class TestAgenticLoopRecovery:
             auto_approve=True,
         )
         loop = AgenticLoop(context, executor)
-        loop._consecutive_failures = {"list_ips": 3}
+        loop._tool_processor._consecutive_failures = {"list_ips": 3}
 
         response = self._make_tool_response("list_ips", {})
-        results = asyncio.run(loop._process_tool_calls(response))
+        results = asyncio.run(loop._tool_processor.process(response))
 
         # Must produce exactly 1 tool_result
         assert len(results) == 1

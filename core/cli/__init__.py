@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import json as _json
 import logging
-import re as _re
 import signal
 import sys
 import termios
+import threading
 from collections import OrderedDict
 from contextvars import ContextVar
 from enum import Enum
@@ -66,7 +66,6 @@ from core.cli.startup import (
     ReadinessReport,
     auto_generate_env,
     check_readiness,
-    detect_api_key,
     env_setup_wizard,
     key_registration_gate,
     render_readiness,
@@ -127,14 +126,16 @@ class _ResultCache:
     def __init__(self, max_size: int = _RESULT_CACHE_MAX) -> None:
         self._cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._max_size = max_size
+        self._lock = threading.Lock()
         self._load_from_disk()
 
     def get(self, ip_name: str) -> dict[str, Any] | None:
         key = ip_name.lower()
-        if key not in self._cache:
-            return None
-        self._cache.move_to_end(key)
-        return self._cache[key]
+        with self._lock:
+            if key not in self._cache:
+                return None
+            self._cache.move_to_end(key)
+            return self._cache[key]
 
     def put(self, result: dict[str, Any] | None) -> None:
         if result is None:
@@ -143,10 +144,11 @@ class _ResultCache:
         if not ip_name:
             return
         key = ip_name.lower()
-        self._cache[key] = result
-        self._cache.move_to_end(key)
-        while len(self._cache) > self._max_size:
-            self._cache.popitem(last=False)
+        with self._lock:
+            self._cache[key] = result
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._max_size:
+                self._cache.popitem(last=False)
         self._persist(key, result)
 
     def _persist(self, key: str, result: dict[str, Any]) -> None:
@@ -685,17 +687,6 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
         console.print()
 
 
-_DRY_RUN_PATTERN = _re.compile(
-    r"(?:dry[-_\s]?run|드라이런|LLM\s*(?:호출\s*)?없이|without\s+LLM|no[-_\s]?LLM|fixture로만|간단히)",
-    _re.IGNORECASE,
-)
-
-
-def _text_requests_dry_run(text: str) -> bool:
-    """Detect if user text explicitly requests dry-run mode."""
-    return bool(_DRY_RUN_PATTERN.search(text))
-
-
 def _build_sub_agent_manager(
     verbose: bool = False,
     *,
@@ -1086,25 +1077,8 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 )
                 agentic_ref[0] = agentic
         else:
-            # API key detection: intercept pasted keys before sending to LLM
-            detected = detect_api_key(user_input)
-            if detected:
-                provider, env_var, key_value = detected
-                from core.cli.commands import cmd_key
-
-                # Route through cmd_key for proper handling
-                if provider == "glm":
-                    cmd_key(f"glm {key_value}")
-                elif provider == "openai":
-                    cmd_key(key_value)
-                else:
-                    cmd_key(key_value)
-                new_readiness = check_readiness()
-                _set_readiness(new_readiness)
-                render_readiness(new_readiness)
-                continue
-
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
+            # Key management is handled via /key command or set_api_key tool.
             try:
                 result = agentic.run(user_input)
                 _render_agentic_result(result)
@@ -1647,10 +1621,17 @@ def serve(
             sub_agent_manager=sub_mgr,
             hitl_level=0,
         )
+        from core.config import _resolve_provider
+        from core.config import settings as _gw_settings
+
+        gw_model = _gw_settings.model
+        gw_provider = _resolve_provider(gw_model)
         loop = AgenticLoop(
             ctx,
             executor,
             max_rounds=50,
+            model=gw_model,
+            provider=gw_provider,
             mcp_manager=boot.mcp_manager,
             skill_registry=boot.skill_registry,
             system_suffix=_GATEWAY_SUFFIX,

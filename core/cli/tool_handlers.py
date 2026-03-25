@@ -78,7 +78,6 @@ def _build_analysis_handlers(
         _get_search_engine,
         _render_search_results,
         _run_analysis,
-        _text_requests_dry_run,
     )
 
     def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
@@ -94,8 +93,6 @@ def _build_analysis_handlers(
         if not ip_name:
             return _clarify("analyze_ip", ["ip_name"], "어떤 IP를 분석할까요?")
         dry_run = kwargs.get("dry_run", force_dry)
-        if _text_requests_dry_run(ip_name):
-            dry_run = True
         result = _run_analysis(ip_name, dry_run=dry_run, verbose=verbose)
         if result is None:
             return {"error": f"Analysis failed for '{ip_name}'"}
