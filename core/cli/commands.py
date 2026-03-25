@@ -1020,7 +1020,7 @@ def cmd_skills(skill_registry: _Any, arg: str) -> None:
         names = reg.list_skills()
         if not names:
             console.print("  [muted]No skills loaded.[/muted]")
-            console.print("  [muted]Add skills to .claude/skills/<name>/SKILL.md[/muted]")
+            console.print("  [muted]Add skills to .geode/skills/<name>/SKILL.md[/muted]")
             console.print()
             return
 
@@ -1077,7 +1077,7 @@ def cmd_skills(skill_registry: _Any, arg: str) -> None:
 def _skills_add(reg: _Any, raw: str) -> None:
     """Handle /skills add <path> — register an external SKILL.md file.
 
-    Copies the SKILL.md into .claude/skills/<name>/ and registers it.
+    Copies the SKILL.md into .geode/skills/<name>/ and registers it.
     Example: /skills add /path/to/my-skill/SKILL.md
     """
     import shutil

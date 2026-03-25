@@ -72,7 +72,7 @@ class SkillRegistry:
     """Skill ``.md`` file discovery and management.
 
     Discovery priority (4-priority pattern from OpenClaw):
-      1. Bundled:    .claude/skills/        (project .claude/ directory)
+      1. Bundled:    .geode/skills/         (project .geode/ directory)
       2. Project:    ./skills/              (project root)
       3. User:       ~/.geode/skills/       (user global)
       4. Extra:      config-specified paths  (CLI --skills-dir)
@@ -125,7 +125,7 @@ class SkillRegistry:
         # project root: core/llm/ → core/ → root
         root = Path(__file__).resolve().parent.parent.parent
         dirs: list[Path] = [
-            root / ".claude" / "skills",  # 1. Bundled (.claude/skills/)
+            root / ".geode" / "skills",  # 1. Bundled (.geode/skills/)
             Path.cwd() / "skills",  # 2. Project
             Path.home() / ".geode" / "skills",  # 3. User
         ]
