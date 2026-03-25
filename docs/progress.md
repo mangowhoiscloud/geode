@@ -22,7 +22,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| docs-sync | CLAUDE.md 수치 갱신 + CHANGELOG 기록 | @mangowhoiscloud | — | 2026-03-26 | v0.26.0 |
+| — | — | — | — | — | — |
 
 ### In Review
 
@@ -35,6 +35,7 @@
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
 | ui-parallel-spinner | 서브에이전트 병렬 실행 시 UI 스피너 과다 출력 정돈 | #441→#442 | @mangowhoiscloud | 2026-03-26 |
+| docs-sync | v0.27.0 릴리스 docs-sync — 버전 4곳 + Tests 3088 + CHANGELOG | main direct | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-25 — 세션 25)
 
