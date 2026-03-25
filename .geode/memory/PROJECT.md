@@ -16,8 +16,6 @@
 - (없음 — 기본 14-axis 루브릭 사용)
 
 ## 최근 인사이트
-- 2026-03-24: [Berserk] tier=?, score=0.00
-- 2026-03-24: [unknown] tier=?, score=0.00
 - 2026-03-24: geode_slack_integration_test: GEODE Slack 통합 테스트 완료 — 3개 시나리오 성공 (기록 시각: 2026-03-24 11:51:25 KST)
 - 2026-03-24: huggingface_trending_2026_march: ## Hugging Face 트렌딩 동향 조사 (2026년 3월 24일 기준)
 ### 1. 플랫폼 성장 현황
@@ -56,7 +54,3 @@
 - https://huggingface.co/blog/huggingface/state-of-os-hf-spring-2026
 - https://huggingface-paper-explorer.vercel.app/
 - https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/what-is-trending-in-hugging-face-on-microsoft-foundry-feb-2-2026/4490602
-- 2026-03-22: [Berserk] tier=?, score=0.00
-- 2026-03-22: [unknown] tier=?, score=0.00
-- 2026-03-19: [Berserk] tier=?, score=0.00
-- 2026-03-19: [unknown] tier=?, score=0.00
