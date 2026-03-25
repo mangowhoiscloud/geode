@@ -1,4 +1,4 @@
-"""Skill System — load skill definitions from .claude/skills/*/SKILL.md.
+"""Skill System — load skill definitions from .geode/skills/*/SKILL.md.
 
 Layer 5 extensibility component for defining domain-specific knowledge
 and tools that can be injected into the system prompt at runtime.
@@ -17,6 +17,9 @@ from pydantic import BaseModel, Field
 from core.skills._frontmatter import parse_yaml_frontmatter
 
 log = logging.getLogger(__name__)
+
+# Package root: core/skills/skills.py → parent.parent.parent = project root
+_PACKAGE_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Regex to extract trigger keywords from description's last segment
 # Pattern: "keyword1", "keyword2" 키워드로 트리거
@@ -127,13 +130,13 @@ class SkillRegistry:
 
 
 class SkillLoader:
-    """Load skill definitions from .claude/skills/*/SKILL.md files."""
+    """Load skill definitions from .geode/skills/*/SKILL.md files."""
 
     def __init__(self, skills_dir: str | Path | None = None) -> None:
         if skills_dir is not None:
             self._skills_dir = Path(skills_dir)
         else:
-            self._skills_dir = Path(".claude/skills")
+            self._skills_dir = _PACKAGE_ROOT / ".geode" / "skills"
 
     @property
     def skills_dir(self) -> Path:
