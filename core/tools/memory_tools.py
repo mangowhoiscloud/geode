@@ -59,6 +59,10 @@ def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePor
     default = _default_session_store_ctx.get()
     if default is not None:
         return default
+    log.warning(
+        "SessionStore ContextVar not initialized; "
+        "falling back to ephemeral InMemorySessionStore"
+    )
     return InMemorySessionStore()
 
 

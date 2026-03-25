@@ -347,6 +347,27 @@ def _calc_final_score(
         }
         base_m, scale_m = 0.7, 0.3
 
+    # Validate weights sum to ~1.0; normalize if off
+    weight_sum = sum(weights.values())
+    if abs(weight_sum - 1.0) > 0.01:
+        log.warning(
+            "Scoring weights sum to %.4f (expected ~1.0); normalizing",
+            weight_sum,
+        )
+        if weight_sum > 0:
+            weights = {k: v / weight_sum for k, v in weights.items()}
+
+    # Validate confidence multiplier params
+    if not (0.0 <= base_m <= 1.0) or not (0.0 <= scale_m <= 1.0):
+        log.warning(
+            "Confidence multiplier params out of range: base=%.2f, scale=%.2f; "
+            "clamping to [0, 1]",
+            base_m,
+            scale_m,
+        )
+        base_m = max(0.0, min(1.0, base_m))
+        scale_m = max(0.0, min(1.0, scale_m))
+
     base = (
         weights.get("exposure_lift", 0.25) * exposure_lift
         + weights.get("quality", 0.20) * quality

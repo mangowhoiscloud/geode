@@ -391,7 +391,14 @@ def synthesizer_node(state: GeodeState) -> dict[str, Any]:
 
         cause, cause_desc = _classify_cause(d_score, e_score, f_score, release_timing_issue)
         cause_to_action = _get_cause_to_action()
-        action = cause_to_action[cause]
+        action = cause_to_action.get(cause)
+        if action is None:
+            log.warning(
+                "Unknown cause %r not in cause_to_action map; "
+                "falling back to discovery_failure action",
+                cause,
+            )
+            action = cause_to_action.get("discovery_failure", "expand_discovery")
 
         if state.get("verbose"):
             action_descs = _get_action_descriptions()
