@@ -14,6 +14,7 @@ import re as _re
 import signal
 import sys
 import termios
+import threading
 from collections import OrderedDict
 from contextvars import ContextVar
 from enum import Enum
@@ -127,14 +128,16 @@ class _ResultCache:
     def __init__(self, max_size: int = _RESULT_CACHE_MAX) -> None:
         self._cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._max_size = max_size
+        self._lock = threading.Lock()
         self._load_from_disk()
 
     def get(self, ip_name: str) -> dict[str, Any] | None:
         key = ip_name.lower()
-        if key not in self._cache:
-            return None
-        self._cache.move_to_end(key)
-        return self._cache[key]
+        with self._lock:
+            if key not in self._cache:
+                return None
+            self._cache.move_to_end(key)
+            return self._cache[key]
 
     def put(self, result: dict[str, Any] | None) -> None:
         if result is None:
@@ -143,10 +146,11 @@ class _ResultCache:
         if not ip_name:
             return
         key = ip_name.lower()
-        self._cache[key] = result
-        self._cache.move_to_end(key)
-        while len(self._cache) > self._max_size:
-            self._cache.popitem(last=False)
+        with self._lock:
+            self._cache[key] = result
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._max_size:
+                self._cache.popitem(last=False)
         self._persist(key, result)
 
     def _persist(self, key: str, result: dict[str, Any]) -> None:

@@ -70,7 +70,7 @@ class Lane:
         """
         acquired = self._semaphore.acquire(timeout=self.timeout_s)
         if not acquired:
-            self._stats.timeouts += 1
+            self._stats.inc_timeouts()
             raise TimeoutError(
                 f"Lane '{self.name}' timeout after {self.timeout_s}s "
                 f"(max_concurrent={self.max_concurrent})"
@@ -78,7 +78,7 @@ class Lane:
 
         with self._lock:
             self._active[key] = time.time()
-            self._stats.acquired += 1
+        self._stats.inc_acquired()
 
         log.debug(
             "Lane '%s' acquired by %s (%d/%d active)",
@@ -93,7 +93,7 @@ class Lane:
         finally:
             with self._lock:
                 self._active.pop(key, None)
-                self._stats.released += 1
+            self._stats.inc_released()
             self._semaphore.release()
             log.debug("Lane '%s' released by %s", self.name, key)
 
@@ -158,7 +158,7 @@ class LaneQueue:
                 lane._semaphore.acquire(timeout=lane.timeout_s)
                 with lane._lock:
                     lane._active[key] = time.time()
-                    lane._stats.acquired += 1
+                lane._stats.inc_acquired()
                 acquired_lanes.append(lane)
 
             yield
@@ -167,7 +167,7 @@ class LaneQueue:
             for lane in reversed(acquired_lanes):
                 with lane._lock:
                     lane._active.pop(key, None)
-                    lane._stats.released += 1
+                lane._stats.inc_released()
                 lane._semaphore.release()
 
     def status(self) -> dict[str, Any]:
@@ -189,10 +189,24 @@ class _LaneStats:
         self.acquired: int = 0
         self.released: int = 0
         self.timeouts: int = 0
+        self._lock = threading.Lock()
+
+    def inc_acquired(self) -> None:
+        with self._lock:
+            self.acquired += 1
+
+    def inc_released(self) -> None:
+        with self._lock:
+            self.released += 1
+
+    def inc_timeouts(self) -> None:
+        with self._lock:
+            self.timeouts += 1
 
     def to_dict(self) -> dict[str, int]:
-        return {
-            "acquired": self.acquired,
-            "released": self.released,
-            "timeouts": self.timeouts,
-        }
+        with self._lock:
+            return {
+                "acquired": self.acquired,
+                "released": self.released,
+                "timeouts": self.timeouts,
+            }
