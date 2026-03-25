@@ -85,11 +85,11 @@ class TestLoadCareer:
 # ---------------------------------------------------------------------------
 
 
-class TestCareerSystemPrompt:
-    """_build_career_context() injects career data."""
+class TestUserContextSystemPrompt:
+    """_build_user_context() injects user profile + career data."""
 
-    def test_build_career_context_with_data(self, tmp_path: Path) -> None:
-        from core.agent.system_prompt import _build_career_context
+    def test_build_user_context_with_data(self, tmp_path: Path) -> None:
+        from core.agent.system_prompt import _build_user_context
 
         profile_dir = tmp_path / ".geode" / "user_profile"
         profile_dir.mkdir(parents=True)
@@ -98,18 +98,22 @@ class TestCareerSystemPrompt:
             'skills = ["Python"]\n\n[goals]\nseeking = "startup"\n',
             encoding="utf-8",
         )
+        (profile_dir / "profile.md").write_text(
+            '---\nrole: "AI Engineer"\nexpertise: "ML, LLM"\n---\n',
+            encoding="utf-8",
+        )
 
         with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
-            result = _build_career_context()
+            result = _build_user_context()
 
-        assert "## User Career" in result
+        assert "## User Context" in result
         assert "ML Engineer" in result
 
-    def test_build_career_context_no_data(self, tmp_path: Path) -> None:
-        from core.agent.system_prompt import _build_career_context
+    def test_build_user_context_no_data(self, tmp_path: Path) -> None:
+        from core.agent.system_prompt import _build_user_context
 
         with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
-            result = _build_career_context()
+            result = _build_user_context()
         assert result == ""
 
 

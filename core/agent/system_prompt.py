@@ -89,10 +89,10 @@ def build_system_prompt(model: str = "") -> str:
     if memory_ctx:
         base += "\n\n" + memory_ctx
 
-    # Career identity context (Tier 0.5 extension)
-    career_ctx = _build_career_context()
-    if career_ctx:
-        base += "\n\n" + career_ctx
+    # User context: profile + career identity
+    user_ctx = _build_user_context()
+    if user_ctx:
+        base += "\n\n" + user_ctx
 
     return base
 
@@ -167,18 +167,43 @@ def _build_model_card(model: str) -> str:
         return ""
 
 
-def _build_career_context() -> str:
-    """Build career identity context from ~/.geode/identity/career.toml."""
+def _build_user_context() -> str:
+    """Build user context from profile + career identity.
+
+    Sources:
+      ~/.geode/user_profile/profile.md   — role, expertise, bio
+      ~/.geode/user_profile/preferences.json — language, output format
+      ~/.geode/user_profile/learned.md   — learned patterns
+      ~/.geode/identity/career.toml      — career summary
+    """
     try:
         from core.memory.user_profile import FileBasedUserProfile
 
         profile = FileBasedUserProfile()
-        summary = profile.get_career_summary()
-        if summary:
-            return f"## User Career\n{summary}"
-        return ""
+        parts: list[str] = []
+
+        # Profile summary (role, expertise, lang, skills)
+        context_summary = profile.get_context_summary()
+        if context_summary:
+            parts.append(context_summary)
+
+        # Career summary (title, experience, seeking)
+        career_summary = profile.get_career_summary()
+        if career_summary:
+            parts.append(f"Career: {career_summary}")
+
+        # Learned patterns (last 5)
+        learned = profile.get_learned_patterns()
+        if learned:
+            recent = learned[:5]
+            parts.append("Learned: " + " | ".join(recent))
+
+        if not parts:
+            return ""
+
+        return "## User Context\n" + "\n".join(parts)
     except Exception:
-        log.debug("Failed to build career context", exc_info=True)
+        log.debug("Failed to build user context", exc_info=True)
         return ""
 
 

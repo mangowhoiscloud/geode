@@ -77,16 +77,23 @@ def bootstrap_geode(
             (serve needs this; REPL typically does not).
     """
     if load_env:
+        import os
         from pathlib import Path
 
-        from dotenv import load_dotenv
+        from dotenv import dotenv_values, load_dotenv
 
+        # 1) Global ~/.geode/.env — baseline for all projects
         global_env = Path.home() / ".geode" / ".env"
         if global_env.exists():
             load_dotenv(str(global_env), override=False)
+
+        # 2) Local .env — override only with non-empty values
+        #    Empty values (e.g. ANTHROPIC_API_KEY=) must NOT clobber global keys
         local_env = Path(".env")
         if local_env.exists():
-            load_dotenv(str(local_env), override=True)
+            for key, val in dotenv_values(str(local_env)).items():
+                if val:  # non-empty only
+                    os.environ[key] = val
 
     # 1. Domain adapter
     try:
