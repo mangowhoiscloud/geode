@@ -534,6 +534,14 @@ def _handle_command(
         cmd_context(args)
     elif action == "apply":
         cmd_apply(args)
+    elif action == "compact":
+        from core.cli.commands import cmd_compact
+
+        cmd_compact(args)
+    elif action == "clear":
+        from core.cli.commands import cmd_clear
+
+        cmd_clear(args)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -910,6 +918,11 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
     """
     verbose = False
     conversation = ConversationContext()
+
+    # Inject ConversationContext for slash commands (/compact, /clear, /model guard)
+    from core.cli.commands import set_conversation_context
+
+    set_conversation_context(conversation)
 
     # --- Unified bootstrap (domain, memory, readiness, MCP, skills) ---
     from core.cli.bootstrap import bootstrap_geode
