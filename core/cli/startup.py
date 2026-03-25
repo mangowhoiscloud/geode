@@ -309,7 +309,7 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
         Capability(
             name="Project Memory",
             available=mem.exists(),
-            reason="" if mem.exists() else ".claude/MEMORY.md not found",
+            reason="" if mem.exists() else ".geode/memory/PROJECT.md not found",
         )
     )
 
