@@ -89,7 +89,7 @@ def check_context(
     response_overhead = 500  # reserve for response + tool definitions
     estimated = system_tokens + message_tokens + response_overhead
 
-    usage_pct = min(estimated / context_window * 100, 100.0)
+    usage_pct = estimated / context_window * 100
     remaining = max(context_window - estimated, 0)
 
     return ContextMetrics(
@@ -117,3 +117,84 @@ def prune_oldest_messages(
 
     # Keep the first message (initial user context) + last N
     return messages[:1] + messages[-keep_recent:]
+
+
+def summarize_tool_results(
+    messages: list[dict[str, Any]],
+    target_window: int,
+) -> int:
+    """Replace large tool_result content with compact summaries.
+
+    Mutates messages in-place. Returns the number of results summarized.
+    Only targets tool_result blocks exceeding 5% of the target context window.
+    """
+    threshold = target_window // 20  # 5% of context window in tokens
+    summarized = 0
+
+    for msg in messages:
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                continue
+            inner = block.get("content", "")
+            if isinstance(inner, str) and len(inner) < 200:
+                continue  # already small
+            estimated = len(json.dumps(block, default=str)) // CHARS_PER_TOKEN
+            if estimated > threshold:
+                block["content"] = f"[summarized: {estimated:,} tokens truncated]"
+                summarized += 1
+
+    if summarized:
+        log.info("Summarized %d large tool results (threshold=%d tokens)", summarized, threshold)
+    return summarized
+
+
+def adaptive_prune(
+    messages: list[dict[str, Any]],
+    target_tokens: int,
+) -> list[dict[str, Any]]:
+    """Token-aware pruning: build result from newest messages within budget.
+
+    Strategy:
+    1. Always keep the first message (initial context)
+    2. Always keep the last 2 messages (most recent exchange)
+    3. Add middle messages from newest to oldest until budget is reached
+    4. Budget = target_tokens * 0.7 (30% headroom for system prompt + response)
+    """
+    if len(messages) <= 3:
+        return list(messages)
+
+    budget = int(target_tokens * 0.7)
+    first = messages[0]
+    recent = messages[-2:]
+    middle = messages[1:-2]
+
+    base_tokens = estimate_message_tokens([first]) + estimate_message_tokens(recent)
+    if base_tokens >= budget:
+        # Even first + recent exceeds budget — return minimal
+        return [first, *recent]
+
+    remaining_budget = budget - base_tokens
+    kept_middle: list[dict[str, Any]] = []
+
+    # Add from newest to oldest
+    for msg in reversed(middle):
+        msg_tokens = estimate_message_tokens([msg])
+        if remaining_budget - msg_tokens >= 0:
+            kept_middle.append(msg)
+            remaining_budget -= msg_tokens
+        # Skip messages that don't fit
+
+    kept_middle.reverse()  # restore chronological order
+    result = [first, *kept_middle, *recent]
+    log.info(
+        "Adaptive prune: %d → %d messages (budget=%d tokens)",
+        len(messages),
+        len(result),
+        budget,
+    )
+    return result
