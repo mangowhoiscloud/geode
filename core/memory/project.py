@@ -98,7 +98,7 @@ class ProjectMemory:
             return ""
 
     def load_rules(self, context: str = "*") -> list[dict[str, Any]]:
-        """Load matching rules from .claude/rules/*.md.
+        """Load matching rules from .geode/rules/*.md.
 
         Args:
             context: Context string to match against rule paths (e.g. "anime", "berserk").
