@@ -100,6 +100,7 @@ def get_agentic_tools(
 # Set GEODE_MAX_TOOL_RESULT_TOKENS to a positive value to re-enable.
 # ---------------------------------------------------------------------------
 MAX_TOOL_RESULT_TOKENS = 0  # backward-compat alias; canonical: settings.max_tool_result_tokens
+TOOL_LAZY_LOAD_THRESHOLD = 50  # Above this count, skip MCP lazy loading
 
 
 def _guard_tool_result(
@@ -232,7 +233,7 @@ class AgenticLoop:
             self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
             self._transcript = SessionTranscript(self._session_id)
         except Exception:
-            log.debug("Transcript init failed", exc_info=True)
+            log.warning("Transcript init failed", exc_info=True)
 
         # C3 checkpoint: full message persistence for /resume (Claude Code pattern)
         self._checkpoint: Any | None = None
@@ -241,7 +242,7 @@ class AgenticLoop:
 
             self._checkpoint = SessionCheckpoint()
         except Exception:
-            log.debug("SessionCheckpoint init failed", exc_info=True)
+            log.warning("SessionCheckpoint init failed", exc_info=True)
 
     def _save_checkpoint(self, user_input: str, round_idx: int = 0) -> None:
         """Persist session checkpoint for resume (per-turn, Claude Code pattern)."""
@@ -335,7 +336,7 @@ class AgenticLoop:
 
         # Lazy MCP tool refresh: if tools were empty at init (MCP not yet connected),
         # try to load them now. This handles the startup timing gap.
-        if self._mcp_manager is not None and len(self._tools) < 50:
+        if self._mcp_manager is not None and len(self._tools) < TOOL_LAZY_LOAD_THRESHOLD:
             added = self.refresh_tools()
             if added > 0:
                 log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
