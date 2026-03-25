@@ -21,6 +21,14 @@ class UserCancelledError(Exception):
     """
 
 
+class BillingError(Exception):
+    """Raised when an LLM provider rejects a call due to billing/credit issues.
+
+    Caught at the UI layer to display a clean one-line message instead
+    of a full traceback.  Never retried or counted as a model failure.
+    """
+
+
 @runtime_checkable
 class AgenticLLMPort(Protocol):
     """Protocol for agentic loop LLM calls.

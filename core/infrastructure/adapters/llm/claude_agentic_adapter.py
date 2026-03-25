@@ -100,6 +100,14 @@ class ClaudeAgenticAdapter:
             raise UserCancelledError("LLM call interrupted by user") from None
         except LLMBadRequestError as exc:
             msg = str(exc)
+            # Billing/credit errors — propagate as BillingError for clean UI
+            if "credit balance" in msg.lower() or "billing" in msg.lower():
+                from core.infrastructure.ports.agentic_llm_port import BillingError
+
+                raise BillingError(
+                    "Anthropic API credit balance too low. "
+                    "Visit https://console.anthropic.com/settings/billing to add credits."
+                ) from exc
             log.warning("Anthropic BadRequest in agentic loop: %s", msg)
             if "tool_use_id" in msg or "tool_result" in msg:
                 from core.agent.agentic_loop import AgenticLoop

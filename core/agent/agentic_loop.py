@@ -45,7 +45,7 @@ from core.infrastructure.adapters.llm.agentic_registry import (
     CROSS_PROVIDER_FALLBACK,
     resolve_agentic_adapter,
 )
-from core.infrastructure.ports.agentic_llm_port import UserCancelledError
+from core.infrastructure.ports.agentic_llm_port import BillingError, UserCancelledError
 from core.llm.client import maybe_traceable
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.orchestration.hooks import HookEvent, HookSystem
@@ -343,7 +343,17 @@ class AgenticLoop:
 
         # Goal decomposition: try to break compound requests into sub-goal DAGs.
         # Returns a hint string appended to the system prompt, or None if not compound.
-        decomposition_hint = self._try_decompose(user_input)
+        try:
+            decomposition_hint = self._try_decompose(user_input)
+        except BillingError as exc:
+            from rich.console import Console as _Con
+
+            _Con().print(f"\n  [bold red]✗ Billing error[/bold red] — {exc}")
+            return AgenticResult(
+                text=str(exc),
+                rounds=0,
+                termination_reason="billing_error",
+            )
 
         # Add user message to conversation context
         self.context.add_user_message(user_input)
@@ -374,6 +384,16 @@ class AgenticLoop:
             _spinner.start()
             try:
                 response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
+            except BillingError as exc:
+                _spinner.stop()
+                from rich.console import Console as _Con
+
+                _Con().print(f"\n  [bold red]✗ Billing error[/bold red] — {exc}")
+                return AgenticResult(
+                    text=str(exc),
+                    rounds=round_idx + 1,
+                    termination_reason="billing_error",
+                )
             except UserCancelledError:
                 _spinner.stop()
                 log.info("LLM call interrupted by user")
