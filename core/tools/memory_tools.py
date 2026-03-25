@@ -332,7 +332,7 @@ class MemorySaveTool:
 class RuleCreateTool:
     """Tool for creating analysis rules from learned patterns.
 
-    Enables the agent to autonomously create .claude/rules/*.md files
+    Enables the agent to autonomously create .geode/rules/*.md files
     when it discovers recurring analysis patterns.
     """
 
@@ -343,7 +343,7 @@ class RuleCreateTool:
     @property
     def description(self) -> str:
         return (
-            "Create a new analysis rule in .claude/rules/. "
+            "Create a new analysis rule in .geode/rules/. "
             "Use when you discover a recurring pattern that should be "
             "applied to future IP analyses matching the given paths."
         )
@@ -404,7 +404,7 @@ class RuleUpdateTool:
     @property
     def description(self) -> str:
         return (
-            "Update an existing analysis rule in .claude/rules/. "
+            "Update an existing analysis rule in .geode/rules/. "
             "Preserves frontmatter (paths) and replaces the rule body content."
         )
 
@@ -456,7 +456,7 @@ class RuleDeleteTool:
 
     @property
     def description(self) -> str:
-        return "Delete an analysis rule from .claude/rules/ by name."
+        return "Delete an analysis rule from .geode/rules/ by name."
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -502,7 +502,7 @@ class RuleListTool:
     @property
     def description(self) -> str:
         return (
-            "List all active analysis rules in .claude/rules/ with their paths and content preview."
+            "List all active analysis rules in .geode/rules/ with their paths and content preview."
         )
 
     @property
