@@ -26,6 +26,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.24.2] — 2026-03-25
+
+Skills 경로 `.claude/skills` → `.geode/skills` 마이그레이션.
+
+### Fixed
+- **Skills 경로 마이그레이션** — `.claude/skills/` 28개 스킬 → `.geode/skills/` 이동 + `skills.py`/`skill_registry.py`/`commands.py` 잔류 참조 4건 수정
+- **CWD 독립 해석** — `__file__` 기준 패키지 루트 산출으로 워킹디렉토리 무관하게 스킬 로딩
+
 ## [0.24.1] — 2026-03-25
 
 메모리 경로 표시 수정.
