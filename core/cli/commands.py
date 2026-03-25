@@ -323,8 +323,22 @@ def cmd_model(args: str) -> None:
     """
     arg = args.strip()
 
-    # /model (no args) → interactive picker
+    # /model (no args) → interactive picker (requires tty)
     if not arg:
+        import sys
+
+        if not sys.stdin.isatty():
+            from core.config import settings
+
+            console.print()
+            console.print("  [header]Models[/header]")
+            for i, p in enumerate(MODEL_PROFILES, 1):
+                marker = " ←" if p.id == settings.model else ""
+                console.print(f"  {i}. {p.label:<12} {p.provider:<10} {p.cost}{marker}")
+            console.print()
+            console.print("  [muted]Usage: /model <number> or /model <name>[/muted]")
+            console.print()
+            return
         _interactive_model_picker()
         return
 
