@@ -159,7 +159,11 @@ class TestCmdModel:
 
         old = settings.model
         try:
-            with patch("core.cli.commands.TerminalMenu") as MockMenu:
+            with (
+                patch("core.cli.commands.TerminalMenu") as MockMenu,
+                patch("sys.stdin") as mock_stdin,
+            ):
+                mock_stdin.isatty.return_value = True
                 MockMenu.return_value.show.return_value = 2  # Haiku
                 cmd_model("")
             assert settings.model == MODEL_PROFILES[2].id
@@ -172,7 +176,11 @@ class TestCmdModel:
         from core.config import settings
 
         old = settings.model
-        with patch("core.cli.commands.TerminalMenu") as MockMenu:
+        with (
+            patch("core.cli.commands.TerminalMenu") as MockMenu,
+            patch("sys.stdin") as mock_stdin,
+        ):
+            mock_stdin.isatty.return_value = True
             MockMenu.return_value.show.return_value = None
             cmd_model("")
         assert settings.model == old
