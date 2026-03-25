@@ -356,9 +356,7 @@ class ToolExecutor:
             status = "ok" if result.success else "err"
             # Single overwriting line — no scroll flood
             sys.stdout.write(
-                f"\r\x1b[2K  \x1b[2m"
-                f"sub-agent {completed_count}/{total_count} {status}"
-                f"\x1b[0m"
+                f"\r\x1b[2K  \x1b[2msub-agent {completed_count}/{total_count} {status}\x1b[0m"
             )
             sys.stdout.flush()
 
