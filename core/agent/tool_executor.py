@@ -68,6 +68,7 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "profile_learn",
         "calendar_create_event",
         "calendar_sync_scheduler",
+        "manage_context",
     }
 )
 

@@ -56,6 +56,22 @@ MODEL_PROFILES: list[ModelProfile] = [
 
 _MODEL_INDEX: dict[str, ModelProfile] = {m.id: m for m in MODEL_PROFILES}
 
+# ---------------------------------------------------------------------------
+# Conversation Context ContextVar (shared with tool handlers)
+# ---------------------------------------------------------------------------
+
+_conversation_ctx: ContextVar[_Any] = ContextVar("conversation_ctx", default=None)
+
+
+def set_conversation_context(ctx: _Any) -> None:
+    """Inject the active ConversationContext for command handlers."""
+    _conversation_ctx.set(ctx)
+
+
+def get_conversation_context() -> _Any:
+    """Retrieve the active ConversationContext (None if not set)."""
+    return _conversation_ctx.get(None)
+
 
 # ---------------------------------------------------------------------------
 # Command Map (OpenClaw Binding pattern: deterministic routing)
@@ -95,6 +111,8 @@ COMMAND_MAP: dict[str, str] = {
     "/context": "context",
     "/ctx": "context",
     "/apply": "apply",
+    "/compact": "compact",
+    "/clear": "clear",
 }
 
 
@@ -125,6 +143,8 @@ def show_help() -> None:
     console.print("  [label]/resume[/label]             — Resume interrupted session")
     console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/apply[/label]              — Manage job applications")
+    console.print("  [label]/compact[/label]            — Compact conversation context")
+    console.print("  [label]/clear[/label]              — Clear conversation history")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
     console.print()
@@ -265,7 +285,11 @@ def _check_provider_key(selected: ModelProfile) -> None:
 
 
 def _apply_model(selected: ModelProfile) -> None:
-    """Apply a model selection — update settings + .env."""
+    """Apply a model selection — update settings + .env.
+
+    Includes context window guard: blocks downgrade when current context
+    exceeds 80% of the target model's window.
+    """
     from core.config import settings
 
     old = settings.model
@@ -275,6 +299,30 @@ def _apply_model(selected: ModelProfile) -> None:
         return
 
     _check_provider_key(selected)
+
+    # --- Context Window Guard ---
+    ctx = get_conversation_context()
+    if ctx is not None and ctx.messages:
+        from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+        from core.orchestration.context_monitor import estimate_message_tokens
+
+        current_tokens = estimate_message_tokens(ctx.messages)
+        target_window = MODEL_CONTEXT_WINDOW.get(selected.id, 200_000)
+        threshold = int(target_window * 0.8)
+
+        if current_tokens > threshold:
+            console.print()
+            console.print(
+                f"  [warning]Context guard: {current_tokens:,} tokens "
+                f"exceeds {selected.label} limit "
+                f"({target_window:,} x 80% = {threshold:,})[/warning]"
+            )
+            console.print(
+                "  [muted]Run /compact or /clear first, "
+                "then retry /model.[/muted]"
+            )
+            console.print()
+            return
 
     settings.model = selected.id
     _upsert_env("GEODE_MODEL", selected.id)
@@ -1592,6 +1640,109 @@ def cmd_context(args: str) -> None:
 
     console.print()
     console.print("  [muted]Subcommands: /context career | /context profile[/muted]")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# /compact — Context Budget compaction (Karpathy P6)
+# ---------------------------------------------------------------------------
+
+
+def cmd_compact(args: str) -> None:
+    """Compact conversation context to fit within model budget.
+
+    /compact         -> compact to current model's 70% budget
+    /compact --hard  -> keep only last 1 turn
+    """
+    from core.config import settings
+    from core.orchestration.context_monitor import (
+        adaptive_prune,
+        check_context,
+        summarize_tool_results,
+    )
+
+    ctx = get_conversation_context()
+    if ctx is None or not ctx.messages:
+        console.print("  [muted]Nothing to compact.[/muted]")
+        console.print()
+        return
+
+    before = check_context(ctx.messages, settings.model)
+    console.print()
+    console.print(
+        f"  [label]Before:[/label] {before.estimated_tokens:,} tokens "
+        f"({before.usage_pct:.0f}% of {settings.model} "
+        f"{before.context_window:,})"
+    )
+
+    hard = "--hard" in args
+    if hard:
+        last_pair = (
+            ctx.messages[-2:]
+            if len(ctx.messages) >= 2
+            else list(ctx.messages)
+        )
+        ctx.messages.clear()
+        ctx.messages.extend(last_pair)
+    else:
+        summarize_tool_results(ctx.messages, before.context_window)
+        compacted = adaptive_prune(ctx.messages, before.context_window)
+        ctx.messages.clear()
+        ctx.messages.extend(compacted)
+
+    ctx._sanitize_tool_pairs()
+
+    after = check_context(ctx.messages, settings.model)
+    console.print(
+        f"  [label]After:[/label]  {after.estimated_tokens:,} tokens "
+        f"({after.usage_pct:.0f}% of {settings.model} "
+        f"{after.context_window:,})"
+    )
+    console.print(
+        f"  [success]Compacted[/success]  "
+        f"{before.estimated_tokens:,} → {after.estimated_tokens:,} tokens"
+    )
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# /clear — Clear conversation history
+# ---------------------------------------------------------------------------
+
+
+def cmd_clear(args: str) -> None:
+    """Clear conversation context entirely.
+
+    /clear         -> confirm prompt before clearing
+    /clear --force -> clear without confirmation
+    """
+    ctx = get_conversation_context()
+    if ctx is None or not ctx.messages:
+        console.print("  [muted]Conversation already empty.[/muted]")
+        console.print()
+        return
+
+    msg_count = len(ctx.messages)
+    console.print()
+
+    if "--force" not in args:
+        console.print(
+            f"  Clear all {msg_count} messages? (y/N): ", end=""
+        )
+        try:
+            answer = input().strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer != "y":
+            console.print("  [muted]Cancelled.[/muted]")
+            console.print()
+            return
+
+    ctx.clear()
+    console.print(
+        f"  [success]Conversation cleared[/success] "
+        f"({msg_count} messages removed)"
+    )
     console.print()
 
 

@@ -1072,5 +1072,26 @@
       },
       "required": []
     }
+  },
+  {
+    "name": "manage_context",
+    "description": "대화 컨텍스트를 관리합니다. 사용자가 '컨텍스트 정리', '대화 초기화', '컨텍스트 줄여줘', 'compact', 'clear context', '대화 리셋', '토큰 확인' 등을 요청할 때 사용하세요.",
+    "category": "model",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["compact", "clear", "status"],
+          "description": "compact: 대화 압축, clear: 전체 초기화, status: 현재 토큰 사용량 확인"
+        },
+        "force": {
+          "type": "boolean",
+          "description": "true이면 확인 없이 실행 (clear 시 적용). 기본값 false."
+        }
+      },
+      "required": ["action"]
+    }
   }
 ]
