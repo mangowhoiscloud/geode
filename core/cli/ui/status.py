@@ -38,12 +38,15 @@ class TextSpinner:
         "\u280f",
     ]
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, *, quiet: bool = False) -> None:
         self._message = message
         self._running = False
         self._thread: threading.Thread | None = None
+        self._quiet = quiet  # suppress output (sub-agent, headless)
 
     def start(self) -> None:
+        if self._quiet:
+            return
         self._running = True
         self._thread = threading.Thread(target=self._animate, daemon=True)
         self._thread.start()
@@ -63,6 +66,8 @@ class TextSpinner:
 
     def stop(self, final_message: str = "") -> None:
         self._running = False
+        if self._quiet:
+            return
         if self._thread:
             self._thread.join(timeout=0.2)
         sys.stdout.write("\r\x1b[2K")
