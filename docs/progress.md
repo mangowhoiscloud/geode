@@ -13,7 +13,7 @@
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
 | portfolio-carousel | 포트폴리오 REPL 유즈케이스 캐러셀 — GLM-5 실측 응답, 좌우 네비게이션 | P1 | portfolio-usecase-carousel.md | 세션 25 핸드오프 |
-| — | — | — | — | — |
+| action-summary | Action Summary — 결정론적 Tier1 + LLM 내러티브 Tier2 (opt-in) | P1 | action-summary-system.md | 유저 피드백 기반 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | proxy-cleanup | 구 경로 proxy 파일 최종 삭제 (nodes/ui/auth/extensibility/cli/mcp) | P3 | — | CI 래칫이 차단 중 |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
