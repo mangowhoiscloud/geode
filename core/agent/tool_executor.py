@@ -231,51 +231,56 @@ class ToolExecutor:
         """Register a tool handler."""
         self._handlers[tool_name] = handler
 
+    def _apply_safety_gates(
+        self, tool_name: str, tool_input: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, bool]:
+        """Check HITL gates. Returns (rejection_result, approved_via_hitl).
+
+        If the first element is not None, the tool was rejected — return it immediately.
+        """
+        # Dangerous tools: always require HITL
+        if tool_name in DANGEROUS_TOOLS:
+            return self._execute_dangerous(tool_name, tool_input), False
+
+        approved = False
+
+        # Write tools: require approval (hitl_level 0 = autonomous skip)
+        if tool_name in WRITE_TOOLS:
+            if self._hitl_level == 0 or "write" in self._always_approved_categories:
+                approved = True
+            elif not self._confirm_write(tool_name, tool_input):
+                return _write_denial_with_fallback(tool_name), False
+            else:
+                approved = True
+
+        # Expensive tools: cost confirmation
+        if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
+            if self._hitl_level == 0 or "cost" in self._always_approved_categories:
+                approved = True
+            else:
+                cost = EXPENSIVE_TOOLS[tool_name]
+                if not self._confirm_cost(tool_name, cost):
+                    return {"error": "User denied expensive operation", "denied": True}, False
+                approved = True
+
+        return None, approved
+
     def execute(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
         """Execute a tool call, applying HITL gate if needed."""
         log.debug("ToolExecutor: %s(%s)", tool_name, tool_input)
 
-        # Dangerous tools: HITL gate (never auto-approved)
-        if tool_name in DANGEROUS_TOOLS:
-            return self._execute_dangerous(tool_name, tool_input)
-
-        # Track whether user went through an approval gate — if so, show
-        # a spinner during handler execution for visual feedback.
-        approved_via_hitl = False
-
-        # Write tools: HITL gate — always requires approval, even for
-        # sub-agents (auto_approve is intentionally ignored here).
-        # hitl_level 0: skip write confirmation (autonomous mode)
-        if tool_name in WRITE_TOOLS:
-            if self._hitl_level == 0 or "write" in self._always_approved_categories:
-                approved_via_hitl = True  # auto-approved
-            elif not self._confirm_write(tool_name, tool_input):
-                return _write_denial_with_fallback(tool_name)
-            else:
-                approved_via_hitl = True
-
-        # Expensive tools: cost confirmation gate
-        # hitl_level 0: skip cost confirmation (autonomous mode)
-        if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
-            if self._hitl_level == 0 or "cost" in self._always_approved_categories:
-                approved_via_hitl = True  # auto-approved
-            else:
-                cost = EXPENSIVE_TOOLS[tool_name]
-                if not self._confirm_cost(tool_name, cost):
-                    return {
-                        "error": "User denied expensive operation",
-                        "denied": True,
-                    }
-                approved_via_hitl = True
+        # Safety gates (HITL approval for dangerous/write/expensive tools)
+        gate_result, approved_via_hitl = self._apply_safety_gates(tool_name, tool_input)
+        if gate_result is not None:
+            return gate_result
 
         # Sub-agent delegation
         if tool_name == "delegate_task":
             return self._execute_delegate(tool_input)
 
-        # Delegate to registered handler
+        # Resolve handler (registered or MCP fallback)
         handler = self._handlers.get(tool_name)
         if handler is None:
-            # MCP fallback: route through safety checks
             if self._mcp_manager is not None:
                 server = self._mcp_manager.find_server_for_tool(tool_name)
                 if server is not None:
@@ -283,13 +288,13 @@ class ToolExecutor:
             log.warning("No handler for tool: %s", tool_name)
             return {"error": f"Unknown tool: '{tool_name}'. Use 'show_help' for available tools."}
 
+        # Execute handler
         try:
             if approved_via_hitl:
                 with _tool_spinner(f"Executing {tool_name}..."):
                     raw: Any = handler(**tool_input)
             else:
                 raw = handler(**tool_input)
-            # Guard: ensure result is always a dict (handlers may return None or non-dict)
             if raw is None:
                 return {
                     "error": f"Tool '{tool_name}' returned None instead of a dict. "

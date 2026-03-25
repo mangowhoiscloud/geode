@@ -106,6 +106,8 @@ DEFAULT_SESSION_TTL = 3600.0  # 1 hour
 DEFAULT_LOG_DIR = Path.home() / ".geode" / "runs"
 DEFAULT_GLOBAL_CONCURRENCY = 4
 DEFAULT_STUCK_TIMEOUT_S = 7200.0  # 2 hours
+COALESCING_WINDOW_MS = 250.0  # Deduplication window for sub-agent tasks
+CONFIG_WATCHER_DEBOUNCE_MS = 300.0  # Avoid thrashing on rapid file changes
 
 
 # ---------------------------------------------------------------------------
@@ -1168,10 +1170,10 @@ class GeodeRuntime:
         )
 
         # Coalescing queue (250ms debounce)
-        coalescing = CoalescingQueue(window_ms=250.0)
+        coalescing = CoalescingQueue(window_ms=COALESCING_WINDOW_MS)
 
         # Config watcher (300ms debounce, 1s poll)
-        config_watcher = ConfigWatcher(debounce_ms=300.0)
+        config_watcher = ConfigWatcher(debounce_ms=CONFIG_WATCHER_DEBOUNCE_MS)
 
         # Wire ConfigWatcher to watch .env if it exists
         env_path = Path(".env")
