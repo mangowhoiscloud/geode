@@ -39,21 +39,13 @@ class TestParseMCPContent:
 
     def test_text_content_json(self):
         """Standard MCP content with JSON text."""
-        result = {
-            "content": [
-                {"type": "text", "text": '{"views": 1000, "subscribers": 50}'}
-            ]
-        }
+        result = {"content": [{"type": "text", "text": '{"views": 1000, "subscribers": 50}'}]}
         parsed = _parse_mcp_content(result)
         assert parsed == {"views": 1000, "subscribers": 50}
 
     def test_text_content_plain(self):
         """MCP content with plain text (not JSON)."""
-        result = {
-            "content": [
-                {"type": "text", "text": "Game not found on platform."}
-            ]
-        }
+        result = {"content": [{"type": "text", "text": "Game not found on platform."}]}
         parsed = _parse_mcp_content(result)
         assert parsed == {"text": "Game not found on platform."}
 
@@ -113,9 +105,7 @@ class TestTryMCPSignal:
         mock_manager = MagicMock()
         mock_manager.check_health.return_value = {"steam": True}
         mock_manager.call_tool.return_value = {
-            "content": [
-                {"type": "text", "text": '{"player_count": 500}'}
-            ]
+            "content": [{"type": "text", "text": '{"player_count": 500}'}]
         }
 
         with patch(
@@ -383,11 +373,7 @@ class TestGoogleTrendsToolMCP:
     def test_live_with_region(self):
         manager = _make_mcp_manager(
             "google-trends",
-            {
-                "content": [
-                    {"type": "text", "text": '{"interest_index": 45}'}
-                ]
-            },
+            {"content": [{"type": "text", "text": '{"interest_index": 45}'}]},
         )
         with patch(
             _MCP_MANAGER_PATCH,
