@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pytest
 
 from core.memory.session import InMemorySessionStore
 from core.orchestration.coalescing import CoalescingQueue
@@ -291,7 +295,13 @@ class TestGetHealth:
 
 
 class TestReactiveChains:
-    def test_drift_triggers_snapshot(self, tmp_path: Path):
+    def test_drift_triggers_snapshot(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        # Isolate SnapshotManager storage to tmp_path so stale .geode/snapshots/
+        # files from previous runs don't pollute snapshot counts.
+        monkeypatch.setattr(
+            "core.config.settings.snapshot_dir",
+            str(tmp_path / "snapshots"),
+        )
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         initial_snaps = runtime.snapshot_manager.list_snapshots()
 
@@ -303,7 +313,13 @@ class TestReactiveChains:
         after_snaps = runtime.snapshot_manager.list_snapshots()
         assert len(after_snaps) == len(initial_snaps) + 1
 
-    def test_pipeline_end_triggers_snapshot(self, tmp_path: Path):
+    def test_pipeline_end_triggers_snapshot(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        # Isolate SnapshotManager storage to tmp_path so stale .geode/snapshots/
+        # files from previous runs don't pollute snapshot counts.
+        monkeypatch.setattr(
+            "core.config.settings.snapshot_dir",
+            str(tmp_path / "snapshots"),
+        )
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         initial_snaps = runtime.snapshot_manager.list_snapshots()
 
