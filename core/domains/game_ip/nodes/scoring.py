@@ -360,8 +360,7 @@ def _calc_final_score(
     # Validate confidence multiplier params
     if not (0.0 <= base_m <= 1.0) or not (0.0 <= scale_m <= 1.0):
         log.warning(
-            "Confidence multiplier params out of range: base=%.2f, scale=%.2f; "
-            "clamping to [0, 1]",
+            "Confidence multiplier params out of range: base=%.2f, scale=%.2f; clamping to [0, 1]",
             base_m,
             scale_m,
         )

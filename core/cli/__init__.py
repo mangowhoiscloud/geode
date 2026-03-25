@@ -1621,10 +1621,16 @@ def serve(
             sub_agent_manager=sub_mgr,
             hitl_level=0,
         )
+        from core.config import _resolve_provider, settings as _gw_settings
+
+        gw_model = _gw_settings.model
+        gw_provider = _resolve_provider(gw_model)
         loop = AgenticLoop(
             ctx,
             executor,
             max_rounds=50,
+            model=gw_model,
+            provider=gw_provider,
             mcp_manager=boot.mcp_manager,
             skill_registry=boot.skill_registry,
             system_suffix=_GATEWAY_SUFFIX,

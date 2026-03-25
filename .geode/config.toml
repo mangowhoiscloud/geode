@@ -1,0 +1,22 @@
+[gateway.bindings]
+
+[[gateway.bindings.rules]]
+channel = "slack"
+channel_id = "C0ALBPUFXL5"
+auto_respond = true
+require_mention = true
+max_rounds = 50
+
+[[gateway.bindings.rules]]
+channel = "slack"
+channel_id = "C0ALUA25DKK"
+auto_respond = true
+require_mention = true
+max_rounds = 50
+
+[[gateway.bindings.rules]]
+channel = "slack"
+channel_id = "C0ALD5084UW"
+auto_respond = true
+require_mention = true
+max_rounds = 50

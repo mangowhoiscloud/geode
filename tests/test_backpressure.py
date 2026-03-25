@@ -59,7 +59,9 @@ class TestBackpressure:
                 "content": json.dumps({"error": "Not found"}),
             },
         ]
-        loop._tool_processor._tool_log.append({"tool": "test_tool", "input": {}, "result": {"error": "Not found"}})
+        loop._tool_processor._tool_log.append(
+            {"tool": "test_tool", "input": {}, "result": {"error": "Not found"}}
+        )
         loop._update_tool_error_tracking(tool_results)
         assert loop._total_consecutive_tool_errors == 1
 
@@ -93,7 +95,9 @@ class TestBackpressure:
                 "content": json.dumps({"status": "ok"}),
             },
         ]
-        loop._tool_processor._tool_log.append({"tool": "test_tool", "input": {}, "result": {"error": "fail"}})
+        loop._tool_processor._tool_log.append(
+            {"tool": "test_tool", "input": {}, "result": {"error": "fail"}}
+        )
         loop._update_tool_error_tracking(tool_results)
         assert loop._total_consecutive_tool_errors == 0
 

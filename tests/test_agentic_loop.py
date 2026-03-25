@@ -1009,12 +1009,8 @@ class TestAgenticLoopToolCallRendering:
         mock_response.content = [tool_block]
 
         with (
-            patch.object(
-                loop._tool_processor._op_logger, "log_tool_call", return_value=True
-            ),
-            patch.object(
-                loop._tool_processor._op_logger, "log_tool_result"
-            ) as mock_log_result,
+            patch.object(loop._tool_processor._op_logger, "log_tool_call", return_value=True),
+            patch.object(loop._tool_processor._op_logger, "log_tool_result") as mock_log_result,
         ):
             import asyncio
 

@@ -705,8 +705,7 @@ class ToolCallProcessor:
             if self._clarification_count > self.MAX_CLARIFICATION_ROUNDS:
                 result = {
                     "error": (
-                        "Too many clarification attempts. "
-                        "Please provide all required parameters."
+                        "Too many clarification attempts. Please provide all required parameters."
                     ),
                     "max_clarifications_exceeded": True,
                 }

@@ -60,8 +60,7 @@ def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePor
     if default is not None:
         return default
     log.warning(
-        "SessionStore ContextVar not initialized; "
-        "falling back to ephemeral InMemorySessionStore"
+        "SessionStore ContextVar not initialized; falling back to ephemeral InMemorySessionStore"
     )
     return InMemorySessionStore()
 

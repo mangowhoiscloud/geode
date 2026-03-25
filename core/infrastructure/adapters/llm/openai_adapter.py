@@ -342,8 +342,7 @@ class OpenAIAdapter:
             retryable_errors=_get_retryable_errors(),
             bad_request_error=openai.BadRequestError,
             billing_message=(
-                "OpenAI API billing/credit error. "
-                "Check your OpenAI account billing settings."
+                "OpenAI API billing/credit error. Check your OpenAI account billing settings."
             ),
             max_retries=_MAX_RETRIES,
             retry_base_delay=_RETRY_BASE_DELAY,
