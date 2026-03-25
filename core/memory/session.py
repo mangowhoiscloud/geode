@@ -50,7 +50,7 @@ class InMemorySessionStore:
         self._storage_dir = storage_dir
 
         if storage_dir:
-            storage_dir.mkdir(parents=True, exist_ok=True)
+            storage_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
             self._load_from_disk()
 
     @property
