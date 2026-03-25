@@ -51,6 +51,9 @@ DEFAULT_SERVERS: tuple[str, ...] = (
     "playwright",
     "arxiv",
     "gmail",
+    "youtube-transcript",
+    "reddit",
+    "google-trends",
 )
 
 # ---------------------------------------------------------------------------
