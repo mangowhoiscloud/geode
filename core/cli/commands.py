@@ -1107,7 +1107,7 @@ def _skills_add(reg: _Any, raw: str) -> None:
     if skill_name in (".", ""):
         skill_name = src.stem.lower().replace(" ", "-")
 
-    # Copy to .claude/skills/<name>/SKILL.md
+    # Copy to .geode/skills/<name>/SKILL.md
     loader = SkillLoader()
     dest_dir = loader.skills_dir / skill_name
     dest_dir.mkdir(parents=True, exist_ok=True)
