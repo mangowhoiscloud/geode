@@ -604,7 +604,11 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
         _record_response_usage(response, model, label="parsed")
 
         if response.parsed_output is None:
-            raise ValueError("Structured output parsing returned None")
+            raise ValueError(
+                "LLM returned no structured output. "
+                "Verify the prompt constrains the response format "
+                "and the Pydantic model matches the schema."
+            )
         return response.parsed_output
 
     result: T = _retry_with_backoff(_do_call, model=target_model)

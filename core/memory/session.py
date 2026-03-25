@@ -127,8 +127,14 @@ class InMemorySessionStore:
     # ------------------------------------------------------------------
 
     def _safe_filename(self, session_id: str) -> str:
-        """Convert session_id to a safe filename."""
-        safe = session_id.replace(":", "_").replace("/", "_").replace(" ", "_")
+        """Convert session_id to a safe filename.
+
+        Strips all non-alphanumeric chars (except hyphen/underscore) to prevent
+        path traversal attacks like '../../etc/passwd'.
+        """
+        import re
+
+        safe = re.sub(r"[^a-zA-Z0-9_\-]", "_", session_id)
         return f"sess-{safe}.json"
 
     def _persist(self, session_id: str) -> None:

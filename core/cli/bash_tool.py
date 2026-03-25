@@ -147,7 +147,7 @@ class BashTool:
         if result.denied:
             return {"error": "User denied execution", "denied": True}
         if result.error:
-            return {"error": result.error, "returncode": result.returncode}
+            return {"error": redact_secrets(result.error), "returncode": result.returncode}
 
         out: dict[str, Any] = {"returncode": result.returncode}
         if result.stdout:

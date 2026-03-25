@@ -314,7 +314,7 @@ class TestCallLLMParsed:
 
         with (
             patch("core.llm.client.get_anthropic_client", return_value=mock_client),
-            pytest.raises(ValueError, match="Structured output parsing returned None"),
+            pytest.raises(ValueError, match="LLM returned no structured output"),
         ):
             call_llm_parsed(
                 system="test",
