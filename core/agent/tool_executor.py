@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -344,20 +345,29 @@ class ToolExecutor:
             for i, t in enumerate(tasks_raw)
         ]
 
-        # P2-C: progress callback — update spinner on each sub-agent completion
+        # P2-C: progress callback — consolidated progress line (Claude Code pattern)
         completed_count = 0
         total_count = len(sub_tasks)
+        _start_ts = time.time()
 
         def _on_progress(result: Any) -> None:
             nonlocal completed_count
             completed_count += 1
-            status_icon = "[green]ok[/green]" if result.success else "[red]err[/red]"
-            console.print(
-                f"  [dim]  sub-agent {completed_count}/{total_count}"
-                f" {status_icon} {result.task_id}[/dim]"
+            status = "ok" if result.success else "err"
+            # Single overwriting line — no scroll flood
+            sys.stdout.write(
+                f"\r\x1b[2K  \x1b[2msub-agent {completed_count}/{total_count} {status}\x1b[0m"
             )
+            sys.stdout.flush()
 
         results = self._sub_agent_manager.delegate(sub_tasks, on_progress=_on_progress)
+
+        # Clear progress line and show final summary
+        sys.stdout.write("\r\x1b[2K")
+        sys.stdout.flush()
+        from core.cli.ui.agentic_ui import render_subagent_complete
+
+        render_subagent_complete(len(results), time.time() - _start_ts)
 
         # P2-A: unified response format (single and batch identical)
         succeeded = sum(1 for r in results if r.success)
