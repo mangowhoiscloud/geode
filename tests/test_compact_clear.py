@@ -23,24 +23,18 @@ def _make_msg(role: str, text: str) -> dict[str, Any]:
 def _make_tool_result(tool_use_id: str, content: str) -> dict[str, Any]:
     return {
         "role": "user",
-        "content": [
-            {"type": "tool_result", "tool_use_id": tool_use_id, "content": content}
-        ],
+        "content": [{"type": "tool_result", "tool_use_id": tool_use_id, "content": content}],
     }
 
 
 def _make_tool_use_assistant(tool_use_id: str, name: str) -> dict[str, Any]:
     return {
         "role": "assistant",
-        "content": [
-            {"type": "tool_use", "id": tool_use_id, "name": name, "input": {}}
-        ],
+        "content": [{"type": "tool_use", "id": tool_use_id, "name": name, "input": {}}],
     }
 
 
-def _build_conversation(
-    n_pairs: int, tool_result_size: int = 100
-) -> list[dict[str, Any]]:
+def _build_conversation(n_pairs: int, tool_result_size: int = 100) -> list[dict[str, Any]]:
     """Build conversation with n tool_use/tool_result pairs."""
     msgs: list[dict[str, Any]] = [_make_msg("user", "initial question")]
     for i in range(n_pairs):
@@ -232,9 +226,7 @@ class TestModelSwitchGuard:
     def _make_profile(self, model_id: str, label: str) -> Any:
         from core.cli.commands import ModelProfile
 
-        return ModelProfile(
-            id=model_id, provider="test", label=label, cost="$"
-        )
+        return ModelProfile(id=model_id, provider="test", label=label, cost="$")
 
     @patch("core.cli.commands._upsert_env")
     @patch("core.cli.commands._check_provider_key")
@@ -397,9 +389,7 @@ class TestEscalationCompact:
         loop.model = "glm-5"
         loop.context = context
         loop._provider = "glm"
-        loop._adapter = MagicMock(
-            fallback_chain=["glm-5", "glm-5-turbo", "glm-4.7-flash"]
-        )
+        loop._adapter = MagicMock(fallback_chain=["glm-5", "glm-5-turbo", "glm-4.7-flash"])
         loop.update_model = MagicMock()
 
         from core.agent.agentic_loop import AgenticLoop
