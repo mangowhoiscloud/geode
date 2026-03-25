@@ -115,10 +115,12 @@ def bootstrap_geode(
     readiness = check_readiness()
     _set_readiness(readiness)
 
-    # 4. MCP
+    # 4. MCP — load config (server discovery) without connecting subprocesses.
+    #    Full startup() (connect all) is deferred to first tool use.
     from core.mcp.manager import get_mcp_manager
 
     mcp_mgr = get_mcp_manager()
+    mcp_mgr.load_config()
 
     # 5. Skills
     from core.skills.skills import SkillLoader, SkillRegistry
