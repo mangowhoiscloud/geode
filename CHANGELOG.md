@@ -26,6 +26,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.25.0] — 2026-03-25
+
+메모리 계층 4-tier 시스템 프롬프트 주입 + MCP 부트스트랩 수정.
+
+### Added
+- **메모리 계층 시스템 프롬프트** — GEODE.md(G1 정체성) + MEMORY.md(G2 메모리) + LEARNING.md(G3 학습) + 도메인(G4)을 `system_prompt.py`에서 자동 조립하여 LLM에 주입
+
+### Fixed
+- **MCP 부트스트랩 경로** — 외부 디렉토리에서 `geode` 실행 시 MCP 서버 0개 로딩되던 이슈 수정 (`load_config` 추가 + 경로 산출 보정)
+
 ## [0.24.2] — 2026-03-25
 
 Skills 경로 `.claude/skills` → `.geode/skills` 마이그레이션.
