@@ -56,7 +56,7 @@ class CoalescingQueue:
             existing = self._timers.get(key)
             if existing is not None:
                 existing.cancel()
-                self._stats.coalesced += 1
+                self._stats.inc_coalesced()
                 coalesced = True
                 log.debug("Coalesced request for key=%s", key)
             else:
@@ -70,7 +70,7 @@ class CoalescingQueue:
             timer.daemon = True
             self._timers[key] = timer
             timer.start()
-            self._stats.submitted += 1
+            self._stats.inc_submitted()
 
         return not coalesced
 
@@ -81,9 +81,9 @@ class CoalescingQueue:
 
         try:
             callback(key, data)
-            self._stats.executed += 1
+            self._stats.inc_executed()
         except Exception:
-            self._stats.errors += 1
+            self._stats.inc_errors()
             log.exception("Coalescing callback failed for key=%s", key)
 
     def cancel(self, key: str) -> bool:
@@ -119,11 +119,29 @@ class _CoalescingStats:
         self.coalesced: int = 0
         self.executed: int = 0
         self.errors: int = 0
+        self._lock = threading.Lock()
+
+    def inc_submitted(self) -> None:
+        with self._lock:
+            self.submitted += 1
+
+    def inc_coalesced(self) -> None:
+        with self._lock:
+            self.coalesced += 1
+
+    def inc_executed(self) -> None:
+        with self._lock:
+            self.executed += 1
+
+    def inc_errors(self) -> None:
+        with self._lock:
+            self.errors += 1
 
     def to_dict(self) -> dict[str, int]:
-        return {
-            "submitted": self.submitted,
-            "coalesced": self.coalesced,
-            "executed": self.executed,
-            "errors": self.errors,
-        }
+        with self._lock:
+            return {
+                "submitted": self.submitted,
+                "coalesced": self.coalesced,
+                "executed": self.executed,
+                "errors": self.errors,
+            }

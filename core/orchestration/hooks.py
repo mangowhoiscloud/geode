@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -125,6 +126,7 @@ class HookSystem:
 
     def __init__(self) -> None:
         self._hooks: dict[HookEvent, list[_RegisteredHook]] = {}
+        self._lock = threading.Lock()
 
     def register(
         self,
@@ -138,18 +140,20 @@ class HookSystem:
         hook_name = name or handler.__name__
         entry = _RegisteredHook(handler=handler, name=hook_name, priority=priority)
 
-        if event not in self._hooks:
-            self._hooks[event] = []
-        self._hooks[event].append(entry)
-        # Keep sorted by priority (stable sort)
-        self._hooks[event].sort(key=lambda h: h.priority)
+        with self._lock:
+            if event not in self._hooks:
+                self._hooks[event] = []
+            self._hooks[event].append(entry)
+            # Keep sorted by priority (stable sort)
+            self._hooks[event].sort(key=lambda h: h.priority)
 
     def unregister(self, event: HookEvent, name: str) -> bool:
         """Remove a named hook. Returns True if found and removed."""
-        hooks = self._hooks.get(event, [])
-        before = len(hooks)
-        self._hooks[event] = [h for h in hooks if h.name != name]
-        return len(self._hooks[event]) < before
+        with self._lock:
+            hooks = self._hooks.get(event, [])
+            before = len(hooks)
+            self._hooks[event] = [h for h in hooks if h.name != name]
+            return len(self._hooks[event]) < before
 
     def trigger(self, event: HookEvent, data: dict[str, Any] | None = None) -> list[HookResult]:
         """Trigger all hooks for an event in priority order.
@@ -158,7 +162,8 @@ class HookSystem:
         """
         data = data or {}
         results: list[HookResult] = []
-        hooks = self._hooks.get(event, [])
+        with self._lock:
+            hooks = list(self._hooks.get(event, []))
 
         for hook in hooks:
             try:
@@ -179,14 +184,16 @@ class HookSystem:
 
     def list_hooks(self, event: HookEvent | None = None) -> dict[str, list[str]]:
         """List registered hook names, optionally filtered by event."""
-        if event is not None:
-            hooks = self._hooks.get(event, [])
-            return {event.value: [h.name for h in hooks]}
-        return {e.value: [h.name for h in hooks] for e, hooks in self._hooks.items() if hooks}
+        with self._lock:
+            if event is not None:
+                hooks = self._hooks.get(event, [])
+                return {event.value: [h.name for h in hooks]}
+            return {e.value: [h.name for h in hooks] for e, hooks in self._hooks.items() if hooks}
 
     def clear(self, event: HookEvent | None = None) -> None:
         """Clear hooks for a specific event, or all hooks."""
-        if event is not None:
-            self._hooks.pop(event, None)
-        else:
-            self._hooks.clear()
+        with self._lock:
+            if event is not None:
+                self._hooks.pop(event, None)
+            else:
+                self._hooks.clear()
