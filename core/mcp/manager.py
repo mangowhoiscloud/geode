@@ -29,7 +29,7 @@ from core.mcp.stdio_client import StdioMCPClient
 
 log = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _CONFIG_PATH = _PROJECT_ROOT / ".claude" / "mcp_servers.json"
 _DOTENV_PATH = _PROJECT_ROOT / ".env"
 _GLOBAL_DOTENV_PATH = Path.home() / ".geode" / ".env"
