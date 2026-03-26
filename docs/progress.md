@@ -15,7 +15,7 @@
 | ~~kent-beck-p1~~ | ~~Phase 1 — dry-run 파싱 + Safety 상수 추출~~ | ~~P0~~ | ~~#462~~ | **Done** |
 | ~~kent-beck-p2~~ | ~~Phase 2 — Provider 디스패치 딕셔너리 통합~~ | ~~P0~~ | ~~#463~~ | **Done** |
 | ~~kent-beck-p3~~ | ~~Kent Beck Phase 3 — CLI God Object 분해 (~800줄 감소)~~ | ~~P1~~ | ~~#464~~ | **Done** |
-| ~~kent-beck-p4~~ | ~~Kent Beck Phase 4 — runtime + agentic_loop 추출 (~265줄 감소)~~ | ~~P1~~ | ~~#465~~ | **In Progress** |
+| ~~kent-beck-p4~~ | ~~Kent Beck Phase 4 — runtime + agentic_loop 추출 (~265줄 감소)~~ | ~~P1~~ | ~~#465~~ | **Done** |
 | kent-beck-p5 | Kent Beck Phase 5 — 핸들러 통합 + Executor 분해 (~110줄 감소) | P2 | encapsulated-hugging-bunny.md | 가독성 개선 |
 | action-summary | Action Summary — 결정론적 Tier1 + LLM 내러티브 Tier2 (opt-in) | P1 | action-summary-system.md | 유저 피드백 기반 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
@@ -28,7 +28,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| kent-beck-p4 | Kent Beck Phase 4 — runtime + agentic_loop 추출 | @mangowhoiscloud | feature/kent-beck-p4 | 2026-03-26 | CI 대기중 |
+| — | — | — | — | — | — |
 
 ### In Review
 
@@ -40,6 +40,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| kent-beck-p4 | Kent Beck Phase 4 — runtime 훅 추출 + MCP 팩토리 + arun 결과 DRY | #465 | @mangowhoiscloud | 2026-03-26 |
 | kent-beck-p3 | Kent Beck Phase 3 — CLI God Object 분해 (session_state + cmd_schedule 추출) | #464 | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-26 — 세션 33)
