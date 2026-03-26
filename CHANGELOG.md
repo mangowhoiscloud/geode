@@ -32,6 +32,7 @@ MCP 카탈로그 단일화 + Proxy Cleanup — registry 삭제 + catalog 축소 
 
 ### Architecture
 - **`core/agent/adapters/` 삭제** — ClaudeAgenticAdapter/OpenAIAgenticAdapter/GlmAgenticAdapter를 각 provider 파일로 통합. `resolve_agentic_adapter`를 `core.llm.router`로 이동. 모듈 수 195 → 187.
+- **`infrastructure/ports/` 삭제** — 8개 Protocol 포트를 주 소비자 모듈 옆으로 co-locate 이동. `infrastructure/` 디렉터리 제거. ~52개 import 경로 갱신.
 - **MCPRegistry 삭제** — registry.py(257줄) 제거, MCPServerManager.load_config()가 직접 처리
 - **Catalog 검색 전용 축소** — MCPCatalogEntry: package/command/extra_args → install_hint 단일 필드로 통합
 - **config.toml 통합** — .geode/config.toml [mcp.servers] 섹션이 MCP 설정 주소 (mcp_servers.json은 fallback 유지)
