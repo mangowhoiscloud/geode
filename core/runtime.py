@@ -660,7 +660,38 @@ class GeodeRuntime:
             hooks=hooks,
         )
 
-        # --- Hook wiring for L4.5 events ---
+        GeodeRuntime._wire_automation_hooks(
+            hooks,
+            snapshot_manager=snapshot_manager,
+            trigger_manager=trigger_manager,
+            session_key=session_key,
+            ip_name=ip_name,
+            project_memory=project_memory,
+        )
+
+        return {
+            "drift_detector": drift_detector,
+            "model_registry": model_registry,
+            "expert_panel": expert_panel,
+            "correlation_analyzer": correlation_analyzer,
+            "outcome_tracker": outcome_tracker,
+            "snapshot_manager": snapshot_manager,
+            "trigger_manager": trigger_manager,
+            "scheduler_service": scheduler_service,
+            "feedback_loop": feedback_loop,
+        }
+
+    @staticmethod
+    def _wire_automation_hooks(
+        hooks: HookSystemPort,
+        *,
+        snapshot_manager: Any,
+        trigger_manager: Any,
+        session_key: str,
+        ip_name: str,
+        project_memory: Any,
+    ) -> None:
+        """Wire L4.5 automation event handlers to the hook system."""
 
         def _on_drift(event: HookEvent, data: dict[str, Any]) -> None:
             log.info("Drift detected: %s", data)
@@ -778,18 +809,6 @@ class GeodeRuntime:
             priority=85,
         )
 
-        return {
-            "drift_detector": drift_detector,
-            "model_registry": model_registry,
-            "expert_panel": expert_panel,
-            "correlation_analyzer": correlation_analyzer,
-            "outcome_tracker": outcome_tracker,
-            "snapshot_manager": snapshot_manager,
-            "trigger_manager": trigger_manager,
-            "scheduler_service": scheduler_service,
-            "feedback_loop": feedback_loop,
-        }
-
     @staticmethod
     def _build_auth() -> tuple[ProfileStorePort, ProfileRotatorPort, CooldownTrackerPort]:
         """Build auth profile system with API key profiles."""
@@ -898,28 +917,38 @@ class GeodeRuntime:
         set_signal_adapter(composite)
 
     @staticmethod
+    def _load_mcp_manager_for_plugin(
+        plugin_name: str,
+        setter_fn: Any,
+    ) -> Any | None:
+        """Load MCP manager config, or mark plugin unavailable and return None."""
+        from core.mcp.manager import get_mcp_manager
+
+        try:
+            manager = get_mcp_manager()
+            manager.load_config()
+            return manager
+        except Exception as exc:
+            _plugin_status[plugin_name] = "unavailable"
+            log.warning("Plugin %s: MCP manager failed (%s)", plugin_name, exc)
+            setter_fn(None)
+            return None
+
+    @staticmethod
     def _build_notification_adapter() -> None:
         """Build and inject CompositeNotificationAdapter with MCP-backed channels.
 
         Chains Slack + Discord + Telegram adapters. If no messaging MCP servers
         are available, notification tools fall back to stub responses.
         """
-        from core.mcp.composite_notification import (
-            CompositeNotificationAdapter,
-        )
+        from core.mcp.composite_notification import CompositeNotificationAdapter
         from core.mcp.discord_adapter import DiscordNotificationAdapter
-        from core.mcp.manager import get_mcp_manager
         from core.mcp.notification_port import set_notification
         from core.mcp.slack_adapter import SlackNotificationAdapter
         from core.mcp.telegram_adapter import TelegramNotificationAdapter
 
-        try:
-            manager = get_mcp_manager()
-            manager.load_config()
-        except Exception as exc:
-            _plugin_status["notification_adapter"] = "unavailable"
-            log.warning("Plugin notification_adapter: MCP manager failed (%s)", exc)
-            set_notification(None)
+        manager = GeodeRuntime._load_mcp_manager_for_plugin("notification_adapter", set_notification)
+        if manager is None:
             return
 
         adapters = [
@@ -927,17 +956,11 @@ class GeodeRuntime:
             DiscordNotificationAdapter(manager=manager),
             TelegramNotificationAdapter(manager=manager),
         ]
-
         composite = CompositeNotificationAdapter(adapters)  # type: ignore[arg-type]
-
         if composite.is_available():
-            log.info(
-                "Notification adapter enabled: channels=%s",
-                composite.list_channels(),
-            )
+            log.info("Notification adapter enabled: channels=%s", composite.list_channels())
         else:
             log.debug("No messaging MCP servers available — stub notification mode")
-
         set_notification(composite)
 
     @staticmethod
@@ -947,42 +970,24 @@ class GeodeRuntime:
         Chains Google Calendar + CalDAV (Apple Calendar) adapters.
         If no calendar MCP servers are available, calendar tools return empty.
         """
-        from core.mcp.apple_calendar_adapter import (
-            AppleCalendarAdapter,
-        )
+        from core.mcp.apple_calendar_adapter import AppleCalendarAdapter
         from core.mcp.calendar_port import set_calendar
-        from core.mcp.composite_calendar import (
-            CompositeCalendarAdapter,
-        )
-        from core.mcp.google_calendar_adapter import (
-            GoogleCalendarAdapter,
-        )
-        from core.mcp.manager import get_mcp_manager
+        from core.mcp.composite_calendar import CompositeCalendarAdapter
+        from core.mcp.google_calendar_adapter import GoogleCalendarAdapter
 
-        try:
-            manager = get_mcp_manager()
-            manager.load_config()
-        except Exception as exc:
-            _plugin_status["calendar_adapter"] = "unavailable"
-            log.warning("Plugin calendar_adapter: MCP manager failed (%s)", exc)
-            set_calendar(None)
+        manager = GeodeRuntime._load_mcp_manager_for_plugin("calendar_adapter", set_calendar)
+        if manager is None:
             return
 
         adapters = [
             GoogleCalendarAdapter(manager=manager),
             AppleCalendarAdapter(manager=manager),
         ]
-
         composite = CompositeCalendarAdapter(adapters)  # type: ignore[arg-type]
-
         if composite.is_available():
-            log.info(
-                "Calendar adapter enabled: sources=%s",
-                composite.list_sources(),
-            )
+            log.info("Calendar adapter enabled: sources=%s", composite.list_sources())
         else:
             log.debug("No calendar MCP servers available — calendar tools disabled")
-
         set_calendar(composite)
 
     @staticmethod
