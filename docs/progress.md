@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-26 (세션 34 — MCP 단일화 플랜)
+> 마지막 갱신: 2026-03-26 (세션 35 — Task Tool 노출 착수)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -16,7 +16,8 @@
 | ~~kent-beck-p2~~ | ~~Phase 2 — Provider 디스패치 딕셔너리 통합~~ | ~~P0~~ | ~~#463~~ | **Done** |
 | ~~kent-beck-p3~~ | ~~Kent Beck Phase 3 — CLI God Object 분해 (~800줄 감소)~~ | ~~P1~~ | ~~#464~~ | **Done** |
 | ~~kent-beck-p4~~ | ~~Kent Beck Phase 4 — runtime + agentic_loop 추출 (~265줄 감소)~~ | ~~P1~~ | ~~#465~~ | **Done** |
-| kent-beck-p5 | Kent Beck Phase 5 — 핸들러 통합 + Executor 분해 (~110줄 감소) | P2 | encapsulated-hugging-bunny.md | 가독성 개선 |
+| task-tools | Task Tool 노출 — task_create/update/get/list/stop + definitions.json + handlers | P1 | task-tools-plan.md | AgenticLoop 작업 추적 |
+| ~~kent-beck-p5~~ | ~~Kent Beck Phase 5 — 핸들러 통합 + Executor 분해 (~80줄 감소)~~ | ~~P2~~ | ~~kent-beck-p5-sonnet-guide.md~~ | **In Progress** |
 | action-summary | Action Summary — 결정론적 Tier1 + LLM 내러티브 Tier2 (opt-in) | P1 | action-summary-system.md | 유저 피드백 기반 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | proxy-cleanup | 구 경로 proxy 파일 최종 삭제 (nodes/ui/auth/extensibility/cli/mcp) | P3 | — | CI 래칫이 차단 중 |
@@ -28,7 +29,8 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| task-tools | Task Tool 노출 — task_create/update/get/list/stop | @mangowhoiscloud | feature/task-tools | 2026-03-26 | 착수 |
+| kent-beck-p5 | Kent Beck Phase 5 — 핸들러 레지스트리 통합 + Executor 분해 (~80줄) | @mangowhoiscloud | feature/kent-beck-p5 | 2026-03-26 | 소크라틱 통과 |
 
 ### In Review
 
