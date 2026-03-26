@@ -21,7 +21,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| pipeline-model-fixed | 파이프라인 모델 고정 — Analyst/Evaluator/Synthesizer Opus 4.6 + Cross-LLM GPT-5.4 + 실행 전 유저 승인 | @mangowhoiscloud | feature/pipeline-model-fixed | 2026-03-26 | P0 |
 
 ### In Review
 
