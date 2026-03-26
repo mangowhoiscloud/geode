@@ -10,7 +10,7 @@
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
-# GEODE v0.28.1 — Autonomous Execution Harness
+# GEODE v0.29.0 — Autonomous Execution Harness
 
 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 자율 수행하는 범용 에이전트.
 
@@ -79,7 +79,7 @@ uv sync && uv run geode
 
 ```
 geode/
-├── core/                          # 221 modules, 6-Layer Architecture
+├── core/                          # 202 modules, 6-Layer Architecture
 │   ├── agent/                     # L0: AgenticLoop, ToolCallProcessor, SubAgentManager
 │   ├── cli/                       # L0: REPL, Commands, UI
 │   ├── infrastructure/            # L1: Port/Adapter (Claude, OpenAI, GLM, MCP)
@@ -92,7 +92,7 @@ geode/
 │   ├── gateway/                   # Slack Gateway (geode serve)
 │   ├── llm/                       # LLM Client + Prompts
 │   └── verification/              # Guardrails, BiasBuster, Cross-LLM
-├── tests/                         # 3181+ tests
+├── tests/                         # 3202+ tests
 ├── docs/                          # Architecture, Workflow, Plans
 │   ├── architecture.md            # 6-Layer + Mermaid diagrams
 │   ├── workflow.md                # CANNOT/CAN, GitFlow, Kanban
@@ -177,7 +177,7 @@ while CI fails:
 
 | Job | 역할 | 실패 시 |
 |-----|------|---------|
-| `pytest` | 3,181 테스트 전체 실행 | 실패 테스트 자동 수정 후 재시도 |
+| `pytest` | 3,202 테스트 전체 실행 | 실패 테스트 자동 수정 후 재시도 |
 | `mypy` | 타입 체크 strict 모드 | 타입 힌트 추가 후 재시도 |
 | `ruff` | 린트 + 포매팅 | auto-fix 적용 후 재시도 |
 | `import-order` | 임포트 정렬 검증 | isort 적용 후 재시도 |
@@ -208,7 +208,7 @@ main-only 수정. 3-Checkpoint 필수. TaskCreate ↔ 칸반 task_id 1:1 매핑.
 
 주요 구성:
 - **Agentic Loop**: Claude Opus 4.6 기반 `while(tool_use)` 루프. max 50 rounds, 1M context.
-- **Tool Hierarchy**: Built-in(46) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
+- **Tool Hierarchy**: Built-in(47) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
 - **Sub-Agent**: 부모 역량 전체 상속, MAX_CONCURRENT=5, Token Guard.
 - **Memory**: SOUL → User Profile → Organization → Project → Session. ContextAssembler 280자 압축.
 - **Domain Plugin**: `DomainPort` Protocol로 파이프라인 교체. Game IP 기본 탑재 (LangGraph 9-node).
@@ -228,7 +228,7 @@ CANNOT(가드레일)이 CAN(자유도)보다 먼저 온다. 7단계 워크플로
 |------|---------|--------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 3109+ pass |
+| Test | `uv run pytest tests/ -q` | 3202+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 </details>

@@ -171,7 +171,7 @@ GEODE_HITL_LEVEL=2
 ## Testing
 
 ```bash
-uv run pytest                                        # Full (3109+ passed)
+uv run pytest                                        # Full (3202+ passed)
 uv run pytest tests/test_e2e_live_llm.py -v -m live  # Live E2E
 uv run ruff check core/ tests/                       # Lint
 uv run mypy core/                                    # Type check (175 files)

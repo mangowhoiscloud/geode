@@ -26,6 +26,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.29.0] — 2026-03-26
+
+F안 LLM 분할 + Native Tools + Context Persistence — client.py 1182줄을 Provider Module 패턴으로 분할하고, 3사 네이티브 도구를 통합하고, 프로필 영속성을 보장.
+
+### Added
+- **LLM Provider Module** — `core/llm/router.py` + `core/llm/providers/{anthropic,openai,glm}.py` + `core/llm/fallback.py` 분할
+- **Anthropic 네이티브 도구** — `web_search_20260209` + `web_fetch_20260209` 자동 주입
+- **GLM-5 네이티브 web_search** — 무료 도구 패스스루
+- **Agentic adapter 이동** — `core/agent/adapters/` (claude/openai/glm + registry)
+- **프로필 영속성** — `geode init` 시 글로벌→프로젝트 자동 시딩 + 로드 상태 표시 + 경고 로그
+
+### Changed
+- **client.py 1182줄 → router.py + providers/ 분할** (Provider Module 패턴)
+- **infrastructure/adapters/llm/ → core/agent/adapters/ 이동** (agentic) + **core/llm/providers/** (client)
+- **BillingError/UserCancelledError → core/llm/errors.py 이동**
+
+### Removed
+- **Proxy 47파일 삭제** — cli/extensibility/auth/mcp re-export shims (-710줄)
+- **core/nodes/ 빈 디렉토리 삭제**
+
+### Fixed
+- **Native tools 테스트** — import 경로 `core.agent.adapters/` 갱신
+- **OpenAI adapter** — Responses API TODO 문서화
+
 ## [0.28.1] — 2026-03-26
 
 파이프라인 모델 고정 — Analyst/Evaluator/Synthesizer가 유저 REPL 모델을 상속하던 버그 수정.

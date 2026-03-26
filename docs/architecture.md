@@ -84,7 +84,7 @@ graph TB
 graph TB
     Input["User Input<br/>(한국어/영어)"] --> LLM["Claude Opus 4.6<br/>Tool Use API"]
     LLM --> Decision{stop_reason}
-    Decision -->|tool_use| Exec["ToolExecutor<br/>(46 base + MCP)"]
+    Decision -->|tool_use| Exec["ToolExecutor<br/>(47 base + MCP)"]
     Exec --> Check{clarification<br/>needed?}
     Check -->|Yes| Clarify["LLM asks<br/>clarifying question"]
     Clarify --> Output
@@ -108,7 +108,7 @@ graph TB
 
 | 구성 요소 | 설명 |
 |----------|------|
-| **LLM Tool Use** | Claude Opus 4.6 — base 46 + MCP 20+ tool 정의 전달, `stop_reason` 기반 루프 제어 |
+| **LLM Tool Use** | Claude Opus 4.6 — base 47 + MCP 20+ tool 정의 전달, `stop_reason` 기반 루프 제어 |
 | **ToolExecutor** | 4-tier safety: SAFE / STANDARD / WRITE / DANGEROUS (bash 사용자 승인 필수) |
 | **Clarification** | 필수 파라미터 누락 시 LLM이 사용자에게 되묻기 |
 | **max_rounds** | 기본 50 라운드 — 마지막 2라운드에서 텍스트 응답 강제 (1M 컨텍스트 + `clear_tool_uses` 활용) |
@@ -123,7 +123,7 @@ graph TB
 flowchart LR
     NL["AgenticLoop<br/>(LLM tool_use)"]
 
-    NL --> Builtin["Built-in Tools<br/>(46 definitions)"]
+    NL --> Builtin["Built-in Tools<br/>(47 definitions)"]
     NL --> MCP["MCP Tools<br/>(auto-discovered)"]
     NL --> Bash["Bash<br/>(run_bash)"]
 
@@ -154,7 +154,7 @@ flowchart LR
 
 | 경로 | 도구 수 | 승인 방식 |
 |------|--------|----------|
-| Built-in Tools | 46 | SAFE 자동승인, STANDARD 실행, WRITE HITL 승인 |
+| Built-in Tools | 47 | SAFE 자동승인, STANDARD 실행, WRITE HITL 승인 |
 | MCP Tools | 카탈로그 44종 | AUTO_APPROVED 서버 4종 자동승인, 그 외 초회 승인 |
 | Bash | shell 명령 | SAFE_BASH_PREFIXES 41종 자동승인, 9종 차단, 그 외 HITL |
 

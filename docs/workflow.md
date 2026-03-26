@@ -133,7 +133,7 @@ Backlog → In Progress → In Review → Done
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 3109+ pass |
+| Test | `uv run pytest tests/ -q` | 3202+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 ---

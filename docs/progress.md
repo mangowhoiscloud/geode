@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-26 (세션 30 — 포트폴리오 고도화 + F안 Phase 2 + Context Persistence)
+> 마지막 갱신: 2026-03-26 (세션 31 — v0.29.0 릴리스 docs-sync)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -21,14 +21,21 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| llm-layer-f-p2 | F안 Phase 2 — client.py 분할(Provider Module) + Adapter 삭제 + Port→DomainPort만 + Proxy 30개 삭제 | @mangowhoiscloud | feature/llm-layer-f-p2 | 2026-03-26 | 🔄 테스트 패치 갱신 중 |
-| context-persistence | .geode/ 컨텍스트 영속성 점검 — 재설치/업그레이드 시 유저 프로필 휘발 방지 + ~/.geode/{workspace}/.geode 로드 검증 | @mangowhoiscloud | feature/context-persistence | 2026-03-26 | 🔄 실행 시작 |
+| — | — | — | — | — | — |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
+
+### Done (2026-03-26 — 세션 30)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| llm-layer-f-p2 | F안 Phase 2 — client.py 분할(Provider Module) + Adapter 이동 + Proxy 47파일 삭제 (-710줄) | — | @mangowhoiscloud | 2026-03-26 |
+| context-persistence | .geode/ 컨텍스트 영속성 — geode init 글로벌→프로젝트 시딩 + 로드 상태 표시 + 경고 로그 | — | @mangowhoiscloud | 2026-03-26 |
+| docs-sync-v029 | v0.29.0 릴리스 docs-sync — 버전 4곳 + 202 modules + 3202 tests + CHANGELOG | main direct | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-26 — 세션 29)
 
@@ -284,9 +291,9 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.28.1 | 2026-03-26 |
-| Modules | 221 | 2026-03-26 |
-| Tests | 3181 | 2026-03-26 |
+| Version | 0.29.0 | 2026-03-26 |
+| Modules | 202 | 2026-03-26 |
+| Tests | 3202 | 2026-03-26 |
 | Tools | 47 (+MCP) | 2026-03-26 |
 | MCP Catalog | 44 | 2026-03-26 |
 | HookEvents | 36 | 2026-03-19 |
