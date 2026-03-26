@@ -16,7 +16,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 # Default fixture directory
-DEFAULT_FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
+DEFAULT_FIXTURE_DIR = Path(__file__).parent.parent / "domains" / "game_ip" / "fixtures"
 # GEODE.md lives at project root (Karpathy P7: program.md = agent identity)
 DEFAULT_SOUL_PATH = Path(__file__).parent.parent.parent / "GEODE.md"
 

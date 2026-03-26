@@ -57,7 +57,9 @@ _EVALUATOR_AXIS_COUNTS: dict[str, int] = {
 }
 
 # Default golden set path
-_GOLDEN_SET_PATH = Path(__file__).parent.parent / "fixtures" / "_golden_set.json"
+_GOLDEN_SET_PATH = (
+    Path(__file__).parent.parent / "domains" / "game_ip" / "fixtures" / "_golden_set.json"
+)
 
 
 # ---------------------------------------------------------------------------

@@ -393,7 +393,7 @@ main에서만 `docs/progress.md` 갱신. Backlog → In Progress → Done.
 
 ## Custom Skills (Scaffold)
 
-Scaffold가 GEODE 개발 시 사용하는 skills (`.geode/skills/`). GEODE 런타임의 `core/skills/` SkillRegistry와는 별개.
+Scaffold가 GEODE 개발 시 사용하는 skills (`.claude/skills/`). GEODE 런타임의 `core/skills/` SkillRegistry와는 별개.
 
 | Skill | Triggers | Content |
 |-------|----------|---------|
