@@ -41,7 +41,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 L0: CLI & AGENT      — Typer CLI, AgenticLoop, SubAgentManager, Batch
 L1: INFRASTRUCTURE   — ClaudeAdapter, OpenAIAdapter, MCP Adapters (Ports co-located with consumers)
 L2: MEMORY           — Organization > Project > Session + User Profile (4-Tier + Hybrid L1/L2)
-L3: ORCHESTRATION    — HookSystem(36), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
+L3: ORCHESTRATION    — TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue (hooks 별도 분리)
 L4: EXTENSIBILITY    — ToolRegistry(47), PolicyChain, Skills, MCP Catalog(44), Reports
 L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 ```
@@ -214,7 +214,7 @@ Decision Tree on D-E-F axes:
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
 - **Port/Adapter**: All infra via Protocol ports + contextvars DI
-- **Hook-driven**: 36 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`) for extensibility
+- **Hook-driven**: `core.hooks` — 36 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`) for extensibility. Cross-cutting; accessible from all layers via `from core.hooks import HookSystem, HookEvent`.
 - **Domain Plugin**: `DomainPort` Protocol — 도메인별 pipeline 교체 가능 (`set_domain()` / `get_domain()`)
 
 ## Implementation Workflow

@@ -697,7 +697,7 @@ class TestHookIntegration:
 
         mock_hooks.trigger.assert_called_once()
         call_args = mock_hooks.trigger.call_args
-        from core.orchestration.hooks import HookEvent
+        from core.hooks import HookEvent
 
         assert call_args[0][0] == HookEvent.TRIGGER_FIRED
         assert call_args[0][1]["job_id"] == "j1"

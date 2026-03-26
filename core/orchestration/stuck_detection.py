@@ -157,7 +157,7 @@ class StuckDetector:
         are automatically tracked. When a stuck node is detected, a
         PIPELINE_ERROR event is fired.
         """
-        from core.orchestration.hooks import HookEvent
+        from core.hooks import HookEvent
 
         def _on_enter(_event: Any, data: dict[str, Any]) -> None:
             node = data.get("node", "")

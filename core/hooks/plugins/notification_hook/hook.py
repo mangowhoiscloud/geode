@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.orchestration.hooks import HookEvent, HookSystem
+from core.hooks.system import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
 

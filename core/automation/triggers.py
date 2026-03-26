@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.automation.snapshot import SnapshotManager
-    from core.orchestration.hooks import HookSystem
+    from core.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -364,7 +364,7 @@ class TriggerManager:
 
         # 5. Publish post-dispatch event
         if self._hooks:
-            from core.orchestration.hooks import HookEvent
+            from core.hooks import HookEvent
 
             self._hooks.trigger(
                 HookEvent.POST_ANALYSIS,
@@ -393,7 +393,7 @@ class TriggerManager:
             self._stats.fired += 1
 
             if self._hooks:
-                from core.orchestration.hooks import HookEvent
+                from core.hooks import HookEvent
 
                 self._hooks.trigger(
                     HookEvent.TRIGGER_FIRED,

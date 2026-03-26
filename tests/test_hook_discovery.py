@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.orchestration.hook_discovery import HookPluginLoader, discover_hooks
-from core.orchestration.hooks import HookEvent, HookSystem
+from core.hooks import HookEvent, HookSystem
+from core.hooks.discovery import HookPluginLoader, discover_hooks
 
 # ---------------------------------------------------------------------------
 # Fixtures for creating temporary plugin directories
@@ -86,8 +86,8 @@ def _make_class_plugin(
             "from dataclasses import dataclass, field\n"
             "from pathlib import Path\n"
             "from typing import Any\n"
-            "from core.orchestration.hooks import HookEvent\n"
-            "from core.orchestration.hook_discovery import HookPluginMetadata\n"
+            "from core.hooks import HookEvent\n"
+            "from core.hooks.discovery import HookPluginMetadata\n"
             "\n"
             "calls: list[dict[str, Any]] = []\n"
             "\n"

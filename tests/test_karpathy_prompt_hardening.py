@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from core.hooks import HookEvent, HookSystem
 from core.llm.prompt_assembler import PromptAssembler
 from core.llm.prompts import (
     PROMPT_VERSIONS,
@@ -32,7 +33,6 @@ from core.llm.prompts import (
 from core.llm.prompts.axes import AXES_VERSIONS, _hash_axes
 from core.llm.skill_registry import SkillDefinition, SkillRegistry
 from core.memory.context import ContextAssembler
-from core.orchestration.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------
 # Gap #3 + #4: Prompt drift detection + CI gate (expanded 8→20)

@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 from core.automation.triggers import CronParser, TriggerManager
 
 if TYPE_CHECKING:
-    from core.orchestration.hooks import HookSystem
+    from core.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -563,7 +563,7 @@ class SchedulerService:
 
         # Fire hook
         if self._hooks:
-            from core.orchestration.hooks import HookEvent
+            from core.hooks import HookEvent
 
             self._hooks.trigger(
                 HookEvent.TRIGGER_FIRED,

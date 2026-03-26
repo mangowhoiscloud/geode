@@ -26,6 +26,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Architecture
+- **`core/hooks/` 신설** — HookSystem/HookEvent/HookResult + HookPluginLoader + plugins/를 `core/orchestration/`에서 분리. Cross-cutting concern이므로 별도 최상위 모듈로. 26개 소비자 `from core.hooks import HookSystem` 경로 통일. L0~L4가 L3(orchestration)에 의존하던 레이어 위반 해소.
+
+---
+
 ## [0.30.0] — 2026-03-27
 
 MCP 카탈로그 단일화 + Proxy Cleanup — registry 삭제 + catalog 축소 + config.toml 통합 + backward-compat stub 제거.

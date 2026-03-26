@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.orchestration.hooks import HookSystem
+    from core.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ class SnapshotManager:
             self._persist_snapshot(snap)
 
         if self._hooks:
-            from core.orchestration.hooks import HookEvent
+            from core.hooks import HookEvent
 
             self._hooks.trigger(
                 HookEvent.SNAPSHOT_CAPTURED,

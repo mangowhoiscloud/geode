@@ -23,7 +23,7 @@ from core.automation.expert_panel import ExpertPanel
 from core.automation.model_registry import ModelRegistry
 
 if TYPE_CHECKING:
-    from core.orchestration.hooks import HookSystem
+    from core.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -546,7 +546,7 @@ class FeedbackLoop:
 
         # Emit hook events for observability
         if self._hooks:
-            from core.orchestration.hooks import HookEvent
+            from core.hooks import HookEvent
 
             if result.drift_alerts:
                 self._hooks.trigger(
@@ -674,7 +674,7 @@ class FeedbackOrchestrator:
         alert_dicts = [a.to_dict() for a in alerts]
 
         if alert_dicts and self._hooks:
-            from core.orchestration.hooks import HookEvent
+            from core.hooks import HookEvent
 
             self._hooks.trigger(
                 HookEvent.DRIFT_DETECTED,

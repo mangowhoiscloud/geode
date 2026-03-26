@@ -42,6 +42,7 @@ from core.domains.port import set_domain
 from core.gateway.auth.cooldown import CooldownTracker
 from core.gateway.auth.profiles import ProfileStore
 from core.gateway.auth.rotation import ProfileRotator
+from core.hooks import HookEvent, HookSystem
 from core.llm.providers.openai import OpenAIAdapter
 from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.memory.context import ContextAssembler
@@ -56,7 +57,6 @@ from core.memory.session import InMemorySessionStore
 from core.memory.session_key import build_session_key, build_thread_config
 from core.memory.user_profile import FileBasedUserProfile
 from core.orchestration.coalescing import CoalescingQueue
-from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog, RunLogEntry
@@ -450,7 +450,7 @@ class GeodeRuntime:
 
         # Notification hook plugin (events → external messaging)
         def _reg_notification() -> None:
-            from core.orchestration.plugins.notification_hook.hook import (
+            from core.hooks.plugins.notification_hook.hook import (
                 register_notification_hooks,
             )
 

@@ -36,6 +36,7 @@ from core.config import (
     ANTHROPIC_PRIMARY,
     _resolve_provider,
 )
+from core.hooks import HookEvent, HookSystem
 from core.llm.errors import BillingError, UserCancelledError
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.llm.router import (
@@ -43,7 +44,6 @@ from core.llm.router import (
     maybe_traceable,
     resolve_agentic_adapter,
 )
-from core.orchestration.hooks import HookEvent, HookSystem
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
