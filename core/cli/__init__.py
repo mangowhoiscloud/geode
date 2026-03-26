@@ -1667,18 +1667,35 @@ def serve(
         "This message comes from an external messaging channel (Slack/Discord/Telegram).\n"
         "- Do NOT echo, repeat, or quote the user's message in your response.\n"
         "- Do NOT prefix your response with 'GEODE:' or the user's original text.\n"
-        "- Respond directly with the answer only. Be concise."
+        "- Respond directly with the answer only. Be concise.\n"
+        "- You have access to prior messages in this thread as conversation history."
     )
 
-    def _gateway_processor(content: str) -> str:
-        """Process a gateway message with a fresh AgenticLoop per message.
+    # Max conversation turns to persist per thread (safety net)
+    _GATEWAY_MAX_TURNS = 20
 
-        Uses bootstrap.propagate_to_thread() to fix ContextVar visibility
-        in daemon threads, then builds a per-message AgenticLoop with
-        the same MCP/skills/handlers as the REPL.
+    def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
+        """Process a gateway message with multi-turn context.
+
+        Loads prior conversation from SessionStore (keyed by thread),
+        runs AgenticLoop, then persists the updated conversation back.
         """
         boot.propagate_to_thread()  # Fix ContextVar propagation for daemon thread
-        ctx = ConversationContext(max_turns=20)
+
+        session_key = metadata.get("session_key", "")
+
+        # --- Load prior conversation from session store ---
+        ctx = ConversationContext(max_turns=_GATEWAY_MAX_TURNS)
+        if session_key:
+            prior = runtime.session_store.get(session_key)
+            if prior and isinstance(prior.get("messages"), list):
+                ctx.messages = prior["messages"]
+                log.info(
+                    "Gateway multi-turn: loaded %d messages for %s",
+                    len(ctx.messages),
+                    session_key,
+                )
+
         agentic_ref: list[Any] = [None]
         handlers = _build_tool_handlers(
             mcp_manager=boot.mcp_manager,
@@ -1714,6 +1731,18 @@ def serve(
         agentic_ref[0] = loop
         try:
             result = loop.run(content)
+
+            # --- Persist conversation for next turn ---
+            if session_key:
+                runtime.session_store.set(
+                    session_key,
+                    {
+                        "messages": ctx.messages,
+                        "thread_id": metadata.get("thread_id", ""),
+                        "channel": metadata.get("channel", ""),
+                    },
+                )
+
             return result.text if result else ""
         except Exception as exc:
             log.warning("Gateway processor error: %s", exc, exc_info=True)

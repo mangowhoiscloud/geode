@@ -68,7 +68,7 @@ class TestChannelBinding:
 class TestChannelManager:
     def test_route_message_with_binding(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content: f"Response to: {content}")
+        manager.set_processor(lambda content, meta: f"Response to: {content}")
         manager.add_binding(ChannelBinding(channel="slack"))
 
         msg = InboundMessage(
@@ -84,7 +84,7 @@ class TestChannelManager:
 
     def test_route_message_no_binding(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content: "response")
+        manager.set_processor(lambda content, meta: "response")
 
         msg = InboundMessage(
             channel="telegram",
@@ -100,7 +100,7 @@ class TestChannelManager:
     def test_specific_binding_wins(self):
         """Most-specific binding (channel + channel_id) should win."""
         manager = ChannelManager()
-        manager.set_processor(lambda content: "processed")
+        manager.set_processor(lambda content, meta: "processed")
 
         # Add generic binding
         manager.add_binding(ChannelBinding(channel="slack"))
@@ -120,7 +120,7 @@ class TestChannelManager:
 
     def test_require_mention_filter(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content: "processed")
+        manager.set_processor(lambda content, meta: "processed")
         manager.add_binding(ChannelBinding(channel="discord", require_mention=True))
 
         # Without mention — should be ignored
@@ -160,7 +160,7 @@ class TestChannelManager:
 
     def test_stats(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content: "ok")
+        manager.set_processor(lambda content, meta: "ok")
         manager.add_binding(ChannelBinding(channel="slack"))
 
         msg = InboundMessage(
@@ -187,7 +187,7 @@ class TestChannelManager:
 
     def test_processor_exception(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content: 1 / 0)
+        manager.set_processor(lambda content, meta: 1 / 0)
         manager.add_binding(ChannelBinding(channel="slack"))
 
         msg = InboundMessage(
@@ -325,13 +325,31 @@ class TestGatewaySessionKey:
         key = build_gateway_session_key("telegram", "987654")
         assert key == "gateway:telegram:987654"
 
+    def test_build_gateway_session_key_with_thread_id(self):
+        from core.memory.session_key import build_gateway_session_key
+
+        key = build_gateway_session_key("slack", "C12345", "U67890", thread_id="1234567890.123456")
+        assert "1234567890_123456" in key
+        # Without thread_id should be shorter
+        key_no_thread = build_gateway_session_key("slack", "C12345", "U67890")
+        assert len(key) > len(key_no_thread)
+
+    def test_different_threads_different_keys(self):
+        from core.memory.session_key import build_gateway_session_key
+
+        k1 = build_gateway_session_key("slack", "C1", "U1", thread_id="111.000")
+        k2 = build_gateway_session_key("slack", "C1", "U1", thread_id="222.000")
+        k3 = build_gateway_session_key("slack", "C1", "U1")
+        assert k1 != k2
+        assert k1 != k3
+
 
 class TestAllowedToolsEnforcement:
     def test_allowed_tools_hint_injected(self):
         """Binding's allowed_tools should be prefixed to content."""
         received_content = []
         manager = ChannelManager()
-        manager.set_processor(lambda c: (received_content.append(c), "ok")[1])
+        manager.set_processor(lambda c, m: (received_content.append(c), "ok")[1])
         manager.add_binding(
             ChannelBinding(
                 channel="slack",
@@ -355,7 +373,7 @@ class TestAllowedToolsEnforcement:
         """Without allowed_tools, content passes through unchanged."""
         received_content = []
         manager = ChannelManager()
-        manager.set_processor(lambda c: (received_content.append(c), "ok")[1])
+        manager.set_processor(lambda c, m: (received_content.append(c), "ok")[1])
         manager.add_binding(ChannelBinding(channel="slack"))
 
         msg = InboundMessage(
@@ -379,7 +397,7 @@ class TestLaneQueueIntegration:
         lq.add_lane("gateway", max_concurrent=2)
 
         manager = ChannelManager(lane_queue=lq)
-        manager.set_processor(lambda c: f"processed: {c}")
+        manager.set_processor(lambda c, m: f"processed: {c}")
         manager.add_binding(ChannelBinding(channel="slack"))
 
         msg = InboundMessage(
@@ -396,7 +414,7 @@ class TestLaneQueueIntegration:
     def test_route_without_lane_queue(self):
         """Messages should still work without lane queue."""
         manager = ChannelManager(lane_queue=None)
-        manager.set_processor(lambda c: "ok")
+        manager.set_processor(lambda c, m: "ok")
         manager.add_binding(ChannelBinding(channel="slack"))
 
         msg = InboundMessage(
@@ -451,6 +469,80 @@ class TestBindingConfigReload:
         bindings = manager.list_bindings()
         assert len(bindings) == 1
         assert bindings[0]["channel"] == "slack"
+
+
+class TestMultiTurnMetadata:
+    """Verify that route_message passes metadata to the processor."""
+
+    def test_metadata_contains_session_key(self):
+        """Processor receives session_key in metadata."""
+        captured: list[dict] = []
+        manager = ChannelManager()
+        manager.set_processor(lambda c, m: (captured.append(m), "ok")[1])
+        manager.add_binding(ChannelBinding(channel="slack"))
+
+        msg = InboundMessage(
+            channel="slack",
+            channel_id="C123",
+            sender_id="U456",
+            sender_name="Bob",
+            content="hello",
+            timestamp=time.time(),
+            thread_id="1234567890.123456",
+        )
+        manager.route_message(msg)
+
+        assert len(captured) == 1
+        meta = captured[0]
+        assert "session_key" in meta
+        assert "c123" in meta["session_key"]
+        assert "u456" in meta["session_key"]
+        assert "1234567890_123456" in meta["session_key"]
+        assert meta["thread_id"] == "1234567890.123456"
+        assert meta["channel"] == "slack"
+
+    def test_metadata_without_thread_id(self):
+        """Messages without thread_id still get session_key."""
+        captured: list[dict] = []
+        manager = ChannelManager()
+        manager.set_processor(lambda c, m: (captured.append(m), "ok")[1])
+        manager.add_binding(ChannelBinding(channel="slack"))
+
+        msg = InboundMessage(
+            channel="slack",
+            channel_id="C123",
+            sender_id="U456",
+            sender_name="Bob",
+            content="hello",
+            timestamp=time.time(),
+        )
+        manager.route_message(msg)
+
+        meta = captured[0]
+        assert "session_key" in meta
+        assert meta["thread_id"] == ""
+
+    def test_thread_scoped_session_keys_differ(self):
+        """Different threads produce different session keys."""
+        keys: list[str] = []
+        manager = ChannelManager()
+        manager.set_processor(lambda c, m: (keys.append(m["session_key"]), "ok")[1])
+        manager.add_binding(ChannelBinding(channel="slack"))
+
+        for thread_id in ["111.000", "222.000"]:
+            msg = InboundMessage(
+                channel="slack",
+                channel_id="C123",
+                sender_id="U456",
+                sender_name="Bob",
+                content="hello",
+                timestamp=time.time(),
+                thread_id=thread_id,
+            )
+            manager.route_message(msg)
+
+        assert len(keys) == 2
+        assert keys[0] != keys[1]
 
 
 class TestPollerLifecycle:
