@@ -1,21 +1,14 @@
-"""Tests that all concrete implementations satisfy their Port protocols.
+"""Tests that concrete implementations satisfy their Port protocols.
 
-Verifies Clean Architecture compliance: every concrete class used in
-GeodeRuntime is isinstance-checkable against its corresponding Port.
-
-Note: Only ports with multiple implementations (or kept for DI extensibility)
-are tested here. Single-implementation ports have been removed per the
-ports-migrate refactor.
+Only ports with multiple implementations are tested here.
+Single-implementation Protocols (ProjectMemoryPort, OrganizationMemoryPort,
+UserProfilePort) have been removed — use concrete types directly.
 """
 
 from __future__ import annotations
 
 from core.llm.router import LLMClientPort
-from core.memory.port import (
-    OrganizationMemoryPort,
-    ProjectMemoryPort,
-    SessionStorePort,
-)
+from core.memory.port import SessionStorePort
 
 
 class TestExistingPortCompliance:
@@ -25,16 +18,6 @@ class TestExistingPortCompliance:
         from core.memory.session import InMemorySessionStore
 
         assert isinstance(InMemorySessionStore(), SessionStorePort)
-
-    def test_project_memory_satisfies_port(self):
-        from core.memory.project import ProjectMemory
-
-        assert isinstance(ProjectMemory(), ProjectMemoryPort)
-
-    def test_organization_memory_satisfies_port(self):
-        from core.memory.organization import MonoLakeOrganizationMemory
-
-        assert isinstance(MonoLakeOrganizationMemory(), OrganizationMemoryPort)
 
     def test_claude_adapter_satisfies_port(self):
         from core.llm.router import ClaudeAdapter

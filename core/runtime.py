@@ -47,11 +47,7 @@ from core.llm.providers.openai import OpenAIAdapter
 from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.memory.context import ContextAssembler
 from core.memory.organization import MonoLakeOrganizationMemory
-from core.memory.port import (
-    OrganizationMemoryPort,
-    ProjectMemoryPort,
-    SessionStorePort,
-)
+from core.memory.port import SessionStorePort
 from core.memory.project import ProjectMemory
 from core.memory.session import InMemorySessionStore
 from core.memory.session_key import build_session_key, build_thread_config
@@ -327,7 +323,7 @@ class RuntimeCoreConfig:
     config_watcher: ConfigWatcher
     stuck_detector: StuckDetector
     lane_queue: LaneQueue
-    project_memory: ProjectMemoryPort
+    project_memory: ProjectMemory
     session_key: str
     ip_name: str
     secondary_adapter: LLMClientPort | None = None
@@ -355,7 +351,7 @@ class RuntimeAutomationConfig:
 class RuntimeMemoryConfig:
     """L2 Memory + Prompt assembly components (all optional)."""
 
-    organization_memory: OrganizationMemoryPort | None = None
+    organization_memory: MonoLakeOrganizationMemory | None = None
     context_assembler: ContextAssembler | None = None
     prompt_assembler: Any | None = field(default=None)  # PromptAssembler (TYPE_CHECKING)
 
@@ -548,7 +544,7 @@ class GeodeRuntime:
         hooks: HookSystem,
         session_key: str,
         ip_name: str,
-        project_memory: ProjectMemoryPort | None = None,
+        project_memory: ProjectMemory | None = None,
     ) -> dict[str, Any]:
         """Build L4.5 automation components and wire hook event handlers.
 
@@ -1223,8 +1219,8 @@ class GeodeRuntime:
 
         # Calendar ↔ Scheduler bridge
         try:
+            from core.automation.calendar_bridge import set_calendar_bridge
             from core.mcp.calendar_port import get_calendar
-            from core.orchestration.calendar_bridge import set_calendar_bridge
 
             cal = get_calendar()
             if cal is not None and cal.is_available():
