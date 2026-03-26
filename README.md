@@ -12,7 +12,10 @@
 
 # GEODE v0.29.0 — Autonomous Execution Harness
 
-Claude Code Scaffold 위에 3-Layer 제어 구조를 쌓아 만든 범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다. Scaffold(CLAUDE.md + 25 Skills + 36 Hooks)가 에이전트의 행동 규칙을 정의하고, 에이전트(`while(tool_use)` 루프)가 47 도구 + 44 MCP 중에서 자율 선택하여 실행합니다.
+범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
+
+**생산**: Claude Code Scaffold(CLAUDE.md + 개발 Skills + CI Hooks)가 GEODE를 만듭니다.
+**실행**: GEODE(`while(tool_use)` 루프)가 47 도구 + 44 MCP 중에서 자율 선택하고, 36개 런타임 Hook이 라이프사이클을 제어하고, 5-Layer Verification이 출력을 검증합니다.
 
 ## Quick Start
 
@@ -69,7 +72,8 @@ uv sync && uv run geode
 | **4-Tier Memory** | SOUL → User Profile → Organization → Project → Session |
 | **`.geode/` Context** | 프로젝트-로컬 영속 저장소 — journal, vault, rules, cache |
 | **Domain Plugin** | `DomainPort` Protocol로 파이프라인 교체 — Game IP 분석 기본 탑재 |
-| **Scaffold** | CLAUDE.md(428줄 행동 규칙) + 25 Skills(도메인 지식) + 36 Hooks(라이프사이클 제어) — 에이전트를 생산하는 제어 구조 |
+| **Scaffold (생산)** | Claude Code + CLAUDE.md(428줄) + 개발 Skills + CI Hooks — GEODE를 만드는 제어 구조 |
+| **36 Runtime Hooks** | 파이프라인/노드/검증/메모리/서브에이전트 라이프사이클 이벤트 — GEODE 런타임 제어 |
 | **5-Layer Verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM(Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
 | **Safety** | 4-tier HITL(SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, PolicyChain 6-layer |
 
@@ -77,7 +81,11 @@ uv sync && uv run geode
 
 ## Scaffold
 
-Scaffold는 에이전트와 분리된 도구가 아닙니다. CLAUDE.md가 행동 규칙을 정의하고, 25개 Skills가 도메인 지식을 인코딩하고, 36개 Hooks가 라이프사이클을 제어합니다. 이 제어 구조 위에서 `while(tool_use)` 루프가 자율 실행합니다. Scaffold가 에이전트를 만들고, 에이전트가 Scaffold의 가치를 실현합니다.
+두 가지 제어 계층이 있습니다.
+
+**Scaffold (생산 체계)**: Claude Code + CLAUDE.md + 개발 Skills + CI Hooks. GEODE의 코드를 생산하고 품질을 보장하는 외부 하네스.
+
+**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 47 도구 + 36 런타임 Hook + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
 
 ### Project Structure
 
