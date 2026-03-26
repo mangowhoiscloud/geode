@@ -18,6 +18,10 @@
     "command": "npx",
     "args": ["-y", "@playwright/mcp"]
   },
+  "playwriter": {
+    "command": "npx",
+    "args": ["-y", "playwriter@latest"]
+  },
   "linkedin-reader": {
     "command": "uvx",
     "args": ["linkedin-scraper-mcp"]

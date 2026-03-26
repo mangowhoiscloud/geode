@@ -273,6 +273,12 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         description="Browser automation via Playwright (navigate, click, scrape)",
         tags=("browser", "playwright", "automation", "scrape"),
     ),
+    "playwriter": MCPCatalogEntry(
+        name="playwriter",
+        package="playwriter@latest",
+        description="Chrome extension bridge — control existing Chrome with logins/cookies intact",
+        tags=("browser", "chrome", "auth", "login", "playwriter"),
+    ),
     "youtube-transcript": MCPCatalogEntry(
         name="youtube-transcript",
         package="@fabriqa.ai/youtube-transcript-mcp@latest",

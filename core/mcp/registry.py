@@ -48,6 +48,7 @@ DEFAULT_SERVERS: tuple[str, ...] = (
     "steam",
     "sequential-thinking",
     "playwright",
+    "playwriter",
     "arxiv",
     "gmail",
     "youtube-transcript",
