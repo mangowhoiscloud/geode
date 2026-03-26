@@ -113,6 +113,9 @@ COMMAND_MAP: dict[str, str] = {
     "/apply": "apply",
     "/compact": "compact",
     "/clear": "clear",
+    "/tasks": "tasks",
+    "/task": "tasks",
+    "/t": "tasks",
 }
 
 
@@ -143,6 +146,7 @@ def show_help() -> None:
     console.print("  [label]/resume[/label]             — Resume interrupted session")
     console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/apply[/label]              — Manage job applications")
+    console.print("  [label]/tasks[/label]              — Show task list")
     console.print("  [label]/compact[/label]            — Compact conversation context")
     console.print("  [label]/clear[/label]              — Clear conversation history")
     console.print("  [label]/help[/label]               — Show this help")
@@ -1512,6 +1516,77 @@ def cmd_clear(args: str) -> None:
 
     ctx.clear()
     console.print(f"  [success]Conversation cleared[/success] ({msg_count} messages removed)")
+    console.print()
+
+
+def cmd_tasks(args: str) -> None:
+    """Show user task list.
+
+    Usage:
+        /tasks            — show all tasks
+        /tasks pending    — show pending only
+        /tasks done       — show completed tasks
+    """
+    from core.cli.session_state import _get_user_task_graph
+    from core.orchestration.task_system import TaskStatus
+
+    _STATUS_LABEL: dict[TaskStatus, tuple[str, str]] = {
+        TaskStatus.PENDING: ("○", "muted"),
+        TaskStatus.READY: ("○", "muted"),
+        TaskStatus.RUNNING: ("▶", "value"),
+        TaskStatus.COMPLETED: ("✓", "success"),
+        TaskStatus.FAILED: ("✗", "error"),
+        TaskStatus.SKIPPED: ("–", "muted"),
+    }
+
+    filter_arg = args.strip().lower()
+    graph = _get_user_task_graph()
+    all_tasks = [graph.get_task(tid) for batch in graph.topological_order() for tid in batch]
+    all_tasks = [t for t in all_tasks if t is not None]
+
+    # Apply filter
+    if filter_arg in ("pending", "todo"):
+        all_tasks = [t for t in all_tasks if t.status in (TaskStatus.PENDING, TaskStatus.READY)]
+    elif filter_arg in ("done", "completed"):
+        all_tasks = [t for t in all_tasks if t.status == TaskStatus.COMPLETED]
+    elif filter_arg in ("active", "running"):
+        all_tasks = [t for t in all_tasks if t.status == TaskStatus.RUNNING]
+
+    console.print()
+    if not all_tasks:
+        console.print("  [muted]No tasks.[/muted]")
+        console.print()
+        return
+
+    # Sort: running first, then pending, then completed/failed
+    _order = {
+        TaskStatus.RUNNING: 0,
+        TaskStatus.READY: 1,
+        TaskStatus.PENDING: 1,
+        TaskStatus.FAILED: 2,
+        TaskStatus.SKIPPED: 2,
+        TaskStatus.COMPLETED: 3,
+    }
+    all_tasks.sort(key=lambda t: _order.get(t.status, 9))
+
+    console.print("  [header]Tasks[/header]")
+    for task in all_tasks:
+        icon, style = _STATUS_LABEL.get(task.status, ("?", "muted"))
+        owner = task.metadata.get("owner", "")
+        owner_tag = f"  [muted]{owner}[/muted]" if owner else ""
+        elapsed = f"  [muted]{task.elapsed_s:.1f}s[/muted]" if task.elapsed_s else ""
+        console.print(
+            f"  [{style}]{icon}[/{style}]  [{style}]{task.task_id}[/{style}]"
+            f"  {task.name}{owner_tag}{elapsed}"
+        )
+    console.print()
+    running = sum(1 for t in all_tasks if t.status == TaskStatus.RUNNING)
+    pending = sum(1 for t in all_tasks if t.status in (TaskStatus.PENDING, TaskStatus.READY))
+    done = sum(1 for t in all_tasks if t.status == TaskStatus.COMPLETED)
+    console.print(
+        f"  [muted]{len(all_tasks)} total"
+        f"  ▶ {running} active  ○ {pending} pending  ✓ {done} done[/muted]"
+    )
     console.print()
 
 

@@ -431,6 +431,10 @@ def _handle_command(
         from core.cli.commands import cmd_clear
 
         cmd_clear(args)
+    elif action in ("tasks", "task"):
+        from core.cli.commands import cmd_tasks
+
+        cmd_tasks(args)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
