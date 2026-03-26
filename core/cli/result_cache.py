@@ -106,7 +106,7 @@ class ResultCache:
             fpath = self._cache_dir / f"{safe}.json"
             from pydantic import BaseModel
 
-            from core.infrastructure.atomic_io import atomic_write_json
+            from core.utils.atomic_io import atomic_write_json
 
             def _default(obj: Any) -> Any:
                 if isinstance(obj, BaseModel):
