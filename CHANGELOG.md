@@ -26,6 +26,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.29.1] — 2026-03-26
+
+Action Display — tool-type 그루핑 + 서브에이전트 progressive counter + 턴 끝 컴팩트 요약.
+
+### Added
+- **Action Display** — tool-type 그루핑 (6건+ 동일 타입 그룹 요약), 서브에이전트 progressive counter, 턴 끝 컴팩트 요약
+- **OperationLogger** — `_tool_type_counts` 추적 + `finalize()` 그룹 렌더링
+- **render_turn_summary()** — rounds · tools · elapsed · cost 한 줄 요약
+- **render_subagent_progress()** — completed/total 카운터
+
 ## [0.29.0] — 2026-03-26
 
 F안 LLM 분할 + Native Tools + Context Persistence — client.py 1182줄을 Provider Module 패턴으로 분할하고, 3사 네이티브 도구를 통합하고, 프로필 영속성을 보장.

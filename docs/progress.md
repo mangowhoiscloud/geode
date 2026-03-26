@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-26 (세션 31 — v0.29.0 릴리스 docs-sync)
+> 마지막 갱신: 2026-03-26 (세션 32 — v0.29.1 릴리스 docs-sync)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -21,13 +21,20 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| action-display | Action Display 개선 — tool-type 그루핑 + 병렬 서브에이전트 카운터 + 턴 끝 요약 (Tier1, LLM 없음) | @mangowhoiscloud | feature/action-display | 2026-03-26 | 프론티어 GAP 기반 |
+| — | — | — | — | — | — |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
+
+### Done (2026-03-26 — 세션 32)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| action-display | Action Display 개선 — tool-type 그루핑 + 서브에이전트 progressive counter + 턴 끝 컴팩트 요약 | — | @mangowhoiscloud | 2026-03-26 |
+| docs-sync-v0291 | v0.29.1 릴리스 docs-sync — 버전 4곳 + 3219 tests + CHANGELOG | main direct | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-26 — 세션 30)
 
@@ -291,9 +298,9 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.29.0 | 2026-03-26 |
+| Version | 0.29.1 | 2026-03-26 |
 | Modules | 202 | 2026-03-26 |
-| Tests | 3202 | 2026-03-26 |
+| Tests | 3219 | 2026-03-26 |
 | Tools | 47 (+MCP) | 2026-03-26 |
 | MCP Catalog | 44 | 2026-03-26 |
 | HookEvents | 36 | 2026-03-19 |
