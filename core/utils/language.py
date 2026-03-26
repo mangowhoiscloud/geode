@@ -20,16 +20,16 @@ def detect_language(text: str) -> str:
     korean = sum(
         1
         for c in text
-        if "\uAC00" <= c <= "\uD7A3"  # Hangul syllables
-        or "\u3131" <= c <= "\u314E"  # Hangul compatibility jamo
+        if "\uac00" <= c <= "\ud7a3"  # Hangul syllables
+        or "\u3131" <= c <= "\u314e"  # Hangul compatibility jamo
     )
     japanese_kana = sum(
         1
         for c in text
-        if "\u3040" <= c <= "\u309F"  # Hiragana
-        or "\u30A0" <= c <= "\u30FF"  # Katakana
+        if "\u3040" <= c <= "\u309f"  # Hiragana
+        or "\u30a0" <= c <= "\u30ff"  # Katakana
     )
-    cjk = sum(1 for c in text if "\u4E00" <= c <= "\u9FFF")
+    cjk = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
 
     if korean > 0:
         return "Korean"
