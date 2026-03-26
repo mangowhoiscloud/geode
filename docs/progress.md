@@ -21,7 +21,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| action-display | Action Display 개선 — tool-type 그루핑 + 병렬 서브에이전트 카운터 + 턴 끝 요약 (Tier1, LLM 없음) | @mangowhoiscloud | feature/action-display | 2026-03-26 | 프론티어 GAP 기반 |
 
 ### In Review
 
