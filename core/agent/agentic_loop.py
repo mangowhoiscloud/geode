@@ -253,6 +253,24 @@ class AgenticLoop:
         except Exception:
             log.debug("Transcript end recording failed", exc_info=True)
 
+    def _finalize_and_return(
+        self,
+        result: AgenticResult,
+        user_input: str,
+        round_idx: int,
+    ) -> AgenticResult:
+        """Log result, record transcript end, save checkpoint, and return (DRY)."""
+        log.info(
+            "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
+            result.termination_reason,
+            result.rounds,
+            self.max_rounds,
+            len(result.tool_calls),
+        )
+        self._record_transcript_end(result)
+        self._save_checkpoint(user_input, round_idx=round_idx)
+        return result
+
     def refresh_tools(self) -> int:
         """Reload MCP tools into the tool list without reconstructing the loop.
 
@@ -449,16 +467,7 @@ class AgenticLoop:
                     error="llm_call_failed",
                     termination_reason="llm_error",
                 )
-                log.info(
-                    "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
-                    result.termination_reason,
-                    result.rounds,
-                    self.max_rounds,
-                    len(result.tool_calls),
-                )
-                self._record_transcript_end(result)
-                self._save_checkpoint(user_input, round_idx=round_idx + 1)
-                return result
+                return self._finalize_and_return(result, user_input, round_idx + 1)
 
             # Successful LLM response — reset failure counter
             self._consecutive_llm_failures = 0
@@ -481,16 +490,7 @@ class AgenticLoop:
                     rounds=round_idx + 1,
                     termination_reason=reason,
                 )
-                log.info(
-                    "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
-                    result.termination_reason,
-                    result.rounds,
-                    self.max_rounds,
-                    len(result.tool_calls),
-                )
-                self._record_transcript_end(result)
-                self._save_checkpoint(user_input, round_idx=round_idx + 1)
-                return result
+                return self._finalize_and_return(result, user_input, round_idx + 1)
 
             tool_results = await self._tool_processor.process(response)
 
@@ -510,16 +510,7 @@ class AgenticLoop:
                     error="convergence_detected",
                     termination_reason="convergence_detected",
                 )
-                log.info(
-                    "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
-                    result.termination_reason,
-                    result.rounds,
-                    self.max_rounds,
-                    len(result.tool_calls),
-                )
-                self._record_transcript_end(result)
-                self._save_checkpoint(user_input, round_idx=round_idx + 1)
-                return result
+                return self._finalize_and_return(result, user_input, round_idx + 1)
 
             if self._total_consecutive_tool_errors >= 3:
                 # Backpressure: inject a cooldown hint
@@ -555,16 +546,7 @@ class AgenticLoop:
             error="max_rounds",
             termination_reason="max_rounds",
         )
-        log.info(
-            "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
-            result.termination_reason,
-            result.rounds,
-            self.max_rounds,
-            len(result.tool_calls),
-        )
-        self._record_transcript_end(result)
-        self._save_checkpoint(user_input, round_idx=self.max_rounds)
-        return result
+        return self._finalize_and_return(result, user_input, self.max_rounds)
 
     def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:
         """Replace context messages with the full messages list.
