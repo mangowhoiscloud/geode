@@ -391,9 +391,9 @@ main에서만 `docs/progress.md` 갱신. Backlog → In Progress → Done.
 | Test | `uv run pytest tests/ -m "not live"` | 3202+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
-## Custom Skills
+## Custom Skills (Scaffold)
 
-Project-specific skills in `.claude/skills/`:
+Scaffold가 GEODE 개발 시 사용하는 skills (`.geode/skills/`). GEODE 런타임의 `core/skills/` SkillRegistry와는 별개.
 
 | Skill | Triggers | Content |
 |-------|----------|---------|

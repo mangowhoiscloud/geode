@@ -73,6 +73,7 @@ uv sync && uv run geode
 | **`.geode/` Context** | 프로젝트-로컬 영속 저장소 — journal, vault, rules, cache |
 | **Domain Plugin** | `DomainPort` Protocol로 파이프라인 교체 — Game IP 분석 기본 탑재 |
 | **Scaffold (생산)** | Claude Code + CLAUDE.md(428줄) + 개발 Skills + CI Hooks — GEODE를 만드는 제어 구조 |
+| **20 Runtime Skills** | `.geode/skills/` — 도메인별 지식을 프롬프트로 주입. 파이프라인, 스코어링, 검증, 아키텍처 패턴 등 |
 | **36 Runtime Hooks** | 파이프라인/노드/검증/메모리/서브에이전트 라이프사이클 이벤트 — GEODE 런타임 제어 |
 | **5-Layer Verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM(Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
 | **Safety** | 4-tier HITL(SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, PolicyChain 6-layer |
@@ -85,7 +86,7 @@ uv sync && uv run geode
 
 **Scaffold (생산 체계)**: Claude Code + CLAUDE.md + 개발 Skills + CI Hooks. GEODE의 코드를 생산하고 품질을 보장하는 외부 하네스.
 
-**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 47 도구 + 36 런타임 Hook + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
+**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 47 도구 + 20 런타임 Skills + 36 런타임 Hooks + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
 
 ### Project Structure
 
