@@ -110,6 +110,7 @@ app = typer.Typer(
 _search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
 _readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
 _scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", default=None)
+_user_task_graph_ctx: ContextVar[Any] = ContextVar("user_task_graph", default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +206,24 @@ def _get_readiness() -> ReadinessReport | None:
 def _set_readiness(report: ReadinessReport) -> None:
     """Set the context-local ReadinessReport."""
     _readiness_ctx.set(report)
+
+
+def _get_user_task_graph() -> Any:
+    """Get (or lazily create) the context-local user TaskGraph."""
+    from core.orchestration.task_system import TaskGraph
+
+    graph = _user_task_graph_ctx.get()
+    if graph is None:
+        graph = TaskGraph()
+        _user_task_graph_ctx.set(graph)
+    return graph
+
+
+def _reset_user_task_graph() -> None:
+    """Reset the context-local user TaskGraph (new session)."""
+    from core.orchestration.task_system import TaskGraph
+
+    _user_task_graph_ctx.set(TaskGraph())
 
 
 def _get_last_result() -> dict[str, Any] | None:
@@ -542,6 +561,10 @@ def _handle_command(
         from core.cli.commands import cmd_clear
 
         cmd_clear(args)
+    elif action in ("tasks", "task"):
+        from core.cli.commands import cmd_tasks
+
+        cmd_tasks(args)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")

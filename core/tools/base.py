@@ -22,6 +22,7 @@ VALID_CATEGORIES = frozenset(
         "profile",
         "notification",
         "calendar",
+        "task",
     }
 )
 
