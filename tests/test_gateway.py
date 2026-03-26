@@ -14,7 +14,7 @@ from core.gateway.pollers.base import BasePoller
 from core.gateway.pollers.discord_poller import DiscordPoller
 from core.gateway.pollers.slack_poller import SlackPoller
 from core.gateway.pollers.telegram_poller import TelegramPoller
-from core.infrastructure.ports.gateway_port import get_gateway, set_gateway
+from core.gateway.port import get_gateway, set_gateway
 
 # ---------------------------------------------------------------------------
 # InboundMessage

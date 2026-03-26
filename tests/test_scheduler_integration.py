@@ -299,7 +299,7 @@ class TestSchedulerServicePort:
     """Verify SchedulerService implements SchedulerServicePort."""
 
     def test_protocol_compliance(self, svc: SchedulerService) -> None:
-        from core.infrastructure.ports.automation_port import (
+        from core.automation.port import (
             SchedulerServicePort,
         )
 

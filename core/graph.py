@@ -52,8 +52,8 @@ from core.domains.game_ip.nodes.router import route_after_router, router_node
 from core.domains.game_ip.nodes.scoring import scoring_node
 from core.domains.game_ip.nodes.signals import signals_node
 from core.domains.game_ip.nodes.synthesizer import synthesizer_node
-from core.infrastructure.ports.hook_port import HookSystemPort
 from core.orchestration.bootstrap import BootstrapManager
+from core.orchestration.hook_port import HookSystemPort
 from core.orchestration.hooks import HookEvent
 from core.state import (
     BiasBusterResult,

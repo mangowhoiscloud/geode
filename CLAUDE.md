@@ -8,7 +8,7 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 187
+- **Modules**: 184
 - **Tests**: 3249+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -39,7 +39,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 
 ```
 L0: CLI & AGENT      — Typer CLI, AgenticLoop, SubAgentManager, Batch
-L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
+L1: INFRASTRUCTURE   — ClaudeAdapter, OpenAIAdapter, MCP Adapters (Ports co-located with consumers)
 L2: MEMORY           — Organization > Project > Session + User Profile (4-Tier + Hybrid L1/L2)
 L3: ORCHESTRATION    — HookSystem(36), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
 L4: EXTENSIBILITY    — ToolRegistry(47), PolicyChain, Skills, MCP Catalog(44), Reports

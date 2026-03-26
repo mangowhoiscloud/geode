@@ -34,19 +34,7 @@ from core.automation.expert_panel import ExpertPanel
 from core.automation.feedback_loop import FeedbackLoop
 from core.automation.model_registry import ModelRegistry
 from core.automation.outcome_tracking import OutcomeTracker
-from core.automation.snapshot import SnapshotManager
-from core.automation.triggers import TriggerManager, TriggerType
-from core.config import settings
-from core.domains.loader import load_domain_adapter
-from core.gateway.auth.cooldown import CooldownTracker
-from core.gateway.auth.profiles import ProfileStore
-from core.gateway.auth.rotation import ProfileRotator
-from core.infrastructure.ports.auth_port import (
-    CooldownTrackerPort,
-    ProfileRotatorPort,
-    ProfileStorePort,
-)
-from core.infrastructure.ports.automation_port import (
+from core.automation.port import (
     CorrelationAnalyzerPort,
     DriftDetectorPort,
     ExpertPanelPort,
@@ -56,14 +44,38 @@ from core.infrastructure.ports.automation_port import (
     SnapshotManagerPort,
     TriggerManagerPort,
 )
-from core.infrastructure.ports.domain_port import set_domain
-from core.infrastructure.ports.hook_port import HookSystemPort
-from core.infrastructure.ports.memory_port import (
+from core.automation.snapshot import SnapshotManager
+from core.automation.triggers import TriggerManager, TriggerType
+from core.config import settings
+from core.domains.loader import load_domain_adapter
+from core.domains.port import set_domain
+from core.gateway.auth.cooldown import CooldownTracker
+from core.gateway.auth.profiles import ProfileStore
+from core.gateway.auth.rotation import ProfileRotator
+from core.gateway.auth_port import (
+    CooldownTrackerPort,
+    ProfileRotatorPort,
+    ProfileStorePort,
+)
+from core.llm.providers.openai import OpenAIAdapter
+from core.llm.router import ClaudeAdapter, LLMClientPort
+from core.memory.context import ContextAssembler
+from core.memory.organization import MonoLakeOrganizationMemory
+from core.memory.port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
     SessionStorePort,
 )
-from core.infrastructure.ports.orchestration_port import (
+from core.memory.project import ProjectMemory
+from core.memory.session import InMemorySessionStore
+from core.memory.session_key import build_session_key, build_thread_config
+from core.memory.user_profile import FileBasedUserProfile
+from core.orchestration.coalescing import CoalescingQueue
+from core.orchestration.hook_port import HookSystemPort
+from core.orchestration.hooks import HookEvent, HookSystem
+from core.orchestration.hot_reload import ConfigWatcher
+from core.orchestration.lane_queue import LaneQueue
+from core.orchestration.orchestration_port import (
     CoalescingQueuePort,
     ConfigWatcherPort,
     LaneQueuePort,
@@ -71,28 +83,16 @@ from core.infrastructure.ports.orchestration_port import (
     StuckDetectorPort,
     TaskGraphPort,
 )
-from core.infrastructure.ports.tool_port import (
-    PolicyChainPort,
-    ToolRegistryPort,
-)
-from core.llm.providers.openai import OpenAIAdapter
-from core.llm.router import ClaudeAdapter, LLMClientPort
-from core.memory.context import ContextAssembler
-from core.memory.organization import MonoLakeOrganizationMemory
-from core.memory.project import ProjectMemory
-from core.memory.session import InMemorySessionStore
-from core.memory.session_key import build_session_key, build_thread_config
-from core.memory.user_profile import FileBasedUserProfile
-from core.orchestration.coalescing import CoalescingQueue
-from core.orchestration.hooks import HookEvent, HookSystem
-from core.orchestration.hot_reload import ConfigWatcher
-from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog, RunLogEntry
 from core.orchestration.stuck_detection import StuckDetector
 from core.orchestration.task_bridge import TaskGraphHookBridge
 from core.orchestration.task_system import create_geode_task_graph
 from core.tools.analysis import ExplainScoreTool, PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
 from core.tools.policy import NodeScopePolicy, ToolPolicy
+from core.tools.port import (
+    PolicyChainPort,
+    ToolRegistryPort,
+)
 from core.tools.registry import ToolRegistry, ToolSearchTool
 
 log = logging.getLogger(__name__)
@@ -1005,7 +1005,7 @@ class GeodeRuntime:
         from core.gateway.pollers.discord_poller import DiscordPoller
         from core.gateway.pollers.slack_poller import SlackPoller
         from core.gateway.pollers.telegram_poller import TelegramPoller
-        from core.infrastructure.ports.gateway_port import set_gateway
+        from core.gateway.port import set_gateway
         from core.mcp.notification_port import get_notification
 
         if not settings.gateway_enabled:
@@ -1438,7 +1438,7 @@ class GeodeRuntime:
         Returns empty dict if no tools are available (dry_run, etc).
         Also injects tool executor into contextvar via ``set_tool_executor()``.
         """
-        from core.infrastructure.ports.tool_port import set_tool_executor
+        from core.tools.port import set_tool_executor
 
         available = self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
         if not available:

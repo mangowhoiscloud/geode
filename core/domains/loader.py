@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from core.infrastructure.ports.domain_port import DomainPort
+from core.domains.port import DomainPort
 
 log = logging.getLogger(__name__)
 

@@ -12,14 +12,14 @@ from typing import Any
 import numpy as np
 
 from core.domains.game_ip.fixtures import load_fixture
-from core.infrastructure.ports.domain_port import get_domain_or_none
-from core.infrastructure.ports.tool_port import get_tool_executor
+from core.domains.port import get_domain_or_none
 from core.state import (
     AnalysisResult,
     EvaluatorResult,
     GeodeState,
     PSMResult,
 )
+from core.tools.port import get_tool_executor
 
 log = logging.getLogger(__name__)
 

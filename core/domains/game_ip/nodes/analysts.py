@@ -13,8 +13,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from core.config import get_node_model
-from core.infrastructure.ports.domain_port import get_domain_or_none
-from core.infrastructure.ports.tool_port import get_tool_executor
+from core.domains.port import get_domain_or_none
 from core.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_TOOLS_SUFFIX, ANALYST_USER
 from core.llm.router import (
     call_llm_with_tools,
@@ -24,6 +23,7 @@ from core.llm.router import (
     get_secondary_llm_parsed,
 )
 from core.state import AnalysisResult, GeodeState
+from core.tools.port import get_tool_executor
 
 log = logging.getLogger(__name__)
 

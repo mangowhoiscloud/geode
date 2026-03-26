@@ -13,7 +13,7 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
-from core.infrastructure.ports.memory_port import UserProfilePort
+from core.memory.port import UserProfilePort
 
 log = logging.getLogger(__name__)
 

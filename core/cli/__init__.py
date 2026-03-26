@@ -81,10 +81,10 @@ from core.cli.tool_handlers import (
 from core.cli.ui.console import console
 from core.cli.ui.status import GeodeStatus
 from core.config import settings
-from core.infrastructure.ports.hook_port import HookSystemPort
 from core.llm.commentary import (
     generate_commentary,
 )
+from core.orchestration.hook_port import HookSystemPort
 
 log = logging.getLogger(__name__)
 
@@ -1575,7 +1575,7 @@ def serve(
 
     # Wire AgenticLoop as gateway processor
     from core.agent.conversation import ConversationContext
-    from core.infrastructure.ports.gateway_port import get_gateway
+    from core.gateway.port import get_gateway
 
     gateway = get_gateway()
     if gateway is None:

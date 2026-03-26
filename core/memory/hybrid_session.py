@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core.infrastructure.ports.memory_port import SessionStorePort
+from core.memory.port import SessionStorePort
 
 log = logging.getLogger(__name__)
 

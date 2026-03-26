@@ -38,7 +38,7 @@ VALID_AXES_MAP: dict[str, set[str]] = _derive_valid_axes_map()
 
 def get_valid_axes_map() -> dict[str, set[str]]:
     """Get valid axes map from domain adapter if available, else static."""
-    from core.infrastructure.ports.domain_port import get_domain_or_none
+    from core.domains.port import get_domain_or_none
 
     domain = get_domain_or_none()
     if domain is not None:

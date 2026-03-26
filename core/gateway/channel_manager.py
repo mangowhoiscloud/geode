@@ -12,7 +12,7 @@ from typing import Any
 
 from core.gateway.models import ChannelBinding, InboundMessage
 from core.gateway.pollers.base import BasePoller
-from core.infrastructure.ports.gateway_port import MessageProcessor
+from core.gateway.port import MessageProcessor
 from core.memory.session_key import build_gateway_session_key
 
 log = logging.getLogger(__name__)
