@@ -23,6 +23,7 @@
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
 | glm-pipeline-routing | GLM-5 파이프라인 라우팅 — call_llm_parsed provider 분기 + GLMAdapter 생성 | @mangowhoiscloud | feature/glm-pipeline-routing | 2026-03-26 | P0 파이프라인 동작 불가 |
+| status-line-per-turn | Status line per-turn 리셋 — SessionMeter/TokenTracker/Cost/Context% 턴 단위 표시 | @mangowhoiscloud | feature/status-line-per-turn | 2026-03-26 | 전 항목 세션 누적 버그 |
 
 ### In Review
 
