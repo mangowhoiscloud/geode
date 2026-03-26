@@ -23,6 +23,7 @@
 |---------|----------|------|--------|--------|------|
 | native-tools | 3사 Agent SDK 네이티브 도구 통합 — Anthropic web_search/web_fetch/code_exec 버전업 + OpenAI Responses API 패스스루 + GLM-5 web_search 네이티브 | @mangowhoiscloud | feature/native-tools | 2026-03-26 | Agent SDK 리서치 완료 |
 | llm-layer-f | F안 적용 — client.py 분할(Provider Module) + Adapter 삭제 + Port→DomainPort만 + Proxy 30개 삭제 + infrastructure/ 제거 | @mangowhoiscloud | feature/llm-layer-f | 2026-03-26 | 프론티어 GAP 기반 |
+| context-persistence | .geode/ 컨텍스트 영속성 점검 — 재설치/업그레이드 시 유저 프로필 휘발 방지 + ~/.geode/{workspace}/.geode 로드 검증 | @mangowhoiscloud | feature/context-persistence | 2026-03-26 | 유저 피드백 |
 
 ### In Review
 
