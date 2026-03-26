@@ -334,9 +334,7 @@ class MCPServerManager:
             if name in self._servers or not entry.env_keys:
                 continue
             missing = [
-                k
-                for k in entry.env_keys
-                if not (os.environ.get(k) or self._dotenv_cache.get(k))
+                k for k in entry.env_keys if not (os.environ.get(k) or self._dotenv_cache.get(k))
             ]
             if missing:
                 available_inactive.append(

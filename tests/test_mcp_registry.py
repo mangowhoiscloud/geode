@@ -149,9 +149,7 @@ class TestManagerLoadConfig:
         geode_dir = tmp_path / ".geode"
         geode_dir.mkdir()
         toml_content = (
-            "[mcp.servers.playwright]\n"
-            'command = "npx"\n'
-            'args = ["-y", "@playwright/mcp"]\n'
+            '[mcp.servers.playwright]\ncommand = "npx"\nargs = ["-y", "@playwright/mcp"]\n'
         )
         (geode_dir / "config.toml").write_text(toml_content, encoding="utf-8")
 
