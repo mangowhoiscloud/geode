@@ -2,6 +2,10 @@
 
 Base adapter for all OpenAI-compatible providers (OpenAI, GLM, etc.).
 Handles Anthropic->OpenAI message/tool conversion, httpx pool, circuit breaker.
+
+TODO(v0.30+): Migrate to OpenAI Responses API for native web_search_preview,
+code_interpreter, file_search, and other hosted tools. Current implementation
+uses Chat Completions API which only supports function-type tools.
 """
 
 from __future__ import annotations
@@ -26,6 +30,9 @@ log = logging.getLogger(__name__)
 
 class OpenAIAgenticAdapter:
     """OpenAI agentic adapter (P1 Gateway pattern).
+
+    TODO(v0.30+): Migrate to OpenAI Responses API for native web_search_preview,
+    code_interpreter, file_search, and other hosted tools.
 
     Subclass for GLM, Qwen, etc. Override ``_resolve_config()`` and
     ``fallback_chain`` for provider-specific settings.
