@@ -31,7 +31,14 @@ import httpx
 from anthropic.types import TextBlockParam
 from pydantic import BaseModel
 
-from core.config import ANTHROPIC_FALLBACK_CHAIN, is_model_allowed, settings
+from core.config import (
+    ANTHROPIC_FALLBACK_CHAIN,
+    GLM_FALLBACK_CHAIN,
+    OPENAI_FALLBACK_CHAIN,
+    _resolve_provider,
+    is_model_allowed,
+    settings,
+)
 from core.llm.token_tracker import MODEL_PRICING as MODEL_PRICING
 from core.llm.token_tracker import LLMUsage as LLMUsage
 from core.llm.token_tracker import LLMUsageAccumulator as LLMUsageAccumulator
@@ -370,6 +377,138 @@ _RETRYABLE_ERRORS = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Provider-aware helpers — route to correct SDK based on model provider
+# ---------------------------------------------------------------------------
+
+
+def _get_provider_client(provider: str) -> Any:
+    """Return the correct SDK client for the given provider.
+
+    - "anthropic" → Anthropic sync client
+    - "openai" → OpenAI client
+    - "glm" → GLM client (OpenAI-compatible with custom base_url)
+    """
+    if provider == "anthropic":
+        return get_anthropic_client()
+    if provider == "openai":
+        from core.infrastructure.adapters.llm.openai_adapter import _get_openai_client
+
+        return _get_openai_client()
+    if provider == "glm":
+        from core.infrastructure.adapters.llm.glm_adapter import _get_glm_client
+
+        return _get_glm_client()
+    raise ValueError(f"Unsupported provider: {provider}")
+
+
+def _get_fallback_chain(provider: str) -> list[str]:
+    """Return the fallback model chain for the given provider."""
+    if provider == "anthropic":
+        return list(ANTHROPIC_FALLBACK_CHAIN)
+    if provider == "openai":
+        return list(OPENAI_FALLBACK_CHAIN)
+    if provider == "glm":
+        return list(GLM_FALLBACK_CHAIN)
+    return []
+
+
+def _get_provider_retryable_errors(provider: str) -> tuple[type[Exception], ...]:
+    """Return retryable error types for the given provider."""
+    if provider == "anthropic":
+        return _RETRYABLE_ERRORS
+    # OpenAI and GLM both use the openai SDK
+    import openai
+
+    return (
+        openai.RateLimitError,
+        openai.APIConnectionError,
+        openai.InternalServerError,
+    )
+
+
+def _get_provider_bad_request_error(provider: str) -> type[Exception] | None:
+    """Return the bad-request error type for the given provider."""
+    if provider == "anthropic":
+        return anthropic.BadRequestError
+    import openai
+
+    return openai.BadRequestError
+
+
+# Per-provider circuit breakers (Anthropic uses module-level _circuit_breaker)
+_openai_cb = CircuitBreaker()
+_glm_cb = CircuitBreaker()
+
+
+def _get_provider_circuit_breaker(provider: str) -> CircuitBreaker:
+    """Return the circuit breaker for the given provider."""
+    if provider == "anthropic":
+        return _circuit_breaker
+    if provider == "openai":
+        return _openai_cb
+    if provider == "glm":
+        return _glm_cb
+    return _circuit_breaker
+
+
+def _record_openai_usage(
+    response: Any,
+    model: str,
+    *,
+    label: str = "",
+) -> LLMUsage | None:
+    """Record token usage from an OpenAI-format response. Returns usage or None.
+
+    OpenAI SDK uses ``prompt_tokens`` / ``completion_tokens`` (not
+    ``input_tokens`` / ``output_tokens`` like Anthropic).
+    """
+    if not (hasattr(response, "usage") and response.usage):
+        return None
+    in_tok = response.usage.prompt_tokens or 0
+    out_tok = response.usage.completion_tokens or 0
+    usage = get_tracker().record(model, in_tok, out_tok)
+    suffix = f" ({label})" if label else ""
+    log.info(
+        "LLM call%s: model=%s in=%d out=%d cost=$%.4f",
+        suffix,
+        model,
+        in_tok,
+        out_tok,
+        usage.cost_usd,
+    )
+    return usage
+
+
+def _retry_provider_aware(
+    fn: Any,
+    *,
+    model: str,
+    provider: str,
+) -> Any:
+    """Execute fn with retry + backoff + fallback, provider-aware.
+
+    Selects the correct fallback chain, circuit breaker, and error types
+    based on the provider.
+    """
+    fallback = _get_fallback_chain(provider)
+    candidates = [model] + [m for m in fallback if m != model]
+    models_to_try = [m for m in candidates if is_model_allowed(m)]
+    if not models_to_try:
+        raise RuntimeError(f"All models blocked by policy: {candidates}")
+
+    return retry_with_backoff_generic(
+        fn,
+        model=models_to_try[0],
+        fallback_models=models_to_try[1:],
+        circuit_breaker=_get_provider_circuit_breaker(provider),
+        retryable_errors=_get_provider_retryable_errors(provider),
+        bad_request_error=_get_provider_bad_request_error(provider),
+        billing_message=f"{provider} API billing/credit error.",
+        provider_label=provider.upper(),
+    )
+
+
 def get_anthropic_client() -> anthropic.Anthropic:
     """Return a singleton sync Anthropic client with configured connection pool.
 
@@ -593,18 +732,45 @@ def call_llm(
     temperature: float = 0.3,
     seed: int | None = None,
 ) -> str:
-    """Synchronous Claude call with failover. Returns text content.
+    """Synchronous LLM call with provider-aware routing and failover.
+
+    Routes to Anthropic, OpenAI, or GLM SDK based on the model name.
+    Returns text content.
 
     Args:
         seed: Optional seed for reproducibility tracking. Logged for auditing
             but not passed to the Anthropic API (not supported by SDK).
     """
-    client = get_anthropic_client()
     target_model = model or settings.model
+    provider = _resolve_provider(target_model)
 
     if seed is not None:
         log.info("Reproducibility seed=%d requested (logged for auditing)", seed)
 
+    # Non-Anthropic providers: use OpenAI-compatible SDK
+    if provider != "anthropic":
+        oa_client = _get_provider_client(provider)
+
+        def _do_call_openai(*, model: str) -> str:
+            response = oa_client.chat.completions.create(
+                model=model,
+                max_completion_tokens=max_tokens,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                timeout=120.0,
+            )
+            _record_openai_usage(response, model)
+            choice = response.choices[0]
+            return choice.message.content or ""
+
+        result: str = _retry_provider_aware(_do_call_openai, model=target_model, provider=provider)
+        return result
+
+    # Anthropic path (original)
+    client = get_anthropic_client()
     system_cached = _system_with_cache(system)
 
     def _do_call(*, model: str) -> str:
@@ -622,7 +788,7 @@ def call_llm(
             raise TypeError(f"Expected TextBlock, got {type(block)}")
         return block.text
 
-    result: str = _retry_with_backoff(_do_call, model=target_model)
+    result = _retry_with_backoff(_do_call, model=target_model)
     return result
 
 
@@ -639,13 +805,47 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
     max_tokens: int = 4096,
     temperature: float = 0.3,
 ) -> T:
-    """Claude call with Anthropic Structured Output (messages.parse).
+    """LLM call with provider-aware structured output routing.
 
-    Uses the SDK's native Pydantic integration to guarantee valid JSON
-    conforming to the output_model schema. No manual JSON parsing needed.
+    Routes to the correct SDK based on model provider:
+    - Anthropic: ``messages.parse()`` with ``output_format``
+    - OpenAI/GLM: ``beta.chat.completions.parse()`` with ``response_format``
     """
-    client = get_anthropic_client()
     target_model = model or settings.model
+    provider = _resolve_provider(target_model)
+
+    # Non-Anthropic providers: use OpenAI-compatible beta.chat.completions.parse()
+    if provider != "anthropic":
+        oa_client = _get_provider_client(provider)
+
+        def _do_call_openai(*, model: str) -> T:
+            response = oa_client.beta.chat.completions.parse(
+                model=model,
+                max_completion_tokens=max_tokens,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format=output_model,
+                timeout=120.0,
+            )
+            _record_openai_usage(response, model, label="parsed")
+
+            choice = response.choices[0]
+            if choice.message.parsed is None:
+                raise ValueError(
+                    "LLM returned no structured output. "
+                    "Verify the prompt constrains the response format "
+                    "and the Pydantic model matches the schema."
+                )
+            return choice.message.parsed  # type: ignore[no-any-return]
+
+        result: T = _retry_provider_aware(_do_call_openai, model=target_model, provider=provider)
+        return result
+
+    # Anthropic path (original)
+    client = get_anthropic_client()
     system_cached = _system_with_cache(system)
 
     def _do_call(*, model: str) -> T:
@@ -667,7 +867,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
             )
         return response.parsed_output
 
-    result: T = _retry_with_backoff(_do_call, model=target_model)
+    result = _retry_with_backoff(_do_call, model=target_model)
     return result
 
 
@@ -750,19 +950,63 @@ def call_llm_with_tools(
     temperature: float = 0.3,
     max_tool_rounds: int = 5,
 ) -> ToolUseResult:
-    """Claude call with tool-use loop. Returns final text + tool call records.
+    """LLM call with tool-use loop and provider-aware routing.
 
+    Routes to Anthropic or OpenAI-compatible SDK based on model provider.
     Runs a multi-turn loop: when the model requests tool_use, executes the
     tool via tool_executor and feeds the result back. On the last round,
     forces tool_choice=none to guarantee a text response.
 
     Args:
-        tools: Anthropic-format tool definitions.
+        tools: Tool definitions (Anthropic or OpenAI format).
         tool_executor: Callable(name, **kwargs) -> dict[str, Any].
         max_tool_rounds: Max loop iterations (default 5). Prevents runaway.
     """
-    client = get_anthropic_client()
     target_model = model or settings.model
+    provider = _resolve_provider(target_model)
+
+    # Non-Anthropic providers: delegate to OpenAIAdapter.generate_with_tools
+    if provider != "anthropic":
+        from core.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
+
+        adapter = OpenAIAdapter(default_model=target_model)
+        # Override client for GLM provider
+        if provider == "glm":
+            from core.infrastructure.adapters.llm import openai_adapter
+
+            orig_get = openai_adapter._get_openai_client
+
+            def _glm_client_override() -> Any:
+                return _get_provider_client("glm")
+
+            openai_adapter._get_openai_client = _glm_client_override
+            try:
+                return adapter.generate_with_tools(
+                    system,
+                    user,
+                    tools=tools,
+                    tool_executor=tool_executor,
+                    model=target_model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    max_tool_rounds=max_tool_rounds,
+                )
+            finally:
+                openai_adapter._get_openai_client = orig_get
+        else:
+            return adapter.generate_with_tools(
+                system,
+                user,
+                tools=tools,
+                tool_executor=tool_executor,
+                model=target_model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                max_tool_rounds=max_tool_rounds,
+            )
+
+    # Anthropic path (original)
+    client = get_anthropic_client()
     system_cached = _system_with_cache(system)
 
     all_tool_calls: list[ToolCallRecord] = []

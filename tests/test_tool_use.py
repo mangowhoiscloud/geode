@@ -135,6 +135,13 @@ class TestToolUseResult:
 
 
 class TestClaudeAdapterToolUse:
+    """Tests for ClaudeAdapter tool-use loop.
+
+    All tests pass model="claude-opus-4-6" explicitly to ensure Anthropic SDK
+    routing regardless of settings.model (which may be set to a non-Anthropic
+    model via GEODE_MODEL env var).
+    """
+
     @patch("core.llm.client.get_anthropic_client")
     def test_no_tool_use(self, mock_get_client: MagicMock):
         """When model doesn't request tools, returns text immediately."""
@@ -150,6 +157,7 @@ class TestClaudeAdapterToolUse:
             "user prompt",
             tools=[{"name": "dummy", "description": "test", "input_schema": {}}],
             tool_executor=lambda name, **kw: {"result": "ok"},
+            model="claude-opus-4-6",
         )
 
         assert isinstance(result, ToolUseResult)
@@ -181,6 +189,7 @@ class TestClaudeAdapterToolUse:
             "user",
             tools=[{"name": "search", "description": "search", "input_schema": {}}],
             tool_executor=mock_executor,
+            model="claude-opus-4-6",
         )
 
         assert result.text == "Found it"
@@ -211,6 +220,7 @@ class TestClaudeAdapterToolUse:
             "usr",
             tools=[{"name": "dummy_tool", "description": "t", "input_schema": {}}],
             tool_executor=failing_executor,
+            model="claude-opus-4-6",
         )
 
         assert result.text == "Handled error"
@@ -236,6 +246,7 @@ class TestClaudeAdapterToolUse:
             tools=[{"name": "dummy_tool", "description": "t", "input_schema": {}}],
             tool_executor=lambda n, **kw: {"ok": True},
             max_tool_rounds=3,
+            model="claude-opus-4-6",
         )
 
         assert result.text == "Forced end"

@@ -428,3 +428,153 @@ class TestLLMUsageEdgeCases:
         with patch.dict(os.environ, env, clear=False):
             os.environ.pop("LANGCHAIN_API_KEY", None)
             assert is_langsmith_enabled() is True
+
+
+# ---------------------------------------------------------------------------
+# Provider-aware routing tests
+# ---------------------------------------------------------------------------
+
+
+class TestProviderRouting:
+    """Verify call_llm_parsed / call_llm route to correct SDK based on model."""
+
+    def test_call_llm_parsed_routes_to_anthropic_for_claude(self):
+        """call_llm_parsed should use Anthropic SDK when model is claude-*."""
+        from pydantic import BaseModel
+
+        class _DummyOutput(BaseModel):
+            value: str
+
+        mock_response = MagicMock()
+        mock_response.parsed_output = _DummyOutput(value="test")
+        mock_response.usage = MagicMock(
+            input_tokens=10,
+            output_tokens=5,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        )
+
+        with patch("core.llm.client.get_anthropic_client") as mock_get:
+            mock_client = MagicMock()
+            mock_client.messages.parse.return_value = mock_response
+            mock_get.return_value = mock_client
+
+            from core.llm.client import call_llm_parsed
+
+            result = call_llm_parsed(
+                "system",
+                "user",
+                output_model=_DummyOutput,
+                model="claude-opus-4-6",
+            )
+
+            assert result.value == "test"
+            mock_client.messages.parse.assert_called_once()
+
+    def test_call_llm_parsed_routes_to_openai_for_glm(self):
+        """call_llm_parsed should use OpenAI-compatible SDK when model is glm-*."""
+        from pydantic import BaseModel
+
+        class _DummyOutput(BaseModel):
+            value: str
+
+        mock_parsed = _DummyOutput(value="glm-result")
+        mock_choice = MagicMock()
+        mock_choice.message.parsed = mock_parsed
+
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
+
+        mock_glm_client = MagicMock()
+        mock_glm_client.beta.chat.completions.parse.return_value = mock_response
+
+        with patch("core.llm.client._get_provider_client", return_value=mock_glm_client):
+            from core.llm.client import call_llm_parsed
+
+            result = call_llm_parsed(
+                "system",
+                "user",
+                output_model=_DummyOutput,
+                model="glm-5",
+            )
+
+            assert result.value == "glm-result"
+            mock_glm_client.beta.chat.completions.parse.assert_called_once()
+
+    def test_call_llm_parsed_routes_to_openai_for_gpt(self):
+        """call_llm_parsed should use OpenAI SDK when model is gpt-*."""
+        from pydantic import BaseModel
+
+        class _DummyOutput(BaseModel):
+            value: str
+
+        mock_parsed = _DummyOutput(value="gpt-result")
+        mock_choice = MagicMock()
+        mock_choice.message.parsed = mock_parsed
+
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
+
+        mock_openai_client = MagicMock()
+        mock_openai_client.beta.chat.completions.parse.return_value = mock_response
+
+        with patch("core.llm.client._get_provider_client", return_value=mock_openai_client):
+            from core.llm.client import call_llm_parsed
+
+            result = call_llm_parsed(
+                "system",
+                "user",
+                output_model=_DummyOutput,
+                model="gpt-5.4",
+            )
+
+            assert result.value == "gpt-result"
+            mock_openai_client.beta.chat.completions.parse.assert_called_once()
+
+    def test_call_llm_routes_to_openai_for_glm(self):
+        """call_llm should use OpenAI-compatible SDK when model is glm-*."""
+        mock_choice = MagicMock()
+        mock_choice.message.content = "glm text response"
+
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
+
+        mock_glm_client = MagicMock()
+        mock_glm_client.chat.completions.create.return_value = mock_response
+
+        with patch("core.llm.client._get_provider_client", return_value=mock_glm_client):
+            from core.llm.client import call_llm
+
+            result = call_llm("system", "user", model="glm-5")
+
+            assert result == "glm text response"
+            mock_glm_client.chat.completions.create.assert_called_once()
+
+    def test_call_llm_routes_to_anthropic_for_claude(self):
+        """call_llm should use Anthropic SDK when model is claude-*."""
+        mock_block = MagicMock()
+        mock_block.text = "anthropic response"
+
+        mock_response = MagicMock()
+        mock_response.content = [mock_block]
+        mock_response.usage = MagicMock(
+            input_tokens=10,
+            output_tokens=5,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        )
+
+        with patch("core.llm.client.get_anthropic_client") as mock_get:
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_response
+            mock_get.return_value = mock_client
+
+            from core.llm.client import call_llm
+
+            result = call_llm("system", "user", model="claude-opus-4-6")
+
+            assert result == "anthropic response"
+            mock_client.messages.create.assert_called_once()
