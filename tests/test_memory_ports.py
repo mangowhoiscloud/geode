@@ -1,6 +1,6 @@
 """Tests for L1 Memory Ports (Protocol interfaces)."""
 
-from core.infrastructure.ports.memory_port import (
+from core.memory.port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
     SessionStorePort,

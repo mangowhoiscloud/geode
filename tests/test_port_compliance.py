@@ -21,11 +21,6 @@ from core.infrastructure.ports.automation_port import (
     SnapshotManagerPort,
     TriggerManagerPort,
 )
-from core.infrastructure.ports.memory_port import (
-    OrganizationMemoryPort,
-    ProjectMemoryPort,
-    SessionStorePort,
-)
 from core.infrastructure.ports.orchestration_port import (
     CoalescingQueuePort,
     ConfigWatcherPort,
@@ -39,6 +34,11 @@ from core.infrastructure.ports.tool_port import (
     ToolRegistryPort,
 )
 from core.llm.router import LLMClientPort
+from core.memory.port import (
+    OrganizationMemoryPort,
+    ProjectMemoryPort,
+    SessionStorePort,
+)
 from core.orchestration.hook_port import HookSystemPort
 
 

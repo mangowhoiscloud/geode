@@ -57,11 +57,6 @@ from core.infrastructure.ports.automation_port import (
     SnapshotManagerPort,
     TriggerManagerPort,
 )
-from core.infrastructure.ports.memory_port import (
-    OrganizationMemoryPort,
-    ProjectMemoryPort,
-    SessionStorePort,
-)
 from core.infrastructure.ports.orchestration_port import (
     CoalescingQueuePort,
     ConfigWatcherPort,
@@ -78,6 +73,11 @@ from core.llm.providers.openai import OpenAIAdapter
 from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.memory.context import ContextAssembler
 from core.memory.organization import MonoLakeOrganizationMemory
+from core.memory.port import (
+    OrganizationMemoryPort,
+    ProjectMemoryPort,
+    SessionStorePort,
+)
 from core.memory.project import ProjectMemory
 from core.memory.session import InMemorySessionStore
 from core.memory.session_key import build_session_key, build_thread_config

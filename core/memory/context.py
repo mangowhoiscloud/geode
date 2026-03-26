@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from core.infrastructure.ports.memory_port import (
+from core.memory.port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
     SessionStorePort,
