@@ -34,6 +34,17 @@ def upsert_env(var_name: str, value: str) -> None:
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def parse_dry_run_flag(args: str) -> tuple[bool, str]:
+    """Extract --dry-run / --dry_run flag from CLI args.
+
+    Returns ``(has_flag, cleaned_args)`` where ``cleaned_args`` has the
+    flag removed and is stripped of surrounding whitespace.
+    """
+    has_flag = "--dry-run" in args or "--dry_run" in args
+    cleaned = args.replace("--dry-run", "").replace("--dry_run", "").strip()
+    return has_flag, cleaned
+
+
 def is_glm_key(value: str) -> bool:
     """Detect ZhipuAI API key pattern: {id}.{secret} (e.g. abc12345.def67890).
 
