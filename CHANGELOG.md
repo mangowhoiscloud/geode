@@ -26,6 +26,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.28.1] — 2026-03-26
+
+파이프라인 모델 고정 — Analyst/Evaluator/Synthesizer가 유저 REPL 모델을 상속하던 버그 수정.
+
+### Fixed
+- **파이프라인 모델 고정** — Analyst/Evaluator/Synthesizer가 유저 REPL 모델(glm-5)을 상속하던 버그 수정. `_PIPELINE_NODE_DEFAULTS`로 `claude-opus-4-6` 고정
+- **Tool-augmented LLM paths model= 명시** — analysts/evaluators/synthesizer의 tool-augmented LLM 경로에 `model=` 파라미터 명시 추가
+
+### Added
+- **파이프라인 실행 전 유저 안내** — `pipeline_notice` 필드 + `definitions.json` 비용 안내
+
 ## [0.28.0] — 2026-03-26
 
 GLM-5 파이프라인 라우팅 수정 + Status line per-turn 리셋 + Signal Tools MCP 라이브 연동.

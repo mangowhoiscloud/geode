@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-26 (세션 28 — GLM 라우팅 + status line per-turn)
+> 마지막 갱신: 2026-03-26 (세션 28 — 파이프라인 모델 고정)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -21,7 +21,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| pipeline-model-fixed | 파이프라인 모델 고정 — Analyst/Evaluator/Synthesizer Opus 4.6 + Cross-LLM GPT-5.4 + 실행 전 유저 승인 | @mangowhoiscloud | feature/pipeline-model-fixed | 2026-03-26 | P0 |
+| — | — | — | — | — | — |
 
 ### In Review
 
@@ -33,6 +33,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| pipeline-model-fixed | 파이프라인 모델 고정 — Analyst/Evaluator/Synthesizer Opus 4.6 고정 + 실행 전 유저 안내 | — | @mangowhoiscloud | 2026-03-26 |
 | glm-pipeline-routing | GLM-5 파이프라인 라우팅 — call_llm_parsed provider 분기 수정 | #450 | @mangowhoiscloud | 2026-03-26 |
 | status-line-per-turn | Status line per-turn — SessionMeter/TokenTracker 턴 단위 리셋 | #450 | @mangowhoiscloud | 2026-03-26 |
 | portfolio-carousel | 포트폴리오 REPL 유즈케이스 캐러셀 — 좌우 네비게이션, 3카드, GLM-5 실측 | portfolio | @mangowhoiscloud | 2026-03-26 |
@@ -276,9 +277,9 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.28.0 | 2026-03-26 |
+| Version | 0.28.1 | 2026-03-26 |
 | Modules | 221 | 2026-03-26 |
-| Tests | 3179 | 2026-03-26 |
+| Tests | 3181 | 2026-03-26 |
 | Tools | 46 (+MCP 86) | 2026-03-22 |
 | MCP Catalog | 43 | 2026-03-24 |
 | HookEvents | 36 | 2026-03-19 |
