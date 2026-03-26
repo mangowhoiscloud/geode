@@ -285,9 +285,13 @@ def _render_streaming_evaluator(key: str, ev: EvaluatorResult) -> None:
     }
     label = labels.get(key, key)
     score = ev.composite_score
-    filled = int(score / 100 * 24)
-    bar = "[green]" + "\u2588" * filled + "[/green][dim]" + "\u2591" * (24 - filled) + "[/dim]"
-    console.print(f"  {label:10s} {bar} {score:.0f}/100")
+    score_style = "bold green" if score >= 80 else "yellow" if score >= 60 else "red"
+    rationale_snippet = ev.rationale.split(".")[0] + "." if ev.rationale else ""
+    console.print(
+        f"  [label]{label:14s}[/label] "
+        f"[{score_style}]{score:.0f}/100[/{score_style}]  "
+        f"{rationale_snippet}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -307,8 +311,8 @@ def _execute_pipeline_streaming(
 
     final_state: dict[str, Any] = dict(initial_state)
     analyst_count = 0
+    evaluator_count = 0
     analyst_header_shown = False
-    evaluator_header_shown = False
     config = runtime.thread_config
     input_state: GeodeState | None = initial_state
     done: list[str] = []
@@ -336,13 +340,20 @@ def _execute_pipeline_streaming(
                             _render_streaming_analyst(a)
 
                     elif node_name == "evaluator":
-                        if not evaluator_header_shown:
+                        evaluator_count += 1
+                        total_evaluators = 3
+                        if evaluator_count == 1:
                             console.print()
+                        if evaluator_count < total_evaluators:
                             console.print(
-                                "[step]\u25b8 [EVALUATE][/step]"
-                                " 14-Axis Rubric Scoring (streaming)..."
+                                f"[step]\u25b8 [EVALUATE][/step]"
+                                f" Evaluate ({evaluator_count}/{total_evaluators})..."
                             )
-                            evaluator_header_shown = True
+                        else:
+                            console.print(
+                                f"[step]\u25b8 [EVALUATE][/step]"
+                                f" Evaluate ({evaluator_count}/{total_evaluators}) \u2713"
+                            )
                         evals = output.get("evaluations", {})
                         for key, ev in evals.items():
                             _render_streaming_evaluator(key, ev)
