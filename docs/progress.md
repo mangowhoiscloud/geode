@@ -26,7 +26,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| kent-beck-p2 | Kent Beck Phase 2 — router.py Provider 전략 패턴 (~200줄 감소) | @mangowhoiscloud | feature/kent-beck-p2 | 2026-03-26 | P0 |
 
 ### In Review
 
