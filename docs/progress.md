@@ -20,7 +20,7 @@
 | ~~kent-beck-p5~~ | ~~Kent Beck Phase 5 — 핸들러 레지스트리 + Executor 분해~~ | ~~P2~~ | ~~#467~~ | **Done** |
 | action-summary | Action Summary — 결정론적 Tier1 + LLM 내러티브 Tier2 (opt-in) | P1 | action-summary-system.md | 유저 피드백 기반 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
-| proxy-cleanup | 구 경로 proxy 파일 최종 삭제 (nodes/ui/auth/extensibility/cli/mcp) | P3 | — | CI 래칫이 차단 중 |
+| ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~—~~ | **In Progress** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
 | mcp-simplify | MCP 카탈로그 단일화 — registry 삭제 + catalog 축소 + config.toml 통합 | P1 | tool-mcp-architecture-review.md | kent-beck 완료 후 착수 |
 | scheduler-callback | 스케줄러 callback 와이어링 — action 필드 + 큐 연결 | P1 | tool-mcp-architecture-review.md | mcp-simplify 이후 |
@@ -29,7 +29,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| proxy-cleanup | 구 경로 proxy/stub 파일 삭제 + atomic_io/signal_adapter 이동 | @mangowhoiscloud | feature/proxy-cleanup | 2026-03-27 | .pyi 6개 + adapters/llm 7개 + atomic_io 이동 |
 
 ### In Review
 
