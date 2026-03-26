@@ -288,4 +288,3 @@ class TestCmdScheduleEnhanced:
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Executed" in output
         assert len(callback_called) == 1
-

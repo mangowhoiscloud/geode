@@ -30,6 +30,7 @@ def get_gateway() -> ChannelManager | None:
     """Get the active gateway, or None if not set."""
     return _gateway_ctx.get()
 
+
 log = logging.getLogger(__name__)
 
 
