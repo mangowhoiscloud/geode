@@ -314,14 +314,17 @@ class MCPServerManager:
         os.environ, so MCP keys defined only in .env would be invisible.
         """
         # Lazy-load .env values (cached after first call)
-        # Cascade: CWD/.env (project) → ~/.geode/.env (global)
+        # Cascade: ~/.geode/.env (global) → CWD/.env (project, non-empty only)
         if not self._dotenv_cache:
-            # Global first (lower priority)
+            # Global first (baseline)
             if _GLOBAL_DOTENV_PATH.exists():
                 self._dotenv_cache.update(dotenv_values(str(_GLOBAL_DOTENV_PATH)))
-            # Project .env overrides global
+            # Project .env overrides — only non-empty values
+            # Empty values (e.g. BRAVE_API_KEY=) must NOT clobber global keys
             if _DOTENV_PATH.exists():
-                self._dotenv_cache.update(dotenv_values(str(_DOTENV_PATH)))
+                for k, v in dotenv_values(str(_DOTENV_PATH)).items():
+                    if v:  # skip empty/None values
+                        self._dotenv_cache[k] = v
 
         resolved: dict[str, str] = {}
         for key, value in env.items():
