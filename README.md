@@ -185,7 +185,7 @@ while CI fails:
 
 **3-Checkpoint**: (1) alloc (Backlog→In Progress) → (2) merge (PR→Done, CI 5/5 필수) → (3) verify (다음 세션 시작 시 이전 상태 교차 검증)
 
-[Development Workflow →](docs/workflow.md)
+[Development Workflow (Scaffold) →](docs/workflow.md)
 
 ### Kanban (`docs/progress.md`)
 
@@ -216,7 +216,7 @@ main-only 수정. 3-Checkpoint 필수. TaskCreate ↔ 칸반 task_id 1:1 매핑.
 </details>
 
 <details>
-<summary><strong>Development Workflow</strong></summary>
+<summary><strong>Development Workflow (Scaffold)</strong></summary>
 
 CANNOT(가드레일)이 CAN(자유도)보다 먼저 온다. 7단계 워크플로우 + 품질 게이트.
 
