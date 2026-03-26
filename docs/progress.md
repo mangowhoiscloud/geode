@@ -22,6 +22,7 @@
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
 | native-tools | 3사 Agent SDK 네이티브 도구 통합 — Anthropic web_search/web_fetch/code_exec 버전업 + OpenAI Responses API 패스스루 + GLM-5 web_search 네이티브 | @mangowhoiscloud | feature/native-tools | 2026-03-26 | Agent SDK 리서치 완료 |
+| llm-layer-f | F안 적용 — client.py 분할(Provider Module) + Adapter 삭제 + Port→DomainPort만 + Proxy 30개 삭제 + infrastructure/ 제거 | @mangowhoiscloud | feature/llm-layer-f | 2026-03-26 | 프론티어 GAP 기반 |
 
 ### In Review
 
