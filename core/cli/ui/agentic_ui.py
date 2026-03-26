@@ -33,10 +33,20 @@ from core.cli.ui.console import console
 
 @dataclass
 class SessionMeter:
-    """Tracks session-level timing for status line display."""
+    """Tracks session-level and per-turn timing for status line display."""
 
     start_time: float = field(default_factory=time.monotonic)
     model: str = ""
+    _turn_start: float = field(default=0.0, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._turn_start = self.start_time
+
+    def mark_turn_start(self) -> None:
+        """Reset the per-turn timer (call before each agentic.run())."""
+        self._turn_start = time.monotonic()
+
+    # -- Session-level (cumulative) ----------------------------------------
 
     @property
     def elapsed_s(self) -> float:
@@ -44,7 +54,23 @@ class SessionMeter:
 
     @property
     def elapsed_display(self) -> str:
-        s = int(self.elapsed_s)
+        return self._format_seconds(self.elapsed_s)
+
+    # -- Turn-level (per-turn delta) ---------------------------------------
+
+    @property
+    def turn_elapsed_s(self) -> float:
+        return time.monotonic() - self._turn_start
+
+    @property
+    def turn_elapsed_display(self) -> str:
+        return self._format_seconds(self.turn_elapsed_s)
+
+    # -- Helpers -----------------------------------------------------------
+
+    @staticmethod
+    def _format_seconds(seconds: float) -> str:
+        s = int(seconds)
         if s < 60:
             return f"{s}s"
         m, sec = divmod(s, 60)
@@ -274,7 +300,11 @@ def render_subagent_complete(count: int, elapsed_s: float) -> None:
 def render_status_line() -> None:
     """Render Claude Code-style status line after each agentic result.
 
-    Format: ✢ Worked for 48s · claude-opus-4-6 · ↓12.3k ↑2.1k · $0.42 · 11% context
+    Shows **per-turn** metrics (elapsed, tokens, cost, context %) so that
+    each user turn gets an independent measurement — matching Claude Code's
+    behaviour where the timer and counters reset every turn.
+
+    Format: ✢ Worked for 2s · claude-opus-4-6 · ↓1.2k ↑350 · $0.003 · 1% context
     """
     meter = get_session_meter()
     if meter is None:
@@ -283,13 +313,26 @@ def render_status_line() -> None:
         from core.llm.token_tracker import get_tracker
 
         tracker = get_tracker()
-        acc = tracker.accumulator
-        in_str = _fmt_tokens(acc.total_input_tokens)
-        out_str = _fmt_tokens(acc.total_output_tokens)
-        cost = acc.total_cost_usd
-        ctx_pct = tracker.context_usage_pct(meter.model)
 
-        parts = [f"✢ Worked for {meter.elapsed_display}"]
+        # Per-turn delta: if a snapshot was taken before agentic.run(),
+        # compute delta; otherwise fall back to cumulative (first turn).
+        snap = _turn_snapshot
+        if snap is not None:
+            delta = tracker.delta_since(snap)
+            in_tok = delta.total_input_tokens
+            out_tok = delta.total_output_tokens
+            cost = delta.total_cost_usd
+        else:
+            acc = tracker.accumulator
+            in_tok = acc.total_input_tokens
+            out_tok = acc.total_output_tokens
+            cost = acc.total_cost_usd
+
+        in_str = _fmt_tokens(in_tok)
+        out_str = _fmt_tokens(out_tok)
+        ctx_pct = tracker.context_usage_pct_for(meter.model, in_tok)
+
+        parts = [f"✢ Worked for {meter.turn_elapsed_display}"]
         parts.append(meter.model)
         parts.append(f"↓{in_str} ↑{out_str}")
         if cost > 0:
@@ -300,7 +343,32 @@ def render_status_line() -> None:
         console.print(f"\n  [dim]{line}[/dim]")
     except Exception:
         # Fallback: just show elapsed time
-        console.print(f"\n  [dim]✢ Worked for {meter.elapsed_display}[/dim]")
+        console.print(f"\n  [dim]✢ Worked for {meter.turn_elapsed_display}[/dim]")
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Per-turn snapshot state (set before each agentic.run(), read by render)
+# ───────────────────────────────────────────────────────────────────────────
+
+_turn_snapshot: Any = None  # UsageSnapshot | None
+
+
+def mark_turn_start() -> None:
+    """Snapshot current cumulative metrics and reset turn timer.
+
+    Call this before each ``agentic.run()`` so that ``render_status_line()``
+    can display per-turn deltas instead of session-cumulative totals.
+    """
+    global _turn_snapshot
+    meter = get_session_meter()
+    if meter is not None:
+        meter.mark_turn_start()
+    try:
+        from core.llm.token_tracker import get_tracker
+
+        _turn_snapshot = get_tracker().snapshot()
+    except Exception:
+        _turn_snapshot = None
 
 
 def _fmt_tokens(n: int) -> str:

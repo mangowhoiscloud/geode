@@ -1106,6 +1106,11 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
             # Key management is handled via /key command or set_api_key tool.
             try:
+                # Snapshot cumulative metrics before this turn
+                from core.cli.ui.agentic_ui import mark_turn_start
+
+                mark_turn_start()
+
                 result = agentic.run(user_input)
                 _render_agentic_result(result)
                 # Claude Code-style status line after each result
