@@ -63,6 +63,25 @@ class GeodeBootstrap:
         except Exception:
             log.debug("Domain propagation skipped", exc_info=True)
 
+        # User profile (Tier 0.5)
+        try:
+            from pathlib import Path
+
+            from core.config import settings
+            from core.memory.user_profile import FileBasedUserProfile
+            from core.tools.profile_tools import set_user_profile
+
+            global_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
+            project_dir = Path(".geode") / "user_profile"
+            set_user_profile(
+                FileBasedUserProfile(
+                    global_dir=global_dir,
+                    project_dir=project_dir if project_dir.parent.exists() else None,
+                )
+            )
+        except Exception:
+            log.debug("User profile propagation skipped", exc_info=True)
+
 
 def bootstrap_geode(
     *,
@@ -114,6 +133,24 @@ def bootstrap_geode(
         set_org_memory(MonoLakeOrganizationMemory())
     except Exception:
         log.debug("Memory context skipped", exc_info=True)
+
+    # 2.5. User Profile (Tier 0.5) — wire into profile tools via ContextVar
+    try:
+        from pathlib import Path
+
+        from core.config import settings
+        from core.memory.user_profile import FileBasedUserProfile
+        from core.tools.profile_tools import set_user_profile
+
+        global_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
+        project_dir = Path(".geode") / "user_profile"
+        user_profile = FileBasedUserProfile(
+            global_dir=global_dir,
+            project_dir=project_dir if project_dir.parent.exists() else None,
+        )
+        set_user_profile(user_profile)
+    except Exception:
+        log.debug("User profile context skipped", exc_info=True)
 
     # 3. Readiness
     from core.cli import _set_readiness
