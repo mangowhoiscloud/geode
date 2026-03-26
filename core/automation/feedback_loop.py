@@ -23,7 +23,7 @@ from core.automation.expert_panel import ExpertPanel
 from core.automation.model_registry import ModelRegistry
 
 if TYPE_CHECKING:
-    from core.infrastructure.ports.hook_port import HookSystemPort
+    from core.orchestration.hook_port import HookSystemPort
 
 log = logging.getLogger(__name__)
 

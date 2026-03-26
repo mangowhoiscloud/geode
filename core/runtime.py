@@ -57,7 +57,6 @@ from core.infrastructure.ports.automation_port import (
     TriggerManagerPort,
 )
 from core.infrastructure.ports.domain_port import set_domain
-from core.infrastructure.ports.hook_port import HookSystemPort
 from core.infrastructure.ports.memory_port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
@@ -84,6 +83,7 @@ from core.memory.session import InMemorySessionStore
 from core.memory.session_key import build_session_key, build_thread_config
 from core.memory.user_profile import FileBasedUserProfile
 from core.orchestration.coalescing import CoalescingQueue
+from core.orchestration.hook_port import HookSystemPort
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue

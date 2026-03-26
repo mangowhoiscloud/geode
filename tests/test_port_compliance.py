@@ -21,7 +21,6 @@ from core.infrastructure.ports.automation_port import (
     SnapshotManagerPort,
     TriggerManagerPort,
 )
-from core.infrastructure.ports.hook_port import HookSystemPort
 from core.infrastructure.ports.memory_port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
@@ -40,6 +39,7 @@ from core.infrastructure.ports.tool_port import (
     ToolRegistryPort,
 )
 from core.llm.router import LLMClientPort
+from core.orchestration.hook_port import HookSystemPort
 
 
 class TestToolPortCompliance:

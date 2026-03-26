@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.infrastructure.ports.hook_port import HookSystemPort
+from core.orchestration.hook_port import HookSystemPort
 from core.orchestration.hooks import HookEvent
 from core.orchestration.task_system import TaskGraph, TaskStatus
 

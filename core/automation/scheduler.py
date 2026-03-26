@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 from core.automation.triggers import CronParser, TriggerManager
 
 if TYPE_CHECKING:
-    from core.infrastructure.ports.hook_port import HookSystemPort
+    from core.orchestration.hook_port import HookSystemPort
 
 log = logging.getLogger(__name__)
 

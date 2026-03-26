@@ -17,7 +17,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.infrastructure.ports.hook_port import HookSystemPort
+    from core.orchestration.hook_port import HookSystemPort
 
 log = logging.getLogger(__name__)
 
