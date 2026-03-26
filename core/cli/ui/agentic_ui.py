@@ -133,6 +133,7 @@ class OperationLogger:
             console.print(f"  ⎿ [error]✗ {tool_name}[/error] — {result['error']}")
             return
         summary_parts: list[str] = []
+        # Domain-specific keys (Game IP pipeline)
         if "tier" in result:
             summary_parts.append(result["tier"])
         if "score" in result:
@@ -141,6 +142,17 @@ class OperationLogger:
             summary_parts.append(f"{result['count']} items")
         if "plan_id" in result:
             summary_parts.append(f"plan:{result['plan_id'][:8]}")
+        # Generic keys (MCP tools, web search, etc.)
+        if not summary_parts:
+            for key in ("output", "content", "text", "result", "message", "summary"):
+                val = result.get(key)
+                if val and isinstance(val, str):
+                    # Truncate long values for display (max 80 chars)
+                    preview = val.replace("\n", " ").strip()
+                    if len(preview) > 80:
+                        preview = preview[:77] + "..."
+                    summary_parts.append(preview)
+                    break
         summary = " · ".join(summary_parts) if summary_parts else "ok"
         console.print(f"  ⎿ [success]✓ {tool_name}[/success] → {summary}")
 
