@@ -133,20 +133,27 @@ def build_gateway_session_key(
     channel: str,
     channel_id: str,
     sender_id: str = "",
+    thread_id: str = "",
 ) -> str:
     """Build a session key for a gateway inbound message.
 
-    Format: gateway:{channel}:{channel_id}[:{sender_id}]
+    Format: gateway:{channel}:{channel_id}[:{sender_id}][:{thread_id}]
+
+    When ``thread_id`` is provided the key scopes to a specific
+    conversation thread, enabling multi-turn context within that thread.
 
     Examples:
         gateway:slack:C12345
+        gateway:slack:C12345:U789:1234567890.123456
         gateway:telegram:987654321:U123
         gateway:discord:456789
     """
-    parts = [f"gateway:{channel}:{_normalize_name(channel_id)}"]
+    key = f"gateway:{channel}:{_normalize_name(channel_id)}"
     if sender_id:
-        parts[0] += f":{_normalize_name(sender_id)}"
-    return parts[0]
+        key += f":{_normalize_name(sender_id)}"
+    if thread_id:
+        key += f":{_normalize_name(thread_id)}"
+    return key
 
 
 def build_thread_config(ip_name: str, phase: str, sub_context: str | None = None) -> dict[str, Any]:

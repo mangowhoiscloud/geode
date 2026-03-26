@@ -10,6 +10,11 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any, Protocol, runtime_checkable
 
+#: Processor callback signature.
+#: ``(content, metadata) -> response``
+#: metadata keys: ``session_key``, ``thread_id``, ``channel``, ``channel_id``, ``sender_id``
+MessageProcessor = Callable[[str, dict[str, Any]], str]
+
 
 @runtime_checkable
 class GatewayPort(Protocol):
@@ -23,7 +28,7 @@ class GatewayPort(Protocol):
         """Stop all pollers."""
         ...
 
-    def set_processor(self, processor: Callable[[str], str]) -> None:
+    def set_processor(self, processor: MessageProcessor) -> None:
         """Set the message processor callback."""
         ...
 

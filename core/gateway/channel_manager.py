@@ -8,17 +8,14 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable
 from typing import Any
 
 from core.gateway.models import ChannelBinding, InboundMessage
 from core.gateway.pollers.base import BasePoller
+from core.infrastructure.ports.gateway_port import MessageProcessor
 from core.memory.session_key import build_gateway_session_key
 
 log = logging.getLogger(__name__)
-
-# Type for the message processor callback
-MessageProcessor = Callable[[str], str]  # input → response
 
 
 class ChannelManager:
@@ -110,10 +107,21 @@ class ChannelManager:
             log.warning("No message processor set — cannot process inbound message")
             return None
 
-        # Build gateway session key for context isolation
+        # Build gateway session key for context isolation (thread-scoped)
         session_key = build_gateway_session_key(
-            message.channel, message.channel_id, message.sender_id
+            message.channel,
+            message.channel_id,
+            message.sender_id,
+            thread_id=message.thread_id,
         )
+
+        metadata: dict[str, Any] = {
+            "session_key": session_key,
+            "thread_id": message.thread_id,
+            "channel": message.channel,
+            "channel_id": message.channel_id,
+            "sender_id": message.sender_id,
+        }
 
         # Strip mention tags so the LLM receives clean content
         content = self._strip_mentions(message.content)
@@ -128,11 +136,11 @@ class ChannelManager:
                 gateway_lane = self._lane_queue.get_lane("gateway")
                 if gateway_lane is not None:
                     with gateway_lane.acquire(session_key):
-                        response = self._processor(content)
+                        response = self._processor(content, metadata)
                 else:
-                    response = self._processor(content)
+                    response = self._processor(content, metadata)
             else:
-                response = self._processor(content)
+                response = self._processor(content, metadata)
 
             self._stats["processed"] += 1
             return response
