@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-26 (세션 27 — Signal Tools MCP 라이브 연동)
+> 마지막 갱신: 2026-03-26 (세션 28 — GLM 라우팅 + status line per-turn)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -22,14 +22,20 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| glm-pipeline-routing | GLM-5 파이프라인 라우팅 — call_llm_parsed provider 분기 + GLMAdapter 생성 | @mangowhoiscloud | feature/glm-pipeline-routing | 2026-03-26 | P0 파이프라인 동작 불가 |
-| status-line-per-turn | Status line per-turn 리셋 — SessionMeter/TokenTracker/Cost/Context% 턴 단위 표시 | @mangowhoiscloud | feature/status-line-per-turn | 2026-03-26 | 전 항목 세션 누적 버그 |
+| — | — | — | — | — | — |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
+
+### Done (2026-03-26 — 세션 28)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| glm-pipeline-routing | GLM-5 파이프라인 라우팅 — call_llm_parsed provider 분기 수정 | — | @mangowhoiscloud | 2026-03-26 |
+| status-line-per-turn | Status line per-turn — SessionMeter/TokenTracker 턴 단위 리셋 | — | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-26 — 세션 27)
 
@@ -270,9 +276,9 @@
 
 | 항목 | 값 | 갱신일 |
 |------|-----|--------|
-| Version | 0.27.1 | 2026-03-26 |
+| Version | 0.28.0 | 2026-03-26 |
 | Modules | 221 | 2026-03-26 |
-| Tests | 3109 | 2026-03-26 |
+| Tests | 3179 | 2026-03-26 |
 | Tools | 46 (+MCP 86) | 2026-03-22 |
 | MCP Catalog | 43 | 2026-03-24 |
 | HookEvents | 36 | 2026-03-19 |

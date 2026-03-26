@@ -28,12 +28,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.28.0] — 2026-03-26
 
-Signal Tools MCP 라이브 연동 — 5종 stub→MCP-first+fixture fallback 전환.
+GLM-5 파이프라인 라우팅 수정 + Status line per-turn 리셋 + Signal Tools MCP 라이브 연동.
 
 ### Added
 - **Signal Tools MCP Live Integration** — 5개 signal stub 도구를 MCP-first + fixture fallback 패턴으로 전환. YouTube(youtube MCP), Reddit(reddit MCP), Twitch(igdb MCP), Steam(steam MCP), Google Trends(google-trends MCP) 서버 연동. `source` 필드로 데이터 출처 추적 (`*_mcp_live` / `*_api_stub`).
 - **MCP DEFAULT_SERVERS 확장** — reddit, google-trends를 키 불필요 기본 서버로 등록. youtube-transcript 카탈로그 항목 추가.
 - **Signal MCP 테스트 28건** — MCP 라이브 경로, fixture 폴백, 에러 핸들링 검증.
+- **Provider-aware LLM routing** — `_get_provider_client()`, `_retry_provider_aware()` — per-provider circuit breaker
+- **TokenTracker snapshot/delta** — `UsageSnapshot` + `snapshot()`/`delta_since()` — per-turn 메트릭 계산
+- **SessionMeter per-turn** — `mark_turn_start()` + `turn_elapsed_s` — 턴 단위 시간 측정
+
+### Fixed
+- **GLM-5 파이프라인 라우팅** — `call_llm_parsed`/`call_llm`/`call_llm_with_tools`가 항상 Anthropic API로 라우팅되던 버그 수정. `_resolve_provider()` 기반 자동 분기
+- **Status line per-turn** — 세션 누적(elapsed/tokens/cost/context%) → per-turn 델타 표시
 
 ## [0.27.1] — 2026-03-26
 
