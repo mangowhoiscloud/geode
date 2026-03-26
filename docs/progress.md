@@ -22,6 +22,7 @@
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
 | gateway-multiturn | Gateway 멀티턴 — thread_id 기반 대화 이력 연결 + SessionStore 영속화 | @mangowhoiscloud | feature/gateway-multiturn | 2026-03-26 | P0 |
+| web-search-fix | 웹검색 수정 — general_web_search Haiku→Sonnet + signal tools stub 활성화 + MCP 도구명 매핑 | @mangowhoiscloud | feature/web-search-fix | 2026-03-26 | P0 유저 피드백 |
 
 ### In Review
 
