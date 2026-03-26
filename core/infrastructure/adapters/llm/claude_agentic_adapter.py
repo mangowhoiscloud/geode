@@ -22,6 +22,14 @@ log = logging.getLogger(__name__)
 
 _API_ALLOWED_KEYS = frozenset({"name", "description", "input_schema", "cache_control", "type"})
 
+# Anthropic native tools injected alongside function tools.
+# These are server-side capabilities (web search, web fetch) that the API
+# handles internally without requiring local tool execution.
+_ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
+    {"type": "web_search_20260209", "name": "web_search"},
+    {"type": "web_fetch_20260209", "name": "web_fetch"},
+]
+
 
 class ClaudeAgenticAdapter:
     """Anthropic agentic adapter (P1 Gateway pattern).
@@ -68,6 +76,14 @@ class ClaudeAgenticAdapter:
             tool_choice = {"type": tool_choice}
 
         api_tools = [{k: v for k, v in t.items() if k in _API_ALLOWED_KEYS} for t in tools]
+
+        # Inject Anthropic native tools (web_search, web_fetch) — server-side capabilities.
+        # De-duplicate by name to avoid conflicts with user-defined tools.
+        existing_names = {t.get("name") for t in api_tools}
+        for native in _ANTHROPIC_NATIVE_TOOLS:
+            if native["name"] not in existing_names:
+                api_tools.append(native)
+
         failover_models = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
 
         async def _do_call(m: str) -> Any:
