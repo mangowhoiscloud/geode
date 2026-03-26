@@ -21,7 +21,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| gateway-config | Gateway 하드코딩 상수화 — max_rounds/max_turns config.toml 연동 + GATEWAY_SUFFIX 적극성 조정 | @mangowhoiscloud | feature/gateway-config | 2026-03-26 | P0 serve 포기 이슈 |
+| — | — | — | — | — | — |
 
 ### In Review
 
@@ -33,6 +33,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| gateway-config | Gateway-REPL 통합 팩토리 + config.toml 상수화 + SUFFIX 적극성 조정 | #461 | @mangowhoiscloud | 2026-03-26 |
 | gateway-multiturn | Gateway 멀티턴 대화 지원 — thread_id 기반 세션 영속화 + MessageProcessor 확장 | #459 | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-26 — 세션 32)
