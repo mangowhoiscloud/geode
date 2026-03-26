@@ -362,6 +362,8 @@ def _handle_command(
     mcp_manager: Any = None,
 ) -> tuple[bool, bool, Any]:
     """Handle a slash command. Returns (should_break, new_verbose, resume_state)."""
+    from core.cli._helpers import parse_dry_run_flag
+
     action = resolve_action(cmd)
 
     if action == "quit":
@@ -389,9 +391,9 @@ def _handle_command(
         readiness = _get_readiness()
         force_dry = readiness.force_dry_run if readiness else True
         # Support "--dry-run" flag in slash command args
-        if "--dry-run" in args or "--dry_run" in args:
+        dry_flag, args = parse_dry_run_flag(args)
+        if dry_flag:
             force_dry = True
-            args = args.replace("--dry-run", "").replace("--dry_run", "").strip()
         if force_dry and readiness is not None and not readiness.force_dry_run:
             console.print("  [info]Dry-run mode (explicitly requested)[/info]")
         elif force_dry:
@@ -425,8 +427,7 @@ def _handle_command(
                 " [html|json|md] [summary|detailed|executive][/warning]"
             )
         else:
-            dry_flag = "--dry-run" in args or "--dry_run" in args
-            clean_args = args.replace("--dry-run", "").replace("--dry_run", "").strip()
+            dry_flag, clean_args = parse_dry_run_flag(args)
             report_args = _parse_report_args(clean_args.split())
             readiness = _get_readiness()
             report_dry = readiness.force_dry_run if readiness else True
@@ -443,9 +444,9 @@ def _handle_command(
     elif action == "batch":
         readiness = _get_readiness()
         force_dry = readiness.force_dry_run if readiness else True
-        if "--dry-run" in args or "--dry_run" in args:
+        dry_flag, args = parse_dry_run_flag(args)
+        if dry_flag:
             force_dry = True
-            args = args.replace("--dry-run", "").replace("--dry_run", "").strip()
         cmd_batch(
             args,
             run_fn=_run_analysis,
@@ -503,7 +504,7 @@ def _handle_command(
         if len(parts) < 2:
             console.print("  [warning]Usage: /compare <IP_A> <IP_B>[/warning]")
         else:
-            dry_flag = "--dry-run" in args or "--dry_run" in args
+            dry_flag, _clean_compare = parse_dry_run_flag(args)
             clean_parts = [p for p in parts if p not in ("--dry-run", "--dry_run")]
             if len(clean_parts) < 2:
                 console.print("  [warning]Usage: /compare <IP_A> <IP_B>[/warning]")
