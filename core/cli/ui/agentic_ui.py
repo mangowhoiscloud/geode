@@ -112,23 +112,35 @@ class OperationLogger:
 
     Manages the progressive log display with tree structure and
     auto-collapse after COLLAPSE_THRESHOLD visible operations.
+
+    When finalize() is called with 6+ total tools, renders a grouped
+    summary by tool type instead of the simple collapsed count.
     """
 
     COLLAPSE_THRESHOLD = 5
+    GROUPING_THRESHOLD = 6
 
     def __init__(self) -> None:
         self._visible_count = 0
         self._collapsed_count = 0
         self._header_printed = False
+        # Tool-type grouping state
+        self._tool_type_counts: dict[str, int] = {}
+        self._tool_type_last_summary: dict[str, str] = {}
+        self._total_tool_count = 0
+        self._round_count = 0
 
     def begin_round(self, label: str = "AgenticLoop") -> None:
         """Start a new agentic round — print header if not yet shown."""
         if not self._header_printed:
             console.print(f"\n[bold]● {label}[/bold]")
             self._header_printed = True
+        self._round_count += 1
 
     def log_tool_call(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         """Log a tool call. Returns True if visible, False if collapsed."""
+        self._total_tool_count += 1
+        self._tool_type_counts[tool_name] = self._tool_type_counts.get(tool_name, 0) + 1
         if self._visible_count < self.COLLAPSE_THRESHOLD:
             args_parts: list[str] = []
             for k, v in tool_input.items():
@@ -152,12 +164,28 @@ class OperationLogger:
     def log_tool_result(
         self, tool_name: str, result: dict[str, Any], *, visible: bool = True
     ) -> None:
-        """Log a tool result (only renders if the call was visible)."""
+        """Log a tool result (only renders if the call was visible).
+
+        Also tracks per-type last summary for grouped finalize display.
+        """
+        # Build summary string (needed for both visible rendering and grouping)
+        summary = self._build_result_summary(tool_name, result)
+
+        # Track per-type last summary for grouped display
+        self._tool_type_last_summary[tool_name] = summary
+
         if not visible:
             return
         if result.get("error"):
             console.print(f"  ⎿ [error]✗ {tool_name}[/error] — {result['error']}")
             return
+        console.print(f"  ⎿ [success]✓ {tool_name}[/success] → {summary}")
+
+    @staticmethod
+    def _build_result_summary(tool_name: str, result: dict[str, Any]) -> str:
+        """Build a compact summary string from a tool result dict."""
+        if result.get("error"):
+            return str(result["error"])
         summary_parts: list[str] = []
         # Domain-specific keys (Game IP pipeline)
         if "tier" in result:
@@ -179,12 +207,24 @@ class OperationLogger:
                         preview = preview[:77] + "..."
                     summary_parts.append(preview)
                     break
-        summary = " · ".join(summary_parts) if summary_parts else "ok"
-        console.print(f"  ⎿ [success]✓ {tool_name}[/success] → {summary}")
+        return " · ".join(summary_parts) if summary_parts else "ok"
 
     def finalize(self) -> None:
-        """Print collapsed count if any tools were hidden."""
-        if self._collapsed_count > 0:
+        """Print collapsed count or grouped summary.
+
+        When total tool count >= GROUPING_THRESHOLD (6), renders a grouped
+        summary by tool type (e.g., ``web_search (3) · memory (2) · bash (1)``).
+        Otherwise, falls back to the simple collapsed count message.
+        """
+        if self._total_tool_count >= self.GROUPING_THRESHOLD:
+            # Grouped summary: tool_type (count) sorted by count descending
+            sorted_types = sorted(self._tool_type_counts.items(), key=lambda x: -x[1])
+            type_parts = [f"{name} ({count})" for name, count in sorted_types]
+            group_line = " · ".join(type_parts)
+            console.print(f"  ⎿ [dim]{group_line}[/dim]")
+            rounds = max(self._round_count, 1)
+            console.print(f"  ⎿ [dim]{self._total_tool_count} tools · {rounds} rounds[/dim]")
+        elif self._collapsed_count > 0:
             console.print(f"  ⎿ [dim]+{self._collapsed_count} more tool uses (collapsed)[/dim]")
 
     def reset(self) -> None:
@@ -192,6 +232,10 @@ class OperationLogger:
         self._visible_count = 0
         self._collapsed_count = 0
         self._header_printed = False
+        self._tool_type_counts.clear()
+        self._tool_type_last_summary.clear()
+        self._total_tool_count = 0
+        self._round_count = 0
 
 
 def render_tool_call(tool_name: str, tool_input: dict[str, Any]) -> None:
@@ -291,6 +335,25 @@ def render_subagent_dispatch(task_id: str, task_type: str, description: str) -> 
     console.print(f'  [subagent]▸ delegate_task[/subagent]({task_type}, "{description}")')
 
 
+def render_subagent_progress(
+    completed: int, total: int, latest_name: str, latest_time: float
+) -> None:
+    """Render sub-agent progress with counter.
+
+    Shows progressive ``[completed/total]`` counter as each sub-agent finishes.
+    """
+    if completed < total:
+        console.print(
+            f"  [dim]⎿[/dim] [success]✓[/success] {latest_name} ({latest_time:.1f}s)"
+            f"  [{completed}/{total}]"
+        )
+    else:
+        console.print(
+            f"  [dim]⎿[/dim] [success]✓[/success] {latest_name} ({latest_time:.1f}s)"
+            f"  [{completed}/{total}]"
+        )
+
+
 def render_subagent_complete(count: int, elapsed_s: float) -> None:
     """Render sub-agent batch completion."""
     console.print(f"  [success]✓ {count} sub-agents completed[/success] ({elapsed_s:.1f}s)")
@@ -344,6 +407,21 @@ def render_status_line() -> None:
     except Exception:
         # Fallback: just show elapsed time
         console.print(f"\n  [dim]✢ Worked for {meter.turn_elapsed_display}[/dim]")
+
+
+def render_turn_summary(rounds: int, tool_count: int, elapsed_s: float, cost: float) -> None:
+    """Render compact turn-end summary line.
+
+    Format: ``──── 3 rounds · 8 tools · 4.2s · $0.012 ────``
+    Only renders when there is meaningful activity (at least 1 tool call).
+    """
+    if tool_count == 0:
+        return
+    parts = [f"{rounds} rounds", f"{tool_count} tools", f"{elapsed_s:.1f}s"]
+    if cost > 0:
+        parts.append(f"${cost:.3f}")
+    summary = " · ".join(parts)
+    console.print(f"\n  [dim]──── {summary} ────[/dim]")
 
 
 # ───────────────────────────────────────────────────────────────────────────

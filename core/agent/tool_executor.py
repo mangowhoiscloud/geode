@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -346,26 +345,28 @@ class ToolExecutor:
             for i, t in enumerate(tasks_raw)
         ]
 
-        # P2-C: progress callback — consolidated progress line (Claude Code pattern)
+        # P2-C: progress callback — progressive counter (Claude Code pattern)
         completed_count = 0
         total_count = len(sub_tasks)
         _start_ts = time.time()
+        _task_starts: dict[str, float] = {t.task_id: time.time() for t in sub_tasks}
 
         def _on_progress(result: Any) -> None:
             nonlocal completed_count
             completed_count += 1
-            status = "ok" if result.success else "err"
-            # Single overwriting line — no scroll flood
-            sys.stdout.write(
-                f"\r\x1b[2K  \x1b[2msub-agent {completed_count}/{total_count} {status}\x1b[0m"
+            task_elapsed = time.time() - _task_starts.get(result.task_id, _start_ts)
+            from core.cli.ui.agentic_ui import render_subagent_progress
+
+            render_subagent_progress(
+                completed_count,
+                total_count,
+                result.description or result.task_id,
+                task_elapsed,
             )
-            sys.stdout.flush()
 
         results = self._sub_agent_manager.delegate(sub_tasks, on_progress=_on_progress)
 
-        # Clear progress line and show final summary
-        sys.stdout.write("\r\x1b[2K")
-        sys.stdout.flush()
+        # Final summary line
         from core.cli.ui.agentic_ui import render_subagent_complete
 
         render_subagent_complete(len(results), time.time() - _start_ts)

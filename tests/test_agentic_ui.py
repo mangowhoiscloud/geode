@@ -16,9 +16,11 @@ from core.cli.ui.agentic_ui import (
     render_status_line,
     render_subagent_complete,
     render_subagent_dispatch,
+    render_subagent_progress,
     render_tokens,
     render_tool_call,
     render_tool_result,
+    render_turn_summary,
 )
 
 
@@ -229,14 +231,18 @@ class TestOperationLogger:
         assert logger.log_tool_call("tool_extra", {}) is False
 
     @patch("core.cli.ui.agentic_ui.console")
-    def test_finalize_shows_collapsed_count(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+    def test_finalize_shows_grouped_summary(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """When total tools >= GROUPING_THRESHOLD (6), finalize shows grouped summary."""
         logger = OperationLogger()
+        logger.begin_round()
         for i in range(OperationLogger.COLLAPSE_THRESHOLD + 3):
             logger.log_tool_call(f"tool_{i}", {})
         logger.finalize()
         calls = [str(c) for c in mock_console.print.call_args_list]
         combined = " ".join(calls)
-        assert "+3 more tool uses" in combined
+        # Should show grouped summary, not collapsed count
+        assert "8 tools" in combined
+        assert "1 rounds" in combined
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_finalize_no_collapsed(self, mock_console) -> None:  # type: ignore[no-untyped-def]
@@ -269,6 +275,9 @@ class TestOperationLogger:
         assert logger._visible_count == 0
         assert logger._collapsed_count == 0
         assert logger._header_printed is False
+        assert logger._total_tool_count == 0
+        assert logger._tool_type_counts == {}
+        assert logger._round_count == 0
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_log_tool_result_error(self, mock_console) -> None:  # type: ignore[no-untyped-def]
@@ -466,3 +475,205 @@ class TestMarkTurnStart:
 
         mark_turn_start()
         assert meter.turn_elapsed_s < 1
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Action Display — tool-type grouping, sub-agent counter, turn summary
+# ───────────────────────────────────────────────────────────────────────────
+
+
+class TestToolTypeGrouping:
+    """OperationLogger tool-type grouping (6+ tools)."""
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_grouping_with_mixed_types(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """8 tool calls of mixed types produce grouped summary in finalize()."""
+        logger = OperationLogger()
+        logger.begin_round()
+        # 3 web_search + 2 memory_search + 2 bash + 1 analyze_ip = 8
+        for _ in range(3):
+            logger.log_tool_call("web_search", {"query": "test"})
+        for _ in range(2):
+            logger.log_tool_call("memory_search", {"query": "test"})
+        for _ in range(2):
+            logger.log_tool_call("run_bash", {"command": "ls"})
+        logger.log_tool_call("analyze_ip", {"ip_name": "Berserk"})
+
+        mock_console.print.reset_mock()
+        logger.finalize()
+        calls = [str(c) for c in mock_console.print.call_args_list]
+        combined = " ".join(calls)
+
+        # Should show grouped summary
+        assert "web_search (3)" in combined
+        assert "memory_search (2)" in combined
+        assert "run_bash (2)" in combined
+        assert "analyze_ip (1)" in combined
+        assert "8 tools" in combined
+        assert "1 rounds" in combined
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_grouping_sorted_by_count(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """Grouped types are sorted by count descending."""
+        logger = OperationLogger()
+        logger.begin_round()
+        # 1 alpha + 4 beta + 1 gamma = 6
+        logger.log_tool_call("alpha", {})
+        for _ in range(4):
+            logger.log_tool_call("beta", {})
+        logger.log_tool_call("gamma", {})
+
+        mock_console.print.reset_mock()
+        logger.finalize()
+        calls = [str(c) for c in mock_console.print.call_args_list]
+        combined = " ".join(calls)
+
+        # beta should come first (4 > 1)
+        assert "beta (4)" in combined
+        beta_pos = combined.index("beta (4)")
+        alpha_pos = combined.index("alpha (1)")
+        assert beta_pos < alpha_pos
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_below_grouping_threshold_no_summary(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """<= 5 tools: no grouping, no collapsed count."""
+        logger = OperationLogger()
+        for i in range(5):
+            logger.log_tool_call(f"tool_{i}", {})
+
+        mock_console.print.reset_mock()
+        logger.finalize()
+        # 5 tools, 0 collapsed, total < 6 → nothing printed
+        assert not mock_console.print.called
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_exactly_6_tools_triggers_grouping(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """Exactly 6 tools (GROUPING_THRESHOLD) triggers grouping."""
+        logger = OperationLogger()
+        logger.begin_round()
+        for i in range(6):
+            logger.log_tool_call("web_search", {"q": str(i)})
+
+        mock_console.print.reset_mock()
+        logger.finalize()
+        calls = [str(c) for c in mock_console.print.call_args_list]
+        combined = " ".join(calls)
+
+        assert "web_search (6)" in combined
+        assert "6 tools" in combined
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_round_counting(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """Multiple begin_round() calls increment round count."""
+        logger = OperationLogger()
+        logger.begin_round()
+        for _ in range(3):
+            logger.log_tool_call("tool_a", {})
+        logger.begin_round()  # header already printed, but round count++
+        for _ in range(3):
+            logger.log_tool_call("tool_b", {})
+
+        mock_console.print.reset_mock()
+        logger.finalize()
+        calls = [str(c) for c in mock_console.print.call_args_list]
+        combined = " ".join(calls)
+
+        assert "6 tools" in combined
+        assert "2 rounds" in combined
+
+
+class TestSubagentProgressCounter:
+    """Sub-agent progressive counter rendering."""
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_progress_in_flight(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """Partial completion shows [completed/total] counter."""
+        render_subagent_progress(2, 5, "thread-safety", 2.1)
+        printed = str(mock_console.print.call_args)
+        assert "thread-safety" in printed
+        assert "2.1s" in printed
+        assert "[2/5]" in printed
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_progress_final(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """Last completion still shows [completed/total]."""
+        render_subagent_progress(5, 5, "final-task", 3.4)
+        printed = str(mock_console.print.call_args)
+        assert "final-task" in printed
+        assert "3.4s" in printed
+        assert "[5/5]" in printed
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_progress_first(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """First completion shows [1/total]."""
+        render_subagent_progress(1, 3, "task-alpha", 1.0)
+        printed = str(mock_console.print.call_args)
+        assert "[1/3]" in printed
+        assert "task-alpha" in printed
+
+
+class TestTurnSummary:
+    """Turn-end compact summary line."""
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_basic_summary(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """Summary shows rounds, tools, time, cost."""
+        render_turn_summary(3, 8, 4.2, 0.012)
+        printed = str(mock_console.print.call_args)
+        assert "3 rounds" in printed
+        assert "8 tools" in printed
+        assert "4.2s" in printed
+        assert "$0.012" in printed
+        assert "────" in printed
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_summary_no_cost(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """When cost is 0, cost part is omitted."""
+        render_turn_summary(2, 5, 1.5, 0.0)
+        printed = str(mock_console.print.call_args)
+        assert "2 rounds" in printed
+        assert "5 tools" in printed
+        assert "1.5s" in printed
+        assert "$" not in printed
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_summary_zero_tools_noop(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """No tool calls means no summary rendered."""
+        render_turn_summary(1, 0, 0.5, 0.0)
+        assert not mock_console.print.called
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_summary_single_round(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """Single round summary."""
+        render_turn_summary(1, 2, 0.8, 0.001)
+        printed = str(mock_console.print.call_args)
+        assert "1 rounds" in printed
+        assert "2 tools" in printed
+        assert "$0.001" in printed
+
+
+class TestBuildResultSummary:
+    """OperationLogger._build_result_summary static method."""
+
+    def test_tier_and_score(self) -> None:
+        s = OperationLogger._build_result_summary("t", {"tier": "S", "score": 81.2})
+        assert "S" in s
+        assert "81.2" in s
+
+    def test_error(self) -> None:
+        s = OperationLogger._build_result_summary("t", {"error": "Not found"})
+        assert s == "Not found"
+
+    def test_generic_text(self) -> None:
+        s = OperationLogger._build_result_summary("t", {"output": "some text"})
+        assert "some text" in s
+
+    def test_empty(self) -> None:
+        s = OperationLogger._build_result_summary("t", {})
+        assert s == "ok"
+
+    def test_long_text_truncated(self) -> None:
+        long_text = "x" * 100
+        s = OperationLogger._build_result_summary("t", {"output": long_text})
+        assert len(s) <= 80
+        assert s.endswith("...")
