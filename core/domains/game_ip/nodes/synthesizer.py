@@ -18,7 +18,6 @@ from pydantic import ValidationError
 
 from core.config import get_node_model
 from core.domains.port import get_domain_or_none
-from core.infrastructure.ports.tool_port import get_tool_executor
 from core.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_TOOLS_SUFFIX, SYNTHESIZER_USER
 from core.llm.router import get_llm_json, get_llm_parsed, get_llm_tool
 from core.state import (
@@ -26,6 +25,7 @@ from core.state import (
     GeodeState,
     SynthesisResult,
 )
+from core.tools.port import get_tool_executor
 
 log = logging.getLogger(__name__)
 

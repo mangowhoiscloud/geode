@@ -29,10 +29,6 @@ from core.infrastructure.ports.orchestration_port import (
     StuckDetectorPort,
     TaskGraphPort,
 )
-from core.infrastructure.ports.tool_port import (
-    PolicyChainPort,
-    ToolRegistryPort,
-)
 from core.llm.router import LLMClientPort
 from core.memory.port import (
     OrganizationMemoryPort,
@@ -40,6 +36,10 @@ from core.memory.port import (
     SessionStorePort,
 )
 from core.orchestration.hook_port import HookSystemPort
+from core.tools.port import (
+    PolicyChainPort,
+    ToolRegistryPort,
+)
 
 
 class TestToolPortCompliance:

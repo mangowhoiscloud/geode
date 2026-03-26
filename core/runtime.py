@@ -65,10 +65,6 @@ from core.infrastructure.ports.orchestration_port import (
     StuckDetectorPort,
     TaskGraphPort,
 )
-from core.infrastructure.ports.tool_port import (
-    PolicyChainPort,
-    ToolRegistryPort,
-)
 from core.llm.providers.openai import OpenAIAdapter
 from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.memory.context import ContextAssembler
@@ -93,6 +89,10 @@ from core.orchestration.task_bridge import TaskGraphHookBridge
 from core.orchestration.task_system import create_geode_task_graph
 from core.tools.analysis import ExplainScoreTool, PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
 from core.tools.policy import NodeScopePolicy, ToolPolicy
+from core.tools.port import (
+    PolicyChainPort,
+    ToolRegistryPort,
+)
 from core.tools.registry import ToolRegistry, ToolSearchTool
 
 log = logging.getLogger(__name__)
@@ -1438,7 +1438,7 @@ class GeodeRuntime:
         Returns empty dict if no tools are available (dry_run, etc).
         Also injects tool executor into contextvar via ``set_tool_executor()``.
         """
-        from core.infrastructure.ports.tool_port import set_tool_executor
+        from core.tools.port import set_tool_executor
 
         available = self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
         if not available:
