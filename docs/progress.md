@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-26 (세션 28 — 파이프라인 모델 고정)
+> 마지막 갱신: 2026-03-26 (세션 29 — 네이티브 도구 통합)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -21,7 +21,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| native-tools | 3사 Agent SDK 네이티브 도구 통합 — Anthropic web_search/web_fetch/code_exec 버전업 + OpenAI Responses API 패스스루 + GLM-5 web_search 네이티브 | @mangowhoiscloud | feature/native-tools | 2026-03-26 | Agent SDK 리서치 완료 |
 
 ### In Review
 
