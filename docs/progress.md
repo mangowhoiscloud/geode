@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-27 (세션 35 — Task Tool 노출 머지 #466)
+> 마지막 갱신: 2026-03-27 (세션 37 — mcp-simplify PR #469 CI 대기)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -22,7 +22,7 @@
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~—~~ | **In Progress** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
-| mcp-simplify | MCP 카탈로그 단일화 — registry 삭제 + catalog 축소 + config.toml 통합 | P1 | tool-mcp-architecture-review.md | kent-beck 완료 후 착수 |
+| ~~mcp-simplify~~ | ~~MCP 카탈로그 단일화~~ | ~~P1~~ | ~~#469~~ | **In Review** |
 | scheduler-callback | 스케줄러 callback 와이어링 — action 필드 + 큐 연결 | P1 | tool-mcp-architecture-review.md | mcp-simplify 이후 |
 
 ### In Progress
@@ -35,7 +35,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
-| — | — | — | — | — | — |
+| mcp-simplify | MCP 카탈로그 단일화 — registry 삭제 + catalog 축소 + config.toml 통합 | #469 | @mangowhoiscloud | pending | v0.30.0 |
 
 ### Done (2026-03-27 — 세션 35)
 
