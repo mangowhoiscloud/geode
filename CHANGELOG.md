@@ -1053,7 +1053,6 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 | 0.6.0 | 2026-03-10 | Initial release — full pipeline, agentic loop, 3-tier memory |
 
 <!-- Links -->
-[Unreleased]: https://github.com/mangowhoiscloud/geode/compare/v0.19.1...HEAD
 [0.19.1]: https://github.com/mangowhoiscloud/geode/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/mangowhoiscloud/geode/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/mangowhoiscloud/geode/compare/v0.18.0...v0.18.1
