@@ -24,18 +24,16 @@ if TYPE_CHECKING:
     from core.cli.ui.agentic_ui import OperationLogger
     from core.orchestration.hooks import HookSystem
 
-from core.cli.bash_tool import BashTool
-from core.cli.ui.console import console
-
-log = logging.getLogger(__name__)
-
-# Re-export safety constants from single source of truth
 from core.agent.safety_constants import AUTO_APPROVED_MCP_SERVERS as AUTO_APPROVED_MCP_SERVERS
 from core.agent.safety_constants import DANGEROUS_TOOLS as DANGEROUS_TOOLS
 from core.agent.safety_constants import EXPENSIVE_TOOLS as EXPENSIVE_TOOLS
 from core.agent.safety_constants import SAFE_BASH_PREFIXES as SAFE_BASH_PREFIXES
 from core.agent.safety_constants import SAFE_TOOLS as SAFE_TOOLS
 from core.agent.safety_constants import WRITE_TOOLS as WRITE_TOOLS
+from core.cli.bash_tool import BashTool
+from core.cli.ui.console import console
+
+log = logging.getLogger(__name__)
 
 # Everything else is STANDARD — executes without special gates
 
