@@ -134,7 +134,7 @@ class TestMCPRegistry:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("BRAVE_API_KEY", None)
             # Also mock global .env to prevent cascade loading
-            with patch("core.infrastructure.adapters.mcp.registry.Path") as mock_path:
+            with patch("core.mcp.registry.Path") as mock_path:
                 mock_path.home.return_value = Path("/nonexistent_home")
                 registry = MCPRegistry(dotenv_path="/nonexistent/.env")
                 result = registry.discover()
@@ -158,7 +158,7 @@ class TestMCPRegistry:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("BRAVE_API_KEY", None)
             # Mock global .env to prevent cascade loading
-            with patch("core.infrastructure.adapters.mcp.registry.Path") as mock_path:
+            with patch("core.mcp.registry.Path") as mock_path:
                 mock_path.home.return_value = Path("/nonexistent_home")
                 registry = MCPRegistry(dotenv_path="/nonexistent/.env")
                 missing = registry.list_missing_env()
