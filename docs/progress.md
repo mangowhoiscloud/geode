@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-27 (세션 39 — agentic-provider-merge #473 + ports-migrate #474 Done. ports-cleanup-2 Backlog 추가)
+> 마지막 갱신: 2026-03-27 (세션 40 — ports-cleanup-2 #475 Done. prompt-cleanup #476 In Review)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -26,8 +26,6 @@
 | scheduler-callback | 스케줄러 callback 와이어링 — action 필드 + 큐 연결 | P1 | tool-mcp-architecture-review.md | mcp-simplify 이후 |
 | ~~agentic-provider-merge~~ | ~~agent/adapters/ → llm/providers/ 통합~~ | ~~P2~~ | ~~#473~~ | **Done** |
 | ~~ports-migrate~~ | ~~infrastructure/ports/ → domain co-locate 이동 (8포트, 40+ 소비자)~~ | ~~P2~~ | ~~#474~~ | **Done** |
-| ports-cleanup-2 | 단일 구현 Protocol 6개 삭제 — HookSystemPort/ToolPort/GatewayPort/AutomationPort/OrchestrationPort/AuthPort → concrete 교체 | P2 | — | ports-migrate 후속 |
-
 ### In Progress
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
@@ -37,11 +35,13 @@
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+| prompt-cleanup | 프롬프트 영어 통일 + output_language 파이프라인 + 언어 감지 | #476 | @mangowhoiscloud | pending | Karpathy P7 |
 
-### Done (2026-03-27 — 세션 39)
+### Done (2026-03-27 — 세션 40)
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| ports-cleanup-2 | 단일 구현 Protocol 6개 삭제 — HookSystemPort/ToolPort/GatewayPort/AutomationPort/OrchestrationPort/AuthPort | #475 | @mangowhoiscloud | 2026-03-27 |
 | agentic-provider-merge | agent/adapters/ → llm/providers/ 통합 — 모듈 수 195 → 187 | #473 | @mangowhoiscloud | 2026-03-27 |
 | ports-migrate | infrastructure/ports/ → domain co-locate — infrastructure/ 디렉터리 제거 | #474 | @mangowhoiscloud | 2026-03-27 |
 
