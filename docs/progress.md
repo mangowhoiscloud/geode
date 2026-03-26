@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-26 (세션 32 — v0.29.1 릴리스 docs-sync)
+> 마지막 갱신: 2026-03-26 (세션 33 — Gateway 멀티턴)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -21,7 +21,6 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| gateway-multiturn | Gateway 멀티턴 — thread_id 기반 대화 이력 연결 + SessionStore 영속화 | @mangowhoiscloud | feature/gateway-multiturn | 2026-03-26 | P0 |
 | web-search-fix | 웹검색 수정 — general_web_search Haiku→Sonnet + signal tools stub 활성화 + MCP 도구명 매핑 | @mangowhoiscloud | feature/web-search-fix | 2026-03-26 | P0 유저 피드백 |
 
 ### In Review
@@ -29,6 +28,12 @@
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
+
+### Done (2026-03-26 — 세션 33)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| gateway-multiturn | Gateway 멀티턴 대화 지원 — thread_id 기반 세션 영속화 + MessageProcessor 확장 | #459 | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-26 — 세션 32)
 
