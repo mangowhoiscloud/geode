@@ -140,12 +140,48 @@ Backlog → In Progress → In Review → Done
 
 ## Docs-Sync
 
-| 동기화 대상 | 검증 |
-|-----------|------|
-| 버전 4곳 | CHANGELOG, CLAUDE.md, README.md, pyproject.toml |
-| 수치 | Tests, Modules, Commands -- 실측값 |
+### 버전 동기화 (4곳 필수)
+
+| 대상 | 파일 |
+|------|------|
+| CHANGELOG | `CHANGELOG.md` — `[x.y.z] — YYYY-MM-DD` 섹션 추가 |
+| CLAUDE.md | Version, Modules, Tests 수치 |
+| README.md | 타이틀 버전, Scaffold 섹션 수치, Highlights 수치 |
+| pyproject.toml | `version = "x.y.z"` |
 
 **버전업**: 새 기능 = MINOR, 버그 = PATCH, 문서만 = 안 함.
+
+### 수치 실측 (6항목)
+
+| 항목 | 실측 명령어 |
+|------|-----------|
+| Modules | `find core/ -name "*.py" -not -path "*__pycache__*" \| wc -l` |
+| Tests | `uv run python -m pytest tests/ -m "not live" 2>&1 \| tail -1` |
+| Tools | `python3 -c "import json; print(len(json.load(open('core/tools/definitions.json'))))"` |
+| MCP | `grep -c "MCPCatalogEntry(" core/mcp/catalog.py` |
+| Hooks | `grep -c "^\s\+[A-Z_]\+ = \"" core/orchestration/hooks.py` |
+| Skills | `.geode/skills/` 파일 수 |
+
+### 레퍼런스 문서 전수 점검
+
+| 문서 | 점검 항목 |
+|------|----------|
+| `docs/architecture.md` | 모듈 수, 도구 수, MCP 수, 레이어 설명 |
+| `docs/workflow.md` | 품질 게이트 테스트 수 |
+| `docs/setup.md` | 설치 명령어, pytest 수 |
+| `docs/progress.md` | Metrics 섹션, In Progress → Done 이동, 마지막 갱신일 |
+
+### GitHub About 갱신
+
+```bash
+gh repo edit mangowhoiscloud/geode --description "GEODE vX.Y.Z — ..."
+```
+
+**서술 원칙**: Scaffold(생산)과 Runtime(에이전트)을 분리하여 서술.
+
+- **Scaffold**: Claude Code 기반 생산 체계 (CLAUDE.md + 개발 Skills + CI Hooks)
+- **Runtime**: GEODE 에이전트의 내부 시스템 (런타임 Hooks, Tools, Verification)
+- 정량 수치(모듈 수 등)보다 **임팩트 키워드** 사용 (`·` 구분자)
 
 ---
 
