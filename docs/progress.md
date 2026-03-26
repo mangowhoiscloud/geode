@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-27 (세션 38 — agentic-provider-merge + ports-migrate In Progress)
+> 마지막 갱신: 2026-03-27 (세션 39 — agentic-provider-merge #473 + ports-migrate #474 Done. ports-cleanup-2 Backlog 추가)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -24,20 +24,26 @@
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
 | ~~mcp-simplify~~ | ~~MCP 카탈로그 단일화~~ | ~~P1~~ | ~~#469~~ | **Done** |
 | scheduler-callback | 스케줄러 callback 와이어링 — action 필드 + 큐 연결 | P1 | tool-mcp-architecture-review.md | mcp-simplify 이후 |
-| agentic-provider-merge | agent/adapters/ → llm/providers/ 통합 — provider당 파일 1개로 agentic+batch 통합 | P2 | — | agent/adapters 4파일 제거 |
-| ports-migrate | infrastructure/ports/ → 각 도메인 co-locate 이동 (8포트, 40+ 소비자) | P2 | — | F안 완성 |
+| ~~agentic-provider-merge~~ | ~~agent/adapters/ → llm/providers/ 통합~~ | ~~P2~~ | ~~#473~~ | **Done** |
+| ~~ports-migrate~~ | ~~infrastructure/ports/ → domain co-locate 이동 (8포트, 40+ 소비자)~~ | ~~P2~~ | ~~#474~~ | **Done** |
+| ports-cleanup-2 | 단일 구현 Protocol 6개 삭제 — HookSystemPort/ToolPort/GatewayPort/AutomationPort/OrchestrationPort/AuthPort → concrete 교체 | P2 | — | ports-migrate 후속 |
 
 ### In Progress
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| agentic-provider-merge | agent/adapters/ → llm/providers/ 통합 | @agent-1 | feature/agentic-provider-merge | 2026-03-27 | 병렬 실행 |
-| ports-migrate | infrastructure/ports/ → domain co-locate | @agent-2 | feature/ports-migrate | 2026-03-27 | 병렬 실행 |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-03-27 — 세션 39)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| agentic-provider-merge | agent/adapters/ → llm/providers/ 통합 — 모듈 수 195 → 187 | #473 | @mangowhoiscloud | 2026-03-27 |
+| ports-migrate | infrastructure/ports/ → domain co-locate — infrastructure/ 디렉터리 제거 | #474 | @mangowhoiscloud | 2026-03-27 |
 
 ### Done (2026-03-27 — 세션 37)
 
