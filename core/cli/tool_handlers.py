@@ -1232,8 +1232,7 @@ def _build_task_handlers() -> dict[str, Any]:
             out["description"] = task.metadata.get("description", "")
             out["elapsed_s"] = task.elapsed_s
             out["metadata"] = {
-                k: v for k, v in task.metadata.items()
-                if k not in ("owner", "description")
+                k: v for k, v in task.metadata.items() if k not in ("owner", "description")
             }
             if task.error:
                 out["error"] = task.error

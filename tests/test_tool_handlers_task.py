@@ -39,17 +39,13 @@ class TestTaskCreate:
         assert "subject" in result["missing"]
 
     def test_description_stored_in_metadata(self, handlers):
-        result = handlers["task_create"](
-            subject="Run analysis", description="detailed desc"
-        )
+        result = handlers["task_create"](subject="Run analysis", description="detailed desc")
         task_id = result["task_id"]
         detail = handlers["task_get"](task_id=task_id)
         assert detail["description"] == "detailed desc"
 
     def test_metadata_stored(self, handlers):
-        result = handlers["task_create"](
-            subject="Step 1", metadata={"priority": "P0"}
-        )
+        result = handlers["task_create"](subject="Step 1", metadata={"priority": "P0"})
         task_id = result["task_id"]
         detail = handlers["task_get"](task_id=task_id)
         assert detail["metadata"]["priority"] == "P0"
