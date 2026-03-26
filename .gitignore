@@ -36,4 +36,5 @@ geode_checkpoints.db
 .geode/*
 !.geode/rules/
 !.geode/memory/
-!.geode/config.toml
+!.geode/config.toml.example
+!.geode/skills/

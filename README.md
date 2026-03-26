@@ -32,7 +32,7 @@ cd geode && uv sync
 ```
 
 > API 키 없이 시작하면 dry-run 모드로 자동 전환됩니다.
-> `geode serve`는 CLI 없이 Slack 채널에서 에이전트를 운용합니다. [Slack Gateway 설정 →](docs/setup.md#slack-gateway)
+> `geode serve`는 CLI 없이 Slack 채널에서 에이전트를 운용합니다. 최초 설정: `cp .geode/config.toml.example .geode/config.toml` → 채널 ID 입력. [Slack Gateway 설정 →](docs/setup.md#slack-gateway)
 > 상세 설치는 [Setup Guide](docs/setup.md)를 참고하세요.
 
 ---

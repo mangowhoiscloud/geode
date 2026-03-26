@@ -102,26 +102,72 @@ GEODE_GATEWAY_ENABLED=true
 
 ### 3. 채널 바인딩 (`.geode/config.toml`)
 
+`.geode/config.toml`이 없으면 Slack 폴러가 모니터링할 채널이 없어 **메시지를 수신하지 않습니다**.
+이 파일은 채널 ID(개인정보)를 포함하므로 git에 커밋하지 않습니다.
+
+```bash
+# 템플릿에서 복사
+cp .geode/config.toml.example .geode/config.toml
+
+# 채널 ID 편집
+vi .geode/config.toml
+```
+
 ```toml
+[gateway.bindings]
+
 [[gateway.bindings.rules]]
 channel = "slack"
-channel_id = "C0ALBPUFXL5"    # Slack channel ID
+channel_id = "C0XXXXXXXXX"  # Slack 채널 → 채널명 클릭 → 맨 아래 Channel ID
 auto_respond = true
-require_mention = false
+require_mention = true       # true: @멘션 시에만 응답
 max_rounds = 5
+
+# 채널을 추가하려면 [[gateway.bindings.rules]] 블록을 반복
 ```
+
+**채널 ID 확인법**: Slack 채널 → 채널명 클릭 → 스크롤 맨 아래 `Channel ID: C0XXXXXXXXX`
+
+> **주의**: `git pull`로 코드를 업데이트해도 `.geode/config.toml`은 `.gitignore` 대상이므로 유지됩니다.
+> 단, 클린 클론 시에는 `config.toml.example`에서 다시 복사해야 합니다.
 
 ### 4. 실행
 
 ```bash
-# Foreground (REPL + Gateway)
-geode
-
 # Headless (Gateway only, background)
 nohup geode serve > /tmp/geode-gateway.log 2>&1 &
+
+# Foreground (REPL + Gateway)
+geode
 ```
 
+### 5. 동작 확인
+
+```bash
+# 프로세스 확인
+ps aux | grep "geode serve"
+
+# 로그에서 바인딩 로드 확인
+grep "binding" /tmp/geode-gateway.log
+# → Channel binding added: slack/C0XXXXXXXXX (auto_respond=True)
+# → Loaded 4 gateway bindings from config
+
+# 로그에서 Slack 폴링 확인
+grep "Slack poller seeded" /tmp/geode-gateway.log
+# → Slack poller seeded ts=... for C0XXXXXXXXX (5 skipped)
+```
+
+바인딩이 0개이거나 "seeded" 로그가 없으면 `.geode/config.toml`이 없거나 채널 ID가 잘못된 것입니다.
+
 `geode serve`는 REPL 없이 Gateway만 실행합니다. MCP 서버 14종이 순차 연결되므로 시작까지 2-3분 소요됩니다.
+
+### 리액션
+
+`require_mention = true`인 채널에서 @멘션 메시지를 보내면:
+1. :eyes: 리액션 (수신 확인)
+2. AgenticLoop 처리
+3. :white_check_mark: 리액션 (완료)
+4. 스레드에 응답 전송
 
 ---
 
