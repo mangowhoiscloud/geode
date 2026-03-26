@@ -110,6 +110,7 @@ app = typer.Typer(
 _search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
 _readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
 _scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", default=None)
+_user_task_graph_ctx: ContextVar[Any] = ContextVar("user_task_graph", default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +206,24 @@ def _get_readiness() -> ReadinessReport | None:
 def _set_readiness(report: ReadinessReport) -> None:
     """Set the context-local ReadinessReport."""
     _readiness_ctx.set(report)
+
+
+def _get_user_task_graph() -> Any:
+    """Get (or lazily create) the context-local user TaskGraph."""
+    from core.orchestration.task_system import TaskGraph
+
+    graph = _user_task_graph_ctx.get()
+    if graph is None:
+        graph = TaskGraph()
+        _user_task_graph_ctx.set(graph)
+    return graph
+
+
+def _reset_user_task_graph() -> None:
+    """Reset the context-local user TaskGraph (new session)."""
+    from core.orchestration.task_system import TaskGraph
+
+    _user_task_graph_ctx.set(TaskGraph())
 
 
 def _get_last_result() -> dict[str, Any] | None:
@@ -542,6 +561,10 @@ def _handle_command(
         from core.cli.commands import cmd_clear
 
         cmd_clear(args)
+    elif action in ("tasks", "task"):
+        from core.cli.commands import cmd_tasks
+
+        cmd_tasks(args)
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")
@@ -1667,18 +1690,35 @@ def serve(
         "This message comes from an external messaging channel (Slack/Discord/Telegram).\n"
         "- Do NOT echo, repeat, or quote the user's message in your response.\n"
         "- Do NOT prefix your response with 'GEODE:' or the user's original text.\n"
-        "- Respond directly with the answer only. Be concise."
+        "- Respond directly with the answer only. Be concise.\n"
+        "- You have access to prior messages in this thread as conversation history."
     )
 
-    def _gateway_processor(content: str) -> str:
-        """Process a gateway message with a fresh AgenticLoop per message.
+    # Max conversation turns to persist per thread (safety net)
+    _GATEWAY_MAX_TURNS = 20
 
-        Uses bootstrap.propagate_to_thread() to fix ContextVar visibility
-        in daemon threads, then builds a per-message AgenticLoop with
-        the same MCP/skills/handlers as the REPL.
+    def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
+        """Process a gateway message with multi-turn context.
+
+        Loads prior conversation from SessionStore (keyed by thread),
+        runs AgenticLoop, then persists the updated conversation back.
         """
         boot.propagate_to_thread()  # Fix ContextVar propagation for daemon thread
-        ctx = ConversationContext(max_turns=20)
+
+        session_key = metadata.get("session_key", "")
+
+        # --- Load prior conversation from session store ---
+        ctx = ConversationContext(max_turns=_GATEWAY_MAX_TURNS)
+        if session_key:
+            prior = runtime.session_store.get(session_key)
+            if prior and isinstance(prior.get("messages"), list):
+                ctx.messages = prior["messages"]
+                log.info(
+                    "Gateway multi-turn: loaded %d messages for %s",
+                    len(ctx.messages),
+                    session_key,
+                )
+
         agentic_ref: list[Any] = [None]
         handlers = _build_tool_handlers(
             mcp_manager=boot.mcp_manager,
@@ -1714,6 +1754,18 @@ def serve(
         agentic_ref[0] = loop
         try:
             result = loop.run(content)
+
+            # --- Persist conversation for next turn ---
+            if session_key:
+                runtime.session_store.set(
+                    session_key,
+                    {
+                        "messages": ctx.messages,
+                        "thread_id": metadata.get("thread_id", ""),
+                        "channel": metadata.get("channel", ""),
+                    },
+                )
+
             return result.text if result else ""
         except Exception as exc:
             log.warning("Gateway processor error: %s", exc, exc_info=True)
