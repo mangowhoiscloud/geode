@@ -10,15 +10,16 @@ Handlers are organized into logical groups:
 - HITL: rate_result, accept_result, reject_result, rerun_node
 - System: check_status, show_help, switch_model, set_api_key, manage_auth
 - Execution: generate_data, schedule_job, trigger_event
-- Delegated: web_fetch, general_web_search, read_document, note_save, note_read
-- Profile: profile_show, profile_update, profile_preference, profile_learn
-- Signal: youtube_search, reddit_sentiment, steam_info, google_trends
+- Delegated: web_fetch, general_web_search, read_document, note_save, note_read,
+             profile_show, profile_update, profile_preference, profile_learn,
+             youtube_search, reddit_sentiment, steam_info, google_trends
 - MCP: install_mcp_server
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from core.cli.ui.console import console
@@ -884,116 +885,52 @@ def _build_execution_handlers() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Handler group: Delegated tools (web, document, note)
+# Handler group: Delegated tools (registry-based)
 # ---------------------------------------------------------------------------
+
+# Maps tool name → (module_path, class_name) for lazy-import delegation.
+# Adding a new delegated tool requires only one line here.
+_DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
+    # web / document / note
+    "web_fetch": ("core.tools.web_tools", "WebFetchTool"),
+    "general_web_search": ("core.tools.web_tools", "GeneralWebSearchTool"),
+    "read_document": ("core.tools.document_tools", "ReadDocumentTool"),
+    "note_save": ("core.tools.memory_tools", "NoteSaveTool"),
+    "note_read": ("core.tools.memory_tools", "NoteReadTool"),
+    # profile
+    "profile_show": ("core.tools.profile_tools", "ProfileShowTool"),
+    "profile_update": ("core.tools.profile_tools", "ProfileUpdateTool"),
+    "profile_preference": ("core.tools.profile_tools", "ProfilePreferenceTool"),
+    "profile_learn": ("core.tools.profile_tools", "ProfileLearnTool"),
+    # signals
+    "youtube_search": ("core.tools.signal_tools", "YouTubeSearchTool"),
+    "reddit_sentiment": ("core.tools.signal_tools", "RedditSentimentTool"),
+    "steam_info": ("core.tools.signal_tools", "SteamInfoTool"),
+    "google_trends": ("core.tools.signal_tools", "GoogleTrendsTool"),
+}
+
+
+def _make_delegate_handler(
+    module_path: str,
+    class_name: str,
+) -> Callable[..., dict[str, Any]]:
+    """Return a handler that lazily imports *class_name* from *module_path* and delegates."""
+
+    def _handler(**kwargs: Any) -> dict[str, Any]:
+        import importlib
+
+        mod = importlib.import_module(module_path)
+        tool_cls = getattr(mod, class_name)
+        return _safe_delegate(tool_cls, kwargs)
+
+    return _handler
 
 
 def _build_delegated_handlers() -> dict[str, Any]:
-    """Build delegated tool handlers (web, document, note)."""
-
-    def handle_web_fetch(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.web_tools import WebFetchTool
-
-        return _safe_delegate(WebFetchTool, kwargs)
-
-    def handle_general_web_search(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.web_tools import GeneralWebSearchTool
-
-        return _safe_delegate(GeneralWebSearchTool, kwargs)
-
-    def handle_read_document(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.document_tools import ReadDocumentTool
-
-        return _safe_delegate(ReadDocumentTool, kwargs)
-
-    def handle_note_save(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.memory_tools import NoteSaveTool
-
-        return _safe_delegate(NoteSaveTool, kwargs)
-
-    def handle_note_read(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.memory_tools import NoteReadTool
-
-        return _safe_delegate(NoteReadTool, kwargs)
-
+    """Build all delegated tool handlers from ``_DELEGATED_TOOLS`` registry."""
     return {
-        "web_fetch": handle_web_fetch,
-        "general_web_search": handle_general_web_search,
-        "read_document": handle_read_document,
-        "note_save": handle_note_save,
-        "note_read": handle_note_read,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Handler group: Profile tools
-# ---------------------------------------------------------------------------
-
-
-def _build_profile_handlers() -> dict[str, Any]:
-    """Build user profile tool handlers."""
-
-    def handle_profile_show(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.profile_tools import ProfileShowTool
-
-        return _safe_delegate(ProfileShowTool, kwargs)
-
-    def handle_profile_update(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.profile_tools import ProfileUpdateTool
-
-        return _safe_delegate(ProfileUpdateTool, kwargs)
-
-    def handle_profile_preference(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.profile_tools import ProfilePreferenceTool
-
-        return _safe_delegate(ProfilePreferenceTool, kwargs)
-
-    def handle_profile_learn(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.profile_tools import ProfileLearnTool
-
-        return _safe_delegate(ProfileLearnTool, kwargs)
-
-    return {
-        "profile_show": handle_profile_show,
-        "profile_update": handle_profile_update,
-        "profile_preference": handle_profile_preference,
-        "profile_learn": handle_profile_learn,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Handler group: Signal tools
-# ---------------------------------------------------------------------------
-
-
-def _build_signal_handlers() -> dict[str, Any]:
-    """Build external signal tool handlers."""
-
-    def handle_youtube_search(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.signal_tools import YouTubeSearchTool
-
-        return _safe_delegate(YouTubeSearchTool, kwargs)
-
-    def handle_reddit_sentiment(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.signal_tools import RedditSentimentTool
-
-        return _safe_delegate(RedditSentimentTool, kwargs)
-
-    def handle_steam_info(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.signal_tools import SteamInfoTool
-
-        return _safe_delegate(SteamInfoTool, kwargs)
-
-    def handle_google_trends(**kwargs: Any) -> dict[str, Any]:
-        from core.tools.signal_tools import GoogleTrendsTool
-
-        return _safe_delegate(GoogleTrendsTool, kwargs)
-
-    return {
-        "youtube_search": handle_youtube_search,
-        "reddit_sentiment": handle_reddit_sentiment,
-        "steam_info": handle_steam_info,
-        "google_trends": handle_google_trends,
+        name: _make_delegate_handler(mod, cls)
+        for name, (mod, cls) in _DELEGATED_TOOLS.items()
     }
 
 
@@ -1181,8 +1118,6 @@ def _build_tool_handlers(
     handlers.update(_build_system_handlers(readiness, force_dry, mcp_manager))
     handlers.update(_build_execution_handlers())
     handlers.update(_build_delegated_handlers())
-    handlers.update(_build_profile_handlers())
-    handlers.update(_build_signal_handlers())
     handlers.update(_build_notification_handlers())
     handlers.update(_build_calendar_handlers())
     handlers.update(_build_mcp_handler(mcp_manager, agentic_ref))
