@@ -947,7 +947,9 @@ class GeodeRuntime:
         from core.mcp.slack_adapter import SlackNotificationAdapter
         from core.mcp.telegram_adapter import TelegramNotificationAdapter
 
-        manager = GeodeRuntime._load_mcp_manager_for_plugin("notification_adapter", set_notification)
+        manager = GeodeRuntime._load_mcp_manager_for_plugin(
+            "notification_adapter", set_notification
+        )
         if manager is None:
             return
 
