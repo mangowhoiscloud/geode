@@ -28,12 +28,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.30.0] — 2026-03-27
 
-MCP 카탈로그 단일화 — registry 삭제 + catalog 축소 + config.toml 통합.
+MCP 카탈로그 단일화 + Proxy Cleanup — registry 삭제 + catalog 축소 + config.toml 통합 + backward-compat stub 제거.
 
 ### Architecture
 - **MCPRegistry 삭제** — registry.py(257줄) 제거, MCPServerManager.load_config()가 직접 처리
 - **Catalog 검색 전용 축소** — MCPCatalogEntry: package/command/extra_args → install_hint 단일 필드로 통합
 - **config.toml 통합** — .geode/config.toml [mcp.servers] 섹션이 MCP 설정 주소 (mcp_servers.json은 fallback 유지)
+- **Proxy stub 삭제** — `core/cli/*.pyi` 6개, `infrastructure/ports/*.pyi` 3개, `infrastructure/adapters/llm/` 8개, `ports/{llm_port,agentic_llm_port}.py` 삭제. 소비자 0 확인 후 제거.
+- **`core/utils/atomic_io.py`** — `infrastructure/atomic_io.py`를 canonical 위치로 이동. 9개 소비자 갱신.
+- **`core/mcp/signal_adapter.py`** — `infrastructure/adapters/signal_adapter.py`를 MCP 레이어로 이동.
 
 ### Added
 - `MCPServerManager.get_status()` — MCP 상태 조회 (registry.get_mcp_status() 흡수)

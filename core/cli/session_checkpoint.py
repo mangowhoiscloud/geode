@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core.infrastructure.atomic_io import atomic_write_json
+from core.utils.atomic_io import atomic_write_json
 
 log = logging.getLogger(__name__)
 

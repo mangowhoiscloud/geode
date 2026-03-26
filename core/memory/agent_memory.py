@@ -14,7 +14,7 @@ import logging
 import time
 from pathlib import Path
 
-from core.infrastructure.atomic_io import atomic_write_json
+from core.utils.atomic_io import atomic_write_json
 
 log = logging.getLogger(__name__)
 
