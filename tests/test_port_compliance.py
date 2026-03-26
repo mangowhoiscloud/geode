@@ -16,7 +16,7 @@ from core.automation.port import (
     SnapshotManagerPort,
     TriggerManagerPort,
 )
-from core.infrastructure.ports.auth_port import (
+from core.gateway.auth_port import (
     CooldownTrackerPort,
     ProfileRotatorPort,
     ProfileStorePort,

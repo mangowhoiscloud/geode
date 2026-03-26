@@ -52,7 +52,7 @@ from core.domains.port import set_domain
 from core.gateway.auth.cooldown import CooldownTracker
 from core.gateway.auth.profiles import ProfileStore
 from core.gateway.auth.rotation import ProfileRotator
-from core.infrastructure.ports.auth_port import (
+from core.gateway.auth_port import (
     CooldownTrackerPort,
     ProfileRotatorPort,
     ProfileStorePort,
