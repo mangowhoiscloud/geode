@@ -12,7 +12,6 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| portfolio-carousel | 포트폴리오 REPL 유즈케이스 캐러셀 — GLM-5 실측 응답, 좌우 네비게이션 | P1 | portfolio-usecase-carousel.md | 세션 25 핸드오프 |
 | action-summary | Action Summary — 결정론적 Tier1 + LLM 내러티브 Tier2 (opt-in) | P1 | action-summary-system.md | 유저 피드백 기반 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | proxy-cleanup | 구 경로 proxy 파일 최종 삭제 (nodes/ui/auth/extensibility/cli/mcp) | P3 | — | CI 래칫이 차단 중 |
@@ -34,8 +33,9 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
-| glm-pipeline-routing | GLM-5 파이프라인 라우팅 — call_llm_parsed provider 분기 수정 | — | @mangowhoiscloud | 2026-03-26 |
-| status-line-per-turn | Status line per-turn — SessionMeter/TokenTracker 턴 단위 리셋 | — | @mangowhoiscloud | 2026-03-26 |
+| glm-pipeline-routing | GLM-5 파이프라인 라우팅 — call_llm_parsed provider 분기 수정 | #450 | @mangowhoiscloud | 2026-03-26 |
+| status-line-per-turn | Status line per-turn — SessionMeter/TokenTracker 턴 단위 리셋 | #450 | @mangowhoiscloud | 2026-03-26 |
+| portfolio-carousel | 포트폴리오 REPL 유즈케이스 캐러셀 — 좌우 네비게이션, 3카드, GLM-5 실측 | portfolio | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-26 — 세션 27)
 
