@@ -62,7 +62,8 @@ def _build_analyst_prompt(analyst_type: str, state: GeodeState) -> tuple[str, st
     analyst_specific = "" if has_skill else analyst_specific_map.get(analyst_type, "")
 
     # Phase 1: Base template rendering
-    base_system = ANALYST_SYSTEM.format(analyst_type=analyst_type)
+    output_language = state.get("output_language", "English")
+    base_system = ANALYST_SYSTEM.format(analyst_type=analyst_type, output_language=output_language)
     base_user = ANALYST_USER.format(
         analyst_type=analyst_type,
         ip_name=ip["ip_name"],

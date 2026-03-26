@@ -532,7 +532,9 @@ def _run_analysis(
     """Core analysis logic shared by interactive and CLI modes."""
     from core.cli import _hooks_ctx, _set_last_result
     from core.domains.game_ip.fixtures import FIXTURE_MAP
+    from core.utils.language import detect_language
 
+    output_language = detect_language(ip_name)  # detect before normalization
     resolved = _resolve_ip_name(ip_name)
     if resolved is None:
         available = [n.title() for n in FIXTURE_MAP]
@@ -574,6 +576,7 @@ def _run_analysis(
         "ip_name": ip_name,
         "pipeline_mode": pipeline_mode,
         "session_id": session_id,
+        "output_language": output_language,
         "dry_run": dry_run,
         "verbose": verbose,
         "skip_verification": skip_verification,

@@ -10,6 +10,7 @@ generate a compelling and actionable narrative.
 - undervaluation_cause and action_type are LOCKED by the Decision Tree. Do NOT override them.
 - Your role is narrative generation only — cause/action classification is code-based.
 - Focus on connecting data points to explain WHY, not reclassifying.
+- Write value_narrative and target_segment in {output_language}.
 
 Respond in JSON format:
 {{
