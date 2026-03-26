@@ -666,7 +666,6 @@ def _build_system_handlers(
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
         from core.domains.game_ip.fixtures import FIXTURE_MAP as _FM
-        from core.mcp.registry import MCPRegistry
 
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
@@ -684,20 +683,19 @@ def _build_system_handlers(
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
 
         # MCP status
-        registry = MCPRegistry()
-        json_servers = None
-        if mcp_manager is not None:
-            json_servers = {s["name"]: s for s in mcp_manager.list_servers()}
-        mcp_status = registry.get_mcp_status(json_config_servers=json_servers)
+        mcp_status = (
+            mcp_manager.get_status()
+            if mcp_manager is not None
+            else {"active": [], "active_count": 0, "available_inactive": [], "catalog_total": 0}
+        )
 
         console.print()
         console.print("  [header]MCP Servers[/header]")
         active = mcp_status["active"]
         if active:
             for srv in active:
-                src_tag = "json" if srv["source"] == "json_config" else "auto"
                 desc = f" -- {srv['description']}" if srv["description"] else ""
-                console.print(f"    [green]OK[/green] {srv['name']} [dim]({src_tag}){desc}[/dim]")
+                console.print(f"    [green]OK[/green] {srv['name']} [dim]{desc}[/dim]")
         else:
             console.print("    [muted]No active servers[/muted]")
 
@@ -970,10 +968,14 @@ def _build_mcp_handler(
         if mcp_manager is None:
             return {"status": "error", "message": "MCP manager not available"}
 
-        # Register server
-        args = ["-y", best.package, *best.extra_args]
+        # Derive command + args from install_hint
+        if not best.install_hint:
+            return {"status": "error", "message": f"No install configuration for {best.name}"}
+        hint_parts = best.install_hint.split()
+        cmd = hint_parts[0]
+        args = hint_parts[1:]
         env_map = {k: f"${{{k}}}" for k in best.env_keys} or None
-        ok = mcp_manager.add_server(best.name, best.command, args=args, env=env_map)
+        ok = mcp_manager.add_server(best.name, cmd, args=args, env=env_map)
         if not ok:
             return {"status": "error", "message": f"Failed to save {best.name}"}
 
@@ -992,7 +994,7 @@ def _build_mcp_handler(
         return {
             "status": "installed",
             "server": best.name,
-            "package": best.package,
+            "install_hint": best.install_hint,
             "tools_added": added,
             "env_required": list(best.env_keys),
             "env_missing": missing,

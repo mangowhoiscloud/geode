@@ -366,19 +366,16 @@ def _handle_command(
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
 
         # MCP status section
-        from core.mcp.registry import MCPRegistry as _MCPReg
-
-        _reg = _MCPReg()
-        _json_servers = None
-        if mcp_manager is not None:
-            _json_servers = {s["name"]: s for s in mcp_manager.list_servers()}
-        _mcp_st = _reg.get_mcp_status(json_config_servers=_json_servers)
+        _mcp_st = (
+            mcp_manager.get_status()
+            if mcp_manager is not None
+            else {"active": [], "available_inactive": []}
+        )
         console.print()
         console.print("  [header]MCP Servers[/header]")
         for srv in _mcp_st["active"]:
-            _src = "json" if srv["source"] == "json_config" else "auto"
             _desc = f" -- {srv['description']}" if srv["description"] else ""
-            console.print(f"    [green]OK[/green] {srv['name']} [dim]({_src}){_desc}[/dim]")
+            console.print(f"    [green]OK[/green] {srv['name']} [dim]{_desc}[/dim]")
         if not _mcp_st["active"]:
             console.print("    [muted]No active servers[/muted]")
         if _mcp_st["available_inactive"]:

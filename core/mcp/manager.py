@@ -1,11 +1,9 @@
 """MCP Server Manager — load config, discover tools, and call MCP servers.
 
 Manages external MCP server connections using stdio-based JSON-RPC protocol.
-Configuration is loaded in two layers:
-  1. Code-level registry — auto-discovers servers from MCP_CATALOG based on
-     available env vars (always persists across sessions).
-  2. File overrides — .claude/mcp_servers.json entries override/extend
-     registry defaults.
+Configuration is loaded from two sources (priority order):
+  1. .geode/config.toml [mcp.servers] — primary, explicit configuration
+  2. .claude/mcp_servers.json — fallback / legacy / install target
 
 Lifecycle:
   startup()  — load config + connect all + register signal handlers
@@ -260,42 +258,49 @@ class MCPServerManager:
     # ------------------------------------------------------------------
 
     def load_config(self) -> int:
-        """Load MCP server configurations from registry + file overrides.
+        """Load MCP server configurations from config.toml + json fallback.
 
-        Layer 1: Code-level registry auto-discovers servers from MCP_CATALOG
-        whose required env vars are present (persists across sessions).
-        Layer 2: .claude/mcp_servers.json entries override/extend registry
-        defaults (backward-compatible).
+        Priority order:
+          1. .geode/config.toml [mcp.servers] — explicit configuration (wins)
+          2. .claude/mcp_servers.json — legacy fallback, install target
 
         Returns total number of servers loaded.
         """
-        from core.mcp.registry import MCPRegistry
+        import tomllib
 
-        # Layer 1: code-level registry (auto-discovery)
-        try:
-            registry = MCPRegistry(dotenv_path=str(_DOTENV_PATH))
-            self._servers = registry.discover()
-            registry_count = len(self._servers)
-            if registry_count > 0:
-                log.info("MCP registry: %d servers auto-discovered", registry_count)
-        except Exception as exc:
-            log.debug("MCP registry discovery failed: %s", exc)
+        self._servers = {}
 
-        # Layer 2: file overrides (merge on top)
-        file_count = 0
+        # Layer 1: .geode/config.toml [mcp.servers]
+        config_toml = _PROJECT_ROOT / ".geode" / "config.toml"
+        if config_toml.exists():
+            try:
+                with open(config_toml, "rb") as f:
+                    toml_data = tomllib.load(f)
+                mcp_section = toml_data.get("mcp", {}).get("servers", {})
+                for name, cfg in mcp_section.items():
+                    entry: dict[str, Any] = {"command": cfg["command"]}
+                    if "args" in cfg:
+                        entry["args"] = cfg["args"]
+                    if "env" in cfg:
+                        entry["env"] = cfg["env"]
+                    self._servers[name] = entry
+                if mcp_section:
+                    log.info("MCP config.toml: %d servers", len(mcp_section))
+            except Exception as exc:
+                log.debug("Failed to load MCP from config.toml: %s", exc)
+
+        # Layer 2: .claude/mcp_servers.json (fallback — toml entries take priority)
         if self._config_path.exists():
             try:
                 raw = self._config_path.read_text(encoding="utf-8")
                 file_servers: dict[str, dict[str, Any]] = json.loads(raw)
-                file_count = len(file_servers)
-                # File entries override registry defaults
-                self._servers.update(file_servers)
-                if file_count > 0:
-                    log.info(
-                        "MCP file overrides: %d from %s",
-                        file_count,
-                        self._config_path,
-                    )
+                added = 0
+                for name, cfg in file_servers.items():
+                    if name not in self._servers:
+                        self._servers[name] = cfg
+                        added += 1
+                if added > 0:
+                    log.info("MCP mcp_servers.json: %d additional servers", added)
             except (json.JSONDecodeError, OSError) as exc:
                 log.debug("Failed to load MCP config file: %s", exc)
 
@@ -306,6 +311,63 @@ class MCPServerManager:
             log.debug("MCP: no servers configured")
         return total
 
+    def get_status(self) -> dict[str, Any]:
+        """Build MCP status report: active servers + available-but-inactive.
+
+        Returns:
+            active: servers currently configured (from config.toml + json)
+            available_inactive: catalog entries with missing env vars
+        """
+        from core.mcp.catalog import MCP_CATALOG
+
+        self._load_dotenv_cache()
+
+        active: list[dict[str, str]] = []
+        for name in sorted(self._servers):
+            entry = MCP_CATALOG.get(name)
+            desc = entry.description if entry else ""
+            active.append({"name": name, "description": desc})
+
+        # Available but inactive: catalog entries with env_keys not configured
+        available_inactive: list[dict[str, Any]] = []
+        for name, entry in sorted(MCP_CATALOG.items()):
+            if name in self._servers or not entry.env_keys:
+                continue
+            missing = [
+                k
+                for k in entry.env_keys
+                if not (os.environ.get(k) or self._dotenv_cache.get(k))
+            ]
+            if missing:
+                available_inactive.append(
+                    {
+                        "name": name,
+                        "description": entry.description,
+                        "missing_env": missing,
+                    }
+                )
+
+        return {
+            "active": active,
+            "active_count": len(active),
+            "available_inactive": available_inactive,
+            "available_inactive_count": len(available_inactive),
+            "catalog_total": len(MCP_CATALOG),
+        }
+
+    def _load_dotenv_cache(self) -> None:
+        """Populate dotenv cache if empty.
+
+        Cascade: ~/.geode/.env (global) → CWD/.env (project, non-empty only).
+        """
+        if not self._dotenv_cache:
+            if _GLOBAL_DOTENV_PATH.exists():
+                self._dotenv_cache.update(dotenv_values(str(_GLOBAL_DOTENV_PATH)))
+            if _DOTENV_PATH.exists():
+                for k, v in dotenv_values(str(_DOTENV_PATH)).items():
+                    if v:  # skip empty/None — must not clobber global keys
+                        self._dotenv_cache[k] = v
+
     def _resolve_env(self, env: dict[str, str]) -> dict[str, str]:
         """Resolve ${VAR} references in env values.
 
@@ -313,18 +375,7 @@ class MCPServerManager:
         pydantic-settings loads .env into Settings fields but NOT into
         os.environ, so MCP keys defined only in .env would be invisible.
         """
-        # Lazy-load .env values (cached after first call)
-        # Cascade: ~/.geode/.env (global) → CWD/.env (project, non-empty only)
-        if not self._dotenv_cache:
-            # Global first (baseline)
-            if _GLOBAL_DOTENV_PATH.exists():
-                self._dotenv_cache.update(dotenv_values(str(_GLOBAL_DOTENV_PATH)))
-            # Project .env overrides — only non-empty values
-            # Empty values (e.g. BRAVE_API_KEY=) must NOT clobber global keys
-            if _DOTENV_PATH.exists():
-                for k, v in dotenv_values(str(_DOTENV_PATH)).items():
-                    if v:  # skip empty/None values
-                        self._dotenv_cache[k] = v
+        self._load_dotenv_cache()
 
         resolved: dict[str, str] = {}
         for key, value in env.items():
