@@ -57,14 +57,6 @@ from core.infrastructure.ports.auth_port import (
     ProfileRotatorPort,
     ProfileStorePort,
 )
-from core.infrastructure.ports.orchestration_port import (
-    CoalescingQueuePort,
-    ConfigWatcherPort,
-    LaneQueuePort,
-    RunLogPort,
-    StuckDetectorPort,
-    TaskGraphPort,
-)
 from core.llm.providers.openai import OpenAIAdapter
 from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.memory.context import ContextAssembler
@@ -83,6 +75,14 @@ from core.orchestration.hook_port import HookSystemPort
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
+from core.orchestration.orchestration_port import (
+    CoalescingQueuePort,
+    ConfigWatcherPort,
+    LaneQueuePort,
+    RunLogPort,
+    StuckDetectorPort,
+    TaskGraphPort,
+)
 from core.orchestration.run_log import RunLog, RunLogEntry
 from core.orchestration.stuck_detection import StuckDetector
 from core.orchestration.task_bridge import TaskGraphHookBridge

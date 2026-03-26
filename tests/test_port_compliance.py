@@ -21,14 +21,6 @@ from core.infrastructure.ports.auth_port import (
     ProfileRotatorPort,
     ProfileStorePort,
 )
-from core.infrastructure.ports.orchestration_port import (
-    CoalescingQueuePort,
-    ConfigWatcherPort,
-    LaneQueuePort,
-    RunLogPort,
-    StuckDetectorPort,
-    TaskGraphPort,
-)
 from core.llm.router import LLMClientPort
 from core.memory.port import (
     OrganizationMemoryPort,
@@ -36,6 +28,14 @@ from core.memory.port import (
     SessionStorePort,
 )
 from core.orchestration.hook_port import HookSystemPort
+from core.orchestration.orchestration_port import (
+    CoalescingQueuePort,
+    ConfigWatcherPort,
+    LaneQueuePort,
+    RunLogPort,
+    StuckDetectorPort,
+    TaskGraphPort,
+)
 from core.tools.port import (
     PolicyChainPort,
     ToolRegistryPort,
