@@ -10,8 +10,8 @@ from core.agent.agentic_loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, g
 from core.agent.conversation import ConversationContext
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.agent.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, WRITE_TOOLS, ToolExecutor
+from core.hooks import HookEvent, HookSystem
 from core.orchestration.coalescing import CoalescingQueue
-from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import IsolatedRunner
 
 # ---------------------------------------------------------------------------

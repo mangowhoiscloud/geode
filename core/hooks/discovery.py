@@ -20,7 +20,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import yaml
 
-from core.orchestration.hooks import HookEvent, HookSystem
+from core.hooks.system import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
 

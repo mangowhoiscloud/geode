@@ -23,7 +23,7 @@ from core.agent.error_recovery import (
     RecoveryStrategy,
 )
 from core.agent.tool_executor import ToolExecutor
-from core.orchestration.hooks import HookEvent, HookSystem
+from core.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------
 # ErrorRecoveryStrategy unit tests

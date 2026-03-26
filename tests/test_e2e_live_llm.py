@@ -381,7 +381,7 @@ class TestSubAgentLive:
     def test_6_4_subagent_hook_events(self) -> None:
         """E4: SUBAGENT_STARTED/COMPLETED hooks fire."""
         from core.agent.sub_agent import SubAgentManager, SubTask
-        from core.orchestration.hooks import HookEvent, HookSystem
+        from core.hooks import HookEvent, HookSystem
         from core.orchestration.isolated_execution import (
             IsolatedRunner,
         )

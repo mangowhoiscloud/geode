@@ -1,7 +1,8 @@
 """Hook System — event-driven extension points for the GEODE pipeline.
 
-Layer 4 orchestration component that allows registering callbacks
-for pipeline events (pre/post node execution, errors, etc.).
+Cross-cutting infrastructure accessible by all layers.
+Allows registering callbacks for pipeline events (pre/post node execution,
+errors, sub-agent lifecycle, etc.).
 """
 
 from __future__ import annotations

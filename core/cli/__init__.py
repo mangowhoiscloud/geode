@@ -80,10 +80,10 @@ from core.cli.tool_handlers import (
 from core.cli.ui.console import console
 from core.cli.ui.status import GeodeStatus
 from core.config import settings
+from core.hooks import HookEvent, HookSystem
 from core.llm.commentary import (
     generate_commentary,
 )
-from core.orchestration.hooks import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -494,7 +494,7 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
             ok = mem.create_rule(name, paths, rule_content)
             if ok:
                 console.print(f"  [success]Rule '{name}' created.[/success]")
-                from core.orchestration.hooks import HookEvent
+                from core.hooks import HookEvent
 
                 _fire_hook(HookEvent.RULE_CREATED, {"name": name, "paths": paths})
             else:
@@ -511,7 +511,7 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
             ok = mem.update_rule(name, rule_content)
             if ok:
                 console.print(f"  [success]Rule '{name}' updated.[/success]")
-                from core.orchestration.hooks import HookEvent
+                from core.hooks import HookEvent
 
                 _fire_hook(HookEvent.RULE_UPDATED, {"name": name})
             else:
@@ -525,7 +525,7 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
             ok = mem.delete_rule(name)
             if ok:
                 console.print(f"  [success]Rule '{name}' deleted.[/success]")
-                from core.orchestration.hooks import HookEvent
+                from core.hooks import HookEvent
 
                 _fire_hook(HookEvent.RULE_DELETED, {"name": name})
             else:
@@ -568,7 +568,7 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
         saved = save_result.get("result", {}).get("saved", False)
         if saved:
             console.print(f"  [success]Saved to memory: '{key}'[/success]")
-            from core.orchestration.hooks import HookEvent
+            from core.hooks import HookEvent
 
             _fire_hook(HookEvent.MEMORY_SAVED, {"key": key})
         else:

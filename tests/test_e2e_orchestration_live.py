@@ -14,8 +14,8 @@ from typing import Any
 
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.graph import compile_graph
+from core.hooks import HookEvent, HookSystem
 from core.orchestration.coalescing import CoalescingQueue
-from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import IsolatedRunner
 from core.orchestration.task_system import Task, TaskGraph, TaskStatus
 from core.state import GeodeState

@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from core.hooks import HookEvent, HookSystem
 from core.llm.prompt_assembler import PromptAssembler
 from core.llm.skill_registry import SkillRegistry
-from core.orchestration.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------
 # Fixtures

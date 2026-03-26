@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core.hooks import HookEvent, HookSystem
 from core.memory.project import ProjectMemory
-from core.orchestration.hooks import HookEvent, HookSystem
 from core.runtime import GeodeRuntime
 
 

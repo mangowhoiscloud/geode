@@ -17,7 +17,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.orchestration.hooks import HookSystem
+    from core.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -200,7 +200,7 @@ class OutcomeTracker:
         log.info("Job %s completed successfully", job_id)
 
         if self._hooks:
-            from core.orchestration.hooks import HookEvent
+            from core.hooks import HookEvent
 
             self._hooks.trigger(
                 HookEvent.OUTCOME_COLLECTED,
@@ -297,7 +297,7 @@ class OutcomeTracker:
         within_sla = time.time() <= deadline
 
         if not within_sla and self._hooks:
-            from core.orchestration.hooks import HookEvent
+            from core.hooks import HookEvent
 
             self._hooks.trigger(
                 HookEvent.DRIFT_DETECTED,

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.orchestration.hooks import HookEvent, HookSystem
+from core.hooks import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
 

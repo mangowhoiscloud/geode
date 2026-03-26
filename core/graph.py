@@ -52,8 +52,8 @@ from core.domains.game_ip.nodes.router import route_after_router, router_node
 from core.domains.game_ip.nodes.scoring import scoring_node
 from core.domains.game_ip.nodes.signals import signals_node
 from core.domains.game_ip.nodes.synthesizer import synthesizer_node
+from core.hooks import HookEvent, HookSystem
 from core.orchestration.bootstrap import BootstrapManager
-from core.orchestration.hooks import HookEvent, HookSystem
 from core.state import (
     BiasBusterResult,
     GeodeState,

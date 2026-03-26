@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.hooks import HookEvent, HookSystem
 from core.orchestration.bootstrap import BootstrapContext, BootstrapManager
-from core.orchestration.hooks import HookEvent, HookSystem
 
 
 class TestBootstrapContext:

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from core.agent.error_recovery import ErrorRecoveryStrategy
     from core.agent.sub_agent import SubAgentManager
     from core.cli.ui.agentic_ui import OperationLogger
-    from core.orchestration.hooks import HookSystem
+    from core.hooks import HookSystem
 
 from core.agent.safety_constants import AUTO_APPROVED_MCP_SERVERS as AUTO_APPROVED_MCP_SERVERS
 from core.agent.safety_constants import DANGEROUS_TOOLS as DANGEROUS_TOOLS
@@ -925,7 +925,7 @@ class ToolCallProcessor:
         if self._hooks is None:
             return
         try:
-            from core.orchestration.hooks import HookEvent as _HookEvent
+            from core.hooks import HookEvent as _HookEvent
 
             event = _HookEvent(event_name)
             self._hooks.trigger(event, data)

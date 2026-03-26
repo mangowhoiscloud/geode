@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pytest
 
+from core.hooks import HookEvent, HookSystem
 from core.memory.session import InMemorySessionStore
 from core.orchestration.coalescing import CoalescingQueue
-from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog

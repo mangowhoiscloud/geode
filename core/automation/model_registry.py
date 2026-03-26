@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.orchestration.hooks import HookSystem
+    from core.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -295,7 +295,7 @@ class ModelRegistry:
         log.info("Promoted %s: %s → %s", version_id, old_stage.value, target_stage.value)
 
         if self._hooks:
-            from core.orchestration.hooks import HookEvent
+            from core.hooks import HookEvent
 
             self._hooks.trigger(
                 HookEvent.MODEL_PROMOTED,

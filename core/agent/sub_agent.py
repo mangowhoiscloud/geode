@@ -24,8 +24,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from core.hooks import HookEvent, HookSystem
 from core.orchestration.coalescing import CoalescingQueue
-from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import (
     IsolatedRunner,
     IsolationConfig,

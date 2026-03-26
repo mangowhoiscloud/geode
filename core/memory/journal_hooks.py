@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.orchestration.hooks import HookEvent
+from core.hooks import HookEvent
 
 log = logging.getLogger(__name__)
 

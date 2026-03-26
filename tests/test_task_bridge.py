@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.orchestration.hooks import HookEvent, HookSystem
+from core.hooks import HookEvent, HookSystem
 from core.orchestration.task_bridge import TaskGraphHookBridge
 from core.orchestration.task_system import (
     TaskStatus,

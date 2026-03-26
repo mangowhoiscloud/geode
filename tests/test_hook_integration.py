@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from core.graph import _make_hooked_node, build_graph
-from core.orchestration.hooks import HookEvent, HookSystem
+from core.hooks import HookEvent, HookSystem
 from core.state import GeodeState
 
 
