@@ -928,10 +928,7 @@ def _make_delegate_handler(
 
 def _build_delegated_handlers() -> dict[str, Any]:
     """Build all delegated tool handlers from ``_DELEGATED_TOOLS`` registry."""
-    return {
-        name: _make_delegate_handler(mod, cls)
-        for name, (mod, cls) in _DELEGATED_TOOLS.items()
-    }
+    return {name: _make_delegate_handler(mod, cls) for name, (mod, cls) in _DELEGATED_TOOLS.items()}
 
 
 # ---------------------------------------------------------------------------
