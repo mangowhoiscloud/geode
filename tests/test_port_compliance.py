@@ -6,12 +6,7 @@ GeodeRuntime is isinstance-checkable against its corresponding Port.
 
 from __future__ import annotations
 
-from core.infrastructure.ports.auth_port import (
-    CooldownTrackerPort,
-    ProfileRotatorPort,
-    ProfileStorePort,
-)
-from core.infrastructure.ports.automation_port import (
+from core.automation.port import (
     CorrelationAnalyzerPort,
     DriftDetectorPort,
     ExpertPanelPort,
@@ -20,6 +15,11 @@ from core.infrastructure.ports.automation_port import (
     OutcomeTrackerPort,
     SnapshotManagerPort,
     TriggerManagerPort,
+)
+from core.infrastructure.ports.auth_port import (
+    CooldownTrackerPort,
+    ProfileRotatorPort,
+    ProfileStorePort,
 )
 from core.infrastructure.ports.orchestration_port import (
     CoalescingQueuePort,

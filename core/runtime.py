@@ -34,6 +34,16 @@ from core.automation.expert_panel import ExpertPanel
 from core.automation.feedback_loop import FeedbackLoop
 from core.automation.model_registry import ModelRegistry
 from core.automation.outcome_tracking import OutcomeTracker
+from core.automation.port import (
+    CorrelationAnalyzerPort,
+    DriftDetectorPort,
+    ExpertPanelPort,
+    FeedbackLoopPort,
+    ModelRegistryPort,
+    OutcomeTrackerPort,
+    SnapshotManagerPort,
+    TriggerManagerPort,
+)
 from core.automation.snapshot import SnapshotManager
 from core.automation.triggers import TriggerManager, TriggerType
 from core.config import settings
@@ -46,16 +56,6 @@ from core.infrastructure.ports.auth_port import (
     CooldownTrackerPort,
     ProfileRotatorPort,
     ProfileStorePort,
-)
-from core.infrastructure.ports.automation_port import (
-    CorrelationAnalyzerPort,
-    DriftDetectorPort,
-    ExpertPanelPort,
-    FeedbackLoopPort,
-    ModelRegistryPort,
-    OutcomeTrackerPort,
-    SnapshotManagerPort,
-    TriggerManagerPort,
 )
 from core.infrastructure.ports.orchestration_port import (
     CoalescingQueuePort,
