@@ -31,6 +31,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 MCP 카탈로그 단일화 + Proxy Cleanup — registry 삭제 + catalog 축소 + config.toml 통합 + backward-compat stub 제거.
 
 ### Architecture
+- **`core/agent/adapters/` 삭제** — ClaudeAgenticAdapter/OpenAIAgenticAdapter/GlmAgenticAdapter를 각 provider 파일로 통합. `resolve_agentic_adapter`를 `core.llm.router`로 이동. 모듈 수 195 → 187.
 - **MCPRegistry 삭제** — registry.py(257줄) 제거, MCPServerManager.load_config()가 직접 처리
 - **Catalog 검색 전용 축소** — MCPCatalogEntry: package/command/extra_args → install_hint 단일 필드로 통합
 - **config.toml 통합** — .geode/config.toml [mcp.servers] 섹션이 MCP 설정 주소 (mcp_servers.json은 fallback 유지)

@@ -21,10 +21,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.agent.adapters.agentic_registry import (
-    CROSS_PROVIDER_FALLBACK,
-    resolve_agentic_adapter,
-)
 from core.agent.conversation import ConversationContext
 from core.agent.error_recovery import ErrorRecoveryStrategy
 from core.agent.sub_agent import SubAgentResult, drain_announced_results
@@ -42,7 +38,11 @@ from core.config import (
 )
 from core.llm.errors import BillingError, UserCancelledError
 from core.llm.prompts import AGENTIC_SUFFIX
-from core.llm.router import maybe_traceable
+from core.llm.router import (
+    CROSS_PROVIDER_FALLBACK,
+    maybe_traceable,
+    resolve_agentic_adapter,
+)
 from core.orchestration.hooks import HookEvent, HookSystem
 
 if TYPE_CHECKING:

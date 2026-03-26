@@ -1144,6 +1144,50 @@ class AgenticLLMPort(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# resolve_agentic_adapter — factory + cross-provider fallback map
+# ---------------------------------------------------------------------------
+
+import importlib  # noqa: E402
+
+from core.config import ANTHROPIC_PRIMARY, OPENAI_PRIMARY  # noqa: E402
+
+# Provider -> "module_path:ClassName"
+_ADAPTER_MAP: dict[str, str] = {
+    "anthropic": "core.llm.providers.anthropic:ClaudeAgenticAdapter",
+    "openai": "core.llm.providers.openai:OpenAIAgenticAdapter",
+    "glm": "core.llm.providers.glm:GlmAgenticAdapter",
+}
+
+# Cross-provider fallback: when a provider's chain is exhausted, try these.
+# GLM -> OpenAI -> Anthropic (Bug #6 fix: add Anthropic path for GLM)
+CROSS_PROVIDER_FALLBACK: dict[str, list[tuple[str, str]]] = {
+    "anthropic": [("openai", OPENAI_PRIMARY)],
+    "openai": [("anthropic", ANTHROPIC_PRIMARY)],
+    "glm": [("openai", OPENAI_PRIMARY), ("anthropic", ANTHROPIC_PRIMARY)],
+}
+
+_router_log = logging.getLogger(__name__)
+
+
+def resolve_agentic_adapter(provider: str) -> AgenticLLMPort:
+    """Create an agentic adapter for the given provider.
+
+    Uses dynamic import to avoid loading unused providers.
+    """
+    entry = _ADAPTER_MAP.get(provider)
+    if entry is None:
+        # Unknown provider -> default to OpenAI-compatible
+        _router_log.warning("Unknown provider '%s', defaulting to openai adapter", provider)
+        entry = _ADAPTER_MAP["openai"]
+
+    module_path, class_name = entry.rsplit(":", 1)
+    mod = importlib.import_module(module_path)
+    cls = getattr(mod, class_name)
+    adapter: AgenticLLMPort = cls()
+    return adapter
+
+
+# ---------------------------------------------------------------------------
 # ClaudeAdapter — thin wrapper that delegates to router functions
 # ---------------------------------------------------------------------------
 
