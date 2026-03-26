@@ -21,7 +21,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| web-search-fix | 웹검색 수정 — general_web_search Haiku→Sonnet + signal tools stub 활성화 + MCP 도구명 매핑 | @mangowhoiscloud | feature/web-search-fix | 2026-03-26 | P0 유저 피드백 |
+| gateway-config | Gateway 하드코딩 상수화 — max_rounds/max_turns config.toml 연동 + GATEWAY_SUFFIX 적극성 조정 | @mangowhoiscloud | feature/gateway-config | 2026-03-26 | P0 serve 포기 이슈 |
 
 ### In Review
 
