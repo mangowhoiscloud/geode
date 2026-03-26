@@ -12,7 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| kent-beck-p1 | Kent Beck Phase 1 — dry-run 파싱 + Safety 상수 추출 | P0 | encapsulated-hugging-bunny.md | 기계적 추출, 행동 변경 0 |
+| ~~kent-beck-p1~~ | ~~Kent Beck Phase 1 — dry-run 파싱 + Safety 상수 추출~~ | ~~P0~~ | ~~#462~~ | **Done** |
 | kent-beck-p2 | Kent Beck Phase 2 — router.py Provider 전략 패턴 (~200줄 감소) | P0 | encapsulated-hugging-bunny.md | 27 소비자, re-export |
 | kent-beck-p3 | Kent Beck Phase 3 — CLI God Object 분해 (~800줄 감소) | P1 | encapsulated-hugging-bunny.md | leaf layer, 4-5 PR |
 | kent-beck-p4 | Kent Beck Phase 4 — runtime + agentic_loop 추출 (~265줄 감소) | P1 | encapsulated-hugging-bunny.md | 내부 구조 개선 |
@@ -26,7 +26,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| kent-beck-p1 | Kent Beck Phase 1 — dry-run 파싱 + Safety 상수 추출 | @mangowhoiscloud | feature/kent-beck-p1 | 2026-03-26 | P0 기계적 추출 |
+| — | — | — | — | — | — |
 
 ### In Review
 
@@ -38,6 +38,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| kent-beck-p1 | Kent Beck Phase 1 — dry-run 파싱 + Safety 상수 추출 (DRY) | #462 | @mangowhoiscloud | 2026-03-26 |
 | gateway-config | Gateway-REPL 통합 팩토리 + config.toml 상수화 + SUFFIX 적극성 조정 | #461 | @mangowhoiscloud | 2026-03-26 |
 | gateway-multiturn | Gateway 멀티턴 대화 지원 — thread_id 기반 세션 영속화 + MessageProcessor 확장 | #459 | @mangowhoiscloud | 2026-03-26 |
 
