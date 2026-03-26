@@ -46,14 +46,14 @@ class MCPServerConfig:
 
 DEFAULT_SERVERS: tuple[str, ...] = (
     "steam",
-    "fetch",
     "sequential-thinking",
     "playwright",
     "arxiv",
     "gmail",
     "youtube-transcript",
     "reddit",
-    "google-trends",
+    # NOTE: fetch (@modelcontextprotocol/server-fetch) — npm E404, removed
+    # NOTE: google-trends (andrewlwn77/google-trends-mcp) — npm E404, removed
 )
 
 # ---------------------------------------------------------------------------

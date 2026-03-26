@@ -115,7 +115,7 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
     ),
     "reddit": MCPCatalogEntry(
         name="reddit",
-        package="arindam200/reddit-mcp-server",
+        package="reddit-mcp-server",
         description="Reddit subreddit analysis, posts, sentiment",
         tags=("reddit", "social", "community", "sentiment", "forum"),
     ),
