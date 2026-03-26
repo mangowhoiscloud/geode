@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-26 (세션 29 — 네이티브 도구 통합)
+> 마지막 갱신: 2026-03-26 (세션 30 — 포트폴리오 고도화 + F안 Phase 2 + Context Persistence)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -21,15 +21,20 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| native-tools | 3사 Agent SDK 네이티브 도구 통합 — Anthropic web_search/web_fetch/code_exec 버전업 + OpenAI Responses API 패스스루 + GLM-5 web_search 네이티브 | @mangowhoiscloud | feature/native-tools | 2026-03-26 | Agent SDK 리서치 완료 |
-| llm-layer-f | F안 적용 — client.py 분할(Provider Module) + Adapter 삭제 + Port→DomainPort만 + Proxy 30개 삭제 + infrastructure/ 제거 | @mangowhoiscloud | feature/llm-layer-f | 2026-03-26 | 프론티어 GAP 기반 |
-| context-persistence | .geode/ 컨텍스트 영속성 점검 — 재설치/업그레이드 시 유저 프로필 휘발 방지 + ~/.geode/{workspace}/.geode 로드 검증 | @mangowhoiscloud | feature/context-persistence | 2026-03-26 | 유저 피드백 |
+| llm-layer-f-p2 | F안 Phase 2 — client.py 분할(Provider Module) + Adapter 삭제 + Port→DomainPort만 + Proxy 30개 삭제 | @mangowhoiscloud | feature/llm-layer-f-p2 | 2026-03-26 | 🔄 테스트 패치 갱신 중 |
+| context-persistence | .geode/ 컨텍스트 영속성 점검 — 재설치/업그레이드 시 유저 프로필 휘발 방지 + ~/.geode/{workspace}/.geode 로드 검증 | @mangowhoiscloud | feature/context-persistence | 2026-03-26 | 🔄 실행 시작 |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 | — | — | — | — | — | — |
+
+### Done (2026-03-26 — 세션 29)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| native-tools | 3사 Agent SDK 네이티브 도구 통합 — Anthropic web_search/web_fetch/code_exec + OpenAI Responses API + GLM-5 web_search | #456 | @mangowhoiscloud | 2026-03-26 |
 
 ### Done (2026-03-26 — 세션 28)
 

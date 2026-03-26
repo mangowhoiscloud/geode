@@ -55,7 +55,7 @@ class TestAnthropicNativeToolInjection:
 
     def test_native_tools_constant_has_web_search(self) -> None:
         """_ANTHROPIC_NATIVE_TOOLS must include web_search_20260209."""
-        from core.infrastructure.adapters.llm.claude_agentic_adapter import (
+        from core.agent.adapters.claude_agentic_adapter import (
             _ANTHROPIC_NATIVE_TOOLS,
         )
 
@@ -66,7 +66,7 @@ class TestAnthropicNativeToolInjection:
 
     def test_native_tools_constant_has_web_fetch(self) -> None:
         """_ANTHROPIC_NATIVE_TOOLS must include web_fetch_20260209."""
-        from core.infrastructure.adapters.llm.claude_agentic_adapter import (
+        from core.agent.adapters.claude_agentic_adapter import (
             _ANTHROPIC_NATIVE_TOOLS,
         )
 
@@ -77,7 +77,7 @@ class TestAnthropicNativeToolInjection:
 
     def test_native_tools_deduplication(self) -> None:
         """Native tools should not duplicate existing tool names."""
-        from core.infrastructure.adapters.llm.claude_agentic_adapter import (
+        from core.agent.adapters.claude_agentic_adapter import (
             _ANTHROPIC_NATIVE_TOOLS,
             _API_ALLOWED_KEYS,
         )
@@ -114,7 +114,7 @@ class TestAnthropicNativeToolInjection:
         """agentic_call must include native tools in the API request."""
         import asyncio
 
-        from core.infrastructure.adapters.llm.claude_agentic_adapter import (
+        from core.agent.adapters.claude_agentic_adapter import (
             ClaudeAgenticAdapter,
         )
 
@@ -127,12 +127,8 @@ class TestAnthropicNativeToolInjection:
         mock_response.model = "claude-opus-4-6"
 
         with (
-            patch(
-                "core.infrastructure.adapters.llm.claude_agentic_adapter.settings"
-            ) as mock_settings,
-            patch(
-                "core.infrastructure.adapters.llm.claude_agentic_adapter.call_with_failover"
-            ) as mock_failover,
+            patch("core.agent.adapters.claude_agentic_adapter.settings") as mock_settings,
+            patch("core.agent.adapters.claude_agentic_adapter.call_with_failover") as mock_failover,
         ):
             mock_settings.anthropic_api_key = "test-key"
             mock_failover.return_value = (mock_response, "claude-opus-4-6")
@@ -179,7 +175,7 @@ class TestGlmNativeWebSearch:
 
     def test_glm_native_web_search_constant(self) -> None:
         """_GLM_NATIVE_WEB_SEARCH must have correct structure."""
-        from core.infrastructure.adapters.llm.glm_agentic_adapter import (
+        from core.agent.adapters.glm_agentic_adapter import (
             _GLM_NATIVE_WEB_SEARCH,
         )
 
@@ -188,10 +184,10 @@ class TestGlmNativeWebSearch:
 
     def test_glm_adapter_is_subclass_of_openai(self) -> None:
         """GlmAgenticAdapter must inherit from OpenAIAgenticAdapter."""
-        from core.infrastructure.adapters.llm.glm_agentic_adapter import (
+        from core.agent.adapters.glm_agentic_adapter import (
             GlmAgenticAdapter,
         )
-        from core.infrastructure.adapters.llm.openai_agentic_adapter import (
+        from core.agent.adapters.openai_agentic_adapter import (
             OpenAIAgenticAdapter,
         )
 
@@ -199,7 +195,7 @@ class TestGlmNativeWebSearch:
 
     def test_glm_provider_name(self) -> None:
         """GlmAgenticAdapter.provider_name must be 'glm'."""
-        from core.infrastructure.adapters.llm.glm_agentic_adapter import (
+        from core.agent.adapters.glm_agentic_adapter import (
             GlmAgenticAdapter,
         )
 
@@ -208,10 +204,10 @@ class TestGlmNativeWebSearch:
 
     def test_glm_has_own_agentic_call(self) -> None:
         """GlmAgenticAdapter must override agentic_call (not inherit from OpenAI)."""
-        from core.infrastructure.adapters.llm.glm_agentic_adapter import (
+        from core.agent.adapters.glm_agentic_adapter import (
             GlmAgenticAdapter,
         )
-        from core.infrastructure.adapters.llm.openai_agentic_adapter import (
+        from core.agent.adapters.openai_agentic_adapter import (
             OpenAIAgenticAdapter,
         )
 
@@ -231,7 +227,7 @@ class TestOpenAIResponsesApiGap:
 
     def test_openai_adapter_has_todo_comment(self) -> None:
         """OpenAIAgenticAdapter docstring must mention Responses API TODO."""
-        from core.infrastructure.adapters.llm.openai_agentic_adapter import (
+        from core.agent.adapters.openai_agentic_adapter import (
             OpenAIAgenticAdapter,
         )
 
@@ -243,7 +239,7 @@ class TestOpenAIResponsesApiGap:
         """Confirm OpenAI adapter still uses Chat Completions (not yet migrated)."""
         import inspect
 
-        from core.infrastructure.adapters.llm.openai_agentic_adapter import (
+        from core.agent.adapters.openai_agentic_adapter import (
             OpenAIAgenticAdapter,
         )
 
@@ -261,7 +257,7 @@ class TestApiAllowedKeys:
 
     def test_type_key_in_allowed(self) -> None:
         """'type' must be in _API_ALLOWED_KEYS for native tool passthrough."""
-        from core.infrastructure.adapters.llm.claude_agentic_adapter import (
+        from core.agent.adapters.claude_agentic_adapter import (
             _API_ALLOWED_KEYS,
         )
 
@@ -269,7 +265,7 @@ class TestApiAllowedKeys:
 
     def test_native_tool_passes_filter(self) -> None:
         """Native tool dict must survive _API_ALLOWED_KEYS filtering."""
-        from core.infrastructure.adapters.llm.claude_agentic_adapter import (
+        from core.agent.adapters.claude_agentic_adapter import (
             _API_ALLOWED_KEYS,
         )
 

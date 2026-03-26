@@ -200,7 +200,7 @@ def cmd_key(args: str) -> bool:
         settings.openai_api_key = value
         _upsert_env("OPENAI_API_KEY", value)
         try:
-            from core.infrastructure.adapters.llm.openai_adapter import reset_openai_client
+            from core.llm.providers.openai import reset_openai_client
 
             reset_openai_client()
         except ImportError:
@@ -218,7 +218,7 @@ def cmd_key(args: str) -> bool:
         settings.zai_api_key = value
         _upsert_env("ZAI_API_KEY", value)
         try:
-            from core.infrastructure.adapters.llm.glm_adapter import reset_glm_client
+            from core.llm.providers.glm import reset_glm_client
 
             reset_glm_client()
         except ImportError:
@@ -237,7 +237,7 @@ def cmd_key(args: str) -> bool:
         settings.openai_api_key = value
         _upsert_env("OPENAI_API_KEY", value)
         try:
-            from core.infrastructure.adapters.llm.openai_adapter import reset_openai_client
+            from core.llm.providers.openai import reset_openai_client
 
             reset_openai_client()
         except ImportError:
@@ -247,7 +247,7 @@ def cmd_key(args: str) -> bool:
         settings.zai_api_key = value
         _upsert_env("ZAI_API_KEY", value)
         try:
-            from core.infrastructure.adapters.llm.glm_adapter import reset_glm_client
+            from core.llm.providers.glm import reset_glm_client
 
             reset_glm_client()
         except ImportError:

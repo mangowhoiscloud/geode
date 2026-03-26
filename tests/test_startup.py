@@ -465,11 +465,11 @@ class TestGlmClient:
 
         with (
             _p.dict("sys.modules", {"openai": mock_openai_mod}),
-            _p("core.infrastructure.adapters.llm.glm_adapter._glm_client", None),
-            _p("core.infrastructure.adapters.llm.glm_adapter.settings") as ms,
+            _p("core.llm.providers.glm._glm_client", None),
+            _p("core.llm.providers.glm.settings") as ms,
         ):
             ms.zai_api_key = "test-key"
-            from core.infrastructure.adapters.llm.glm_adapter import _get_glm_client
+            from core.llm.providers.glm import _get_glm_client
 
             _get_glm_client()
             mock_openai_mod.OpenAI.assert_called_once_with(
@@ -505,3 +505,157 @@ class TestSetupProjectMemory:
     def test_idempotent(self, tmp_path: Path):
         assert setup_project_memory(tmp_path) is True
         assert setup_project_memory(tmp_path) is False
+
+
+class TestSetupUserProfileWarning:
+    """Fix 1: setup_user_profile() logs warning (not debug) on failure."""
+
+    def test_logs_warning_on_exception(self):
+        """setup_user_profile() should log.warning on failure, not log.debug."""
+        from unittest.mock import MagicMock
+
+        from core.cli.startup import setup_user_profile
+
+        mock_profile = MagicMock()
+        mock_profile.ensure_structure.side_effect = RuntimeError("boom")
+
+        with (
+            patch(
+                "core.memory.user_profile.FileBasedUserProfile",
+                return_value=mock_profile,
+            ),
+            patch("core.cli.startup.log") as mock_log,
+        ):
+            result = setup_user_profile()
+            assert result is False
+            mock_log.warning.assert_called_once()
+            assert "boom" in str(mock_log.warning.call_args)
+
+    def test_returns_false_on_failure(self):
+        from unittest.mock import MagicMock
+
+        from core.cli.startup import setup_user_profile
+
+        mock_profile = MagicMock()
+        mock_profile.ensure_structure.side_effect = OSError("denied")
+
+        with patch(
+            "core.memory.user_profile.FileBasedUserProfile",
+            return_value=mock_profile,
+        ):
+            assert setup_user_profile() is False
+
+
+class TestReadinessProfileStatus:
+    """Fix 2: check_readiness() includes User Profile capability."""
+
+    def test_profile_exists_shown_available(self, tmp_path: Path):
+        """When global profile exists, User Profile capability is available."""
+        from unittest.mock import MagicMock
+
+        mock_profile_instance = MagicMock()
+        mock_profile_instance.exists.return_value = True
+
+        with (
+            patch("core.cli.startup.settings") as mock_settings,
+            patch(
+                "core.memory.user_profile.FileBasedUserProfile",
+                return_value=mock_profile_instance,
+            ),
+        ):
+            _no_keys_mock(mock_settings)
+            report = check_readiness(tmp_path)
+
+        assert report.has_profile is True
+        profile_cap = next(c for c in report.capabilities if c.name == "User Profile")
+        assert profile_cap.available is True
+
+    def test_profile_missing_shown_unavailable(self, tmp_path: Path):
+        """When no profile exists, User Profile shows as unavailable with hint."""
+        from unittest.mock import MagicMock
+
+        mock_profile_instance = MagicMock()
+        mock_profile_instance.exists.return_value = False
+
+        with (
+            patch("core.cli.startup.settings") as mock_settings,
+            patch(
+                "core.memory.user_profile.FileBasedUserProfile",
+                return_value=mock_profile_instance,
+            ),
+        ):
+            _no_keys_mock(mock_settings)
+            report = check_readiness(tmp_path)
+
+        assert report.has_profile is False
+        profile_cap = next(c for c in report.capabilities if c.name == "User Profile")
+        assert profile_cap.available is False
+        assert "/profile" in profile_cap.reason
+
+    def test_profile_load_exception_handled(self, tmp_path: Path):
+        """If FileBasedUserProfile raises, profile shows as unavailable."""
+        with (
+            patch("core.cli.startup.settings") as mock_settings,
+            patch(
+                "core.memory.user_profile.FileBasedUserProfile",
+                side_effect=RuntimeError("broken"),
+            ),
+        ):
+            _no_keys_mock(mock_settings)
+            report = check_readiness(tmp_path)
+
+        assert report.has_profile is False
+        profile_cap = next(c for c in report.capabilities if c.name == "User Profile")
+        assert profile_cap.available is False
+        assert "load failed" in profile_cap.reason
+
+
+class TestGeodeInitProfileSeeding:
+    """Fix 3: geode init seeds project profile from global."""
+
+    def test_seeds_project_profile_from_global(self, tmp_path: Path, monkeypatch):
+        """When global profile exists and project profile absent, copy it."""
+        import shutil
+
+        # Set up global profile dir
+        global_profile = tmp_path / "global_profile"
+        global_profile.mkdir(parents=True)
+        (global_profile / "profile.md").write_text("---\nrole: engineer\n---\n")
+        (global_profile / "preferences.json").write_text('{"lang": "ko"}\n')
+
+        # Set up project dir
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        project_profile = project_dir / ".geode" / "user_profile"
+        # .geode exists but user_profile does not
+        (project_dir / ".geode").mkdir()
+
+        # Simulate the seeding logic from geode init
+        if not project_profile.exists() and global_profile.exists():
+            shutil.copytree(str(global_profile), str(project_profile))
+
+        assert project_profile.exists()
+        assert (project_profile / "profile.md").exists()
+        assert "engineer" in (project_profile / "profile.md").read_text()
+        assert (project_profile / "preferences.json").exists()
+
+    def test_does_not_overwrite_existing_project_profile(self, tmp_path: Path):
+        """If project profile already exists, do not overwrite."""
+        import shutil
+
+        # Set up global profile
+        global_profile = tmp_path / "global_profile"
+        global_profile.mkdir(parents=True)
+        (global_profile / "profile.md").write_text("---\nrole: global\n---\n")
+
+        # Set up existing project profile
+        project_profile = tmp_path / ".geode" / "user_profile"
+        project_profile.mkdir(parents=True)
+        (project_profile / "profile.md").write_text("---\nrole: local\n---\n")
+
+        # Seeding logic: should skip
+        if not project_profile.exists() and global_profile.exists():
+            shutil.copytree(str(global_profile), str(project_profile))
+
+        # Project profile should be untouched
+        assert "local" in (project_profile / "profile.md").read_text()

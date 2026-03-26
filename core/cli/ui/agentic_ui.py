@@ -251,7 +251,7 @@ def render_tokens(
 def render_session_cost_summary() -> None:
     """Render cumulative session cost summary."""
     try:
-        from core.llm.client import get_usage_accumulator
+        from core.llm.router import get_usage_accumulator
 
         acc = get_usage_accumulator()
         if not acc.calls:

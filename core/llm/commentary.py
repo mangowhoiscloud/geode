@@ -13,8 +13,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.llm.client import call_llm
 from core.llm.prompts import COMMENTARY_SYSTEM, COMMENTARY_USER
+from core.llm.router import call_llm
 
 log = logging.getLogger(__name__)
 

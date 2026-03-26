@@ -20,7 +20,7 @@ from core.domains.game_ip.nodes.analysts import (
     _run_analyst,
     _should_use_secondary,
 )
-from core.infrastructure.ports.llm_port import (
+from core.llm.router import (
     get_secondary_llm_json,
     get_secondary_llm_parsed,
     set_llm_callable,

@@ -433,7 +433,7 @@ class WebSearchTool:
         # Attempt real web search via Anthropic SDK
         try:
             from core.config import settings
-            from core.llm.client import get_anthropic_client
+            from core.llm.router import get_anthropic_client
 
             if not settings.anthropic_api_key:
                 return self._stub_result(query, "no_api_key")
