@@ -1093,5 +1093,119 @@
       },
       "required": ["action"]
     }
+  },
+  {
+    "name": "task_create",
+    "description": "새 작업(task)을 생성합니다. 복잡한 요청을 단계별 작업으로 분해하거나 진행 상황을 추적할 때 사용하세요.",
+    "category": "task",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "subject": {
+          "type": "string",
+          "description": "작업 제목 (imperative form, e.g. 'Analyze Berserk IP')"
+        },
+        "description": {
+          "type": "string",
+          "description": "작업 상세 설명 (선택)"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "추가 메타데이터 (선택) — {priority, source, tool_name, tool_args}"
+        }
+      },
+      "required": ["subject"]
+    }
+  },
+  {
+    "name": "task_update",
+    "description": "기존 작업의 상태나 내용을 변경합니다. 작업을 시작하거나 완료 처리할 때 사용하세요.",
+    "category": "task",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "description": "변경할 task ID (task_create 반환값)"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["in_progress", "completed", "failed"],
+          "description": "새 상태 (in_progress: 작업 시작, completed: 완료, failed: 실패)"
+        },
+        "subject": {
+          "type": "string",
+          "description": "변경할 작업 제목 (선택)"
+        },
+        "description": {
+          "type": "string",
+          "description": "변경할 설명 (선택)"
+        },
+        "owner": {
+          "type": "string",
+          "description": "작업 담당자 (선택, e.g. 'subagent-1')"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "메타데이터 병합 (선택, null 값으로 키 삭제)"
+        }
+      },
+      "required": ["task_id"]
+    }
+  },
+  {
+    "name": "task_get",
+    "description": "특정 작업의 상세 정보를 조회합니다.",
+    "category": "task",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "description": "조회할 task ID"
+        }
+      },
+      "required": ["task_id"]
+    }
+  },
+  {
+    "name": "task_list",
+    "description": "전체 작업 목록을 조회합니다. 현재 진행 상황을 파악하거나 다음 작업을 결정할 때 사용하세요.",
+    "category": "task",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "status_filter": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "completed", "failed", "all"],
+          "description": "상태 필터 (기본값: all)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "task_stop",
+    "description": "실행 중인 작업을 취소(실패 처리)합니다. 다운스트림 의존 작업도 함께 스킵됩니다.",
+    "category": "task",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "description": "취소할 task ID"
+        },
+        "reason": {
+          "type": "string",
+          "description": "취소 사유 (선택)"
+        }
+      },
+      "required": ["task_id"]
+    }
   }
 ]
