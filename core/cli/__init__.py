@@ -1114,9 +1114,37 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 result = agentic.run(user_input)
                 _render_agentic_result(result)
                 # Claude Code-style status line after each result
-                from core.cli.ui.agentic_ui import render_status_line
+                from core.cli.ui.agentic_ui import render_status_line, render_turn_summary
 
                 render_status_line()
+
+                # Turn-end compact summary (rounds · tools · time · cost)
+                if result and result.tool_calls:
+                    from core.cli.ui.agentic_ui import get_session_meter
+
+                    _meter = get_session_meter()
+                    _turn_elapsed = _meter.turn_elapsed_s if _meter else 0.0
+                    _turn_cost = 0.0
+                    try:
+                        from core.llm.token_tracker import get_tracker as _get_tk
+
+                        _tk = _get_tk()
+                        import core.cli.ui.agentic_ui as _ui_mod
+
+                        _snap = _ui_mod._turn_snapshot
+                        if _snap is not None:
+                            _delta = _tk.delta_since(_snap)
+                            _turn_cost = _delta.total_cost_usd
+                        else:
+                            _turn_cost = _tk.accumulator.total_cost_usd
+                    except Exception:
+                        log.debug("Turn cost calculation failed", exc_info=True)
+                    render_turn_summary(
+                        result.rounds,
+                        len(result.tool_calls),
+                        _turn_elapsed,
+                        _turn_cost,
+                    )
             except KeyboardInterrupt:
                 console.show_cursor(True)
                 console.print("\n  [dim]Interrupted.[/dim]\n")
