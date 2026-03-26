@@ -1426,6 +1426,22 @@ def init(
     if created_profile:
         console.print("  Created ~/.geode/user_profile/")
 
+    # 7a. Seed project profile from global if absent
+    try:
+        project_profile_dir = Path(".geode/user_profile")
+        global_profile_dir = user_profile.global_dir
+        if (
+            not project_profile_dir.exists()
+            and isinstance(global_profile_dir, Path)
+            and (global_profile_dir / "profile.md").exists()
+        ):
+            import shutil
+
+            shutil.copytree(str(global_profile_dir), str(project_profile_dir))
+            console.print("  Seeded .geode/user_profile/ from global profile")
+    except OSError as e:
+        log.debug("Profile seeding skipped: %s", e)
+
     # 7b. ~/.geode/identity/career.toml template
     identity_dir = Path.home() / ".geode" / "identity"
     career_toml = identity_dir / "career.toml"

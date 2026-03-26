@@ -259,6 +259,7 @@ class ReadinessReport:
     has_api_key: bool = False
     has_env_file: bool = False
     has_memory: bool = False
+    has_profile: bool = False
     blocked: bool = False
     force_dry_run: bool = False  # backward-compat alias
 
@@ -313,7 +314,31 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
         )
     )
 
-    # 4. Always-available capabilities
+    # 4. User Profile check (Tier 0.5)
+    try:
+        from core.memory.user_profile import FileBasedUserProfile
+
+        profile = FileBasedUserProfile()
+        profile_exists = profile.exists()
+        report.has_profile = profile_exists
+        report.capabilities.append(
+            Capability(
+                name="User Profile",
+                available=profile_exists,
+                reason="" if profile_exists else "run /profile to set up",
+            )
+        )
+    except Exception:
+        report.has_profile = False
+        report.capabilities.append(
+            Capability(
+                name="User Profile",
+                available=False,
+                reason="load failed",
+            )
+        )
+
+    # 5. Always-available capabilities
     report.capabilities.append(Capability(name="Dry-Run Analysis", available=True))
     report.capabilities.append(Capability(name="IP Search", available=True))
 
@@ -360,5 +385,5 @@ def setup_user_profile() -> bool:
         profile = FileBasedUserProfile()
         return profile.ensure_structure()
     except Exception as e:
-        log.debug("User profile setup skipped: %s", e)
+        log.warning("User profile setup failed: %s", e)
         return False
