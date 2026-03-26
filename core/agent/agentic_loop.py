@@ -21,6 +21,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.agent.adapters.agentic_registry import (
+    CROSS_PROVIDER_FALLBACK,
+    resolve_agentic_adapter,
+)
 from core.agent.conversation import ConversationContext
 from core.agent.error_recovery import ErrorRecoveryStrategy
 from core.agent.sub_agent import SubAgentResult, drain_announced_results
@@ -36,13 +40,9 @@ from core.config import (
     ANTHROPIC_PRIMARY,
     _resolve_provider,
 )
-from core.infrastructure.adapters.llm.agentic_registry import (
-    CROSS_PROVIDER_FALLBACK,
-    resolve_agentic_adapter,
-)
-from core.infrastructure.ports.agentic_llm_port import BillingError, UserCancelledError
-from core.llm.client import maybe_traceable
+from core.llm.errors import BillingError, UserCancelledError
 from core.llm.prompts import AGENTIC_SUFFIX
+from core.llm.router import maybe_traceable
 from core.orchestration.hooks import HookEvent, HookSystem
 
 if TYPE_CHECKING:

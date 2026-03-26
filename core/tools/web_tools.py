@@ -100,7 +100,7 @@ class GeneralWebSearchTool:
 
         try:
             from core.config import ANTHROPIC_BUDGET, settings
-            from core.llm.client import get_anthropic_client
+            from core.llm.router import get_anthropic_client
 
             if not settings.anthropic_api_key:
                 return {"error": "No API key configured for web search"}

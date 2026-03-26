@@ -433,7 +433,7 @@ class TestAgenticLoop:
         mock_response = MagicMock()
         mock_response.usage = MagicMock(input_tokens=500, output_tokens=200)
 
-        with patch("core.llm.client.is_langsmith_enabled", return_value=False):
+        with patch("core.llm.router.is_langsmith_enabled", return_value=False):
             loop._track_usage(mock_response)
 
         acc = get_usage_accumulator()
@@ -458,7 +458,7 @@ class TestAgenticLoop:
         mock_response = MagicMock()
         mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
 
-        with patch("core.llm.client.calculate_cost", side_effect=RuntimeError("boom")):
+        with patch("core.llm.router.calculate_cost", side_effect=RuntimeError("boom")):
             loop._track_usage(mock_response)  # should not raise
 
 

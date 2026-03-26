@@ -12,9 +12,8 @@ from typing import Any
 
 import numpy as np
 
-from core.infrastructure.ports.llm_port import LLMClientPort
-from core.llm.client import maybe_traceable
 from core.llm.prompts import CROSS_LLM_DUAL_VERIFY, CROSS_LLM_RESCORE, CROSS_LLM_SYSTEM
+from core.llm.router import LLMClientPort, maybe_traceable
 from core.state import AnalysisResult, GeodeState
 from core.verification.stats import calculate_krippendorff_alpha
 

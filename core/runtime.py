@@ -41,8 +41,6 @@ from core.domains.loader import load_domain_adapter
 from core.gateway.auth.cooldown import CooldownTracker
 from core.gateway.auth.profiles import ProfileStore
 from core.gateway.auth.rotation import ProfileRotator
-from core.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
-from core.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
 from core.infrastructure.ports.auth_port import (
     CooldownTrackerPort,
     ProfileRotatorPort,
@@ -60,7 +58,6 @@ from core.infrastructure.ports.automation_port import (
 )
 from core.infrastructure.ports.domain_port import set_domain
 from core.infrastructure.ports.hook_port import HookSystemPort
-from core.infrastructure.ports.llm_port import LLMClientPort
 from core.infrastructure.ports.memory_port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
@@ -78,6 +75,8 @@ from core.infrastructure.ports.tool_port import (
     PolicyChainPort,
     ToolRegistryPort,
 )
+from core.llm.providers.openai import OpenAIAdapter
+from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.memory.context import ContextAssembler
 from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.project import ProjectMemory
@@ -1153,7 +1152,7 @@ class GeodeRuntime:
 
         # Inject LLM callables so node modules can resolve via contextvars
         # Use the adapter's port methods (not raw functions) for proper DI
-        from core.infrastructure.ports.llm_port import set_llm_callable
+        from core.llm.router import set_llm_callable
 
         # Build tool executor bound to registry + policy chain
         tool_fn = _make_tool_executor(llm_adapter, tool_registry, policy_chain)

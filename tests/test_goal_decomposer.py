@@ -146,7 +146,7 @@ class TestGoalDecomposer:
         assert result is None
         assert decomposer.stats.simple_passthrough == 1
 
-    @patch("core.llm.client.call_llm_parsed")
+    @patch("core.llm.router.call_llm_parsed")
     def test_compound_request_decomposed(self, mock_llm: MagicMock) -> None:
         """Compound requests should be decomposed into sub-goals."""
         mock_llm.return_value = DecompositionResult(
@@ -179,7 +179,7 @@ class TestGoalDecomposer:
         assert result.goals[1].depends_on == ["step_1"]
         assert decomposer.stats.compound_detected == 1
 
-    @patch("core.llm.client.call_llm_parsed")
+    @patch("core.llm.router.call_llm_parsed")
     def test_llm_says_not_compound(self, mock_llm: MagicMock) -> None:
         """When LLM determines the request is single-intent, return None."""
         mock_llm.return_value = DecompositionResult(
@@ -195,7 +195,7 @@ class TestGoalDecomposer:
         assert result is None
         assert decomposer.stats.simple_passthrough == 1
 
-    @patch("core.llm.client.call_llm_parsed")
+    @patch("core.llm.router.call_llm_parsed")
     def test_llm_error_returns_none(self, mock_llm: MagicMock) -> None:
         """LLM errors should return None (graceful degradation)."""
         mock_llm.side_effect = RuntimeError("API error")
@@ -206,7 +206,7 @@ class TestGoalDecomposer:
         assert result is None
         assert decomposer.stats.llm_errors == 1
 
-    @patch("core.llm.client.call_llm_parsed")
+    @patch("core.llm.router.call_llm_parsed")
     def test_single_goal_not_compound(self, mock_llm: MagicMock) -> None:
         """Single goal result should not be treated as compound."""
         mock_llm.return_value = DecompositionResult(
@@ -403,7 +403,7 @@ class TestAgenticLoopIntegration:
         result = loop._try_decompose("종합적으로 분석하고 리포트 만들어줘")
         assert result is None
 
-    @patch("core.llm.client.call_llm_parsed")
+    @patch("core.llm.router.call_llm_parsed")
     def test_decomposition_returns_hint(self, mock_llm: MagicMock) -> None:
         """Compound request should produce a system prompt hint."""
         mock_llm.return_value = DecompositionResult(

@@ -5,8 +5,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from core.config import OPENAI_PRIMARY
-from core.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
-from core.infrastructure.ports.llm_port import LLMClientPort
+from core.llm.providers.openai import OpenAIAdapter
+from core.llm.router import LLMClientPort
 
 
 class TestOpenAIAdapterInterface:
@@ -22,7 +22,7 @@ class TestOpenAIAdapterInterface:
         adapter = OpenAIAdapter(default_model="gpt-4o")
         assert adapter._default_model == "gpt-4o"
 
-    @patch("core.infrastructure.adapters.llm.openai_adapter._get_openai_client")
+    @patch("core.llm.providers.openai._get_openai_client")
     def test_generate(self, mock_client_fn):
         mock_client = MagicMock()
         mock_client_fn.return_value = mock_client
@@ -38,7 +38,7 @@ class TestOpenAIAdapterInterface:
         result = adapter.generate("system prompt", "user prompt")
         assert result == "Hello from GPT"
 
-    @patch("core.infrastructure.adapters.llm.openai_adapter._get_openai_client")
+    @patch("core.llm.providers.openai._get_openai_client")
     def test_generate_structured(self, mock_client_fn):
         mock_client = MagicMock()
         mock_client_fn.return_value = mock_client
@@ -54,7 +54,7 @@ class TestOpenAIAdapterInterface:
         result = adapter.generate_structured("system", "user")
         assert result == {"key": "value"}
 
-    @patch("core.infrastructure.adapters.llm.openai_adapter._get_openai_client")
+    @patch("core.llm.providers.openai._get_openai_client")
     def test_generate_stream(self, mock_client_fn):
         mock_client = MagicMock()
         mock_client_fn.return_value = mock_client

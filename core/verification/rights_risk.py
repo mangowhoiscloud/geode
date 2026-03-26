@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from core.llm.client import maybe_traceable
+from core.llm.router import maybe_traceable
 
 
 class RightsStatus(StrEnum):
