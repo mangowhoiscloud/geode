@@ -36,6 +36,9 @@ class ChannelManager:
         self._lane_queue = lane_queue  # LaneQueue for concurrency control
         self._lock = threading.Lock()
         self._stats: dict[str, int] = {"received": 0, "processed": 0, "ignored": 0}
+        # Gateway-level defaults (overridden by config.toml [gateway])
+        self.gateway_max_rounds: int = 30
+        self.gateway_max_turns: int = 20
 
     def register_poller(self, poller: BasePoller) -> None:
         """Register a poller to be managed by this gateway."""
@@ -214,25 +217,38 @@ class ChannelManager:
             ]
 
     def load_bindings_from_config(self, config: dict[str, Any]) -> int:
-        """Load bindings from TOML/dict config (hot-reloadable).
+        """Load bindings and gateway-level settings from TOML/dict config.
 
         Expected format::
 
-            [gateway.bindings]
+            [gateway]
+            max_rounds = 30
+            max_turns = 20
+
             [[gateway.bindings.rules]]
             channel = "slack"
             channel_id = "C12345"
             auto_respond = true
-            require_mention = false
 
         Returns number of bindings loaded.
         """
-        rules = config.get("gateway", {}).get("bindings", {}).get("rules", [])
+        gw = config.get("gateway", {})
+
+        # Gateway-level defaults
+        if "max_rounds" in gw:
+            self.gateway_max_rounds = int(gw["max_rounds"])
+        if "max_turns" in gw:
+            self.gateway_max_turns = int(gw["max_turns"])
+
+        rules = gw.get("bindings", {}).get("rules", [])
         if not rules:
             return 0
 
         with self._lock:
             self._bindings.clear()
+
+        # Per-binding max_rounds falls back to gateway-level default
+        default_max_rounds = self.gateway_max_rounds
 
         loaded = 0
         for rule in rules:
@@ -244,10 +260,15 @@ class ChannelManager:
                 auto_respond=rule.get("auto_respond", True),
                 require_mention=rule.get("require_mention", False),
                 allowed_tools=rule.get("allowed_tools", []),
-                max_rounds=rule.get("max_rounds", 5),
+                max_rounds=rule.get("max_rounds", default_max_rounds),
             )
             self.add_binding(binding)
             loaded += 1
 
-        log.info("Loaded %d gateway bindings from config", loaded)
+        log.info(
+            "Loaded %d gateway bindings from config (max_rounds=%d, max_turns=%d)",
+            loaded,
+            self.gateway_max_rounds,
+            self.gateway_max_turns,
+        )
         return loaded

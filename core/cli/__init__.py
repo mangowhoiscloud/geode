@@ -23,9 +23,8 @@ from typing import Any, cast
 import typer
 
 from core import __version__
-from core.agent.agentic_loop import AgenticLoop, AgenticResult
+from core.agent.agentic_loop import AgenticResult
 from core.agent.conversation import ConversationContext
-from core.agent.tool_executor import ToolExecutor
 from core.cli.commands import (
     cmd_apply,
     cmd_auth,
@@ -695,6 +694,67 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
         console.print()
 
 
+def _build_agentic_stack(
+    conversation: Any,
+    *,
+    mcp_manager: Any = None,
+    skill_registry: Any = None,
+    verbose: bool = False,
+    hitl_level: int = 2,
+    max_rounds: int = 50,
+    model: str | None = None,
+    provider: str | None = None,
+    system_suffix: str = "",
+    quiet: bool = False,
+) -> tuple[Any, Any, Any]:
+    """Build ToolExecutor + AgenticLoop stack. Single source for REPL, Gateway, Batch.
+
+    Returns (agentic_ref, executor, loop).  The ``agentic_ref`` is a mutable
+    list whose [0] element is set to the created AgenticLoop — callers that
+    need it for handler closures can pass the same list to ``_build_tool_handlers``.
+    """
+    from core.agent.agentic_loop import AgenticLoop
+    from core.agent.tool_executor import ToolExecutor
+    from core.config import _resolve_provider
+    from core.config import settings as _stk_settings
+
+    _model = model or _stk_settings.model
+    _provider = provider or _resolve_provider(_model)
+
+    agentic_ref: list[Any] = [None]
+    handlers = _build_tool_handlers(
+        verbose=verbose,
+        mcp_manager=mcp_manager,
+        agentic_ref=agentic_ref,
+        skill_registry=skill_registry,
+    )
+    sub_mgr = _build_sub_agent_manager(
+        verbose=verbose,
+        action_handlers=handlers,
+        mcp_manager=mcp_manager,
+        skill_registry=skill_registry,
+    )
+    executor = ToolExecutor(
+        action_handlers=handlers,
+        mcp_manager=mcp_manager,
+        sub_agent_manager=sub_mgr,
+        hitl_level=hitl_level,
+    )
+    loop = AgenticLoop(
+        conversation,
+        executor,
+        max_rounds=max_rounds,
+        model=_model,
+        provider=_provider,
+        mcp_manager=mcp_manager,
+        skill_registry=skill_registry,
+        system_suffix=system_suffix,
+        quiet=quiet,
+    )
+    agentic_ref[0] = loop
+    return agentic_ref, executor, loop
+
+
 def _build_sub_agent_manager(
     verbose: bool = False,
     *,
@@ -971,26 +1031,14 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
 
     console.print()  # blank line before prompt
 
-    # Build tool handlers and executor
-    agentic_ref: list[Any] = [None]  # mutable ref for handler closure
-    handlers = _build_tool_handlers(
-        verbose=verbose, mcp_manager=mcp_mgr, agentic_ref=agentic_ref, skill_registry=skill_registry
-    )
-    sub_mgr = _build_sub_agent_manager(
-        verbose=verbose,
-        action_handlers=handlers,
+    # Build tool handlers, executor, and AgenticLoop (shared factory)
+    _last_verbose = verbose
+    agentic_ref, executor, agentic = _build_agentic_stack(
+        conversation,
         mcp_manager=mcp_mgr,
         skill_registry=skill_registry,
+        verbose=verbose,
     )
-    executor = ToolExecutor(
-        action_handlers=handlers,
-        mcp_manager=mcp_mgr,
-        sub_agent_manager=sub_mgr,
-    )
-    agentic = AgenticLoop(
-        conversation, executor, mcp_manager=mcp_mgr, skill_registry=skill_registry
-    )
-    agentic_ref[0] = agentic
 
     # Initialize session meter for status line
     from core.cli.ui.agentic_ui import init_session_meter
@@ -1077,31 +1125,14 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
             if settings.model != agentic.model:
                 agentic.update_model(settings.model)
             # Update handlers if verbose changed
-            if verbose != (handlers.get("_verbose_flag") is True):
-                handlers = _build_tool_handlers(
-                    verbose=verbose,
-                    mcp_manager=mcp_mgr,
-                    agentic_ref=agentic_ref,
-                    skill_registry=skill_registry,
-                )
-                sub_mgr = _build_sub_agent_manager(
-                    verbose=verbose,
-                    action_handlers=handlers,
-                    mcp_manager=mcp_mgr,
-                    skill_registry=skill_registry,
-                )
-                executor = ToolExecutor(
-                    action_handlers=handlers,
-                    mcp_manager=mcp_mgr,
-                    sub_agent_manager=sub_mgr,
-                )
-                agentic = AgenticLoop(
+            if verbose != _last_verbose:
+                _last_verbose = verbose
+                agentic_ref, executor, agentic = _build_agentic_stack(
                     conversation,
-                    executor,
                     mcp_manager=mcp_mgr,
                     skill_registry=skill_registry,
+                    verbose=verbose,
                 )
-                agentic_ref[0] = agentic
         else:
             # Agentic loop: multi-turn + multi-intent (online) or offline regex
             # Key management is handled via /key command or set_api_key tool.
@@ -1652,9 +1683,7 @@ def serve(
         raise typer.Exit(1)
 
     # Wire AgenticLoop as gateway processor
-    from core.agent.agentic_loop import AgenticLoop
     from core.agent.conversation import ConversationContext
-    from core.agent.tool_executor import ToolExecutor
     from core.infrastructure.ports.gateway_port import get_gateway
 
     gateway = get_gateway()
@@ -1663,29 +1692,31 @@ def serve(
         raise typer.Exit(1)
 
     _GATEWAY_SUFFIX = (
-        "## Gateway response rules\n"
-        "This message comes from an external messaging channel (Slack/Discord/Telegram).\n"
-        "- Do NOT echo, repeat, or quote the user's message in your response.\n"
-        "- Do NOT prefix your response with 'GEODE:' or the user's original text.\n"
-        "- Respond directly with the answer only. Be concise.\n"
-        "- You have access to prior messages in this thread as conversation history."
+        "## Gateway mode\n"
+        "You are responding via an external messaging channel (Slack/Discord/Telegram).\n"
+        "- Do NOT echo or quote the user's message. Respond directly.\n"
+        "- Use tools aggressively to answer thoroughly. Do not give up early.\n"
+        "- For complex questions, break them down and use multiple tool calls.\n"
+        "- You have access to prior messages in this thread as conversation history.\n"
+        "- Format responses for messaging: use short paragraphs, avoid excessive markdown."
     )
 
-    # Max conversation turns to persist per thread (safety net)
-    _GATEWAY_MAX_TURNS = 20
+    # Read gateway config from ChannelManager (loaded from config.toml)
+    _gw_max_rounds = gateway.gateway_max_rounds if hasattr(gateway, "gateway_max_rounds") else 30
+    _gw_max_turns = gateway.gateway_max_turns if hasattr(gateway, "gateway_max_turns") else 20
 
     def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
         """Process a gateway message with multi-turn context.
 
-        Loads prior conversation from SessionStore (keyed by thread),
-        runs AgenticLoop, then persists the updated conversation back.
+        Uses the same _build_agentic_stack() factory as REPL — only
+        system_suffix, hitl_level, and quiet differ.
         """
         boot.propagate_to_thread()  # Fix ContextVar propagation for daemon thread
 
         session_key = metadata.get("session_key", "")
 
         # --- Load prior conversation from session store ---
-        ctx = ConversationContext(max_turns=_GATEWAY_MAX_TURNS)
+        ctx = ConversationContext(max_turns=_gw_max_turns)
         if session_key:
             prior = runtime.session_store.get(session_key)
             if prior and isinstance(prior.get("messages"), list):
@@ -1696,39 +1727,16 @@ def serve(
                     session_key,
                 )
 
-        agentic_ref: list[Any] = [None]
-        handlers = _build_tool_handlers(
-            mcp_manager=boot.mcp_manager,
-            agentic_ref=agentic_ref,
-            skill_registry=boot.skill_registry,
-        )
-        sub_mgr = _build_sub_agent_manager(
-            action_handlers=handlers,
-            mcp_manager=boot.mcp_manager,
-            skill_registry=boot.skill_registry,
-        )
-        executor = ToolExecutor(
-            action_handlers=handlers,
-            mcp_manager=boot.mcp_manager,
-            sub_agent_manager=sub_mgr,
-            hitl_level=0,
-        )
-        from core.config import _resolve_provider
-        from core.config import settings as _gw_settings
-
-        gw_model = _gw_settings.model
-        gw_provider = _resolve_provider(gw_model)
-        loop = AgenticLoop(
+        # Same factory as REPL — only output behavior differs
+        _ref, _executor, loop = _build_agentic_stack(
             ctx,
-            executor,
-            max_rounds=50,
-            model=gw_model,
-            provider=gw_provider,
             mcp_manager=boot.mcp_manager,
             skill_registry=boot.skill_registry,
+            hitl_level=0,
+            max_rounds=_gw_max_rounds,
             system_suffix=_GATEWAY_SUFFIX,
+            quiet=True,
         )
-        agentic_ref[0] = loop
         try:
             result = loop.run(content)
 
