@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from typing import Any, TypeVar
 
-from core.infrastructure.ports.llm_port import LLMClientPort
+from core.llm.router import LLMClientPort
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)

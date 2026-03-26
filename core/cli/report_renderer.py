@@ -169,7 +169,7 @@ section for a report on the subject below. Use the domain knowledge provided.
 Write the Expert Analysis section."""
 
     try:
-        from core.llm.client import call_llm
+        from core.llm.router import call_llm
 
         return str(call_llm(system_prompt, user_prompt, max_tokens=2048, temperature=0.4))
     except Exception as exc:

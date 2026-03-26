@@ -13,15 +13,14 @@ from pydantic import BaseModel, Field, ValidationError
 
 from core.config import get_node_model
 from core.infrastructure.ports.domain_port import get_domain_or_none
-from core.infrastructure.ports.llm_port import get_llm_json, get_llm_parsed
 from core.infrastructure.ports.tool_port import get_tool_executor
-from core.llm.client import call_llm_with_tools
 from core.llm.prompts import (
     EVALUATOR_AXES,
     EVALUATOR_SYSTEM,
     EVALUATOR_USER,
     PROSPECT_EVALUATOR_AXES,
 )
+from core.llm.router import call_llm_with_tools, get_llm_json, get_llm_parsed
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
 
 log = logging.getLogger(__name__)

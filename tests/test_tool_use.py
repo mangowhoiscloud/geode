@@ -142,14 +142,14 @@ class TestClaudeAdapterToolUse:
     model via GEODE_MODEL env var).
     """
 
-    @patch("core.llm.client.get_anthropic_client")
+    @patch("core.llm.router.get_anthropic_client")
     def test_no_tool_use(self, mock_get_client: MagicMock):
         """When model doesn't request tools, returns text immediately."""
         mock_client = MagicMock()
         mock_client.messages.create.return_value = _make_anthropic_text_response("Hello")
         mock_get_client.return_value = mock_client
 
-        from core.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
+        from core.llm.router import ClaudeAdapter
 
         adapter = ClaudeAdapter()
         result = adapter.generate_with_tools(
@@ -165,7 +165,7 @@ class TestClaudeAdapterToolUse:
         assert result.tool_calls == []
         assert result.rounds == 1
 
-    @patch("core.llm.client.get_anthropic_client")
+    @patch("core.llm.router.get_anthropic_client")
     def test_single_tool_call(self, mock_get_client: MagicMock):
         """Model calls one tool, then returns text."""
         mock_client = MagicMock()
@@ -175,7 +175,7 @@ class TestClaudeAdapterToolUse:
         ]
         mock_get_client.return_value = mock_client
 
-        from core.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
+        from core.llm.router import ClaudeAdapter
 
         executor_calls: list[tuple[str, dict[str, Any]]] = []
 
@@ -199,7 +199,7 @@ class TestClaudeAdapterToolUse:
         assert result.rounds == 2
         assert len(executor_calls) == 1
 
-    @patch("core.llm.client.get_anthropic_client")
+    @patch("core.llm.router.get_anthropic_client")
     def test_tool_executor_error(self, mock_get_client: MagicMock):
         """Tool execution errors are captured, not raised."""
         mock_client = MagicMock()
@@ -209,7 +209,7 @@ class TestClaudeAdapterToolUse:
         ]
         mock_get_client.return_value = mock_client
 
-        from core.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
+        from core.llm.router import ClaudeAdapter
 
         def failing_executor(name: str, **kwargs: Any) -> dict[str, Any]:
             raise RuntimeError("Tool broke")
@@ -227,7 +227,7 @@ class TestClaudeAdapterToolUse:
         assert len(result.tool_calls) == 1
         assert "error" in result.tool_calls[0].tool_result
 
-    @patch("core.llm.client.get_anthropic_client")
+    @patch("core.llm.router.get_anthropic_client")
     def test_max_rounds_enforced(self, mock_get_client: MagicMock):
         """After max_tool_rounds, loop stops."""
         mock_client = MagicMock()
@@ -237,7 +237,7 @@ class TestClaudeAdapterToolUse:
         ] + [_make_anthropic_text_response("Forced end")]
         mock_get_client.return_value = mock_client
 
-        from core.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
+        from core.llm.router import ClaudeAdapter
 
         adapter = ClaudeAdapter()
         result = adapter.generate_with_tools(
@@ -260,14 +260,14 @@ class TestClaudeAdapterToolUse:
 
 
 class TestOpenAIAdapterToolUse:
-    @patch("core.infrastructure.adapters.llm.openai_adapter._get_openai_client")
+    @patch("core.llm.providers.openai._get_openai_client")
     def test_no_tool_use(self, mock_get_client: MagicMock):
         """When model doesn't request tools, returns text immediately."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = _make_openai_text_response("Hello")
         mock_get_client.return_value = mock_client
 
-        from core.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
+        from core.llm.providers.openai import OpenAIAdapter
 
         adapter = OpenAIAdapter()
         result = adapter.generate_with_tools(
@@ -287,7 +287,7 @@ class TestOpenAIAdapterToolUse:
         assert result.tool_calls == []
         assert result.rounds == 1
 
-    @patch("core.infrastructure.adapters.llm.openai_adapter._get_openai_client")
+    @patch("core.llm.providers.openai._get_openai_client")
     def test_single_tool_call(self, mock_get_client: MagicMock):
         """Model calls one tool, then returns text."""
         mock_client = MagicMock()
@@ -297,7 +297,7 @@ class TestOpenAIAdapterToolUse:
         ]
         mock_get_client.return_value = mock_client
 
-        from core.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
+        from core.llm.providers.openai import OpenAIAdapter
 
         executor_calls: list[tuple[str, dict[str, Any]]] = []
 
@@ -324,7 +324,7 @@ class TestOpenAIAdapterToolUse:
         assert result.rounds == 2
         assert len(executor_calls) == 1
 
-    @patch("core.infrastructure.adapters.llm.openai_adapter._get_openai_client")
+    @patch("core.llm.providers.openai._get_openai_client")
     def test_tool_executor_error(self, mock_get_client: MagicMock):
         """Tool execution errors are captured, not raised."""
         mock_client = MagicMock()
@@ -334,7 +334,7 @@ class TestOpenAIAdapterToolUse:
         ]
         mock_get_client.return_value = mock_client
 
-        from core.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
+        from core.llm.providers.openai import OpenAIAdapter
 
         adapter = OpenAIAdapter()
         result = adapter.generate_with_tools(
@@ -365,7 +365,7 @@ class TestOpenAIAdapterToolUse:
 class TestLLMToolContextVar:
     def test_get_llm_tool_not_injected(self):
         """get_llm_tool() raises when not injected."""
-        from core.infrastructure.ports.llm_port import _llm_tool_ctx, get_llm_tool
+        from core.llm.router import _llm_tool_ctx, get_llm_tool
 
         _llm_tool_ctx.set(None)
         with pytest.raises(RuntimeError, match="tool callable not injected"):
@@ -373,7 +373,7 @@ class TestLLMToolContextVar:
 
     def test_set_and_get_llm_tool(self):
         """set_llm_callable with tool_fn makes it available via get_llm_tool."""
-        from core.infrastructure.ports.llm_port import (
+        from core.llm.router import (
             _llm_tool_ctx,
             get_llm_tool,
             set_llm_callable,

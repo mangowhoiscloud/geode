@@ -245,7 +245,7 @@ def _make_hooked_node(
     _wrapped.__name__ = f"hooked_{node_name}"
 
     # Phase 5-B: Wrap with LangSmith traceable for Run Tree hierarchy
-    from core.llm.client import is_langsmith_enabled
+    from core.llm.router import is_langsmith_enabled
 
     if is_langsmith_enabled():
         try:

@@ -22,7 +22,6 @@ from core.infrastructure.ports.automation_port import (
     TriggerManagerPort,
 )
 from core.infrastructure.ports.hook_port import HookSystemPort
-from core.infrastructure.ports.llm_port import LLMClientPort
 from core.infrastructure.ports.memory_port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
@@ -40,6 +39,7 @@ from core.infrastructure.ports.tool_port import (
     PolicyChainPort,
     ToolRegistryPort,
 )
+from core.llm.router import LLMClientPort
 
 
 class TestToolPortCompliance:
@@ -170,6 +170,6 @@ class TestExistingPortCompliance:
         assert isinstance(MonoLakeOrganizationMemory(), OrganizationMemoryPort)
 
     def test_claude_adapter_satisfies_port(self):
-        from core.infrastructure.adapters.llm.claude_adapter import ClaudeAdapter
+        from core.llm.router import ClaudeAdapter
 
         assert isinstance(ClaudeAdapter(), LLMClientPort)

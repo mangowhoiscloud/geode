@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass
 
 from core.cli.ui.console import console
-from core.llm.client import LLMUsageAccumulator, get_usage_accumulator
+from core.llm.router import LLMUsageAccumulator, get_usage_accumulator
 
 
 class TextSpinner:

@@ -231,8 +231,8 @@ class GoalDecomposer:
     ) -> DecompositionResult | None:
         """Call LLM to decompose the request into sub-goals."""
         try:
-            from core.llm.client import call_llm_parsed
             from core.llm.prompts import load_prompt
+            from core.llm.router import call_llm_parsed
 
             system = load_prompt("decomposer", "system")
 
@@ -253,7 +253,7 @@ class GoalDecomposer:
 
         except Exception as exc:
             # Billing errors must propagate for clean UI handling
-            from core.infrastructure.ports.agentic_llm_port import BillingError
+            from core.llm.errors import BillingError
 
             if isinstance(exc, BillingError):
                 raise

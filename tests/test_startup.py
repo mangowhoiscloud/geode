@@ -465,11 +465,11 @@ class TestGlmClient:
 
         with (
             _p.dict("sys.modules", {"openai": mock_openai_mod}),
-            _p("core.infrastructure.adapters.llm.glm_adapter._glm_client", None),
-            _p("core.infrastructure.adapters.llm.glm_adapter.settings") as ms,
+            _p("core.llm.providers.glm._glm_client", None),
+            _p("core.llm.providers.glm.settings") as ms,
         ):
             ms.zai_api_key = "test-key"
-            from core.infrastructure.adapters.llm.glm_adapter import _get_glm_client
+            from core.llm.providers.glm import _get_glm_client
 
             _get_glm_client()
             mock_openai_mod.OpenAI.assert_called_once_with(
