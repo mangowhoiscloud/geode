@@ -24,7 +24,7 @@ graph TB
     subgraph L2["L2 — Memory (4-Tier)"]
         UserProf["User Profile<br/>(Tier 0.5, preferences)"]
         Org["Organization<br/>(fixtures, immutable)"]
-        Project["Project Memory<br/>(.claude/MEMORY.md)"]
+        Project["Project Memory<br/>(.geode/MEMORY.md)"]
         Session["Session Store<br/>(in-memory TTL)"]
         Checkpoint["SqliteSaver"]
     end
@@ -468,7 +468,7 @@ graph LR
 
 ## Prompt Assembly Pipeline (ADR-007)
 
-모든 노드(Analyst, Evaluator, Synthesizer, BiasBuster)는 동일한 5단계 조합 파이프라인을 거쳐 LLM을 호출합니다.
+LLM을 직접 호출하는 노드(Analyst, Evaluator, Synthesizer, BiasBuster)는 동일한 5단계 조합 파이프라인을 거칩니다. Router, Signals, Scoring, Verification 등 비-LLM 노드는 이 파이프라인을 거치지 않습니다.
 
 ```mermaid
 graph LR
@@ -498,7 +498,7 @@ graph LR
 |------|------|------|------|
 | **Phase 0** | `prompts/*.md` (9개 `.md` + `axes.py`) | — | `=== SYSTEM ===` / `=== USER ===` 구분자로 분리, `.format(**kwargs)` 렌더링 |
 | **Phase 1** | `state._prompt_overrides` | append-only (기본) | 노드별 프롬프트 오버라이드. full replace opt-in |
-| **Phase 2** | `SkillRegistry` | top 3, 500c/skill | `.claude/skills/` YAML frontmatter 기반 자동 발견, `node` + `role_type` 필터, priority 정렬 |
+| **Phase 2** | `SkillRegistry` | top 3, 500c/skill | `.geode/skills/` YAML frontmatter 기반 자동 발견, `node` + `role_type` 필터, priority 정렬 |
 | **Phase 3** | `ContextAssembler._llm_summary` | 300c | 4-tier 메모리 압축 요약 주입 |
 | **Phase 4** | `BootstrapManager._extra_instructions` | 5개 × 100c | 노드 사전 실행 컨텍스트 (pre-execution injection) |
 | **Budget** | 전체 조합 결과 | hard limit 6000c, warning 4000c | 초과 시 truncation, 이벤트 기록 |
@@ -525,46 +525,81 @@ graph LR
 
 ## Extensibility
 
-### Tool & MCP
+### Tool Dispatch: 6-Path Execution
+
+LLM이 `tool_choice: auto`로 도구를 선택하면, ToolExecutor가 6가지 경로로 디스패치합니다.
 
 ```mermaid
-graph TB
-    subgraph GEODE["GEODE Autonomous Core"]
-        Registry["ToolRegistry<br/>46 base tools"]
-        Policy["PolicyChain"]
-        SkillReg["SkillRegistry<br/>(auto-inject)"]
-        MCPInstall["MCP Auto-Install<br/>(44 catalog)"]
-    end
+flowchart TB
+    LLM["LLM selects tool<br/>tool_choice: auto"]
+    LLM --> Safety{"Safety Gate<br/>SAFE / STANDARD / WRITE / DANGEROUS"}
 
-    subgraph MCPAdapters["MCP Adapters (4 active)"]
-        Brave["Brave Search"]
-        Steam["Steam MCP"]
-        LI["LinkedIn Reader"]
-        Mem["Memory MCP"]
-    end
+    Safety -->|"DANGEROUS"| Bash["Bash Execution<br/>preexec_fn rlimit<br/>9 blocked patterns<br/>21 safe prefixes"]
+    Safety -->|"delegate_task"| Sub["Sub-Agent Delegation<br/>→ CoalescingQueue → TaskGraph"]
+    Safety -->|"analyze_ip etc"| DAG["Domain DAG Pipeline<br/>9-node StateGraph"]
+    Safety -->|"Native handler"| Native["Native Tool<br/>47 registered tools"]
+    Safety -->|"No handler"| MCP["MCP Fallback<br/>find_server_for_tool()<br/>44 catalog servers"]
+    Safety -->|"Skill match"| Skill["Skill Injection<br/>28 skills, .md → prompt"]
 
-    subgraph MCPServer["MCP Server (FastMCP)"]
-        T1["analyze_ip / quick_score"]
-        T2["get_ip_signals"]
-        T3["list_fixtures / query_memory / get_health"]
-    end
+    Bash --> HITL{"HITL Gate<br/>[Y/n/A]"}
+    HITL -->|"Y"| Exec["Execute once"]
+    HITL -->|"N"| Deny["Deny, suggest alternative"]
+    HITL -->|"A"| Always["Always: session-level<br/>auto-approve remembered"]
 
-    Registry --> Policy
-    SkillReg --> Registry
-    MCPInstall --> MCPAdapters
-    GEODE --> MCPAdapters
-    MCPServer --> GEODE
+    Native --> Hook["HookSystem<br/>PRE_TOOL_USE → execute → POST_TOOL_USE"]
+    MCP --> Hook
+    DAG --> Hook
 
-    style GEODE fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
-    style MCPAdapters fill:#1e293b,stroke:#10b981,color:#e2e8f0
-    style MCPServer fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style LLM fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style Safety fill:#1e293b,stroke:#f5c542,color:#e2e8f0
+    style Bash fill:#1e293b,stroke:#ef4444,color:#e2e8f0
+    style HITL fill:#1e293b,stroke:#f4b8c8,color:#e2e8f0
+    style Native fill:#1e293b,stroke:#34d399,color:#e2e8f0
+    style MCP fill:#1e293b,stroke:#60a5fa,color:#e2e8f0
+    style DAG fill:#1e293b,stroke:#c084fc,color:#e2e8f0
+    style Skill fill:#1e293b,stroke:#818cf8,color:#e2e8f0
+    style Hook fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
 ```
 
-- **46 base tools** — `web_fetch`, `general_web_search`, `youtube_search`, `read_document` 등 범용 도구 + `category`/`cost_tier` 메타데이터
-- **MCP Adapters** — Brave Search, Steam, LinkedIn, Memory (env var 비어있으면 graceful skip)
-- **MCP Server** — `uv run python -m core.mcp_server` 로 GEODE를 외부 에이전트에서 호출 가능 (6 tools, 2 resources)
-- **Skills** — `.claude/skills/` 자동 발견 + YAML frontmatter 기반 도구 핫 리로드
-- **MCP 자동설치** — `install_mcp_server` tool → 44개 카탈로그 검색 + 설치 + `refresh_tools()`
+| 경로 | 소스 | 트리거 | HITL |
+|------|------|--------|------|
+| **Bash** | `core/cli/bash_tool.py` | `run_bash` tool | Y/N/A (DANGEROUS), 21 safe prefixes auto |
+| **Sub-Agent** | `core/agent/sub_agent.py` | `delegate_task` tool | STANDARD auto, WRITE escalate |
+| **Domain DAG** | `core/graph.py` | `analyze_ip`, Planner full_pipeline | N/A (pipeline 내부) |
+| **Native Tool** | `core/tools/registry.py` | handler dict lookup hit | SAFE auto, WRITE Y/N/A |
+| **MCP Fallback** | `core/mcp/manager.py` | handler miss + server found | 첫 호출 Y/N/A, AUTO_APPROVED 서버 auto |
+| **Skill** | `core/llm/skill_registry.py` | node+role_type match | N/A (prompt injection) |
+
+**HITL 승인 3단계** (`tool_executor.py:217`):
+- **Y** (Yes): 이번 1회만 승인
+- **N** (No): 거부. LLM에 거부 사유 전달, 대안 제안 유도
+- **A** (Always): 세션 레벨 자동 승인. 해당 카테고리 전체를 기억하여 이후 동일 유형 자동 통과
+
+**Hook 연동**: 모든 도구 실행은 `PRE_TOOL_USE` → 실행 → `POST_TOOL_USE` Hook을 거칩니다. 실패 시 `TOOL_RECOVERY_START` → retry/fallback → `TOOL_RECOVERY_SUCCESS/FAIL`.
+
+### Observability
+
+```mermaid
+flowchart LR
+    Agent["AgenticLoop"] --> TT["TokenTracker<br/>per-call I/O + cost"]
+    Agent --> RL["RunLog<br/>session journal"]
+    Agent --> Hook["HookSystem<br/>36 events"]
+
+    TT --> Status["Status Line<br/>✢ model · ↓in ↑out · $cost"]
+    RL --> File[".geode/runs/<br/>session history"]
+    Hook --> LangSmith["LangSmith<br/>(optional)"]
+    Hook --> SelfObs["Self-Observability<br/>CUSUM drift · spearman ρ"]
+
+    style Agent fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style TT fill:#1e293b,stroke:#f5c542,color:#e2e8f0
+    style RL fill:#1e293b,stroke:#34d399,color:#e2e8f0
+    style Status fill:#1e293b,stroke:#818cf8,color:#e2e8f0
+    style SelfObs fill:#1e293b,stroke:#c084fc,color:#e2e8f0
+```
+
+- **TokenTracker** — 매 LLM 호출마다 input/output 토큰 + 비용을 추적. Status Line(`✢ model · ↓in ↑out · $cost`)으로 실시간 표시
+- **RunLog** — 세션 전체 실행 이력을 `.geode/runs/`에 저장. Hook priority 50으로 등록
+- **Self-Observability** — LangSmith 의존 없이 자체 관측. CUSUM 누적합으로 4개 메트릭(spearman ρ, human-LLM α, precision@10, tier accuracy) 드리프트 감지. WARNING(≥2.5) / CRITICAL(≥4.0) 임계
 
 ### Domain Plugin
 
