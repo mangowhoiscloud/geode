@@ -127,12 +127,8 @@ class TestAnthropicNativeToolInjection:
         mock_response.model = "claude-opus-4-6"
 
         with (
-            patch(
-                "core.agent.adapters.claude_agentic_adapter.settings"
-            ) as mock_settings,
-            patch(
-                "core.agent.adapters.claude_agentic_adapter.call_with_failover"
-            ) as mock_failover,
+            patch("core.agent.adapters.claude_agentic_adapter.settings") as mock_settings,
+            patch("core.agent.adapters.claude_agentic_adapter.call_with_failover") as mock_failover,
         ):
             mock_settings.anthropic_api_key = "test-key"
             mock_failover.return_value = (mock_response, "claude-opus-4-6")
