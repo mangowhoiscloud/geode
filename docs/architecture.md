@@ -267,14 +267,121 @@ DAG만 있으면 5개 에이전트가 같은 웹페이지를 동시에 요청해
 250ms 윈도우 내 동일 요청을 병합하여 "언제, 몇 번" 실행할지 제어합니다.
 Queue만 있으면 중복은 제거하지만 실행 순서를 보장하지 못합니다.
 
+#### 전체 디스패치 흐름
+
+```mermaid
+flowchart LR
+    subgraph Parent["Parent AgenticLoop"]
+        LLM["LLM<br/>tool_choice: auto"]
+        DT["delegate_task"]
+    end
+
+    subgraph CQ["CoalescingQueue<br/><i>시간적 관심사</i>"]
+        direction TB
+        Submit["submit(key, callback)"]
+        Timer["Timer 250ms"]
+        Dedup["중복 → cancel + reset"]
+        Fire["_fire() → callback"]
+        Submit --> Timer
+        Timer -->|"window expires"| Fire
+        Submit -->|"same key within 250ms"| Dedup
+        Dedup -->|"reset timer"| Timer
+    end
+
+    subgraph TG["TaskGraph (DAG)<br/><i>구조적 관심사</i>"]
+        direction TB
+        Add["add_task(deps)"]
+        Ready["get_ready_tasks()"]
+        Run["mark_running()"]
+        Done["mark_completed()"]
+        Fail["mark_failed()"]
+        Skip["propagate_failure()<br/>→ skip dependents"]
+        Add --> Ready
+        Ready -->|"deps satisfied"| Run
+        Run --> Done
+        Run --> Fail
+        Fail --> Skip
+    end
+
+    subgraph IR["IsolatedRunner<br/>MAX_CONCURRENT=5"]
+        W1["Worker 1"]
+        W2["Worker 2"]
+        W3["Worker N"]
+    end
+
+    LLM -->|"tool_use"| DT
+    DT -->|"submit"| CQ
+    CQ -->|"deduplicated tasks"| TG
+    TG -->|"ready tasks<br/>(parallel)"| IR
+    IR -->|"SubAgentResult<br/>summary only"| LLM
+
+    style Parent fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style CQ fill:#1e293b,stroke:#f4b8c8,color:#e2e8f0
+    style TG fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style IR fill:#1e293b,stroke:#10b981,color:#e2e8f0
 ```
-CoalescingQueue (temporal)          TaskGraph (structural)
-┌─────────────────────┐            ┌─────────────────────┐
-│ 250ms window        │            │ DAG dependency       │
-│ dedup identical     │     →      │ parallel if independent │
-│ rate limit          │            │ sequential if dependent │
-│ "언제, 몇 번"       │            │ "무엇을, 어떤 순서로"  │
-└─────────────────────┘            └─────────────────────┘
+
+#### TaskGraph: IP 분석 DAG 예시 (13 tasks)
+
+```mermaid
+flowchart TB
+    R["router"] --> S["signals"]
+    S --> A1["analyst:game_mechanics"]
+    S --> A2["analyst:player_experience"]
+    S --> A3["analyst:growth_potential"]
+    S --> A4["analyst:discovery"]
+    A1 & A2 & A3 & A4 --> E1["evaluator:quality_judge"]
+    A1 & A2 & A3 & A4 --> E2["evaluator:hidden_value"]
+    A1 & A2 & A3 & A4 --> E3["evaluator:community_momentum"]
+    E1 & E2 & E3 --> SC["scoring + PSM"]
+    SC --> V["verification<br/>confidence ≥ 0.7?"]
+    V -->|"pass"| SYN["synthesizer"]
+    V -->|"fail → loopback"| S
+
+    style R fill:#1e293b,stroke:#818cf8,color:#e2e8f0
+    style S fill:#1e293b,stroke:#60a5fa,color:#e2e8f0
+    style A1 fill:#1e293b,stroke:#f4b8c8,color:#e2e8f0
+    style A2 fill:#1e293b,stroke:#f4b8c8,color:#e2e8f0
+    style A3 fill:#1e293b,stroke:#f4b8c8,color:#e2e8f0
+    style A4 fill:#1e293b,stroke:#f4b8c8,color:#e2e8f0
+    style E1 fill:#1e293b,stroke:#c084fc,color:#e2e8f0
+    style E2 fill:#1e293b,stroke:#c084fc,color:#e2e8f0
+    style E3 fill:#1e293b,stroke:#c084fc,color:#e2e8f0
+    style SC fill:#1e293b,stroke:#f5c542,color:#e2e8f0
+    style V fill:#1e293b,stroke:#34d399,color:#e2e8f0
+    style SYN fill:#1e293b,stroke:#34d399,color:#e2e8f0
+```
+
+#### CoalescingQueue: 내부 구조
+
+```mermaid
+sequenceDiagram
+    participant A as Agent A
+    participant B as Agent B
+    participant CQ as CoalescingQueue
+    participant CB as Callback
+
+    A->>CQ: submit("ip:berserk", cb, data)
+    Note over CQ: Timer started (250ms)
+    B->>CQ: submit("ip:berserk", cb, data)
+    Note over CQ: Same key → cancel timer,<br/>reset 250ms (coalesced)
+    Note over CQ: 250ms expires...
+    CQ->>CB: _fire("ip:berserk", cb, data)
+    Note over CB: Executed ONCE<br/>(not twice)
+```
+
+#### TaskGraph: 상태 전이
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: add_task()
+    PENDING --> READY: deps satisfied
+    READY --> RUNNING: mark_running()
+    RUNNING --> COMPLETED: mark_completed()
+    RUNNING --> FAILED: mark_failed()
+    FAILED --> SKIPPED: propagate_failure()<br/>dependents auto-skip
+    COMPLETED --> [*]
+    SKIPPED --> [*]
 ```
 
 **Karpathy "Dumb Platform" 원칙**: Queue/DAG는 외부 시스템 제약(rate limit, 타임아웃)을 다루므로 가장 마지막에 LLM으로 이전되는 레이어입니다. 현재는 코드로 강제하지만, 모델이 자원 한계를 이해하게 되면 프롬프트 기반 소프트 제어로 전환할 수 있습니다.
