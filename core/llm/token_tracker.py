@@ -22,7 +22,7 @@ import logging
 import os
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NamedTuple
 
 log = logging.getLogger(__name__)
 
@@ -197,6 +197,15 @@ MODEL_CONTEXT_WINDOW: dict[str, int] = {
 # fmt: on
 
 
+class UsageSnapshot(NamedTuple):
+    """Immutable snapshot of cumulative usage at a point in time."""
+
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cost_usd: float
+    call_count: int
+
+
 class TokenTracker:
     """Unified token tracker — inject once, call ``record()`` everywhere.
 
@@ -281,6 +290,33 @@ class TokenTracker:
         max_ctx = MODEL_CONTEXT_WINDOW.get(model, 200_000)
         total_input = self._accumulator.total_input_tokens
         return min(total_input / max_ctx * 100, 100.0)
+
+    # -- Per-turn snapshot / delta -----------------------------------------
+
+    def snapshot(self) -> UsageSnapshot:
+        """Capture current cumulative totals as an immutable snapshot."""
+        acc = self._accumulator
+        return UsageSnapshot(
+            total_input_tokens=acc.total_input_tokens,
+            total_output_tokens=acc.total_output_tokens,
+            total_cost_usd=acc.total_cost_usd,
+            call_count=len(acc.calls),
+        )
+
+    def delta_since(self, snap: UsageSnapshot) -> UsageSnapshot:
+        """Compute delta between current state and a previous snapshot."""
+        acc = self._accumulator
+        return UsageSnapshot(
+            total_input_tokens=acc.total_input_tokens - snap.total_input_tokens,
+            total_output_tokens=acc.total_output_tokens - snap.total_output_tokens,
+            total_cost_usd=acc.total_cost_usd - snap.total_cost_usd,
+            call_count=len(acc.calls) - snap.call_count,
+        )
+
+    def context_usage_pct_for(self, model: str, input_tokens: int) -> float:
+        """Context window usage % for a specific input token count."""
+        max_ctx = MODEL_CONTEXT_WINDOW.get(model, 200_000)
+        return min(input_tokens / max_ctx * 100, 100.0)
 
     # -- LangSmith (optional, fire-and-forget) -----------------------------
 
