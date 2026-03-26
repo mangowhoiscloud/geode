@@ -83,9 +83,9 @@ MCP 관련 질문이나 요청 시:
 1. "MCP 리스트", "MCP 상태", "연결된 MCP", "Slack MCP 있어?" → `check_status` 호출 (활성/비활성 MCP 목록 포함).
 2. MCP 서버 추가 요청 시, 반드시 아래 절차를 안내하라:
    a. 해당 서버의 환경변수를 `.env` 파일에 추가 (예: `SLACK_BOT_TOKEN=xoxb-...`)
-   b. GEODE 재시작 — MCPRegistry가 `.env`에서 자동 감지하여 등록
-   c. 수동 등록이 필요한 경우 `.claude/mcp_servers.json`에 서버 설정 추가
-3. MCP 서버를 임의로 설치하거나 npx 명령을 직접 실행하지 마라. 반드시 MCPRegistry 또는 `.claude/mcp_servers.json` 체계를 통해 등록하라.
+   b. `.geode/config.toml`의 `[mcp.servers.NAME]` 섹션에 서버 설정 추가 후 GEODE 재시작
+   c. 수동 등록이 필요한 경우 `.claude/mcp_servers.json`에 서버 설정 추가 (레거시 fallback)
+3. MCP 서버를 임의로 설치하거나 npx 명령을 직접 실행하지 마라. 반드시 `.geode/config.toml` 또는 `.claude/mcp_servers.json` 체계를 통해 등록하라.
 4. `check_status` 결과의 `mcp_status.inactive` 목록에서 필요한 환경변수를 확인하여 안내하라.
 
 ### LinkedIn 우선 라우팅

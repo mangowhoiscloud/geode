@@ -26,6 +26,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.30.0] — 2026-03-27
+
+MCP 카탈로그 단일화 — registry 삭제 + catalog 축소 + config.toml 통합.
+
+### Architecture
+- **MCPRegistry 삭제** — registry.py(257줄) 제거, MCPServerManager.load_config()가 직접 처리
+- **Catalog 검색 전용 축소** — MCPCatalogEntry: package/command/extra_args → install_hint 단일 필드로 통합
+- **config.toml 통합** — .geode/config.toml [mcp.servers] 섹션이 MCP 설정 주소 (mcp_servers.json은 fallback 유지)
+
+### Added
+- `MCPServerManager.get_status()` — MCP 상태 조회 (registry.get_mcp_status() 흡수)
+- `MCPServerManager._load_dotenv_cache()` — dotenv 캐시 초기화 헬퍼
+
+### Removed
+- `core/mcp/registry.py` — MCPRegistry, MCPServerConfig, DEFAULT_SERVERS, AUTO_DISCOVER_SERVERS 삭제
+- MCP 자동 발견(env var 기반 auto-discovery) 제거 — 명시적 config.toml 등록으로 대체
+
+### Changed
+- `MCPCatalogEntry`: package/command/extra_args → install_hint(str) + env_keys 유지
+- `install_mcp_server` 핸들러: install_hint 파싱으로 command/args 도출
+- fetch(E404), google-trends(E404) 카탈로그에서 제거
+
 ## [0.29.1] — 2026-03-26
 
 Action Display — tool-type 그루핑 + 서브에이전트 progressive counter + 턴 끝 컴팩트 요약.
