@@ -26,7 +26,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| kent-beck-p1 | Kent Beck Phase 1 — dry-run 파싱 + Safety 상수 추출 | @mangowhoiscloud | feature/kent-beck-p1 | 2026-03-26 | P0 기계적 추출 |
 
 ### In Review
 
