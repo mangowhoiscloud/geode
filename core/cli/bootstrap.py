@@ -72,6 +72,8 @@ class GeodeBootstrap:
             from core.tools.profile_tools import set_user_profile
 
             global_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
+            if global_dir is None:
+                log.debug("Using default global profile dir: ~/.geode/user_profile")
             project_dir = Path(".geode") / "user_profile"
             set_user_profile(
                 FileBasedUserProfile(
@@ -143,6 +145,8 @@ def bootstrap_geode(
         from core.tools.profile_tools import set_user_profile
 
         global_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
+        if global_dir is None:
+            log.debug("Using default global profile dir: ~/.geode/user_profile")
         project_dir = Path(".geode") / "user_profile"
         user_profile = FileBasedUserProfile(
             global_dir=global_dir,
