@@ -602,6 +602,57 @@ class ToolCallProcessor:
 
         return await self._execute_parallel(tool_blocks)
 
+    def _record_tool_activity(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        result: Any,
+        visible: bool,
+    ) -> None:
+        """Log result, record transcript events, and append to tool_log."""
+        # Progressive log: show tool result summary (skip if already logged)
+        if isinstance(result, dict):
+            skip_log = result.get("skipped") or result.get("recovery_attempted")
+            if not skip_log:
+                self._op_logger.log_tool_result(tool_name, result, visible=visible)
+
+        # Transcript: tool_call + tool_result events
+        if self._transcript is not None:
+            self._transcript.record_tool_call(tool_name, tool_input)
+            status = "error" if isinstance(result, dict) and result.get("error") else "ok"
+            summary = ""
+            if isinstance(result, dict):
+                summary = str(result.get("summary", result.get("error", "")))
+            self._transcript.record_tool_result(tool_name, status, summary)
+
+        self._tool_log.append(
+            {
+                "tool": tool_name,
+                "input": tool_input,
+                "result": result,
+            }
+        )
+
+    def _serialize_tool_result(self, result: Any, block_id: str) -> dict[str, Any]:
+        """Apply token guard and serialize result as JSON for LLM consumption."""
+        # Token guard: truncate oversized results to prevent context explosion
+        # For small-context models (e.g. GLM-5 80K), apply model-aware limit
+        if isinstance(result, dict):
+            model_limit = _compute_model_tool_limit(self._model) if self._model else 0
+            result = _guard_tool_result(result, max_tokens=model_limit or None)
+
+        # Serialize result as JSON for LLM (not Python repr)
+        try:
+            content = json.dumps(result, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            content = str(result)
+
+        return {
+            "type": "tool_result",
+            "tool_use_id": block_id,
+            "content": content,
+        }
+
     async def _execute_single(self, block: Any) -> dict[str, Any]:
         """Execute a single tool_use block and return its processed result dict.
 
@@ -649,45 +700,8 @@ class ToolCallProcessor:
                     "max_clarifications_exceeded": True,
                 }
 
-        # Progressive log: show tool result summary (skip if already logged)
-        skip_log = result.get("skipped") or result.get("recovery_attempted")
-        if isinstance(result, dict) and not skip_log:
-            self._op_logger.log_tool_result(tool_name, result, visible=visible)
-
-        # Transcript: tool_call + tool_result events
-        if self._transcript is not None:
-            self._transcript.record_tool_call(tool_name, tool_input)
-            status = "error" if isinstance(result, dict) and result.get("error") else "ok"
-            summary = ""
-            if isinstance(result, dict):
-                summary = str(result.get("summary", result.get("error", "")))
-            self._transcript.record_tool_result(tool_name, status, summary)
-
-        self._tool_log.append(
-            {
-                "tool": tool_name,
-                "input": tool_input,
-                "result": result,
-            }
-        )
-
-        # Token guard: truncate oversized results to prevent context explosion
-        # For small-context models (e.g. GLM-5 80K), apply model-aware limit
-        if isinstance(result, dict):
-            model_limit = _compute_model_tool_limit(self._model) if self._model else 0
-            result = _guard_tool_result(result, max_tokens=model_limit or None)
-
-        # Serialize result as JSON for LLM (not Python repr)
-        try:
-            content = json.dumps(result, ensure_ascii=False, default=str)
-        except (TypeError, ValueError):
-            content = str(result)
-
-        return {
-            "type": "tool_result",
-            "tool_use_id": block.id,
-            "content": content,
-        }
+        self._record_tool_activity(tool_name, tool_input, result, visible)
+        return self._serialize_tool_result(result, block.id)
 
     async def _execute_sequential(self, tool_blocks: list[Any]) -> list[dict[str, Any]]:
         """Execute tool blocks one by one (single-tool fast path)."""
