@@ -39,6 +39,11 @@ class OpenAIAgenticAdapter:
     - httpx connection pool (parity with Anthropic adapter)
     - CircuitBreaker
     - KeyboardInterrupt → UserCancelledError
+
+    TODO(native-tools): OpenAI native tools (web_search_preview, file_search,
+    code_interpreter) require the Responses API (client.responses.create).
+    Current adapter uses Chat Completions API. Migration planned for v0.30+.
+    See docs/plans/native-tools-integration.md for details.
     """
 
     def __init__(self) -> None:
