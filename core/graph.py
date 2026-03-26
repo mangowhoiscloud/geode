@@ -53,8 +53,7 @@ from core.domains.game_ip.nodes.scoring import scoring_node
 from core.domains.game_ip.nodes.signals import signals_node
 from core.domains.game_ip.nodes.synthesizer import synthesizer_node
 from core.orchestration.bootstrap import BootstrapManager
-from core.orchestration.hook_port import HookSystemPort
-from core.orchestration.hooks import HookEvent
+from core.orchestration.hooks import HookEvent, HookSystem
 from core.state import (
     BiasBusterResult,
     GeodeState,
@@ -90,7 +89,7 @@ _NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
 def _make_hooked_node(
     node_fn: Callable[[GeodeState], dict[str, Any]],
     node_name: str,
-    hooks: HookSystemPort,
+    hooks: HookSystem,
     bootstrap_mgr: BootstrapManager | None = None,
     prompt_assembler: PromptAssembler | None = None,
     node_scope_policy: NodeScopePolicy | None = None,
@@ -376,7 +375,7 @@ def _gather_node(state: GeodeState) -> dict[str, Any]:
 
 def build_graph(
     *,
-    hooks: HookSystemPort | None = None,
+    hooks: HookSystem | None = None,
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     bootstrap_mgr: BootstrapManager | None = None,
@@ -514,7 +513,7 @@ def build_graph(
     return graph
 
 
-def _register_drift_scan_hook(hooks: HookSystemPort) -> None:
+def _register_drift_scan_hook(hooks: HookSystem) -> None:
     """Register a SCORING_COMPLETE handler that triggers CUSUM drift scan.
 
     When the scoring node completes, this hook checks the drift_scan_hint
@@ -553,7 +552,7 @@ def _register_drift_scan_hook(hooks: HookSystemPort) -> None:
 def compile_graph(
     *,
     checkpoint_db: str | None = None,
-    hooks: HookSystemPort | None = None,
+    hooks: HookSystem | None = None,
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     interrupt_before: list[str] | None = None,

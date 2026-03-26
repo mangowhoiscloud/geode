@@ -23,7 +23,7 @@ from core.llm.router import (
     get_secondary_llm_parsed,
 )
 from core.state import AnalysisResult, GeodeState
-from core.tools.port import get_tool_executor
+from core.tools.registry import get_tool_executor
 
 log = logging.getLogger(__name__)
 

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.orchestration.hook_port import HookSystemPort
+    from core.orchestration.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class SnapshotManager:
         self,
         storage_dir: Path | None = None,
         max_recent: int = DEFAULT_MAX_RECENT,
-        hooks: HookSystemPort | None = None,
+        hooks: HookSystem | None = None,
         auto_gc_threshold: int = 0,
     ) -> None:
         self._storage_dir = storage_dir

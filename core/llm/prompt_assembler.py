@@ -16,8 +16,7 @@ from typing import Any
 
 from core.llm.prompts import _hash_prompt
 from core.llm.skill_registry import SkillDefinition, SkillRegistry
-from core.orchestration.hook_port import HookSystemPort
-from core.orchestration.hooks import HookEvent
+from core.orchestration.hooks import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ class PromptAssembler:
         self,
         *,
         skill_registry: SkillRegistry | None = None,
-        hooks: HookSystemPort | None = None,
+        hooks: HookSystem | None = None,
         allow_full_override: bool = False,
         # Token budget configuration
         max_skill_chars: int = 500,

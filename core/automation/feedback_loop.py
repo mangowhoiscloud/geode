@@ -23,7 +23,7 @@ from core.automation.expert_panel import ExpertPanel
 from core.automation.model_registry import ModelRegistry
 
 if TYPE_CHECKING:
-    from core.orchestration.hook_port import HookSystemPort
+    from core.orchestration.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ class FeedbackLoop:
         expert_panel: ExpertPanel | None = None,
         correlation_analyzer: CorrelationAnalyzer | None = None,
         drift_detector: CUSUMDetector | None = None,
-        hooks: HookSystemPort | None = None,
+        hooks: HookSystem | None = None,
         improvement_approver: (Callable[[ImprovementCandidate], bool] | None) = None,
     ) -> None:
         self._model_registry = model_registry
@@ -597,7 +597,7 @@ class FeedbackOrchestrator:
         feedback_loop: FeedbackLoop | None = None,
         drift_detector: CUSUMDetector | None = None,
         expert_panel: ExpertPanel | None = None,
-        hooks: HookSystemPort | None = None,
+        hooks: HookSystem | None = None,
     ) -> None:
         self._feedback_loop = feedback_loop or FeedbackLoop(
             drift_detector=drift_detector,

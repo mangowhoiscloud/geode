@@ -8,6 +8,8 @@ mode-based tool access control.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from core.tools.base import Tool
@@ -16,6 +18,26 @@ if TYPE_CHECKING:
     from core.tools.policy import PolicyChain
 
 log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Tool executor contextvar (NOT in state — functions are not serializable)
+# ---------------------------------------------------------------------------
+
+ToolExecutorCallable = Callable[..., dict[str, Any]]
+
+_tool_executor_ctx: ContextVar[ToolExecutorCallable | None] = ContextVar(
+    "tool_executor", default=None
+)
+
+
+def set_tool_executor(executor: ToolExecutorCallable | None) -> None:
+    """Inject tool executor callable (called by GeodeRuntime.create())."""
+    _tool_executor_ctx.set(executor)
+
+
+def get_tool_executor() -> ToolExecutorCallable | None:
+    """Get injected tool executor. Returns None if not injected."""
+    return _tool_executor_ctx.get()
 
 
 class ToolSearchTool:

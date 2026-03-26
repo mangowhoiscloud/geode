@@ -25,7 +25,7 @@ from core.state import (
     GeodeState,
     SynthesisResult,
 )
-from core.tools.port import get_tool_executor
+from core.tools.registry import get_tool_executor
 
 log = logging.getLogger(__name__)
 

@@ -19,8 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.orchestration.hook_port import HookSystemPort
-from core.orchestration.hooks import HookEvent
+from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.task_system import TaskGraph, TaskStatus
 
 log = logging.getLogger(__name__)
@@ -59,7 +58,7 @@ class TaskGraphHookBridge:
         self._prefix = ip_prefix
         self._evaluator_done_count = 0  # exit + error combined
         self._evaluator_has_error = False
-        self._hooks: HookSystemPort | None = None
+        self._hooks: HookSystem | None = None
 
     @property
     def task_graph(self) -> TaskGraph:
@@ -69,7 +68,7 @@ class TaskGraphHookBridge:
     def evaluator_done_count(self) -> int:
         return self._evaluator_done_count
 
-    def register(self, hooks: HookSystemPort) -> None:
+    def register(self, hooks: HookSystem) -> None:
         """Register NODE_ENTER/EXIT/ERROR handlers on the HookSystem."""
         self._hooks = hooks
         hooks.register(
