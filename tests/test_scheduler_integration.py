@@ -288,19 +288,3 @@ class TestCmdScheduleEnhanced:
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Executed" in output
         assert len(callback_called) == 1
-
-
-# ---------------------------------------------------------------------------
-# SchedulerServicePort protocol compliance
-# ---------------------------------------------------------------------------
-
-
-class TestSchedulerServicePort:
-    """Verify SchedulerService implements SchedulerServicePort."""
-
-    def test_protocol_compliance(self, svc: SchedulerService) -> None:
-        from core.automation.port import (
-            SchedulerServicePort,
-        )
-
-        assert isinstance(svc, SchedulerServicePort)

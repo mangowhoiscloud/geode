@@ -7,7 +7,7 @@ from unittest.mock import patch
 from core.domains.game_ip.nodes.synthesizer import _build_tool_augmented_synthesis, synthesizer_node
 from core.llm.client import ToolCallRecord, ToolUseResult
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
-from core.tools.port import set_tool_executor
+from core.tools.registry import set_tool_executor
 
 
 def _make_state(*, dry_run: bool = False, with_tools: bool = False) -> GeodeState:

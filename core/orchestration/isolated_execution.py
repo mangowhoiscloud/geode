@@ -19,8 +19,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from core.orchestration.hook_port import HookSystemPort
-from core.orchestration.hooks import HookEvent
+from core.orchestration.hooks import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +75,7 @@ class IsolatedRunner:
 
     MAX_CONCURRENT = 5  # Max parallel isolated executions
 
-    def __init__(self, hooks: HookSystemPort | None = None) -> None:
+    def __init__(self, hooks: HookSystem | None = None) -> None:
         self._hooks = hooks
         self._results: dict[str, IsolationResult] = {}
         self._active: dict[str, threading.Thread] = {}

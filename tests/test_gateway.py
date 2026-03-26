@@ -8,13 +8,12 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock, patch
 
-from core.gateway.channel_manager import ChannelManager
+from core.gateway.channel_manager import ChannelManager, get_gateway, set_gateway
 from core.gateway.models import ChannelBinding, InboundMessage
 from core.gateway.pollers.base import BasePoller
 from core.gateway.pollers.discord_poller import DiscordPoller
 from core.gateway.pollers.slack_poller import SlackPoller
 from core.gateway.pollers.telegram_poller import TelegramPoller
-from core.gateway.port import get_gateway, set_gateway
 
 # ---------------------------------------------------------------------------
 # InboundMessage

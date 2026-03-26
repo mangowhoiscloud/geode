@@ -13,7 +13,6 @@ import signal
 import sys
 import termios
 from contextvars import ContextVar
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -84,15 +83,15 @@ from core.config import settings
 from core.llm.commentary import (
     generate_commentary,
 )
-from core.orchestration.hook_port import HookSystemPort
+from core.orchestration.hooks import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
 
 # Hook system context for memory event firing (P1.5)
-_hooks_ctx: ContextVar[HookSystemPort | None] = ContextVar("cli_hooks", default=None)
+_hooks_ctx: ContextVar[HookSystem | None] = ContextVar("cli_hooks", default=None)
 
 
-def _fire_hook(event: Enum, data: dict[str, Any]) -> None:
+def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
     """Fire a hook event if HookSystem is available in context."""
     hooks = _hooks_ctx.get()
     if hooks is not None:
@@ -1575,7 +1574,7 @@ def serve(
 
     # Wire AgenticLoop as gateway processor
     from core.agent.conversation import ConversationContext
-    from core.gateway.port import get_gateway
+    from core.gateway.channel_manager import get_gateway
 
     gateway = get_gateway()
     if gateway is None:

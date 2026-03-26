@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 from core.automation.triggers import CronParser, TriggerManager
 
 if TYPE_CHECKING:
-    from core.orchestration.hook_port import HookSystemPort
+    from core.orchestration.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -311,7 +311,7 @@ class SchedulerService:
     def __init__(
         self,
         trigger_manager: TriggerManager | None = None,
-        hooks: HookSystemPort | None = None,
+        hooks: HookSystem | None = None,
         store_path: Path | None = None,
         log_dir: Path | None = None,
     ) -> None:

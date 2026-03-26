@@ -21,7 +21,7 @@ from core.llm.prompts import (
 )
 from core.llm.router import call_llm_with_tools, get_llm_json, get_llm_parsed
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
-from core.tools.port import get_tool_executor
+from core.tools.registry import get_tool_executor
 
 log = logging.getLogger(__name__)
 

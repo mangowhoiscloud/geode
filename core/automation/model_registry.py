@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.orchestration.hook_port import HookSystemPort
+    from core.orchestration.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ class ModelRegistry:
     def __init__(
         self,
         storage_dir: Path | None = None,
-        hooks: HookSystemPort | None = None,
+        hooks: HookSystem | None = None,
     ) -> None:
         self._versions: dict[str, ModelVersion] = {}
         self._storage_dir = storage_dir

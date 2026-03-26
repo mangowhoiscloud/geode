@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.automation.snapshot import SnapshotManager
-    from core.orchestration.hook_port import HookSystemPort
+    from core.orchestration.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ class TriggerManager:
     def __init__(
         self,
         scheduler_interval_s: float = 60.0,
-        hooks: HookSystemPort | None = None,
+        hooks: HookSystem | None = None,
         snapshot_manager: SnapshotManager | None = None,
     ) -> None:
         self._triggers: dict[str, TriggerConfig] = {}

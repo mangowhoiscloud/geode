@@ -12,8 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.orchestration.hook_port import HookSystemPort
-from core.orchestration.hooks import HookEvent
+from core.orchestration.hooks import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ class BootstrapManager:
             # ... execute node
     """
 
-    def __init__(self, hooks: HookSystemPort) -> None:
+    def __init__(self, hooks: HookSystem) -> None:
         self._hooks = hooks
 
     def prepare_node(self, node_name: str, ip_name: str, state: dict[str, Any]) -> BootstrapContext:

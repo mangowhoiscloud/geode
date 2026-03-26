@@ -34,16 +34,6 @@ from core.automation.expert_panel import ExpertPanel
 from core.automation.feedback_loop import FeedbackLoop
 from core.automation.model_registry import ModelRegistry
 from core.automation.outcome_tracking import OutcomeTracker
-from core.automation.port import (
-    CorrelationAnalyzerPort,
-    DriftDetectorPort,
-    ExpertPanelPort,
-    FeedbackLoopPort,
-    ModelRegistryPort,
-    OutcomeTrackerPort,
-    SnapshotManagerPort,
-    TriggerManagerPort,
-)
 from core.automation.snapshot import SnapshotManager
 from core.automation.triggers import TriggerManager, TriggerType
 from core.config import settings
@@ -52,11 +42,6 @@ from core.domains.port import set_domain
 from core.gateway.auth.cooldown import CooldownTracker
 from core.gateway.auth.profiles import ProfileStore
 from core.gateway.auth.rotation import ProfileRotator
-from core.gateway.auth_port import (
-    CooldownTrackerPort,
-    ProfileRotatorPort,
-    ProfileStorePort,
-)
 from core.llm.providers.openai import OpenAIAdapter
 from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.memory.context import ContextAssembler
@@ -71,28 +56,15 @@ from core.memory.session import InMemorySessionStore
 from core.memory.session_key import build_session_key, build_thread_config
 from core.memory.user_profile import FileBasedUserProfile
 from core.orchestration.coalescing import CoalescingQueue
-from core.orchestration.hook_port import HookSystemPort
 from core.orchestration.hooks import HookEvent, HookSystem
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
-from core.orchestration.orchestration_port import (
-    CoalescingQueuePort,
-    ConfigWatcherPort,
-    LaneQueuePort,
-    RunLogPort,
-    StuckDetectorPort,
-    TaskGraphPort,
-)
 from core.orchestration.run_log import RunLog, RunLogEntry
 from core.orchestration.stuck_detection import StuckDetector
 from core.orchestration.task_bridge import TaskGraphHookBridge
-from core.orchestration.task_system import create_geode_task_graph
+from core.orchestration.task_system import TaskGraph, create_geode_task_graph
 from core.tools.analysis import ExplainScoreTool, PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
-from core.tools.policy import NodeScopePolicy, ToolPolicy
-from core.tools.port import (
-    PolicyChainPort,
-    ToolRegistryPort,
-)
+from core.tools.policy import NodeScopePolicy, PolicyChain, ToolPolicy
 from core.tools.registry import ToolRegistry, ToolSearchTool
 
 log = logging.getLogger(__name__)
@@ -115,7 +87,7 @@ CONFIG_WATCHER_DEBOUNCE_MS = 300.0  # Avoid thrashing on rapid file changes
 
 
 def _make_run_log_handler(
-    run_log: RunLogPort,
+    run_log: RunLog,
     session_key: str,
     run_id: str,
 ) -> tuple[str, Any]:
@@ -142,7 +114,7 @@ def _make_run_log_handler(
 
 
 def _make_stuck_hook_handler(
-    detector: StuckDetectorPort,
+    detector: StuckDetector,
 ) -> tuple[str, Any]:
     """Create hook handlers for stuck detection lifecycle."""
 
@@ -198,7 +170,7 @@ def get_plugin_status() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def _build_default_policies() -> PolicyChainPort:
+def _build_default_policies() -> PolicyChain:
     """Build default PolicyChain with L1-2 profile/org + L3 mode-based restrictions."""
     from core.tools.policy import build_6layer_chain, load_org_policy, load_profile_policy
 
@@ -221,7 +193,7 @@ def _build_default_policies() -> PolicyChainPort:
     return build_6layer_chain(profile=profile, org=org, mode_policies=mode_policies)
 
 
-def _build_default_registry() -> ToolRegistryPort:
+def _build_default_registry() -> ToolRegistry:
     """Build ToolRegistry with all 21 tools registered."""
     registry = ToolRegistry()
     # Analysis (4)
@@ -277,10 +249,10 @@ def _build_default_registry() -> ToolRegistryPort:
     registry.register(SendNotificationTool())
     # Meta-tool: tool_search (enables deferred loading)
     registry.register(ToolSearchTool(registry))
-    return registry  # type: ignore[return-value]
+    return registry
 
 
-def _build_default_lanes() -> LaneQueuePort:
+def _build_default_lanes() -> LaneQueue:
     """Build default LaneQueue with session + global lanes."""
     queue = LaneQueue()
     queue.add_lane("session", max_concurrent=1)  # Serial per session
@@ -295,8 +267,8 @@ def _build_default_lanes() -> LaneQueuePort:
 
 def _make_tool_executor(
     llm_adapter: LLMClientPort,
-    registry: ToolRegistryPort,
-    policy_chain: PolicyChainPort,
+    registry: ToolRegistry,
+    policy_chain: PolicyChain,
 ) -> Any:
     """Create a tool_fn callable that binds generate_with_tools to registry.
 
@@ -345,38 +317,38 @@ def _make_tool_executor(
 class RuntimeCoreConfig:
     """Essential infrastructure parameters (always required)."""
 
-    hooks: HookSystemPort
+    hooks: HookSystem
     session_store: SessionStorePort
-    policy_chain: PolicyChainPort
-    tool_registry: ToolRegistryPort
-    run_log: RunLogPort
+    policy_chain: PolicyChain
+    tool_registry: ToolRegistry
+    run_log: RunLog
     llm_adapter: LLMClientPort
-    coalescing: CoalescingQueuePort
-    config_watcher: ConfigWatcherPort
-    stuck_detector: StuckDetectorPort
-    lane_queue: LaneQueuePort
+    coalescing: CoalescingQueue
+    config_watcher: ConfigWatcher
+    stuck_detector: StuckDetector
+    lane_queue: LaneQueue
     project_memory: ProjectMemoryPort
     session_key: str
     ip_name: str
     secondary_adapter: LLMClientPort | None = None
-    profile_store: ProfileStorePort | None = None
-    profile_rotator: ProfileRotatorPort | None = None
-    cooldown_tracker: CooldownTrackerPort | None = None
+    profile_store: ProfileStore | None = None
+    profile_rotator: ProfileRotator | None = None
+    cooldown_tracker: CooldownTracker | None = None
 
 
 @dataclass
 class RuntimeAutomationConfig:
     """L4.5 Automation components (all optional)."""
 
-    drift_detector: DriftDetectorPort | None = None
-    model_registry: ModelRegistryPort | None = None
-    expert_panel: ExpertPanelPort | None = None
-    correlation_analyzer: CorrelationAnalyzerPort | None = None
-    outcome_tracker: OutcomeTrackerPort | None = None
-    snapshot_manager: SnapshotManagerPort | None = None
-    trigger_manager: TriggerManagerPort | None = None
+    drift_detector: CUSUMDetector | None = None
+    model_registry: ModelRegistry | None = None
+    expert_panel: ExpertPanel | None = None
+    correlation_analyzer: CorrelationAnalyzer | None = None
+    outcome_tracker: OutcomeTracker | None = None
+    snapshot_manager: SnapshotManager | None = None
+    trigger_manager: TriggerManager | None = None
     scheduler_service: Any | None = None
-    feedback_loop: FeedbackLoopPort | None = None
+    feedback_loop: FeedbackLoop | None = None
 
 
 @dataclass
@@ -446,7 +418,7 @@ class GeodeRuntime:
         self.context_assembler = mem.context_assembler
         self.prompt_assembler: PromptAssembler | None = mem.prompt_assembler
         # L4 Task tracking
-        self.task_graph: TaskGraphPort | None = None
+        self.task_graph: TaskGraph | None = None
         self._task_bridge: TaskGraphHookBridge | None = None
 
     # ------------------------------------------------------------------
@@ -460,9 +432,9 @@ class GeodeRuntime:
         run_id: str,
         log_dir: Path | str | None,
         stuck_timeout_s: float,
-    ) -> tuple[HookSystemPort, RunLogPort, StuckDetectorPort]:
+    ) -> tuple[HookSystem, RunLog, StuckDetector]:
         """Build HookSystem with RunLog and StuckDetector handlers."""
-        hooks: HookSystemPort = HookSystem()  # type: ignore[assignment]
+        hooks: HookSystem = HookSystem()
 
         # Run log + hook handler
         run_log = RunLog(session_key, log_dir=log_dir)
@@ -483,7 +455,7 @@ class GeodeRuntime:
             )
 
             register_notification_hooks(
-                hooks,  # type: ignore[arg-type]
+                hooks,
                 channel=settings.notification_channel,
                 recipient=settings.notification_recipient,
             )
@@ -573,7 +545,7 @@ class GeodeRuntime:
     @staticmethod
     def _build_automation(
         *,
-        hooks: HookSystemPort,
+        hooks: HookSystem,
         session_key: str,
         ip_name: str,
         project_memory: ProjectMemoryPort | None = None,
@@ -683,7 +655,7 @@ class GeodeRuntime:
 
     @staticmethod
     def _wire_automation_hooks(
-        hooks: HookSystemPort,
+        hooks: HookSystem,
         *,
         snapshot_manager: Any,
         trigger_manager: Any,
@@ -810,7 +782,7 @@ class GeodeRuntime:
         )
 
     @staticmethod
-    def _build_auth() -> tuple[ProfileStorePort, ProfileRotatorPort, CooldownTrackerPort]:
+    def _build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
         """Build auth profile system with API key profiles."""
         from core.gateway.auth.profiles import AuthProfile, CredentialType
 
@@ -841,7 +813,7 @@ class GeodeRuntime:
     @staticmethod
     def _build_prompt_assembler(
         *,
-        hooks: HookSystemPort,
+        hooks: HookSystem,
         skill_dirs: list[Path] | None = None,
     ) -> PromptAssembler:
         """Build PromptAssembler with SkillRegistry and hook integration (ADR-007)."""
@@ -858,9 +830,9 @@ class GeodeRuntime:
     @staticmethod
     def _build_task_graph(
         *,
-        hooks: HookSystemPort,
+        hooks: HookSystem,
         ip_name: str,
-    ) -> tuple[TaskGraphPort, TaskGraphHookBridge]:
+    ) -> tuple[TaskGraph, TaskGraphHookBridge]:
         """Build TaskGraph and wire the hook bridge for status tracking."""
         prefix = ip_name.lower().replace(" ", "_")
         graph = create_geode_task_graph(ip_name)
@@ -1001,11 +973,10 @@ class GeodeRuntime:
         gateway_enabled=True in settings.
         """
         from core.config import settings
-        from core.gateway.channel_manager import ChannelManager
+        from core.gateway.channel_manager import ChannelManager, set_gateway
         from core.gateway.pollers.discord_poller import DiscordPoller
         from core.gateway.pollers.slack_poller import SlackPoller
         from core.gateway.pollers.telegram_poller import TelegramPoller
-        from core.gateway.port import set_gateway
         from core.mcp.notification_port import get_notification
 
         if not settings.gateway_enabled:
@@ -1438,7 +1409,7 @@ class GeodeRuntime:
         Returns empty dict if no tools are available (dry_run, etc).
         Also injects tool executor into contextvar via ``set_tool_executor()``.
         """
-        from core.tools.port import set_tool_executor
+        from core.tools.registry import set_tool_executor
 
         available = self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
         if not available:

@@ -17,7 +17,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.orchestration.hook_port import HookSystemPort
+    from core.orchestration.hooks import HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ class OutcomeTracker:
     BASE_BACKOFF_S = 60.0  # 1 minute
     MAX_BACKOFF_S = 3600.0  # 1 hour
 
-    def __init__(self, *, hooks: HookSystemPort | None = None) -> None:
+    def __init__(self, *, hooks: HookSystem | None = None) -> None:
         self._jobs: dict[str, OutcomeJob] = {}
         self._outcomes: dict[str, list[OutcomeData]] = {}  # ip_name → outcomes
         self._next_id = 0
