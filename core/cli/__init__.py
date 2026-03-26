@@ -8,17 +8,14 @@ Architecture (OpenClaw-inspired):
 
 from __future__ import annotations
 
-import json as _json
 import logging
 import signal
 import sys
 import termios
-import threading
-from collections import OrderedDict
 from contextvars import ContextVar
 from enum import Enum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import typer
 
@@ -60,7 +57,14 @@ from core.cli.report_renderer import (
 from core.cli.report_renderer import (
     _state_to_report_dict as _state_to_report_dict,
 )
-from core.cli.search import IPSearchEngine
+from core.cli.session_state import _get_last_result as _get_last_result
+from core.cli.session_state import _get_readiness as _get_readiness
+from core.cli.session_state import _get_search_engine as _get_search_engine
+from core.cli.session_state import _result_cache as _result_cache
+from core.cli.session_state import _ResultCache as _ResultCache
+from core.cli.session_state import _scheduler_service_ctx as _scheduler_service_ctx
+from core.cli.session_state import _set_last_result as _set_last_result
+from core.cli.session_state import _set_readiness as _set_readiness
 from core.cli.startup import (
     ReadinessReport,
     auto_generate_env,
@@ -104,121 +108,6 @@ app = typer.Typer(
     no_args_is_help=False,
     invoke_without_command=True,
 )
-
-# Thread-safe singletons for REPL session via contextvars
-_search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
-_readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
-_scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", default=None)
-
-
-# ---------------------------------------------------------------------------
-# Multi-IP LRU analysis result cache
-# ---------------------------------------------------------------------------
-
-_RESULT_CACHE_DIR = Path(".geode/result_cache")
-_RESULT_CACHE_MAX = 8
-
-
-class _ResultCache:
-    """OrderedDict-based LRU cache for pipeline results, with disk persistence."""
-
-    def __init__(self, max_size: int = _RESULT_CACHE_MAX) -> None:
-        self._cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
-        self._max_size = max_size
-        self._lock = threading.Lock()
-        self._load_from_disk()
-
-    def get(self, ip_name: str) -> dict[str, Any] | None:
-        key = ip_name.lower()
-        with self._lock:
-            if key not in self._cache:
-                return None
-            self._cache.move_to_end(key)
-            return self._cache[key]
-
-    def put(self, result: dict[str, Any] | None) -> None:
-        if result is None:
-            return
-        ip_name = result.get("ip_name", "")
-        if not ip_name:
-            return
-        key = ip_name.lower()
-        with self._lock:
-            self._cache[key] = result
-            self._cache.move_to_end(key)
-            while len(self._cache) > self._max_size:
-                self._cache.popitem(last=False)
-        self._persist(key, result)
-
-    def _persist(self, key: str, result: dict[str, Any]) -> None:
-        try:
-            _RESULT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            safe = key.replace(" ", "-")
-            fpath = _RESULT_CACHE_DIR / f"{safe}.json"
-            from pydantic import BaseModel
-
-            def _default(obj: Any) -> Any:
-                if isinstance(obj, BaseModel):
-                    return obj.model_dump()
-                return str(obj)
-
-            fpath.write_text(
-                _json.dumps(result, ensure_ascii=False, default=_default),
-                encoding="utf-8",
-            )
-        except Exception:
-            log.debug("Failed to persist result cache for %s", key, exc_info=True)
-
-    def _load_from_disk(self) -> None:
-        if not _RESULT_CACHE_DIR.exists():
-            return
-        for fpath in sorted(_RESULT_CACHE_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime):
-            try:
-                data = _json.loads(fpath.read_text(encoding="utf-8"))
-                ip = data.get("ip_name", fpath.stem)
-                self._cache[ip.lower()] = data
-            except Exception:
-                log.debug("Failed to load result cache %s", fpath.name, exc_info=True)
-        # Trim to max
-        while len(self._cache) > self._max_size:
-            self._cache.popitem(last=False)
-
-
-_result_cache = _ResultCache()
-
-
-def _get_search_engine() -> IPSearchEngine:
-    """Get or create the context-local IPSearchEngine."""
-    engine = _search_engine_ctx.get()
-    if engine is None:
-        engine = IPSearchEngine()
-        _search_engine_ctx.set(engine)
-    return cast(IPSearchEngine, engine)
-
-
-def _get_readiness() -> ReadinessReport | None:
-    """Get the context-local ReadinessReport."""
-    return cast("ReadinessReport | None", _readiness_ctx.get())
-
-
-def _set_readiness(report: ReadinessReport) -> None:
-    """Set the context-local ReadinessReport."""
-    _readiness_ctx.set(report)
-
-
-def _get_last_result() -> dict[str, Any] | None:
-    """Get the most recently cached pipeline result (any IP)."""
-    if not _result_cache._cache:
-        return None
-    # Last item in OrderedDict = most recent
-    key = next(reversed(_result_cache._cache))
-    return _result_cache._cache[key]
-
-
-def _set_last_result(result: dict[str, Any] | None) -> None:
-    """Cache a pipeline result (multi-IP LRU)."""
-    _result_cache.put(result)
-
 
 # ---------------------------------------------------------------------------
 # Interactive welcome screen
