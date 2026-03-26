@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
   <img src="https://img.shields.io/badge/Opus%204.6-1M%20context-1e293b?style=flat-square" alt="Opus 4.6">
-  <img src="https://img.shields.io/badge/46%20tools-MCP%20native-1e293b?style=flat-square" alt="46 Tools">
+  <img src="https://img.shields.io/badge/47%20tools-MCP%20native-1e293b?style=flat-square" alt="47 Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -63,7 +63,7 @@ uv sync && uv run geode
 | 기능 | 설명 |
 |------|------|
 | **`while(tool_use)` Loop** | 모든 자율 행동의 핵심 프리미티브. 서브에이전트, 계획 실행, 배치 분석 전부 AgenticLoop 인스턴스 |
-| **46 Tools + MCP** | 네이티브 46개 도구 + MCP 카탈로그 42종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
+| **47 Tools + MCP** | 네이티브 47개 도구 + MCP 카탈로그 44종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
 | **Sub-Agent** | 부모 역량 전체 상속, 최대 5 병렬, Token Guard, DAG 의존성 |
 | **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain |
 | **4-Tier Memory** | SOUL → User Profile → Organization → Project → Session |
@@ -79,22 +79,28 @@ uv sync && uv run geode
 
 ```
 geode/
-├── core/                  # 221 modules, 6-Layer Architecture
-│   ├── cli/               # L0: AgenticLoop, SubAgent, Commands
-│   ├── infrastructure/    # L1: Ports (Protocol), LLM/MCP Adapters
-│   ├── memory/            # L2: 4-Tier Memory + SqliteSaver
-│   ├── orchestration/     # L3: Hooks(36), TaskGraph, PlanMode
-│   ├── tools/             # L4: ToolRegistry(46), PolicyChain
-│   ├── domains/           # L5: DomainPort, GameIPDomain
-│   ├── nodes/             # Pipeline nodes (9-node StateGraph)
-│   └── ...                # llm, verification, automation, ui
-├── tests/                 # 3109+ tests
-├── docs/                  # Architecture, Workflow, ADRs
-│   ├── architecture.md    # 6-Layer + Mermaid diagrams
-│   ├── workflow.md        # CANNOT/CAN, GitFlow, Kanban
-│   ├── setup.md           # Installation, API keys, Slack
-│   └── progress.md        # Kanban board (multi-agent shared)
-└── .geode/                # Project-local agent context
+├── core/                          # 221 modules, 6-Layer Architecture
+│   ├── agent/                     # L0: AgenticLoop, ToolCallProcessor, SubAgentManager
+│   ├── cli/                       # L0: REPL, Commands, UI
+│   ├── infrastructure/            # L1: Port/Adapter (Claude, OpenAI, GLM, MCP)
+│   ├── memory/                    # L2: 4-Tier Memory, Context Assembly, User Profile
+│   ├── orchestration/             # L3: HookSystem(36), TaskGraph, PlanMode, Queue
+│   ├── tools/                     # L4: 47 Tool Definitions + Handlers
+│   ├── skills/                    # L4: Skill Templates
+│   ├── mcp/                       # L4: MCP Catalog(44) + Manager
+│   ├── domains/game_ip/           # L5: Game IP Domain Plugin (7 pipeline nodes)
+│   ├── gateway/                   # Slack Gateway (geode serve)
+│   ├── llm/                       # LLM Client + Prompts
+│   └── verification/              # Guardrails, BiasBuster, Cross-LLM
+├── tests/                         # 3181+ tests
+├── docs/                          # Architecture, Workflow, Plans
+│   ├── architecture.md            # 6-Layer + Mermaid diagrams
+│   ├── workflow.md                # CANNOT/CAN, GitFlow, Kanban
+│   ├── setup.md                   # Installation, API keys, Slack
+│   └── progress.md                # Kanban board (multi-agent shared)
+├── .geode/                        # Project-local agent context
+├── CLAUDE.md                      # Agent behavior rules (SOT)
+└── pyproject.toml                 # uv package config
 ```
 
 [Architecture details →](docs/architecture.md) | [Full source tree →](docs/architecture.md#project-structure)

@@ -39,11 +39,11 @@ graph TB
     end
 
     subgraph L4["L4 — Extensibility"]
-        Tools["ToolRegistry (46)"]
+        Tools["ToolRegistry (47)"]
         Policy["PolicyChain"]
         Reports["Report Generator"]
         Skills["Skills System"]
-        MCPCat["MCP Catalog (42)"]
+        MCPCat["MCP Catalog (44)"]
     end
 
     subgraph L5["L5 — Domain Plugins"]
@@ -71,7 +71,7 @@ graph TB
 | **L1** Infra | Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters | Port/Adapter DI — `contextvars` 주입 |
 | **L2** Memory | SOUL → User Profile → Organization → Project → Session (4-Tier), SqliteSaver | 계층적 메모리 + LangGraph 체크포인트 |
 | **L3** Orchestration | HookSystem (36 events), TaskGraph DAG, PlanMode, CoalescingQueue | 라이프사이클 이벤트, 동시성 제어 |
-| **L4** Extensibility | ToolRegistry (46), PolicyChain, Skills, MCP Catalog (42) | 런타임 tool/skill 확장, MCP 자동설치 |
+| **L4** Extensibility | ToolRegistry (47), PolicyChain, Skills, MCP Catalog (44) | 런타임 tool/skill 확장, MCP 자동설치 |
 | **L5** Domain Plugins | DomainPort Protocol, GameIPDomain, LangGraph StateGraph | 도메인별 파이프라인 플러그인 교체 |
 
 ---
@@ -155,7 +155,7 @@ flowchart LR
 | 경로 | 도구 수 | 승인 방식 |
 |------|--------|----------|
 | Built-in Tools | 46 | SAFE 자동승인, STANDARD 실행, WRITE HITL 승인 |
-| MCP Tools | 카탈로그 42종 | AUTO_APPROVED 서버 4종 자동승인, 그 외 초회 승인 |
+| MCP Tools | 카탈로그 44종 | AUTO_APPROVED 서버 4종 자동승인, 그 외 초회 승인 |
 | Bash | shell 명령 | SAFE_BASH_PREFIXES 41종 자동승인, 9종 차단, 그 외 HITL |
 
 ---
@@ -366,7 +366,7 @@ graph TB
         Registry["ToolRegistry<br/>46 base tools"]
         Policy["PolicyChain"]
         SkillReg["SkillRegistry<br/>(auto-inject)"]
-        MCPInstall["MCP Auto-Install<br/>(42 catalog)"]
+        MCPInstall["MCP Auto-Install<br/>(44 catalog)"]
     end
 
     subgraph MCPAdapters["MCP Adapters (4 active)"]
@@ -397,7 +397,7 @@ graph TB
 - **MCP Adapters** — Brave Search, Steam, LinkedIn, Memory (env var 비어있으면 graceful skip)
 - **MCP Server** — `uv run python -m core.mcp_server` 로 GEODE를 외부 에이전트에서 호출 가능 (6 tools, 2 resources)
 - **Skills** — `.claude/skills/` 자동 발견 + YAML frontmatter 기반 도구 핫 리로드
-- **MCP 자동설치** — `install_mcp_server` tool → 42개 카탈로그 검색 + 설치 + `refresh_tools()`
+- **MCP 자동설치** — `install_mcp_server` tool → 44개 카탈로그 검색 + 설치 + `refresh_tools()`
 
 ### Domain Plugin
 

@@ -42,7 +42,7 @@ L0: CLI & AGENT      — Typer CLI, AgenticLoop, SubAgentManager, Batch
 L1: INFRASTRUCTURE   — Ports (Protocol), ClaudeAdapter, OpenAIAdapter, MCP Adapters
 L2: MEMORY           — Organization > Project > Session + User Profile (4-Tier + Hybrid L1/L2)
 L3: ORCHESTRATION    — HookSystem(36), TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue
-L4: EXTENSIBILITY    — ToolRegistry(46), PolicyChain, Skills, MCP Catalog(43), Reports
+L4: EXTENSIBILITY    — ToolRegistry(47), PolicyChain, Skills, MCP Catalog(44), Reports
 L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 ```
 
@@ -181,7 +181,7 @@ Decision Tree on D-E-F axes:
 
 ## Tool Routing (AgenticLoop Direct)
 
-모든 자유 텍스트 입력은 AgenticLoop로 직행한다. Claude가 46개 도구 정의를 직접 보고 tool_use로 자율 선택한다.
+모든 자유 텍스트 입력은 AgenticLoop로 직행한다. Claude가 47개 도구 정의를 직접 보고 tool_use로 자율 선택한다.
 
 - `/command` -> commands.py 슬래시 커맨드 디스패치
 - 자유 텍스트 -> AgenticLoop.run() (while tool_use 루프)
