@@ -254,6 +254,31 @@ graph TB
     style Workers fill:#1e293b,stroke:#10b981,color:#e2e8f0
 ```
 
+### CoalescingQueue + TaskGraph: 왜 둘 다 필요한가
+
+직교하는 두 문제를 각각 해결합니다.
+
+**TaskGraph (DAG)** — 구조적 관심사.
+태스크 간 의존성을 모델링하여 "무엇을 어떤 순서로" 실행할지 결정합니다.
+독립적인 태스크는 병렬로, 의존성이 있는 태스크는 순차로 스케줄링합니다.
+DAG만 있으면 5개 에이전트가 같은 웹페이지를 동시에 요청해도 5번 실행됩니다.
+
+**CoalescingQueue** — 시간적 관심사.
+250ms 윈도우 내 동일 요청을 병합하여 "언제, 몇 번" 실행할지 제어합니다.
+Queue만 있으면 중복은 제거하지만 실행 순서를 보장하지 못합니다.
+
+```
+CoalescingQueue (temporal)          TaskGraph (structural)
+┌─────────────────────┐            ┌─────────────────────┐
+│ 250ms window        │            │ DAG dependency       │
+│ dedup identical     │     →      │ parallel if independent │
+│ rate limit          │            │ sequential if dependent │
+│ "언제, 몇 번"       │            │ "무엇을, 어떤 순서로"  │
+└─────────────────────┘            └─────────────────────┘
+```
+
+**Karpathy "Dumb Platform" 원칙**: Queue/DAG는 외부 시스템 제약(rate limit, 타임아웃)을 다루므로 가장 마지막에 LLM으로 이전되는 레이어입니다. 현재는 코드로 강제하지만, 모델이 자원 한계를 이해하게 되면 프롬프트 기반 소프트 제어로 전환할 수 있습니다.
+
 | 제어 | 값 | 설명 |
 |------|-----|------|
 | **max_depth** | 2 | 재귀 위임 최대 깊이 (Root=0 → depth 2) |

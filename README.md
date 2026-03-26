@@ -129,7 +129,7 @@ graph LR
 graph LR
     L0["L0 CLI & Agent<br/>AgenticLoop, SubAgent"] --> L1["L1 Infra<br/>Port/Adapter DI"]
     L0 --> L3["L3 Orchestration<br/>Hooks, TaskGraph"]
-    L0 --> L4["L4 Extensibility<br/>Tools(46), MCP(42)"]
+    L0 --> L4["L4 Extensibility<br/>Tools(47), MCP(44)"]
     L4 --> L5["L5 Domain<br/>DomainPort Plugin"]
     L0 --> L2["L2 Memory<br/>4-Tier + Checkpoint"]
 
@@ -147,7 +147,7 @@ graph LR
 | **L1** | Protocol ports + contextvars DI | `core/infrastructure/ports/` |
 | **L2** | SOUL → User → Org → Project → Session | `core/memory/` |
 | **L3** | HookSystem(36), TaskGraph DAG, PlanMode | `core/orchestration/` |
-| **L4** | ToolRegistry(46), MCP Catalog(42), Skills | `core/tools/` |
+| **L4** | ToolRegistry(47), MCP Catalog(44), Skills | `core/tools/` |
 | **L5** | DomainPort Protocol, GameIPDomain | `core/domains/` |
 
 [Architecture details →](docs/architecture.md)
@@ -159,10 +159,31 @@ alloc → own(.owner) → execute(isolated) → free(worktree remove)
 ```
 
 ```
-feature/<task> ──PR──▸ develop ──PR──▸ main (CI 필수)
+feature/<task> ──PR──▸ develop ──PR──▸ main
 ```
 
-**3-Checkpoint**: (1) alloc (Backlog→In Progress) → (2) merge (PR→Done) → (3) verify (session start)
+**CI Ratchet — 5-Job Gate**
+
+PR은 CI 5개 Job이 모두 통과해야 머지됩니다. 실패 시 Claude Code가 자동으로 원인을 분석하고 수정한 뒤 재시도합니다.
+사람이 개입하지 않아도 pytest, mypy, ruff, import-order, test-count 게이트를 반복적으로 통과할 때까지 루프합니다.
+
+테스트 수는 단조증가만 허용됩니다(Ratchet). 기존 테스트를 삭제하면 CI가 거부합니다.
+이 구조 덕분에 436 PR을 24 세션에 걸쳐 머지하면서 회귀를 한 건도 발생시키지 않았습니다.
+
+```
+while CI fails:
+    Claude Code → analyze failure → fix → push → re-run CI
+```
+
+| Job | 역할 | 실패 시 |
+|-----|------|---------|
+| `pytest` | 3,181 테스트 전체 실행 | 실패 테스트 자동 수정 후 재시도 |
+| `mypy` | 타입 체크 strict 모드 | 타입 힌트 추가 후 재시도 |
+| `ruff` | 린트 + 포매팅 | auto-fix 적용 후 재시도 |
+| `import-order` | 임포트 정렬 검증 | isort 적용 후 재시도 |
+| `test-count` | 테스트 수 단조증가 검증 | 삭제된 테스트 복원 또는 대체 작성 |
+
+**3-Checkpoint**: (1) alloc (Backlog→In Progress) → (2) merge (PR→Done, CI 5/5 필수) → (3) verify (다음 세션 시작 시 이전 상태 교차 검증)
 
 [Development Workflow →](docs/workflow.md)
 
@@ -187,7 +208,7 @@ main-only 수정. 3-Checkpoint 필수. TaskCreate ↔ 칸반 task_id 1:1 매핑.
 
 주요 구성:
 - **Agentic Loop**: Claude Opus 4.6 기반 `while(tool_use)` 루프. max 50 rounds, 1M context.
-- **Tool Hierarchy**: Built-in(46) + MCP(42) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
+- **Tool Hierarchy**: Built-in(46) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
 - **Sub-Agent**: 부모 역량 전체 상속, MAX_CONCURRENT=5, Token Guard.
 - **Memory**: SOUL → User Profile → Organization → Project → Session. ContextAssembler 280자 압축.
 - **Domain Plugin**: `DomainPort` Protocol로 파이프라인 교체. Game IP 기본 탑재 (LangGraph 9-node).
