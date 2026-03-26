@@ -1005,7 +1005,7 @@ class GeodeRuntime:
         from core.gateway.pollers.discord_poller import DiscordPoller
         from core.gateway.pollers.slack_poller import SlackPoller
         from core.gateway.pollers.telegram_poller import TelegramPoller
-        from core.infrastructure.ports.gateway_port import set_gateway
+        from core.gateway.port import set_gateway
         from core.mcp.notification_port import get_notification
 
         if not settings.gateway_enabled:
