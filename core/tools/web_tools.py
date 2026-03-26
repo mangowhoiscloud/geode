@@ -99,7 +99,7 @@ class GeneralWebSearchTool:
         max_results: int = kwargs.get("max_results", 5)
 
         try:
-            from core.config import ANTHROPIC_BUDGET, settings
+            from core.config import ANTHROPIC_PRIMARY, settings
             from core.llm.router import get_anthropic_client
 
             if not settings.anthropic_api_key:
@@ -108,7 +108,7 @@ class GeneralWebSearchTool:
             today = date.today()
             client = get_anthropic_client()
             response = client.messages.create(
-                model=ANTHROPIC_BUDGET,
+                model=ANTHROPIC_PRIMARY,
                 max_tokens=1024,
                 tools=[{"type": "web_search_20260209", "name": "web_search"}],
                 messages=[

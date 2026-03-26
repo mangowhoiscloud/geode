@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.config import ANTHROPIC_BUDGET
+from core.config import ANTHROPIC_PRIMARY
 from core.domains.game_ip.fixtures import load_fixture
 
 log = logging.getLogger(__name__)
@@ -440,7 +440,7 @@ class WebSearchTool:
 
             client = get_anthropic_client()
             response = client.messages.create(
-                model=ANTHROPIC_BUDGET,
+                model=ANTHROPIC_PRIMARY,
                 max_tokens=1024,
                 tools=[{"type": "web_search_20260209", "name": "web_search"}],
                 messages=[
