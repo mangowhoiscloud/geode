@@ -249,6 +249,7 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
                 tool_executor=tool_executor,
                 temperature=0.3,
                 max_tool_rounds=2,
+                model=get_node_model("evaluator"),
             )
             if result.text:
                 data = json.loads(result.text)

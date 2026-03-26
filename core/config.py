@@ -430,10 +430,26 @@ def load_routing_config(path: Path | None = None) -> RoutingConfig:
         return _routing_config_cache
 
 
+# Pipeline nodes ALWAYS use these models regardless of user's REPL model.
+# When routing.toml has no per-node config, these defaults prevent
+# fallback to settings.model (the user's active REPL model like glm-5).
+_PIPELINE_NODE_DEFAULTS: dict[str, str] = {
+    "analyst": ANTHROPIC_PRIMARY,
+    "evaluator": ANTHROPIC_PRIMARY,
+    "scoring": ANTHROPIC_PRIMARY,
+    "synthesizer": ANTHROPIC_PRIMARY,
+}
+
+
 def get_node_model(node_name: str) -> str | None:
-    """Return the model for a pipeline node, or None for default fallback."""
+    """Return the model for a pipeline node, or None for default fallback.
+
+    Priority: routing.toml > _PIPELINE_NODE_DEFAULTS > None.
+    Pipeline nodes (analyst, evaluator, scoring, synthesizer) always return
+    a fixed model so they never inherit the user's REPL model.
+    """
     cfg = load_routing_config()
-    return cfg.nodes.get(node_name) or None
+    return cfg.nodes.get(node_name) or _PIPELINE_NODE_DEFAULTS.get(node_name)
 
 
 def reset_routing_cache() -> None:

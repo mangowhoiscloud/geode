@@ -94,6 +94,13 @@ def _build_analysis_handlers(
             return _clarify("analyze_ip", ["ip_name"], "어떤 IP를 분석할까요?")
         dry_run = kwargs.get("dry_run", force_dry)
         result = _run_analysis(ip_name, dry_run=dry_run, verbose=verbose)
+        # Pipeline cost/model notice for live runs (non-dry-run)
+        pipeline_notice: str | None = None
+        if not dry_run:
+            pipeline_notice = (
+                "이 분석은 claude-opus-4-6 (Primary) + gpt-5.4 (Cross-LLM)을 사용합니다. "
+                "예상: ~8 LLM 호출, ~$0.15, ~15초."
+            )
         if result is None:
             return {"error": f"Analysis failed for '{ip_name}'"}
         # Extract analyst summaries for LLM context
@@ -111,7 +118,7 @@ def _build_analysis_handlers(
         synthesis = result.get("synthesis")
         if synthesis is not None and hasattr(synthesis, "model_dump"):
             synthesis = synthesis.model_dump()
-        return {
+        out: dict[str, Any] = {
             "status": "ok",
             "action": "analyze",
             "ip_name": result.get("ip_name", ip_name),
@@ -124,6 +131,9 @@ def _build_analysis_handlers(
             ),
             "analyses": analyses_summary,
         }
+        if pipeline_notice:
+            out["pipeline_notice"] = pipeline_notice
+        return out
 
     def handle_search_ips(**kwargs: Any) -> dict[str, Any]:
         query = kwargs.get("query", "")

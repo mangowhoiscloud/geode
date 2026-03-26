@@ -360,6 +360,7 @@ def _build_tool_augmented_synthesis(
             tools=tool_defs,
             tool_executor=get_tool_executor(),
             max_tool_rounds=3,
+            model=get_node_model("synthesizer"),
         )
         if result.text:
             return SynthesisResult(

@@ -139,6 +139,7 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
                 tool_executor=tool_executor,
                 temperature=0.5,
                 max_tool_rounds=2,
+                model=get_node_model("analyst"),
             )
             if result.text:
                 data = json.loads(result.text)

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 from core.config import (
+    _PIPELINE_NODE_DEFAULTS,
+    ANTHROPIC_PRIMARY,
     RoutingConfig,
     get_node_model,
     load_routing_config,
@@ -84,12 +86,20 @@ class TestLoadRoutingConfig:
 class TestGetNodeModel:
     """get_node_model() integration."""
 
-    def test_no_config_returns_none(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_no_config_returns_pipeline_defaults(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Pipeline nodes return fixed defaults even without routing.toml."""
         import core.config as cfg
 
         monkeypatch.setattr(cfg, "ROUTING_CONFIG_PATH", tmp_path / "nope.toml")
-        assert get_node_model("analyst") is None
-        assert get_node_model("evaluator") is None
+        # Pipeline nodes get fixed defaults (never None → never inherit REPL model)
+        assert get_node_model("analyst") == ANTHROPIC_PRIMARY
+        assert get_node_model("evaluator") == ANTHROPIC_PRIMARY
+        assert get_node_model("scoring") == ANTHROPIC_PRIMARY
+        assert get_node_model("synthesizer") == ANTHROPIC_PRIMARY
+        # Non-pipeline nodes still return None
+        assert get_node_model("unknown_node") is None
 
     def test_configured_node_returns_model(
         self,
@@ -107,4 +117,34 @@ class TestGetNodeModel:
         )
         monkeypatch.setattr(cfg, "ROUTING_CONFIG_PATH", toml_file)
         assert get_node_model("analyst") == "claude-sonnet-4-6"
-        assert get_node_model("evaluator") is None  # not configured → fallback
+        # evaluator not in routing.toml → falls back to pipeline default
+        assert get_node_model("evaluator") == ANTHROPIC_PRIMARY
+
+    def test_pipeline_node_defaults_cover_all_nodes(self) -> None:
+        """Verify _PIPELINE_NODE_DEFAULTS covers analyst/evaluator/scoring/synthesizer."""
+        expected_nodes = {"analyst", "evaluator", "scoring", "synthesizer"}
+        assert set(_PIPELINE_NODE_DEFAULTS.keys()) == expected_nodes
+        # All defaults must be ANTHROPIC_PRIMARY
+        for node, model in _PIPELINE_NODE_DEFAULTS.items():
+            assert model == ANTHROPIC_PRIMARY, f"{node} default should be {ANTHROPIC_PRIMARY}"
+
+    def test_routing_toml_overrides_pipeline_defaults(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """routing.toml takes priority over _PIPELINE_NODE_DEFAULTS."""
+        import core.config as cfg
+
+        toml_file = tmp_path / "routing.toml"
+        toml_file.write_text(
+            textwrap.dedent("""\
+            [nodes]
+            analyst = "glm-5"
+            """)
+        )
+        monkeypatch.setattr(cfg, "ROUTING_CONFIG_PATH", toml_file)
+        # Explicit routing.toml override takes priority
+        assert get_node_model("analyst") == "glm-5"
+        # Others still use pipeline defaults
+        assert get_node_model("evaluator") == ANTHROPIC_PRIMARY
