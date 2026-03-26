@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-27 (세션 41 — prompt-cleanup #476 + hook-extract #477 Done. fixtures-cleanup 진행 중)
+> 마지막 갱신: 2026-03-27 (세션 42 — port-cleanup-3 #479 In Review. runtime-decompose + claude-md-skill-cleanup P0 추가)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -18,6 +18,8 @@
 | ~~kent-beck-p4~~ | ~~Kent Beck Phase 4 — runtime + agentic_loop 추출 (~265줄 감소)~~ | ~~P1~~ | ~~#465~~ | **Done** |
 | ~~task-tools~~ | ~~Task Tool 노출 — task_create/update/get/list/stop + definitions.json + handlers~~ | ~~P1~~ | ~~#466~~ | **Done** |
 | ~~kent-beck-p5~~ | ~~Kent Beck Phase 5 — 핸들러 레지스트리 + Executor 분해~~ | ~~P2~~ | ~~#467~~ | **Done** |
+| runtime-decompose | runtime.py God Object 분해 — _build_automation/_build_gateway 등 도메인별 모듈 분리 (~265줄 감소) | P0 | — | Kent Beck Phase 4, partial 상태 |
+| claude-md-skill-cleanup | CLAUDE.md clean-architecture / architecture-patterns linked skill 제거 | P0 | — | 낮은 작업량, 일관성 |
 | action-summary | Action Summary — 결정론적 Tier1 + LLM 내러티브 Tier2 (opt-in) | P1 | action-summary-system.md | 유저 피드백 기반 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~#470~~ | **Done** |
@@ -36,6 +38,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+| port-cleanup-3 | memory/port.py 단일 구현 Protocol 3개 삭제 + calendar_bridge automation/ 이동 | #479 | @mangowhoiscloud | pending | |
 
 ### Done (2026-03-27 — 세션 41)
 
