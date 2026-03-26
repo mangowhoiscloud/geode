@@ -85,7 +85,7 @@ class TestCallLlmFailover:
         mock_response.content = [mock_block]
         mock_client_fn.return_value.messages.create.return_value = mock_response
 
-        result = call_llm("sys", "usr", model="test")
+        result = call_llm("sys", "usr", model="claude-test")
         assert result == "response text"
 
     @patch("core.llm.client.time.sleep")
@@ -102,7 +102,7 @@ class TestCallLlmFailover:
 
         mock_client_fn.return_value.messages.create.side_effect = [rate_err, mock_response]
 
-        result = call_llm("sys", "usr", model="test")
+        result = call_llm("sys", "usr", model="claude-test")
         assert result == "recovered"
 
 
