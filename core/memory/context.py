@@ -13,12 +13,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-from core.memory.port import (
-    OrganizationMemoryPort,
-    ProjectMemoryPort,
-    SessionStorePort,
-    UserProfilePort,
-)
+from core.memory.organization import MonoLakeOrganizationMemory
+from core.memory.port import SessionStorePort
+from core.memory.project import ProjectMemory
+from core.memory.user_profile import FileBasedUserProfile
 
 log = logging.getLogger(__name__)
 
@@ -63,10 +61,10 @@ class ContextAssembler:
     def __init__(
         self,
         *,
-        organization_memory: OrganizationMemoryPort | None = None,
-        project_memory: ProjectMemoryPort | None = None,
+        organization_memory: MonoLakeOrganizationMemory | None = None,
+        project_memory: ProjectMemory | None = None,
         session_store: SessionStorePort | None = None,
-        user_profile: UserProfilePort | None = None,
+        user_profile: FileBasedUserProfile | None = None,
         freshness_threshold_s: float = DEFAULT_FRESHNESS_THRESHOLD_S,
         run_log_dir: Path | str | None = None,
         project_journal: Any | None = None,

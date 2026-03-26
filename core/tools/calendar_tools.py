@@ -216,7 +216,7 @@ class CalendarSyncSchedulerTool:
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
-        from core.orchestration.calendar_bridge import get_calendar_bridge
+        from core.automation.calendar_bridge import get_calendar_bridge
 
         bridge = get_calendar_bridge()
         if bridge is None:

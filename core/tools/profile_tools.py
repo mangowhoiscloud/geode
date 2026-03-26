@@ -13,22 +13,22 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
-from core.memory.port import UserProfilePort
+from core.memory.user_profile import FileBasedUserProfile
 
 log = logging.getLogger(__name__)
 
 # Thread-safe user profile via contextvars
-_user_profile_ctx: ContextVar[UserProfilePort | None] = ContextVar(
+_user_profile_ctx: ContextVar[FileBasedUserProfile | None] = ContextVar(
     "user_profile_tools", default=None
 )
 
 
-def set_user_profile(profile: UserProfilePort | None) -> None:
+def set_user_profile(profile: FileBasedUserProfile | None) -> None:
     """Set the context-local user profile for profile tools."""
     _user_profile_ctx.set(profile)
 
 
-def get_user_profile() -> UserProfilePort | None:
+def get_user_profile() -> FileBasedUserProfile | None:
     """Get the context-local user profile."""
     return _user_profile_ctx.get()
 

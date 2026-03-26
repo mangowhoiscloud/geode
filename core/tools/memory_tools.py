@@ -16,11 +16,9 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
-from core.memory.port import (
-    OrganizationMemoryPort,
-    ProjectMemoryPort,
-    SessionStorePort,
-)
+from core.memory.organization import MonoLakeOrganizationMemory
+from core.memory.port import SessionStorePort
+from core.memory.project import ProjectMemory
 from core.memory.session import InMemorySessionStore
 
 log = logging.getLogger(__name__)
@@ -29,10 +27,10 @@ log = logging.getLogger(__name__)
 _default_session_store_ctx: ContextVar[SessionStorePort | None] = ContextVar(
     "default_session_store", default=None
 )
-_project_memory_ctx: ContextVar[ProjectMemoryPort | None] = ContextVar(
+_project_memory_ctx: ContextVar[ProjectMemory | None] = ContextVar(
     "project_memory_tools", default=None
 )
-_org_memory_ctx: ContextVar[OrganizationMemoryPort | None] = ContextVar(
+_org_memory_ctx: ContextVar[MonoLakeOrganizationMemory | None] = ContextVar(
     "org_memory_tools", default=None
 )
 
@@ -42,12 +40,12 @@ def set_default_session_store(store: SessionStorePort) -> None:
     _default_session_store_ctx.set(store)
 
 
-def set_project_memory(mem: ProjectMemoryPort | None) -> None:
+def set_project_memory(mem: ProjectMemory | None) -> None:
     """Set the context-local project memory for memory tools."""
     _project_memory_ctx.set(mem)
 
 
-def set_org_memory(mem: OrganizationMemoryPort | None) -> None:
+def set_org_memory(mem: MonoLakeOrganizationMemory | None) -> None:
     """Set the context-local organization memory for memory tools."""
     _org_memory_ctx.set(mem)
 
@@ -382,11 +380,6 @@ class RuleCreateTool:
         if proj is None:
             return {"result": {"created": False, "error": "Project memory not available"}}
 
-        from core.memory.project import ProjectMemory
-
-        if not isinstance(proj, ProjectMemory):
-            return {"result": {"created": False, "error": "Project memory type mismatch"}}
-
         success = proj.create_rule(rule_name, paths, content)
         return {
             "result": {
@@ -436,11 +429,6 @@ class RuleUpdateTool:
         if proj is None:
             return {"result": {"updated": False, "error": "Project memory not available"}}
 
-        from core.memory.project import ProjectMemory
-
-        if not isinstance(proj, ProjectMemory):
-            return {"result": {"updated": False, "error": "Project memory type mismatch"}}
-
         success = proj.update_rule(rule_name, content)
         return {
             "result": {
@@ -481,11 +469,6 @@ class RuleDeleteTool:
         if proj is None:
             return {"result": {"deleted": False, "error": "Project memory not available"}}
 
-        from core.memory.project import ProjectMemory
-
-        if not isinstance(proj, ProjectMemory):
-            return {"result": {"deleted": False, "error": "Project memory type mismatch"}}
-
         success = proj.delete_rule(rule_name)
         return {
             "result": {
@@ -521,11 +504,6 @@ class RuleListTool:
         if proj is None:
             return {"result": {"rules": [], "error": "Project memory not available"}}
 
-        from core.memory.project import ProjectMemory
-
-        if not isinstance(proj, ProjectMemory):
-            return {"result": {"rules": [], "error": "Project memory type mismatch"}}
-
         rules = proj.list_rules()
         return {
             "result": {
@@ -556,11 +534,6 @@ class NoteSaveTool:
         proj = _project_memory_ctx.get()
         if proj is None:
             return {"error": "Project memory not available"}
-
-        from core.memory.project import ProjectMemory
-
-        if not isinstance(proj, ProjectMemory):
-            return {"error": "Project memory type mismatch"}
 
         note_text = f"**{key}**: {content}"
         proj.add_insight(note_text)
