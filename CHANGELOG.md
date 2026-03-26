@@ -26,6 +26,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.28.0] — 2026-03-26
+
+Signal Tools MCP 라이브 연동 — 5종 stub→MCP-first+fixture fallback 전환.
+
+### Added
+- **Signal Tools MCP Live Integration** — 5개 signal stub 도구를 MCP-first + fixture fallback 패턴으로 전환. YouTube(youtube MCP), Reddit(reddit MCP), Twitch(igdb MCP), Steam(steam MCP), Google Trends(google-trends MCP) 서버 연동. `source` 필드로 데이터 출처 추적 (`*_mcp_live` / `*_api_stub`).
+- **MCP DEFAULT_SERVERS 확장** — reddit, google-trends를 키 불필요 기본 서버로 등록. youtube-transcript 카탈로그 항목 추가.
+- **Signal MCP 테스트 28건** — MCP 라이브 경로, fixture 폴백, 에러 핸들링 검증.
+
 ## [0.27.1] — 2026-03-26
 
 모델 스위칭 컨텍스트 가드 — Opus→GLM-5 전환 시 overflow 방지.

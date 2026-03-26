@@ -273,6 +273,12 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         description="Browser automation via Playwright (navigate, click, scrape)",
         tags=("browser", "playwright", "automation", "scrape"),
     ),
+    "youtube-transcript": MCPCatalogEntry(
+        name="youtube-transcript",
+        package="@fabriqa.ai/youtube-transcript-mcp@latest",
+        description="YouTube video transcript extraction with language selection and timestamps",
+        tags=("youtube", "transcript", "video", "chapter", "subtitle", "timeline"),
+    ),
     # --- Financial ---
     "financial-datasets": MCPCatalogEntry(
         name="financial-datasets",
