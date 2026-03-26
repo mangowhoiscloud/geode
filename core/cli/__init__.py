@@ -926,15 +926,28 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
 
     # --- Unified bootstrap (domain, memory, readiness, MCP, skills) ---
     from core.cli.bootstrap import bootstrap_geode
+    from core.cli.ui.status import TextSpinner
 
-    console.print("  [dim]Initializing...[/dim]", end="\r")
+    spinner = TextSpinner("Initializing...")
+    spinner.start()
+
     boot = bootstrap_geode()
     mcp_mgr = boot.mcp_manager
     skill_registry = boot.skill_registry
 
-    n_mcp = len(mcp_mgr._servers) if mcp_mgr and hasattr(mcp_mgr, "_servers") else 0
+    # Eagerly connect MCP servers with live progress
+    n_total = len(mcp_mgr._servers) if mcp_mgr and hasattr(mcp_mgr, "_servers") else 0
+    n_connected = 0
+    if mcp_mgr and n_total > 0:
+        spinner.update(f"Loading MCP (0/{n_total})...")
+
+        def _on_mcp_progress(done: int, total: int, name: str) -> None:
+            spinner.update(f"Loading MCP ({done}/{total})...")
+
+        n_connected = mcp_mgr.startup(on_progress=_on_mcp_progress)
+
     n_skills = len(skill_registry._skills) if hasattr(skill_registry, "_skills") else 0
-    console.print(f"  [bold green]ok[/bold green] Bootstrap (MCP {n_mcp}, Skills {n_skills})")
+    spinner.stop(f"\x1b[1;32mok\x1b[0m Bootstrap (MCP {n_connected}/{n_total}, Skills {n_skills})")
 
     # Key gate (REPL-only: interactive prompt if API key missing)
     readiness = boot.readiness

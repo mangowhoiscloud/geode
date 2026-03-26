@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import signal
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -107,13 +108,22 @@ class MCPServerManager:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def startup(self) -> int:
+    def startup(
+        self,
+        *,
+        on_progress: Callable[[int, int, str], None] | None = None,
+    ) -> int:
         """Full lifecycle startup: load config, connect all servers, register signal handlers.
+
+        Args:
+            on_progress: Optional callback ``(done, total, server_name)`` invoked
+                each time a server finishes connecting (success or failure).
 
         Returns the number of servers that connected successfully.
         """
-        self.load_config()
-        connected = self._connect_all()
+        if not self._servers:
+            self.load_config()
+        connected = self._connect_all(on_progress=on_progress)
         self._install_signal_handlers()
         log.info("MCP startup complete: %d/%d servers connected", connected, len(self._servers))
         return connected
@@ -131,12 +141,20 @@ class MCPServerManager:
         self._uninstall_signal_handlers()
         log.info("MCP shutdown complete")
 
-    def _connect_all(self) -> int:
+    def _connect_all(
+        self,
+        *,
+        on_progress: Callable[[int, int, str], None] | None = None,
+    ) -> int:
         """Connect to all configured servers in parallel.
 
         Uses ThreadPoolExecutor to start all MCP subprocess connections
         concurrently. Each server takes ~10s (npx startup + JSON-RPC
         handshake), so parallel execution reduces total from N×10s to ~10-15s.
+
+        Args:
+            on_progress: Optional callback ``(done, total, server_name)`` invoked
+                each time a server finishes connecting (success or failure).
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -145,7 +163,9 @@ class MCPServerManager:
             return 0
 
         connected = 0
-        max_workers = min(len(server_names), 8)
+        done = 0
+        total = len(server_names)
+        max_workers = min(total, 8)
 
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = {pool.submit(self._get_client, name): name for name in server_names}
@@ -157,6 +177,9 @@ class MCPServerManager:
                         connected += 1
                 except Exception:
                     log.debug("MCP parallel connect failed: %s", name, exc_info=True)
+                done += 1
+                if on_progress:
+                    on_progress(done, total, name)
 
         return connected
 
