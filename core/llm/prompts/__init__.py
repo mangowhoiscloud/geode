@@ -165,9 +165,9 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 #   python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \
 #     print(dict(sorted(V.items())))"
 _PINNED_HASHES: dict[str, str] = {
-    "AGENTIC_SUFFIX": "fb235a7e49e3",
+    "AGENTIC_SUFFIX": "769c33bff0d2",
     "ANALYST_SPECIFIC": "5a696a2d5ebb",
-    "ANALYST_SYSTEM": "90acc856a5b2",
+    "ANALYST_SYSTEM": "8a325a63b397",
     "ANALYST_TOOLS_SUFFIX": "2961fb31d96f",
     "ANALYST_USER": "e59d00faadd5",
     "BIASBUSTER_SYSTEM": "07987c709fd9",
@@ -181,8 +181,8 @@ _PINNED_HASHES: dict[str, str] = {
     "EVALUATOR_SYSTEM": "e891c0ce27d4",
     "EVALUATOR_USER": "f6d7f955338d",
     "PROSPECT_EVALUATOR_AXES": "a9954477497b",
-    "ROUTER_SYSTEM": "de4cab14aadc",
-    "SYNTHESIZER_SYSTEM": "666d8e1fe137",
+    "ROUTER_SYSTEM": "076cde81e703",
+    "SYNTHESIZER_SYSTEM": "e01544c0c8d2",
     "SYNTHESIZER_TOOLS_SUFFIX": "c6c65e47e191",
     "SYNTHESIZER_USER": "30d99edc79a5",
 }

@@ -228,6 +228,7 @@ class GeodeState(TypedDict, total=False):
     pipeline_mode: str  # full_pipeline, cortex_only, evaluation, scoring
     ip_type: str  # "gamified" (default) or "prospect" (non-gamified IP)
     session_id: str  # Hierarchical session key for 3-tier memory
+    output_language: str  # Language for LLM-generated text (e.g. "English", "Korean")
 
     # Layer 1: Data Loading (Router)
     ip_info: dict[str, Any]

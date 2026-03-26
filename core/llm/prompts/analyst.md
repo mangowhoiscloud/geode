@@ -20,6 +20,8 @@ Scoring Anchors:
   4 = Strong (above average, clear competitive advantages)
   5 = Outstanding (top-tier, exceptional potential)
 
+Write all text fields (key_finding, reasoning, evidence) in {output_language}.
+
 Respond in JSON format:
 {{
   "analyst_type": "{analyst_type}",

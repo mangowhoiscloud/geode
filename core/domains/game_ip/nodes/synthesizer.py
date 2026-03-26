@@ -237,6 +237,7 @@ def _build_llm_synthesis(
     qj = evaluations.get("quality_judge")
     cm = evaluations.get("community_momentum")
 
+    output_language = state.get("output_language", "English")
     user = SYNTHESIZER_USER.format(
         ip_name=state["ip_name"],
         cause=cause,
@@ -255,7 +256,7 @@ def _build_llm_synthesis(
     )
 
     # ADR-007: PromptAssembler injection
-    system = SYNTHESIZER_SYSTEM
+    system = SYNTHESIZER_SYSTEM.format(output_language=output_language)
     assembler: Any = state.get("_prompt_assembler")
     if assembler is not None:
         result = assembler.assemble(
@@ -334,7 +335,12 @@ def _build_tool_augmented_synthesis(
     )
     eval_summary = "\n".join(f"- {k}: {v.composite_score:.0f}/100" for k, v in evaluations.items())
 
-    enhanced_system = SYNTHESIZER_SYSTEM + "\n\n" + SYNTHESIZER_TOOLS_SUFFIX
+    output_language = state.get("output_language", "English")
+    enhanced_system = (
+        SYNTHESIZER_SYSTEM.format(output_language=output_language)
+        + "\n\n"
+        + SYNTHESIZER_TOOLS_SUFFIX
+    )
 
     user = SYNTHESIZER_USER.format(
         ip_name=state["ip_name"],
