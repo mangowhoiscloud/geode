@@ -21,7 +21,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| — | — | — | — | — | — |
+| gateway-multiturn | Gateway 멀티턴 — thread_id 기반 대화 이력 연결 + SessionStore 영속화 | @mangowhoiscloud | feature/gateway-multiturn | 2026-03-26 | P0 |
 
 ### In Review
 
