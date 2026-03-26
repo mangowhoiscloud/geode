@@ -1734,11 +1734,14 @@ def serve(
 
             # --- Persist conversation for next turn ---
             if session_key:
-                runtime.session_store.set(session_key, {
-                    "messages": ctx.messages,
-                    "thread_id": metadata.get("thread_id", ""),
-                    "channel": metadata.get("channel", ""),
-                })
+                runtime.session_store.set(
+                    session_key,
+                    {
+                        "messages": ctx.messages,
+                        "thread_id": metadata.get("thread_id", ""),
+                        "channel": metadata.get("channel", ""),
+                    },
+                )
 
             return result.text if result else ""
         except Exception as exc:
