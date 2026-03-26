@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 
 from core.config import get_node_model
-from core.infrastructure.ports.domain_port import get_domain_or_none
+from core.domains.port import get_domain_or_none
 from core.infrastructure.ports.tool_port import get_tool_executor
 from core.llm.prompts import (
     EVALUATOR_AXES,

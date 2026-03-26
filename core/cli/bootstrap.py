@@ -57,7 +57,7 @@ class GeodeBootstrap:
         # Domain adapter
         try:
             from core.domains.loader import load_domain_adapter
-            from core.infrastructure.ports.domain_port import set_domain
+            from core.domains.port import set_domain
 
             set_domain(load_domain_adapter("game_ip"))
         except Exception:
@@ -119,7 +119,7 @@ def bootstrap_geode(
     # 1. Domain adapter
     try:
         from core.domains.loader import load_domain_adapter
-        from core.infrastructure.ports.domain_port import set_domain
+        from core.domains.port import set_domain
 
         set_domain(load_domain_adapter("game_ip"))
     except Exception:

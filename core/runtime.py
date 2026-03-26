@@ -38,6 +38,7 @@ from core.automation.snapshot import SnapshotManager
 from core.automation.triggers import TriggerManager, TriggerType
 from core.config import settings
 from core.domains.loader import load_domain_adapter
+from core.domains.port import set_domain
 from core.gateway.auth.cooldown import CooldownTracker
 from core.gateway.auth.profiles import ProfileStore
 from core.gateway.auth.rotation import ProfileRotator
@@ -56,7 +57,6 @@ from core.infrastructure.ports.automation_port import (
     SnapshotManagerPort,
     TriggerManagerPort,
 )
-from core.infrastructure.ports.domain_port import set_domain
 from core.infrastructure.ports.memory_port import (
     OrganizationMemoryPort,
     ProjectMemoryPort,
