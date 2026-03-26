@@ -84,7 +84,7 @@ class TestToolAugmentedSynthesis:
             rounds=2,
         )
 
-        def mock_tool_fn(system, user, *, tools, tool_executor, max_tool_rounds=5):
+        def mock_tool_fn(system, user, *, tools, tool_executor, max_tool_rounds=5, model=None):
             return mock_result
 
         result = _build_tool_augmented_synthesis(
@@ -97,7 +97,7 @@ class TestToolAugmentedSynthesis:
     def test_returns_none_on_failure(self):
         state = _make_state(with_tools=True)
 
-        def failing_tool_fn(system, user, *, tools, tool_executor, max_tool_rounds=5):
+        def failing_tool_fn(system, user, *, tools, tool_executor, max_tool_rounds=5, model=None):
             raise RuntimeError("API error")
 
         result = _build_tool_augmented_synthesis(

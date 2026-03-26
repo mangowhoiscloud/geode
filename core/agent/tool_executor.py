@@ -533,6 +533,12 @@ class ToolExecutor:
         console.print("  [warning]$ Cost confirmation[/warning]")
         console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
         console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
+        # Show pipeline model info for analysis tools
+        if tool_name in ("analyze_ip", "compare_ips", "batch_analyze"):
+            from core.config import ANTHROPIC_PRIMARY, get_node_model
+
+            primary = get_node_model("analyst") or ANTHROPIC_PRIMARY
+            console.print(f"  [dim]Pipeline model:[/dim] {primary}")
         console.print()
 
         response = self._prompt_with_always("Proceed?", tool_name)

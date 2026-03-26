@@ -12,7 +12,7 @@
   },
   {
     "name": "analyze_ip",
-    "description": "특정 IP를 분석합니다. 사용자가 IP 이름을 말하거나 분석을 요청할 때 사용하세요. IP 이름만 단독으로 입력한 경우에도 이 도구를 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이', 'fixture로만' 등을 명시하면 반드시 dry_run=true로 설정하세요.",
+    "description": "특정 IP를 분석합니다. 사용자가 IP 이름을 말하거나 분석을 요청할 때 사용하세요. IP 이름만 단독으로 입력한 경우에도 이 도구를 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이', 'fixture로만' 등을 명시하면 반드시 dry_run=true로 설정하세요. dry_run=false (live 분석) 시 claude-opus-4-6 + gpt-5.4로 ~8회 LLM 호출, ~$0.15 비용이 발생합니다. 실행 전 사용자에게 비용을 안내하세요.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
