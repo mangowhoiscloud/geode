@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (40 events)."""
+    """Pipeline lifecycle events (42 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -88,6 +88,10 @@ class HookEvent(Enum):
     # Session lifecycle (OpenClaw agent:bootstrap pattern)
     SESSION_START = "session_start"
     SESSION_END = "session_end"
+
+    # LLM call lifecycle (model-level latency/cost observability)
+    LLM_CALL_START = "llm_call_start"
+    LLM_CALL_END = "llm_call_end"
 
 
 @dataclass
