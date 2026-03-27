@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from contextvars import ContextVar
 from typing import Any
 
 from core.gateway.models import ChannelBinding, InboundMessage
@@ -18,17 +17,18 @@ from core.memory.session_key import build_gateway_session_key
 
 MessageProcessor = Callable[[str, dict[str, Any]], str]
 
-_gateway_ctx: ContextVar[ChannelManager | None] = ContextVar("gateway_ctx", default=None)
+_gateway: ChannelManager | None = None
 
 
 def set_gateway(gateway: ChannelManager | None) -> None:
-    """Set the active gateway for the current context."""
-    _gateway_ctx.set(gateway)
+    """Set the active gateway."""
+    global _gateway
+    _gateway = gateway
 
 
 def get_gateway() -> ChannelManager | None:
     """Get the active gateway, or None if not set."""
-    return _gateway_ctx.get()
+    return _gateway
 
 
 log = logging.getLogger(__name__)

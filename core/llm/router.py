@@ -1021,7 +1021,6 @@ class LLMToolCallable(Protocol):
 # ---------------------------------------------------------------------------
 
 _llm_json_ctx: ContextVar[LLMJsonCallable | None] = ContextVar("llm_json", default=None)
-_llm_text_ctx: ContextVar[LLMTextCallable | None] = ContextVar("llm_text", default=None)
 _llm_parsed_ctx: ContextVar[LLMParsedCallable | None] = ContextVar("llm_parsed", default=None)
 _llm_tool_ctx: ContextVar[LLMToolCallable | None] = ContextVar("llm_tool", default=None)
 
@@ -1044,7 +1043,6 @@ def set_llm_callable(
 ) -> None:
     """Inject LLM callables (typically called by GeodeRuntime.create())."""
     _llm_json_ctx.set(json_fn)
-    _llm_text_ctx.set(text_fn)
     if parsed_fn is not None:
         _llm_parsed_ctx.set(parsed_fn)
     if tool_fn is not None:
@@ -1060,17 +1058,6 @@ def get_llm_json() -> LLMJsonCallable:
     if fn is None:
         raise RuntimeError(
             "LLM JSON callable not injected. "
-            "Call set_llm_callable() first (done by GeodeRuntime.create())."
-        )
-    return fn
-
-
-def get_llm_text() -> LLMTextCallable:
-    """Return the injected text callable. Raises if not injected."""
-    fn = _llm_text_ctx.get()
-    if fn is None:
-        raise RuntimeError(
-            "LLM text callable not injected. "
             "Call set_llm_callable() first (done by GeodeRuntime.create())."
         )
     return fn

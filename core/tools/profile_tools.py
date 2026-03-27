@@ -10,27 +10,25 @@ Tools for viewing, updating, and learning from user interactions:
 from __future__ import annotations
 
 import logging
-from contextvars import ContextVar
 from typing import Any
 
 from core.memory.user_profile import FileBasedUserProfile
 
 log = logging.getLogger(__name__)
 
-# Thread-safe user profile via contextvars
-_user_profile_ctx: ContextVar[FileBasedUserProfile | None] = ContextVar(
-    "user_profile_tools", default=None
-)
+# Module-level user profile singleton
+_user_profile: FileBasedUserProfile | None = None
 
 
 def set_user_profile(profile: FileBasedUserProfile | None) -> None:
-    """Set the context-local user profile for profile tools."""
-    _user_profile_ctx.set(profile)
+    """Set the module-level user profile for profile tools."""
+    global _user_profile
+    _user_profile = profile
 
 
 def get_user_profile() -> FileBasedUserProfile | None:
-    """Get the context-local user profile."""
-    return _user_profile_ctx.get()
+    """Get the module-level user profile."""
+    return _user_profile
 
 
 class ProfileShowTool:
@@ -56,7 +54,7 @@ class ProfileShowTool:
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
-        profile = _user_profile_ctx.get()
+        profile = _user_profile
         if profile is None:
             return {"error": "User profile not configured"}
 
@@ -122,7 +120,7 @@ class ProfileUpdateTool:
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
-        profile = _user_profile_ctx.get()
+        profile = _user_profile
         if profile is None:
             return {"error": "User profile not configured"}
 
@@ -173,7 +171,7 @@ class ProfilePreferenceTool:
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
-        profile = _user_profile_ctx.get()
+        profile = _user_profile
         if profile is None:
             return {"error": "User profile not configured"}
 
@@ -235,7 +233,7 @@ class ProfileLearnTool:
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
-        profile = _user_profile_ctx.get()
+        profile = _user_profile
         if profile is None:
             return {"error": "User profile not configured"}
 
