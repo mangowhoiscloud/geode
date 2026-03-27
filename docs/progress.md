@@ -29,7 +29,7 @@
 | ~~di-cleanup~~ | ~~불필요 ContextVar DI 8개 제거 — 직접 import로 대체~~ | ~~P0~~ | ~~#486~~ | **Done** |
 | ~~cron-session-isolation~~ | ~~Cron systemEvent vs agentTurn 구분~~ | ~~P2~~ | ~~#487~~ | **Done** |
 | ~~hook-turn-complete~~ | ~~TURN_COMPLETE 자동 메모리~~ | ~~P1~~ | ~~#488~~ | **Done** |
-| geode-dir-hierarchy | .geode/ 디렉토리 계층화 — session/journal/snapshot/vault/models → ~/.geode/ 이동 + project_id 스코핑 | P1 | — | Claude Code ~/.claude/projects/ 패턴 |
+| ~~geode-dir-hierarchy~~ | ~~.geode/ 디렉토리 계층화~~ | ~~P1~~ | ~~#491~~ | **Done** |
 | ~~hook-context-action~~ | ~~CONTEXT_CRITICAL 행동 위임~~ | ~~P2~~ | ~~#490~~ | **Done** |
 | ~~hook-session-start~~ | ~~SESSION_START 동적 프롬프트~~ | ~~P2~~ | ~~#489~~ | **Done** |
 | ~~hook-llm-lifecycle~~ | ~~LLM_CALL_START/END — latency/cost 관측~~ | ~~P2~~ | ~~#492~~ | **Done** |
