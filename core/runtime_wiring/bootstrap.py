@@ -244,6 +244,61 @@ def build_hooks(
 
     _register_plugin("session_lifecycle_hook", _reg_session_lifecycle)
 
+    # C5: LLM call lifecycle hooks (LLM_CALL_START/END -> slow call logging + journal cost)
+    def _reg_llm_lifecycle() -> None:
+        from core.llm.router import set_router_hooks
+
+        # Session-level LLM call statistics accumulator
+        _llm_stats: dict[str, Any] = {
+            "total_calls": 0,
+            "total_errors": 0,
+            "total_latency_ms": 0.0,
+            "by_model": {},  # model -> {"calls": int, "total_latency_ms": float}
+        }
+
+        def _on_llm_end(event: HookEvent, data: dict[str, Any]) -> None:
+            latency = data.get("latency_ms", 0.0)
+            model = data.get("model", "?")
+            error = data.get("error")
+
+            # Accumulate session stats
+            _llm_stats["total_calls"] += 1
+            _llm_stats["total_latency_ms"] += latency
+            if error:
+                _llm_stats["total_errors"] += 1
+            model_stats = _llm_stats["by_model"].setdefault(
+                model, {"calls": 0, "total_latency_ms": 0.0}
+            )
+            model_stats["calls"] += 1
+            model_stats["total_latency_ms"] += latency
+
+            # Slow call / error logging
+            if error:
+                log.warning(
+                    "LLM call failed: model=%s error=%s latency=%dms",
+                    model,
+                    error,
+                    int(latency),
+                )
+            elif latency > 10_000:  # > 10s
+                log.warning(
+                    "LLM call slow: model=%s latency=%dms",
+                    model,
+                    int(latency),
+                )
+
+        hooks.register(
+            HookEvent.LLM_CALL_END,
+            _on_llm_end,
+            name="llm_slow_logger",
+            priority=55,
+        )
+
+        # Wire hooks into the LLM router module
+        set_router_hooks(hooks)
+
+    _register_plugin("llm_lifecycle_hook", _reg_llm_lifecycle)
+
     return hooks, run_log, stuck_detector
 
 
