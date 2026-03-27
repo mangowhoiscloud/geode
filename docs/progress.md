@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-27 (세션 43 — #482/#483/#484 머지 완료)
+> 마지막 갱신: 2026-03-27 (세션 43 — #478/#482/#483/#484 머지 완료)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -32,7 +32,6 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| fixtures-cleanup | core/fixtures/ 제거 + .geode/skills/ scaffold/runtime 분리 | @mangowhoiscloud | feature/fixtures-cleanup | 2026-03-27 | 백그라운드 에이전트 |
 
 ### In Review
 
@@ -43,6 +42,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| fixtures-cleanup | core/fixtures/ 삭제 + scaffold skills .claude/skills/ 분리 | #478 | @mangowhoiscloud | 2026-03-27 |
 | runtime-decompose-v2 | runtime.py 1476→517줄 — 5-module OpenClaw-style decomposition | #484 | @mangowhoiscloud | 2026-03-27 |
 | scheduler-nl-fix | NL 정규식 제거 → 원문 저장 + LLM 프레이밍 위임 | #483 | @mangowhoiscloud | 2026-03-27 |
 | scheduler-callback | 스케줄러 action queue 와이어링 — NL job 발화 시 AgenticLoop 실행 | #482 | @mangowhoiscloud | 2026-03-27 |
