@@ -1,0 +1,73 @@
+%%{init: {
+  'theme': 'default',
+  'themeVariables': {
+    'fontSize': '13px',
+    'fontFamily': 'arial',
+    'lineColor': '#6366F1',
+    'primaryColor': '#dbeafe',
+    'primaryBorderColor': '#3b82f6',
+    'primaryTextColor': '#1e293b',
+    'secondaryColor': '#fef3c7',
+    'secondaryBorderColor': '#f59e0b',
+    'tertiaryColor': '#dcfce7',
+    'tertiaryBorderColor': '#22c55e',
+    'clusterBkg': '#f8fafc',
+    'clusterBorder': '#cbd5e1'
+  }
+}}%%
+
+graph TB
+    %% ── Styles ──
+    classDef observeNode fill:#f1f5f9,stroke:#64748b,color:#1e293b,stroke-width:2px
+    classDef reactNode fill:#dbeafe,stroke:#2563eb,color:#1e293b,stroke-width:2px
+    classDef decideNode fill:#ede9fe,stroke:#7c3aed,color:#1e293b,stroke-width:2px
+    classDef autonomyNode fill:#dcfce7,stroke:#16a34a,color:#1e293b,stroke-width:2px
+    classDef eventNode fill:#fef3c7,stroke:#d97706,color:#1e293b,stroke-width:2px
+    classDef plannedNode fill:#fff,stroke:#94a3b8,color:#94a3b8,stroke-width:2px,stroke-dasharray:5 5
+    classDef frontierLine fill:none,stroke:#dc2626,stroke-width:3px,stroke-dasharray:8 4
+    classDef labelNode fill:none,stroke:none,color:#64748b,font-size:11px
+
+    %% ── L4 AUTONOMY ──
+    subgraph L4 ["L4 AUTONOMY — 패턴에서 규칙을 자율 학습"]
+        direction LR
+        L4_TOOL["hook-tool-approval<br/><i>HITL 이력 → 자동 승인 룰</i>"]:::plannedNode
+        L4_MODEL["hook-model-switched<br/><i>전환 사유 → 자동 정책</i>"]:::plannedNode
+        L4_FS["hook-filesystem-plugin<br/><i>.geode/hooks/ 자동 발견</i>"]:::plannedNode
+    end
+
+    %% ── L3 DECIDE ──
+    subgraph L3 ["L3 DECIDE — Hook이 행동 방향을 결정"]
+        direction LR
+        L3_CTX["hook-context-action<br/><i>CONTEXT_CRITICAL → 압축 전략</i>"]:::plannedNode
+        L3_SESSION["hook-session-start<br/><i>SESSION_START → 동적 프롬프트</i>"]:::plannedNode
+    end
+
+    %% ── Frontier marker ──
+    FRONTIER["▲ CURRENT FRONTIER"]:::frontierLine
+
+    %% ── L2 REACT ──
+    subgraph L2 ["L2 REACT — 이벤트에 자동 반응"]
+        direction LR
+        L2_TURN["turn_auto_memory<br/><b>P85</b><br/><i>TURN_COMPLETE → 인사이트</i>"]:::reactNode
+        L2_DRIFT_SNAP["drift_auto_snapshot<br/><b>P80</b><br/><i>DRIFT → 상태 캡처</i>"]:::reactNode
+        L2_MEM["memory_write_back<br/><b>P85</b><br/><i>PIPELINE_END → MEMORY.md</i>"]:::reactNode
+        L2_SNAP["pipeline_end_snapshot<br/><b>P80</b><br/><i>PIPELINE_END → 스냅샷</i>"]:::reactNode
+        L2_TRIG["drift_pipeline_trigger<br/><b>P70</b><br/><i>DRIFT → 재분석</i>"]:::reactNode
+    end
+
+    %% ── L1 OBSERVE ──
+    subgraph L1 ["L1 OBSERVE — 기록만, 상태 변경 없음"]
+        direction LR
+        L1_TASK["TaskGraphBridge<br/><b>P30</b><br/><i>NODE_ENTER/EXIT</i>"]:::observeNode
+        L1_STUCK["StuckDetector<br/><b>P40</b><br/><i>PIPELINE_START/END</i>"]:::observeNode
+        L1_RUNLOG["RunLog<br/><b>P50</b><br/><i>ALL 38 events → JSONL</i>"]:::observeNode
+        L1_JOURNAL["JournalHook<br/><b>P60</b><br/><i>END/ERROR → runs.jsonl</i>"]:::observeNode
+        L1_LOGGERS["TableLoggers ×5<br/><b>P90</b><br/><i>Automation events</i>"]:::observeNode
+        L1_LLM["hook-llm-lifecycle<br/><i>latency/cost 집계</i>"]:::plannedNode
+    end
+
+    %% ── Vertical flow (maturity progression) ──
+    L1 --> FRONTIER
+    FRONTIER --> L2
+    L2 --> L3
+    L3 --> L4

@@ -1,0 +1,76 @@
+%%{init: {
+  'theme': 'default',
+  'themeVariables': {
+    'fontSize': '13px',
+    'fontFamily': 'arial',
+    'lineColor': '#6366F1',
+    'primaryColor': '#dbeafe',
+    'primaryBorderColor': '#3b82f6',
+    'primaryTextColor': '#1e293b',
+    'clusterBkg': '#f8fafc',
+    'clusterBorder': '#cbd5e1'
+  }
+}}%%
+
+graph LR
+    %% ── Styles ──
+    classDef eventNode fill:#fef3c7,stroke:#d97706,color:#1e293b,stroke-width:2px,font-weight:bold
+    classDef observeHandler fill:#f1f5f9,stroke:#64748b,color:#1e293b,stroke-width:2px
+    classDef reactHandler fill:#dbeafe,stroke:#2563eb,color:#1e293b,stroke-width:2px
+    classDef decideHandler fill:#ede9fe,stroke:#7c3aed,color:#1e293b,stroke-width:2px
+    classDef plannedHandler fill:#fff,stroke:#94a3b8,color:#94a3b8,stroke-width:2px,stroke-dasharray:5 5
+    classDef levelLabel fill:none,stroke:none,color:#64748b,font-weight:bold
+
+    %% ── Events (Left) ──
+    subgraph EVENTS ["Events"]
+        direction TB
+        E_PIPE["PIPELINE_END"]:::eventNode
+        E_DRIFT["DRIFT_DETECTED"]:::eventNode
+        E_TURN["TURN_COMPLETE"]:::eventNode
+        E_CTX["CONTEXT_CRITICAL"]:::eventNode
+    end
+
+    %% ── L1 OBSERVE handlers ──
+    subgraph OBS ["L1 OBSERVE"]
+        direction TB
+        O1["RunLog<br/>P50"]:::observeHandler
+        O2["JournalHook<br/>P60"]:::observeHandler
+        O3["DriftLogger<br/>P90"]:::observeHandler
+        O4["RunLog<br/>P50"]:::observeHandler
+        O5["RunLog<br/>P50"]:::observeHandler
+    end
+
+    %% ── L2 REACT handlers ──
+    subgraph REACT ["L2 REACT"]
+        direction TB
+        R1["SnapshotCapture<br/>P80"]:::reactHandler
+        R2["MemoryWriteBack<br/>P85"]:::reactHandler
+        R3["DriftSnapshot<br/>P80"]:::reactHandler
+        R4["DriftTrigger<br/>P70"]:::reactHandler
+        R5["TurnAutoMemory<br/>P85"]:::reactHandler
+    end
+
+    %% ── L3 DECIDE handlers (planned) ──
+    subgraph DECIDE ["L3 DECIDE"]
+        direction TB
+        D1["ContextAction<br/>P70"]:::plannedHandler
+    end
+
+    %% ── PIPELINE_END ripple ──
+    E_PIPE -->|"P50"| O1
+    E_PIPE -->|"P60"| O2
+    E_PIPE -->|"P80"| R1
+    E_PIPE -->|"P85"| R2
+
+    %% ── DRIFT_DETECTED ripple ──
+    E_DRIFT -->|"P70"| R4
+    E_DRIFT -->|"P80"| R3
+    E_DRIFT -->|"P90"| O3
+
+    %% ── TURN_COMPLETE ripple ──
+    E_TURN -->|"P50"| O4
+    E_TURN -->|"P85"| R5
+
+    %% ── CONTEXT_CRITICAL ripple (planned) ──
+    E_CTX -->|"P50"| O5
+    E_CTX -.->|"P70"| D1

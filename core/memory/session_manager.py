@@ -18,7 +18,18 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = Path(".geode") / "session" / "sessions.db"
+# Default resolves to ~/.geode/projects/{id}/sessions/sessions.db
+# with fallback to .geode/session/sessions.db
+_DEFAULT_DB_PATH: Path | None = None
+
+
+def _get_default_db_path() -> Path:
+    global _DEFAULT_DB_PATH
+    if _DEFAULT_DB_PATH is None:
+        from core.paths import resolve_sessions_dir
+
+        _DEFAULT_DB_PATH = resolve_sessions_dir() / "sessions.db"
+    return _DEFAULT_DB_PATH
 
 
 @dataclass
@@ -68,7 +79,7 @@ class SessionManager:
     """
 
     def __init__(self, db_path: Path | None = None) -> None:
-        self._db_path = db_path or DEFAULT_DB_PATH
+        self._db_path = db_path or _get_default_db_path()
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)

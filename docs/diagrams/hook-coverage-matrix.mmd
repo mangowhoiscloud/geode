@@ -1,0 +1,78 @@
+%%{init: {
+  'theme': 'default',
+  'themeVariables': {
+    'fontSize': '12px',
+    'fontFamily': 'arial'
+  }
+}}%%
+
+graph TD
+    classDef done fill:#dcfce7,stroke:#16a34a,color:#1e293b,stroke-width:2px
+    classDef infra fill:#dbeafe,stroke:#2563eb,color:#1e293b,stroke-width:2px
+    classDef planned fill:#fff,stroke:#94a3b8,color:#94a3b8,stroke-width:2px,stroke-dasharray:5 5
+    classDef none fill:#f8fafc,stroke:#e2e8f0,color:#cbd5e1,stroke-width:1px
+    classDef header fill:#1e293b,stroke:#1e293b,color:#fff,font-weight:bold
+    classDef dimHeader fill:#f1f5f9,stroke:#94a3b8,color:#475569,font-weight:bold
+
+    subgraph MATRIX ["Hook Coverage Matrix — 38 Events × 4 Maturity Levels"]
+        direction TB
+
+        subgraph PIPELINE ["Pipeline Lifecycle"]
+            direction LR
+            P_START["PIPELINE_START<br/>L1 ✓ StuckDetector"]:::done
+            P_END["PIPELINE_END<br/>L1 ✓ RunLog, Journal<br/>L2 ✓ Snapshot, Memory"]:::done
+            P_ERR["PIPELINE_ERROR<br/>L1 ✓ Journal, Stuck"]:::done
+        end
+
+        subgraph NODE ["Node Lifecycle"]
+            direction LR
+            N_BOOT["NODE_BOOTSTRAP<br/>L1 ✓ RunLog"]:::done
+            N_ENTER["NODE_ENTER<br/>L1 ✓ TaskBridge"]:::done
+            N_EXIT["NODE_EXIT<br/>L1 ✓ TaskBridge"]:::done
+            N_ERR["NODE_ERROR<br/>L1 ✓ TaskBridge"]:::done
+        end
+
+        subgraph ANALYSIS ["Analysis Lifecycle"]
+            direction LR
+            A_ANA["ANALYST_COMPLETE<br/>L1 ⊘ infra only"]:::infra
+            A_EVAL["EVALUATOR_COMPLETE<br/>L1 ⊘ infra only"]:::infra
+            A_SCORE["SCORING_COMPLETE<br/>L1 ⊘ infra only"]:::infra
+        end
+
+        subgraph VERIFY ["Verification"]
+            direction LR
+            V_PASS["VERIFICATION_PASS<br/>L1 ✓ RunLog"]:::done
+            V_FAIL["VERIFICATION_FAIL<br/>L1 ✓ RunLog"]:::done
+        end
+
+        subgraph AUTOMATION ["L4.5 Automation"]
+            direction LR
+            AU_DRIFT["DRIFT_DETECTED<br/>L1 ✓ Logger<br/>L2 ✓ Snapshot, Trigger"]:::done
+            AU_OUT["OUTCOME_COLLECTED<br/>L1 ✓ Logger"]:::done
+            AU_MOD["MODEL_PROMOTED<br/>L1 ✓ Logger"]:::done
+            AU_SNAP["SNAPSHOT_CAPTURED<br/>L1 ✓ Logger"]:::done
+            AU_TRIG["TRIGGER_FIRED<br/>L1 ✓ Logger"]:::done
+        end
+
+        subgraph AGENT ["Agent Lifecycle"]
+            direction LR
+            AG_TURN["TURN_COMPLETE<br/>L1 ✓ RunLog<br/>L2 ✓ AutoMemory"]:::done
+            AG_START["SUBAGENT_STARTED<br/>L1 ✓ RunLog"]:::done
+            AG_COMP["SUBAGENT_COMPLETED<br/>L1 ✓ Journal"]:::done
+            AG_FAIL["SUBAGENT_FAILED<br/>L1 ✓ RunLog"]:::done
+        end
+
+        subgraph CONTEXT ["Context Overflow"]
+            direction LR
+            C_WARN["CONTEXT_WARNING<br/>L1 ⊘ infra only"]:::infra
+            C_CRIT["CONTEXT_CRITICAL<br/>L3 ○ planned"]:::planned
+        end
+
+        subgraph PLANNED_GROUP ["Planned Extensions"]
+            direction LR
+            PL_SESSION["SESSION_START<br/>L3 ○ planned"]:::planned
+            PL_LLM["LLM_LIFECYCLE<br/>L1 ○ planned"]:::planned
+            PL_TOOL["TOOL_APPROVAL<br/>L4 ○ planned"]:::planned
+            PL_FS["FILESYSTEM_PLUGIN<br/>L4 ○ planned"]:::planned
+        end
+    end

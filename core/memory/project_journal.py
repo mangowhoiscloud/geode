@@ -28,7 +28,19 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-DEFAULT_JOURNAL_DIR = Path(".geode") / "journal"
+# Default resolves to ~/.geode/projects/{id}/journal/ with fallback to .geode/journal/
+_DEFAULT_JOURNAL_DIR: Path | None = None
+
+
+def _get_default_journal_dir() -> Path:
+    global _DEFAULT_JOURNAL_DIR
+    if _DEFAULT_JOURNAL_DIR is None:
+        from core.paths import resolve_journal_dir
+
+        _DEFAULT_JOURNAL_DIR = resolve_journal_dir()
+    return _DEFAULT_JOURNAL_DIR
+
+
 MAX_LEARNED_PATTERNS = 100
 
 
@@ -89,7 +101,7 @@ class ProjectJournal:
     """
 
     def __init__(self, journal_dir: Path | str | None = None) -> None:
-        self._dir = Path(journal_dir) if journal_dir else DEFAULT_JOURNAL_DIR
+        self._dir = Path(journal_dir) if journal_dir else _get_default_journal_dir()
         self._lock = threading.Lock()
 
     @property
