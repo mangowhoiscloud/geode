@@ -339,7 +339,7 @@ Progress Board 기록 후 Worktree 할당. 완료 후: `git push` → `git workt
 ```bash
 uv run ruff check core/ tests/      # Lint: 0 errors
 uv run mypy core/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"   # Test: 3219+ pass
+uv run pytest tests/ -m "not live"   # Test: 3285+ pass
 ```
 
 #### 4. E2E Verify
@@ -386,7 +386,7 @@ main에서만 `docs/progress.md` 갱신. Backlog → In Progress → Done.
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -m "not live"` | 3219+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 3285+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 ## Custom Skills (Scaffold)
