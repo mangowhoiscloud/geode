@@ -1049,6 +1049,131 @@ class GeodeRuntime:
         log.info("Gateway built with %d pollers", len(manager._pollers))
 
     # ------------------------------------------------------------------
+    # Factory sub-builders (called from create())
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_session_store(*, session_ttl: float) -> SessionStorePort:
+        """Build session store — InMemory default, HybridSessionStore if URLs configured."""
+        session_storage_dir: Path | None = None
+        if settings.session_storage_dir:
+            session_storage_dir = Path(settings.session_storage_dir)
+        session_store: SessionStorePort = InMemorySessionStore(
+            ttl=session_ttl,
+            storage_dir=session_storage_dir,
+        )
+        if settings.redis_url or settings.postgres_url:
+            from core.memory.hybrid_session import (
+                HybridSessionStore,
+                PostgreSQLSessionStore,
+                RedisSessionStore,
+            )
+
+            l1 = RedisSessionStore(ttl_hours=settings.session_ttl_hours)
+            pg_path = settings.postgres_url or ".geode/sessions"
+            l2 = PostgreSQLSessionStore(storage_dir=Path(pg_path))
+            session_store = HybridSessionStore(l1=l1, l2=l2)
+        return session_store
+
+    @staticmethod
+    def _build_llm_adapters(
+        tool_registry: ToolRegistry,
+        policy_chain: PolicyChain,
+    ) -> tuple[LLMClientPort, LLMClientPort | None]:
+        """Build LLM adapters and inject callables into contextvars."""
+        from core.llm.router import set_llm_callable
+
+        llm_adapter: LLMClientPort = ClaudeAdapter()
+        secondary_adapter: LLMClientPort | None = None
+        if settings.openai_api_key:
+            secondary_adapter = OpenAIAdapter()
+
+        tool_fn = _make_tool_executor(llm_adapter, tool_registry, policy_chain)
+        set_llm_callable(
+            llm_adapter.generate_structured,
+            llm_adapter.generate,
+            parsed_fn=llm_adapter.generate_parsed,
+            tool_fn=tool_fn,
+            secondary_json_fn=(
+                secondary_adapter.generate_structured if secondary_adapter else None
+            ),
+            secondary_parsed_fn=(secondary_adapter.generate_parsed if secondary_adapter else None),
+        )
+        return llm_adapter, secondary_adapter
+
+    @staticmethod
+    def _build_config_watcher() -> ConfigWatcher:
+        """Build ConfigWatcher and register .env hot-reload handler if .env exists."""
+        config_watcher = ConfigWatcher(debounce_ms=CONFIG_WATCHER_DEBOUNCE_MS)
+        env_path = Path(".env")
+        if not env_path.exists():
+            return config_watcher
+
+        def _on_config_change(path: Path, mtime: float) -> None:
+            log.info("Config file changed: %s — reloading settings", path)
+            from core.config import Settings
+
+            new_settings = Settings()
+
+            # Validate constraints before applying
+            if new_settings.drift_warning_threshold <= 0:
+                log.warning("Invalid drift_warning_threshold; skipping reload")
+                return
+            if new_settings.drift_critical_threshold <= new_settings.drift_warning_threshold:
+                log.warning("drift_critical_threshold must exceed warning; skipping")
+                return
+            if new_settings.session_ttl_hours <= 0:
+                log.warning("Invalid session_ttl_hours; skipping reload")
+                return
+            if new_settings.trigger_scheduler_interval_s <= 0:
+                log.warning("Invalid trigger_scheduler_interval_s; skipping reload")
+                return
+
+            # Core settings
+            settings.model = new_settings.model
+            settings.verbose = new_settings.verbose
+            # L4.5 Drift Detection
+            settings.drift_scan_cron = new_settings.drift_scan_cron
+            settings.drift_warning_threshold = new_settings.drift_warning_threshold
+            settings.drift_critical_threshold = new_settings.drift_critical_threshold
+            # L4.5 Outcome Tracking
+            settings.outcome_tracking_enabled = new_settings.outcome_tracking_enabled
+            # L4.5 Snapshot Manager
+            settings.snapshot_dir = new_settings.snapshot_dir
+            settings.snapshot_max_recent = new_settings.snapshot_max_recent
+            # L4.5 Trigger Manager
+            settings.trigger_scheduler_interval_s = new_settings.trigger_scheduler_interval_s
+            # L4.5 Model Registry
+            settings.model_registry_dir = new_settings.model_registry_dir
+            # L2 Memory
+            settings.session_ttl_hours = new_settings.session_ttl_hours
+            log.info("Settings hot-reload complete (12 fields updated)")
+
+        config_watcher.watch(env_path, _on_config_change, name="dotenv")
+        config_watcher.start()
+        return config_watcher
+
+    @classmethod
+    def _build_plugins(cls) -> None:
+        """Wire all MCP plugin adapters: signal, notification, calendar, gateway."""
+        cls._build_signal_adapter()
+        cls._build_notification_adapter()
+        cls._build_calendar_adapter()
+        cls._build_gateway()
+        try:
+            from core.automation.calendar_bridge import set_calendar_bridge
+            from core.mcp.calendar_port import get_calendar
+
+            cal = get_calendar()
+            if cal is None or not cal.is_available():
+                set_calendar_bridge(None)
+            else:
+                log.debug("Calendar adapter available — bridge will wire in REPL")
+        except Exception as exc:
+            _plugin_status["calendar_bridge"] = "error"
+            log.warning("Plugin calendar_bridge: setup failed (%s)", exc)
+
+    # ------------------------------------------------------------------
     # Factory method
     # ------------------------------------------------------------------
 
@@ -1069,10 +1194,14 @@ class GeodeRuntime:
         Composed from sub-builders:
         - _build_hooks(): HookSystem, RunLog, StuckDetector
         - _build_auth(): ProfileStore, ProfileRotator, CooldownTracker
+        - _build_session_store(): InMemory or HybridSessionStore
+        - _build_llm_adapters(): ClaudeAdapter + optional OpenAIAdapter
+        - _build_config_watcher(): .env hot-reload watcher
+        - _build_plugins(): signal/notification/calendar/gateway MCP wiring
         - _build_memory(): ProjectMemory, OrganizationMemory, ContextAssembler, UserProfile
         - _build_automation(): Drift, ModelRegistry, ExpertPanel, etc.
         """
-        # Domain adapter (Phase 4 — wire before anything that reads domain config)
+        # Domain adapter — wire before anything that reads domain config
         domain = load_domain_adapter(domain_name)
         set_domain(domain)
 
@@ -1080,165 +1209,29 @@ class GeodeRuntime:
         session_key = build_session_key(ip_name, phase)
         run_id = uuid.uuid4().hex[:12]
 
-        # Hooks subsystem
+        # Core sub-systems
         hooks, run_log, stuck_detector = cls._build_hooks(
             session_key=session_key,
             run_id=run_id,
             log_dir=log_dir,
             stuck_timeout_s=stuck_timeout_s,
         )
-
-        # Session store (with optional file-backed persistence)
-        session_storage_dir: Path | None = None
-        if settings.session_storage_dir:
-            session_storage_dir = Path(settings.session_storage_dir)
-        session_store: SessionStorePort = InMemorySessionStore(
-            ttl=session_ttl,
-            storage_dir=session_storage_dir,
-        )
-
-        # Wire HybridSessionStore if redis/postgres URLs configured
-        if settings.redis_url or settings.postgres_url:
-            from core.memory.hybrid_session import (
-                HybridSessionStore,
-                PostgreSQLSessionStore,
-                RedisSessionStore,
-            )
-
-            l1 = RedisSessionStore(ttl_hours=settings.session_ttl_hours)
-            pg_path = settings.postgres_url or ".geode/sessions"
-            pg_dir = Path(pg_path)
-            l2 = PostgreSQLSessionStore(storage_dir=pg_dir)
-            session_store = HybridSessionStore(l1=l1, l2=l2)
-
-        # Policy chain + Tool registry
+        session_store = cls._build_session_store(session_ttl=session_ttl)
         policy_chain = _build_default_policies()
         tool_registry = _build_default_registry()
-
-        # Auth subsystem
         profile_store, profile_rotator, cooldown_tracker = cls._build_auth()
-
-        # LLM adapters (Clean Architecture port/adapter)
-        llm_adapter: LLMClientPort = ClaudeAdapter()
-        secondary_adapter: LLMClientPort | None = None
-        if settings.openai_api_key:
-            secondary_adapter = OpenAIAdapter()
-
-        # Inject LLM callables so node modules can resolve via contextvars
-        # Use the adapter's port methods (not raw functions) for proper DI
-        from core.llm.router import set_llm_callable
-
-        # Build tool executor bound to registry + policy chain
-        tool_fn = _make_tool_executor(llm_adapter, tool_registry, policy_chain)
-
-        set_llm_callable(
-            llm_adapter.generate_structured,
-            llm_adapter.generate,
-            parsed_fn=llm_adapter.generate_parsed,
-            tool_fn=tool_fn,
-            secondary_json_fn=(
-                secondary_adapter.generate_structured if secondary_adapter else None
-            ),
-            secondary_parsed_fn=(secondary_adapter.generate_parsed if secondary_adapter else None),
-        )
-
-        # Coalescing queue (250ms debounce)
+        llm_adapter, secondary_adapter = cls._build_llm_adapters(tool_registry, policy_chain)
         coalescing = CoalescingQueue(window_ms=COALESCING_WINDOW_MS)
-
-        # Config watcher (300ms debounce, 1s poll)
-        config_watcher = ConfigWatcher(debounce_ms=CONFIG_WATCHER_DEBOUNCE_MS)
-
-        # Wire ConfigWatcher to watch .env if it exists
-        env_path = Path(".env")
-        if env_path.exists():
-
-            def _on_config_change(path: Path, mtime: float) -> None:
-                log.info("Config file changed: %s — reloading settings", path)
-                from core.config import Settings
-
-                new_settings = Settings()
-
-                # Validate constraints before applying
-                if new_settings.drift_warning_threshold <= 0:
-                    log.warning("Invalid drift_warning_threshold; skipping reload")
-                    return
-                if new_settings.drift_critical_threshold <= new_settings.drift_warning_threshold:
-                    log.warning("drift_critical_threshold must exceed warning; skipping")
-                    return
-                if new_settings.session_ttl_hours <= 0:
-                    log.warning("Invalid session_ttl_hours; skipping reload")
-                    return
-                if new_settings.trigger_scheduler_interval_s <= 0:
-                    log.warning("Invalid trigger_scheduler_interval_s; skipping reload")
-                    return
-
-                # Core settings
-                settings.model = new_settings.model
-                settings.verbose = new_settings.verbose
-
-                # L4.5 Drift Detection
-                settings.drift_scan_cron = new_settings.drift_scan_cron
-                settings.drift_warning_threshold = new_settings.drift_warning_threshold
-                settings.drift_critical_threshold = new_settings.drift_critical_threshold
-
-                # L4.5 Outcome Tracking
-                settings.outcome_tracking_enabled = new_settings.outcome_tracking_enabled
-
-                # L4.5 Snapshot Manager
-                settings.snapshot_dir = new_settings.snapshot_dir
-                settings.snapshot_max_recent = new_settings.snapshot_max_recent
-
-                # L4.5 Trigger Manager
-                settings.trigger_scheduler_interval_s = new_settings.trigger_scheduler_interval_s
-
-                # L4.5 Model Registry
-                settings.model_registry_dir = new_settings.model_registry_dir
-
-                # L2 Memory
-                settings.session_ttl_hours = new_settings.session_ttl_hours
-
-                log.info("Settings hot-reload complete (12 fields updated)")
-
-            config_watcher.watch(env_path, _on_config_change, name="dotenv")
-            config_watcher.start()
-
-        # Lane queue (session serial + global concurrency)
+        config_watcher = cls._build_config_watcher()
         lane_queue = _build_default_lanes()
 
-        # Signal enrichment via MCP (liveification)
-        cls._build_signal_adapter()
+        # Plugin wiring (MCP adapters + Gateway)
+        cls._build_plugins()
 
-        # Notification adapters (Slack/Discord/Telegram)
-        cls._build_notification_adapter()
-
-        # Calendar adapters (Google Calendar / CalDAV)
-        cls._build_calendar_adapter()
-
-        # Gateway (inbound messaging pollers)
-        cls._build_gateway()
-
-        # Calendar ↔ Scheduler bridge
-        try:
-            from core.automation.calendar_bridge import set_calendar_bridge
-            from core.mcp.calendar_port import get_calendar
-
-            cal = get_calendar()
-            if cal is not None and cal.is_available():
-                # Scheduler is wired later in REPL; bridge also wired in REPL
-                # Here we just set up the port dependency
-                log.debug("Calendar adapter available — bridge will wire in REPL")
-            else:
-                set_calendar_bridge(None)
-        except Exception as exc:
-            _plugin_status["calendar_bridge"] = "error"
-            log.warning("Plugin calendar_bridge: setup failed (%s)", exc)
-
-        # Memory subsystem
+        # Memory + Automation
         project_memory, organization_memory, context_assembler, user_profile = cls._build_memory(
             session_store=session_store,
         )
-
-        # Automation subsystem (L4.5)
         automation = cls._build_automation(
             hooks=hooks,
             session_key=session_key,
@@ -1246,14 +1239,12 @@ class GeodeRuntime:
             project_memory=project_memory,
         )
 
-        # Prompt assembler (ADR-007)
+        # Optional components
         try:
             prompt_assembler = cls._build_prompt_assembler(hooks=hooks)
         except ImportError:
             log.debug("ADR-007 prompt_assembler/skill_registry not yet available — skipping")
             prompt_assembler = None
-
-        # Task graph (L4 observer)
         task_graph, task_bridge = cls._build_task_graph(hooks=hooks, ip_name=ip_name)
 
         log.info(
