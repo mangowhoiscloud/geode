@@ -615,27 +615,26 @@ class AgenticLoop:
         log.debug("Pruned messages: kept first + bridge + %d recent", len(recent))
 
     def _check_context_overflow(self, system: str, messages: list[dict[str, Any]]) -> None:
-        """Check context window usage and emergency prune if critical.
+        """Check context window usage and apply provider-aware compression.
 
-        Claude Code pattern: trust server-side clear_tool_uses as primary.
-        Client-side only intervenes at CRITICAL (95%) as safety net.
-        No 80% compaction — clear_tool_uses handles gradual cleanup.
+        Strategy by provider:
+        - Anthropic: server-side compaction (compact_20260112) handles 80%+ automatically.
+          Client only intervenes at 95% as emergency prune safety net.
+        - OpenAI/GLM: no server-side compaction. Client triggers LLM-based compaction
+          at 80% and emergency prune at 95%.
 
         Compression strategy is delegated to the CONTEXT_OVERFLOW_ACTION hook handler.
         If no handler is registered or all fail, falls back to hardcoded defaults.
         """
         try:
             from core.config import settings
-            from core.orchestration.context_monitor import (
-                check_context,
-                prune_oldest_messages,
-            )
+            from core.orchestration.context_monitor import check_context
 
             metrics = check_context(messages, self.model, system_prompt=system)
 
             if metrics.is_critical:
                 log.warning(
-                    "Context CRITICAL: %.0f%% (%d/%d tokens) — emergency prune",
+                    "Context CRITICAL: %.0f%% (%d/%d tokens) — emergency action",
                     metrics.usage_pct,
                     metrics.estimated_tokens,
                     metrics.context_window,
@@ -646,40 +645,92 @@ class AgenticLoop:
                         {"metrics": dataclasses.asdict(metrics), "model": self.model},
                     )
 
-                # Delegate strategy to CONTEXT_OVERFLOW_ACTION hook handler
                 strategy = self._resolve_overflow_strategy(metrics, settings)
+                self._apply_overflow_strategy(strategy, messages, settings)
 
-                if strategy.get("strategy") == "prune":
-                    keep_recent = strategy.get("keep_recent", settings.compact_keep_recent)
-                    pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
-                    original_count = len(messages)
-                    if len(pruned) < original_count:
-                        messages.clear()
-                        messages.extend(pruned)
-                        log.info(
-                            "Emergency pruned: %d → %d messages (keep_recent=%d)",
-                            original_count,
-                            len(pruned),
-                            keep_recent,
-                        )
             elif metrics.is_warning:
-                log.info(
-                    "Context at %.0f%% — clear_tool_uses will handle cleanup",
-                    metrics.usage_pct,
-                )
+                # For non-Anthropic providers, 80% triggers client compaction
+                strategy = self._resolve_overflow_strategy(metrics, settings)
+                if strategy.get("strategy") == "compact":
+                    self._apply_overflow_strategy(strategy, messages, settings)
+                elif self._provider == "anthropic":
+                    log.info(
+                        "Context at %.0f%% — server-side compaction will handle cleanup",
+                        metrics.usage_pct,
+                    )
+                else:
+                    log.info(
+                        "Context at %.0f%% — below compaction threshold",
+                        metrics.usage_pct,
+                    )
         except Exception:
             log.debug("Context monitor check failed", exc_info=True)
+
+    def _apply_overflow_strategy(
+        self,
+        strategy: dict[str, Any],
+        messages: list[dict[str, Any]],
+        settings: Any,
+    ) -> None:
+        """Execute the overflow strategy (prune or compact)."""
+        from core.orchestration.context_monitor import prune_oldest_messages
+
+        action = strategy.get("strategy", "none")
+        keep_recent = strategy.get("keep_recent", settings.compact_keep_recent)
+
+        if action == "compact":
+            import asyncio
+
+            from core.orchestration.compaction import compact_conversation
+
+            try:
+                new_msgs, did_compact = asyncio.get_event_loop().run_until_complete(
+                    compact_conversation(
+                        messages,
+                        provider=self._provider,
+                        model=self.model,
+                        keep_recent=keep_recent,
+                    )
+                )
+                if did_compact:
+                    messages.clear()
+                    messages.extend(new_msgs)
+                    return
+            except Exception:
+                log.warning("Client compaction failed — falling back to prune", exc_info=True)
+            # Fall through to prune on failure
+            action = "prune"
+
+        if action == "prune":
+            pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
+            original_count = len(messages)
+            if len(pruned) < original_count:
+                messages.clear()
+                messages.extend(pruned)
+                log.info(
+                    "Emergency pruned: %d → %d messages (keep_recent=%d)",
+                    original_count,
+                    len(pruned),
+                    keep_recent,
+                )
 
     def _resolve_overflow_strategy(self, metrics: Any, settings: Any) -> dict[str, Any]:
         """Ask CONTEXT_OVERFLOW_ACTION hook for compression strategy, with fallback.
 
         Returns a dict with at least ``strategy`` key. If no handler responds
         or all handlers fail, returns the hardcoded default strategy.
+
+        Provider-aware: passes self._provider so the hook can differentiate
+        between Anthropic (server-side compaction) and others (client-side).
         """
         if self._hooks:
             results = self._hooks.trigger_with_result(
                 HookEvent.CONTEXT_OVERFLOW_ACTION,
-                {"metrics": dataclasses.asdict(metrics), "model": self.model},
+                {
+                    "metrics": dataclasses.asdict(metrics),
+                    "model": self.model,
+                    "provider": self._provider,
+                },
             )
             for result in results:
                 if result.success and result.data.get("strategy"):
@@ -687,9 +738,20 @@ class AgenticLoop:
 
         # Fallback: hardcoded default (no handler registered or all failed)
         keep_recent = settings.compact_keep_recent
+        if self._provider == "anthropic":
+            # Anthropic: server-side handles it, only emergency prune at 95%
+            if metrics.usage_pct >= 95:
+                return {"strategy": "prune", "keep_recent": keep_recent}
+            return {"strategy": "none"}
+
+        # Non-Anthropic: compact at 80%, prune at 95%
         if metrics.context_window < 200_000:
             keep_recent = min(keep_recent, 5)
-        return {"strategy": "prune", "keep_recent": keep_recent}
+        if metrics.usage_pct >= 95:
+            return {"strategy": "prune", "keep_recent": keep_recent}
+        elif metrics.usage_pct >= 80:
+            return {"strategy": "compact", "keep_recent": keep_recent}
+        return {"strategy": "none"}
 
     @staticmethod
     def _repair_messages(messages: list[dict[str, Any]]) -> None:
