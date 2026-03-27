@@ -93,10 +93,9 @@ class HookEvent(Enum):
     LLM_CALL_START = "llm_call_start"
     LLM_CALL_END = "llm_call_end"
 
-    # Tool approval HITL lifecycle
+    # Tool approval lifecycle (L4 AUTONOMY — approval pattern learning)
     TOOL_APPROVAL_REQUESTED = "tool_approval_requested"
-    TOOL_APPROVAL_GRANTED = "tool_approval_granted"
-    TOOL_APPROVAL_DENIED = "tool_approval_denied"
+    TOOL_APPROVAL_DECIDED = "tool_approval_decided"
 
 
 @dataclass

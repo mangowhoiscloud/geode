@@ -6,9 +6,9 @@ from core.hooks import HookEvent, HookResult, HookSystem
 class TestHookEvent:
     def test_all_events_exist(self):
 
-        assert len(HookEvent) == 45
+        assert len(HookEvent) == 44
 
-        assert len(HookEvent) == 45
+        assert len(HookEvent) == 44
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_START.value == "pipeline_start"

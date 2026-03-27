@@ -301,32 +301,17 @@ def build_hooks(
 
     # C6: Tool approval tracking hooks (HITL pattern learning)
     def _reg_tool_approval() -> None:
-        _approval_log: list[dict[str, Any]] = []
-
-        def _on_granted(event: HookEvent, data: dict[str, Any]) -> None:
-            _approval_log.append(
-                {
-                    "tool": data.get("tool_name"),
-                    "always": data.get("always", False),
-                }
-            )
-            if len(_approval_log) > 100:
-                _approval_log.pop(0)  # ring buffer
-
-        def _on_denied(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Tool denied: %s", data.get("tool_name"))
+        def _on_decided(event: HookEvent, data: dict[str, Any]) -> None:
+            tool = data.get("tool_name", "?")
+            decision = data.get("decision", "?")
+            level = data.get("permission_level", "?")
+            log.info("Tool approval: %s [%s] → %s", tool, level, decision)
 
         hooks.register(
-            HookEvent.TOOL_APPROVAL_GRANTED,
-            _on_granted,
-            name="approval_tracker",
-            priority=85,
-        )
-        hooks.register(
-            HookEvent.TOOL_APPROVAL_DENIED,
-            _on_denied,
-            name="denial_logger",
-            priority=85,
+            HookEvent.TOOL_APPROVAL_DECIDED,
+            _on_decided,
+            name="tool_approval_logger",
+            priority=65,
         )
 
     _register_plugin("tool_approval_hook", _reg_tool_approval)
