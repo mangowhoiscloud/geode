@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-27 (세션 42 — #479/#480/#481 머지 완료. scheduler-callback 착수)
+> 마지막 갱신: 2026-03-27 (세션 43 — #482 scheduler-callback 머지 완료)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -32,16 +32,16 @@
 |---------|----------|------|--------|--------|------|
 | fixtures-cleanup | core/fixtures/ 제거 + .geode/skills/ scaffold/runtime 분리 | @mangowhoiscloud | feature/fixtures-cleanup | 2026-03-27 | 백그라운드 에이전트 |
 
-### In Progress
-
-| task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
-|---------|----------|------|--------|--------|------|
-| scheduler-callback | 스케줄러 callback 와이어링 — action 필드 + 큐 연결 | @mangowhoiscloud | feature/scheduler-callback | 2026-03-27 | |
-
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-03-27 — 세션 43)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| scheduler-callback | 스케줄러 action queue 와이어링 — NL job 발화 시 AgenticLoop 실행 | #482 | @mangowhoiscloud | 2026-03-27 |
 
 ### Done (2026-03-27 — 세션 42)
 
