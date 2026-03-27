@@ -11,6 +11,7 @@ from core.cli.agentic_response import (
     ToolUseBlock,
     normalize_anthropic,
     normalize_openai,
+    normalize_openai_responses,
 )
 
 
@@ -189,6 +190,68 @@ class TestNormalizeOpenAI:
         )
         result = normalize_openai(resp)
         assert result.content[0].input == {}
+
+
+class TestNormalizeOpenAIResponses:
+    """Test normalize_openai_responses for the Responses API output format."""
+
+    @staticmethod
+    def _make_message_item(text: str) -> MagicMock:
+        item = MagicMock()
+        item.type = "message"
+        sub = MagicMock()
+        sub.type = "output_text"
+        sub.text = text
+        item.content = [sub]
+        return item
+
+    @staticmethod
+    def _make_function_call_item(call_id: str, name: str, arguments: str) -> MagicMock:
+        item = MagicMock()
+        item.type = "function_call"
+        item.call_id = call_id
+        item.name = name
+        item.arguments = arguments
+        return item
+
+    @staticmethod
+    def _make_web_search_item() -> MagicMock:
+        item = MagicMock()
+        item.type = "web_search_call"
+        return item
+
+    def test_text_response(self) -> None:
+        resp = MagicMock()
+        resp.output = [self._make_message_item("Hello")]
+        resp.usage = MagicMock(input_tokens=10, output_tokens=5)
+        result = normalize_openai_responses(resp)
+        assert result.stop_reason == "end_turn"
+        assert len(result.content) == 1
+        assert result.content[0].text == "Hello"
+
+    def test_function_call_response(self) -> None:
+        resp = MagicMock()
+        resp.output = [self._make_function_call_item("fc_1", "search", '{"q": "test"}')]
+        resp.usage = MagicMock(input_tokens=10, output_tokens=5)
+        result = normalize_openai_responses(resp)
+        assert result.stop_reason == "tool_use"
+        assert result.content[0].id == "fc_1"
+        assert result.content[0].input == {"q": "test"}
+
+    def test_web_search_transparent(self) -> None:
+        resp = MagicMock()
+        resp.output = [self._make_web_search_item(), self._make_message_item("Results")]
+        resp.usage = MagicMock(input_tokens=10, output_tokens=5)
+        result = normalize_openai_responses(resp)
+        assert result.stop_reason == "end_turn"
+        assert len(result.content) == 1
+        assert result.content[0].text == "Results"
+
+    def test_empty_output(self) -> None:
+        resp = MagicMock()
+        resp.output = []
+        result = normalize_openai_responses(resp)
+        assert result.content == []
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ Covers:
 - Anthropic web_search version upgrade (20250305 → 20260209)
 - Anthropic web_fetch native tool injection
 - GLM native web_search injection
-- OpenAI Responses API gap documentation
+- OpenAI Responses API migration + native web_search injection
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ class TestAnthropicWebSearchVersion:
         from core.tools import web_tools
 
         importlib.reload(web_tools)
-        source = inspect.getsource(web_tools.GeneralWebSearchTool.execute)
+        source = inspect.getsource(web_tools.GeneralWebSearchTool)
         assert "web_search_20260209" in source
         assert "web_search_20250305" not in source
 
@@ -40,7 +40,7 @@ class TestAnthropicWebSearchVersion:
         from core.tools import signal_tools
 
         importlib.reload(signal_tools)
-        source = inspect.getsource(signal_tools.WebSearchTool.execute)
+        source = inspect.getsource(signal_tools.WebSearchTool)
         assert "web_search_20260209" in source
         assert "web_search_20250305" not in source
 
@@ -218,33 +218,36 @@ class TestGlmNativeWebSearch:
 
 
 # ---------------------------------------------------------------------------
-# OpenAI: Responses API gap documentation
+# OpenAI: Responses API migration
 # ---------------------------------------------------------------------------
 
 
-class TestOpenAIResponsesApiGap:
-    """Verify OpenAI adapter documents the Responses API gap."""
+class TestOpenAIResponsesApiMigration:
+    """Verify OpenAI adapter uses Responses API with native web_search."""
 
-    def test_openai_adapter_has_todo_comment(self) -> None:
-        """OpenAIAgenticAdapter docstring must mention Responses API TODO."""
-        from core.llm.providers.openai import (
-            OpenAIAgenticAdapter,
-        )
+    def test_openai_adapter_mentions_responses_api(self) -> None:
+        """OpenAIAgenticAdapter docstring must mention Responses API."""
+        from core.llm.providers.openai import OpenAIAgenticAdapter
 
         docstring = OpenAIAgenticAdapter.__doc__ or ""
         assert "Responses API" in docstring
-        assert "TODO" in docstring
 
-    def test_openai_uses_chat_completions(self) -> None:
-        """Confirm OpenAI adapter still uses Chat Completions (not yet migrated)."""
+    def test_openai_uses_responses_api(self) -> None:
+        """OpenAI adapter must use responses.create (not chat.completions)."""
         import inspect
 
-        from core.llm.providers.openai import (
-            OpenAIAgenticAdapter,
-        )
+        from core.llm.providers.openai import OpenAIAgenticAdapter
 
         source = inspect.getsource(OpenAIAgenticAdapter.agentic_call)
-        assert "chat.completions.create" in source
+        assert "responses.create" in source
+        assert "chat.completions.create" not in source
+
+    def test_openai_native_web_search_constant(self) -> None:
+        """_OPENAI_NATIVE_TOOLS must include web_search."""
+        from core.llm.providers.openai import _OPENAI_NATIVE_TOOLS
+
+        types = {t.get("type") for t in _OPENAI_NATIVE_TOOLS}
+        assert "web_search" in types
 
 
 # ---------------------------------------------------------------------------

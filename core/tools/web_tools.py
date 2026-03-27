@@ -80,7 +80,11 @@ class WebFetchTool:
 
 
 class GeneralWebSearchTool:
-    """Search the web for current information via Anthropic native web search."""
+    """Search the web via 3-provider native web search fallback chain.
+
+    Priority: Anthropic (Opus) → OpenAI (gpt-5.4) → GLM (glm-5).
+    Each provider uses its native web search tool — no external API keys needed.
+    """
 
     @property
     def name(self) -> str:
@@ -98,12 +102,31 @@ class GeneralWebSearchTool:
         query: str = kwargs["query"]
         max_results: int = kwargs.get("max_results", 5)
 
+        # 1. Anthropic (primary)
+        result = self._anthropic_search(query, max_results)
+        if result:
+            return result
+
+        # 2. OpenAI Responses API (fallback 1)
+        result = self._openai_search(query, max_results)
+        if result:
+            return result
+
+        # 3. GLM native web_search (fallback 2)
+        result = self._glm_search(query, max_results)
+        if result:
+            return result
+
+        return {"error": "All web search providers failed"}
+
+    def _anthropic_search(self, query: str, max_results: int) -> dict[str, Any] | None:
+        """Anthropic native web search via Messages API."""
         try:
             from core.config import ANTHROPIC_PRIMARY, settings
             from core.llm.router import get_anthropic_client
 
             if not settings.anthropic_api_key:
-                return {"error": "No API key configured for web search"}
+                return None
 
             today = date.today()
             client = get_anthropic_client()
@@ -129,7 +152,6 @@ class GeneralWebSearchTool:
             for block in response.content:
                 if hasattr(block, "text"):
                     text_parts.append(block.text)
-                # Extract cited URLs from web_search_tool_result blocks
                 if getattr(block, "type", "") == "web_search_tool_result":
                     for entry in getattr(block, "content", []):
                         url = getattr(entry, "url", None)
@@ -144,4 +166,89 @@ class GeneralWebSearchTool:
                 }
             }
         except Exception as exc:
-            return {"error": f"Web search failed: {exc}"}
+            log.debug("Anthropic web search failed: %s", exc)
+            return None
+
+    def _openai_search(self, query: str, max_results: int) -> dict[str, Any] | None:
+        """OpenAI native web search via Responses API."""
+        try:
+            from core.config import OPENAI_PRIMARY, settings
+            from core.llm.providers.openai import _get_openai_client
+
+            if not settings.openai_api_key:
+                return None
+
+            today = date.today()
+            client = _get_openai_client()
+            response = client.responses.create(
+                model=OPENAI_PRIMARY,
+                tools=[{"type": "web_search"}],
+                input=(
+                    f"Today is {today.isoformat()}. "
+                    f"Search the web for: {query}. "
+                    f"Return up to {max_results} relevant results "
+                    "with titles, URLs, and brief summaries."
+                ),
+            )
+            text_parts: list[str] = []
+            for item in response.output:
+                if getattr(item, "type", "") == "message":
+                    for sub in getattr(item, "content", []):
+                        if getattr(sub, "type", "") == "output_text":
+                            text = getattr(sub, "text", "")
+                            if text:
+                                text_parts.append(text)
+            if not text_parts:
+                return None
+            return {
+                "result": {
+                    "query": query,
+                    "search_results": "\n".join(text_parts),
+                    "source": "openai_web_search",
+                }
+            }
+        except Exception as exc:
+            log.debug("OpenAI web search failed: %s", exc)
+            return None
+
+    def _glm_search(self, query: str, max_results: int) -> dict[str, Any] | None:
+        """GLM native web search via Chat Completions API."""
+        try:
+            from core.config import GLM_BASE_URL, GLM_PRIMARY, settings
+
+            if not settings.zai_api_key:
+                return None
+
+            import openai
+
+            client = openai.OpenAI(api_key=settings.zai_api_key, base_url=GLM_BASE_URL)
+            today = date.today()
+            response = client.chat.completions.create(
+                model=GLM_PRIMARY,
+                tools=[{"type": "web_search", "web_search": {"enable": True}}],  # type: ignore[list-item]  # GLM native tool
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Today is {today.isoformat()}. "
+                            f"Search the web for: {query}. "
+                            f"Return up to {max_results} relevant results "
+                            "with titles, URLs, and brief summaries."
+                        ),
+                    }
+                ],
+                timeout=30.0,
+            )
+            choice = response.choices[0] if response.choices else None
+            if choice and choice.message.content:
+                return {
+                    "result": {
+                        "query": query,
+                        "search_results": choice.message.content,
+                        "source": "glm_web_search",
+                    }
+                }
+            return None
+        except Exception as exc:
+            log.debug("GLM web search failed: %s", exc)
+            return None

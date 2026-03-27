@@ -1,11 +1,4 @@
 {
-  "brave-search": {
-    "command": "npx",
-    "args": ["-y", "@brave/brave-search-mcp-server"],
-    "env": {
-      "BRAVE_API_KEY": "${BRAVE_API_KEY}"
-    }
-  },
   "steam": {
     "command": "npx",
     "args": ["-y", "steam-mcp-server"]

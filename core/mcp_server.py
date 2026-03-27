@@ -30,7 +30,7 @@ def create_mcp_server() -> Any:
 
     mcp = FastMCP("geode-analysis")
 
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["analyze_ip"])  # type: ignore[untyped-decorator]
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["analyze_ip"])
     def analyze_ip(ip_name: str, dry_run: bool = False) -> dict[str, Any]:
         """Run GEODE analysis pipeline on an IP."""
         from core.domains.game_ip.fixtures import FIXTURE_MAP
@@ -93,13 +93,13 @@ def create_mcp_server() -> Any:
             log.error("MCP analyze_ip failed: %s", exc)
             return {"error": str(exc)}
 
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["quick_score"])  # type: ignore[untyped-decorator]
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["quick_score"])
     def quick_score(ip_name: str) -> dict[str, Any]:
         """Run scoring-only mode for fast estimation."""
         result: dict[str, Any] = analyze_ip(ip_name, dry_run=True)
         return result
 
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["get_ip_signals"])  # type: ignore[untyped-decorator]
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["get_ip_signals"])
     def get_ip_signals(ip_name: str) -> dict[str, Any]:
         """Get community signals for an IP."""
         from core.domains.game_ip.fixtures import FIXTURE_MAP, load_fixture
@@ -115,7 +115,7 @@ def create_mcp_server() -> Any:
             "source": "fixture",
         }
 
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["list_fixtures"])  # type: ignore[untyped-decorator]
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["list_fixtures"])
     def list_fixtures() -> dict[str, Any]:
         """List all available IP fixtures."""
         from core.domains.game_ip.fixtures import FIXTURE_MAP
@@ -128,7 +128,7 @@ def create_mcp_server() -> Any:
     # Shared ProjectMemory instance (created once per server lifetime)
     _project_memory: Any = None
 
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["query_memory"])  # type: ignore[untyped-decorator]
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["query_memory"])
     def query_memory(query: str) -> dict[str, Any]:
         """Search GEODE memory."""
         nonlocal _project_memory
@@ -139,7 +139,7 @@ def create_mcp_server() -> Any:
         context = _project_memory.get_context_for_ip(query)
         return {"query": query, "context": context}
 
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["get_health"])  # type: ignore[untyped-decorator]
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["get_health"])
     def get_health() -> dict[str, Any]:
         """Get pipeline health status."""
         from core.config import settings
@@ -152,14 +152,14 @@ def create_mcp_server() -> Any:
         }
 
     # Resources
-    @mcp.resource("geode://fixtures")  # type: ignore[untyped-decorator]
+    @mcp.resource("geode://fixtures")
     def fixtures_resource() -> str:
         """List all available IP fixtures."""
         from core.domains.game_ip.fixtures import FIXTURE_MAP
 
         return json.dumps({"count": len(FIXTURE_MAP), "ips": sorted(FIXTURE_MAP.keys())})
 
-    @mcp.resource("geode://soul")  # type: ignore[untyped-decorator]
+    @mcp.resource("geode://soul")
     def soul_resource() -> str:
         """Get SOUL.md content."""
         from core.memory.organization import DEFAULT_SOUL_PATH

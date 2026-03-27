@@ -1,7 +1,8 @@
 """Provider-agnostic agentic response normalization.
 
-Normalizes LLM provider responses (Anthropic, OpenAI) into a common
-format that AgenticLoop can process without provider-specific code.
+Normalizes LLM provider responses (Anthropic, OpenAI Chat Completions,
+OpenAI Responses API) into a common format that AgenticLoop can process
+without provider-specific code.
 """
 
 from __future__ import annotations
@@ -122,6 +123,62 @@ def normalize_openai(response: Any) -> AgenticResponse:
         usage = ResponseUsage(
             input_tokens=response.usage.prompt_tokens or 0,
             output_tokens=response.usage.completion_tokens or 0,
+        )
+
+    return AgenticResponse(
+        content=blocks,
+        stop_reason=stop_reason,
+        usage=usage,
+    )
+
+
+def normalize_openai_responses(response: Any) -> AgenticResponse:
+    """Normalize an OpenAI Responses API response to AgenticResponse.
+
+    The Responses API returns ``response.output`` — a list of heterogeneous
+    output items (message, function_call, web_search_call, etc.).
+
+    - ``message`` items contain text sub-blocks → TextBlock
+    - ``function_call`` items → ToolUseBlock (GEODE tool invocations)
+    - ``web_search_call`` items → skipped (server-side, transparent)
+    """
+    if not hasattr(response, "output") or not response.output:
+        return AgenticResponse()
+
+    blocks: list[TextBlock | ToolUseBlock] = []
+    has_function_calls = False
+
+    for item in response.output:
+        item_type = getattr(item, "type", "")
+
+        if item_type == "message":
+            for sub in getattr(item, "content", []):
+                sub_type = getattr(sub, "type", "")
+                if sub_type == "output_text":
+                    text = getattr(sub, "text", "")
+                    if text:
+                        blocks.append(TextBlock(text=text))
+
+        elif item_type == "function_call":
+            has_function_calls = True
+            call_id = getattr(item, "call_id", "") or getattr(item, "id", "")
+            name = getattr(item, "name", "")
+            arguments = getattr(item, "arguments", "{}")
+            try:
+                args = json.loads(arguments) if isinstance(arguments, str) else arguments
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+            blocks.append(ToolUseBlock(id=call_id, name=name, input=args))
+
+        # web_search_call, file_search_call, etc. → skip (server-side)
+
+    stop_reason = "tool_use" if has_function_calls else "end_turn"
+
+    usage = ResponseUsage()
+    if hasattr(response, "usage") and response.usage is not None:
+        usage = ResponseUsage(
+            input_tokens=getattr(response.usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(response.usage, "output_tokens", 0) or 0,
         )
 
     return AgenticResponse(

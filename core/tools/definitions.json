@@ -592,7 +592,7 @@
   },
   {
     "name": "general_web_search",
-    "description": "웹에서 최신 정보를 검색합니다. 기본 웹 검색 도구 — 사용자가 현재 정보, 뉴스, 트렌드를 물어볼 때 이 도구를 우선 사용하세요. Anthropic 네이티브 웹 검색으로 무제한 사용 가능합니다. (brave_web_search MCP는 무료 한도 제한이 있으므로 fallback으로만 사용)",
+    "description": "웹에서 최신 정보를 검색합니다. 3사 네이티브 웹 검색(Anthropic → OpenAI → GLM) fallback chain으로 안정적 검색. 사용자가 현재 정보, 뉴스, 트렌드를 물어볼 때 이 도구를 우선 사용하세요.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
