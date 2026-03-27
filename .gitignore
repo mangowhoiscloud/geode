@@ -38,3 +38,4 @@ geode_checkpoints.db
 !.geode/memory/
 !.geode/config.toml.example
 !.geode/skills/
+# CI trigger

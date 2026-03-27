@@ -129,3 +129,29 @@ class TestConfigWatcher:
         watcher.check_now()
 
         assert watcher.stats.errors == 1
+
+    def test_gateway_binding_reload_pattern(self, tmp_path: Path):
+        """Simulate the gateway binding hot-reload pattern from build_gateway()."""
+        import tomllib
+
+        config_file = tmp_path / "config.toml"
+        config_file.write_bytes(b'[gateway]\nbindings = ["#general"]\n')
+
+        reload_calls: list[dict] = []
+
+        def reload_bindings(path: Path, mtime: float) -> None:
+            with open(path, "rb") as f:
+                data = tomllib.load(f)
+            reload_calls.append(data)
+
+        watcher = ConfigWatcher(debounce_ms=50)
+        watcher.watch(config_file, reload_bindings, name="gateway-bindings")
+
+        # Modify config
+        time.sleep(0.1)
+        config_file.write_bytes(b'[gateway]\nbindings = ["#alerts"]\n')
+
+        detected = watcher.check_now()
+        assert detected == 1
+        assert len(reload_calls) == 1
+        assert reload_calls[0]["gateway"]["bindings"] == ["#alerts"]

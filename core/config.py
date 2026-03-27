@@ -241,6 +241,10 @@ class Settings(BaseSettings):
     gateway_enabled: bool = False  # GEODE_GATEWAY_ENABLED=true to enable
     gateway_poll_interval_s: float = 3.0
 
+    # L4 Gateway Hooks — external webhook endpoint
+    webhook_enabled: bool = False  # GEODE_WEBHOOK_ENABLED=true to enable
+    webhook_port: int = 8765
+
     # Calendar — external calendar sync
     calendar_sync_on_trigger: bool = False  # auto-sync on TRIGGER_FIRED
 
