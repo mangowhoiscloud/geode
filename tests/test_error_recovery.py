@@ -411,7 +411,10 @@ class TestRecoveryHookEvents:
 
     def test_total_hook_event_count(self) -> None:
         """Verify total hook event count is 39 (27 + 3 recovery + 2 gateway + 2 mcp + 2 context + 1 turn + 2 session)."""
-        assert len(HookEvent) == 39
+        assert len(HookEvent) == 40
+
+        """Verify total hook event count is 38 (27 + 3 recovery + 2 gateway + 2 mcp + 3 context + 1 turn)."""
+        assert len(HookEvent) == 40
 
 
 # ---------------------------------------------------------------------------
