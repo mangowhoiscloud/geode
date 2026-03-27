@@ -36,6 +36,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **TURN_COMPLETE 자동 메모리** — 37번째 HookEvent. AgenticLoop 매 턴 종료 시 발화, user_input + tool_calls + result 데이터 전달. `turn_auto_memory` 핸들러가 자동으로 project memory에 턴 요약 기록 (OpenClaw `command:new` 패턴).
 - **OpenAI Responses API 전환** — `OpenAIAgenticAdapter`를 Chat Completions → Responses API(`client.responses.create`)로 마이그레이션. 네이티브 `web_search` 호스티드 도구 주입. `normalize_openai_responses()` 정규화기 추가.
 - **3사 네이티브 웹 검색 fallback** — `GeneralWebSearchTool`/`WebSearchTool`을 Anthropic(Opus) → OpenAI(gpt-5.4) → GLM(glm-5) 순차 fallback으로 전환. 외부 API 키 의존 제로.
+- **Provider-aware context compaction** — 장시간 운용을 위한 프로바이더별 컨텍스트 관리. Anthropic: 서버사이드 compaction(`compact_20260112`) + `clear_tool_uses` 결합. OpenAI/GLM: 80%에서 LLM 요약 기반 클라이언트 compaction 발동. `context_action.py` hook이 프로바이더별 전략을 분화.
 
 ### Removed
 - **Brave Search MCP 제거** — `brave_adapter.py` 삭제, catalog/registry/mcp_servers.json에서 brave-search 항목 제거. 3사 네이티브 웹 검색으로 대체.
