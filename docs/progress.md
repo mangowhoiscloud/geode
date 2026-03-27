@@ -44,6 +44,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
+| hook-approval-fix | TOOL_APPROVAL 이벤트명 불일치 수정 — decided→granted/denied | @mangowhoiscloud | feature/hook-approval-fix | 2026-03-27 | SOT 점검 발견 |
 
 ### In Review
 
