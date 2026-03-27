@@ -45,6 +45,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
+| action-summary | Action Summary — Tier1 결정론적 + Tier2 LLM opt-in | @mangowhoiscloud | feature/action-summary | 2026-03-28 | |
 
 ### In Review
 
