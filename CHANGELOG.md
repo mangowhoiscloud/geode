@@ -28,6 +28,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Plan-first 프롬프트 가이드** — 복잡한 요청(3+ 스텝, 고비용)에 대해 LLM이 자발적으로 `create_plan` 호출 후 사용자 승인 대기. Claude Code 패턴.
+- **Plan HITL UI 보강** — 계획 표시 시 승인/수정/거부 안내 표시. plan_id 노출.
+
 ---
 ## [0.31.0] — 2026-03-28
 
