@@ -555,7 +555,7 @@ class SubAgentManager:
         agent_memory = AgentMemoryStore(task.task_id)
 
         # 2. Fresh conversation context (independent context window)
-        conversation = ConversationContext(max_turns=10)
+        conversation = ConversationContext(max_turns=200)
 
         # 3. Filter denied tools from action_handlers (sandbox hardening)
         filtered_handlers = self._action_handlers
