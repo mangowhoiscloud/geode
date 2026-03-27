@@ -104,15 +104,16 @@ geode/
 ├── core/                          # 202 modules, 6-Layer Architecture
 │   ├── agent/                     # L0: AgenticLoop, ToolCallProcessor, SubAgentManager
 │   ├── cli/                       # L0: REPL, Commands, UI
-│   ├── infrastructure/            # L1: Port/Adapter (Claude, OpenAI, GLM, MCP)
+│   ├── llm/                       # L1: Claude/OpenAI/GLM Adapters, Router, Prompts
 │   ├── memory/                    # L2: 4-Tier Memory, Context Assembly, User Profile
-│   ├── orchestration/             # L3: HookSystem(36), TaskGraph, PlanMode, Queue
-│   ├── tools/                     # L4: 47 Tool Definitions + Handlers
+│   ├── hooks/                     # HookSystem(36) — cross-cutting lifecycle events
+│   ├── orchestration/             # L3: TaskGraph, PlanMode, LaneQueue, CoalescingQueue
+│   ├── tools/                     # L4: 54 Tool Definitions + Handlers
 │   ├── skills/                    # L4: Skill Templates
 │   ├── mcp/                       # L4: MCP Catalog(44) + Manager
 │   ├── domains/game_ip/           # L5: Game IP Domain Plugin (7 pipeline nodes)
 │   ├── gateway/                   # Slack Gateway (geode serve)
-│   ├── llm/                       # LLM Client + Prompts
+│   ├── runtime_wiring/            # Runtime bootstrap modules (5-module split)
 │   └── verification/              # Guardrails, BiasBuster, Cross-LLM
 ├── tests/                         # 3202+ tests
 ├── docs/                          # Architecture, Workflow, Plans
@@ -125,7 +126,7 @@ geode/
 └── pyproject.toml                 # uv package config
 ```
 
-[Architecture details →](docs/architecture.md) | [Full source tree →](docs/architecture.md#project-structure)
+[Architecture details →](docs/architecture.md) | [Hook System →](docs/architecture/hook-system.md) | [Full source tree →](docs/architecture.md#project-structure)
 
 ### `.geode/` -- Agent Context Lifecycle
 
@@ -150,7 +151,8 @@ graph LR
 ```mermaid
 graph LR
     L0["L0 CLI & Agent<br/>AgenticLoop, SubAgent"] --> L1["L1 Infra<br/>Port/Adapter DI"]
-    L0 --> L3["L3 Orchestration<br/>Hooks, TaskGraph"]
+    L0 --> L3["L3 Orchestration<br/>TaskGraph, LaneQueue"]
+    L0 --> HK["Hooks (cross-cutting)<br/>36 events"]
     L0 --> L4["L4 Extensibility<br/>Tools(47), MCP(44)"]
     L4 --> L5["L5 Domain<br/>DomainPort Plugin"]
     L0 --> L2["L2 Memory<br/>4-Tier + Checkpoint"]
@@ -159,6 +161,7 @@ graph LR
     style L1 fill:#1e293b,stroke:#10b981,color:#e2e8f0
     style L2 fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
     style L3 fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style HK fill:#1e293b,stroke:#f97316,color:#e2e8f0
     style L4 fill:#1e293b,stroke:#ef4444,color:#e2e8f0
     style L5 fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
 ```
@@ -166,10 +169,11 @@ graph LR
 | Layer | 핵심 | 진입점 |
 |-------|------|--------|
 | **L0** | CLI, AgenticLoop, SubAgentManager | `core/cli/agentic_loop.py` |
-| **L1** | Protocol ports + contextvars DI | `core/infrastructure/ports/` |
+| **L1** | LLM Adapters (Claude, OpenAI, GLM) | `core/llm/` |
 | **L2** | SOUL → User → Org → Project → Session | `core/memory/` |
-| **L3** | HookSystem(36), TaskGraph DAG, PlanMode | `core/orchestration/` |
-| **L4** | ToolRegistry(47), MCP Catalog(44), Skills | `core/tools/` |
+| **Hooks** | HookSystem(36) — cross-cutting lifecycle | `core/hooks/` → [hook-system.md](docs/architecture/hook-system.md) |
+| **L3** | TaskGraph DAG, PlanMode, LaneQueue | `core/orchestration/` |
+| **L4** | ToolRegistry(54), MCP Catalog(44), Skills | `core/tools/` |
 | **L5** | DomainPort Protocol, GameIPDomain | `core/domains/` |
 
 [Architecture details →](docs/architecture.md)

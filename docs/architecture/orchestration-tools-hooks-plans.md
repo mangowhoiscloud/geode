@@ -13,7 +13,7 @@ GEODE 오케스트레이션 레이어는 LangGraph `StateGraph` 위에 구축된
 
 | 하위 시스템 | 역할 | 핵심 파일 |
 |---|---|---|
-| **HookSystem** | 이벤트 기반 확장 포인트 (36개 이벤트) | `orchestration/hooks.py` |
+| **HookSystem** | 이벤트 기반 확장 포인트 (36개 이벤트) | `core/hooks/` → [hook-system.md](hook-system.md) |
 | **ToolSystem** | LLM-driven 도구 사용 및 정책 기반 접근 제어 | `tools/base.py`, `tools/registry.py`, `tools/policy.py` |
 | **PlanMode** | 복합 분석 요청의 plan-before-execute 패턴 | `orchestration/plan_mode.py`, `orchestration/planner.py` |
 | **BootstrapManager** | 노드 실행 전 구성 주입 (`NODE_BOOTSTRAP`) | `orchestration/bootstrap.py` |
@@ -23,114 +23,12 @@ GEODE 오케스트레이션 레이어는 LangGraph `StateGraph` 위에 구축된
 
 ---
 
-## 2. HookSystem — 이벤트 기반 확장 포인트
+## 2. HookSystem
 
-### 2.1 아키텍처
-
-```mermaid
-graph TB
-    subgraph "이벤트 소스"
-        SG["StateGraph 실행<br/>(_make_hooked_node wrapper)"]
-        BM["BootstrapManager<br/>(NODE_BOOTSTRAP)"]
-        PA["PromptAssembler<br/>(PROMPT_ASSEMBLED)"]
-        L45["L4.5 Automation<br/>(DRIFT/OUTCOME/MODEL/SNAPSHOT/TRIGGER)"]
-    end
-
-    subgraph "HookSystem"
-        HS["HookSystem<br/>register() / trigger() / unregister()"]
-        RH["_RegisteredHook[]<br/>handler + name + priority"]
-    end
-
-    subgraph "핸들러 (우선순위 순)"
-        P30["Priority 30: TaskGraphHookBridge<br/>(task_bridge_enter/exit/error)"]
-        P40["Priority 40: StuckDetector<br/>(stuck_tracker)"]
-        P50["Priority 50: RunLog<br/>(run_log_writer — 전 이벤트 구독)"]
-        P70["Priority 70: TriggerManager<br/>(drift_pipeline_trigger)"]
-        P80["Priority 80: SnapshotManager<br/>(drift_auto_snapshot, pipeline_end_snapshot)"]
-        P90["Priority 90: 로거<br/>(drift/snapshot/trigger/outcome/model_promotion)"]
-    end
-
-    SG -->|"NODE_ENTER/EXIT/ERROR<br/>PIPELINE_START/END/ERROR<br/>ANALYST/EVALUATOR/SCORING_COMPLETE<br/>VERIFICATION_PASS/FAIL"| HS
-    BM -->|"NODE_BOOTSTRAP"| HS
-    PA -->|"PROMPT_ASSEMBLED"| HS
-    L45 -->|"DRIFT_DETECTED<br/>OUTCOME_COLLECTED<br/>MODEL_PROMOTED<br/>SNAPSHOT_CAPTURED<br/>TRIGGER_FIRED"| HS
-    HS --> P30 --> P40 --> P50 --> P70 --> P80 --> P90
-```
-
-### 2.2 HookEvent 열거형 (36개 이벤트)
-
-아래 표는 `orchestration/hooks.py`의 `HookEvent` 열거형 전체 목록입니다. 원본 소스 코드에서 검증된 값입니다.
-
-| 카테고리 | 이벤트 | 값 | 소스 |
-|---|---|---|---|
-| **Pipeline** | `PIPELINE_START` | `"pipeline_start"` | `_make_hooked_node` (router 진입 시) |
-| | `PIPELINE_END` | `"pipeline_end"` | `_make_hooked_node` (synthesizer 완료 시) |
-| | `PIPELINE_ERROR` | `"pipeline_error"` | `_make_hooked_node` (임의 노드 예외 시) |
-| **Node** | `NODE_BOOTSTRAP` | `"node_bootstrap"` | `BootstrapManager.prepare_node()` |
-| | `NODE_ENTER` | `"node_enter"` | `_make_hooked_node` (매 노드 진입) |
-| | `NODE_EXIT` | `"node_exit"` | `_make_hooked_node` (매 노드 정상 완료) |
-| | `NODE_ERROR` | `"node_error"` | `_make_hooked_node` (매 노드 예외) |
-| **Analysis** | `ANALYST_COMPLETE` | `"analyst_complete"` | `_NODE_COMPLETION_EVENTS["analyst"]` |
-| | `EVALUATOR_COMPLETE` | `"evaluator_complete"` | `_NODE_COMPLETION_EVENTS["evaluator"]` |
-| | `SCORING_COMPLETE` | `"scoring_complete"` | `_NODE_COMPLETION_EVENTS["scoring"]` |
-| **Verification** | `VERIFICATION_PASS` | `"verification_pass"` | `_make_hooked_node` (guardrails + biasbuster 통과) |
-| | `VERIFICATION_FAIL` | `"verification_fail"` | `_make_hooked_node` (guardrails 또는 biasbuster 실패) |
-| **Automation** | `DRIFT_DETECTED` | `"drift_detected"` | `_register_drift_scan_hook` / `CUSUMDetector` |
-| | `OUTCOME_COLLECTED` | `"outcome_collected"` | `OutcomeTracker` |
-| | `MODEL_PROMOTED` | `"model_promoted"` | `ModelRegistry` |
-| | `SNAPSHOT_CAPTURED` | `"snapshot_captured"` | `SnapshotManager.capture()` |
-| | `TRIGGER_FIRED` | `"trigger_fired"` | `TriggerManager` |
-| **Prompt** | `PROMPT_ASSEMBLED` | `"prompt_assembled"` | `PromptAssembler.assemble()` |
-
-### 2.3 이벤트 발생 시점의 정확한 순서
-
-`_make_hooked_node()` 래퍼 내부에서 이벤트가 발생하는 정확한 순서는 다음과 같습니다. 이 순서는 `graph.py:62-146`에서 직접 확인하실 수 있습니다.
-
-```
-1. NODE_BOOTSTRAP        (bootstrap_mgr가 존재할 경우)
-2. PromptAssembler 주입   (state["_prompt_assembler"] 설정)
-3. NODE_ENTER
-4. PIPELINE_START         (node_name == "router"일 때만)
-5. node_fn(state) 실행
-6-a. NODE_EXIT            (성공 시)
-6-b. {ANALYST|EVALUATOR|SCORING}_COMPLETE  (해당 노드일 때)
-6-c. VERIFICATION_PASS 또는 VERIFICATION_FAIL  (verification 노드일 때)
-6-d. PIPELINE_END         (node_name == "synthesizer"일 때)
---- 또는 ---
-6-e. NODE_ERROR + PIPELINE_ERROR  (예외 발생 시 — 둘 다 trigger됨)
-```
-
-**중요**: `NODE_ERROR` 발생 시 `PIPELINE_ERROR`도 동시에 trigger됩니다. 이는 `graph.py:141-142`에서 확인하실 수 있으며, 에러 상태 추적의 이중 보장을 의미합니다.
-
-### 2.4 핵심 설계 원칙
-
-1. **비차단 실행**: 한 핸들러의 예외가 다른 핸들러 실행을 중단하지 않습니다 (`hooks.py:129-141`)
-2. **우선순위 정렬**: 낮은 수 = 높은 우선순위입니다 (30 → 90 순서로 실행, `sort(key=lambda h: h.priority)`)
-3. **메타데이터 전용 방출**: `PROMPT_ASSEMBLED`는 원본 프롬프트가 아닌 해시와 통계만 전달합니다 (보안 고려)
-4. **`HookResult` 반환**: `trigger()` 호출 시 모든 핸들러의 성공/실패 결과를 반환하여 디버깅에 활용하실 수 있습니다
-
-### 2.5 등록된 핸들러 전체 목록
-
-`runtime.py`에서 등록되는 핸들러의 정확한 목록입니다.
-
-| 우선순위 | 핸들러명 | 구독 이벤트 | 등록 위치 |
-|---|---|---|---|
-| **30** | `task_bridge_enter` | `NODE_ENTER` | `TaskGraphHookBridge.register()` |
-| **30** | `task_bridge_exit` | `NODE_EXIT` | `TaskGraphHookBridge.register()` |
-| **30** | `task_bridge_error` | `NODE_ERROR` | `TaskGraphHookBridge.register()` |
-| **40** | `stuck_tracker` | `PIPELINE_START`, `PIPELINE_END`, `PIPELINE_ERROR` | `_make_stuck_hook_handler()` |
-| **50** | `run_log_writer` | **전체 36개 이벤트** | `_make_run_log_handler()` |
-| **50** | `drift_scan_on_scoring` | `SCORING_COMPLETE` | `_register_drift_scan_hook()` (graph.py) |
-| **70** | `drift_pipeline_trigger` | `DRIFT_DETECTED` | `TriggerManager.make_event_handler()` |
-| **80** | `drift_auto_snapshot` | `DRIFT_DETECTED` | `_build_automation()` 인라인 |
-| **80** | `pipeline_end_snapshot` | `PIPELINE_END` | `_build_automation()` 인라인 |
-| **90** | `drift_logger` | `DRIFT_DETECTED` | `_build_automation()` 인라인 |
-| **90** | `snapshot_logger` | `SNAPSHOT_CAPTURED` | `_build_automation()` 인라인 |
-| **90** | `trigger_logger` | `TRIGGER_FIRED` | `_build_automation()` 인라인 |
-| **90** | `outcome_logger` | `OUTCOME_COLLECTED` | `_build_automation()` 인라인 |
-| **90** | `model_promotion_logger` | `MODEL_PROMOTED` | `_build_automation()` 인라인 |
-
-총 **14개** 핸들러가 등록됩니다 (`drift_scan_on_scoring`은 `enable_drift_scan=True`일 때만 등록되므로, 조건 충족 시 포함).
+> **별도 문서로 분리됨**: [hook-system.md](hook-system.md)
+>
+> HookSystem은 `core/hooks/`로 독립 모듈화 (cross-cutting concern). L0~L5 전 레이어에서 접근.
+> 36개 이벤트, 14+ 핸들러, 우선순위 기반 실행.
 
 ---
 
