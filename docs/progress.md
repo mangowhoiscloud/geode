@@ -26,7 +26,7 @@
 | ~~scheduler-callback~~ | ~~스케줄러 callback 와이어링 — action 필드 + 큐 연결~~ | ~~P1~~ | ~~tool-mcp-architecture-review.md~~ | **Done** |
 | ~~scheduler-nl-fix~~ | ~~스케줄러 NL 정규식 제거 → 원문 저장 + LLM 프레이밍 위임~~ | ~~P0~~ | ~~#483~~ | **Done** |
 | ~~runtime-decompose-v2~~ | ~~runtime.py 1475→380줄 — 5-module split~~ | ~~P0~~ | ~~#484~~ | **Done** |
-| di-cleanup | 불필요 ContextVar DI 8개 제거 — 직접 import로 대체 | P0 | — | 프론티어 패턴 정렬 |
+| ~~di-cleanup~~ | ~~불필요 ContextVar DI 8개 제거 — 직접 import로 대체~~ | ~~P0~~ | ~~#486~~ | **Done** |
 | gateway-binding-hotreload | 바인딩 핫 리로드 — config.toml 변경 시 재시작 불필요 | P3 | — | OpenClaw GAP |
 | gateway-hooks-l4 | Gateway Hooks (L4) — 외부 웹훅 → 에이전트 트리거 | P3 | — | OpenClaw GAP |
 | cron-session-isolation | Cron systemEvent vs agentTurn 구분 — 메인 세션 주입 vs 격리 실행 | P2 | — | OpenClaw GAP |
