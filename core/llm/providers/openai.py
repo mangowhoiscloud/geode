@@ -363,19 +363,24 @@ import asyncio  # noqa: E402
 
 import httpx  # noqa: E402
 
+# OpenAI native hosted tools (Responses API)
+_OPENAI_NATIVE_TOOLS: list[dict[str, Any]] = [
+    {"type": "web_search"},
+]
+
 
 class OpenAIAgenticAdapter:
-    """OpenAI agentic adapter (P1 Gateway pattern).
+    """OpenAI agentic adapter via Responses API (P1 Gateway pattern).
 
-    TODO(v0.30+): Migrate to OpenAI Responses API for native web_search_preview,
-    code_interpreter, file_search, and other hosted tools.
+    Uses ``client.responses.create`` with native hosted tools (web_search).
+    Chat Completions converters are retained for the GLM subclass.
 
     Subclass for GLM, Qwen, etc. Override ``_resolve_config()`` and
     ``fallback_chain`` for provider-specific settings.
 
     Features:
-    - Anthropic->OpenAI message format conversion
-    - Anthropic->OpenAI tool schema conversion
+    - Anthropic->OpenAI Responses API input format conversion
+    - Native hosted tool injection (web_search)
     - httpx connection pool (parity with Anthropic adapter)
     - CircuitBreaker
     - KeyboardInterrupt -> UserCancelledError
@@ -448,23 +453,32 @@ class OpenAIAgenticAdapter:
             log.warning("%s circuit breaker is OPEN, skipping call", self.provider_name)
             return None
 
-        # OpenAI tool_choice is a string
+        # Responses API tool_choice is a string
         tc_val = tool_choice.get("type", "auto") if isinstance(tool_choice, dict) else tool_choice
 
-        oai_tools = _tools_to_openai(tools)
-        oai_messages = _convert_messages_to_openai(system, messages)
+        # Build tools: function tools + native hosted tools (dedup)
+        oai_tools: list[dict[str, Any]] = _tools_to_openai(tools)
+        existing_names = {
+            t.get("function", {}).get("name") for t in oai_tools if t.get("type") == "function"
+        }
+        for native in _OPENAI_NATIVE_TOOLS:
+            native_name = native.get("name") or native.get("type", "")
+            if native_name not in existing_names:
+                oai_tools.append(native)
+
+        # Convert messages to Responses API input format
+        responses_input = _convert_messages_to_responses(system, messages)
         failover_models = [model] + [m for m in self.fallback_chain if m != model]
 
         async def _do_call(m: str) -> Any:
             return await asyncio.to_thread(
-                client.chat.completions.create,
+                client.responses.create,
                 model=m,
-                messages=oai_messages,
+                input=responses_input,
                 tools=oai_tools if oai_tools else None,
                 tool_choice=tc_val if oai_tools else None,
-                max_completion_tokens=max_tokens,
+                max_output_tokens=max_tokens,
                 temperature=temperature,
-                timeout=120.0,
             )
 
         try:
@@ -485,9 +499,9 @@ class OpenAIAgenticAdapter:
         if used_model and used_model != model:
             log.warning("Model failover: %s -> %s", model, used_model)
 
-        from core.cli.agentic_response import normalize_openai
+        from core.cli.agentic_response import normalize_openai_responses
 
-        return normalize_openai(response)
+        return normalize_openai_responses(response)
 
     def reset_client(self) -> None:
         with self._client_lock:
@@ -500,7 +514,113 @@ class OpenAIAgenticAdapter:
 
 
 # ---------------------------------------------------------------------------
-# Format converters (Anthropic -> OpenAI)
+# Format converters: Anthropic -> OpenAI Responses API
+# ---------------------------------------------------------------------------
+
+
+def _convert_messages_to_responses(
+    system: str, messages: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Convert Anthropic-format messages to OpenAI Responses API input format.
+
+    Responses API differences from Chat Completions:
+    - tool_use blocks become ``{"type": "function_call", ...}`` items
+    - tool_result blocks become ``{"type": "function_call_output", ...}`` items
+    """
+    result: list[dict[str, Any]] = []
+
+    if system:
+        result.append({"role": "system", "content": system})
+
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content")
+
+        if role == "assistant":
+            result.extend(_convert_assistant_to_responses(content))
+        elif role == "user":
+            result.extend(_convert_user_to_responses(content))
+        else:
+            result.append({"role": role, "content": str(content) if content else ""})
+
+    return result
+
+
+def _convert_assistant_to_responses(content: Any) -> list[dict[str, Any]]:
+    """Convert Anthropic assistant content to Responses API items."""
+    if isinstance(content, str):
+        return [{"role": "assistant", "content": content}]
+    if not isinstance(content, list):
+        return [{"role": "assistant", "content": str(content) if content else ""}]
+
+    items: list[dict[str, Any]] = []
+    text_parts: list[str] = []
+
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text":
+            text_parts.append(block.get("text", ""))
+        elif block.get("type") == "tool_use":
+            if text_parts:
+                items.append({"role": "assistant", "content": "\n".join(text_parts)})
+                text_parts = []
+            items.append(
+                {
+                    "type": "function_call",
+                    "call_id": block["id"],
+                    "name": block["name"],
+                    "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
+                }
+            )
+
+    if text_parts:
+        items.append({"role": "assistant", "content": "\n".join(text_parts)})
+
+    return items if items else [{"role": "assistant", "content": ""}]
+
+
+def _convert_user_to_responses(content: Any) -> list[dict[str, Any]]:
+    """Convert Anthropic user content to Responses API items."""
+    if isinstance(content, str):
+        return [{"role": "user", "content": content}]
+    if not isinstance(content, list):
+        return [{"role": "user", "content": str(content) if content else ""}]
+
+    items: list[dict[str, Any]] = []
+    text_parts: list[str] = []
+
+    for block in content:
+        if isinstance(block, dict):
+            if block.get("type") == "tool_result":
+                raw_content = block.get("content", "")
+                output = (
+                    raw_content
+                    if isinstance(raw_content, str)
+                    else json.dumps(raw_content, ensure_ascii=False)
+                )
+                items.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": block["tool_use_id"],
+                        "output": output,
+                    }
+                )
+            elif block.get("type") == "text":
+                text_parts.append(block.get("text", ""))
+            else:
+                text_parts.append(str(block))
+        else:
+            text_parts.append(str(block))
+
+    if text_parts:
+        items.append({"role": "user", "content": "\n".join(text_parts)})
+
+    return items if items else [{"role": "user", "content": ""}]
+
+
+# ---------------------------------------------------------------------------
+# Format converters: Anthropic -> OpenAI Chat Completions (used by GLM)
 # ---------------------------------------------------------------------------
 
 

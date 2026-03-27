@@ -16,16 +16,12 @@ log = logging.getLogger(__name__)
 def build_signal_adapter() -> None:
     """Build and inject CompositeSignalAdapter with MCP-backed signal sources.
 
-    Chains Steam MCP + Brave MCP adapters into CompositeSignalAdapter,
+    Chains MCP signal adapters into CompositeSignalAdapter,
     then injects into signals_node via contextvars. If no MCP servers
     are configured or available, the adapter will report is_available()=False
     and signals_node falls back to fixtures.
     """
     from core.domains.game_ip.nodes.signals import set_signal_adapter
-    from core.mcp.brave_adapter import (
-        BraveSearchAdapter,
-        BraveSignalAdapter,
-    )
     from core.mcp.composite_signal import CompositeSignalAdapter
     from core.mcp.manager import get_mcp_manager
     from core.mcp.steam_adapter import SteamMCPSignalAdapter
@@ -39,14 +35,10 @@ def build_signal_adapter() -> None:
         return
 
     # Build individual MCP signal adapters
-    adapters: list[SteamMCPSignalAdapter | BraveSignalAdapter] = []
+    adapters: list[SteamMCPSignalAdapter] = []
 
     steam_adapter = SteamMCPSignalAdapter(manager=manager, server_name="steam")
     adapters.append(steam_adapter)
-
-    brave_search = BraveSearchAdapter(manager=manager, server_name="brave-search")
-    brave_signal = BraveSignalAdapter(brave_search)
-    adapters.append(brave_signal)
 
     composite = CompositeSignalAdapter(adapters)  # type: ignore[arg-type]
 

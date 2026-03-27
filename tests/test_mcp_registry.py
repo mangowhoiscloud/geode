@@ -249,9 +249,9 @@ class TestManagerGetStatus:
             patch("core.mcp.manager._DOTENV_PATH", nonexistent),
             patch.dict(os.environ, {}, clear=False),
         ):
-            os.environ.pop("BRAVE_API_KEY", None)
+            os.environ.pop("TAVILY_API_KEY", None)
             manager = MCPServerManager(config_path=tmp_path / "nonexistent.json")
             manager.load_config()
             status = manager.get_status()
         inactive_names = [s["name"] for s in status["available_inactive"]]
-        assert "brave-search" in inactive_names
+        assert "tavily-search" in inactive_names

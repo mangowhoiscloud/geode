@@ -16,7 +16,7 @@ from dataclasses import dataclass
 class MCPCatalogEntry:
     """A single MCP server in the built-in catalog."""
 
-    name: str  # unique key, e.g. "brave-search"
+    name: str  # unique key, e.g. "steam"
     description: str  # one-line description
     tags: tuple[str, ...]  # searchable tags
     install_hint: str = ""  # e.g. "npx -y @playwright/mcp" or "uvx linkedin-scraper-mcp"
@@ -29,13 +29,6 @@ class MCPCatalogEntry:
 
 MCP_CATALOG: dict[str, MCPCatalogEntry] = {
     # --- Official / Anthropic ---
-    "brave-search": MCPCatalogEntry(
-        name="brave-search",
-        description="Web search via Brave Search API",
-        tags=("search", "web", "brave"),
-        install_hint="npx -y @brave/brave-search-mcp-server",
-        env_keys=("BRAVE_API_KEY",),
-    ),
     "memory": MCPCatalogEntry(
         name="memory",
         description="Knowledge Graph persistent memory (entity-relation-observation)",
@@ -112,13 +105,6 @@ MCP_CATALOG: dict[str, MCPCatalogEntry] = {
         description="Reddit subreddit analysis, posts, sentiment",
         tags=("reddit", "social", "community", "sentiment", "forum"),
         install_hint="npx -y reddit-mcp-server",
-    ),
-    "twitter": MCPCatalogEntry(
-        name="twitter",
-        description="X (Twitter) mentions, trends, timeline",
-        tags=("twitter", "x", "social", "trend", "tweet"),
-        install_hint="npx -y datawhisker/mcp-server-x",
-        env_keys=("TWITTER_BEARER_TOKEN",),
     ),
     "youtube": MCPCatalogEntry(
         name="youtube",

@@ -103,7 +103,6 @@ SAFE_BASH_PREFIXES: tuple[str, ...] = (
 # MCP servers that are read-only and auto-approved (no HITL gate on first call).
 AUTO_APPROVED_MCP_SERVERS: frozenset[str] = frozenset(
     {
-        "brave-search",
         "steam",
         "arxiv",
         "linkedin-reader",
