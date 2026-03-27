@@ -30,6 +30,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **TOOL_APPROVAL hooks** --- `TOOL_APPROVAL_REQUESTED`, `TOOL_APPROVAL_GRANTED`, `TOOL_APPROVAL_DENIED` 3종 HookEvent 추가 (42 -> 45). HITL 승인/거부/Always 패턴 추적. `ToolExecutor`에 hooks 주입, `bootstrap.py`에 `approval_tracker`/`denial_logger` 핸들러 등록.
+
+### Fixed
+- **TOOL_APPROVAL 이벤트명 불일치 수정** — `tool_approval_decided` → `tool_approval_granted`/`tool_approval_denied` 분리. 이전 코드에서 `_emit_hook("tool_approval_decided")`가 HookEvent에 없어 ValueError 삼킴 → 실제 발화 안 되는 버그 해소.
 - **LLM_CALL_START / LLM_CALL_END hooks** — LLM 호출 전후 발화로 model-level latency/cost observability 제공. `call_llm()`, `call_llm_with_tools()` 계측. 10초 초과 시 slow call 경고 로깅. Hook 42개.
 - **SESSION_START / SESSION_END hooks** — REPL 세션 시작/종료 시 발화 (OpenClaw `agent:bootstrap` 패턴).
 - **CONTEXT_OVERFLOW_ACTION hook** — 압축 전략을 Hook 핸들러가 결정. `trigger_with_result()`로 핸들러 반환값 피드백. `context_action.py` 기본 핸들러 제공.
