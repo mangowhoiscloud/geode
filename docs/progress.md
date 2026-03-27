@@ -18,7 +18,7 @@
 | ~~kent-beck-p4~~ | ~~Kent Beck Phase 4 — runtime + agentic_loop 추출 (~265줄 감소)~~ | ~~P1~~ | ~~#465~~ | **Done** |
 | ~~task-tools~~ | ~~Task Tool 노출 — task_create/update/get/list/stop + definitions.json + handlers~~ | ~~P1~~ | ~~#466~~ | **Done** |
 | ~~kent-beck-p5~~ | ~~Kent Beck Phase 5 — 핸들러 레지스트리 + Executor 분해~~ | ~~P2~~ | ~~#467~~ | **Done** |
-| action-summary | Action Summary — 결정론적 Tier1 + LLM 내러티브 Tier2 (opt-in) | P1 | action-summary-system.md | 유저 피드백 기반 |
+| ~~action-summary~~ | ~~Action Summary — 결정론적 Tier1~~ | ~~P1~~ | ~~#507~~ | **Done** |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~#470~~ | **Done** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
@@ -45,7 +45,6 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| action-summary | Action Summary — Tier1 결정론적 + Tier2 LLM opt-in | @mangowhoiscloud | feature/action-summary | 2026-03-28 | |
 
 ### In Review
 
@@ -56,6 +55,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| action-summary | Action Summary Tier 1 — 결정론적 per-tool 요약 (토큰 비용 0) | #507 | @mangowhoiscloud | 2026-03-28 |
 | p3-gateway-batch | binding hot-reload + L4 webhook endpoint | #504 | @mangowhoiscloud | 2026-03-28 |
 | p3-hook-batch | MODEL_SWITCHED + filesystem plugin + README docs-sync | #503 | @mangowhoiscloud | 2026-03-28 |
 | context-long-session | Provider-aware context compaction — GAP-1~5 일괄 해소 (Anthropic 서버사이드 + OpenAI/GLM 클라이언트) | #500 | @mangowhoiscloud | 2026-03-28 |
