@@ -85,9 +85,7 @@ class ApprovalTracker:
 
         return consecutive >= self.CONSECUTIVE_THRESHOLD
 
-    def make_hook_handler(
-        self, session_key: str = ""
-    ) -> tuple[str, Any]:
+    def make_hook_handler(self, session_key: str = "") -> tuple[str, Any]:
         """Return (handler_name, handler_fn) for HookSystem registration."""
 
         def _on_approval(event: HookEvent, data: dict[str, Any]) -> None:
