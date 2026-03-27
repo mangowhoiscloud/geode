@@ -357,10 +357,10 @@ class TestHookEventTypes:
 
     def test_hook_event_count(self):
         """Total hook events should be 39 (+1 TURN_COMPLETE + 2 SESSION_*)."""
-        assert len(HookEvent) == 40
+        assert len(HookEvent) == 45
 
         """Total hook events should be 38 (+1 TURN_COMPLETE + CONTEXT_OVERFLOW_ACTION)."""
-        assert len(HookEvent) == 40
+        assert len(HookEvent) == 45
 
 
 # ---------------------------------------------------------------------------

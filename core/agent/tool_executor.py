@@ -97,6 +97,7 @@ class ToolExecutor:
         sub_agent_manager: SubAgentManager | None = None,
         mcp_manager: Any | None = None,
         hitl_level: int = 2,
+        hooks: HookSystem | None = None,
     ) -> None:
         self._handlers: dict[str, Callable[..., dict[str, Any]]] = action_handlers or {}
         self._bash = bash_tool or BashTool()
@@ -105,6 +106,7 @@ class ToolExecutor:
         self._mcp_manager = mcp_manager
         # HITL level: 0=autonomous, 1=write-only, 2=all prompts
         self._hitl_level = hitl_level
+        self._hooks: HookSystem | None = hooks
         # Per-server MCP approval cache — approve once per server per session
         # Thread-safe: ToolExecutor is per-AgenticLoop, but sub-agents may share.
         import threading
@@ -115,6 +117,18 @@ class ToolExecutor:
         self._always_approved_tools: set[str] = set()
         # Categories: "bash", "write", "cost", "mcp:<server>"
         self._always_approved_categories: set[str] = set()
+
+    def _fire_hook(self, event_name: str, data: dict[str, Any]) -> None:
+        """Fire a hook event if HookSystem is available. No-op otherwise."""
+        if self._hooks is None:
+            return
+        from core.hooks import HookEvent
+
+        try:
+            event = HookEvent(event_name)
+            self._hooks.trigger(event, data)
+        except Exception:
+            log.debug("Hook fire failed for %s", event_name, exc_info=True)
 
     def _prompt_with_always(self, label: str, detail: str) -> str:
         """Show a [Y/n/A] prompt and return 'y', 'n', or 'a'.
@@ -161,9 +175,31 @@ class ToolExecutor:
         if tool_name in WRITE_TOOLS:
             if self._hitl_level == 0 or "write" in self._always_approved_categories:
                 approved = True
-            elif not self._confirm_write(tool_name, tool_input):
-                return _write_denial_with_fallback(tool_name), False
             else:
+                self._fire_hook(
+                    "tool_approval_requested",
+                    {"tool_name": tool_name, "safety_level": "write"},
+                )
+                if not self._confirm_write(tool_name, tool_input):
+                    self._fire_hook(
+                        "tool_approval_denied",
+                        {
+                            "tool_name": tool_name,
+                            "safety_level": "write",
+                            "permission_level": "HITL",
+                            "decision": "denied",
+                            "latency_ms": 0.0,
+                        },
+                    )
+                    return _write_denial_with_fallback(tool_name), False
+                self._fire_hook(
+                    "tool_approval_granted",
+                    {
+                        "tool_name": tool_name,
+                        "safety_level": "write",
+                        "always": "write" in self._always_approved_categories,
+                    },
+                )
                 approved = True
 
         # Expensive tools: cost confirmation
@@ -172,8 +208,30 @@ class ToolExecutor:
                 approved = True
             else:
                 cost = EXPENSIVE_TOOLS[tool_name]
+                self._fire_hook(
+                    "tool_approval_requested",
+                    {"tool_name": tool_name, "safety_level": "cost"},
+                )
                 if not self._confirm_cost(tool_name, cost):
+                    self._fire_hook(
+                        "tool_approval_denied",
+                        {
+                            "tool_name": tool_name,
+                            "safety_level": "cost",
+                            "permission_level": "HITL",
+                            "decision": "denied",
+                            "latency_ms": 0.0,
+                        },
+                    )
                     return {"error": "User denied expensive operation", "denied": True}, False
+                self._fire_hook(
+                    "tool_approval_granted",
+                    {
+                        "tool_name": tool_name,
+                        "safety_level": "cost",
+                        "always": "cost" in self._always_approved_categories,
+                    },
+                )
                 approved = True
 
         return None, approved
@@ -388,11 +446,51 @@ class ToolExecutor:
         console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
         console.print()
 
+        self._fire_hook(
+            "tool_approval_requested",
+            {
+                "tool_name": tool_name,
+                "safety_level": "MCP",
+                "args_preview": f"server={server}",
+            },
+        )
+
+        t0 = time.monotonic()
         response = self._prompt_with_always("Allow?", f"{server}/{tool_name}")
+        latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
             self._always_approved_categories.add(f"mcp:{server}")
+            self._fire_hook(
+                "tool_approval_granted",
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "MCP",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                },
+            )
             return True
-        return response == "y"
+        if response == "y":
+            self._fire_hook(
+                "tool_approval_granted",
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "MCP",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                },
+            )
+            return True
+        self._fire_hook(
+            "tool_approval_denied",
+            {
+                "tool_name": tool_name,
+                "permission_level": "MCP",
+                "decision": "denied",
+                "latency_ms": latency_ms,
+            },
+        )
+        return False
 
     def _confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         """Prompt user for write operation confirmation."""
@@ -423,11 +521,51 @@ class ToolExecutor:
             console.print(f"  [dim]Summary:[/dim] {summary}")
         console.print()
 
+        self._fire_hook(
+            "tool_approval_requested",
+            {
+                "tool_name": tool_name,
+                "safety_level": "WRITE",
+                "args_preview": str(tool_input)[:200],
+            },
+        )
+
+        t0 = time.monotonic()
         response = self._prompt_with_always("Allow?", tool_name)
+        latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
             self._always_approved_categories.add("write")
+            self._fire_hook(
+                "tool_approval_granted",
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "WRITE",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                },
+            )
             return True
-        return response == "y"
+        if response == "y":
+            self._fire_hook(
+                "tool_approval_granted",
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "WRITE",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                },
+            )
+            return True
+        self._fire_hook(
+            "tool_approval_denied",
+            {
+                "tool_name": tool_name,
+                "permission_level": "WRITE",
+                "decision": "denied",
+                "latency_ms": latency_ms,
+            },
+        )
+        return False
 
     def _confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
         """Prompt user for cost confirmation on expensive tools with A=Always option."""
@@ -446,11 +584,51 @@ class ToolExecutor:
             console.print(f"  [dim]Pipeline model:[/dim] {primary}")
         console.print()
 
+        self._fire_hook(
+            "tool_approval_requested",
+            {
+                "tool_name": tool_name,
+                "safety_level": "EXPENSIVE",
+                "args_preview": f"estimated_cost=${estimated_cost:.2f}",
+            },
+        )
+
+        t0 = time.monotonic()
         response = self._prompt_with_always("Proceed?", tool_name)
+        latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
             self._always_approved_categories.add("cost")
+            self._fire_hook(
+                "tool_approval_granted",
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "EXPENSIVE",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                },
+            )
             return True
-        return response == "y"
+        if response == "y":
+            self._fire_hook(
+                "tool_approval_granted",
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "EXPENSIVE",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                },
+            )
+            return True
+        self._fire_hook(
+            "tool_approval_denied",
+            {
+                "tool_name": tool_name,
+                "permission_level": "EXPENSIVE",
+                "decision": "denied",
+                "latency_ms": latency_ms,
+            },
+        )
+        return False
 
     def _request_approval(self, command: str, reason: str) -> bool:
         """Prompt user for bash command approval with A=Always option."""
@@ -464,11 +642,51 @@ class ToolExecutor:
             console.print(f"  [dim]Reason:[/dim]  {reason}")
         console.print()
 
+        self._fire_hook(
+            "tool_approval_requested",
+            {
+                "tool_name": "run_bash",
+                "safety_level": "DANGEROUS",
+                "args_preview": str(command)[:200],
+            },
+        )
+
+        t0 = time.monotonic()
         response = self._prompt_with_always("Allow?", command)
+        latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
             self._always_approved_categories.add("bash")
+            self._fire_hook(
+                "tool_approval_granted",
+                {
+                    "tool_name": "run_bash",
+                    "permission_level": "DANGEROUS",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                },
+            )
             return True
-        return response == "y"
+        if response == "y":
+            self._fire_hook(
+                "tool_approval_granted",
+                {
+                    "tool_name": "run_bash",
+                    "permission_level": "DANGEROUS",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                },
+            )
+            return True
+        self._fire_hook(
+            "tool_approval_denied",
+            {
+                "tool_name": "run_bash",
+                "permission_level": "DANGEROUS",
+                "decision": "denied",
+                "latency_ms": latency_ms,
+            },
+        )
+        return False
 
     @property
     def registered_tools(self) -> list[str]:
@@ -871,7 +1089,7 @@ class ToolCallProcessor:
         Runs the recovery chain in a background thread (sync executor calls)
         and emits hook events for observability.
         """
-        self._emit_hook(
+        self._fire_hook(
             "tool_recovery_attempted",
             {
                 "tool_name": tool_name,
@@ -889,7 +1107,7 @@ class ToolCallProcessor:
 
         if recovery_result.recovered:
             self._consecutive_failures[tool_name] = 0
-            self._emit_hook(
+            self._fire_hook(
                 "tool_recovery_succeeded",
                 {
                     "tool_name": tool_name,
@@ -905,7 +1123,7 @@ class ToolCallProcessor:
             result["recovery_attempted"] = True
             return result
 
-        self._emit_hook(
+        self._fire_hook(
             "tool_recovery_failed",
             {
                 "tool_name": tool_name,
@@ -920,7 +1138,7 @@ class ToolCallProcessor:
         result["skipped"] = True
         return result
 
-    def _emit_hook(self, event_name: str, data: dict[str, Any]) -> None:
+    def _fire_hook(self, event_name: str, data: dict[str, Any]) -> None:
         """Emit a hook event if HookSystem is configured."""
         if self._hooks is None:
             return

@@ -8,7 +8,7 @@ LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 185
+- **Modules**: 186
 - **Tests**: 3270+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -212,7 +212,7 @@ Decision Tree on D-E-F axes:
 - **Verbose gating**: Debug prints only with `--verbose` flag
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
-- **Hook-driven**: `core.hooks` — 40 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`, `SESSION_*`, `TURN_COMPLETE`) for extensibility. Cross-cutting; accessible from all layers via `from core.hooks import HookSystem, HookEvent`.
+- **Hook-driven**: `core.hooks` — 45 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`, `SESSION_*`, `TURN_COMPLETE`, `LLM_CALL_*`, `TOOL_APPROVAL_*`) for extensibility. Cross-cutting; accessible from all layers via `from core.hooks import HookSystem, HookEvent`.
 - **Domain Plugin**: `DomainPort` Protocol — 도메인별 pipeline 교체 가능 (`set_domain()` / `get_domain()`). 도메인 외 인프라는 직접 import (ContextVar DI 최소화).
 
 ## Implementation Workflow

@@ -83,8 +83,8 @@ class TestRuntimeHooksRunLog:
         for event in HookEvent:
             runtime.hooks.trigger(event, {"node": "test"})
 
-        entries = runtime.run_log.read(limit=40)
-        # 16 direct events + 1 cascading SNAPSHOT_CAPTURED from drift→auto-snapshot chain
+        entries = runtime.run_log.read(limit=50)
+        # All direct events + cascading hooks (e.g. SNAPSHOT_CAPTURED from drift→auto-snapshot)
         assert len(entries) >= len(HookEvent)
 
     def test_error_events_logged_with_error_status(self, tmp_path: Path):
