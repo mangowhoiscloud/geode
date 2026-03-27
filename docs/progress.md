@@ -35,17 +35,16 @@
 | ~~hook-llm-lifecycle~~ | ~~LLM_CALL_START/END — latency/cost 관측~~ | ~~P2~~ | ~~#492~~ | **Done** |
 | ~~hook-tool-approval~~ | ~~TOOL_APPROVAL 3종 — HITL 승인 패턴~~ | ~~P2~~ | ~~#494~~ | **Done** |
 | ~~context-long-session~~ | ~~장시간 운용 컨텍스트 관리 — Provider별 압축 전략 분화 + 대화 요약 + 압축 알림~~ | ~~P0~~ | ~~#500~~ | **Done** |
-| hook-model-switched | MODEL_SWITCHED — 전환 사유 기록 + 자동 전환 정책 학습 | P3 | — | 관측 |
-| hook-filesystem-plugin | 파일시스템 Hook 플러그인 — .geode/hooks/ 자동 발견 + 등록 | P3 | — | OpenClaw L3 Internal Hooks |
-| gateway-binding-hotreload | 바인딩 핫 리로드 — config.toml 변경 시 재시작 불필요 | P3 | — | OpenClaw GAP |
-| gateway-hooks-l4 | Gateway Hooks (L4) — 외부 웹훅 → 에이전트 트리거 | P3 | — | OpenClaw GAP |
+| ~~hook-model-switched~~ | ~~MODEL_SWITCHED — 전환 사유 기록~~ | ~~P3~~ | ~~#503~~ | **Done** |
+| ~~hook-filesystem-plugin~~ | ~~파일시스템 Hook 플러그인 — .geode/hooks/ 자동 발견~~ | ~~P3~~ | ~~#503~~ | **Done** |
+| ~~gateway-binding-hotreload~~ | ~~바인딩 핫 리로드 — config.toml 재시작 불필요~~ | ~~P3~~ | ~~#504~~ | **Done** |
+| ~~gateway-hooks-l4~~ | ~~Gateway Hooks (L4) — 외부 웹훅 → 에이전트 트리거~~ | ~~P3~~ | ~~#504~~ | **Done** |
 | ~~agentic-provider-merge~~ | ~~agent/adapters/ → llm/providers/ 통합~~ | ~~P2~~ | ~~#473~~ | **Done** |
 | ~~ports-migrate~~ | ~~infrastructure/ports/ → domain co-locate 이동 (8포트, 40+ 소비자)~~ | ~~P2~~ | ~~#474~~ | **Done** |
 ### In Progress
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| p3-hook-gateway-batch | P3 일괄 — hook-model-switched + hook-filesystem-plugin + gateway-hotreload + gateway-hooks-l4 + README docs-sync | @mangowhoiscloud | feature/p3-batch | 2026-03-28 | |
 
 ### In Review
 
@@ -56,6 +55,8 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| p3-gateway-batch | binding hot-reload + L4 webhook endpoint | #504 | @mangowhoiscloud | 2026-03-28 |
+| p3-hook-batch | MODEL_SWITCHED + filesystem plugin + README docs-sync | #503 | @mangowhoiscloud | 2026-03-28 |
 | context-long-session | Provider-aware context compaction — GAP-1~5 일괄 해소 (Anthropic 서버사이드 + OpenAI/GLM 클라이언트) | #500 | @mangowhoiscloud | 2026-03-28 |
 | hook-approval-fix | TOOL_APPROVAL 이벤트명 불일치 수정 — decided→granted/denied (SOT 점검) | #497 | @mangowhoiscloud | 2026-03-28 |
 | hook-tool-approval | TOOL_APPROVAL 3종 — HITL 승인 패턴 추적 (L4 Autonomy) | #494 | @mangowhoiscloud | 2026-03-27 |
