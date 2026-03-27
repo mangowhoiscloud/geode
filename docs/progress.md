@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-27 (세션 44 — #485 머지 완료)
+> 마지막 갱신: 2026-03-28 (세션 45 — #500 context-long-session 머지)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -34,7 +34,7 @@
 | ~~hook-session-start~~ | ~~SESSION_START 동적 프롬프트~~ | ~~P2~~ | ~~#489~~ | **Done** |
 | ~~hook-llm-lifecycle~~ | ~~LLM_CALL_START/END — latency/cost 관측~~ | ~~P2~~ | ~~#492~~ | **Done** |
 | ~~hook-tool-approval~~ | ~~TOOL_APPROVAL 3종 — HITL 승인 패턴~~ | ~~P2~~ | ~~#494~~ | **Done** |
-| context-long-session | 장시간 운용 컨텍스트 관리 — Provider별 압축 전략 분화 + 대화 요약 + 압축 알림 | P0 | — | GAP-1~5 일괄 해소 |
+| ~~context-long-session~~ | ~~장시간 운용 컨텍스트 관리 — Provider별 압축 전략 분화 + 대화 요약 + 압축 알림~~ | ~~P0~~ | ~~#500~~ | **Done** |
 | hook-model-switched | MODEL_SWITCHED — 전환 사유 기록 + 자동 전환 정책 학습 | P3 | — | 관측 |
 | hook-filesystem-plugin | 파일시스템 Hook 플러그인 — .geode/hooks/ 자동 발견 + 등록 | P3 | — | OpenClaw L3 Internal Hooks |
 | gateway-binding-hotreload | 바인딩 핫 리로드 — config.toml 변경 시 재시작 불필요 | P3 | — | OpenClaw GAP |
@@ -46,7 +46,6 @@
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
 | p3-hook-gateway-batch | P3 일괄 — hook-model-switched + hook-filesystem-plugin + gateway-hotreload + gateway-hooks-l4 + README docs-sync | @mangowhoiscloud | feature/p3-batch | 2026-03-28 | |
-| context-long-session | 장시간 운용 컨텍스트 관리 — GAP-1~5 일괄 해소 | @mangowhoiscloud | feature/context-long-session | 2026-03-28 | Provider별 압축 + 대화 요약 |
 
 ### In Review
 
@@ -57,6 +56,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| context-long-session | Provider-aware context compaction — GAP-1~5 일괄 해소 (Anthropic 서버사이드 + OpenAI/GLM 클라이언트) | #500 | @mangowhoiscloud | 2026-03-28 |
 | hook-approval-fix | TOOL_APPROVAL 이벤트명 불일치 수정 — decided→granted/denied (SOT 점검) | #497 | @mangowhoiscloud | 2026-03-28 |
 | hook-tool-approval | TOOL_APPROVAL 3종 — HITL 승인 패턴 추적 (L4 Autonomy) | #494 | @mangowhoiscloud | 2026-03-27 |
 | hook-llm-lifecycle | LLM_CALL_START/END — latency/cost 관측 (L1 Observe) | #492 | @mangowhoiscloud | 2026-03-27 |
