@@ -41,7 +41,8 @@ class TestGeodeBootstrapDefaults:
 class TestPropagateToThread:
     def test_propagate_sets_memory_contextvars_in_new_thread(self) -> None:
         """propagate_to_thread() makes ProjectMemory/OrgMemory available in a child thread."""
-        from core.tools.memory_tools import _org_memory_ctx, _project_memory_ctx
+        import core.tools.memory_tools as _mem_mod
+        from core.tools.memory_tools import _org_memory_ctx
 
         # Create a bootstrap with a mock readiness
         readiness = MagicMock()
@@ -53,7 +54,7 @@ class TestPropagateToThread:
         def worker() -> None:
             try:
                 boot.propagate_to_thread()
-                results["project"] = _project_memory_ctx.get()
+                results["project"] = _mem_mod._project_memory
                 results["org"] = _org_memory_ctx.get()
             except Exception as exc:
                 errors.append(exc)

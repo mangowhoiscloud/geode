@@ -530,7 +530,9 @@ def _run_analysis(
     domain_name: str = "game_ip",
 ) -> dict[str, Any] | None:
     """Core analysis logic shared by interactive and CLI modes."""
-    from core.cli import _hooks_ctx, _set_last_result
+    import core.cli as _cli_mod
+
+    _set_last_result = _cli_mod._set_last_result
     from core.domains.game_ip.fixtures import FIXTURE_MAP
     from core.utils.language import detect_language
 
@@ -560,7 +562,7 @@ def _run_analysis(
     if is_subagent:
         runtime.is_subagent = True
 
-    _hooks_ctx.set(runtime.hooks)
+    _cli_mod._hooks_ctx = runtime.hooks
 
     # Log available tools for current mode
     mode = "dry_run" if dry_run else pipeline_mode

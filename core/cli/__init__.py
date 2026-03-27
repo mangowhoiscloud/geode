@@ -12,7 +12,6 @@ import logging
 import signal
 import sys
 import termios
-from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -87,13 +86,13 @@ from core.llm.commentary import (
 
 log = logging.getLogger(__name__)
 
-# Hook system context for memory event firing (P1.5)
-_hooks_ctx: ContextVar[HookSystem | None] = ContextVar("cli_hooks", default=None)
+# Hook system module-level variable for memory event firing (P1.5)
+_hooks_ctx: HookSystem | None = None
 
 
 def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
     """Fire a hook event if HookSystem is available in context."""
-    hooks = _hooks_ctx.get()
+    hooks = _hooks_ctx
     if hooks is not None:
         try:
             hooks.trigger(event, data)

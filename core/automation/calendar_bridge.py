@@ -9,7 +9,6 @@ Registers with TRIGGER_FIRED hook for automatic sync after scheduler runs.
 from __future__ import annotations
 
 import logging
-from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -157,19 +156,18 @@ class CalendarSchedulerBridge:
 
 
 # ---------------------------------------------------------------------------
-# contextvars injection
+# Module-level singleton
 # ---------------------------------------------------------------------------
 
-_bridge_ctx: ContextVar[CalendarSchedulerBridge | None] = ContextVar(
-    "calendar_bridge", default=None
-)
+_bridge: CalendarSchedulerBridge | None = None
 
 
 def set_calendar_bridge(bridge: CalendarSchedulerBridge | None) -> None:
-    """Set the active calendar bridge for the current context."""
-    _bridge_ctx.set(bridge)
+    """Set the active calendar bridge."""
+    global _bridge
+    _bridge = bridge
 
 
 def get_calendar_bridge() -> CalendarSchedulerBridge | None:
     """Get the active calendar bridge, or None if not set."""
-    return _bridge_ctx.get()
+    return _bridge

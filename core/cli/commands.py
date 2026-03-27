@@ -8,7 +8,7 @@ from __future__ import annotations
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from typing import Any as _Any
 
 if TYPE_CHECKING:
@@ -552,17 +552,17 @@ def _auth_add_interactive(store: ProfileStore, add_args: str) -> None:
     console.print()
 
 
-# Thread-safe profile store via contextvars
-_profile_store_ctx: ContextVar[_Any] = ContextVar("profile_store", default=None)
+# Module-level profile store singleton
+_profile_store: ProfileStore | None = None
 
 
 def _get_profile_store() -> ProfileStore:
-    """Get or create the context-local profile store, seeded from settings."""
+    """Get or create the module-level profile store, seeded from settings."""
+    global _profile_store
     from core.gateway.auth.profiles import AuthProfile, CredentialType
 
-    store = _profile_store_ctx.get()
-    if store is not None:
-        return cast(ProfileStore, store)
+    if _profile_store is not None:
+        return _profile_store
 
     store = ProfileStore()
 
@@ -596,7 +596,7 @@ def _get_profile_store() -> ProfileStore:
                 key=settings.zai_api_key,
             )
         )
-    _profile_store_ctx.set(store)
+    _profile_store = store
     return store
 
 
