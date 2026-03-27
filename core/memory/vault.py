@@ -28,7 +28,17 @@ from core.utils.atomic_io import atomic_write_text
 
 log = logging.getLogger(__name__)
 
-DEFAULT_VAULT_DIR = Path(".geode") / "vault"
+# Default resolves to ~/.geode/vault/ with fallback to .geode/vault/
+_DEFAULT_VAULT_DIR: Path | None = None
+
+
+def _get_default_vault_dir() -> Path:
+    global _DEFAULT_VAULT_DIR
+    if _DEFAULT_VAULT_DIR is None:
+        from core.paths import resolve_vault_dir
+
+        _DEFAULT_VAULT_DIR = resolve_vault_dir()
+    return _DEFAULT_VAULT_DIR
 
 # Category routing keywords (lowercase matching)
 _CATEGORY_KEYWORDS: dict[str, list[str]] = {
@@ -134,7 +144,7 @@ class Vault:
     CATEGORIES = ("profile", "research", "applications", "general")
 
     def __init__(self, vault_dir: Path | str | None = None) -> None:
-        self._dir = Path(vault_dir) if vault_dir else DEFAULT_VAULT_DIR
+        self._dir = Path(vault_dir) if vault_dir else _get_default_vault_dir()
 
     @property
     def vault_dir(self) -> Path:
@@ -318,7 +328,7 @@ class ApplicationTracker:
     VALID_STATUSES = ("draft", "applied", "interview", "offer", "rejected")
 
     def __init__(self, vault_dir: Path | None = None) -> None:
-        self._path = (vault_dir or DEFAULT_VAULT_DIR) / "applications" / "tracker.json"
+        self._path = (vault_dir or _get_default_vault_dir()) / "applications" / "tracker.json"
 
     def _load(self) -> list[dict[str, Any]]:
         if not self._path.exists():

@@ -21,6 +21,8 @@ from typing import Any
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from core.paths import GLOBAL_CONFIG_TOML, GLOBAL_ENV_FILE, PROJECT_CONFIG_TOML
+
 log = logging.getLogger(__name__)
 
 _settings_lock = threading.Lock()
@@ -29,8 +31,8 @@ _settings_lock = threading.Lock()
 # TOML Config Cascade
 # ---------------------------------------------------------------------------
 
-GLOBAL_CONFIG_PATH = Path.home() / ".geode" / "config.toml"
-PROJECT_CONFIG_PATH = Path(".geode") / "config.toml"
+GLOBAL_CONFIG_PATH = GLOBAL_CONFIG_TOML
+PROJECT_CONFIG_PATH = PROJECT_CONFIG_TOML
 
 # Mapping: TOML dotted key → Settings field name.
 # Only mapped keys are applied; unknown TOML keys are silently ignored.
@@ -132,7 +134,7 @@ def _apply_toml_overlay(s: Settings) -> None:
             object.__setattr__(s, field_name, toml_value)
 
 
-GLOBAL_ENV_PATH = Path.home() / ".geode" / ".env"
+GLOBAL_ENV_PATH = GLOBAL_ENV_FILE
 
 
 class Settings(BaseSettings):
@@ -167,7 +169,7 @@ class Settings(BaseSettings):
     outcome_tracking_enabled: bool = True
 
     # L4.5 Automation — Snapshot Manager
-    snapshot_dir: str = ".geode/snapshots"
+    snapshot_dir: str = ""  # empty = auto-resolve via paths.resolve_snapshots_dir()
     snapshot_max_recent: int = 30
     snapshot_gc_threshold: int = 60  # auto-prune when count exceeds this
 
@@ -193,7 +195,7 @@ class Settings(BaseSettings):
     user_profile_dir: str = ""  # global dir override (default: ~/.geode/user_profile)
 
     # L4.5 Automation — Model Registry
-    model_registry_dir: str = ".geode/models"
+    model_registry_dir: str = ""  # empty = auto-resolve via paths.resolve_models_dir()
 
     # MCP Server URLs
     steam_mcp_url: str = ""

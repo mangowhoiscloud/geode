@@ -1,9 +1,10 @@
 """MCP Server Manager — load config, discover tools, and call MCP servers.
 
 Manages external MCP server connections using stdio-based JSON-RPC protocol.
-Configuration is loaded from two sources (priority order):
-  1. .geode/config.toml [mcp.servers] — primary, explicit configuration
-  2. .claude/mcp_servers.json — fallback / legacy / install target
+Configuration is loaded from three sources (priority order):
+  1. {workspace}/.geode/config.toml [mcp.servers] — project override
+  2. ~/.geode/config.toml [mcp.servers] — global user config
+  3. .claude/mcp_servers.json — fallback / legacy / install target
 
 Lifecycle:
   startup()  — load config + connect all + register signal handlers
@@ -258,21 +259,29 @@ class MCPServerManager:
     # ------------------------------------------------------------------
 
     def load_config(self) -> int:
-        """Load MCP server configurations from config.toml + json fallback.
+        """Load MCP server configurations from config.toml (global + project) + json fallback.
 
-        Priority order:
-          1. .geode/config.toml [mcp.servers] — explicit configuration (wins)
-          2. .claude/mcp_servers.json — legacy fallback, install target
+        Priority order (later wins):
+          1. ~/.geode/config.toml [mcp.servers] — global user config
+          2. {workspace}/.geode/config.toml [mcp.servers] — project override
+          3. .claude/mcp_servers.json — legacy fallback, install target
 
         Returns total number of servers loaded.
         """
         import tomllib
 
+        from core.paths import GLOBAL_CONFIG_TOML
+
         self._servers = {}
 
-        # Layer 1: .geode/config.toml [mcp.servers]
-        config_toml = _PROJECT_ROOT / ".geode" / "config.toml"
-        if config_toml.exists():
+        # Layer 1 & 2: Global then project config.toml [mcp.servers]
+        config_toml_paths = [
+            GLOBAL_CONFIG_TOML,
+            _PROJECT_ROOT / ".geode" / "config.toml",
+        ]
+        for config_toml in config_toml_paths:
+            if not config_toml.exists():
+                continue
             try:
                 with open(config_toml, "rb") as f:
                     toml_data = tomllib.load(f)
@@ -285,9 +294,9 @@ class MCPServerManager:
                         entry["env"] = cfg["env"]
                     self._servers[name] = entry
                 if mcp_section:
-                    log.info("MCP config.toml: %d servers", len(mcp_section))
+                    log.info("MCP %s: %d servers", config_toml, len(mcp_section))
             except Exception as exc:
-                log.debug("Failed to load MCP from config.toml: %s", exc)
+                log.debug("Failed to load MCP from %s: %s", config_toml, exc)
 
         # Layer 2: .claude/mcp_servers.json (fallback — toml entries take priority)
         if self._config_path.exists():

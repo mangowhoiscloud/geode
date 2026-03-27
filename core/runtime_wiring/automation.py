@@ -40,8 +40,12 @@ def build_automation(
     drift_detector = CUSUMDetector()
 
     # Model registry (file-based)
-    model_registry_dir = Path(settings.model_registry_dir)
-    reg_dir = model_registry_dir if model_registry_dir.name != "" else None
+    if settings.model_registry_dir:
+        reg_dir: Path | None = Path(settings.model_registry_dir)
+    else:
+        from core.paths import resolve_models_dir
+
+        reg_dir = resolve_models_dir()
     model_registry = ModelRegistry(storage_dir=reg_dir, hooks=hooks)
 
     # Expert panel
@@ -54,7 +58,12 @@ def build_automation(
     outcome_tracker = OutcomeTracker(hooks=hooks)
 
     # Snapshot manager (with auto-GC)
-    snapshot_dir = Path(settings.snapshot_dir) if settings.snapshot_dir else None
+    if settings.snapshot_dir:
+        snapshot_dir: Path | None = Path(settings.snapshot_dir)
+    else:
+        from core.paths import resolve_snapshots_dir
+
+        snapshot_dir = resolve_snapshots_dir()
     snapshot_manager = SnapshotManager(
         storage_dir=snapshot_dir,
         max_recent=settings.snapshot_max_recent,
