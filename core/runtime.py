@@ -1097,9 +1097,7 @@ class GeodeRuntime:
             secondary_json_fn=(
                 secondary_adapter.generate_structured if secondary_adapter else None
             ),
-            secondary_parsed_fn=(
-                secondary_adapter.generate_parsed if secondary_adapter else None
-            ),
+            secondary_parsed_fn=(secondary_adapter.generate_parsed if secondary_adapter else None),
         )
         return llm_adapter, secondary_adapter
 
