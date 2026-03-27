@@ -39,6 +39,8 @@ def _get_default_journal_dir() -> Path:
 
         _DEFAULT_JOURNAL_DIR = resolve_journal_dir()
     return _DEFAULT_JOURNAL_DIR
+
+
 MAX_LEARNED_PATTERNS = 100
 
 

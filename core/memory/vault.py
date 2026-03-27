@@ -40,6 +40,7 @@ def _get_default_vault_dir() -> Path:
         _DEFAULT_VAULT_DIR = resolve_vault_dir()
     return _DEFAULT_VAULT_DIR
 
+
 # Category routing keywords (lowercase matching)
 _CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "profile": [
