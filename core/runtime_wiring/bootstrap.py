@@ -176,6 +176,33 @@ def build_hooks(
 
     _register_plugin("journal_hook", _reg_journal)
 
+    # C3: Auto-memory on turn complete (OpenClaw command:new pattern)
+    def _reg_turn_memory() -> None:
+        from core.tools import memory_tools
+
+        def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
+            pm = memory_tools._project_memory
+            if pm is None:
+                return
+            text = data.get("text", "")
+            user_input = data.get("user_input", "")
+            tools = data.get("tool_calls", [])
+            if not text or len(text) < 20:
+                return  # too short to be useful
+            # Build concise insight from turn
+            tool_str = ", ".join(tools[:5]) if tools else "none"
+            insight = f"[turn] {user_input[:80]} → tools=[{tool_str}]"
+            pm.add_insight(insight)
+
+        hooks.register(
+            HookEvent.TURN_COMPLETE,
+            _on_turn_complete,
+            name="turn_auto_memory",
+            priority=85,
+        )
+
+    _register_plugin("turn_memory_hook", _reg_turn_memory)
+
     return hooks, run_log, stuck_detector
 
 

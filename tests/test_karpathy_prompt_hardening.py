@@ -356,8 +356,8 @@ class TestHookEventTypes:
         assert HookEvent.PROMPT_DRIFT_DETECTED.value == "prompt_drift_detected"
 
     def test_hook_event_count(self):
-        """Total hook events should be 36 (27 + 3 TOOL_RECOVERY_* + 2 GATEWAY_* + 2 MCP_SERVER_* + 2 CONTEXT_*)."""
-        assert len(HookEvent) == 36
+        """Total hook events should be 37 (+1 TURN_COMPLETE)."""
+        assert len(HookEvent) == 37
 
 
 # ---------------------------------------------------------------------------

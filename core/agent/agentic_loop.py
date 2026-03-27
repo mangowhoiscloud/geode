@@ -269,6 +269,17 @@ class AgenticLoop:
         )
         self._record_transcript_end(result)
         self._save_checkpoint(user_input, round_idx=round_idx)
+        if self._hooks:
+            self._hooks.trigger(
+                HookEvent.TURN_COMPLETE,
+                {
+                    "user_input": user_input,
+                    "text": result.text[:500] if result.text else "",
+                    "rounds": result.rounds,
+                    "tool_calls": [tc.get("name", "") for tc in result.tool_calls],
+                    "termination_reason": result.termination_reason,
+                },
+            )
         return result
 
     def refresh_tools(self) -> int:
