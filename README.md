@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
   <img src="https://img.shields.io/badge/Opus%204.6-1M%20context-1e293b?style=flat-square" alt="Opus 4.6">
-  <img src="https://img.shields.io/badge/47%20tools-MCP%20native-1e293b?style=flat-square" alt="47 Tools">
+  <img src="https://img.shields.io/badge/52%20tools-MCP%20native-1e293b?style=flat-square" alt="52 Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -15,7 +15,7 @@
 범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
 
 **생산**: Claude Code Scaffold(CLAUDE.md + 개발 Skills + CI Hooks)가 GEODE를 만듭니다.
-**실행**: GEODE(`while(tool_use)` 루프)가 47 도구 + 44 MCP 중에서 자율 선택하고, 36개 런타임 Hook이 라이프사이클을 제어하고, 5-Layer Verification이 출력을 검증합니다.
+**실행**: GEODE(`while(tool_use)` 루프)가 52 도구 + 44 MCP 중에서 자율 선택하고, 46개 런타임 Hook이 라이프사이클을 제어하고, 5-Layer Verification이 출력을 검증합니다.
 
 ## Quick Start
 
@@ -76,7 +76,7 @@ cd geode && uv sync
 | 기능 | 설명 |
 |------|------|
 | **`while(tool_use)` Loop** | 모든 자율 행동의 핵심 프리미티브. 서브에이전트, 계획 실행, 배치 분석 전부 AgenticLoop 인스턴스 |
-| **47 Tools + MCP** | 네이티브 47개 도구 + MCP 카탈로그 44종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
+| **52 Tools + MCP** | 네이티브 52개 도구 + MCP 카탈로그 44종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
 | **Sub-Agent** | 부모 역량 전체 상속, 최대 5 병렬, Token Guard, DAG 의존성 |
 | **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain |
 | **4-Tier Memory** | SOUL → User Profile → Organization → Project → Session |
@@ -84,7 +84,7 @@ cd geode && uv sync
 | **Domain Plugin** | `DomainPort` Protocol로 파이프라인 교체 — Game IP 분석 기본 탑재 |
 | **Scaffold (생산)** | Claude Code + CLAUDE.md(428줄) + 개발 Skills + CI Hooks — GEODE를 만드는 제어 구조 |
 | **20 Runtime Skills** | `.geode/skills/` — 도메인별 지식을 프롬프트로 주입. 파이프라인, 스코어링, 검증, 아키텍처 패턴 등 |
-| **36 Runtime Hooks** | 파이프라인/노드/검증/메모리/서브에이전트 라이프사이클 이벤트 — GEODE 런타임 제어 |
+| **46 Runtime Hooks** | 파이프라인/노드/검증/메모리/서브에이전트 라이프사이클 이벤트 — GEODE 런타임 제어 |
 | **5-Layer Verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM(Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
 | **Safety** | 4-tier HITL(SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, PolicyChain 6-layer |
 
@@ -96,7 +96,7 @@ cd geode && uv sync
 
 **Scaffold (생산 체계)**: Claude Code + CLAUDE.md + 개발 Skills + CI Hooks. GEODE의 코드를 생산하고 품질을 보장하는 외부 하네스.
 
-**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 47 도구 + 20 런타임 Skills + 36 런타임 Hooks + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
+**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 52 도구 + 20 런타임 Skills + 46 런타임 Hooks + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
 
 ### Project Structure
 
@@ -107,7 +107,7 @@ geode/
 │   ├── cli/                       # L0: REPL, Commands, UI
 │   ├── llm/                       # L1: Claude/OpenAI/GLM Adapters, Router, Prompts
 │   ├── memory/                    # L2: 4-Tier Memory, Context Assembly, User Profile
-│   ├── hooks/                     # HookSystem(36) — cross-cutting lifecycle events
+│   ├── hooks/                     # HookSystem(46) — cross-cutting lifecycle events
 │   ├── orchestration/             # L3: TaskGraph, PlanMode, LaneQueue, CoalescingQueue
 │   ├── tools/                     # L4: 54 Tool Definitions + Handlers
 │   ├── skills/                    # L4: Skill Templates
@@ -153,8 +153,8 @@ graph LR
 graph LR
     L0["L0 CLI & Agent<br/>AgenticLoop, SubAgent"] --> L1["L1 Infra<br/>Port/Adapter DI"]
     L0 --> L3["L3 Orchestration<br/>TaskGraph, LaneQueue"]
-    L0 --> HK["Hooks (cross-cutting)<br/>36 events"]
-    L0 --> L4["L4 Extensibility<br/>Tools(47), MCP(44)"]
+    L0 --> HK["Hooks (cross-cutting)<br/>46 events"]
+    L0 --> L4["L4 Extensibility<br/>Tools(52), MCP(44)"]
     L4 --> L5["L5 Domain<br/>DomainPort Plugin"]
     L0 --> L2["L2 Memory<br/>4-Tier + Checkpoint"]
 
@@ -235,7 +235,7 @@ main-only 수정. 3-Checkpoint 필수. TaskCreate ↔ 칸반 task_id 1:1 매핑.
 
 주요 구성:
 - **Agentic Loop**: Claude Opus 4.6 기반 `while(tool_use)` 루프. max 50 rounds, 1M context.
-- **Tool Hierarchy**: Built-in(47) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
+- **Tool Hierarchy**: Built-in(52) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
 - **Sub-Agent**: 부모 역량 전체 상속, MAX_CONCURRENT=5, Token Guard.
 - **Memory**: SOUL → User Profile → Organization → Project → Session. ContextAssembler 280자 압축.
 - **Domain Plugin**: `DomainPort` Protocol로 파이프라인 교체. Game IP 기본 탑재 (LangGraph 9-node).
