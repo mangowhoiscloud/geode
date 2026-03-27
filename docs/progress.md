@@ -23,13 +23,17 @@
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~#470~~ | **Done** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
 | ~~mcp-simplify~~ | ~~MCP 카탈로그 단일화~~ | ~~P1~~ | ~~#469~~ | **Done** |
-| ~~scheduler-callback~~ | ~~스케줄러 callback 와이어링 — action 필드 + 큐 연결~~ | ~~P1~~ | ~~tool-mcp-architecture-review.md~~ | **In Progress** |
+| ~~scheduler-callback~~ | ~~스케줄러 callback 와이어링 — action 필드 + 큐 연결~~ | ~~P1~~ | ~~tool-mcp-architecture-review.md~~ | **Done** |
+| scheduler-nl-fix | 스케줄러 NL 정규식 제거 → 원문 저장 + LLM 프레이밍 위임 | P0 | — | 노이즈 방지 |
+| runtime-decompose-v2 | runtime.py 1475→380줄 — 5-module split (OpenClaw 패턴) | P0 | — | God Object 분해 |
 | ~~agentic-provider-merge~~ | ~~agent/adapters/ → llm/providers/ 통합~~ | ~~P2~~ | ~~#473~~ | **Done** |
 | ~~ports-migrate~~ | ~~infrastructure/ports/ → domain co-locate 이동 (8포트, 40+ 소비자)~~ | ~~P2~~ | ~~#474~~ | **Done** |
 ### In Progress
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
+| scheduler-nl-fix | NL 정규식 제거 → 원문 저장 + LLM 프레이밍 위임 | @mangowhoiscloud | feature/scheduler-nl-fix | 2026-03-27 | |
+| runtime-decompose-v2 | runtime.py 1475→~380줄 — 5-module split | @mangowhoiscloud | feature/runtime-decompose-v2 | 2026-03-27 | |
 | fixtures-cleanup | core/fixtures/ 제거 + .geode/skills/ scaffold/runtime 분리 | @mangowhoiscloud | feature/fixtures-cleanup | 2026-03-27 | 백그라운드 에이전트 |
 
 ### In Review
