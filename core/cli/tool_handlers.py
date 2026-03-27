@@ -353,16 +353,21 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         plan = planner.create_plan(ip_name, template=template)
         summary = planner.present_plan(plan)
 
-        # Display plan steps
+        # Display plan steps with HITL approval prompt
         console.print()
-        console.print(f"  [header]● Plan: {ip_name} 분석 계획[/header]")
+        console.print(f"  [header]● Plan: {ip_name}[/header]")
+        console.print()
         for i, step in enumerate(plan.steps, 1):
-            console.print(f"    {i}. {step.description}")
+            console.print(f"    [bold]{i}.[/bold] {step.description}")
+        console.print()
         console.print(
-            f"  [muted]예상 시간: "
-            f"{plan.total_estimated_time_s:.0f}s "
-            f"| 단계: {plan.step_count}개[/muted]"
+            f"  [muted]예상: {plan.total_estimated_time_s:.0f}s · "
+            f"{plan.step_count} 단계 · plan_id={plan.plan_id}[/muted]"
         )
+        if not settings.plan_auto_execute:
+            console.print(
+                "  [dim]→ 승인(approve_plan) · 수정(modify_plan) · 거부(reject_plan)[/dim]"
+            )
         console.print()
         log.info(
             "Plan '%s' created for '%s' (%d steps)",
