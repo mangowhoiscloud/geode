@@ -909,10 +909,13 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         _set_readiness(readiness)
 
     # Scheduler (REPL-only: cron + /schedule command)
+    import queue as _queue_mod
+
+    _action_queue: _queue_mod.Queue[tuple[str, str]] = _queue_mod.Queue()
     try:
         from core.automation.scheduler import SchedulerService
 
-        _sched_svc = SchedulerService()
+        _sched_svc = SchedulerService(action_queue=_action_queue)
         _sched_svc.load()
         _sched_svc.start()
         _scheduler_service_ctx.set(_sched_svc)
@@ -960,6 +963,16 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
             console.print()
 
     while True:
+        # Drain scheduled actions before prompting (scheduler fires in background thread)
+        try:
+            while True:
+                job_id, fired_action = _action_queue.get_nowait()
+                if fired_action:
+                    console.print(f"\n  [muted]Scheduler: running job {job_id}[/muted]")
+                    agentic.run(fired_action)
+        except _queue_mod.Empty:
+            pass
+
         # Defensive: restore terminal state before each prompt
         # (Rich Status/Live may leave cursor hidden or echo off)
         console.show_cursor(True)

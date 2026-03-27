@@ -764,3 +764,75 @@ class TestTriggerManagerComposition:
         svc.add_job(_make_job(callback=lambda d: None))
         result = svc.run_now("j1")
         assert result["status"] == "ok"
+
+
+# ===========================================================================
+# action_queue wiring
+# ===========================================================================
+
+
+class TestActionQueue:
+    """SchedulerService enqueues (job_id, action) when a job with action fires."""
+
+    def test_action_enqueued_on_fire(
+        self,
+        tmp_store: Path,
+        tmp_log_dir: Path,
+    ) -> None:
+        import queue
+
+        q: queue.Queue[tuple[str, str]] = queue.Queue()
+        svc = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, action_queue=q)
+        job = ScheduledJob(
+            job_id="act1",
+            name="test_action",
+            schedule=Schedule(kind=ScheduleKind.AT, at_ms=0.0),  # past → fires immediately
+            action="summarize today's news",
+        )
+        svc.add_job(job)
+        result = svc.run_now("act1")
+        assert result["status"] == "ok"
+        assert not q.empty()
+        queued_id, queued_action = q.get_nowait()
+        assert queued_id == "act1"
+        assert queued_action == "summarize today's news"
+
+    def test_callback_takes_precedence_over_action(
+        self,
+        tmp_store: Path,
+        tmp_log_dir: Path,
+    ) -> None:
+        import queue
+
+        q: queue.Queue[tuple[str, str]] = queue.Queue()
+        calls: list[str] = []
+        svc = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, action_queue=q)
+        job = ScheduledJob(
+            job_id="cb1",
+            name="test_callback",
+            schedule=Schedule(kind=ScheduleKind.AT, at_ms=0.0),
+            callback=lambda d: calls.append(d["job_id"]),
+            action="should not be enqueued",
+        )
+        svc.add_job(job)
+        svc.run_now("cb1")
+        # callback fired, queue untouched
+        assert calls == ["cb1"]
+        assert q.empty()
+
+    def test_no_queue_no_error(
+        self,
+        tmp_store: Path,
+        tmp_log_dir: Path,
+    ) -> None:
+        """SchedulerService without action_queue must not raise when action is set."""
+        svc = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir)
+        job = ScheduledJob(
+            job_id="noq1",
+            name="no_queue",
+            schedule=Schedule(kind=ScheduleKind.AT, at_ms=0.0),
+            action="some action",
+        )
+        svc.add_job(job)
+        result = svc.run_now("noq1")
+        assert result["status"] == "ok"
