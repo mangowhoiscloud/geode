@@ -340,5 +340,3 @@ class TestSteamMCPSignalAdapterManager:
 
         adapter = SteamMCPSignalAdapter(manager=FakeManager(), server_name="steam")  # type: ignore[arg-type]
         assert adapter.fetch_signals("Test") == {}
-
-
