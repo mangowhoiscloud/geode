@@ -19,6 +19,7 @@ from core.llm.fallback import (
     CircuitBreaker,
     retry_with_backoff_generic,
 )
+from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
 log = logging.getLogger(__name__)
 
@@ -269,6 +270,10 @@ class ClaudeAgenticAdapter:
 
         failover_models = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
 
+        # Compaction trigger: 80% of model context window
+        ctx_window = MODEL_CONTEXT_WINDOW.get(model, 200_000)
+        compact_trigger = max(50_000, int(ctx_window * 0.8))
+
         async def _do_call(m: str) -> Any:
             return await self._client.messages.create(  # type: ignore[union-attr]
                 model=m,
@@ -279,7 +284,7 @@ class ClaudeAgenticAdapter:
                 max_tokens=max_tokens,
                 temperature=temperature,
                 extra_headers={
-                    "anthropic-beta": "context-management-2025-06-27",
+                    "anthropic-beta": "context-management-2025-06-27,compact-2026-01-12",
                 },
                 extra_body={
                     "context_management": {
@@ -287,7 +292,14 @@ class ClaudeAgenticAdapter:
                             {
                                 "type": "clear_tool_uses_20250919",
                                 "keep": {"type": "tool_uses", "value": 5},
-                            }
+                            },
+                            {
+                                "type": "compact_20260112",
+                                "trigger": {
+                                    "type": "input_tokens",
+                                    "value": compact_trigger,
+                                },
+                            },
                         ]
                     }
                 },
