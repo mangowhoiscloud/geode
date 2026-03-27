@@ -313,6 +313,7 @@ class NLScheduleParser:
 
         job_id = self._generate_job_id(job_name, agent_id)
         now_ms = time.time() * 1000
+        action = self._extract_action(original)
 
         job = ScheduledJob(
             job_id=job_id,
@@ -320,6 +321,7 @@ class NLScheduleParser:
             schedule=schedule,
             enabled=True,
             delete_after_run=(kind == ScheduleKind.AT),
+            action=action,
             active_hours=active_hours,
             created_at_ms=now_ms,
             metadata={"source": "nl_parser", "original_text": original},
@@ -585,6 +587,41 @@ class NLScheduleParser:
         if target <= now:
             target += datetime.timedelta(days=1)
         return target.timestamp() * 1000
+
+    def _extract_action(self, original: str) -> str:
+        """Strip scheduling keywords from *original* to recover the action text.
+
+        For example:
+        - "remind me to check emails every 5 minutes" → "remind me to check emails"
+        - "daily at 9am send standup summary" → "send standup summary"
+        - "every 5 minutes" → ""
+        """
+        t = original.strip()
+        # Remove active-hours clauses ("during 09:00-22:00", "between 8am-6pm")
+        t = _ACTIVE_HOURS_24H_RE.sub("", t)
+        t = _ACTIVE_HOURS_AMPM_RE.sub("", t)
+        # Remove "every N unit" intervals (e.g. "every 5 minutes")
+        t = re.sub(r"\bevery\s+\d+\s*\w+\b", "", t, flags=re.IGNORECASE)
+        # Remove "every <unit>" without a number (e.g. "every hour", "every day")
+        _unit_words = r"(?:seconds?|minutes?|hours?|days?|weeks?|months?)"
+        t = re.sub(rf"\bevery\s+{_unit_words}\b", "", t, flags=re.IGNORECASE)
+        # Remove cron keywords
+        _cron_kw = r"\b(?:hourly|daily|weekly|monthly|weekday|weekdays)\b"
+        t = re.sub(_cron_kw, "", t, flags=re.IGNORECASE)
+        # Remove "at HH:MM" / "at H am/pm"
+        t = re.sub(r"\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b", "", t, flags=re.IGNORECASE)
+        # Remove "in N unit" relative one-shots
+        t = re.sub(r"\bin\s+\d+\s*\w+\b", "", t, flags=re.IGNORECASE)
+        # Remove "once" keyword
+        t = re.sub(r"\bonce\b", "", t, flags=re.IGNORECASE)
+        # Remove "on <day>" / bare day names
+        t = re.sub(
+            r"\b(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b",
+            "",
+            t,
+            flags=re.IGNORECASE,
+        )
+        return re.sub(r"\s+", " ", t).strip()
 
     @staticmethod
     def _generate_job_id(name: str, agent_id: str) -> str:

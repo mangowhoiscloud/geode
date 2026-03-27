@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-27 (세션 42 — port-cleanup-3 #479 In Review. runtime-decompose + claude-md-skill-cleanup P0 추가)
+> 마지막 갱신: 2026-03-27 (세션 42 — #479/#480/#481 머지 완료. scheduler-callback 착수)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -18,14 +18,12 @@
 | ~~kent-beck-p4~~ | ~~Kent Beck Phase 4 — runtime + agentic_loop 추출 (~265줄 감소)~~ | ~~P1~~ | ~~#465~~ | **Done** |
 | ~~task-tools~~ | ~~Task Tool 노출 — task_create/update/get/list/stop + definitions.json + handlers~~ | ~~P1~~ | ~~#466~~ | **Done** |
 | ~~kent-beck-p5~~ | ~~Kent Beck Phase 5 — 핸들러 레지스트리 + Executor 분해~~ | ~~P2~~ | ~~#467~~ | **Done** |
-| runtime-decompose | runtime.py God Object 분해 — _build_automation/_build_gateway 등 도메인별 모듈 분리 (~265줄 감소) | P0 | — | Kent Beck Phase 4, partial 상태 |
-| claude-md-skill-cleanup | CLAUDE.md clean-architecture / architecture-patterns linked skill 제거 | P0 | — | 낮은 작업량, 일관성 |
 | action-summary | Action Summary — 결정론적 Tier1 + LLM 내러티브 Tier2 (opt-in) | P1 | action-summary-system.md | 유저 피드백 기반 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~#470~~ | **Done** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
 | ~~mcp-simplify~~ | ~~MCP 카탈로그 단일화~~ | ~~P1~~ | ~~#469~~ | **Done** |
-| scheduler-callback | 스케줄러 callback 와이어링 — action 필드 + 큐 연결 | P1 | tool-mcp-architecture-review.md | mcp-simplify 이후 |
+| ~~scheduler-callback~~ | ~~스케줄러 callback 와이어링 — action 필드 + 큐 연결~~ | ~~P1~~ | ~~tool-mcp-architecture-review.md~~ | **In Progress** |
 | ~~agentic-provider-merge~~ | ~~agent/adapters/ → llm/providers/ 통합~~ | ~~P2~~ | ~~#473~~ | **Done** |
 | ~~ports-migrate~~ | ~~infrastructure/ports/ → domain co-locate 이동 (8포트, 40+ 소비자)~~ | ~~P2~~ | ~~#474~~ | **Done** |
 ### In Progress
@@ -34,11 +32,24 @@
 |---------|----------|------|--------|--------|------|
 | fixtures-cleanup | core/fixtures/ 제거 + .geode/skills/ scaffold/runtime 분리 | @mangowhoiscloud | feature/fixtures-cleanup | 2026-03-27 | 백그라운드 에이전트 |
 
+### In Progress
+
+| task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
+|---------|----------|------|--------|--------|------|
+| scheduler-callback | 스케줄러 callback 와이어링 — action 필드 + 큐 연결 | @mangowhoiscloud | feature/scheduler-callback | 2026-03-27 | |
+
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
-| port-cleanup-3 | memory/port.py 단일 구현 Protocol 3개 삭제 + calendar_bridge automation/ 이동 | #479 | @mangowhoiscloud | pending | |
+
+### Done (2026-03-27 — 세션 42)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| runtime-decompose | GeodeRuntime.create() 243줄 → 4 sub-builder 분해 (1488→1477줄) | #481 | @mangowhoiscloud | 2026-03-27 |
+| claude-md-skill-cleanup | CLAUDE.md clean-architecture + architecture-patterns 제거 | #480 | @mangowhoiscloud | 2026-03-27 |
+| port-cleanup-3 | memory/port.py 단일 구현 Protocol 3개 삭제 + calendar_bridge automation/ 이동 | #479 | @mangowhoiscloud | 2026-03-27 |
 
 ### Done (2026-03-27 — 세션 41)
 

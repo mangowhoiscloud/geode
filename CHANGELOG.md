@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Scheduler action queue** — `ScheduledJob.action` 필드 추가. NL 파서가 스케줄 표현식에서 action 텍스트를 추출(`_extract_action()`)하여 job에 저장. `SchedulerService`가 job 발화 시 `action_queue: queue.Queue[tuple[str, str]]`에 `(job_id, action)` 삽입. REPL 루프가 큐를 drain하여 `AgenticLoop.run(action)` 호출 — NL 예약 작업이 실제로 실행됨.
+
 ### Architecture
 - **`core/hooks/` 신설** — HookSystem/HookEvent/HookResult + HookPluginLoader + plugins/를 `core/orchestration/`에서 분리. Cross-cutting concern이므로 별도 최상위 모듈로. 26개 소비자 `from core.hooks import HookSystem` 경로 통일. L0~L4가 L3(orchestration)에 의존하던 레이어 위반 해소.
 - **single-impl Protocol 제거** — `core/memory/port.py`에서 구현체가 하나뿐인 `ProjectMemoryPort`, `OrganizationMemoryPort`, `UserProfilePort` 삭제. 소비자(runtime.py, context.py, memory_tools.py, profile_tools.py)가 구체 타입(`ProjectMemory`, `MonoLakeOrganizationMemory`, `FileBasedUserProfile`)을 직접 참조. `SessionStorePort`는 다중 구현체(`InMemorySessionStore`, `HybridSessionStore`)가 있으므로 유지.

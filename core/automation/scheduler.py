@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import queue
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -86,6 +87,7 @@ class ScheduledJob:
     enabled: bool = True
     delete_after_run: bool = False  # For AT type: auto-delete after success
     callback: Any = None  # Callable[[dict], None]
+    action: str = ""  # Prompt text to enqueue when fired (no callback)
     active_hours: ActiveHours | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     # State tracking
@@ -116,6 +118,7 @@ def _job_to_dict(job: ScheduledJob) -> dict[str, Any]:
         },
         "enabled": job.enabled,
         "delete_after_run": job.delete_after_run,
+        "action": job.action,
         "active_hours": (asdict(job.active_hours) if job.active_hours is not None else None),
         "metadata": job.metadata,
         "created_at_ms": job.created_at_ms,
@@ -147,6 +150,7 @@ def _job_from_dict(data: dict[str, Any]) -> ScheduledJob:
         enabled=data.get("enabled", True),
         delete_after_run=data.get("delete_after_run", False),
         callback=None,  # Callbacks are not serialised
+        action=data.get("action", ""),
         active_hours=active_hours,
         metadata=data.get("metadata", {}),
         created_at_ms=data.get("created_at_ms", 0.0),
@@ -314,6 +318,7 @@ class SchedulerService:
         hooks: HookSystem | None = None,
         store_path: Path | None = None,
         log_dir: Path | None = None,
+        action_queue: queue.Queue[tuple[str, str]] | None = None,
     ) -> None:
         self._trigger_manager = trigger_manager
         self._hooks = hooks
@@ -323,6 +328,7 @@ class SchedulerService:
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._action_queue = action_queue
 
     # -- CRUD ---------------------------------------------------------------
 
@@ -539,6 +545,9 @@ class SchedulerService:
         try:
             if job.callback is not None:
                 job.callback({"job_id": job.job_id, "name": job.name, **job.metadata})
+            elif job.action and self._action_queue is not None:
+                self._action_queue.put((job.job_id, job.action))
+                log.debug("Job '%s' enqueued action: %s", job.job_id, job.action[:60])
         except Exception as exc:
             status = "error"
             error = str(exc)
