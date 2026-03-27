@@ -28,10 +28,13 @@
 | ~~runtime-decompose-v2~~ | ~~runtime.py 1475→380줄 — 5-module split~~ | ~~P0~~ | ~~#484~~ | **Done** |
 | ~~di-cleanup~~ | ~~불필요 ContextVar DI 8개 제거 — 직접 import로 대체~~ | ~~P0~~ | ~~#486~~ | **Done** |
 | ~~cron-session-isolation~~ | ~~Cron systemEvent vs agentTurn 구분~~ | ~~P2~~ | ~~#487~~ | **Done** |
-| hook-turn-complete | TURN_COMPLETE 자동 메모리 — 매 턴 종료 시 key insight 자동 저장 | P1 | — | OpenClaw command:new 패턴 |
+| ~~hook-turn-complete~~ | ~~TURN_COMPLETE 자동 메모리~~ | ~~P1~~ | ~~#488~~ | **Done** |
 | geode-dir-hierarchy | .geode/ 디렉토리 계층화 — session/journal/snapshot/vault/models → ~/.geode/ 이동 + project_id 스코핑 | P1 | — | Claude Code ~/.claude/projects/ 패턴 |
 | hook-context-action | CONTEXT_CRITICAL 행동 위임 — Hook이 압축 전략 결정 | P2 | — | OpenClaw 패턴 |
 | hook-session-start | SESSION_START 동적 프롬프트 — 세션 시작 시 컨텍스트 기반 프롬프트 보강 | P2 | — | OpenClaw agent:bootstrap 패턴 |
+| hook-llm-lifecycle | LLM_CALL_START/END — 모델별 latency/cost 실시간 집계 + 외부 대시보드 연동 | P2 | — | 관측 → 행동 확장 |
+| hook-tool-approval | TOOL_APPROVAL 패턴 학습 — HITL 승인 이력 기반 자동 승인 룰 | P2 | — | 행동 제어 |
+| hook-model-switched | MODEL_SWITCHED — 전환 사유 기록 + 자동 전환 정책 학습 | P3 | — | 관측 |
 | hook-filesystem-plugin | 파일시스템 Hook 플러그인 — .geode/hooks/ 자동 발견 + 등록 | P3 | — | OpenClaw L3 Internal Hooks |
 | gateway-binding-hotreload | 바인딩 핫 리로드 — config.toml 변경 시 재시작 불필요 | P3 | — | OpenClaw GAP |
 | gateway-hooks-l4 | Gateway Hooks (L4) — 외부 웹훅 → 에이전트 트리거 | P3 | — | OpenClaw GAP |
@@ -41,7 +44,9 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| geode-dir-hierarchy | .geode/ 디렉토리 계층화 — session/journal/snapshot/vault/models → ~/.geode/ 이동 + project_id 스코핑 | @mangowhoiscloud | feature/geode-dir-hierarchy | 2026-03-27 | Claude Code projects/ 패턴 |
+| hook-context-action | CONTEXT_CRITICAL 행동 위임 — Hook이 압축 전략 결정 | @mangowhoiscloud | feature/hook-context-action | 2026-03-27 | |
+| hook-session-start | SESSION_START 동적 프롬프트 | @mangowhoiscloud | feature/hook-session-start | 2026-03-27 | |
+| geode-dir-hierarchy | .geode/ 디렉토리 계층화 | @mangowhoiscloud | feature/geode-dir-hierarchy | 2026-03-27 | Claude Code projects/ 패턴 |
 
 ### In Review
 
