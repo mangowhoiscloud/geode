@@ -409,6 +409,26 @@ def render_status_line() -> None:
         console.print(f"\n  [dim]✢ Worked for {meter.turn_elapsed_display}[/dim]")
 
 
+def render_context_event(
+    event_type: str,
+    *,
+    original_count: int = 0,
+    new_count: int = 0,
+) -> None:
+    """Render context compression notification.
+
+    Shows a dim notification when context is auto-compacted or pruned,
+    so the user knows conversation history was compressed.
+
+    Format::
+
+        ⟳ Context compacted: 45 → 12 messages
+        ⟳ Context pruned: 30 → 10 messages
+    """
+    label = "compacted" if event_type == "compact" else "pruned"
+    console.print(f"  [dim]⟳ Context {label}: {original_count} → {new_count} messages[/dim]")
+
+
 def render_turn_summary(rounds: int, tool_count: int, elapsed_s: float, cost: float) -> None:
     """Render compact turn-end summary line.
 

@@ -50,7 +50,7 @@ L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 
 서브에이전트는 부모의 tools/MCP/skills/memory를 상속받아 독립 컨텍스트에서 병렬 실행.
 `SubAgentManager` → `CoalescingQueue`(250ms dedup) → `TaskGraph`(DAG) → `IsolatedRunner`(MAX_CONCURRENT=5).
-제어: max_depth=2, max_total=15, timeout=120s, auto_approve=True(STANDARD만), max_rounds=10, max_tokens=8192.
+제어: max_depth=2, max_total=15, timeout=120s, auto_approve=True(STANDARD만), max_rounds=50, max_tokens=32768, time_budget_s=0 (부모와 동일).
 
 **메모리 격리 규칙:**
 - 서브에이전트는 부모 메모리 스냅샷을 읽기 전용으로 상속
@@ -168,7 +168,7 @@ Decision Tree on D-E-F axes:
 | OpenAI | `gpt-5.2` | $1.75 | $14.00 | 128K | Fallback 1 |
 | OpenAI | `gpt-4.1` | $2.00 | $8.00 | 1M | Fallback 2 |
 | OpenAI | `gpt-4.1-mini` | $0.40 | $1.60 | 1M | Budget |
-| **ZhipuAI** | `glm-5` | $0.72 | $2.30 | 80K | GLM Primary |
+| **ZhipuAI** | `glm-5` | $0.72 | $2.30 | 200K | GLM Primary |
 | ZhipuAI | `glm-5-turbo` | $0.96 | $3.20 | 200K | GLM Agent |
 | ZhipuAI | `glm-4.7-flash` | Free | Free | 200K | GLM Budget |
 
