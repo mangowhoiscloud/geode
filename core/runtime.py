@@ -13,6 +13,12 @@ Centralizes creation and lifecycle of all infrastructure singletons:
 - L4.5 Automation: Drift, ModelRegistry, ExpertPanel, Correlation,
   OutcomeTracker, SnapshotManager, TriggerManager, FeedbackLoop
 - L2 Memory: OrganizationMemory, HybridSessionStore, ContextAssembler
+
+Implementation details are decomposed into `core.runtime_wiring`:
+    bootstrap  — hooks, memory, session, config_watcher, task, prompt, plugin_registry
+    infra      — policies, tools, LLM, auth, lanes
+    automation — L4.5 9 components + hook wiring
+    adapters   — MCP signal/notification/calendar/gateway
 """
 
 from __future__ import annotations
@@ -35,33 +41,41 @@ from core.automation.feedback_loop import FeedbackLoop
 from core.automation.model_registry import ModelRegistry
 from core.automation.outcome_tracking import OutcomeTracker
 from core.automation.snapshot import SnapshotManager
-from core.automation.triggers import TriggerManager, TriggerType
+from core.automation.triggers import TriggerManager
 from core.config import settings
 from core.domains.loader import load_domain_adapter
 from core.domains.port import set_domain
 from core.gateway.auth.cooldown import CooldownTracker
 from core.gateway.auth.profiles import ProfileStore
 from core.gateway.auth.rotation import ProfileRotator
-from core.hooks import HookEvent, HookSystem
-from core.llm.providers.openai import OpenAIAdapter
-from core.llm.router import ClaudeAdapter, LLMClientPort
+from core.hooks import HookSystem
+from core.llm.router import LLMClientPort
 from core.memory.context import ContextAssembler
 from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
 from core.memory.project import ProjectMemory
-from core.memory.session import InMemorySessionStore
 from core.memory.session_key import build_session_key, build_thread_config
-from core.memory.user_profile import FileBasedUserProfile
 from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
-from core.orchestration.run_log import RunLog, RunLogEntry
+from core.orchestration.run_log import RunLog
 from core.orchestration.stuck_detection import StuckDetector
 from core.orchestration.task_bridge import TaskGraphHookBridge
-from core.orchestration.task_system import TaskGraph, create_geode_task_graph
-from core.tools.analysis import ExplainScoreTool, PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
-from core.tools.policy import NodeScopePolicy, PolicyChain, ToolPolicy
-from core.tools.registry import ToolRegistry, ToolSearchTool
+from core.orchestration.task_system import TaskGraph
+from core.runtime_wiring.bootstrap import (  # noqa: F401  — backward compat
+    _make_run_log_handler,
+    get_plugin_status,
+)
+from core.runtime_wiring.infra import build_default_lanes as _build_default_lanes  # noqa: F401
+from core.runtime_wiring.infra import (
+    build_default_policies as _build_default_policies,  # noqa: F401
+)
+from core.runtime_wiring.infra import (
+    build_default_registry as _build_default_registry,  # noqa: F401
+)
+from core.runtime_wiring.infra import make_tool_executor as _make_tool_executor  # noqa: F401
+from core.tools.policy import NodeScopePolicy, PolicyChain
+from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
 
@@ -71,237 +85,8 @@ log = logging.getLogger(__name__)
 
 DEFAULT_SESSION_TTL = 3600.0  # 1 hour
 DEFAULT_LOG_DIR = Path.home() / ".geode" / "runs"
-DEFAULT_GLOBAL_CONCURRENCY = 4
 DEFAULT_STUCK_TIMEOUT_S = 7200.0  # 2 hours
 COALESCING_WINDOW_MS = 250.0  # Deduplication window for sub-agent tasks
-CONFIG_WATCHER_DEBOUNCE_MS = 300.0  # Avoid thrashing on rapid file changes
-
-
-# ---------------------------------------------------------------------------
-# RunLog hook handler — bridges HookSystem events → JSONL log
-# ---------------------------------------------------------------------------
-
-
-def _make_run_log_handler(
-    run_log: RunLog,
-    session_key: str,
-    run_id: str,
-) -> tuple[str, Any]:
-    """Create a hook handler that writes events to RunLog."""
-
-    def _log_event(event: HookEvent, data: dict[str, Any]) -> None:
-        entry = RunLogEntry(
-            session_key=session_key,
-            event=event.value,
-            node=data.get("node", ""),
-            status="error" if "error" in data else "ok",
-            duration_ms=data.get("duration_ms", 0.0),
-            metadata={k: v for k, v in data.items() if k not in ("node", "duration_ms", "error")},
-            run_id=run_id,
-        )
-        run_log.append(entry)
-
-    return "run_log_writer", _log_event
-
-
-# ---------------------------------------------------------------------------
-# Stuck detection hook handler
-# ---------------------------------------------------------------------------
-
-
-def _make_stuck_hook_handler(
-    detector: StuckDetector,
-) -> tuple[str, Any]:
-    """Create hook handlers for stuck detection lifecycle."""
-
-    def _track_lifecycle(event: HookEvent, data: dict[str, Any]) -> None:
-        session_key = data.get("ip_name", "")
-        if event == HookEvent.PIPELINE_START:
-            detector.mark_running(session_key, metadata=data)
-        elif event in (HookEvent.PIPELINE_END, HookEvent.PIPELINE_ERROR):
-            detector.mark_completed(session_key)
-
-    return "stuck_tracker", _track_lifecycle
-
-
-# ---------------------------------------------------------------------------
-# Plugin registration helper (DRY: replaces 8 bare except blocks)
-# ---------------------------------------------------------------------------
-
-_plugin_status: dict[str, str] = {}
-
-
-def _register_plugin(name: str, fn: Any, *args: Any, **kwargs: Any) -> bool:
-    """Call *fn* and record plugin status. Returns True on success.
-
-    Replaces repeated try/except Exception patterns with structured logging:
-    - ImportError  → warning (module not installed)
-    - ValueError   → warning (config invalid)
-    - Other        → error with traceback
-    """
-    try:
-        fn(*args, **kwargs)
-        _plugin_status[name] = "enabled"
-        log.info("Plugin %s: enabled", name)
-        return True
-    except ImportError as exc:
-        _plugin_status[name] = "unavailable"
-        log.warning("Plugin %s: module not available (%s)", name, exc)
-    except ValueError as exc:
-        _plugin_status[name] = "config_error"
-        log.warning("Plugin %s: config invalid (%s)", name, exc)
-    except Exception as exc:
-        _plugin_status[name] = "error"
-        log.error("Plugin %s: failed (%s)", name, exc, exc_info=True)
-    return False
-
-
-def get_plugin_status() -> dict[str, str]:
-    """Return plugin registration status dict for CLI reporting."""
-    return _plugin_status.copy()
-
-
-# ---------------------------------------------------------------------------
-# Default builders
-# ---------------------------------------------------------------------------
-
-
-def _build_default_policies() -> PolicyChain:
-    """Build default PolicyChain with L1-2 profile/org + L3 mode-based restrictions."""
-    from core.tools.policy import build_6layer_chain, load_org_policy, load_profile_policy
-
-    profile = load_profile_policy()
-    org = load_org_policy()
-    mode_policies = [
-        ToolPolicy(
-            name="dry_run_block_llm",
-            mode="dry_run",
-            denied_tools={"run_analyst", "run_evaluator", "send_notification"},
-            priority=100,
-        ),
-        ToolPolicy(
-            name="full_block_notification",
-            mode="full_pipeline",
-            denied_tools={"send_notification"},
-            priority=100,
-        ),
-    ]
-    return build_6layer_chain(profile=profile, org=org, mode_policies=mode_policies)
-
-
-def _build_default_registry() -> ToolRegistry:
-    """Build ToolRegistry with all 21 tools registered."""
-    registry = ToolRegistry()
-    # Analysis (4)
-    registry.register(RunAnalystTool())
-    registry.register(RunEvaluatorTool())
-    registry.register(PSMCalculateTool())
-    registry.register(ExplainScoreTool())
-    # Data (3)
-    from core.tools.data_tools import CortexAnalystTool, CortexSearchTool, QueryMonoLakeTool
-
-    registry.register(QueryMonoLakeTool())
-    registry.register(CortexAnalystTool())
-    registry.register(CortexSearchTool())
-    # Signals (5)
-    from core.tools.signal_tools import (
-        GoogleTrendsTool,
-        RedditSentimentTool,
-        SteamInfoTool,
-        TwitchStatsTool,
-        WebSearchTool,
-        YouTubeSearchTool,
-    )
-
-    registry.register(YouTubeSearchTool())
-    registry.register(RedditSentimentTool())
-    registry.register(TwitchStatsTool())
-    registry.register(SteamInfoTool())
-    registry.register(GoogleTrendsTool())
-    registry.register(WebSearchTool())
-    # Memory (7)
-    from core.tools.memory_tools import (
-        MemoryGetTool,
-        MemorySaveTool,
-        MemorySearchTool,
-        RuleCreateTool,
-        RuleDeleteTool,
-        RuleListTool,
-        RuleUpdateTool,
-    )
-
-    registry.register(MemorySearchTool())
-    registry.register(MemoryGetTool())
-    registry.register(MemorySaveTool())
-    registry.register(RuleCreateTool())
-    registry.register(RuleUpdateTool())
-    registry.register(RuleDeleteTool())
-    registry.register(RuleListTool())
-    # Output (3)
-    from core.tools.output_tools import ExportJsonTool, GenerateReportTool, SendNotificationTool
-
-    registry.register(GenerateReportTool())
-    registry.register(ExportJsonTool())
-    registry.register(SendNotificationTool())
-    # Meta-tool: tool_search (enables deferred loading)
-    registry.register(ToolSearchTool(registry))
-    return registry
-
-
-def _build_default_lanes() -> LaneQueue:
-    """Build default LaneQueue with session + global lanes."""
-    queue = LaneQueue()
-    queue.add_lane("session", max_concurrent=1)  # Serial per session
-    queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY)
-    return queue
-
-
-# ---------------------------------------------------------------------------
-# Tool executor factory
-# ---------------------------------------------------------------------------
-
-
-def _make_tool_executor(
-    llm_adapter: LLMClientPort,
-    registry: ToolRegistry,
-    policy_chain: PolicyChain,
-) -> Any:
-    """Create a tool_fn callable that binds generate_with_tools to registry.
-
-    Returns a callable with the same signature as LLMToolCallable:
-        (system, user, *, tools, tool_executor, ...) -> ToolUseResult
-
-    If no explicit tool_executor is provided, falls back to registry.execute
-    with the default policy chain.
-    """
-
-    def _default_tool_executor(name: str, **kwargs: Any) -> dict[str, Any]:
-        return registry.execute(name, policy=policy_chain, **kwargs)
-
-    def _tool_fn(
-        system: str,
-        user: str,
-        *,
-        tools: list[dict[str, Any]],
-        tool_executor: Any = None,
-        model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.3,
-        max_tool_rounds: int = 5,
-    ) -> Any:
-        executor = tool_executor or _default_tool_executor
-        return llm_adapter.generate_with_tools(
-            system,
-            user,
-            tools=tools,
-            tool_executor=executor,
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            max_tool_rounds=max_tool_rounds,
-        )
-
-    return _tool_fn
 
 
 # ---------------------------------------------------------------------------
@@ -418,762 +203,6 @@ class GeodeRuntime:
         self._task_bridge: TaskGraphHookBridge | None = None
 
     # ------------------------------------------------------------------
-    # Sub-builders for create() decomposition
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _build_hooks(
-        *,
-        session_key: str,
-        run_id: str,
-        log_dir: Path | str | None,
-        stuck_timeout_s: float,
-    ) -> tuple[HookSystem, RunLog, StuckDetector]:
-        """Build HookSystem with RunLog and StuckDetector handlers."""
-        hooks: HookSystem = HookSystem()
-
-        # Run log + hook handler
-        run_log = RunLog(session_key, log_dir=log_dir)
-        handler_name, handler_fn = _make_run_log_handler(run_log, session_key, run_id)
-        for event in HookEvent:
-            hooks.register(event, handler_fn, name=handler_name, priority=50)
-
-        # Stuck detector + hook handler
-        stuck_detector = StuckDetector(timeout_s=stuck_timeout_s)
-        stuck_name, stuck_fn = _make_stuck_hook_handler(stuck_detector)
-        for event in (HookEvent.PIPELINE_START, HookEvent.PIPELINE_END, HookEvent.PIPELINE_ERROR):
-            hooks.register(event, stuck_fn, name=stuck_name, priority=40)
-
-        # Notification hook plugin (events → external messaging)
-        def _reg_notification() -> None:
-            from core.hooks.plugins.notification_hook.hook import (
-                register_notification_hooks,
-            )
-
-            register_notification_hooks(
-                hooks,
-                channel=settings.notification_channel,
-                recipient=settings.notification_recipient,
-            )
-
-        _register_plugin("notification_hook", _reg_notification)
-
-        # C2: Journal auto-record hooks (PIPELINE_END → runs.jsonl, errors.jsonl)
-        def _reg_journal() -> None:
-            from core.memory.journal_hooks import make_journal_handlers
-            from core.memory.project_journal import get_project_journal
-
-            journal = get_project_journal()
-            for handler_name, handler_fn in make_journal_handlers(journal):
-                target_events = {
-                    "journal_pipeline_end": [HookEvent.PIPELINE_END],
-                    "journal_pipeline_error": [HookEvent.PIPELINE_ERROR],
-                    "journal_subagent": [HookEvent.SUBAGENT_COMPLETED],
-                }
-                for evt in target_events.get(handler_name, []):
-                    hooks.register(evt, handler_fn, name=handler_name, priority=60)
-
-        _register_plugin("journal_hook", _reg_journal)
-
-        return hooks, run_log, stuck_detector
-
-    @staticmethod
-    def _build_memory(
-        *,
-        session_store: SessionStorePort,
-    ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler, FileBasedUserProfile]:
-        """Build L2 memory components: project, org, context assembler, user profile."""
-        project_memory = ProjectMemory()
-
-        org_dir = settings.organization_fixture_dir
-        fixture_dir = Path(org_dir) if org_dir else None
-        organization_memory = MonoLakeOrganizationMemory(fixture_dir=fixture_dir)
-
-        # Tier 0.5: User Profile
-        global_profile_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
-        project_profile_dir = Path(".geode") / "user_profile"
-        user_profile = FileBasedUserProfile(
-            global_dir=global_profile_dir,
-            project_dir=project_profile_dir if project_profile_dir.parent.exists() else None,
-        )
-
-        # C2: Project Journal — append-only execution history
-        from core.memory.project_journal import ProjectJournal
-
-        project_journal = ProjectJournal()
-        project_journal.ensure_structure()
-
-        # V0: Vault — purpose-routed artifact storage
-        from core.memory.vault import Vault
-
-        vault = Vault()
-        vault.ensure_structure()
-
-        context_assembler = ContextAssembler(
-            organization_memory=organization_memory,
-            project_memory=project_memory,
-            session_store=session_store,
-            user_profile=user_profile,
-            run_log_dir=DEFAULT_LOG_DIR,
-            project_journal=project_journal,
-            vault=vault,
-            project_root=Path("."),
-        )
-
-        # Wire ContextAssembler into router node (L2 → L3 bridge)
-        from core.domains.game_ip.nodes.router import set_context_assembler
-
-        set_context_assembler(context_assembler)
-
-        # Wire memory into memory tools via contextvars (P1 memory autonomy)
-        from core.tools.memory_tools import set_org_memory, set_project_memory
-
-        set_project_memory(project_memory)
-        set_org_memory(organization_memory)
-
-        # Wire user profile into profile tools via contextvars
-        from core.tools.profile_tools import set_user_profile
-
-        set_user_profile(user_profile)
-
-        return project_memory, organization_memory, context_assembler, user_profile
-
-    @staticmethod
-    def _build_automation(
-        *,
-        hooks: HookSystem,
-        session_key: str,
-        ip_name: str,
-        project_memory: ProjectMemory | None = None,
-    ) -> dict[str, Any]:
-        """Build L4.5 automation components and wire hook event handlers.
-
-        Returns a dict of component name → instance for passing to the constructor.
-        """
-        # Drift detector (CUSUM)
-        drift_detector = CUSUMDetector()
-
-        # Model registry (file-based)
-        model_registry_dir = Path(settings.model_registry_dir)
-        reg_dir = model_registry_dir if model_registry_dir.name != "" else None
-        model_registry = ModelRegistry(storage_dir=reg_dir, hooks=hooks)
-
-        # Expert panel
-        expert_panel = ExpertPanel()
-
-        # Correlation analyzer
-        correlation_analyzer = CorrelationAnalyzer()
-
-        # Outcome tracker
-        outcome_tracker = OutcomeTracker(hooks=hooks)
-
-        # Snapshot manager (with auto-GC)
-        snapshot_dir = Path(settings.snapshot_dir) if settings.snapshot_dir else None
-        snapshot_manager = SnapshotManager(
-            storage_dir=snapshot_dir,
-            max_recent=settings.snapshot_max_recent,
-            hooks=hooks,
-            auto_gc_threshold=settings.snapshot_gc_threshold,
-        )
-
-        # Trigger manager (auto-start scheduler for cron-based triggers)
-        trigger_manager = TriggerManager(
-            scheduler_interval_s=settings.trigger_scheduler_interval_s,
-            hooks=hooks,
-        )
-        trigger_manager.start_scheduler()
-
-        # Advanced scheduler service (3-type: AT/EVERY/CRON + active hours)
-        import contextlib
-
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
-
-        scheduler_service = SchedulerService(
-            trigger_manager=trigger_manager,
-            hooks=hooks,
-        )
-        scheduler_service.load()
-
-        from core.automation.predefined import PREDEFINED_AUTOMATIONS
-
-        for tmpl in PREDEFINED_AUTOMATIONS:
-            if tmpl.enabled and not tmpl.schedule.startswith("event:"):
-                job = ScheduledJob(
-                    job_id=f"predefined:{tmpl.id}",
-                    name=tmpl.name,
-                    schedule=Schedule(
-                        kind=ScheduleKind.CRON,
-                        cron_expr=tmpl.schedule,
-                    ),
-                    enabled=tmpl.enabled,
-                    metadata={
-                        "source": "predefined",
-                        "template_id": tmpl.id,
-                    },
-                )
-                with contextlib.suppress(ValueError):
-                    scheduler_service.add_job(job)
-
-        if settings.scheduler_auto_start:
-            scheduler_service.start(
-                interval_s=settings.scheduler_interval_s,
-            )
-
-        # Feedback loop (wires all L4.5 components + hooks)
-        feedback_loop = FeedbackLoop(
-            model_registry=model_registry,
-            expert_panel=expert_panel,
-            correlation_analyzer=correlation_analyzer,
-            drift_detector=drift_detector,
-            hooks=hooks,
-        )
-
-        GeodeRuntime._wire_automation_hooks(
-            hooks,
-            snapshot_manager=snapshot_manager,
-            trigger_manager=trigger_manager,
-            session_key=session_key,
-            ip_name=ip_name,
-            project_memory=project_memory,
-        )
-
-        return {
-            "drift_detector": drift_detector,
-            "model_registry": model_registry,
-            "expert_panel": expert_panel,
-            "correlation_analyzer": correlation_analyzer,
-            "outcome_tracker": outcome_tracker,
-            "snapshot_manager": snapshot_manager,
-            "trigger_manager": trigger_manager,
-            "scheduler_service": scheduler_service,
-            "feedback_loop": feedback_loop,
-        }
-
-    @staticmethod
-    def _wire_automation_hooks(
-        hooks: HookSystem,
-        *,
-        snapshot_manager: Any,
-        trigger_manager: Any,
-        session_key: str,
-        ip_name: str,
-        project_memory: Any,
-    ) -> None:
-        """Wire L4.5 automation event handlers to the hook system."""
-
-        def _on_drift(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Drift detected: %s", data)
-
-        hooks.register(HookEvent.DRIFT_DETECTED, _on_drift, name="drift_logger", priority=90)
-
-        def _on_snapshot(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Snapshot captured: %s", data.get("snapshot_id", ""))
-
-        hooks.register(
-            HookEvent.SNAPSHOT_CAPTURED,
-            _on_snapshot,
-            name="snapshot_logger",
-            priority=90,
-        )
-
-        def _on_trigger(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Trigger fired: %s", data.get("trigger_id", ""))
-
-        hooks.register(HookEvent.TRIGGER_FIRED, _on_trigger, name="trigger_logger", priority=90)
-
-        def _on_outcome(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Outcome collected: cycle=%s", data.get("cycle_id", ""))
-
-        hooks.register(
-            HookEvent.OUTCOME_COLLECTED,
-            _on_outcome,
-            name="outcome_logger",
-            priority=90,
-        )
-
-        def _on_model_promoted(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info(
-                "Model promoted: %s → %s",
-                data.get("version_id", ""),
-                data.get("stage", ""),
-            )
-
-        hooks.register(
-            HookEvent.MODEL_PROMOTED,
-            _on_model_promoted,
-            name="model_promotion_logger",
-            priority=90,
-        )
-
-        # Reactive chain: drift → auto-snapshot for debugging
-        def _on_drift_snapshot(event: HookEvent, data: dict[str, Any]) -> None:
-            if snapshot_manager:
-                snapshot_manager.capture(
-                    session_key,
-                    pipeline_state={"trigger": "drift_detected", "alerts": data},
-                    context={"ip_name": ip_name},
-                )
-
-        hooks.register(
-            HookEvent.DRIFT_DETECTED,
-            _on_drift_snapshot,
-            name="drift_auto_snapshot",
-            priority=80,
-        )
-
-        # Wire TriggerManager → pipeline integration
-        trigger_manager.register_pipeline_trigger(
-            trigger_id="drift-reanalysis",
-            ip_name=ip_name,
-            trigger_type=TriggerType.EVENT,
-        )
-        drift_trigger_handler = trigger_manager.make_event_handler("drift-reanalysis")
-        hooks.register(
-            HookEvent.DRIFT_DETECTED,
-            drift_trigger_handler,
-            name="drift_pipeline_trigger",
-            priority=70,
-        )
-
-        # Reactive chain: pipeline end → auto-snapshot for reproducibility
-        def _on_pipeline_end_snapshot(event: HookEvent, data: dict[str, Any]) -> None:
-            if snapshot_manager:
-                snapshot_manager.capture(
-                    session_key,
-                    pipeline_state=data,
-                    context={"ip_name": ip_name},
-                )
-
-        hooks.register(
-            HookEvent.PIPELINE_END,
-            _on_pipeline_end_snapshot,
-            name="pipeline_end_snapshot",
-            priority=80,
-        )
-
-        # Memory write-back: pipeline end → add_insight to MEMORY.md (P0 auto-learning)
-        def _on_pipeline_end_memory(event: HookEvent, data: dict[str, Any]) -> None:
-            if project_memory is None:
-                return
-            if data.get("dry_run", False):
-                return  # dry_run은 기록하지 않음
-            ip = data.get("ip_name") or "unknown"
-            tier = data.get("tier") or "?"
-            score = data.get("final_score") or 0.0
-            cause = data.get("synthesis_cause", "")
-            action = data.get("synthesis_action", "")
-            insight = f"[{ip}] tier={tier}, score={score:.2f}"
-            if cause:
-                insight += f", cause={cause}"
-            if action:
-                insight += f", action={action}"
-            if not project_memory.add_insight(insight):
-                log.warning("Failed to write insight for IP=%s", ip)
-
-        hooks.register(
-            HookEvent.PIPELINE_END,
-            _on_pipeline_end_memory,
-            name="memory_write_back",
-            priority=85,
-        )
-
-    @staticmethod
-    def _build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
-        """Build auth profile system with API key profiles."""
-        from core.gateway.auth.profiles import AuthProfile, CredentialType
-
-        profile_store = ProfileStore()
-        if settings.anthropic_api_key:
-            profile_store.add(
-                AuthProfile(
-                    name="anthropic:default",
-                    provider="anthropic",
-                    credential_type=CredentialType.API_KEY,
-                    key=settings.anthropic_api_key,
-                )
-            )
-        if settings.openai_api_key:
-            profile_store.add(
-                AuthProfile(
-                    name="openai:default",
-                    provider="openai",
-                    credential_type=CredentialType.API_KEY,
-                    key=settings.openai_api_key,
-                )
-            )
-        profile_rotator = ProfileRotator(profile_store)
-        cooldown_tracker = CooldownTracker()
-
-        return profile_store, profile_rotator, cooldown_tracker
-
-    @staticmethod
-    def _build_prompt_assembler(
-        *,
-        hooks: HookSystem,
-        skill_dirs: list[Path] | None = None,
-    ) -> PromptAssembler:
-        """Build PromptAssembler with SkillRegistry and hook integration (ADR-007)."""
-        from core.llm.prompt_assembler import PromptAssembler
-        from core.llm.skill_registry import SkillRegistry
-
-        skill_registry = SkillRegistry(extra_dirs=skill_dirs or [])
-        skill_registry.discover()
-        return PromptAssembler(
-            skill_registry=skill_registry,
-            hooks=hooks,
-        )
-
-    @staticmethod
-    def _build_task_graph(
-        *,
-        hooks: HookSystem,
-        ip_name: str,
-    ) -> tuple[TaskGraph, TaskGraphHookBridge]:
-        """Build TaskGraph and wire the hook bridge for status tracking."""
-        prefix = ip_name.lower().replace(" ", "_")
-        graph = create_geode_task_graph(ip_name)
-        bridge = TaskGraphHookBridge(graph, ip_prefix=prefix)
-        bridge.register(hooks)
-        return graph, bridge
-
-    @staticmethod
-    def _build_signal_adapter() -> None:
-        """Build and inject CompositeSignalAdapter with MCP-backed signal sources.
-
-        Chains Steam MCP + Brave MCP adapters into CompositeSignalAdapter,
-        then injects into signals_node via contextvars. If no MCP servers
-        are configured or available, the adapter will report is_available()=False
-        and signals_node falls back to fixtures.
-        """
-        from core.domains.game_ip.nodes.signals import set_signal_adapter
-        from core.mcp.brave_adapter import (
-            BraveSearchAdapter,
-            BraveSignalAdapter,
-        )
-        from core.mcp.composite_signal import CompositeSignalAdapter
-        from core.mcp.manager import get_mcp_manager
-        from core.mcp.steam_adapter import SteamMCPSignalAdapter
-
-        manager = get_mcp_manager()
-        server_count = manager.load_config()
-
-        if server_count == 0:
-            log.debug("No MCP servers configured — signal adapter skipped (fixture fallback)")
-            set_signal_adapter(None)
-            return
-
-        # Build individual MCP signal adapters
-        adapters: list[SteamMCPSignalAdapter | BraveSignalAdapter] = []
-
-        steam_adapter = SteamMCPSignalAdapter(manager=manager, server_name="steam")
-        adapters.append(steam_adapter)
-
-        brave_search = BraveSearchAdapter(manager=manager, server_name="brave-search")
-        brave_signal = BraveSignalAdapter(brave_search)
-        adapters.append(brave_signal)
-
-        composite = CompositeSignalAdapter(adapters)  # type: ignore[arg-type]
-
-        if composite.is_available():
-            log.info(
-                "Signal liveification enabled: %d MCP adapters wired",
-                len(adapters),
-            )
-        else:
-            log.debug("MCP servers configured but none available — fixture fallback active")
-
-        set_signal_adapter(composite)
-
-    @staticmethod
-    def _load_mcp_manager_for_plugin(
-        plugin_name: str,
-        setter_fn: Any,
-    ) -> Any | None:
-        """Load MCP manager config, or mark plugin unavailable and return None."""
-        from core.mcp.manager import get_mcp_manager
-
-        try:
-            manager = get_mcp_manager()
-            manager.load_config()
-            return manager
-        except Exception as exc:
-            _plugin_status[plugin_name] = "unavailable"
-            log.warning("Plugin %s: MCP manager failed (%s)", plugin_name, exc)
-            setter_fn(None)
-            return None
-
-    @staticmethod
-    def _build_notification_adapter() -> None:
-        """Build and inject CompositeNotificationAdapter with MCP-backed channels.
-
-        Chains Slack + Discord + Telegram adapters. If no messaging MCP servers
-        are available, notification tools fall back to stub responses.
-        """
-        from core.mcp.composite_notification import CompositeNotificationAdapter
-        from core.mcp.discord_adapter import DiscordNotificationAdapter
-        from core.mcp.notification_port import set_notification
-        from core.mcp.slack_adapter import SlackNotificationAdapter
-        from core.mcp.telegram_adapter import TelegramNotificationAdapter
-
-        manager = GeodeRuntime._load_mcp_manager_for_plugin(
-            "notification_adapter", set_notification
-        )
-        if manager is None:
-            return
-
-        adapters = [
-            SlackNotificationAdapter(manager=manager),
-            DiscordNotificationAdapter(manager=manager),
-            TelegramNotificationAdapter(manager=manager),
-        ]
-        composite = CompositeNotificationAdapter(adapters)  # type: ignore[arg-type]
-        if composite.is_available():
-            log.info("Notification adapter enabled: channels=%s", composite.list_channels())
-        else:
-            log.debug("No messaging MCP servers available — stub notification mode")
-        set_notification(composite)
-
-    @staticmethod
-    def _build_calendar_adapter() -> None:
-        """Build and inject CompositeCalendarAdapter with MCP-backed sources.
-
-        Chains Google Calendar + CalDAV (Apple Calendar) adapters.
-        If no calendar MCP servers are available, calendar tools return empty.
-        """
-        from core.mcp.apple_calendar_adapter import AppleCalendarAdapter
-        from core.mcp.calendar_port import set_calendar
-        from core.mcp.composite_calendar import CompositeCalendarAdapter
-        from core.mcp.google_calendar_adapter import GoogleCalendarAdapter
-
-        manager = GeodeRuntime._load_mcp_manager_for_plugin("calendar_adapter", set_calendar)
-        if manager is None:
-            return
-
-        adapters = [
-            GoogleCalendarAdapter(manager=manager),
-            AppleCalendarAdapter(manager=manager),
-        ]
-        composite = CompositeCalendarAdapter(adapters)  # type: ignore[arg-type]
-        if composite.is_available():
-            log.info("Calendar adapter enabled: sources=%s", composite.list_sources())
-        else:
-            log.debug("No calendar MCP servers available — calendar tools disabled")
-        set_calendar(composite)
-
-    @staticmethod
-    def _build_gateway() -> None:
-        """Build and inject Gateway with channel pollers.
-
-        Creates ChannelManager with Slack/Discord/Telegram pollers.
-        Pollers only start if their credentials are configured and
-        gateway_enabled=True in settings.
-        """
-        from core.config import settings
-        from core.gateway.channel_manager import ChannelManager, set_gateway
-        from core.gateway.pollers.discord_poller import DiscordPoller
-        from core.gateway.pollers.slack_poller import SlackPoller
-        from core.gateway.pollers.telegram_poller import TelegramPoller
-        from core.mcp.notification_port import get_notification
-
-        if not settings.gateway_enabled:
-            log.debug("Gateway disabled (GEODE_GATEWAY_ENABLED=false)")
-            set_gateway(None)
-            return
-
-        # Wire Lane Queue for gateway concurrency control
-        lane_queue = None
-        try:
-            from core.orchestration.lane_queue import LaneQueue
-
-            lane_queue = LaneQueue()
-            lane_queue.add_lane("gateway", max_concurrent=2, timeout_s=120.0)
-        except Exception as exc:
-            _plugin_status["gateway_lane_queue"] = "unavailable"
-            log.warning("Plugin gateway_lane_queue: %s", exc)
-
-        manager = ChannelManager(lane_queue=lane_queue)
-        notification = get_notification()
-        poll_interval = settings.gateway_poll_interval_s
-
-        # Load bindings from TOML config (hot-reloadable)
-        try:
-            import tomllib
-            from pathlib import Path
-
-            config_path = Path(".geode") / "config.toml"
-            if config_path.exists():
-                with open(config_path, "rb") as f:
-                    toml_config = tomllib.load(f)
-                manager.load_bindings_from_config(toml_config)
-        except Exception as exc:
-            _plugin_status["gateway_bindings"] = "skipped"
-            log.warning("Plugin gateway_bindings: config load failed (%s)", exc)
-
-        try:
-            from core.mcp.manager import get_mcp_manager
-
-            mcp = get_mcp_manager(auto_startup=True)
-            log.info("Gateway MCP: %d/%d servers connected", len(mcp._clients), len(mcp._servers))
-        except Exception as exc:
-            _plugin_status["gateway_mcp"] = "unavailable"
-            log.warning("Plugin gateway_mcp: MCP manager failed (%s)", exc)
-            set_gateway(None)
-            return
-
-        manager.register_poller(
-            SlackPoller(
-                manager,
-                mcp_manager=mcp,
-                notification=notification,
-                poll_interval_s=poll_interval,
-            )
-        )
-        manager.register_poller(
-            DiscordPoller(
-                manager,
-                mcp_manager=mcp,
-                notification=notification,
-                poll_interval_s=poll_interval,
-            )
-        )
-        manager.register_poller(
-            TelegramPoller(
-                manager,
-                mcp_manager=mcp,
-                notification=notification,
-                poll_interval_s=poll_interval,
-            )
-        )
-
-        set_gateway(manager)
-        log.info("Gateway built with %d pollers", len(manager._pollers))
-
-    # ------------------------------------------------------------------
-    # Factory sub-builders (called from create())
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _build_session_store(*, session_ttl: float) -> SessionStorePort:
-        """Build session store — InMemory default, HybridSessionStore if URLs configured."""
-        session_storage_dir: Path | None = None
-        if settings.session_storage_dir:
-            session_storage_dir = Path(settings.session_storage_dir)
-        session_store: SessionStorePort = InMemorySessionStore(
-            ttl=session_ttl,
-            storage_dir=session_storage_dir,
-        )
-        if settings.redis_url or settings.postgres_url:
-            from core.memory.hybrid_session import (
-                HybridSessionStore,
-                PostgreSQLSessionStore,
-                RedisSessionStore,
-            )
-
-            l1 = RedisSessionStore(ttl_hours=settings.session_ttl_hours)
-            pg_path = settings.postgres_url or ".geode/sessions"
-            l2 = PostgreSQLSessionStore(storage_dir=Path(pg_path))
-            session_store = HybridSessionStore(l1=l1, l2=l2)
-        return session_store
-
-    @staticmethod
-    def _build_llm_adapters(
-        tool_registry: ToolRegistry,
-        policy_chain: PolicyChain,
-    ) -> tuple[LLMClientPort, LLMClientPort | None]:
-        """Build LLM adapters and inject callables into contextvars."""
-        from core.llm.router import set_llm_callable
-
-        llm_adapter: LLMClientPort = ClaudeAdapter()
-        secondary_adapter: LLMClientPort | None = None
-        if settings.openai_api_key:
-            secondary_adapter = OpenAIAdapter()
-
-        tool_fn = _make_tool_executor(llm_adapter, tool_registry, policy_chain)
-        set_llm_callable(
-            llm_adapter.generate_structured,
-            llm_adapter.generate,
-            parsed_fn=llm_adapter.generate_parsed,
-            tool_fn=tool_fn,
-            secondary_json_fn=(
-                secondary_adapter.generate_structured if secondary_adapter else None
-            ),
-            secondary_parsed_fn=(secondary_adapter.generate_parsed if secondary_adapter else None),
-        )
-        return llm_adapter, secondary_adapter
-
-    @staticmethod
-    def _build_config_watcher() -> ConfigWatcher:
-        """Build ConfigWatcher and register .env hot-reload handler if .env exists."""
-        config_watcher = ConfigWatcher(debounce_ms=CONFIG_WATCHER_DEBOUNCE_MS)
-        env_path = Path(".env")
-        if not env_path.exists():
-            return config_watcher
-
-        def _on_config_change(path: Path, mtime: float) -> None:
-            log.info("Config file changed: %s — reloading settings", path)
-            from core.config import Settings
-
-            new_settings = Settings()
-
-            # Validate constraints before applying
-            if new_settings.drift_warning_threshold <= 0:
-                log.warning("Invalid drift_warning_threshold; skipping reload")
-                return
-            if new_settings.drift_critical_threshold <= new_settings.drift_warning_threshold:
-                log.warning("drift_critical_threshold must exceed warning; skipping")
-                return
-            if new_settings.session_ttl_hours <= 0:
-                log.warning("Invalid session_ttl_hours; skipping reload")
-                return
-            if new_settings.trigger_scheduler_interval_s <= 0:
-                log.warning("Invalid trigger_scheduler_interval_s; skipping reload")
-                return
-
-            # Core settings
-            settings.model = new_settings.model
-            settings.verbose = new_settings.verbose
-            # L4.5 Drift Detection
-            settings.drift_scan_cron = new_settings.drift_scan_cron
-            settings.drift_warning_threshold = new_settings.drift_warning_threshold
-            settings.drift_critical_threshold = new_settings.drift_critical_threshold
-            # L4.5 Outcome Tracking
-            settings.outcome_tracking_enabled = new_settings.outcome_tracking_enabled
-            # L4.5 Snapshot Manager
-            settings.snapshot_dir = new_settings.snapshot_dir
-            settings.snapshot_max_recent = new_settings.snapshot_max_recent
-            # L4.5 Trigger Manager
-            settings.trigger_scheduler_interval_s = new_settings.trigger_scheduler_interval_s
-            # L4.5 Model Registry
-            settings.model_registry_dir = new_settings.model_registry_dir
-            # L2 Memory
-            settings.session_ttl_hours = new_settings.session_ttl_hours
-            log.info("Settings hot-reload complete (12 fields updated)")
-
-        config_watcher.watch(env_path, _on_config_change, name="dotenv")
-        config_watcher.start()
-        return config_watcher
-
-    @classmethod
-    def _build_plugins(cls) -> None:
-        """Wire all MCP plugin adapters: signal, notification, calendar, gateway."""
-        cls._build_signal_adapter()
-        cls._build_notification_adapter()
-        cls._build_calendar_adapter()
-        cls._build_gateway()
-        try:
-            from core.automation.calendar_bridge import set_calendar_bridge
-            from core.mcp.calendar_port import get_calendar
-
-            cal = get_calendar()
-            if cal is None or not cal.is_available():
-                set_calendar_bridge(None)
-            else:
-                log.debug("Calendar adapter available — bridge will wire in REPL")
-        except Exception as exc:
-            _plugin_status["calendar_bridge"] = "error"
-            log.warning("Plugin calendar_bridge: setup failed (%s)", exc)
-
-    # ------------------------------------------------------------------
     # Factory method
     # ------------------------------------------------------------------
 
@@ -1191,16 +220,16 @@ class GeodeRuntime:
     ) -> GeodeRuntime:
         """Factory method — create a fully wired runtime for an IP analysis.
 
-        Composed from sub-builders:
-        - _build_hooks(): HookSystem, RunLog, StuckDetector
-        - _build_auth(): ProfileStore, ProfileRotator, CooldownTracker
-        - _build_session_store(): InMemory or HybridSessionStore
-        - _build_llm_adapters(): ClaudeAdapter + optional OpenAIAdapter
-        - _build_config_watcher(): .env hot-reload watcher
-        - _build_plugins(): signal/notification/calendar/gateway MCP wiring
-        - _build_memory(): ProjectMemory, OrganizationMemory, ContextAssembler, UserProfile
-        - _build_automation(): Drift, ModelRegistry, ExpertPanel, etc.
+        Delegates to sub-modules in core.runtime_wiring:
+        - bootstrap: hooks, session, memory, config_watcher, task_graph, prompt
+        - infra: policies, tools, LLM, auth, lanes
+        - automation: L4.5 9 components + hook wiring
+        - adapters: MCP signal/notification/calendar/gateway
         """
+        from core.runtime_wiring import adapters as adapter_wiring
+        from core.runtime_wiring import automation as automation_wiring
+        from core.runtime_wiring import bootstrap, infra
+
         # Domain adapter — wire before anything that reads domain config
         domain = load_domain_adapter(domain_name)
         set_domain(domain)
@@ -1210,29 +239,32 @@ class GeodeRuntime:
         run_id = uuid.uuid4().hex[:12]
 
         # Core sub-systems
-        hooks, run_log, stuck_detector = cls._build_hooks(
+        hooks, run_log, stuck_detector = bootstrap.build_hooks(
             session_key=session_key,
             run_id=run_id,
             log_dir=log_dir,
             stuck_timeout_s=stuck_timeout_s,
         )
-        session_store = cls._build_session_store(session_ttl=session_ttl)
-        policy_chain = _build_default_policies()
-        tool_registry = _build_default_registry()
-        profile_store, profile_rotator, cooldown_tracker = cls._build_auth()
-        llm_adapter, secondary_adapter = cls._build_llm_adapters(tool_registry, policy_chain)
+        session_store = bootstrap.build_session_store(session_ttl=session_ttl)
+        policy_chain = infra.build_default_policies()
+        tool_registry = infra.build_default_registry()
+        profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
+        llm_adapter, secondary_adapter = infra.build_llm_adapters(tool_registry, policy_chain)
         coalescing = CoalescingQueue(window_ms=COALESCING_WINDOW_MS)
-        config_watcher = cls._build_config_watcher()
-        lane_queue = _build_default_lanes()
+        config_watcher = bootstrap.build_config_watcher()
+        lane_queue = infra.build_default_lanes()
 
         # Plugin wiring (MCP adapters + Gateway)
-        cls._build_plugins()
+        adapter_wiring.build_plugins()
 
         # Memory + Automation
-        project_memory, organization_memory, context_assembler, user_profile = cls._build_memory(
-            session_store=session_store,
-        )
-        automation = cls._build_automation(
+        (
+            project_memory,
+            organization_memory,
+            context_assembler,
+            user_profile,
+        ) = bootstrap.build_memory(session_store=session_store)
+        automation = automation_wiring.build_automation(
             hooks=hooks,
             session_key=session_key,
             ip_name=ip_name,
@@ -1241,11 +273,11 @@ class GeodeRuntime:
 
         # Optional components
         try:
-            prompt_assembler = cls._build_prompt_assembler(hooks=hooks)
+            prompt_assembler = bootstrap.build_prompt_assembler(hooks=hooks)
         except ImportError:
             log.debug("ADR-007 prompt_assembler/skill_registry not yet available — skipping")
             prompt_assembler = None
-        task_graph, task_bridge = cls._build_task_graph(hooks=hooks, ip_name=ip_name)
+        task_graph, task_bridge = bootstrap.build_task_graph(hooks=hooks, ip_name=ip_name)
 
         log.info(
             "GeodeRuntime created: ip=%s, key=%s, tools=%d, lanes=%s",
@@ -1286,6 +318,10 @@ class GeodeRuntime:
         instance._task_bridge = task_bridge
         return instance
 
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
     @property
     def thread_config(self) -> dict[str, Any]:
         """LangGraph thread config for this session."""
@@ -1300,6 +336,10 @@ class GeodeRuntime:
         """
         db = settings.checkpoint_db
         return db if db and db.strip() else None
+
+    # ------------------------------------------------------------------
+    # Instance methods
+    # ------------------------------------------------------------------
 
     def compile_graph(
         self,
@@ -1349,7 +389,7 @@ class GeodeRuntime:
         return self.project_memory.get_context_for_ip(self.ip_name)
 
     def assemble_context(self) -> dict[str, Any]:
-        """Assemble full 3-tier context (Org → Project → Session)."""
+        """Assemble full 3-tier context (Org -> Project -> Session)."""
         if self.context_assembler:
             ctx = self.context_assembler.assemble(self.session_key, self.ip_name)
             self.context_assembler.mark_assembled(ctx.get("_assembled_at"))
@@ -1375,9 +415,11 @@ class GeodeRuntime:
 
     def reset_task_graph(self) -> None:
         """Reset task graph for REPL reuse (re-creates graph + bridge)."""
+        from core.runtime_wiring.bootstrap import build_task_graph
+
         if self._task_bridge is not None:
             self._task_bridge.unregister()
-        graph, bridge = self._build_task_graph(hooks=self.hooks, ip_name=self.ip_name)
+        graph, bridge = build_task_graph(hooks=self.hooks, ip_name=self.ip_name)
         self.task_graph = graph
         self._task_bridge = bridge
 
@@ -1423,7 +465,7 @@ class GeodeRuntime:
     def get_health(self) -> dict[str, Any]:
         """Aggregate health stats from all infrastructure components.
 
-        Returns a dict of component_name → stats_dict for dashboarding.
+        Returns a dict of component_name -> stats_dict for dashboarding.
         """
         health: dict[str, Any] = {"ip_name": self.ip_name, "session_key": self.session_key}
 
