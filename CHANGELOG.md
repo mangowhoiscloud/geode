@@ -29,6 +29,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Gateway binding hot-reload** --- `ConfigWatcher` watches `.geode/config.toml` and reloads `ChannelManager` bindings on file change (OpenClaw hot-reload pattern). No restart required.
+- **L4 webhook endpoint** --- `geode serve` optionally starts an HTTP POST endpoint (`/webhook`, default port 8765) that triggers AgenticLoop execution from external systems (OpenClaw L4 Gateway Hooks pattern). Controlled by `GEODE_WEBHOOK_ENABLED` / `GEODE_WEBHOOK_PORT` settings.
 - **TOOL_APPROVAL hooks** --- `TOOL_APPROVAL_REQUESTED`, `TOOL_APPROVAL_GRANTED`, `TOOL_APPROVAL_DENIED` 3종 HookEvent 추가 (42 -> 45). HITL 승인/거부/Always 패턴 추적. `ToolExecutor`에 hooks 주입, `bootstrap.py`에 `approval_tracker`/`denial_logger` 핸들러 등록.
 
 ### Fixed

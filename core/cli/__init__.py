@@ -1704,6 +1704,19 @@ def serve(
 
     gateway.set_processor(_gateway_processor)
 
+    # L4 Gateway Hooks: optional webhook endpoint
+    _webhook_server = None
+    if settings.webhook_enabled:
+        try:
+            from core.gateway.webhook_handler import start_webhook_server
+
+            _webhook_server = start_webhook_server(_gateway_processor, port=settings.webhook_port)
+            console.print(
+                f"  [success]Webhook endpoint started on port {settings.webhook_port}[/success]"
+            )
+        except Exception as _wh_exc:
+            log.warning("Webhook server failed to start: %s", _wh_exc)
+
     # Start pollers
     gateway.start()
     console.print("  [success]Gateway started. Listening...[/success]")
@@ -1723,6 +1736,8 @@ def serve(
         while not stop:
             _time.sleep(1.0)
     finally:
+        if _webhook_server is not None:
+            _webhook_server.shutdown()
         gateway.stop()
         console.print()
         console.print("  [dim]Gateway stopped.[/dim]")
