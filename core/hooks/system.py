@@ -77,6 +77,9 @@ class HookEvent(Enum):
     MCP_SERVER_STARTED = "mcp_server_started"
     MCP_SERVER_STOPPED = "mcp_server_stopped"
 
+    # Agentic turn lifecycle (OpenClaw command:new pattern)
+    TURN_COMPLETE = "turn_complete"
+
     # Context overflow detection (Karpathy P6 Context Budget)
     CONTEXT_WARNING = "context_warning"
     CONTEXT_CRITICAL = "context_critical"
