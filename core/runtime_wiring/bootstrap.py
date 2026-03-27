@@ -299,34 +299,23 @@ def build_hooks(
 
     _register_plugin("llm_lifecycle_hook", _reg_llm_lifecycle)
 
-    # C6: Tool approval tracking hooks (HITL pattern learning)
+    # C6: Tool approval tracking hooks (HITL pattern learning → JSONL)
     def _reg_tool_approval() -> None:
-        _approval_log: list[dict[str, Any]] = []
+        from core.hooks.approval_tracker import ApprovalTracker
 
-        def _on_granted(event: HookEvent, data: dict[str, Any]) -> None:
-            _approval_log.append(
-                {
-                    "tool": data.get("tool_name"),
-                    "always": data.get("always", False),
-                }
-            )
-            if len(_approval_log) > 100:
-                _approval_log.pop(0)  # ring buffer
-
-        def _on_denied(event: HookEvent, data: dict[str, Any]) -> None:
-            log.info("Tool denied: %s", data.get("tool_name"))
-
+        tracker = ApprovalTracker()
+        handler_name, handler_fn = tracker.make_hook_handler(session_key=session_key)
         hooks.register(
             HookEvent.TOOL_APPROVAL_GRANTED,
-            _on_granted,
-            name="approval_tracker",
-            priority=85,
+            handler_fn,
+            name=handler_name,
+            priority=65,
         )
         hooks.register(
             HookEvent.TOOL_APPROVAL_DENIED,
-            _on_denied,
-            name="denial_logger",
-            priority=85,
+            handler_fn,
+            name=f"{handler_name}_denied",
+            priority=65,
         )
 
     _register_plugin("tool_approval_hook", _reg_tool_approval)
