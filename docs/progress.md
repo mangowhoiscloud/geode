@@ -36,7 +36,6 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| di-cleanup | 불필요 ContextVar DI 8개 제거 | @mangowhoiscloud | feature/di-cleanup | 2026-03-27 | |
 
 ### In Review
 
@@ -47,6 +46,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| di-cleanup | 불필요 ContextVar DI 8개 제거 — 모듈 변수로 대체 (프론티어 패턴 정렬) | #486 | @mangowhoiscloud | 2026-03-27 |
 | fixtures-cleanup | core/fixtures/ 삭제 + scaffold skills .claude/skills/ 분리 | #478 | @mangowhoiscloud | 2026-03-27 |
 | runtime-decompose-v2 | runtime.py 1476→517줄 — 5-module OpenClaw-style decomposition | #484 | @mangowhoiscloud | 2026-03-27 |
 | scheduler-nl-fix | NL 정규식 제거 → 원문 저장 + LLM 프레이밍 위임 | #483 | @mangowhoiscloud | 2026-03-27 |
