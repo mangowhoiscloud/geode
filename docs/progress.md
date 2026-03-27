@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-27 (세션 42 — port-cleanup-3 #479 + runtime-decompose #481 + skill-cleanup #480 In Review)
+> 마지막 갱신: 2026-03-27 (세션 42 — #479/#480/#481 머지 완료. scheduler-callback 착수)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -23,7 +23,7 @@
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~#470~~ | **Done** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
 | ~~mcp-simplify~~ | ~~MCP 카탈로그 단일화~~ | ~~P1~~ | ~~#469~~ | **Done** |
-| scheduler-callback | 스케줄러 callback 와이어링 — action 필드 + 큐 연결 | P1 | tool-mcp-architecture-review.md | mcp-simplify 이후 |
+| ~~scheduler-callback~~ | ~~스케줄러 callback 와이어링 — action 필드 + 큐 연결~~ | ~~P1~~ | ~~tool-mcp-architecture-review.md~~ | **In Progress** |
 | ~~agentic-provider-merge~~ | ~~agent/adapters/ → llm/providers/ 통합~~ | ~~P2~~ | ~~#473~~ | **Done** |
 | ~~ports-migrate~~ | ~~infrastructure/ports/ → domain co-locate 이동 (8포트, 40+ 소비자)~~ | ~~P2~~ | ~~#474~~ | **Done** |
 ### In Progress
@@ -32,13 +32,24 @@
 |---------|----------|------|--------|--------|------|
 | fixtures-cleanup | core/fixtures/ 제거 + .geode/skills/ scaffold/runtime 분리 | @mangowhoiscloud | feature/fixtures-cleanup | 2026-03-27 | 백그라운드 에이전트 |
 
+### In Progress
+
+| task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
+|---------|----------|------|--------|--------|------|
+| scheduler-callback | 스케줄러 callback 와이어링 — action 필드 + 큐 연결 | @mangowhoiscloud | feature/scheduler-callback | 2026-03-27 | |
+
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
-| port-cleanup-3 | memory/port.py 단일 구현 Protocol 3개 삭제 + calendar_bridge automation/ 이동 | #479 | @mangowhoiscloud | pending | |
-| runtime-decompose | GeodeRuntime.create() 243줄 → 4 sub-builder 분해 (1488→1477줄) | #481 | @mangowhoiscloud | pending | base: port-cleanup-3 |
-| claude-md-skill-cleanup | CLAUDE.md clean-architecture + architecture-patterns 제거 | #480 | @mangowhoiscloud | pending | |
+
+### Done (2026-03-27 — 세션 42)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| runtime-decompose | GeodeRuntime.create() 243줄 → 4 sub-builder 분해 (1488→1477줄) | #481 | @mangowhoiscloud | 2026-03-27 |
+| claude-md-skill-cleanup | CLAUDE.md clean-architecture + architecture-patterns 제거 | #480 | @mangowhoiscloud | 2026-03-27 |
+| port-cleanup-3 | memory/port.py 단일 구현 Protocol 3개 삭제 + calendar_bridge automation/ 이동 | #479 | @mangowhoiscloud | 2026-03-27 |
 
 ### Done (2026-03-27 — 세션 41)
 
