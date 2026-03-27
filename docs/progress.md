@@ -45,6 +45,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
+| p3-hook-gateway-batch | P3 일괄 — hook-model-switched + hook-filesystem-plugin + gateway-hotreload + gateway-hooks-l4 + README docs-sync | @mangowhoiscloud | feature/p3-batch | 2026-03-28 | |
 | context-long-session | 장시간 운용 컨텍스트 관리 — GAP-1~5 일괄 해소 | @mangowhoiscloud | feature/context-long-session | 2026-03-28 | Provider별 압축 + 대화 요약 |
 
 ### In Review

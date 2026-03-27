@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (45 events)."""
+    """Pipeline lifecycle events (46 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -97,6 +97,9 @@ class HookEvent(Enum):
     TOOL_APPROVAL_REQUESTED = "tool_approval_requested"
     TOOL_APPROVAL_GRANTED = "tool_approval_granted"
     TOOL_APPROVAL_DENIED = "tool_approval_denied"
+
+    # Model switching (agentic loop model change observability)
+    MODEL_SWITCHED = "model_switched"
 
 
 @dataclass
