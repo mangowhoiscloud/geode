@@ -29,7 +29,9 @@ from core.verification.calibration import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-GOLDEN_SET_PATH = Path(__file__).parent.parent / "core" / "domains" / "game_ip" / "fixtures" / "_golden_set.json"
+GOLDEN_SET_PATH = (
+    Path(__file__).parent.parent / "core" / "domains" / "game_ip" / "fixtures" / "_golden_set.json"
+)
 
 
 @pytest.fixture
