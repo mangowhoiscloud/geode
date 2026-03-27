@@ -36,6 +36,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **single-impl Protocol 제거** — `core/memory/port.py`에서 구현체가 하나뿐인 `ProjectMemoryPort`, `OrganizationMemoryPort`, `UserProfilePort` 삭제. 소비자(runtime.py, context.py, memory_tools.py, profile_tools.py)가 구체 타입(`ProjectMemory`, `MonoLakeOrganizationMemory`, `FileBasedUserProfile`)을 직접 참조. `SessionStorePort`는 다중 구현체(`InMemorySessionStore`, `HybridSessionStore`)가 있으므로 유지.
 - **`calendar_bridge.py` 이동** — `core/orchestration/calendar_bridge.py` → `core/automation/calendar_bridge.py`. 스케줄러↔캘린더 동기화는 automation concern.
 - **`GeodeRuntime.create()` 분해** — 243줄 팩토리 메서드를 4개 named sub-builder로 분리: `_build_session_store()`, `_build_llm_adapters()`, `_build_config_watcher()`, `_build_plugins()`. create() 70줄로 축소. 파일 1488 → 1477줄.
+- **`runtime.py` 5-module 분해** — 1476줄 → 517줄. OpenClaw 플러그인 패턴으로 `core/runtime_wiring/` 4개 모듈 추출: `bootstrap.py`(345줄, hooks/memory/session/config), `infra.py`(228줄, policies/tools/LLM/auth/lanes), `automation.py`(261줄, L4.5 9 components + hook wiring), `adapters.py`(243줄, MCP signal/notification/calendar/gateway). GeodeRuntime 클래스 + dataclass + instance methods만 runtime.py에 잔류. 기존 import 경로 backward compat 유지.
 
 ---
 

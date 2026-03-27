@@ -7,7 +7,7 @@ from typing import Any
 
 from core.hooks import HookEvent, HookSystem
 from core.memory.project import ProjectMemory
-from core.runtime import GeodeRuntime
+from core.runtime_wiring.automation import build_automation
 
 
 def _make_hooks_and_memory(
@@ -25,7 +25,7 @@ class TestPipelineEndMemoryWrite:
         """PIPELINE_END handler calls add_insight() with enriched data."""
         hooks, mem = _make_hooks_and_memory(tmp_path)
 
-        GeodeRuntime._build_automation(
+        build_automation(
             hooks=hooks,
             session_key="test-session",
             ip_name="Berserk",
@@ -57,7 +57,7 @@ class TestPipelineEndMemoryWrite:
         """dry_run=True → add_insight() is NOT called."""
         hooks, mem = _make_hooks_and_memory(tmp_path)
 
-        GeodeRuntime._build_automation(
+        build_automation(
             hooks=hooks,
             session_key="test-session",
             ip_name="Berserk",
@@ -83,7 +83,7 @@ class TestPipelineEndMemoryWrite:
         """project_memory=None → handler is a no-op, no error."""
         hooks = HookSystem()
 
-        GeodeRuntime._build_automation(
+        build_automation(
             hooks=hooks,
             session_key="test-session",
             ip_name="Berserk",
@@ -106,7 +106,7 @@ class TestPipelineEndMemoryWrite:
         """Missing optional fields → insight still written with defaults."""
         hooks, mem = _make_hooks_and_memory(tmp_path)
 
-        GeodeRuntime._build_automation(
+        build_automation(
             hooks=hooks,
             session_key="test-session",
             ip_name="TestIP",

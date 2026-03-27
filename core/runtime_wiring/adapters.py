@@ -1,0 +1,243 @@
+"""MCP adapter wiring — signal, notification, calendar, gateway.
+
+Extracted from core.runtime as standalone functions (formerly GeodeRuntime staticmethods).
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from core.runtime_wiring.bootstrap import _plugin_status
+
+log = logging.getLogger(__name__)
+
+
+def build_signal_adapter() -> None:
+    """Build and inject CompositeSignalAdapter with MCP-backed signal sources.
+
+    Chains Steam MCP + Brave MCP adapters into CompositeSignalAdapter,
+    then injects into signals_node via contextvars. If no MCP servers
+    are configured or available, the adapter will report is_available()=False
+    and signals_node falls back to fixtures.
+    """
+    from core.domains.game_ip.nodes.signals import set_signal_adapter
+    from core.mcp.brave_adapter import (
+        BraveSearchAdapter,
+        BraveSignalAdapter,
+    )
+    from core.mcp.composite_signal import CompositeSignalAdapter
+    from core.mcp.manager import get_mcp_manager
+    from core.mcp.steam_adapter import SteamMCPSignalAdapter
+
+    manager = get_mcp_manager()
+    server_count = manager.load_config()
+
+    if server_count == 0:
+        log.debug("No MCP servers configured — signal adapter skipped (fixture fallback)")
+        set_signal_adapter(None)
+        return
+
+    # Build individual MCP signal adapters
+    adapters: list[SteamMCPSignalAdapter | BraveSignalAdapter] = []
+
+    steam_adapter = SteamMCPSignalAdapter(manager=manager, server_name="steam")
+    adapters.append(steam_adapter)
+
+    brave_search = BraveSearchAdapter(manager=manager, server_name="brave-search")
+    brave_signal = BraveSignalAdapter(brave_search)
+    adapters.append(brave_signal)
+
+    composite = CompositeSignalAdapter(adapters)  # type: ignore[arg-type]
+
+    if composite.is_available():
+        log.info(
+            "Signal liveification enabled: %d MCP adapters wired",
+            len(adapters),
+        )
+    else:
+        log.debug("MCP servers configured but none available — fixture fallback active")
+
+    set_signal_adapter(composite)
+
+
+def _load_mcp_manager_for_plugin(
+    plugin_name: str,
+    setter_fn: Any,
+) -> Any | None:
+    """Load MCP manager config, or mark plugin unavailable and return None."""
+    from core.mcp.manager import get_mcp_manager
+
+    try:
+        manager = get_mcp_manager()
+        manager.load_config()
+        return manager
+    except Exception as exc:
+        _plugin_status[plugin_name] = "unavailable"
+        log.warning("Plugin %s: MCP manager failed (%s)", plugin_name, exc)
+        setter_fn(None)
+        return None
+
+
+def build_notification_adapter() -> None:
+    """Build and inject CompositeNotificationAdapter with MCP-backed channels.
+
+    Chains Slack + Discord + Telegram adapters. If no messaging MCP servers
+    are available, notification tools fall back to stub responses.
+    """
+    from core.mcp.composite_notification import CompositeNotificationAdapter
+    from core.mcp.discord_adapter import DiscordNotificationAdapter
+    from core.mcp.notification_port import set_notification
+    from core.mcp.slack_adapter import SlackNotificationAdapter
+    from core.mcp.telegram_adapter import TelegramNotificationAdapter
+
+    manager = _load_mcp_manager_for_plugin("notification_adapter", set_notification)
+    if manager is None:
+        return
+
+    adapters = [
+        SlackNotificationAdapter(manager=manager),
+        DiscordNotificationAdapter(manager=manager),
+        TelegramNotificationAdapter(manager=manager),
+    ]
+    composite = CompositeNotificationAdapter(adapters)  # type: ignore[arg-type]
+    if composite.is_available():
+        log.info("Notification adapter enabled: channels=%s", composite.list_channels())
+    else:
+        log.debug("No messaging MCP servers available — stub notification mode")
+    set_notification(composite)
+
+
+def build_calendar_adapter() -> None:
+    """Build and inject CompositeCalendarAdapter with MCP-backed sources.
+
+    Chains Google Calendar + CalDAV (Apple Calendar) adapters.
+    If no calendar MCP servers are available, calendar tools return empty.
+    """
+    from core.mcp.apple_calendar_adapter import AppleCalendarAdapter
+    from core.mcp.calendar_port import set_calendar
+    from core.mcp.composite_calendar import CompositeCalendarAdapter
+    from core.mcp.google_calendar_adapter import GoogleCalendarAdapter
+
+    manager = _load_mcp_manager_for_plugin("calendar_adapter", set_calendar)
+    if manager is None:
+        return
+
+    adapters = [
+        GoogleCalendarAdapter(manager=manager),
+        AppleCalendarAdapter(manager=manager),
+    ]
+    composite = CompositeCalendarAdapter(adapters)  # type: ignore[arg-type]
+    if composite.is_available():
+        log.info("Calendar adapter enabled: sources=%s", composite.list_sources())
+    else:
+        log.debug("No calendar MCP servers available — calendar tools disabled")
+    set_calendar(composite)
+
+
+def build_gateway() -> None:
+    """Build and inject Gateway with channel pollers.
+
+    Creates ChannelManager with Slack/Discord/Telegram pollers.
+    Pollers only start if their credentials are configured and
+    gateway_enabled=True in settings.
+    """
+    from core.config import settings
+    from core.gateway.channel_manager import ChannelManager, set_gateway
+    from core.gateway.pollers.discord_poller import DiscordPoller
+    from core.gateway.pollers.slack_poller import SlackPoller
+    from core.gateway.pollers.telegram_poller import TelegramPoller
+    from core.mcp.notification_port import get_notification
+
+    if not settings.gateway_enabled:
+        log.debug("Gateway disabled (GEODE_GATEWAY_ENABLED=false)")
+        set_gateway(None)
+        return
+
+    # Wire Lane Queue for gateway concurrency control
+    lane_queue = None
+    try:
+        from core.orchestration.lane_queue import LaneQueue
+
+        lane_queue = LaneQueue()
+        lane_queue.add_lane("gateway", max_concurrent=2, timeout_s=120.0)
+    except Exception as exc:
+        _plugin_status["gateway_lane_queue"] = "unavailable"
+        log.warning("Plugin gateway_lane_queue: %s", exc)
+
+    manager = ChannelManager(lane_queue=lane_queue)
+    notification = get_notification()
+    poll_interval = settings.gateway_poll_interval_s
+
+    # Load bindings from TOML config (hot-reloadable)
+    try:
+        import tomllib
+        from pathlib import Path
+
+        config_path = Path(".geode") / "config.toml"
+        if config_path.exists():
+            with open(config_path, "rb") as f:
+                toml_config = tomllib.load(f)
+            manager.load_bindings_from_config(toml_config)
+    except Exception as exc:
+        _plugin_status["gateway_bindings"] = "skipped"
+        log.warning("Plugin gateway_bindings: config load failed (%s)", exc)
+
+    try:
+        from core.mcp.manager import get_mcp_manager
+
+        mcp = get_mcp_manager(auto_startup=True)
+        log.info("Gateway MCP: %d/%d servers connected", len(mcp._clients), len(mcp._servers))
+    except Exception as exc:
+        _plugin_status["gateway_mcp"] = "unavailable"
+        log.warning("Plugin gateway_mcp: MCP manager failed (%s)", exc)
+        set_gateway(None)
+        return
+
+    manager.register_poller(
+        SlackPoller(
+            manager,
+            mcp_manager=mcp,
+            notification=notification,
+            poll_interval_s=poll_interval,
+        )
+    )
+    manager.register_poller(
+        DiscordPoller(
+            manager,
+            mcp_manager=mcp,
+            notification=notification,
+            poll_interval_s=poll_interval,
+        )
+    )
+    manager.register_poller(
+        TelegramPoller(
+            manager,
+            mcp_manager=mcp,
+            notification=notification,
+            poll_interval_s=poll_interval,
+        )
+    )
+
+    set_gateway(manager)
+    log.info("Gateway built with %d pollers", len(manager._pollers))
+
+
+def build_plugins() -> None:
+    """Wire all MCP plugin adapters: signal, notification, calendar, gateway."""
+    build_signal_adapter()
+    build_notification_adapter()
+    build_calendar_adapter()
+    build_gateway()
+    try:
+        from core.automation.calendar_bridge import set_calendar_bridge
+        from core.mcp.calendar_port import get_calendar
+
+        cal = get_calendar()
+        if cal is None or not cal.is_available():
+            set_calendar_bridge(None)
+        else:
+            log.debug("Calendar adapter available — bridge will wire in REPL")
+    except Exception as exc:
+        _plugin_status["calendar_bridge"] = "error"
+        log.warning("Plugin calendar_bridge: setup failed (%s)", exc)
