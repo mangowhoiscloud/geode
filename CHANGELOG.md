@@ -29,6 +29,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **SESSION_START / SESSION_END hooks** — 39번째/40번째(sic, enum 39개) HookEvent. REPL 세션 시작/종료 시 발화하여 동적 컨텍스트 주입 기반 마련 (OpenClaw `agent:bootstrap` 패턴). `session_lifecycle_hook` 플러그인이 model/resumed 정보를 로그에 기록.
 - **Scheduler action queue** — `ScheduledJob.action` 필드 추가. 원문 텍스트를 그대로 저장(정규식 추출 제거). `SchedulerService`가 job 발화 시 `action_queue`에 삽입. REPL이 `[scheduled-job:{id}]` 프레이밍으로 AgenticLoop에 위임 — LLM이 자체 판단으로 스케줄 의도를 분리하여 실행.
 - **Cron 세션 격리** — `ScheduledJob.isolated` 필드 추가 (기본값 `True`). OpenClaw `agentTurn` 패턴: 스케줄 발화 시 fresh ConversationContext + AgenticLoop에서 독립 실행하여 메인 대화 오염 방지. `isolated=False`(systemEvent)로 메인 세션 주입도 가능.
 - **TURN_COMPLETE 자동 메모리** — 37번째 HookEvent. AgenticLoop 매 턴 종료 시 발화, user_input + tool_calls + result 데이터 전달. `turn_auto_memory` 핸들러가 자동으로 project memory에 턴 요약 기록 (OpenClaw `command:new` 패턴).

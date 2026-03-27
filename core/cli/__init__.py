@@ -937,6 +937,16 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
 
     init_session_meter(model=agentic.model)
 
+    # Fire SESSION_START for dynamic context injection (OpenClaw agent:bootstrap)
+    _fire_hook(
+        HookEvent.SESSION_START,
+        {
+            "model": agentic.model,
+            "session_id": getattr(agentic, "_session_id", ""),
+            "resumed": resume_session_id is not None,
+        },
+    )
+
     # Auto-resume: --continue (latest) or --resume <id>
     if resume_session_id is not None:
         from core.cli.session_checkpoint import SessionCheckpoint
@@ -999,6 +1009,13 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         except (KeyboardInterrupt, EOFError):
             from core.cli.ui.agentic_ui import render_session_cost_summary
 
+            _fire_hook(
+                HookEvent.SESSION_END,
+                {
+                    "model": agentic.model,
+                    "session_id": getattr(agentic, "_session_id", ""),
+                },
+            )
             agentic.mark_session_completed()
             render_session_cost_summary()
             console.print("\n  [muted]Goodbye.[/muted]\n")
@@ -1011,6 +1028,13 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         if user_input.strip().lower() in ("exit", "quit", "q"):
             from core.cli.ui.agentic_ui import render_session_cost_summary
 
+            _fire_hook(
+                HookEvent.SESSION_END,
+                {
+                    "model": agentic.model,
+                    "session_id": getattr(agentic, "_session_id", ""),
+                },
+            )
             agentic.mark_session_completed()
             render_session_cost_summary()
             console.print("  [muted]Goodbye.[/muted]\n")

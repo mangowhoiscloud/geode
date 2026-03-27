@@ -203,6 +203,33 @@ def build_hooks(
 
     _register_plugin("turn_memory_hook", _reg_turn_memory)
 
+    # C4: Session lifecycle hooks (OpenClaw agent:bootstrap pattern)
+    def _reg_session_lifecycle() -> None:
+        def _on_session_start(event: HookEvent, data: dict[str, Any]) -> None:
+            log.info(
+                "Session started: model=%s resumed=%s",
+                data.get("model"),
+                data.get("resumed"),
+            )
+
+        def _on_session_end(event: HookEvent, data: dict[str, Any]) -> None:
+            log.info("Session ended: model=%s", data.get("model"))
+
+        hooks.register(
+            HookEvent.SESSION_START,
+            _on_session_start,
+            name="session_start_logger",
+            priority=90,
+        )
+        hooks.register(
+            HookEvent.SESSION_END,
+            _on_session_end,
+            name="session_end_logger",
+            priority=90,
+        )
+
+    _register_plugin("session_lifecycle_hook", _reg_session_lifecycle)
+
     return hooks, run_log, stuck_detector
 
 

@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (36 events)."""
+    """Pipeline lifecycle events (39 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -83,6 +83,10 @@ class HookEvent(Enum):
     # Context overflow detection (Karpathy P6 Context Budget)
     CONTEXT_WARNING = "context_warning"
     CONTEXT_CRITICAL = "context_critical"
+
+    # Session lifecycle (OpenClaw agent:bootstrap pattern)
+    SESSION_START = "session_start"
+    SESSION_END = "session_end"
 
 
 @dataclass
