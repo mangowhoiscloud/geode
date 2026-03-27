@@ -424,6 +424,82 @@ def render_turn_summary(rounds: int, tool_count: int, elapsed_s: float, cost: fl
     console.print(f"\n  [dim]──── {summary} ────[/dim]")
 
 
+def render_action_summary(
+    tool_calls: list[dict[str, Any]],
+    rounds: int,
+    elapsed_s: float,
+    cost: float,
+) -> str:
+    """Render Tier 1 deterministic action summary with per-tool detail.
+
+    Displays a header line (rounds/tools/time/cost) followed by individual
+    tool call results.  Returns the summary string for storing in
+    ``AgenticResult.summary``.  Zero LLM tokens consumed.
+    """
+    if not tool_calls:
+        return ""
+
+    lines: list[str] = []
+
+    # Header
+    header_parts = [f"{rounds} rounds", f"{len(tool_calls)} tools", f"{elapsed_s:.1f}s"]
+    if cost > 0:
+        header_parts.append(f"${cost:.3f}")
+    header = " \u00b7 ".join(header_parts)
+    lines.append("\u2500\u2500\u2500\u2500 Action Summary \u2500\u2500\u2500\u2500")
+    lines.append(header)
+    lines.append("")
+
+    # Per-tool lines (cap at 10)
+    for tc in tool_calls[:10]:
+        name = tc.get("name", "?")
+        inp = tc.get("input", {})
+        result = tc.get("result", {})
+
+        # Concise arg preview: first meaningful value
+        arg_preview = ""
+        if isinstance(inp, dict):
+            for _k, v in inp.items():
+                if v and _k not in ("verbose",):
+                    arg_preview = str(v)[:40]
+                    break
+
+        # Concise result preview
+        result_preview = ""
+        if isinstance(result, dict):
+            if "error" in result:
+                result_preview = f"ERROR: {str(result['error'])[:30]}"
+            elif "result" in result:
+                result_preview = str(result["result"])[:40]
+            elif "status" in result:
+                result_preview = str(result["status"])
+            else:
+                for rk, rv in result.items():
+                    if rk not in ("_meta", "_timing") and rv:
+                        result_preview = f"{rk}={str(rv)[:30]}"
+                        break
+
+        if arg_preview:
+            lines.append(f"  {name}({arg_preview}) \u2192 {result_preview}")
+        else:
+            lines.append(f"  {name} \u2192 {result_preview}")
+
+    if len(tool_calls) > 10:
+        lines.append(f"  ... +{len(tool_calls) - 10} more")
+
+    lines.append(
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    )
+
+    summary_text = "\n".join(lines)
+
+    # Render to console
+    for line in lines:
+        console.print(f"  [dim]{line}[/dim]")
+
+    return summary_text
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # Per-turn snapshot state (set before each agentic.run(), read by render)
 # ───────────────────────────────────────────────────────────────────────────

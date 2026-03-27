@@ -1091,13 +1091,13 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 result = agentic.run(user_input)
                 _render_agentic_result(result)
                 # Claude Code-style status line after each result
-                from core.cli.ui.agentic_ui import render_status_line, render_turn_summary
+                from core.cli.ui.agentic_ui import render_status_line
 
                 render_status_line()
 
-                # Turn-end compact summary (rounds · tools · time · cost)
+                # Turn-end action summary (per-tool detail + header)
                 if result and result.tool_calls:
-                    from core.cli.ui.agentic_ui import get_session_meter
+                    from core.cli.ui.agentic_ui import get_session_meter, render_action_summary
 
                     _meter = get_session_meter()
                     _turn_elapsed = _meter.turn_elapsed_s if _meter else 0.0
@@ -1116,9 +1116,9 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                             _turn_cost = _tk.accumulator.total_cost_usd
                     except Exception:
                         log.debug("Turn cost calculation failed", exc_info=True)
-                    render_turn_summary(
+                    result.summary = render_action_summary(
+                        result.tool_calls,
                         result.rounds,
-                        len(result.tool_calls),
                         _turn_elapsed,
                         _turn_cost,
                     )

@@ -107,6 +107,7 @@ class AgenticResult:
     rounds: int = 0
     error: str | None = None
     termination_reason: str = "unknown"  # "natural" | "forced_text" | "max_rounds" | "llm_error"
+    summary: str = ""  # Tier 1 compact action summary (auto-generated)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, omitting None-valued fields."""
