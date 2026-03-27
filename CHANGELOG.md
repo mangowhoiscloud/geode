@@ -30,6 +30,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **Scheduler action queue** — `ScheduledJob.action` 필드 추가. 원문 텍스트를 그대로 저장(정규식 추출 제거). `SchedulerService`가 job 발화 시 `action_queue`에 삽입. REPL이 `[scheduled-job:{id}]` 프레이밍으로 AgenticLoop에 위임 — LLM이 자체 판단으로 스케줄 의도를 분리하여 실행.
+- **Cron 세션 격리** — `ScheduledJob.isolated` 필드 추가 (기본값 `True`). OpenClaw `agentTurn` 패턴: 스케줄 발화 시 fresh ConversationContext + AgenticLoop에서 독립 실행하여 메인 대화 오염 방지. `isolated=False`(systemEvent)로 메인 세션 주입도 가능.
 - **OpenAI Responses API 전환** — `OpenAIAgenticAdapter`를 Chat Completions → Responses API(`client.responses.create`)로 마이그레이션. 네이티브 `web_search` 호스티드 도구 주입. `normalize_openai_responses()` 정규화기 추가.
 - **3사 네이티브 웹 검색 fallback** — `GeneralWebSearchTool`/`WebSearchTool`을 Anthropic(Opus) → OpenAI(gpt-5.4) → GLM(glm-5) 순차 fallback으로 전환. 외부 API 키 의존 제로.
 

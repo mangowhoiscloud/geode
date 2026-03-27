@@ -781,7 +781,7 @@ class TestActionQueue:
     ) -> None:
         import queue
 
-        q: queue.Queue[tuple[str, str]] = queue.Queue()
+        q: queue.Queue[tuple[str, str, bool]] = queue.Queue()
         svc = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, action_queue=q)
         job = ScheduledJob(
             job_id="act1",
@@ -793,9 +793,10 @@ class TestActionQueue:
         result = svc.run_now("act1")
         assert result["status"] == "ok"
         assert not q.empty()
-        queued_id, queued_action = q.get_nowait()
+        queued_id, queued_action, queued_isolated = q.get_nowait()
         assert queued_id == "act1"
         assert queued_action == "summarize today's news"
+        assert queued_isolated is True  # default: isolated
 
     def test_callback_takes_precedence_over_action(
         self,
@@ -804,7 +805,7 @@ class TestActionQueue:
     ) -> None:
         import queue
 
-        q: queue.Queue[tuple[str, str]] = queue.Queue()
+        q: queue.Queue[tuple[str, str, bool]] = queue.Queue()
         calls: list[str] = []
         svc = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, action_queue=q)
         job = ScheduledJob(
@@ -836,3 +837,25 @@ class TestActionQueue:
         svc.add_job(job)
         result = svc.run_now("noq1")
         assert result["status"] == "ok"
+
+    def test_non_isolated_enqueued(
+        self,
+        tmp_store: Path,
+        tmp_log_dir: Path,
+    ) -> None:
+        """Jobs with isolated=False enqueue with isolated=False flag."""
+        import queue
+
+        q: queue.Queue[tuple[str, str, bool]] = queue.Queue()
+        svc = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, action_queue=q)
+        job = ScheduledJob(
+            job_id="main1",
+            name="main_session",
+            schedule=Schedule(kind=ScheduleKind.AT, at_ms=0.0),
+            action="check status",
+            isolated=False,
+        )
+        svc.add_job(job)
+        svc.run_now("main1")
+        _, _, is_isolated = q.get_nowait()
+        assert is_isolated is False

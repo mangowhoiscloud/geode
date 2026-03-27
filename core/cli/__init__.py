@@ -910,7 +910,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
     # Scheduler (REPL-only: cron + /schedule command)
     import queue as _queue_mod
 
-    _action_queue: _queue_mod.Queue[tuple[str, str]] = _queue_mod.Queue()
+    _action_queue: _queue_mod.Queue[tuple[str, str, bool]] = _queue_mod.Queue()
     try:
         from core.automation.scheduler import SchedulerService
 
@@ -965,10 +965,28 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         # Drain scheduled actions before prompting (scheduler fires in background thread)
         try:
             while True:
-                job_id, fired_action = _action_queue.get_nowait()
-                if fired_action:
+                job_id, fired_action, isolated = _action_queue.get_nowait()
+                if not fired_action:
+                    continue
+                prompt = f"[scheduled-job:{job_id}] {fired_action}"
+                if isolated:
+                    # OpenClaw agentTurn: fresh context, no conversation pollution
+                    console.print(f"\n  [muted]Scheduler (isolated): {job_id}[/muted]")
+                    iso_conv = ConversationContext()
+                    _, _, iso_loop = _build_agentic_stack(
+                        iso_conv,
+                        mcp_manager=mcp_mgr,
+                        skill_registry=skill_registry,
+                        verbose=verbose,
+                        quiet=True,
+                    )
+                    result = iso_loop.run(prompt)
+                    summary = result.text[:200] if result and result.text else "(no output)"
+                    console.print(f"  [muted]  Result: {summary}[/muted]\n")
+                else:
+                    # OpenClaw systemEvent: inject into main session
                     console.print(f"\n  [muted]Scheduler: running job {job_id}[/muted]")
-                    agentic.run(f"[scheduled-job:{job_id}] {fired_action}")
+                    agentic.run(prompt)
         except _queue_mod.Empty:
             pass
 
