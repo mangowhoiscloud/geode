@@ -620,6 +620,9 @@ class AgenticLoop:
         Claude Code pattern: trust server-side clear_tool_uses as primary.
         Client-side only intervenes at CRITICAL (95%) as safety net.
         No 80% compaction — clear_tool_uses handles gradual cleanup.
+
+        Compression strategy is delegated to the CONTEXT_OVERFLOW_ACTION hook handler.
+        If no handler is registered or all fail, falls back to hardcoded defaults.
         """
         try:
             from core.config import settings
@@ -642,20 +645,23 @@ class AgenticLoop:
                         HookEvent.CONTEXT_CRITICAL,
                         {"metrics": dataclasses.asdict(metrics), "model": self.model},
                     )
-                # Small-context models need more aggressive pruning
-                keep_recent = settings.compact_keep_recent
-                if metrics.context_window < 200_000:
-                    keep_recent = min(keep_recent, 5)
-                pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
-                original_count = len(messages)
-                if len(pruned) < original_count:
-                    messages.clear()
-                    messages.extend(pruned)
-                    log.info(
-                        "Emergency pruned: %d → %d messages",
-                        original_count,
-                        len(pruned),
-                    )
+
+                # Delegate strategy to CONTEXT_OVERFLOW_ACTION hook handler
+                strategy = self._resolve_overflow_strategy(metrics, settings)
+
+                if strategy.get("strategy") == "prune":
+                    keep_recent = strategy.get("keep_recent", settings.compact_keep_recent)
+                    pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
+                    original_count = len(messages)
+                    if len(pruned) < original_count:
+                        messages.clear()
+                        messages.extend(pruned)
+                        log.info(
+                            "Emergency pruned: %d → %d messages (keep_recent=%d)",
+                            original_count,
+                            len(pruned),
+                            keep_recent,
+                        )
             elif metrics.is_warning:
                 log.info(
                     "Context at %.0f%% — clear_tool_uses will handle cleanup",
@@ -663,6 +669,27 @@ class AgenticLoop:
                 )
         except Exception:
             log.debug("Context monitor check failed", exc_info=True)
+
+    def _resolve_overflow_strategy(self, metrics: Any, settings: Any) -> dict[str, Any]:
+        """Ask CONTEXT_OVERFLOW_ACTION hook for compression strategy, with fallback.
+
+        Returns a dict with at least ``strategy`` key. If no handler responds
+        or all handlers fail, returns the hardcoded default strategy.
+        """
+        if self._hooks:
+            results = self._hooks.trigger_with_result(
+                HookEvent.CONTEXT_OVERFLOW_ACTION,
+                {"metrics": dataclasses.asdict(metrics), "model": self.model},
+            )
+            for result in results:
+                if result.success and result.data.get("strategy"):
+                    return result.data
+
+        # Fallback: hardcoded default (no handler registered or all failed)
+        keep_recent = settings.compact_keep_recent
+        if metrics.context_window < 200_000:
+            keep_recent = min(keep_recent, 5)
+        return {"strategy": "prune", "keep_recent": keep_recent}
 
     @staticmethod
     def _repair_messages(messages: list[dict[str, Any]]) -> None:

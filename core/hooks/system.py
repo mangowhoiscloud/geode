@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (39 events)."""
+    """Pipeline lifecycle events (40 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -83,6 +83,7 @@ class HookEvent(Enum):
     # Context overflow detection (Karpathy P6 Context Budget)
     CONTEXT_WARNING = "context_warning"
     CONTEXT_CRITICAL = "context_critical"
+    CONTEXT_OVERFLOW_ACTION = "context_overflow_action"
 
     # Session lifecycle (OpenClaw agent:bootstrap pattern)
     SESSION_START = "session_start"
@@ -104,8 +105,11 @@ class HookResult:
         return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
-# Type alias for hook handlers
-HookHandler = Callable[[HookEvent, dict[str, Any]], None]
+# Type alias for hook handlers.
+# Return type is dict|None: most handlers return None (fire-and-forget),
+# but feedback-style hooks (e.g. CONTEXT_OVERFLOW_ACTION) return a dict
+# that trigger_with_result() captures in HookResult.data.
+HookHandler = Callable[[HookEvent, dict[str, Any]], dict[str, Any] | None]
 
 
 @dataclass
@@ -177,6 +181,45 @@ class HookSystem:
             try:
                 hook.handler(event, data)
                 results.append(HookResult(success=True, event=event, handler_name=hook.name))
+            except Exception as exc:
+                log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
+                results.append(
+                    HookResult(
+                        success=False,
+                        event=event,
+                        handler_name=hook.name,
+                        error=str(exc),
+                    )
+                )
+
+        return results
+
+    def trigger_with_result(
+        self, event: HookEvent, data: dict[str, Any] | None = None
+    ) -> list[HookResult]:
+        """Trigger hooks and capture handler return values in HookResult.data.
+
+        Like trigger(), but if a handler returns a dict it is stored in the
+        corresponding HookResult.data field. This enables hooks that feed
+        recommendations back to the caller (e.g. CONTEXT_OVERFLOW_ACTION).
+        """
+        data = data or {}
+        results: list[HookResult] = []
+        with self._lock:
+            hooks = list(self._hooks.get(event, []))
+
+        for hook in hooks:
+            try:
+                ret = hook.handler(event, data)
+                result_data = ret if isinstance(ret, dict) else {}
+                results.append(
+                    HookResult(
+                        success=True,
+                        event=event,
+                        handler_name=hook.name,
+                        data=result_data,
+                    )
+                )
             except Exception as exc:
                 log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
                 results.append(

@@ -145,6 +145,20 @@ def build_hooks(
     for event in (HookEvent.PIPELINE_START, HookEvent.PIPELINE_END, HookEvent.PIPELINE_ERROR):
         hooks.register(event, stuck_fn, name=stuck_name, priority=40)
 
+    # Context overflow action handler (CONTEXT_OVERFLOW_ACTION -> strategy recommendation)
+    def _reg_context_action() -> None:
+        from core.hooks.context_action import make_context_action_handler
+
+        handler_name, handler_fn = make_context_action_handler()
+        hooks.register(
+            HookEvent.CONTEXT_OVERFLOW_ACTION,
+            handler_fn,
+            name=handler_name,
+            priority=50,
+        )
+
+    _register_plugin("context_action_hook", _reg_context_action)
+
     # Notification hook plugin (events -> external messaging)
     def _reg_notification() -> None:
         from core.hooks.plugins.notification_hook.hook import (

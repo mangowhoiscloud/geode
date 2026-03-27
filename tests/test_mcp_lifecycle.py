@@ -38,7 +38,10 @@ class TestMCPHookEvents:
 
     def test_hook_event_count_includes_mcp(self) -> None:
         """Total hook events should be 39 (includes TURN_COMPLETE + 2 MCP_SERVER_* + 2 CONTEXT_* + 2 SESSION_*)."""
-        assert len(HookEvent) == 39
+        assert len(HookEvent) == 40
+
+        """Total hook events should be 38 (includes TURN_COMPLETE + 2 MCP_SERVER_* + 3 CONTEXT_*)."""
+        assert len(HookEvent) == 40
 
 
 # ---------------------------------------------------------------------------
