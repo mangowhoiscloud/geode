@@ -304,6 +304,7 @@ class AgenticLoop:
         same provider, the adapter is reused (it owns its own client).
         Also syncs the SessionMeter so status lines show the correct model.
         """
+        old_model = self.model
         new_provider = provider or _resolve_provider(model)
         if new_provider != self._provider:
             self._provider = new_provider
@@ -316,6 +317,16 @@ class AgenticLoop:
 
         update_session_model(model)
         log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
+
+        # Fire MODEL_SWITCHED hook when the model actually changed
+        if old_model != model and self._hooks:
+            self._hooks.trigger(
+                HookEvent.MODEL_SWITCHED,
+                {
+                    "from_model": old_model,
+                    "to_model": model,
+                },
+            )
 
         # Proactively adapt context for the new model's context window
         self._adapt_context_for_model(model)

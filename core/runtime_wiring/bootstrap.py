@@ -244,6 +244,14 @@ def build_hooks(
 
     _register_plugin("session_lifecycle_hook", _reg_session_lifecycle)
 
+    # C4b: Model switch logging (L1 Observe)
+    hooks.register(
+        HookEvent.MODEL_SWITCHED,
+        lambda e, d: log.info("Model switched: %s → %s", d.get("from_model"), d.get("to_model")),
+        name="model_switch_logger",
+        priority=90,
+    )
+
     # C5: LLM call lifecycle hooks (LLM_CALL_START/END -> slow call logging + journal cost)
     def _reg_llm_lifecycle() -> None:
         from core.llm.router import set_router_hooks
