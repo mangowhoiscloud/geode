@@ -29,6 +29,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **LLM_CALL_START / LLM_CALL_END hooks** — LLM 호출 전후 발화로 model-level latency/cost observability 제공. `call_llm()`, `call_llm_with_tools()` 계측. 10초 초과 시 slow call 경고 로깅. Hook 42개.
 - **SESSION_START / SESSION_END hooks** — REPL 세션 시작/종료 시 발화 (OpenClaw `agent:bootstrap` 패턴).
 - **CONTEXT_OVERFLOW_ACTION hook** — 압축 전략을 Hook 핸들러가 결정. `trigger_with_result()`로 핸들러 반환값 피드백. `context_action.py` 기본 핸들러 제공.
 - **Scheduler action queue** — `ScheduledJob.action` 필드 추가. 원문 텍스트를 그대로 저장(정규식 추출 제거). `SchedulerService`가 job 발화 시 `action_queue`에 삽입. REPL이 `[scheduled-job:{id}]` 프레이밍으로 AgenticLoop에 위임 — LLM이 자체 판단으로 스케줄 의도를 분리하여 실행.
