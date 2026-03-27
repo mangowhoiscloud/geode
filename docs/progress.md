@@ -30,8 +30,8 @@
 | ~~cron-session-isolation~~ | ~~Cron systemEvent vs agentTurn 구분~~ | ~~P2~~ | ~~#487~~ | **Done** |
 | ~~hook-turn-complete~~ | ~~TURN_COMPLETE 자동 메모리~~ | ~~P1~~ | ~~#488~~ | **Done** |
 | geode-dir-hierarchy | .geode/ 디렉토리 계층화 — session/journal/snapshot/vault/models → ~/.geode/ 이동 + project_id 스코핑 | P1 | — | Claude Code ~/.claude/projects/ 패턴 |
-| hook-context-action | CONTEXT_CRITICAL 행동 위임 — Hook이 압축 전략 결정 | P2 | — | OpenClaw 패턴 |
-| hook-session-start | SESSION_START 동적 프롬프트 — 세션 시작 시 컨텍스트 기반 프롬프트 보강 | P2 | — | OpenClaw agent:bootstrap 패턴 |
+| ~~hook-context-action~~ | ~~CONTEXT_CRITICAL 행동 위임~~ | ~~P2~~ | ~~#490~~ | **Done** |
+| ~~hook-session-start~~ | ~~SESSION_START 동적 프롬프트~~ | ~~P2~~ | ~~#489~~ | **Done** |
 | hook-llm-lifecycle | LLM_CALL_START/END — 모델별 latency/cost 실시간 집계 + 외부 대시보드 연동 | P2 | — | 관측 → 행동 확장 |
 | hook-tool-approval | TOOL_APPROVAL 패턴 학습 — HITL 승인 이력 기반 자동 승인 룰 | P2 | — | 행동 제어 |
 | hook-model-switched | MODEL_SWITCHED — 전환 사유 기록 + 자동 전환 정책 학습 | P3 | — | 관측 |
@@ -44,9 +44,8 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| hook-context-action | CONTEXT_CRITICAL 행동 위임 — Hook이 압축 전략 결정 | @mangowhoiscloud | feature/hook-context-action | 2026-03-27 | |
-| hook-session-start | SESSION_START 동적 프롬프트 | @mangowhoiscloud | feature/hook-session-start | 2026-03-27 | |
-| geode-dir-hierarchy | .geode/ 디렉토리 계층화 | @mangowhoiscloud | feature/geode-dir-hierarchy | 2026-03-27 | Claude Code projects/ 패턴 |
+| hook-llm-lifecycle | LLM_CALL_START/END — latency/cost 실시간 집계 | @mangowhoiscloud | feature/hook-llm-lifecycle | 2026-03-27 | |
+| hook-tool-approval | TOOL_APPROVAL 패턴 학습 — HITL 자동 승인 룰 | @mangowhoiscloud | feature/hook-tool-approval | 2026-03-27 | |
 
 ### In Review
 
@@ -57,6 +56,8 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| hook-context-action | CONTEXT_OVERFLOW_ACTION — 압축 전략 Hook 위임 + trigger_with_result() | #490 | @mangowhoiscloud | 2026-03-27 |
+| hook-session-start | SESSION_START/END — 세션 라이프사이클 이벤트 | #489 | @mangowhoiscloud | 2026-03-27 |
 | hook-turn-complete | TURN_COMPLETE 자동 메모리 — OpenClaw command:new 패턴 | #488 | @mangowhoiscloud | 2026-03-27 |
 | openai-responses-v2 | OpenAI Responses API 전환 + 3사 네이티브 웹 검색 fallback + Brave 제거 | #485 | @mangowhoiscloud | 2026-03-27 |
 
