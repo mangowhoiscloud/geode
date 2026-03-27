@@ -482,51 +482,35 @@ class TestEdgeCases:
 
 
 # ===========================================================================
-# Action extraction
+# Action stores original text (LLM does extraction at fire time)
 # ===========================================================================
 
 
-class TestExtractAction:
-    """Tests for NLScheduleParser._extract_action() and job.action field."""
+class TestActionStoresOriginal:
+    """job.action stores the full original text — no regex extraction."""
 
     @pytest.fixture
     def parser(self) -> NLScheduleParser:
         return NLScheduleParser()
 
-    def test_extract_action_every_interval(self, parser: NLScheduleParser) -> None:
-        # "every N unit" schedule keywords stripped, remainder is action
-        assert (
-            parser._extract_action("remind me to check emails every hour")
-            == "remind me to check emails"
-        )
-
-    def test_extract_action_daily_at(self, parser: NLScheduleParser) -> None:
-        assert parser._extract_action("daily at 9am send standup summary") == "send standup summary"
-
-    def test_extract_action_schedule_only(self, parser: NLScheduleParser) -> None:
-        # Pure schedule text → empty action
-        assert parser._extract_action("every 5 minutes") == ""
-
-    def test_extract_action_weekly(self, parser: NLScheduleParser) -> None:
-        assert parser._extract_action("weekly on monday run drift check") == "run drift check"
-
-    def test_extract_action_in_relative(self, parser: NLScheduleParser) -> None:
-        assert parser._extract_action("in 30 minutes summarize inbox") == "summarize inbox"
-
-    def test_extract_action_once_at(self, parser: NLScheduleParser) -> None:
-        assert parser._extract_action("once at 15:00 send report") == "send report"
-
-    def test_extract_action_hourly(self, parser: NLScheduleParser) -> None:
-        assert parser._extract_action("hourly check server health") == "check server health"
-
-    def test_job_action_field_set_by_parse(self, parser: NLScheduleParser) -> None:
-        result = parser.parse("remind me to check emails every 5 minutes")
+    def test_action_is_original_text(self, parser: NLScheduleParser) -> None:
+        text = "remind me to check emails every 5 minutes"
+        result = parser.parse(text)
         assert result.success
         assert result.job is not None
-        assert result.job.action == "remind me to check emails"
+        assert result.job.action == text
 
-    def test_job_action_empty_for_pure_schedule(self, parser: NLScheduleParser) -> None:
-        result = parser.parse("every 5 minutes")
+    def test_action_preserves_schedule_keywords(self, parser: NLScheduleParser) -> None:
+        text = "every 5 minutes"
+        result = parser.parse(text)
         assert result.success
         assert result.job is not None
-        assert result.job.action == ""
+        assert result.job.action == text
+
+    def test_action_preserves_daily_context(self, parser: NLScheduleParser) -> None:
+        text = "daily at 9:00 generate daily standup summary"
+        result = parser.parse(text)
+        assert result.success
+        assert result.job is not None
+        # "daily" in "daily standup summary" is preserved — no regex noise
+        assert "daily standup summary" in result.job.action

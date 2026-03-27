@@ -969,7 +969,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 job_id, fired_action = _action_queue.get_nowait()
                 if fired_action:
                     console.print(f"\n  [muted]Scheduler: running job {job_id}[/muted]")
-                    agentic.run(fired_action)
+                    agentic.run(f"[scheduled-job:{job_id}] {fired_action}")
         except _queue_mod.Empty:
             pass
 
