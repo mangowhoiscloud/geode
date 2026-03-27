@@ -335,12 +335,12 @@ class TestComputeModelToolLimit:
         # 1M context → unlimited (server-side handles it)
         assert _compute_model_tool_limit("claude-opus-4-6") == 0
 
-    def test_glm5_capped(self):
+    def test_glm5_unlimited(self):
         from core.agent.tool_executor import _compute_model_tool_limit
 
-        # GLM-5: 80K context → 5% = 4000 tokens
+        # GLM-5: 200K context → unlimited (server-side handles it)
         limit = _compute_model_tool_limit("glm-5")
-        assert limit == 4000
+        assert limit == 0
 
     def test_200k_model_unlimited(self):
         from core.agent.tool_executor import _compute_model_tool_limit

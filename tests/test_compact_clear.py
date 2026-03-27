@@ -241,7 +241,8 @@ class TestModelSwitchGuard:
         )
 
         ctx = MagicMock()
-        ctx.messages = [_make_msg("user", "x" * 400_000)]
+        # 1M chars = ~250K tokens — exceeds GLM-5 200K window
+        ctx.messages = [_make_msg("user", "x" * 1_000_000)]
         set_conversation_context(ctx)
 
         with patch("core.config.settings") as mock_settings:

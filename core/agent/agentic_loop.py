@@ -106,7 +106,8 @@ class AgenticResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     rounds: int = 0
     error: str | None = None
-    termination_reason: str = "unknown"  # "natural" | "forced_text" | "max_rounds" | "llm_error"
+    # "natural" | "forced_text" | "max_rounds" | "time_budget_expired" | "llm_error"
+    termination_reason: str = "unknown"
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
 
     def to_dict(self) -> dict[str, Any]:
@@ -124,6 +125,7 @@ class AgenticLoop:
     DEFAULT_MAX_ROUNDS = 50
     DEFAULT_MAX_TOKENS = 32768
     WRAP_UP_HEADROOM = 2  # force text response N rounds before max
+    _WRAP_UP_TIME_HEADROOM_S = 30.0  # force text 30s before time budget expires
 
     def __init__(
         self,
@@ -132,6 +134,7 @@ class AgenticLoop:
         *,
         max_rounds: int = DEFAULT_MAX_ROUNDS,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        time_budget_s: float = 0.0,  # 0 = no time limit (OpenClaw pattern)
         model: str | None = None,
         provider: str = "anthropic",
         tool_registry: ToolRegistry | None = None,
@@ -150,6 +153,8 @@ class AgenticLoop:
         self._quiet = quiet  # suppress spinner (sub-agent, headless)
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
+        self._time_budget_s = time_budget_s
+        self._loop_start_time: float = 0.0
         self.model = model or ANTHROPIC_PRIMARY
         self._provider = provider  # "anthropic", "openai", or "glm"
         self._tool_registry = tool_registry
@@ -429,8 +434,21 @@ class AgenticLoop:
         # Prune old messages to stay within context budget (Karpathy P6)
         self._maybe_prune_messages(messages)
 
-        for round_idx in range(self.max_rounds):
-            is_last_round = round_idx == self.max_rounds - 1
+        import time as _time
+
+        self._loop_start_time = _time.monotonic()
+        round_idx = 0
+        while True:
+            # Guard 1: Round limit (max_rounds > 0 enforces; 0 = unlimited)
+            if self.max_rounds > 0 and round_idx >= self.max_rounds:
+                break
+            # Guard 2: Time budget (Karpathy P3)
+            if self._time_budget_s > 0:
+                elapsed = _time.monotonic() - self._loop_start_time
+                if elapsed >= self._time_budget_s:
+                    break
+
+            is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
@@ -552,24 +570,32 @@ class AgenticLoop:
             assistant_content = self._serialize_content(response.content)
             messages.append({"role": "assistant", "content": assistant_content})
             messages.append({"role": "user", "content": tool_results})
+            round_idx += 1
 
-        # Max rounds reached — persist what we have
+        # Loop exited via guard — determine reason
         self._op_logger.finalize()
+        elapsed = _time.monotonic() - self._loop_start_time
+        if self._time_budget_s > 0 and elapsed >= self._time_budget_s:
+            reason = "time_budget_expired"
+            text = f"Time budget ({self._time_budget_s:.0f}s) expired after {round_idx} rounds."
+        else:
+            reason = "max_rounds"
+            text = "Max agentic rounds reached. Please try a more specific request."
         messages.append(
             {
                 "role": "assistant",
-                "content": [{"type": "text", "text": "Max agentic rounds reached."}],
+                "content": [{"type": "text", "text": text}],
             }
         )
         self._sync_messages_to_context(messages)
         result = AgenticResult(
-            text="Max agentic rounds reached. Please try a more specific request.",
+            text=text,
             tool_calls=self._tool_processor.tool_log,
-            rounds=self.max_rounds,
-            error="max_rounds",
-            termination_reason="max_rounds",
+            rounds=round_idx,
+            error=reason,
+            termination_reason=reason,
         )
-        return self._finalize_and_return(result, user_input, self.max_rounds)
+        return self._finalize_and_return(result, user_input, round_idx)
 
     def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:
         """Replace context messages with the full messages list.
@@ -705,8 +731,14 @@ class AgenticLoop:
                     )
                 )
                 if did_compact:
+                    original_count = len(messages)
                     messages.clear()
                     messages.extend(new_msgs)
+                    self._notify_context_event(
+                        "compact",
+                        original_count=original_count,
+                        new_count=len(new_msgs),
+                    )
                     return
             except Exception:
                 log.warning("Client compaction failed — falling back to prune", exc_info=True)
@@ -725,6 +757,28 @@ class AgenticLoop:
                     len(pruned),
                     keep_recent,
                 )
+                self._notify_context_event(
+                    "prune",
+                    original_count=original_count,
+                    new_count=len(pruned),
+                )
+
+    def _notify_context_event(
+        self,
+        event_type: str,
+        *,
+        original_count: int,
+        new_count: int,
+    ) -> None:
+        """Notify user of automatic context compression via UI."""
+        if self._quiet:
+            return
+        try:
+            from core.cli.ui.agentic_ui import render_context_event
+
+            render_context_event(event_type, original_count=original_count, new_count=new_count)
+        except Exception:
+            log.debug("Context event notification failed", exc_info=True)
 
     def _resolve_overflow_strategy(self, metrics: Any, settings: Any) -> dict[str, Any]:
         """Ask CONTEXT_OVERFLOW_ACTION hook for compression strategy, with fallback.
@@ -936,8 +990,16 @@ class AgenticLoop:
         # Context overflow detection (Karpathy P6 Context Budget)
         self._check_context_overflow(system, messages)
 
-        remaining = self.max_rounds - round_idx
-        force_text = remaining <= self.WRAP_UP_HEADROOM
+        # WRAP_UP: force text-only when approaching limits
+        force_text = False
+        if self.max_rounds > 0:
+            remaining = self.max_rounds - round_idx
+            force_text = remaining <= self.WRAP_UP_HEADROOM
+        if not force_text and self._time_budget_s > 0:
+            import time as _time
+
+            remaining_time = self._time_budget_s - (_time.monotonic() - self._loop_start_time)
+            force_text = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
         response = await self._adapter.agentic_call(
