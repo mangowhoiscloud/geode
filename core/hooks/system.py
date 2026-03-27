@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (42 events)."""
+    """Pipeline lifecycle events (45 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -92,6 +92,11 @@ class HookEvent(Enum):
     # LLM call lifecycle (model-level latency/cost observability)
     LLM_CALL_START = "llm_call_start"
     LLM_CALL_END = "llm_call_end"
+
+    # Tool approval HITL lifecycle
+    TOOL_APPROVAL_REQUESTED = "tool_approval_requested"
+    TOOL_APPROVAL_GRANTED = "tool_approval_granted"
+    TOOL_APPROVAL_DENIED = "tool_approval_denied"
 
 
 @dataclass

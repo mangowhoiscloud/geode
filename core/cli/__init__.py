@@ -595,6 +595,7 @@ def _build_agentic_stack(
     provider: str | None = None,
     system_suffix: str = "",
     quiet: bool = False,
+    hooks: Any = None,
 ) -> tuple[Any, Any, Any]:
     """Build ToolExecutor + AgenticLoop stack. Single source for REPL, Gateway, Batch.
 
@@ -628,6 +629,7 @@ def _build_agentic_stack(
         mcp_manager=mcp_manager,
         sub_agent_manager=sub_mgr,
         hitl_level=hitl_level,
+        hooks=hooks,
     )
     loop = AgenticLoop(
         conversation,

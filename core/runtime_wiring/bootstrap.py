@@ -299,6 +299,38 @@ def build_hooks(
 
     _register_plugin("llm_lifecycle_hook", _reg_llm_lifecycle)
 
+    # C6: Tool approval tracking hooks (HITL pattern learning)
+    def _reg_tool_approval() -> None:
+        _approval_log: list[dict[str, Any]] = []
+
+        def _on_granted(event: HookEvent, data: dict[str, Any]) -> None:
+            _approval_log.append(
+                {
+                    "tool": data.get("tool_name"),
+                    "always": data.get("always", False),
+                }
+            )
+            if len(_approval_log) > 100:
+                _approval_log.pop(0)  # ring buffer
+
+        def _on_denied(event: HookEvent, data: dict[str, Any]) -> None:
+            log.info("Tool denied: %s", data.get("tool_name"))
+
+        hooks.register(
+            HookEvent.TOOL_APPROVAL_GRANTED,
+            _on_granted,
+            name="approval_tracker",
+            priority=85,
+        )
+        hooks.register(
+            HookEvent.TOOL_APPROVAL_DENIED,
+            _on_denied,
+            name="denial_logger",
+            priority=85,
+        )
+
+    _register_plugin("tool_approval_hook", _reg_tool_approval)
+
     return hooks, run_log, stuck_detector
 
 
