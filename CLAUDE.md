@@ -87,7 +87,6 @@ START → router → signals → analyst×4 (Send API)
 
 ### Key Design Decisions
 
-- **Port/Adapter DI**: All infra accessed via Protocol ports + contextvars injection
 - **Sub-Agent Inheritance**: 자식은 부모의 tools/MCP/skills/memory 전체 상속 (P2-B)
 - **Token Guard**: SubAgentResult의 `summary` 필드 필수 보존으로 컨텍스트 폭발 방지
 - **Domain Plugin**: 파이프라인은 DomainPort 구현체로 교체 가능 (게임 IP는 플러그인)
@@ -108,7 +107,7 @@ START → router → signals → analyst×4 (Send API)
 ## Project Structure
 
 코드는 `core/` 하위에 6-Layer로 구성. `find core/ -name "*.py" | wc -l`로 모듈 수 확인.
-주요 진입점: `core/cli/agentic_loop.py`(AgenticLoop), `core/graph.py`(StateGraph), `core/runtime.py`(DI wiring).
+주요 진입점: `core/cli/agentic_loop.py`(AgenticLoop), `core/graph.py`(StateGraph), `core/runtime.py`(부트스트랩).
 
 ## Development
 
@@ -213,9 +212,8 @@ Decision Tree on D-E-F axes:
 - **Verbose gating**: Debug prints only with `--verbose` flag
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
-- **Port/Adapter**: All infra via Protocol ports + contextvars DI
 - **Hook-driven**: `core.hooks` — 36 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`) for extensibility. Cross-cutting; accessible from all layers via `from core.hooks import HookSystem, HookEvent`.
-- **Domain Plugin**: `DomainPort` Protocol — 도메인별 pipeline 교체 가능 (`set_domain()` / `get_domain()`)
+- **Domain Plugin**: `DomainPort` Protocol — 도메인별 pipeline 교체 가능 (`set_domain()` / `get_domain()`). 도메인 외 인프라는 직접 import (ContextVar DI 최소화).
 
 ## Implementation Workflow
 
@@ -269,10 +267,10 @@ CANNOT에 없는 것은 자유롭게 할 수 있다. 특히:
 | LLM 프로바이더 전체 장애 | 3사 fallback chain 소진 | Degraded Response(is_degraded=True + 기본값) — 파이프라인 중단 없음 |
 | MCP 서버 스폰 실패 | subprocess 타임아웃 | 해당 MCP 없이 계속 (Graceful Degradation) |
 
-### ContextVar 스레드 전파 (Gateway)
+### Gateway 스레드 전파
 
-`geode serve`의 Gateway 폴러는 데몬 스레드에서 실행됨. 데몬 스레드는 부모의 contextvars를 상속하지 않음.
-해결: `boot.propagate_to_thread()`를 각 Gateway 핸들러 진입 시 호출하여 domain/gateway/hooks를 재주입.
+`geode serve`의 Gateway 폴러는 데몬 스레드에서 실행됨. 데몬 스레드는 부모의 `set_domain()` 컨텍스트를 상속하지 않음.
+해결: `boot.propagate_to_thread()`를 각 Gateway 핸들러 진입 시 호출하여 domain 컨텍스트를 재주입.
 이 호출이 없으면 `get_domain()` → None → AgenticLoop 크래시.
 
 ### 워크플로우 단계
