@@ -29,6 +29,7 @@
 | ~~di-cleanup~~ | ~~불필요 ContextVar DI 8개 제거 — 직접 import로 대체~~ | ~~P0~~ | ~~#486~~ | **Done** |
 | ~~cron-session-isolation~~ | ~~Cron systemEvent vs agentTurn 구분~~ | ~~P2~~ | ~~#487~~ | **Done** |
 | hook-turn-complete | TURN_COMPLETE 자동 메모리 — 매 턴 종료 시 key insight 자동 저장 | P1 | — | OpenClaw command:new 패턴 |
+| geode-dir-hierarchy | .geode/ 디렉토리 계층화 — session/journal/snapshot/vault/models → ~/.geode/ 이동 + project_id 스코핑 | P1 | — | Claude Code ~/.claude/projects/ 패턴 |
 | hook-context-action | CONTEXT_CRITICAL 행동 위임 — Hook이 압축 전략 결정 | P2 | — | OpenClaw 패턴 |
 | hook-session-start | SESSION_START 동적 프롬프트 — 세션 시작 시 컨텍스트 기반 프롬프트 보강 | P2 | — | OpenClaw agent:bootstrap 패턴 |
 | hook-filesystem-plugin | 파일시스템 Hook 플러그인 — .geode/hooks/ 자동 발견 + 등록 | P3 | — | OpenClaw L3 Internal Hooks |
@@ -40,7 +41,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| hook-turn-complete | TURN_COMPLETE 자동 메모리 — 매 턴 종료 시 key insight 자동 저장 | @mangowhoiscloud | feature/hook-turn-complete | 2026-03-27 | OpenClaw command:new |
+| geode-dir-hierarchy | .geode/ 디렉토리 계층화 — session/journal/snapshot/vault/models → ~/.geode/ 이동 + project_id 스코핑 | @mangowhoiscloud | feature/geode-dir-hierarchy | 2026-03-27 | Claude Code projects/ 패턴 |
 
 ### In Review
 
@@ -51,6 +52,7 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| hook-turn-complete | TURN_COMPLETE 자동 메모리 — OpenClaw command:new 패턴 | #488 | @mangowhoiscloud | 2026-03-27 |
 | openai-responses-v2 | OpenAI Responses API 전환 + 3사 네이티브 웹 검색 fallback + Brave 제거 | #485 | @mangowhoiscloud | 2026-03-27 |
 
 ### Done (2026-03-27 — 세션 43)
