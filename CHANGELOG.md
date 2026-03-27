@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+## [0.31.0] — 2026-03-28
+
 ### Added
 - **Action Summary (Tier 1)** --- AgenticLoop 턴 종료 시 개별 도구 호출 + 결과를 결정론적으로 요약 표시. `AgenticResult.summary` 필드에 저장. 토큰 비용 0.
 - **Gateway binding hot-reload** --- `ConfigWatcher` watches `.geode/config.toml` and reloads `ChannelManager` bindings on file change (OpenClaw hot-reload pattern). No restart required.
