@@ -32,6 +32,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Scheduler action queue** — `ScheduledJob.action` 필드 추가. 원문 텍스트를 그대로 저장(정규식 추출 제거). `SchedulerService`가 job 발화 시 `action_queue`에 삽입. REPL이 `[scheduled-job:{id}]` 프레이밍으로 AgenticLoop에 위임 — LLM이 자체 판단으로 스케줄 의도를 분리하여 실행.
 
 ### Architecture
+- **`core/fixtures/` 삭제** — 중복 fixture 디렉터리 제거. 소비자 2곳(`core/memory/organization.py`, `core/verification/calibration.py`) import 경로를 `core.domains.game_ip.fixtures`로 갱신. `tests/test_calibration.py` 경로 동기화.
+- **Scaffold skills 경로 분리** — `.geode/skills/` 내 Scaffold 21종(SKILL.md 기반)을 `.claude/skills/`로 이동. Runtime skills(`geode-analysts/` 4종) 는 `.geode/skills/`에 유지. CLAUDE.md 경로 갱신.
 - **`core/hooks/` 신설** — HookSystem/HookEvent/HookResult + HookPluginLoader + plugins/를 `core/orchestration/`에서 분리. Cross-cutting concern이므로 별도 최상위 모듈로. 26개 소비자 `from core.hooks import HookSystem` 경로 통일. L0~L4가 L3(orchestration)에 의존하던 레이어 위반 해소.
 - **single-impl Protocol 제거** — `core/memory/port.py`에서 구현체가 하나뿐인 `ProjectMemoryPort`, `OrganizationMemoryPort`, `UserProfilePort` 삭제. 소비자(runtime.py, context.py, memory_tools.py, profile_tools.py)가 구체 타입(`ProjectMemory`, `MonoLakeOrganizationMemory`, `FileBasedUserProfile`)을 직접 참조. `SessionStorePort`는 다중 구현체(`InMemorySessionStore`, `HybridSessionStore`)가 있으므로 유지.
 - **`calendar_bridge.py` 이동** — `core/orchestration/calendar_bridge.py` → `core/automation/calendar_bridge.py`. 스케줄러↔캘린더 동기화는 automation concern.
