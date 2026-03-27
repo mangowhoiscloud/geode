@@ -182,7 +182,7 @@ class ToolExecutor:
                 )
                 if not self._confirm_write(tool_name, tool_input):
                     self._fire_hook(
-                        "tool_approval_decided",
+                        "tool_approval_denied",
                         {
                             "tool_name": tool_name,
                             "safety_level": "write",
@@ -193,7 +193,7 @@ class ToolExecutor:
                     )
                     return _write_denial_with_fallback(tool_name), False
                 self._fire_hook(
-                    "tool_approval_decided",
+                    "tool_approval_granted",
                     {
                         "tool_name": tool_name,
                         "safety_level": "write",
@@ -214,7 +214,7 @@ class ToolExecutor:
                 )
                 if not self._confirm_cost(tool_name, cost):
                     self._fire_hook(
-                        "tool_approval_decided",
+                        "tool_approval_denied",
                         {
                             "tool_name": tool_name,
                             "safety_level": "cost",
@@ -225,7 +225,7 @@ class ToolExecutor:
                     )
                     return {"error": "User denied expensive operation", "denied": True}, False
                 self._fire_hook(
-                    "tool_approval_decided",
+                    "tool_approval_granted",
                     {
                         "tool_name": tool_name,
                         "safety_level": "cost",
@@ -461,7 +461,7 @@ class ToolExecutor:
         if response == "a":
             self._always_approved_categories.add(f"mcp:{server}")
             self._fire_hook(
-                "tool_approval_decided",
+                "tool_approval_granted",
                 {
                     "tool_name": tool_name,
                     "permission_level": "MCP",
@@ -472,7 +472,7 @@ class ToolExecutor:
             return True
         if response == "y":
             self._fire_hook(
-                "tool_approval_decided",
+                "tool_approval_granted",
                 {
                     "tool_name": tool_name,
                     "permission_level": "MCP",
@@ -482,7 +482,7 @@ class ToolExecutor:
             )
             return True
         self._fire_hook(
-            "tool_approval_decided",
+            "tool_approval_denied",
             {
                 "tool_name": tool_name,
                 "permission_level": "MCP",
@@ -536,7 +536,7 @@ class ToolExecutor:
         if response == "a":
             self._always_approved_categories.add("write")
             self._fire_hook(
-                "tool_approval_decided",
+                "tool_approval_granted",
                 {
                     "tool_name": tool_name,
                     "permission_level": "WRITE",
@@ -547,7 +547,7 @@ class ToolExecutor:
             return True
         if response == "y":
             self._fire_hook(
-                "tool_approval_decided",
+                "tool_approval_granted",
                 {
                     "tool_name": tool_name,
                     "permission_level": "WRITE",
@@ -557,7 +557,7 @@ class ToolExecutor:
             )
             return True
         self._fire_hook(
-            "tool_approval_decided",
+            "tool_approval_denied",
             {
                 "tool_name": tool_name,
                 "permission_level": "WRITE",
@@ -599,7 +599,7 @@ class ToolExecutor:
         if response == "a":
             self._always_approved_categories.add("cost")
             self._fire_hook(
-                "tool_approval_decided",
+                "tool_approval_granted",
                 {
                     "tool_name": tool_name,
                     "permission_level": "EXPENSIVE",
@@ -610,7 +610,7 @@ class ToolExecutor:
             return True
         if response == "y":
             self._fire_hook(
-                "tool_approval_decided",
+                "tool_approval_granted",
                 {
                     "tool_name": tool_name,
                     "permission_level": "EXPENSIVE",
@@ -620,7 +620,7 @@ class ToolExecutor:
             )
             return True
         self._fire_hook(
-            "tool_approval_decided",
+            "tool_approval_denied",
             {
                 "tool_name": tool_name,
                 "permission_level": "EXPENSIVE",
@@ -657,7 +657,7 @@ class ToolExecutor:
         if response == "a":
             self._always_approved_categories.add("bash")
             self._fire_hook(
-                "tool_approval_decided",
+                "tool_approval_granted",
                 {
                     "tool_name": "run_bash",
                     "permission_level": "DANGEROUS",
@@ -668,7 +668,7 @@ class ToolExecutor:
             return True
         if response == "y":
             self._fire_hook(
-                "tool_approval_decided",
+                "tool_approval_granted",
                 {
                     "tool_name": "run_bash",
                     "permission_level": "DANGEROUS",
@@ -678,7 +678,7 @@ class ToolExecutor:
             )
             return True
         self._fire_hook(
-            "tool_approval_decided",
+            "tool_approval_denied",
             {
                 "tool_name": "run_bash",
                 "permission_level": "DANGEROUS",
