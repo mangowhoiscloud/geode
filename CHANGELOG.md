@@ -29,6 +29,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Autonomous safety 3조건** — (1) 비용 상한 자동 정지: 세션 비용 budget 초과 시 루프 중단 (Karpathy P3). (2) 런타임 래칫: 동일 에러 3회 수렴 감지 시 모델 에스컬레이션 후 재시도 (Karpathy P4). (3) 다양성 강제: 동일 도구 5회 연속 호출 시 다른 접근 유도 힌트 주입.
 - **Plan-first 프롬프트 가이드** — 복잡한 요청(3+ 스텝, 고비용)에 대해 LLM이 자발적으로 `create_plan` 호출 후 사용자 승인 대기. Claude Code 패턴.
 - **Plan HITL UI 보강** — 계획 표시 시 승인/수정/거부 안내 표시. plan_id 노출.
 - **Provider-aware context compaction** — 장시간 운용을 위한 프로바이더별 컨텍스트 관리. Anthropic: 서버사이드 compaction(`compact_20260112`) + `clear_tool_uses` 결합. OpenAI/GLM: 80%에서 LLM 요약 기반 클라이언트 compaction 발동. `context_action.py` hook이 프로바이더별 전략을 분화.

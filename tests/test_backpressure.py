@@ -4,10 +4,10 @@ Feature 5: Backpressure on tool failures
   - Track consecutive tool errors across rounds
   - After 3+ consecutive errors, inject a cooldown delay and hint
 
-Feature 6: Convergence detection (stuck loop)
+Feature 6: Convergence detection (stuck loop) + runtime ratchet
   - Track recent error keys (tool_name:error_type)
-  - 3 identical errors → warning
-  - 4+ identical errors → force break
+  - 3 identical errors → model escalation attempt (runtime ratchet)
+  - 4+ identical errors after escalation → force break
 """
 
 from __future__ import annotations
@@ -142,15 +142,19 @@ class TestConvergenceDetection:
         loop._recent_errors = ["tool_a:timeout", "tool_a:timeout"]
         assert loop._check_convergence_break() is False
 
-    def test_check_convergence_3_identical_no_break(self) -> None:
-        """3 identical errors → warning but no break (need 4)."""
+    def test_check_convergence_3_identical_escalates(self) -> None:
+        """3 identical errors → model escalation, errors cleared, no break."""
         loop = _make_loop()
         loop._recent_errors = ["tool_a:timeout", "tool_a:timeout", "tool_a:timeout"]
-        assert loop._check_convergence_break() is False
+        with patch.object(loop, "_try_model_escalation", return_value=True):
+            assert loop._check_convergence_break() is False
+        assert loop._convergence_escalated is True
+        assert loop._recent_errors == []  # Cleared after escalation
 
-    def test_check_convergence_4_identical_breaks(self) -> None:
-        """4 identical errors → force break."""
+    def test_check_convergence_4_identical_breaks_after_escalation(self) -> None:
+        """4 identical errors after escalation already tried → force break."""
         loop = _make_loop()
+        loop._convergence_escalated = True  # Already escalated
         loop._recent_errors = [
             "tool_a:timeout",
             "tool_a:timeout",
@@ -159,9 +163,10 @@ class TestConvergenceDetection:
         ]
         assert loop._check_convergence_break() is True
 
-    def test_check_convergence_5_identical_breaks(self) -> None:
-        """5+ identical errors → force break."""
+    def test_check_convergence_5_identical_breaks_after_escalation(self) -> None:
+        """5+ identical errors after escalation already tried → force break."""
         loop = _make_loop()
+        loop._convergence_escalated = True  # Already escalated
         loop._recent_errors = [
             "tool_a:timeout",
             "tool_a:timeout",
