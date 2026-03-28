@@ -425,6 +425,11 @@ def render_context_event(
         ⟳ Context compacted: 45 → 12 messages
         ⟳ Context pruned: 30 → 10 messages
     """
+    if event_type == "exhausted":
+        console.print(
+            "  [warning]⟳ Context exhausted — pruning could not free enough space[/warning]"
+        )
+        return
     label = "compacted" if event_type == "compact" else "pruned"
     console.print(f"  [dim]⟳ Context {label}: {original_count} → {new_count} messages[/dim]")
 
