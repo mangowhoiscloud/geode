@@ -173,7 +173,7 @@ class AgenticLoop:
         self._tools = get_agentic_tools(tool_registry, mcp_tools=mcp_tool_list)
         self._last_llm_error: str | None = None  # last error type for user message
         self._adapter = resolve_agentic_adapter(self._provider)
-        self._op_logger = OperationLogger()
+        self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
         # Tier 1 transcript: append-only JSONL event stream (snapshot-redesign)
@@ -1147,7 +1147,8 @@ class AgenticLoop:
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
             usage = get_tracker().record(self.model, in_tok, out_tok)
-            render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
+            if not self._quiet:
+                render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
             log.info(
                 "LLM call: model=%s in=%d out=%d cost=$%.4f",
                 self.model,

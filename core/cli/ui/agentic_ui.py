@@ -120,10 +120,11 @@ class OperationLogger:
     COLLAPSE_THRESHOLD = 5
     GROUPING_THRESHOLD = 6
 
-    def __init__(self) -> None:
+    def __init__(self, *, quiet: bool = False) -> None:
         self._visible_count = 0
         self._collapsed_count = 0
         self._header_printed = False
+        self._quiet = quiet  # suppress all console output (scheduler, headless)
         # Tool-type grouping state
         self._tool_type_counts: dict[str, int] = {}
         self._tool_type_last_summary: dict[str, str] = {}
@@ -132,7 +133,7 @@ class OperationLogger:
 
     def begin_round(self, label: str = "AgenticLoop") -> None:
         """Start a new agentic round — print header if not yet shown."""
-        if not self._header_printed:
+        if not self._header_printed and not self._quiet:
             console.print(f"\n[bold]● {label}[/bold]")
             self._header_printed = True
         self._round_count += 1
@@ -141,6 +142,8 @@ class OperationLogger:
         """Log a tool call. Returns True if visible, False if collapsed."""
         self._total_tool_count += 1
         self._tool_type_counts[tool_name] = self._tool_type_counts.get(tool_name, 0) + 1
+        if self._quiet:
+            return False
         if self._visible_count < self.COLLAPSE_THRESHOLD:
             args_parts: list[str] = []
             for k, v in tool_input.items():
@@ -174,7 +177,7 @@ class OperationLogger:
         # Track per-type last summary for grouped display
         self._tool_type_last_summary[tool_name] = summary
 
-        if not visible:
+        if not visible or self._quiet:
             return
         if result.get("error"):
             console.print(f"  ⎿ [error]✗ {tool_name}[/error] — {result['error']}")
