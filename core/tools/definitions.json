@@ -341,7 +341,7 @@
           "description": "실행할 작업 내용 — 무엇을 할지 (create 시 필수). 스케줄 시점에 AgenticLoop이 수행할 프롬프트. Example: 'ML Engineer 채용 공고를 검색하고 요약해서 이메일로 보내줘'"
         }
       },
-      "required": []
+      "required": ["sub_action"]
     }
   },
   {

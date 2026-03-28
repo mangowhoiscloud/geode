@@ -118,12 +118,11 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
             console.print()
             return
         scheduler_service.add_job(result.job)
-        scheduler_service.save()  # persist immediately — prevent crash data loss
+        scheduler_service.save()
         console.print(f"  [success]Created: {result.job.job_id}[/success]")
         console.print(f"  Schedule: {_format_schedule_desc(result.job)}")
         if not result.job.action:
-            console.print("  [warning]Action not set — job will fire but do nothing.[/warning]")
-            console.print("  [muted]Tip: use schedule_job tool with action param[/muted]")
+            console.print("  [warning]Action not set — set via schedule_job tool[/warning]")
         console.print()
         return
 

@@ -849,6 +849,14 @@ def _build_execution_handlers() -> dict[str, Any]:
         svc = _scheduler_service_ctx.get(None)
 
         if sub_action == "create" and expression:
+            if not action_text:
+                return {
+                    "status": "error",
+                    "action": "schedule",
+                    "sub_action": "create",
+                    "error": "action parameter is required for create. "
+                    "Specify what to do when the schedule fires.",
+                }
             if not svc:
                 return {"status": "error", "action": "schedule", "error": "Scheduler not available"}
             try:
