@@ -29,6 +29,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **스케줄 잡 비동기 실행** — REPL drain loop의 isolated 스케줄 잡을 `IsolatedRunner.run_async()`로 전환. 메인 REPL 스레드 블로킹 해소. OpenClaw agentTurn 패턴: 데몬 스레드에서 fresh AgenticLoop 실행, 완료 시 dim 상태줄 콜백.
 - **MODEL_SWITCHED hook** --- `HookEvent.MODEL_SWITCHED` 추가 (45 -> 46). `AgenticLoop.update_model()` 발화, `bootstrap.py`에 `model_switch_logger` 핸들러 등록.
 - **Filesystem hook plugin auto-discovery** --- `bootstrap.py`에서 `.geode/hooks/` + `core/hooks/plugins/` 자동 스캔 및 등록. `HookPluginLoader`를 부트스트랩에 통합.
 - **README docs-sync** --- 도구(52), Hook(46) 수치를 실측값으로 갱신.
