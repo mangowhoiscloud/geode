@@ -20,6 +20,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+
 def _get_result_cache_dir() -> Path:
     from core.paths import get_project_data_dir
 
