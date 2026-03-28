@@ -149,6 +149,19 @@ _STOP_WORDS = frozenset(
         "or",
         "from",
         "to",
+        # Time units (prevent "minutes" becoming the job name)
+        "second",
+        "seconds",
+        "minute",
+        "minutes",
+        "hour",
+        "hours",
+        "day",
+        "days",
+        "week",
+        "weeks",
+        "month",
+        "months",
     }
 )
 
@@ -408,7 +421,7 @@ class NLScheduleParser:
         significant = [w.lower() for w in words if w.lower() not in _STOP_WORDS]
         if significant:
             return "_".join(significant[:3])
-        return "job"
+        return "scheduled_task"
 
     def _infer_kind(self, text: str) -> ScheduleKind:
         """Infer the schedule kind from the normalized text."""
