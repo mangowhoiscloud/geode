@@ -74,6 +74,7 @@ class IsolatedRunner:
     """
 
     MAX_CONCURRENT = 5  # Max parallel isolated executions
+    MAX_RESULTS_CACHE = 200  # Evict oldest results beyond this limit
 
     def __init__(self, hooks: HookSystem | None = None) -> None:
         self._hooks = hooks
@@ -121,6 +122,10 @@ class IsolatedRunner:
                 self._results[session_id] = result
                 self._active.pop(session_id, None)
                 self._cancel_flags.pop(session_id, None)
+                # Evict oldest results to prevent unbounded growth
+                if len(self._results) > self.MAX_RESULTS_CACHE:
+                    oldest = next(iter(self._results))
+                    self._results.pop(oldest, None)
 
         thread = threading.Thread(target=_worker, name=f"isolated-{session_id}", daemon=True)
         with self._lock:

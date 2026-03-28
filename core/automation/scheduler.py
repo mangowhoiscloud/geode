@@ -336,10 +336,28 @@ class SchedulerService:
     # -- CRUD ---------------------------------------------------------------
 
     def add_job(self, job: ScheduledJob) -> None:
-        """Add a new scheduled job."""
+        """Add a new scheduled job.
+
+        Raises ValueError if job_id already exists or a job with the same
+        schedule expression and action already exists (dedup).
+        """
         with self._lock:
             if job.job_id in self._jobs:
                 raise ValueError(f"Job '{job.job_id}' already exists")
+            # Dedup: reject if an enabled job with same schedule+action exists
+            if job.enabled:
+                for existing in self._jobs.values():
+                    if (
+                        existing.enabled
+                        and existing.schedule.kind == job.schedule.kind
+                        and existing.schedule.every_ms == job.schedule.every_ms
+                        and existing.schedule.cron_expr == job.schedule.cron_expr
+                        and existing.action == job.action
+                    ):
+                        raise ValueError(
+                            f"Duplicate schedule: existing job '{existing.job_id}' "
+                            f"has same schedule and action"
+                        )
             if job.created_at_ms == 0.0:
                 job.created_at_ms = time.time() * 1000
             job.next_run_at_ms = self.compute_next_run(job)
