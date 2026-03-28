@@ -111,7 +111,7 @@ class AgenticResult:
     rounds: int = 0
     error: str | None = None
     # "natural" | "forced_text" | "max_rounds" | "time_budget_expired"
-    # | "llm_error" | "context_exhausted"
+    # | "llm_error" | "context_exhausted" | "cost_budget_exceeded"
     termination_reason: str = "unknown"
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
 
@@ -140,6 +140,7 @@ class AgenticLoop:
         max_rounds: int = DEFAULT_MAX_ROUNDS,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         time_budget_s: float = 0.0,  # 0 = no time limit (OpenClaw pattern)
+        cost_budget: float = 0.0,  # 0 = no cost limit (Karpathy P3)
         model: str | None = None,
         provider: str = "anthropic",
         tool_registry: ToolRegistry | None = None,
@@ -159,6 +160,7 @@ class AgenticLoop:
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self._time_budget_s = time_budget_s
+        self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
         self.model = model or ANTHROPIC_PRIMARY
         self._provider = provider  # "anthropic", "openai", or "glm"
@@ -211,6 +213,10 @@ class AgenticLoop:
 
         # Feature 6: Convergence detection (stuck loop)
         self._recent_errors: list[str] = []
+        self._convergence_escalated: bool = False
+
+        # Feature 8: Diversity forcing — prevent same tool 5x consecutively
+        self._consecutive_tool_tracker: list[str] = []
 
         # C3 checkpoint: full message persistence for /resume (Claude Code pattern)
         self._checkpoint: Any | None = None
@@ -546,6 +552,32 @@ class AgenticLoop:
             # Track usage + Claude Code-style token display
             self._track_usage(response)
 
+            # Guard 3: Cost budget (Karpathy P3 — resource budget)
+            if self._cost_budget > 0:
+                try:
+                    from core.llm.token_tracker import get_tracker as _get_cost_tracker
+
+                    _cost_tracker = _get_cost_tracker()
+                    _session_cost = _cost_tracker.accumulator.total_cost_usd
+                    if _session_cost >= self._cost_budget:
+                        self._op_logger.finalize()
+                        self._sync_messages_to_context(messages)
+                        text = (
+                            f"Cost budget (${self._cost_budget:.2f}) exceeded. "
+                            f"Session cost: ${_session_cost:.2f}"
+                        )
+                        log.warning(text)
+                        result = AgenticResult(
+                            text=text,
+                            tool_calls=self._tool_processor.tool_log,
+                            rounds=round_idx + 1,
+                            error="cost_budget_exceeded",
+                            termination_reason="cost_budget_exceeded",
+                        )
+                        return self._finalize_and_return(result, user_input, round_idx + 1)
+                except Exception:
+                    log.debug("Cost budget check failed", exc_info=True)
+
             if response.stop_reason != "tool_use":
                 # end_turn or max_tokens → extract text, done
                 self._op_logger.finalize()
@@ -594,6 +626,31 @@ class AgenticLoop:
                     ),
                 }
                 tool_results.append(backpressure_hint)
+
+            # Feature 8: Diversity forcing — prevent same tool 5x consecutively
+            for block in response.content:
+                if getattr(block, "type", None) == "tool_use":
+                    self._consecutive_tool_tracker.append(getattr(block, "name", ""))
+            if len(self._consecutive_tool_tracker) > 10:
+                self._consecutive_tool_tracker = self._consecutive_tool_tracker[-10:]
+            if len(self._consecutive_tool_tracker) >= 5:
+                _last_5 = self._consecutive_tool_tracker[-5:]
+                if len(set(_last_5)) == 1:
+                    _repeated_tool = _last_5[0]
+                    diversity_hint = {
+                        "type": "text",
+                        "text": (
+                            f"[system] The tool '{_repeated_tool}' has been called 5 times "
+                            "consecutively with similar results. "
+                            "Try a different approach or tool to make progress."
+                        ),
+                    }
+                    tool_results.append(diversity_hint)
+                    self._consecutive_tool_tracker.clear()
+                    log.warning(
+                        "Diversity forcing: %s called 5x — injecting hint",
+                        _repeated_tool,
+                    )
 
             # Accumulate messages for next round
             # Convert content blocks to serializable format
@@ -1199,9 +1256,9 @@ class AgenticLoop:
     def _check_convergence_break(self) -> bool:
         """Check if the loop is stuck in a repeating failure pattern.
 
-        Returns True if 4+ of the last entries are identical errors,
-        indicating the loop should break.
-        Injects a warning into messages if 3 identical errors are detected.
+        On first detection of 3 identical errors, attempts model escalation
+        (runtime ratchet — Karpathy P4) instead of breaking immediately.
+        Only breaks after escalation has been tried and errors persist.
         """
         if len(self._recent_errors) < 3:
             return False
@@ -1209,17 +1266,31 @@ class AgenticLoop:
         # Check last 3 entries for identical pattern
         last_3 = self._recent_errors[-3:]
         if last_3[0] == last_3[1] == last_3[2]:
+            # Runtime ratchet: try model escalation before giving up
+            if not self._convergence_escalated:
+                self._convergence_escalated = True
+                log.warning(
+                    "Convergence detected (%s x3) — escalating model",
+                    last_3[0],
+                )
+                escalated = self._try_model_escalation()
+                if escalated:
+                    self._recent_errors.clear()
+                    return False  # Give escalated model a chance
+                # Escalation failed (no fallback) — fall through to break check
+
+            # Already escalated and still stuck — check for 4+ identical
             if len(self._recent_errors) >= 4:
                 last_4 = self._recent_errors[-4:]
                 if last_4[0] == last_4[1] == last_4[2] == last_4[3]:
                     log.warning(
-                        "Convergence detected: 4+ identical errors '%s'",
+                        "Convergence detected after escalation: 4+ identical errors '%s'",
                         last_4[0],
                     )
                     return True
-            # 3 identical — log warning (convergence warning injected via backpressure)
+            # 3 identical post-escalation — log warning, don't break yet
             log.warning(
-                "Convergence warning: 3 identical errors '%s'",
+                "Convergence warning (post-escalation): 3 identical errors '%s'",
                 last_3[0],
             )
         return False

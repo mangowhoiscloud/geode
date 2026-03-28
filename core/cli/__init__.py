@@ -592,6 +592,7 @@ def _build_agentic_stack(
     hitl_level: int = 2,
     max_rounds: int = 50,
     time_budget_s: float = 0.0,
+    cost_budget: float = 0.0,
     model: str | None = None,
     provider: str | None = None,
     system_suffix: str = "",
@@ -611,6 +612,12 @@ def _build_agentic_stack(
 
     _model = model or _stk_settings.model
     _provider = provider or _resolve_provider(_model)
+
+    # Resolve cost budget: explicit param > config/env setting
+    if cost_budget <= 0:
+        from core.cli.commands import _get_cost_budget
+
+        cost_budget = _get_cost_budget()
 
     agentic_ref: list[Any] = [None]
     handlers = _build_tool_handlers(
@@ -637,6 +644,7 @@ def _build_agentic_stack(
         executor,
         max_rounds=max_rounds,
         time_budget_s=time_budget_s,
+        cost_budget=cost_budget,
         model=_model,
         provider=_provider,
         mcp_manager=mcp_manager,
