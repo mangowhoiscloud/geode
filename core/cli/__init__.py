@@ -992,22 +992,22 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                     continue
                 prompt = f"[scheduled-job:{job_id}] {fired_action}"
                 if isolated:
-                    # OpenClaw agentTurn: fresh context, no conversation pollution
-                    console.print(f"\n  [muted]Scheduler (isolated): {job_id}[/muted]")
+                    # OpenClaw agentTurn: silent background execution
                     iso_conv = ConversationContext()
                     _, _, iso_loop = _build_agentic_stack(
                         iso_conv,
                         mcp_manager=mcp_mgr,
                         skill_registry=skill_registry,
-                        verbose=verbose,
+                        verbose=False,
                         quiet=True,
                     )
                     result = iso_loop.run(prompt)
-                    summary = result.text[:200] if result and result.text else "(no output)"
-                    console.print(f"  [muted]  Result: {summary}[/muted]\n")
+                    status = "ok" if not result.error else "err"
+                    console.print(
+                        f"  [dim]scheduled:{job_id} → {status}[/dim]"
+                    )
                 else:
-                    # OpenClaw systemEvent: inject into main session
-                    console.print(f"\n  [muted]Scheduler: running job {job_id}[/muted]")
+                    # OpenClaw systemEvent: inject into main session (visible)
                     agentic.run(prompt)
         except _queue_mod.Empty:
             pass
