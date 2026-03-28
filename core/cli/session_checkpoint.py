@@ -21,7 +21,13 @@ from core.utils.atomic_io import atomic_write_json
 
 log = logging.getLogger(__name__)
 
-DEFAULT_SESSION_DIR = Path(".geode") / "session"
+def _get_default_session_dir() -> Path:
+    from core.paths import resolve_sessions_dir
+
+    return resolve_sessions_dir()
+
+
+DEFAULT_SESSION_DIR = _get_default_session_dir()
 CHECKPOINT_MAX_MESSAGES = 20  # Context Budget: keep recent N messages
 CLEANUP_AGE_HOURS = 72
 
