@@ -309,7 +309,7 @@
   },
   {
     "name": "schedule_job",
-    "description": "배치 분석 스케줄을 관리합니다. 자연어로 스케줄 생성/삭제/상태조회가 가능합니다.",
+    "description": "반복 작업 스케줄을 관리합니다. create 시 expression(언제)과 action(무엇을)을 함께 지정해야 합니다.",
     "category": "scheduling",
     "cost_tier": "cheap",
     "input_schema": {
@@ -334,7 +334,11 @@
         },
         "expression": {
           "type": "string",
-          "description": "자연어 스케줄 표현식 (create 시). Examples: 'every 5 minutes', 'daily at 9:00', 'in 30 minutes', 'every 2 hours during 09:00-18:00'"
+          "description": "자연어 스케줄 표현식 — 언제 실행할지 (create 시). Examples: 'every 5 minutes', 'daily at 9:00', 'every monday at 9:00', 'every 2 hours during 09:00-18:00'"
+        },
+        "action": {
+          "type": "string",
+          "description": "실행할 작업 내용 — 무엇을 할지 (create 시 필수). 스케줄 시점에 AgenticLoop이 수행할 프롬프트. Example: 'ML Engineer 채용 공고를 검색하고 요약해서 이메일로 보내줘'"
         }
       },
       "required": []

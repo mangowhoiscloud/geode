@@ -845,30 +845,44 @@ def _build_execution_handlers() -> dict[str, Any]:
         sub_action = kwargs.get("sub_action", "") or "list"
         target_id = kwargs.get("target_id", "")
         expression = kwargs.get("expression", "")
+        action_text = kwargs.get("action", "")
         svc = _scheduler_service_ctx.get(None)
 
         if sub_action == "create" and expression:
-            cmd_schedule(f"create {expression}", scheduler_service=svc)
+            if not svc:
+                return {"status": "error", "action": "schedule", "error": "Scheduler not available"}
             try:
                 from core.automation.nl_scheduler import NLScheduleParser
 
                 result = NLScheduleParser().parse(expression)
-                if result.success and result.job:
+                if not result.success or not result.job:
                     return {
-                        "status": "ok",
+                        "status": "error",
                         "action": "schedule",
                         "sub_action": "create",
-                        "job_id": result.job.job_id,
-                        "schedule_kind": (
-                            result.inferred_kind.value if result.inferred_kind else ""
-                        ),
-                        "expression": expression,
+                        "error": result.error or "parse failed",
                     }
+                job = result.job
+                job.action = action_text
+                svc.add_job(job)
+                svc.save()
+                from core.cli.cmd_schedule import _format_schedule_desc
+
+                console.print(f"  [success]Created: {job.job_id}[/success]")
+                console.print(f"  Schedule: {_format_schedule_desc(job)}")
+                if action_text:
+                    console.print(f"  Action: {action_text[:80]}")
+                console.print()
                 return {
-                    "status": "error",
+                    "status": "ok",
                     "action": "schedule",
                     "sub_action": "create",
-                    "error": result.error or "parse failed",
+                    "job_id": job.job_id,
+                    "schedule_kind": (
+                        result.inferred_kind.value if result.inferred_kind else ""
+                    ),
+                    "expression": expression,
+                    "job_action": action_text,
                 }
             except Exception as exc:
                 return {
