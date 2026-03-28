@@ -42,7 +42,7 @@ class TestRenderActionSummary:
     def test_error_result(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         tool_calls = [{"name": "fail_tool", "input": {}, "result": {"error": "timeout"}}]
         summary = render_action_summary(tool_calls, 1, 0.5, 0.0)
-        assert "ERROR" in summary
+        assert "ERR" in summary
         assert "timeout" in summary
 
     @patch("core.cli.ui.agentic_ui.console")
@@ -58,16 +58,16 @@ class TestRenderActionSummary:
             {"name": "search", "input": {"query": long_query}, "result": {"status": "ok"}}
         ]
         summary = render_action_summary(tool_calls, 1, 0.5, 0.0)
-        # Arg preview capped at 40 chars
-        assert "a" * 40 in summary
-        assert "a" * 41 not in summary
+        # Arg preview capped at 30 chars
+        assert "a" * 30 in summary
+        assert "a" * 31 not in summary
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_result_preview_dict_key(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """When result has a custom key (not error/result/status), show key=value."""
         tool_calls = [{"name": "calc", "input": {}, "result": {"answer": 42}}]
         summary = render_action_summary(tool_calls, 1, 0.1, 0.0)
-        assert "answer=42" in summary
+        assert "42" in summary
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_console_print_called(self, mock_console) -> None:  # type: ignore[no-untyped-def]
@@ -82,3 +82,11 @@ class TestRenderActionSummary:
         tool_calls = [{"name": "t", "input": {}, "result": {}}]
         summary = render_action_summary(tool_calls, 1, 0.5, 0.0)
         assert "Action Summary" in summary
+
+    @patch("core.cli.ui.agentic_ui.console")
+    def test_tool_key_fallback(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        """tool_log uses 'tool' key, not 'name'."""
+        tool_calls = [{"tool": "web_search", "input": {"q": "AI"}, "result": {"status": "ok"}}]
+        summary = render_action_summary(tool_calls, 1, 1.0, 0.0)
+        assert "web_search" in summary
+        assert "?" not in summary

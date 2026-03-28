@@ -477,7 +477,7 @@ def render_action_summary(
 
     # Per-tool lines (cap at 10)
     for tc in tool_calls[:10]:
-        name = tc.get("name", "?")
+        name = tc.get("name") or tc.get("tool") or "?"
         inp = tc.get("input", {})
         result = tc.get("result", {})
 
@@ -486,28 +486,30 @@ def render_action_summary(
         if isinstance(inp, dict):
             for _k, v in inp.items():
                 if v and _k not in ("verbose",):
-                    arg_preview = str(v)[:40]
+                    arg_preview = str(v)[:30].replace("\n", " ")
                     break
 
         # Concise result preview
         result_preview = ""
         if isinstance(result, dict):
             if "error" in result:
-                result_preview = f"ERROR: {str(result['error'])[:30]}"
-            elif "result" in result:
-                result_preview = str(result["result"])[:40]
+                result_preview = f"ERR: {str(result['error'])[:25]}"
             elif "status" in result:
                 result_preview = str(result["status"])
+            elif "result" in result:
+                result_preview = str(result["result"])[:30]
             else:
                 for rk, rv in result.items():
                     if rk not in ("_meta", "_timing") and rv:
-                        result_preview = f"{rk}={str(rv)[:30]}"
+                        result_preview = str(rv)[:25]
                         break
+        if not result_preview:
+            result_preview = "ok"
 
         if arg_preview:
-            lines.append(f"  {name}({arg_preview}) \u2192 {result_preview}")
+            lines.append(f"  {name}({arg_preview}) → {result_preview}")
         else:
-            lines.append(f"  {name} \u2192 {result_preview}")
+            lines.append(f"  {name} → {result_preview}")
 
     if len(tool_calls) > 10:
         lines.append(f"  ... +{len(tool_calls) - 10} more")
