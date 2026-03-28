@@ -202,10 +202,10 @@ def _build_agentic_stack_minimal(prompt: str, *, quiet: bool = True) -> Any:
     Returns AgenticResult. No MCP (prevent subprocess leak), hitl_level=0.
     """
     from core.agent.agentic_loop import AgenticLoop
+    from core.agent.conversation import ConversationContext
     from core.agent.tool_executor import ToolExecutor
     from core.config import _resolve_provider
     from core.config import settings as _stk_settings
-    from core.memory.context import ConversationContext
 
     conversation = ConversationContext()
     handlers = _build_tool_handlers_for_fork()

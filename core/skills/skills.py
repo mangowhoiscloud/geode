@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
-import subprocess
+import subprocess  # nosec B404 — skill dynamic context requires shell execution
 from pathlib import Path
 from typing import Any
 
@@ -91,7 +91,7 @@ class SkillDefinition(BaseModel):
         def _exec_cmd(match: re.Match[str]) -> str:
             cmd = match.group(1)
             try:
-                result = subprocess.run(  # nosec B602 — trusted skill author content
+                result = subprocess.run(  # noqa: S602  # nosec B602
                     cmd,
                     shell=True,
                     capture_output=True,
