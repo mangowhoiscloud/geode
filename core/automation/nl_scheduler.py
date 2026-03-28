@@ -420,9 +420,7 @@ class NLScheduleParser:
         # Exclude stop words AND day names (they describe schedule, not task)
         day_names = set(_DAY_MAP.keys())
         significant = [
-            w.lower()
-            for w in words
-            if w.lower() not in _STOP_WORDS and w.lower() not in day_names
+            w.lower() for w in words if w.lower() not in _STOP_WORDS and w.lower() not in day_names
         ]
         if significant:
             return "_".join(significant[:3])
@@ -504,8 +502,7 @@ class NLScheduleParser:
 
         # "weekly on <day>", "every monday", or just "weekly"
         if "weekly" in text or (
-            re.search(r"\bevery\b", text, re.IGNORECASE)
-            and any(d in text for d in _DAY_MAP)
+            re.search(r"\bevery\b", text, re.IGNORECASE) and any(d in text for d in _DAY_MAP)
         ):
             day_num = self._extract_weekday(text)
             hour, minute = self._extract_time(text)

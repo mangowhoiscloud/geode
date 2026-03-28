@@ -878,9 +878,7 @@ def _build_execution_handlers() -> dict[str, Any]:
                     "action": "schedule",
                     "sub_action": "create",
                     "job_id": job.job_id,
-                    "schedule_kind": (
-                        result.inferred_kind.value if result.inferred_kind else ""
-                    ),
+                    "schedule_kind": (result.inferred_kind.value if result.inferred_kind else ""),
                     "expression": expression,
                     "job_action": action_text,
                 }
