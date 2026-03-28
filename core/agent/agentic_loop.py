@@ -250,6 +250,11 @@ class AgenticLoop:
 
     def mark_session_completed(self) -> None:
         """Mark the current session as completed (called on clean REPL exit)."""
+        # Clean up announce queue to prevent orphan accumulation
+        if self._parent_session_key:
+            from core.agent.sub_agent import cleanup_announce_queue
+
+            cleanup_announce_queue(self._parent_session_key)
         if self._checkpoint is None or not self._session_id:
             return
         try:
