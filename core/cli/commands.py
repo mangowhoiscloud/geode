@@ -106,6 +106,7 @@ COMMAND_MAP: dict[str, str] = {
     "/compare": "compare",
     "/mcp": "mcp",
     "/skills": "skills",
+    "/skill": "skill_invoke",
     "/cost": "cost",
     "/resume": "resume",
     "/context": "context",
@@ -143,6 +144,7 @@ def show_help() -> None:
     console.print("  [label]/compare[/label] <A> <B>    — Compare two IPs")
     console.print("  [label]/mcp[/label]                — MCP server status/tools/add")
     console.print("  [label]/skills[/label]             — List/add/reload skills")
+    console.print("  [label]/skill[/label] <name> [args] — Invoke a skill")
     console.print("  [label]/resume[/label]             — Resume interrupted session")
     console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/apply[/label]              — Manage job applications")
@@ -902,6 +904,64 @@ def cmd_skills(skill_registry: _Any, arg: str) -> None:
         console.print(f"  [label]Tools:[/label]       {', '.join(skill.tools)}")
     console.print(f"  [label]Risk:[/label]        {skill.risk}")
     console.print(f"  [label]Body:[/label]        {len(skill.body)} chars")
+    console.print()
+
+
+def cmd_skill_invoke(skill_registry: _Any, arg: str, *, agentic_ref: _Any = None) -> None:
+    """Handle /skill <name> [args] — invoke a skill with arguments.
+
+    Supports context:fork (subagent execution) and $ARGUMENTS substitution.
+    """
+    from core.skills.skills import SkillRegistry
+
+    reg: SkillRegistry = skill_registry
+    parts = arg.strip().split(None, 1)
+    if not parts:
+        console.print("  [warning]Usage: /skill <name> [arguments][/warning]")
+        console.print()
+        return
+
+    name = parts[0]
+    arguments = parts[1] if len(parts) > 1 else ""
+
+    skill = reg.get(name)
+    if skill is None:
+        console.print(f"  [warning]Skill not found: {name}[/warning]")
+        console.print(f"  [muted]Available: {', '.join(reg.list_skills())}[/muted]")
+        console.print()
+        return
+
+    # Render skill body with dynamic context and arguments
+    rendered = skill.render(arguments=arguments)
+    if not rendered:
+        console.print(f"  [warning]Skill '{name}' has no body content[/warning]")
+        console.print()
+        return
+
+    if skill.context_fork:
+        # Fork execution: run in isolated subagent
+        console.print(f"  [dim]Skill '{name}' → forked subagent[/dim]")
+        from core.cli.bootstrap import _build_agentic_stack_minimal
+
+        try:
+            result = _build_agentic_stack_minimal(rendered, quiet=True)
+            status = "ok" if result and not getattr(result, "error", False) else "err"
+            summary = getattr(result, "text", "")[:200] if result else "(no output)"
+            console.print(f"  [dim]skill:{name} → {status}[/dim]")
+            if summary:
+                console.print(f"\n{summary}\n")
+        except Exception as exc:
+            console.print(f"  [error]Skill fork failed: {exc}[/error]")
+    else:
+        # Inline execution: inject rendered body as user message into main loop
+        if agentic_ref and agentic_ref[0] is not None:
+            prompt = f"[skill:{name}] {rendered}"
+            result = agentic_ref[0].run(prompt)
+            from core.cli.ui.agentic_ui import render_status_line
+
+            render_status_line()
+        else:
+            console.print("  [warning]AgenticLoop not available for skill execution[/warning]")
     console.print()
 
 

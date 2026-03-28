@@ -30,6 +30,7 @@ _user_task_graph_ctx: ContextVar[Any] = ContextVar("user_task_graph", default=No
 # Multi-IP LRU analysis result cache
 # ---------------------------------------------------------------------------
 
+
 def _get_result_cache_dir() -> Path:
     from core.paths import get_project_data_dir
 

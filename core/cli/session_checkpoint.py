@@ -21,6 +21,7 @@ from core.utils.atomic_io import atomic_write_json
 
 log = logging.getLogger(__name__)
 
+
 def _get_default_session_dir() -> Path:
     from core.paths import resolve_sessions_dir
 

@@ -247,6 +247,7 @@ def _handle_command(
     *,
     skill_registry: Any = None,
     mcp_manager: Any = None,
+    agentic_ref: Any = None,
 ) -> tuple[bool, bool, Any]:
     """Handle a slash command. Returns (should_break, new_verbose, resume_state)."""
     from core.cli._helpers import parse_dry_run_flag
@@ -406,6 +407,15 @@ def _handle_command(
     elif action == "skills":
         if skill_registry is not None:
             cmd_skills(skill_registry, args)
+        else:
+            console.print("  [muted]Skills not loaded.[/muted]")
+            console.print()
+    elif action == "skill_invoke":
+        # /skill <name> [args] — invoke a skill with optional arguments
+        if skill_registry is not None:
+            from core.cli.commands import cmd_skill_invoke
+
+            cmd_skill_invoke(skill_registry, args, agentic_ref=agentic_ref)
         else:
             console.print("  [muted]Skills not loaded.[/muted]")
             console.print()
@@ -1108,6 +1118,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 verbose,
                 skill_registry=skill_registry,
                 mcp_manager=mcp_mgr,
+                agentic_ref=agentic_ref,
             )
             if should_break:
                 break
