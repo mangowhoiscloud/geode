@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.30.0"
+version = "0.32.1"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -77,7 +77,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S105", "S106", "B017", "E501"]
+"tests/**/*.py" = ["S101", "S105", "S106", "S310", "B017", "E501"]
 "core/cli/bash_tool.py" = ["S602"]  # shell=True is intentional for agentic bash tool
 
 [tool.bandit]

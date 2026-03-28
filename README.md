@@ -10,12 +10,12 @@
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
-# GEODE v0.30.0 — Autonomous Execution Harness
+# GEODE v0.32.1 — Autonomous Execution Harness
 
 범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
 
 **생산**: Claude Code Scaffold(CLAUDE.md + 개발 Skills + CI Hooks)가 GEODE를 만듭니다.
-**실행**: GEODE(`while(tool_use)` 루프)가 52 도구 + 44 MCP 중에서 자율 선택하고, 46개 런타임 Hook이 라이프사이클을 제어하고, 5-Layer Verification이 출력을 검증합니다.
+**실행**: GEODE(`while(tool_use)` 루프)가 54 도구 + 44 MCP 중에서 자율 선택하고, 46개 런타임 Hook이 라이프사이클을 제어하고, 5-Layer Verification이 출력을 검증합니다.
 
 ## Quick Start
 
@@ -96,7 +96,7 @@ cd geode && uv sync
 
 **Scaffold (생산 체계)**: Claude Code + CLAUDE.md + 개발 Skills + CI Hooks. GEODE의 코드를 생산하고 품질을 보장하는 외부 하네스.
 
-**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 52 도구 + 20 런타임 Skills + 46 런타임 Hooks + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
+**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 54 도구 + 20 런타임 Skills + 46 런타임 Hooks + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
 
 ### Project Structure
 
@@ -154,7 +154,7 @@ graph LR
     L0["L0 CLI & Agent<br/>AgenticLoop, SubAgent"] --> L1["L1 Infra<br/>Port/Adapter DI"]
     L0 --> L3["L3 Orchestration<br/>TaskGraph, LaneQueue"]
     L0 --> HK["Hooks (cross-cutting)<br/>46 events"]
-    L0 --> L4["L4 Extensibility<br/>Tools(52), MCP(44)"]
+    L0 --> L4["L4 Extensibility<br/>Tools(47), MCP(44)"]
     L4 --> L5["L5 Domain<br/>DomainPort Plugin"]
     L0 --> L2["L2 Memory<br/>4-Tier + Checkpoint"]
 
@@ -172,7 +172,7 @@ graph LR
 | **L0** | CLI, AgenticLoop, SubAgentManager | `core/cli/agentic_loop.py` |
 | **L1** | LLM Adapters (Claude, OpenAI, GLM) | `core/llm/` |
 | **L2** | SOUL → User → Org → Project → Session | `core/memory/` |
-| **Hooks** | HookSystem(36) — cross-cutting lifecycle | `core/hooks/` → [hook-system.md](docs/architecture/hook-system.md) |
+| **Hooks** | HookSystem(46) — cross-cutting lifecycle | `core/hooks/` → [hook-system.md](docs/architecture/hook-system.md) |
 | **L3** | TaskGraph DAG, PlanMode, LaneQueue | `core/orchestration/` |
 | **L4** | ToolRegistry(54), MCP Catalog(44), Skills | `core/tools/` |
 | **L5** | DomainPort Protocol, GameIPDomain | `core/domains/` |

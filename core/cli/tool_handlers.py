@@ -345,24 +345,67 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         from core.config import settings
         from core.orchestration.plan_mode import PlanExecutionMode, PlanMode
 
+        goal = kwargs.get("goal", "")
         ip_name = kwargs.get("ip_name", "")
-        if not ip_name:
-            return _clarify("create_plan", ["ip_name"], "어떤 IP의 분석 계획을 세울까요?")
-        template = kwargs.get("template", "full_pipeline")
-        planner = PlanMode()
-        plan = planner.create_plan(ip_name, template=template)
-        summary = planner.present_plan(plan)
+        custom_steps = kwargs.get("steps", [])
+        plan_summary: dict[str, Any] = {}
 
-        # Display plan steps
+        # IP 분석: 기존 파이프라인 템플릿 사용
+        if ip_name:
+            template = kwargs.get("template", "full_pipeline")
+            planner = PlanMode()
+            plan = planner.create_plan(ip_name, template=template)
+            plan_summary = planner.present_plan(plan)
+            plan_title = ip_name
+        elif goal:
+            # 범용 계획: LLM이 제공한 steps 또는 goal 기반 자동 생성
+            import uuid
+
+            from core.orchestration.plan_mode import AnalysisPlan, PlanStep
+
+            template = "agentic"
+            plan_id = f"plan_{uuid.uuid4().hex[:8]}"
+            if custom_steps:
+                steps = [
+                    PlanStep(
+                        step_id=f"step_{i}",
+                        description=desc,
+                        node_name="agentic",
+                        estimated_time_s=10.0,
+                    )
+                    for i, desc in enumerate(custom_steps, 1)
+                ]
+            else:
+                steps = [
+                    PlanStep(
+                        step_id="step_1",
+                        description=goal,
+                        node_name="agentic",
+                        estimated_time_s=30.0,
+                    )
+                ]
+            plan = AnalysisPlan(plan_id=plan_id, ip_name=goal, steps=steps)
+            planner = PlanMode()
+            plan_summary = {"goal": goal, "steps": len(steps)}
+            plan_title = goal
+        else:
+            return _clarify("create_plan", ["goal"], "어떤 작업의 계획을 세울까요?")
+
+        # Display plan steps with HITL approval prompt
         console.print()
-        console.print(f"  [header]● Plan: {ip_name} 분석 계획[/header]")
+        console.print(f"  [header]● Plan: {plan_title}[/header]")
+        console.print()
         for i, step in enumerate(plan.steps, 1):
-            console.print(f"    {i}. {step.description}")
+            console.print(f"    [bold]{i}.[/bold] {step.description}")
+        console.print()
         console.print(
-            f"  [muted]예상 시간: "
-            f"{plan.total_estimated_time_s:.0f}s "
-            f"| 단계: {plan.step_count}개[/muted]"
+            f"  [muted]예상: {plan.total_estimated_time_s:.0f}s · "
+            f"{plan.step_count} 단계 · plan_id={plan.plan_id}[/muted]"
         )
+        if not settings.plan_auto_execute:
+            console.print(
+                "  [dim]→ 승인(approve_plan) · 수정(modify_plan) · 거부(reject_plan)[/dim]"
+            )
         console.print()
         log.info(
             "Plan '%s' created for '%s' (%d steps)",
@@ -397,7 +440,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
                 "template": template,
                 "step_count": plan.step_count,
                 "steps": [s.description for s in plan.steps],
-                "summary": summary,
+                "summary": plan_summary,
                 "execution_mode": PlanExecutionMode.AUTO.value,
                 "auto_executed": True,
                 "execution_result": exec_result,
@@ -417,7 +460,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             "template": template,
             "step_count": plan.step_count,
             "steps": [s.description for s in plan.steps],
-            "summary": summary,
+            "summary": plan_summary,
             "execution_mode": PlanExecutionMode.MANUAL.value,
             "hint": ("Use approve_plan, reject_plan, or modify_plan to proceed."),
         }
@@ -782,7 +825,7 @@ def _build_system_handlers(
 def _build_execution_handlers() -> dict[str, Any]:
     """Build execution-related tool handlers."""
     from core.cli import _scheduler_service_ctx
-    from core.cli.commands import cmd_generate, cmd_schedule, cmd_trigger
+    from core.cli.commands import cmd_generate, cmd_trigger
 
     def handle_generate_data(**kwargs: Any) -> dict[str, Any]:
         count = kwargs.get("count", 5)
@@ -802,30 +845,42 @@ def _build_execution_handlers() -> dict[str, Any]:
         sub_action = kwargs.get("sub_action", "") or "list"
         target_id = kwargs.get("target_id", "")
         expression = kwargs.get("expression", "")
+        action_text = kwargs.get("action", "")
         svc = _scheduler_service_ctx.get(None)
 
         if sub_action == "create" and expression:
-            cmd_schedule(f"create {expression}", scheduler_service=svc)
+            if not svc:
+                return {"status": "error", "action": "schedule", "error": "Scheduler not available"}
             try:
                 from core.automation.nl_scheduler import NLScheduleParser
 
                 result = NLScheduleParser().parse(expression)
-                if result.success and result.job:
+                if not result.success or not result.job:
                     return {
-                        "status": "ok",
+                        "status": "error",
                         "action": "schedule",
                         "sub_action": "create",
-                        "job_id": result.job.job_id,
-                        "schedule_kind": (
-                            result.inferred_kind.value if result.inferred_kind else ""
-                        ),
-                        "expression": expression,
+                        "error": result.error or "parse failed",
                     }
+                job = result.job
+                job.action = action_text
+                svc.add_job(job)
+                svc.save()
+                from core.cli.cmd_schedule import _format_schedule_desc
+
+                console.print(f"  [success]Created: {job.job_id}[/success]")
+                console.print(f"  Schedule: {_format_schedule_desc(job)}")
+                if action_text:
+                    console.print(f"  Action: {action_text[:80]}")
+                console.print()
                 return {
-                    "status": "error",
+                    "status": "ok",
                     "action": "schedule",
                     "sub_action": "create",
-                    "error": result.error or "parse failed",
+                    "job_id": job.job_id,
+                    "schedule_kind": (result.inferred_kind.value if result.inferred_kind else ""),
+                    "expression": expression,
+                    "job_action": action_text,
                 }
             except Exception as exc:
                 return {
@@ -835,8 +890,44 @@ def _build_execution_handlers() -> dict[str, Any]:
                     "error": str(exc),
                 }
 
-        sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
-        cmd_schedule(sched_args, scheduler_service=svc)
+        # Data-only: no cmd_schedule() call — avoids console.print in quiet/isolated sessions.
+        # enable/disable/delete/run handled directly via SchedulerService.
+        if sub_action in ("enable", "disable") and target_id and svc:
+            new_state = sub_action == "enable"
+            updated = svc.update_job(target_id, enabled=new_state)
+            if updated:
+                svc.save()
+            return {
+                "status": "ok" if updated else "error",
+                "action": "schedule",
+                "sub_action": sub_action,
+                "target_id": target_id,
+                "error": "" if updated else f"Job not found: {target_id}",
+            }
+
+        if sub_action == "delete" and target_id and svc:
+            removed = svc.remove_job(target_id)
+            if removed:
+                svc.save()
+            return {
+                "status": "ok" if removed else "error",
+                "action": "schedule",
+                "sub_action": "delete",
+                "target_id": target_id,
+                "error": "" if removed else f"Job not found: {target_id}",
+            }
+
+        if sub_action == "run" and target_id and svc:
+            result = svc.run_now(target_id)
+            return {
+                "status": result.get("status", "ok"),
+                "action": "schedule",
+                "sub_action": "run",
+                "target_id": target_id,
+                "error": result.get("error", ""),
+            }
+
+        # list / status — return structured data
         try:
             from core.automation.predefined import PREDEFINED_AUTOMATIONS
 
@@ -854,7 +945,12 @@ def _build_execution_handlers() -> dict[str, Any]:
         if svc is not None:
             try:
                 dynamic = [
-                    {"id": j.job_id, "name": j.name, "enabled": j.enabled}
+                    {
+                        "id": j.job_id,
+                        "name": j.name,
+                        "enabled": j.enabled,
+                        "action": j.action[:60] if j.action else "",
+                    }
                     for j in svc.list_jobs(include_disabled=True)
                     if not j.job_id.startswith("predefined:")
                 ]

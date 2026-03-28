@@ -591,6 +591,8 @@ def _build_agentic_stack(
     verbose: bool = False,
     hitl_level: int = 2,
     max_rounds: int = 50,
+    time_budget_s: float = 0.0,
+    cost_budget: float = 0.0,
     model: str | None = None,
     provider: str | None = None,
     system_suffix: str = "",
@@ -610,6 +612,12 @@ def _build_agentic_stack(
 
     _model = model or _stk_settings.model
     _provider = provider or _resolve_provider(_model)
+
+    # Resolve cost budget: explicit param > config/env setting
+    if cost_budget <= 0:
+        from core.cli.commands import _get_cost_budget
+
+        cost_budget = _get_cost_budget()
 
     agentic_ref: list[Any] = [None]
     handlers = _build_tool_handlers(
@@ -635,6 +643,8 @@ def _build_agentic_stack(
         conversation,
         executor,
         max_rounds=max_rounds,
+        time_budget_s=time_budget_s,
+        cost_budget=cost_budget,
         model=_model,
         provider=_provider,
         mcp_manager=mcp_manager,
@@ -1131,13 +1141,13 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 result = agentic.run(user_input)
                 _render_agentic_result(result)
                 # Claude Code-style status line after each result
-                from core.cli.ui.agentic_ui import render_status_line, render_turn_summary
+                from core.cli.ui.agentic_ui import render_status_line
 
                 render_status_line()
 
-                # Turn-end compact summary (rounds · tools · time · cost)
+                # Turn-end action summary (per-tool detail + header)
                 if result and result.tool_calls:
-                    from core.cli.ui.agentic_ui import get_session_meter
+                    from core.cli.ui.agentic_ui import get_session_meter, render_action_summary
 
                     _meter = get_session_meter()
                     _turn_elapsed = _meter.turn_elapsed_s if _meter else 0.0
@@ -1156,9 +1166,9 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                             _turn_cost = _tk.accumulator.total_cost_usd
                     except Exception:
                         log.debug("Turn cost calculation failed", exc_info=True)
-                    render_turn_summary(
+                    result.summary = render_action_summary(
+                        result.tool_calls,
                         result.rounds,
-                        len(result.tool_calls),
                         _turn_elapsed,
                         _turn_cost,
                     )
@@ -1744,6 +1754,19 @@ def serve(
 
     gateway.set_processor(_gateway_processor)
 
+    # L4 Gateway Hooks: optional webhook endpoint
+    _webhook_server = None
+    if settings.webhook_enabled:
+        try:
+            from core.gateway.webhook_handler import start_webhook_server
+
+            _webhook_server = start_webhook_server(_gateway_processor, port=settings.webhook_port)
+            console.print(
+                f"  [success]Webhook endpoint started on port {settings.webhook_port}[/success]"
+            )
+        except Exception as _wh_exc:
+            log.warning("Webhook server failed to start: %s", _wh_exc)
+
     # Start pollers
     gateway.start()
     console.print("  [success]Gateway started. Listening...[/success]")
@@ -1763,6 +1786,8 @@ def serve(
         while not stop:
             _time.sleep(1.0)
     finally:
+        if _webhook_server is not None:
+            _webhook_server.shutdown()
         gateway.stop()
         console.print()
         console.print("  [dim]Gateway stopped.[/dim]")

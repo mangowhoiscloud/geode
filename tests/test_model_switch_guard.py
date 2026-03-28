@@ -59,18 +59,18 @@ def _build_large_conversation(
 
 
 # ---------------------------------------------------------------------------
-# T1: Opus(500K) → GLM-5(80K) — adaptation with tool result summarization
+# T1: Opus(1M) → GLM-5(200K) — adaptation with tool result summarization
 # ---------------------------------------------------------------------------
 
 
 class TestT1LargeToSmall:
     def test_tool_results_summarized(self):
-        msgs = _build_large_conversation(num_tool_results=10, tool_result_chars=50_000)
-        # Before: ~125K tokens of tool results
+        msgs = _build_large_conversation(num_tool_results=20, tool_result_chars=50_000)
+        # Before: ~250K tokens of tool results
         before_tokens = check_context(msgs, "glm-5").estimated_tokens
-        assert before_tokens > 80_000  # exceeds GLM-5 window
+        assert before_tokens > 200_000  # exceeds GLM-5 200K window
 
-        count = summarize_tool_results(msgs, target_window=80_000)
+        count = summarize_tool_results(msgs, target_window=200_000)
         assert count > 0
 
         after_tokens = check_context(msgs, "glm-5").estimated_tokens
@@ -78,7 +78,7 @@ class TestT1LargeToSmall:
 
     def test_adapt_context_reduces_tokens(self):
         ctx = ConversationContext()
-        ctx.messages = _build_large_conversation()
+        ctx.messages = _build_large_conversation(num_tool_results=20, tool_result_chars=50_000)
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
         before = check_context(ctx.messages, "glm-5").estimated_tokens
@@ -162,7 +162,7 @@ class TestT6PureText:
             msgs.append({"role": "user", "content": f"{'y' * 5_000} q{i}"})
             msgs.append({"role": "assistant", "content": f"{'z' * 5_000} a{i}"})
 
-        # Should exceed 80K context of GLM-5
+        # Should exceed 200K context of GLM-5
         before = check_context(msgs, "glm-5")
         assert before.is_warning
 
@@ -184,7 +184,7 @@ class TestT6PureText:
 class TestUpdateModelIntegration:
     def test_update_model_calls_adapt(self):
         ctx = ConversationContext()
-        ctx.messages = _build_large_conversation()
+        ctx.messages = _build_large_conversation(num_tool_results=20, tool_result_chars=50_000)
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
         before = check_context(ctx.messages, "glm-5").estimated_tokens
@@ -213,7 +213,7 @@ class TestUsagePctNoCap:
     def test_exceeds_100_percent(self):
         huge_msg = "x" * 2_000_000  # ~500K tokens
         metrics = check_context([{"role": "user", "content": huge_msg}], "glm-5")
-        # 500K / 80K = 625%
+        # 500K / 200K = 250%
         assert metrics.usage_pct > 100.0
 
 

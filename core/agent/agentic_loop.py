@@ -98,6 +98,10 @@ MAX_TOOL_RESULT_TOKENS = 0  # backward-compat alias; canonical: settings.max_too
 TOOL_LAZY_LOAD_THRESHOLD = 50  # Above this count, skip MCP lazy loading
 
 
+class _ContextExhaustedError(Exception):
+    """Raised when context remains critical after pruning — unrecoverable."""
+
+
 @dataclass
 class AgenticResult:
     """Result of an agentic loop execution."""
@@ -106,7 +110,10 @@ class AgenticResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     rounds: int = 0
     error: str | None = None
-    termination_reason: str = "unknown"  # "natural" | "forced_text" | "max_rounds" | "llm_error"
+    # "natural" | "forced_text" | "max_rounds" | "time_budget_expired"
+    # | "llm_error" | "context_exhausted" | "cost_budget_exceeded"
+    termination_reason: str = "unknown"
+    summary: str = ""  # Tier 1 compact action summary (auto-generated)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, omitting None-valued fields."""
@@ -123,6 +130,7 @@ class AgenticLoop:
     DEFAULT_MAX_ROUNDS = 50
     DEFAULT_MAX_TOKENS = 32768
     WRAP_UP_HEADROOM = 2  # force text response N rounds before max
+    _WRAP_UP_TIME_HEADROOM_S = 30.0  # force text 30s before time budget expires
 
     def __init__(
         self,
@@ -131,6 +139,8 @@ class AgenticLoop:
         *,
         max_rounds: int = DEFAULT_MAX_ROUNDS,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        time_budget_s: float = 0.0,  # 0 = no time limit (OpenClaw pattern)
+        cost_budget: float = 0.0,  # 0 = no cost limit (Karpathy P3)
         model: str | None = None,
         provider: str = "anthropic",
         tool_registry: ToolRegistry | None = None,
@@ -149,6 +159,9 @@ class AgenticLoop:
         self._quiet = quiet  # suppress spinner (sub-agent, headless)
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
+        self._time_budget_s = time_budget_s
+        self._cost_budget = cost_budget
+        self._loop_start_time: float = 0.0
         self.model = model or ANTHROPIC_PRIMARY
         self._provider = provider  # "anthropic", "openai", or "glm"
         self._tool_registry = tool_registry
@@ -160,7 +173,7 @@ class AgenticLoop:
         self._tools = get_agentic_tools(tool_registry, mcp_tools=mcp_tool_list)
         self._last_llm_error: str | None = None  # last error type for user message
         self._adapter = resolve_agentic_adapter(self._provider)
-        self._op_logger = OperationLogger()
+        self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
         # Tier 1 transcript: append-only JSONL event stream (snapshot-redesign)
@@ -200,6 +213,10 @@ class AgenticLoop:
 
         # Feature 6: Convergence detection (stuck loop)
         self._recent_errors: list[str] = []
+        self._convergence_escalated: bool = False
+
+        # Feature 8: Diversity forcing — prevent same tool 5x consecutively
+        self._consecutive_tool_tracker: list[str] = []
 
         # C3 checkpoint: full message persistence for /resume (Claude Code pattern)
         self._checkpoint: Any | None = None
@@ -431,8 +448,21 @@ class AgenticLoop:
         # Prune old messages to stay within context budget (Karpathy P6)
         self._maybe_prune_messages(messages)
 
-        for round_idx in range(self.max_rounds):
-            is_last_round = round_idx == self.max_rounds - 1
+        import time as _time
+
+        self._loop_start_time = _time.monotonic()
+        round_idx = 0
+        while True:
+            # Guard 1: Round limit (max_rounds > 0 enforces; 0 = unlimited)
+            if self.max_rounds > 0 and round_idx >= self.max_rounds:
+                break
+            # Guard 2: Time budget (Karpathy P3)
+            if self._time_budget_s > 0:
+                elapsed = _time.monotonic() - self._loop_start_time
+                if elapsed >= self._time_budget_s:
+                    break
+
+            is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
@@ -461,6 +491,31 @@ class AgenticLoop:
                     text="Interrupted.",
                     rounds=round_idx + 1,
                     termination_reason="user_cancelled",
+                )
+            except _ContextExhaustedError as exc:
+                _spinner.stop()
+                log.warning("Context exhausted: %s", exc)
+                self._notify_context_event(
+                    "exhausted",
+                    original_count=len(messages),
+                    new_count=len(messages),
+                )
+                self._sync_messages_to_context(messages)
+                result = AgenticResult(
+                    text=(
+                        "Context window exhausted after pruning. "
+                        "Your conversation is preserved — start a new request "
+                        "or use /compact to manually reduce context."
+                    ),
+                    tool_calls=self._tool_processor.tool_log,
+                    rounds=round_idx + 1,
+                    error="context_exhausted",
+                    termination_reason="context_exhausted",
+                )
+                return self._finalize_and_return(
+                    result,
+                    user_input,
+                    round_idx + 1,
                 )
             finally:
                 _spinner.stop()
@@ -499,6 +554,32 @@ class AgenticLoop:
 
             # Track usage + Claude Code-style token display
             self._track_usage(response)
+
+            # Guard 3: Cost budget (Karpathy P3 — resource budget)
+            if self._cost_budget > 0:
+                try:
+                    from core.llm.token_tracker import get_tracker as _get_cost_tracker
+
+                    _cost_tracker = _get_cost_tracker()
+                    _session_cost = _cost_tracker.accumulator.total_cost_usd
+                    if _session_cost >= self._cost_budget:
+                        self._op_logger.finalize()
+                        self._sync_messages_to_context(messages)
+                        text = (
+                            f"Cost budget (${self._cost_budget:.2f}) exceeded. "
+                            f"Session cost: ${_session_cost:.2f}"
+                        )
+                        log.warning(text)
+                        result = AgenticResult(
+                            text=text,
+                            tool_calls=self._tool_processor.tool_log,
+                            rounds=round_idx + 1,
+                            error="cost_budget_exceeded",
+                            termination_reason="cost_budget_exceeded",
+                        )
+                        return self._finalize_and_return(result, user_input, round_idx + 1)
+                except Exception:
+                    log.debug("Cost budget check failed", exc_info=True)
 
             if response.stop_reason != "tool_use":
                 # end_turn or max_tokens → extract text, done
@@ -549,29 +630,62 @@ class AgenticLoop:
                 }
                 tool_results.append(backpressure_hint)
 
+            # Feature 8: Diversity forcing — prevent same tool 5x consecutively
+            for block in response.content:
+                if getattr(block, "type", None) == "tool_use":
+                    self._consecutive_tool_tracker.append(getattr(block, "name", ""))
+            if len(self._consecutive_tool_tracker) > 10:
+                self._consecutive_tool_tracker = self._consecutive_tool_tracker[-10:]
+            if len(self._consecutive_tool_tracker) >= 5:
+                _last_5 = self._consecutive_tool_tracker[-5:]
+                if len(set(_last_5)) == 1:
+                    _repeated_tool = _last_5[0]
+                    diversity_hint = {
+                        "type": "text",
+                        "text": (
+                            f"[system] The tool '{_repeated_tool}' has been called 5 times "
+                            "consecutively with similar results. "
+                            "Try a different approach or tool to make progress."
+                        ),
+                    }
+                    tool_results.append(diversity_hint)
+                    self._consecutive_tool_tracker.clear()
+                    log.warning(
+                        "Diversity forcing: %s called 5x — injecting hint",
+                        _repeated_tool,
+                    )
+
             # Accumulate messages for next round
             # Convert content blocks to serializable format
             assistant_content = self._serialize_content(response.content)
             messages.append({"role": "assistant", "content": assistant_content})
             messages.append({"role": "user", "content": tool_results})
+            round_idx += 1
 
-        # Max rounds reached — persist what we have
+        # Loop exited via guard — determine reason
         self._op_logger.finalize()
+        elapsed = _time.monotonic() - self._loop_start_time
+        if self._time_budget_s > 0 and elapsed >= self._time_budget_s:
+            reason = "time_budget_expired"
+            text = f"Time budget ({self._time_budget_s:.0f}s) expired after {round_idx} rounds."
+        else:
+            reason = "max_rounds"
+            text = "Max agentic rounds reached. Please try a more specific request."
         messages.append(
             {
                 "role": "assistant",
-                "content": [{"type": "text", "text": "Max agentic rounds reached."}],
+                "content": [{"type": "text", "text": text}],
             }
         )
         self._sync_messages_to_context(messages)
         result = AgenticResult(
-            text="Max agentic rounds reached. Please try a more specific request.",
+            text=text,
             tool_calls=self._tool_processor.tool_log,
-            rounds=self.max_rounds,
-            error="max_rounds",
-            termination_reason="max_rounds",
+            rounds=round_idx,
+            error=reason,
+            termination_reason=reason,
         )
-        return self._finalize_and_return(result, user_input, self.max_rounds)
+        return self._finalize_and_return(result, user_input, round_idx)
 
     def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:
         """Replace context messages with the full messages list.
@@ -662,6 +776,13 @@ class AgenticLoop:
                 strategy = self._resolve_overflow_strategy(metrics, settings)
                 self._apply_overflow_strategy(strategy, messages, settings)
 
+                # Re-check: if still critical after pruning, context is exhausted
+                post = check_context(messages, self.model, system_prompt=system)
+                if post.is_critical:
+                    raise _ContextExhaustedError(
+                        f"Context exhausted: {post.usage_pct:.0f}% after pruning"
+                    )
+
             elif metrics.is_warning:
                 # For non-Anthropic providers, 80% triggers client compaction
                 strategy = self._resolve_overflow_strategy(metrics, settings)
@@ -707,8 +828,14 @@ class AgenticLoop:
                     )
                 )
                 if did_compact:
+                    original_count = len(messages)
                     messages.clear()
                     messages.extend(new_msgs)
+                    self._notify_context_event(
+                        "compact",
+                        original_count=original_count,
+                        new_count=len(new_msgs),
+                    )
                     return
             except Exception:
                 log.warning("Client compaction failed — falling back to prune", exc_info=True)
@@ -727,6 +854,28 @@ class AgenticLoop:
                     len(pruned),
                     keep_recent,
                 )
+                self._notify_context_event(
+                    "prune",
+                    original_count=original_count,
+                    new_count=len(pruned),
+                )
+
+    def _notify_context_event(
+        self,
+        event_type: str,
+        *,
+        original_count: int,
+        new_count: int,
+    ) -> None:
+        """Notify user of automatic context compression via UI."""
+        if self._quiet:
+            return
+        try:
+            from core.cli.ui.agentic_ui import render_context_event
+
+            render_context_event(event_type, original_count=original_count, new_count=new_count)
+        except Exception:
+            log.debug("Context event notification failed", exc_info=True)
 
     def _resolve_overflow_strategy(self, metrics: Any, settings: Any) -> dict[str, Any]:
         """Ask CONTEXT_OVERFLOW_ACTION hook for compression strategy, with fallback.
@@ -938,8 +1087,16 @@ class AgenticLoop:
         # Context overflow detection (Karpathy P6 Context Budget)
         self._check_context_overflow(system, messages)
 
-        remaining = self.max_rounds - round_idx
-        force_text = remaining <= self.WRAP_UP_HEADROOM
+        # WRAP_UP: force text-only when approaching limits
+        force_text = False
+        if self.max_rounds > 0:
+            remaining = self.max_rounds - round_idx
+            force_text = remaining <= self.WRAP_UP_HEADROOM
+        if not force_text and self._time_budget_s > 0:
+            import time as _time
+
+            remaining_time = self._time_budget_s - (_time.monotonic() - self._loop_start_time)
+            force_text = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
         response = await self._adapter.agentic_call(
@@ -993,7 +1150,8 @@ class AgenticLoop:
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
             usage = get_tracker().record(self.model, in_tok, out_tok)
-            render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
+            if not self._quiet:
+                render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
             log.info(
                 "LLM call: model=%s in=%d out=%d cost=$%.4f",
                 self.model,
@@ -1102,9 +1260,9 @@ class AgenticLoop:
     def _check_convergence_break(self) -> bool:
         """Check if the loop is stuck in a repeating failure pattern.
 
-        Returns True if 4+ of the last entries are identical errors,
-        indicating the loop should break.
-        Injects a warning into messages if 3 identical errors are detected.
+        On first detection of 3 identical errors, attempts model escalation
+        (runtime ratchet — Karpathy P4) instead of breaking immediately.
+        Only breaks after escalation has been tried and errors persist.
         """
         if len(self._recent_errors) < 3:
             return False
@@ -1112,17 +1270,31 @@ class AgenticLoop:
         # Check last 3 entries for identical pattern
         last_3 = self._recent_errors[-3:]
         if last_3[0] == last_3[1] == last_3[2]:
+            # Runtime ratchet: try model escalation before giving up
+            if not self._convergence_escalated:
+                self._convergence_escalated = True
+                log.warning(
+                    "Convergence detected (%s x3) — escalating model",
+                    last_3[0],
+                )
+                escalated = self._try_model_escalation()
+                if escalated:
+                    self._recent_errors.clear()
+                    return False  # Give escalated model a chance
+                # Escalation failed (no fallback) — fall through to break check
+
+            # Already escalated and still stuck — check for 4+ identical
             if len(self._recent_errors) >= 4:
                 last_4 = self._recent_errors[-4:]
                 if last_4[0] == last_4[1] == last_4[2] == last_4[3]:
                     log.warning(
-                        "Convergence detected: 4+ identical errors '%s'",
+                        "Convergence detected after escalation: 4+ identical errors '%s'",
                         last_4[0],
                     )
                     return True
-            # 3 identical — log warning (convergence warning injected via backpressure)
+            # 3 identical post-escalation — log warning, don't break yet
             log.warning(
-                "Convergence warning: 3 identical errors '%s'",
+                "Convergence warning (post-escalation): 3 identical errors '%s'",
                 last_3[0],
             )
         return False

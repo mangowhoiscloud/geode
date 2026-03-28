@@ -211,6 +211,29 @@ def build_gateway() -> None:
         )
     )
 
+    # Hot-reload bindings on config.toml change
+    try:
+        from core.orchestration.hot_reload import ConfigWatcher
+
+        def _reload_bindings(path: Any, mtime: float) -> None:
+            try:
+                reload_config: dict[str, Any] = {}
+                if Path(path).exists():
+                    with open(path, "rb") as fh:
+                        reload_config = tomllib.load(fh)
+                manager.load_bindings_from_config(reload_config)
+                log.info("Gateway bindings reloaded from %s", path)
+            except Exception as reload_exc:
+                log.warning("Gateway binding reload failed: %s", reload_exc)
+
+        if config_path.exists():
+            _binding_watcher = ConfigWatcher()
+            _binding_watcher.watch(config_path, _reload_bindings, name="gateway-bindings")
+            _binding_watcher.start()
+    except Exception as exc:
+        _plugin_status["gateway_hot_reload"] = "unavailable"
+        log.debug("Gateway binding hot-reload not available: %s", exc)
+
     set_gateway(manager)
     log.info("Gateway built with %d pollers", len(manager._pollers))
 

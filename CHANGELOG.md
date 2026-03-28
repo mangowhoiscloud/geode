@@ -26,13 +26,34 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.32.1] — 2026-03-29
+
+### Fixed
+- **create_plan goal 경로 UnboundLocalError** — `goal` 파라미터로 범용 계획 생성 시 `template` 변수 미할당 수정 (#515).
+- **Scheduler WHEN/WHAT 분리** — NL parser가 `action=original_text`(스케줄 표현식)로 설정 → `action=""`으로 수정. `schedule_job` 도구에 `action` 파라미터 추가. "every monday at 9:00" → AT(1회성) 파싱 → CRON(weekly) 수정. tool handler 이중 파싱 버그 수정 (#516).
+- **delegate_task 이중 컨텍스트 주입 제거** — tool_result(전체) + announce(500자 요약) 이중 주입 → `delegate(announce=False)` 파라미터로 동기 호출 시 announce 비활성화. 비동기 경로는 유지 (#517).
+- **schedule_job handler quiet mode** — `console.print` 제거로 quiet/isolated 세션에서 UI 오염 방지 (#518).
+
+---
+## [0.32.0] — 2026-03-28
 
 ### Added
 - **스케줄 잡 비동기 실행** — REPL drain loop의 isolated 스케줄 잡을 `IsolatedRunner.run_async()`로 전환. 메인 REPL 스레드 블로킹 해소. OpenClaw agentTurn 패턴: 데몬 스레드에서 fresh AgenticLoop 실행, 완료 시 dim 상태줄 콜백.
 - **MODEL_SWITCHED hook** --- `HookEvent.MODEL_SWITCHED` 추가 (45 -> 46). `AgenticLoop.update_model()` 발화, `bootstrap.py`에 `model_switch_logger` 핸들러 등록.
 - **Filesystem hook plugin auto-discovery** --- `bootstrap.py`에서 `.geode/hooks/` + `core/hooks/plugins/` 자동 스캔 및 등록. `HookPluginLoader`를 부트스트랩에 통합.
 - **README docs-sync** --- 도구(52), Hook(46) 수치를 실측값으로 갱신.
+- **Autonomous safety 3조건** — (1) 비용 상한 자동 정지: 세션 비용 budget 초과 시 루프 중단 (Karpathy P3). (2) 런타임 래칫: 동일 에러 3회 수렴 감지 시 모델 에스컬레이션 후 재시도 (Karpathy P4). (3) 다양성 강제: 동일 도구 5회 연속 호출 시 다른 접근 유도 힌트 주입.
+- **Plan-first 프롬프트 가이드** — 복잡한 요청(3+ 스텝, 고비용)에 대해 LLM이 자발적으로 `create_plan` 호출 후 사용자 승인 대기. Claude Code 패턴.
+- **Plan HITL UI 보강** — 계획 표시 시 승인/수정/거부 안내 표시. plan_id 노출.
+- **Provider-aware context compaction** — 장시간 운용을 위한 프로바이더별 컨텍스트 관리. Anthropic: 서버사이드 compaction(`compact_20260112`) + `clear_tool_uses` 결합. OpenAI/GLM: 80%에서 LLM 요약 기반 클라이언트 compaction 발동. `context_action.py` hook이 프로바이더별 전략을 분화.
+
+---
+## [0.31.0] — 2026-03-28
+
+### Added
+- **Action Summary (Tier 1)** --- AgenticLoop 턴 종료 시 개별 도구 호출 + 결과를 결정론적으로 요약 표시. `AgenticResult.summary` 필드에 저장. 토큰 비용 0.
+- **Gateway binding hot-reload** --- `ConfigWatcher` watches `.geode/config.toml` and reloads `ChannelManager` bindings on file change (OpenClaw hot-reload pattern). No restart required.
+- **L4 webhook endpoint** --- `geode serve` optionally starts an HTTP POST endpoint (`/webhook`, default port 8765) that triggers AgenticLoop execution from external systems (OpenClaw L4 Gateway Hooks pattern). Controlled by `GEODE_WEBHOOK_ENABLED` / `GEODE_WEBHOOK_PORT` settings.
 - **TOOL_APPROVAL hooks** --- `TOOL_APPROVAL_REQUESTED`, `TOOL_APPROVAL_GRANTED`, `TOOL_APPROVAL_DENIED` 3종 HookEvent 추가 (42 -> 45). HITL 승인/거부/Always 패턴 추적. `ToolExecutor`에 hooks 주입, `bootstrap.py`에 `approval_tracker`/`denial_logger` 핸들러 등록.
 
 ### Fixed
@@ -45,7 +66,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **TURN_COMPLETE 자동 메모리** — 37번째 HookEvent. AgenticLoop 매 턴 종료 시 발화, user_input + tool_calls + result 데이터 전달. `turn_auto_memory` 핸들러가 자동으로 project memory에 턴 요약 기록 (OpenClaw `command:new` 패턴).
 - **OpenAI Responses API 전환** — `OpenAIAgenticAdapter`를 Chat Completions → Responses API(`client.responses.create`)로 마이그레이션. 네이티브 `web_search` 호스티드 도구 주입. `normalize_openai_responses()` 정규화기 추가.
 - **3사 네이티브 웹 검색 fallback** — `GeneralWebSearchTool`/`WebSearchTool`을 Anthropic(Opus) → OpenAI(gpt-5.4) → GLM(glm-5) 순차 fallback으로 전환. 외부 API 키 의존 제로.
-- **Provider-aware context compaction** — 장시간 운용을 위한 프로바이더별 컨텍스트 관리. Anthropic: 서버사이드 compaction(`compact_20260112`) + `clear_tool_uses` 결합. OpenAI/GLM: 80%에서 LLM 요약 기반 클라이언트 compaction 발동. `context_action.py` hook이 프로바이더별 전략을 분화.
 
 ### Removed
 - **Brave Search MCP 제거** — `brave_adapter.py` 삭제, catalog/registry/mcp_servers.json에서 brave-search 항목 제거. 3사 네이티브 웹 검색으로 대체.

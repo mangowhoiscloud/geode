@@ -89,6 +89,9 @@ class HookEvent(Enum):
     SESSION_START = "session_start"
     SESSION_END = "session_end"
 
+    # Model switching (L1 Observe)
+    MODEL_SWITCHED = "model_switched"
+
     # LLM call lifecycle (model-level latency/cost observability)
     LLM_CALL_START = "llm_call_start"
     LLM_CALL_END = "llm_call_end"

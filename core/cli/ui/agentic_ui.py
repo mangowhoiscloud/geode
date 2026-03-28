@@ -120,10 +120,11 @@ class OperationLogger:
     COLLAPSE_THRESHOLD = 5
     GROUPING_THRESHOLD = 6
 
-    def __init__(self) -> None:
+    def __init__(self, *, quiet: bool = False) -> None:
         self._visible_count = 0
         self._collapsed_count = 0
         self._header_printed = False
+        self._quiet = quiet  # suppress all console output (scheduler, headless)
         # Tool-type grouping state
         self._tool_type_counts: dict[str, int] = {}
         self._tool_type_last_summary: dict[str, str] = {}
@@ -132,7 +133,7 @@ class OperationLogger:
 
     def begin_round(self, label: str = "AgenticLoop") -> None:
         """Start a new agentic round — print header if not yet shown."""
-        if not self._header_printed:
+        if not self._header_printed and not self._quiet:
             console.print(f"\n[bold]● {label}[/bold]")
             self._header_printed = True
         self._round_count += 1
@@ -141,6 +142,8 @@ class OperationLogger:
         """Log a tool call. Returns True if visible, False if collapsed."""
         self._total_tool_count += 1
         self._tool_type_counts[tool_name] = self._tool_type_counts.get(tool_name, 0) + 1
+        if self._quiet:
+            return False
         if self._visible_count < self.COLLAPSE_THRESHOLD:
             args_parts: list[str] = []
             for k, v in tool_input.items():
@@ -174,7 +177,7 @@ class OperationLogger:
         # Track per-type last summary for grouped display
         self._tool_type_last_summary[tool_name] = summary
 
-        if not visible:
+        if not visible or self._quiet:
             return
         if result.get("error"):
             console.print(f"  ⎿ [error]✗ {tool_name}[/error] — {result['error']}")
@@ -409,6 +412,31 @@ def render_status_line() -> None:
         console.print(f"\n  [dim]✢ Worked for {meter.turn_elapsed_display}[/dim]")
 
 
+def render_context_event(
+    event_type: str,
+    *,
+    original_count: int = 0,
+    new_count: int = 0,
+) -> None:
+    """Render context compression notification.
+
+    Shows a dim notification when context is auto-compacted or pruned,
+    so the user knows conversation history was compressed.
+
+    Format::
+
+        ⟳ Context compacted: 45 → 12 messages
+        ⟳ Context pruned: 30 → 10 messages
+    """
+    if event_type == "exhausted":
+        console.print(
+            "  [warning]⟳ Context exhausted — pruning could not free enough space[/warning]"
+        )
+        return
+    label = "compacted" if event_type == "compact" else "pruned"
+    console.print(f"  [dim]⟳ Context {label}: {original_count} → {new_count} messages[/dim]")
+
+
 def render_turn_summary(rounds: int, tool_count: int, elapsed_s: float, cost: float) -> None:
     """Render compact turn-end summary line.
 
@@ -422,6 +450,84 @@ def render_turn_summary(rounds: int, tool_count: int, elapsed_s: float, cost: fl
         parts.append(f"${cost:.3f}")
     summary = " · ".join(parts)
     console.print(f"\n  [dim]──── {summary} ────[/dim]")
+
+
+def render_action_summary(
+    tool_calls: list[dict[str, Any]],
+    rounds: int,
+    elapsed_s: float,
+    cost: float,
+) -> str:
+    """Render Tier 1 deterministic action summary with per-tool detail.
+
+    Displays a header line (rounds/tools/time/cost) followed by individual
+    tool call results.  Returns the summary string for storing in
+    ``AgenticResult.summary``.  Zero LLM tokens consumed.
+    """
+    if not tool_calls:
+        return ""
+
+    lines: list[str] = []
+
+    # Header
+    header_parts = [f"{rounds} rounds", f"{len(tool_calls)} tools", f"{elapsed_s:.1f}s"]
+    if cost > 0:
+        header_parts.append(f"${cost:.3f}")
+    header = " \u00b7 ".join(header_parts)
+    lines.append("\u2500\u2500\u2500\u2500 Action Summary \u2500\u2500\u2500\u2500")
+    lines.append(header)
+    lines.append("")
+
+    # Per-tool lines (cap at 10)
+    for tc in tool_calls[:10]:
+        name = tc.get("name") or tc.get("tool") or "?"
+        inp = tc.get("input", {})
+        result = tc.get("result", {})
+
+        # Concise arg preview: first meaningful value
+        arg_preview = ""
+        if isinstance(inp, dict):
+            for _k, v in inp.items():
+                if v and _k not in ("verbose",):
+                    arg_preview = str(v)[:30].replace("\n", " ")
+                    break
+
+        # Concise result preview
+        result_preview = ""
+        if isinstance(result, dict):
+            if "error" in result:
+                result_preview = f"ERR: {str(result['error'])[:25]}"
+            elif "status" in result:
+                result_preview = str(result["status"])
+            elif "result" in result:
+                result_preview = str(result["result"])[:30]
+            else:
+                for rk, rv in result.items():
+                    if rk not in ("_meta", "_timing") and rv:
+                        result_preview = str(rv)[:25]
+                        break
+        if not result_preview:
+            result_preview = "ok"
+
+        if arg_preview:
+            lines.append(f"  {name}({arg_preview}) → {result_preview}")
+        else:
+            lines.append(f"  {name} → {result_preview}")
+
+    if len(tool_calls) > 10:
+        lines.append(f"  ... +{len(tool_calls) - 10} more")
+
+    lines.append(
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    )
+
+    summary_text = "\n".join(lines)
+
+    # Render to console
+    for line in lines:
+        console.print(f"  [dim]{line}[/dim]")
+
+    return summary_text
 
 
 # ───────────────────────────────────────────────────────────────────────────

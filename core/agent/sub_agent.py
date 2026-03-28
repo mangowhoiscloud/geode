@@ -230,8 +230,16 @@ class SubAgentManager:
         tasks: list[SubTask],
         *,
         on_progress: Callable[[SubResult], None] | None = None,
+        announce: bool = True,
     ) -> list[SubResult]:
-        """Run multiple sub-tasks in parallel, wait for all."""
+        """Run multiple sub-tasks in parallel, wait for all.
+
+        Args:
+            announce: If False, skip pushing results to the announce queue.
+                Callers that already return full results via tool_result
+                (e.g. delegate_task) should pass announce=False to avoid
+                injecting the same information into the parent context twice.
+        """
         if not tasks:
             return []
 
@@ -349,7 +357,7 @@ class SubAgentManager:
                     rec.outcome = "ok" if sub_result.success else "error"
 
         # Announce completed results to parent (OpenClaw Spawn+Announce)
-        if self._announce_enabled and self._parent_session_key:
+        if announce and self._announce_enabled and self._parent_session_key:
             for sub_result in results:
                 # Build a SubAgentResult for announce (may already be one)
                 summary = ""
@@ -555,7 +563,7 @@ class SubAgentManager:
         agent_memory = AgentMemoryStore(task.task_id)
 
         # 2. Fresh conversation context (independent context window)
-        conversation = ConversationContext(max_turns=10)
+        conversation = ConversationContext(max_turns=200)
 
         # 3. Filter denied tools from action_handlers (sandbox hardening)
         filtered_handlers = self._action_handlers

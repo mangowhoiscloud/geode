@@ -189,7 +189,7 @@ MODEL_CONTEXT_WINDOW: dict[str, int] = {
     "gpt-4.1-nano":             1_047_576,
     "o3":                         200_000,
     "o4-mini":                    200_000,
-    "glm-5":                       80_000,
+    "glm-5":                      200_000,
     "glm-5-turbo":                200_000,
     "glm-4.7":                    200_000,
     "glm-4.7-flash":              200_000,

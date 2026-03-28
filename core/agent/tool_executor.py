@@ -326,7 +326,11 @@ class ToolExecutor:
                 task_elapsed,
             )
 
-        results = self._sub_agent_manager.delegate(sub_tasks, on_progress=_on_progress)
+        # announce=False: delegate_task returns full results via tool_result,
+        # so skip announce queue to avoid double context injection.
+        results = self._sub_agent_manager.delegate(
+            sub_tasks, on_progress=_on_progress, announce=False
+        )
 
         # Final summary line
         from core.cli.ui.agentic_ui import render_subagent_complete
@@ -703,7 +707,7 @@ def _compute_model_tool_limit(model: str) -> int:
     """Compute per-tool-result token limit based on model context window.
 
     For large-context models (>=200K), returns 0 (unlimited — server-side handles it).
-    For small-context models (<200K, e.g. GLM-5 80K), caps each tool result at 5% of
+    For small-context models (<200K, e.g. GLM-5), caps each tool result at 5% of
     the context window to prevent a single result from consuming the budget.
     """
     from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
@@ -854,7 +858,7 @@ class ToolCallProcessor:
     def _serialize_tool_result(self, result: Any, block_id: str) -> dict[str, Any]:
         """Apply token guard and serialize result as JSON for LLM consumption."""
         # Token guard: truncate oversized results to prevent context explosion
-        # For small-context models (e.g. GLM-5 80K), apply model-aware limit
+        # For small-context models (e.g. GLM-5), apply model-aware limit
         if isinstance(result, dict):
             model_limit = _compute_model_tool_limit(self._model) if self._model else 0
             result = _guard_tool_result(result, max_tokens=model_limit or None)

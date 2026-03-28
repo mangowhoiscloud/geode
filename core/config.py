@@ -43,6 +43,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "output.verbose": "verbose",
     "pipeline.confidence_threshold": "confidence_threshold",
     "pipeline.max_iterations": "max_iterations",
+    "agentic.time_budget": "agentic_loop_time_budget",
 }
 
 DEFAULT_CONFIG_TOML = """\
@@ -221,11 +222,14 @@ class Settings(BaseSettings):
     # Sub-Agent Orchestration (P2)
     max_subagent_depth: int = 2  # 최대 재귀 깊이 (root=0 → depth 2까지 허용)
     max_total_subagents: int = 15  # 세션 내 최대 서브에이전트 수
-    subagent_max_rounds: int = 10  # 서브에이전트 agentic loop 라운드 제한
-    subagent_max_tokens: int = 8192  # 서브에이전트 출력 토큰 제한
+    subagent_max_rounds: int = 50  # 서브에이전트 agentic loop 라운드 제한 (부모와 동일)
+    subagent_max_tokens: int = 32768  # 서브에이전트 출력 토큰 제한 (부모와 동일)
 
     # Token Guard — tool result truncation threshold (0 = unlimited)
     max_tool_result_tokens: int = 0  # 0 = no limit; clear_tool_uses handles overflow
+
+    # Agentic Loop — time budget (Karpathy P3, OpenClaw Attempt Loop)
+    agentic_loop_time_budget: float = 0.0  # 0 = no time limit; >0 = wall-clock seconds
 
     # Context Compaction — overflow prevention
     compact_keep_recent: int = 10  # messages to preserve during compaction/prune
@@ -240,6 +244,10 @@ class Settings(BaseSettings):
     # Gateway — inbound messaging
     gateway_enabled: bool = False  # GEODE_GATEWAY_ENABLED=true to enable
     gateway_poll_interval_s: float = 3.0
+
+    # L4 Gateway Hooks — external webhook endpoint
+    webhook_enabled: bool = False  # GEODE_WEBHOOK_ENABLED=true to enable
+    webhook_port: int = 8765
 
     # Calendar — external calendar sync
     calendar_sync_on_trigger: bool = False  # auto-sync on TRIGGER_FIRED

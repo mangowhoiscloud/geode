@@ -306,18 +306,20 @@ class TestGetSkills:
 
 
 class TestSkillDirs:
-    def test_4_priority_dirs(self, tmp_path: Path) -> None:
-        """Bundled, project, user, extra dirs are all resolved."""
+    def test_5_priority_dirs(self, tmp_path: Path) -> None:
+        """Bundled, user global, project local, project flat, extra dirs."""
         extra = tmp_path / "extra-skills"
         extra.mkdir()
 
         registry = SkillRegistry(extra_dirs=[extra])
         dirs = registry._resolve_skill_dirs()
 
-        # Should have at least 4 dirs: bundled, project/cwd, user home, extra
-        assert len(dirs) >= 4
+        # Should have at least 5 dirs: bundled, user, project .geode/, project flat, extra
+        assert len(dirs) >= 5
         assert extra in dirs
         # Bundled dir should end with "skills"
         assert dirs[0].name == "skills"
-        # User dir should be under home
-        assert dirs[2] == Path.home() / ".geode" / "skills"
+        # User global dir
+        assert dirs[1] == Path.home() / ".geode" / "skills"
+        # Project local (CWD/.geode/skills)
+        assert dirs[2] == Path.cwd() / ".geode" / "skills"
