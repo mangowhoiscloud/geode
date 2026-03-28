@@ -15,38 +15,38 @@ def tmp_skills(tmp_path: Path) -> Path:
     s1 = tmp_path / "researcher" / "SKILL.md"
     s1.parent.mkdir()
     s1.write_text(
-        '---\n'
-        'name: researcher\n'
+        "---\n"
+        "name: researcher\n"
         'description: 조사 스킬. "조사해", "research" 키워드로 트리거.\n'
-        'tools: web_search, memory_save\n'
-        '---\n'
-        '# Researcher\nDo research on $ARGUMENTS\n'
+        "tools: web_search, memory_save\n"
+        "---\n"
+        "# Researcher\nDo research on $ARGUMENTS\n"
     )
 
     # Skill 2: background knowledge (user-invocable: false)
     s2 = tmp_path / "bg-knowledge" / "SKILL.md"
     s2.parent.mkdir()
     s2.write_text(
-        '---\n'
-        'name: bg-knowledge\n'
-        'description: Background skill.\n'
-        'user-invocable: false\n'
-        '---\n'
-        '# Background\nThis is background knowledge.\n'
+        "---\n"
+        "name: bg-knowledge\n"
+        "description: Background skill.\n"
+        "user-invocable: false\n"
+        "---\n"
+        "# Background\nThis is background knowledge.\n"
     )
 
     # Skill 3: forked skill
     s3 = tmp_path / "heavy-analysis" / "SKILL.md"
     s3.parent.mkdir()
     s3.write_text(
-        '---\n'
-        'name: heavy-analysis\n'
+        "---\n"
+        "name: heavy-analysis\n"
         'description: Heavy analysis. "분석해" 키워드로 트리거.\n'
-        'context: fork\n'
+        "context: fork\n"
         'argument-hint: "[topic]"\n'
-        '---\n'
-        '# Heavy Analysis\nAnalyze $ARGUMENTS in depth.\n'
-        'Current date: !`date +%Y-%m-%d`\n'
+        "---\n"
+        "# Heavy Analysis\nAnalyze $ARGUMENTS in depth.\n"
+        "Current date: !`date +%Y-%m-%d`\n"
     )
 
     return tmp_path
@@ -136,7 +136,7 @@ class TestUserInvocable:
 
         heavy = next(s for s in skills if s.name == "heavy-analysis")
         assert heavy.context_fork is True
-        assert heavy.argument_hint == '[topic]'
+        assert heavy.argument_hint == "[topic]"
 
 
 class TestDynamicContext:
@@ -170,6 +170,7 @@ class TestDynamicContext:
         assert "quantum computing" in rendered
         # Date should look like YYYY-MM-DD
         import re
+
         assert re.search(r"\d{4}-\d{2}-\d{2}", rendered)
 
     def test_no_arguments_passthrough(self) -> None:

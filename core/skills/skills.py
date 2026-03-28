@@ -139,9 +139,7 @@ class SkillRegistry:
 
     def list_skills(self) -> list[str]:
         """List all registered skill names (user-invocable only)."""
-        return sorted(
-            name for name, s in self._skills.items() if s.user_invocable
-        )
+        return sorted(name for name, s in self._skills.items() if s.user_invocable)
 
     def list_all(self) -> list[str]:
         """List all skill names including background knowledge."""
@@ -302,7 +300,9 @@ class SkillLoader:
                     registry.register(skill)
                 log.debug(
                     "Loaded skill: %s (invocable=%s, fork=%s)",
-                    skill.name, skill.user_invocable, skill.context_fork,
+                    skill.name,
+                    skill.user_invocable,
+                    skill.context_fork,
                 )
             except Exception:
                 log.warning("Failed to load skill from %s", path, exc_info=True)
