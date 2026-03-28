@@ -121,13 +121,14 @@ class SkillRegistry:
     # -- Internal -----------------------------------------------------------
 
     def _resolve_skill_dirs(self) -> list[Path]:
-        """Return skill directories in 4-priority order."""
-        # project root: core/llm/ → core/ → root
+        """Return skill directories in 5-priority order (low → high)."""
         root = Path(__file__).resolve().parent.parent.parent
+        cwd = Path.cwd()
         dirs: list[Path] = [
-            root / ".geode" / "skills",  # 1. Bundled (.geode/skills/)
-            Path.cwd() / "skills",  # 2. Project
-            Path.home() / ".geode" / "skills",  # 3. User
+            root / ".geode" / "skills",  # 1. Bundled (GEODE package)
+            Path.home() / ".geode" / "skills",  # 2. User global
+            cwd / ".geode" / "skills",  # 3. Project local (CWD)
+            cwd / "skills",  # 4. Project flat
         ]
         dirs.extend(self._extra_dirs)  # 4. Extra
         return dirs
