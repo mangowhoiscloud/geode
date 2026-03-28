@@ -11,7 +11,6 @@ Sandbox hardening (v0.22.0):
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
@@ -39,13 +38,12 @@ def _set_resource_limits() -> None:
     """preexec_fn for subprocess: apply hard resource limits.
 
     Called in the child process after fork, before exec.
-    RLIMIT_NPROC may not be available on all platforms (macOS).
+    Note: RLIMIT_NPROC is intentionally NOT set. On macOS it caps the
+    user's *total* process count (not per-subprocess), causing fork()
+    failures when many MCP/serve processes are running.
     """
     resource.setrlimit(resource.RLIMIT_CPU, (_BASH_CPU_LIMIT_S, _BASH_CPU_LIMIT_S))
     resource.setrlimit(resource.RLIMIT_FSIZE, (_BASH_FSIZE_LIMIT_B, _BASH_FSIZE_LIMIT_B))
-    with contextlib.suppress(ValueError, OSError):
-        # macOS: RLIMIT_NPROC may not be settable
-        resource.setrlimit(resource.RLIMIT_NPROC, (_BASH_NPROC_LIMIT, _BASH_NPROC_LIMIT))
 
 
 @dataclass
