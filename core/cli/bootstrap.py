@@ -194,3 +194,35 @@ def bootstrap_geode(
         tool_handlers=handlers,
         readiness=readiness,
     )
+
+
+def _build_agentic_stack_minimal(prompt: str, *, quiet: bool = True) -> Any:
+    """Build a minimal isolated AgenticLoop and run a prompt (for context:fork skills).
+
+    Returns AgenticResult. No MCP (prevent subprocess leak), hitl_level=0.
+    """
+    from core.agent.agentic_loop import AgenticLoop
+    from core.agent.tool_executor import ToolExecutor
+    from core.config import _resolve_provider
+    from core.config import settings as _stk_settings
+    from core.memory.context import ConversationContext
+
+    conversation = ConversationContext()
+    handlers = _build_tool_handlers_for_fork()
+    executor = ToolExecutor(action_handlers=handlers, hitl_level=0)
+    loop = AgenticLoop(
+        conversation,
+        executor,
+        model=_stk_settings.model,
+        provider=_resolve_provider(_stk_settings.model),
+        quiet=quiet,
+        max_rounds=20,
+    )
+    return loop.run(prompt)
+
+
+def _build_tool_handlers_for_fork() -> dict[str, Any]:
+    """Minimal tool handlers for forked skill execution (no MCP, no sub-agents)."""
+    from core.cli.tool_handlers import _build_tool_handlers
+
+    return _build_tool_handlers(verbose=False)
