@@ -363,6 +363,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
 
             from core.orchestration.plan_mode import AnalysisPlan, PlanStep
 
+            template = "agentic"
             plan_id = f"plan_{uuid.uuid4().hex[:8]}"
             if custom_steps:
                 steps = [

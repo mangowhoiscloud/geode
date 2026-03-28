@@ -1003,9 +1003,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                     )
                     result = iso_loop.run(prompt)
                     status = "ok" if not result.error else "err"
-                    console.print(
-                        f"  [dim]scheduled:{job_id} → {status}[/dim]"
-                    )
+                    console.print(f"  [dim]scheduled:{job_id} → {status}[/dim]")
                 else:
                     # OpenClaw systemEvent: inject into main session (visible)
                     agentic.run(prompt)
