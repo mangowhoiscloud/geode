@@ -4,12 +4,12 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.31.0
+- **Version**: 0.32.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
 - **Modules**: 187
-- **Tests**: 3285+
+- **Tests**: 3299+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -242,6 +242,15 @@ Decision Tree on D-E-F axes:
 | **PR** | HEREDOC 없이 PR body 금지 | 형식 일관성 |
 | | Why 근거 없이 PR 금지 | 의사결정 기록 |
 | | CI 가드레일 미통과 PR 머지 금지 | 래칫 (P4) |
+
+### 리팩토링 기망 방지
+
+| 항목 | 규칙 |
+|------|------|
+| **부분 구현 위장** | 플랜 명시 항목을 일부만 수행하고 완료 처리 금지 |
+| **stub 위장** | 빈 모듈(`pass` only)로 추출 완료 위장 금지 |
+| **원본 잔류** | 원본에 코드 남긴 채 "추출 완료" 표기 금지 (re-export만 허용) |
+| **제로 컨텍스트 검증** | 독립 에이전트가 플랜 문서 + diff 대조 → 모든 항목 구현 확인 → 누락 시 FAIL |
 
 ### CAN — 허용된 자유도
 

@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+## [0.32.0] — 2026-03-28
+
 ### Added
 - **Autonomous safety 3조건** — (1) 비용 상한 자동 정지: 세션 비용 budget 초과 시 루프 중단 (Karpathy P3). (2) 런타임 래칫: 동일 에러 3회 수렴 감지 시 모델 에스컬레이션 후 재시도 (Karpathy P4). (3) 다양성 강제: 동일 도구 5회 연속 호출 시 다른 접근 유도 힌트 주입.
 - **Plan-first 프롬프트 가이드** — 복잡한 요청(3+ 스텝, 고비용)에 대해 LLM이 자발적으로 `create_plan` 호출 후 사용자 승인 대기. Claude Code 패턴.
