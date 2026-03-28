@@ -1021,6 +1021,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                         skill_registry=skill_registry,
                         verbose=False,
                         quiet=True,
+                        hitl_level=0,  # unattended — skip all HITL/MCP approval
                     )
                     _captured_job_id = job_id
                     _captured_prompt = prompt

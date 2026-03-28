@@ -28,17 +28,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.32.1] — 2026-03-29
 
+### Added
+- **스케줄 잡 비동기 실행** — REPL drain loop의 isolated 스케줄 잡을 `IsolatedRunner.run_async()`로 전환. 메인 REPL 스레드 블로킹 해소. OpenClaw agentTurn 패턴: 데몬 스레드에서 fresh AgenticLoop 실행, 완료 시 dim 상태줄 콜백 (#519).
+
 ### Fixed
 - **create_plan goal 경로 UnboundLocalError** — `goal` 파라미터로 범용 계획 생성 시 `template` 변수 미할당 수정 (#515).
 - **Scheduler WHEN/WHAT 분리** — NL parser가 `action=original_text`(스케줄 표현식)로 설정 → `action=""`으로 수정. `schedule_job` 도구에 `action` 파라미터 추가. "every monday at 9:00" → AT(1회성) 파싱 → CRON(weekly) 수정. tool handler 이중 파싱 버그 수정 (#516).
 - **delegate_task 이중 컨텍스트 주입 제거** — tool_result(전체) + announce(500자 요약) 이중 주입 → `delegate(announce=False)` 파라미터로 동기 호출 시 announce 비활성화. 비동기 경로는 유지 (#517).
 - **schedule_job handler quiet mode** — `console.print` 제거로 quiet/isolated 세션에서 UI 오염 방지 (#518).
+- **isolated 스케줄 잡 HITL 블로킹** — `hitl_level=0` 추가로 무인 실행 시 MCP/WRITE/EXPENSIVE 도구 승인 프롬프트 억제.
+- **MODEL_SWITCHED HookEvent 중복 정의** — main-develop 머지 잔류 제거.
 
 ---
 ## [0.32.0] — 2026-03-28
 
 ### Added
-- **스케줄 잡 비동기 실행** — REPL drain loop의 isolated 스케줄 잡을 `IsolatedRunner.run_async()`로 전환. 메인 REPL 스레드 블로킹 해소. OpenClaw agentTurn 패턴: 데몬 스레드에서 fresh AgenticLoop 실행, 완료 시 dim 상태줄 콜백.
 - **MODEL_SWITCHED hook** --- `HookEvent.MODEL_SWITCHED` 추가 (45 -> 46). `AgenticLoop.update_model()` 발화, `bootstrap.py`에 `model_switch_logger` 핸들러 등록.
 - **Filesystem hook plugin auto-discovery** --- `bootstrap.py`에서 `.geode/hooks/` + `core/hooks/plugins/` 자동 스캔 및 등록. `HookPluginLoader`를 부트스트랩에 통합.
 - **README docs-sync** --- 도구(52), Hook(46) 수치를 실측값으로 갱신.

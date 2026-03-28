@@ -46,12 +46,17 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| scheduler-async-drain | 스케줄 잡 비동기 실행 — IsolatedRunner.run_async() 전환 | @mangowhoiscloud | feature/scheduler-async-drain | 2026-03-29 | OpenClaw agentTurn 패턴 |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-03-29 — 세션 45)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| scheduler-async-drain | 스케줄 잡 비동기 실행 — IsolatedRunner.run_async() 전환 | #519 #520 | @mangowhoiscloud | 2026-03-29 |
 
 ### Done (2026-03-27 — 세션 44)
 
