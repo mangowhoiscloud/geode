@@ -326,7 +326,6 @@ class NLScheduleParser:
 
         job_id = self._generate_job_id(job_name, agent_id)
         now_ms = time.time() * 1000
-        action = original
 
         job = ScheduledJob(
             job_id=job_id,
@@ -334,7 +333,7 @@ class NLScheduleParser:
             schedule=schedule,
             enabled=True,
             delete_after_run=(kind == ScheduleKind.AT),
-            action=action,
+            action="",  # caller sets action (schedule expression != task to execute)
             active_hours=active_hours,
             created_at_ms=now_ms,
             metadata={"source": "nl_parser", "original_text": original},
@@ -418,7 +417,11 @@ class NLScheduleParser:
     def _auto_name(self, text: str) -> str:
         """Generate a name from the first significant words of *text*."""
         words = re.findall(r"[a-zA-Z]+", text)
-        significant = [w.lower() for w in words if w.lower() not in _STOP_WORDS]
+        # Exclude stop words AND day names (they describe schedule, not task)
+        day_names = set(_DAY_MAP.keys())
+        significant = [
+            w.lower() for w in words if w.lower() not in _STOP_WORDS and w.lower() not in day_names
+        ]
         if significant:
             return "_".join(significant[:3])
         return "scheduled_task"
@@ -434,6 +437,12 @@ class NLScheduleParser:
         for kw in cron_keywords:
             if kw in text:
                 return ScheduleKind.CRON
+
+        # "every <day-of-week>" → CRON (weekly)
+        if re.search(r"\bevery\b", text, re.IGNORECASE):
+            for day_name in _DAY_MAP:
+                if day_name in text:
+                    return ScheduleKind.CRON
 
         # Check for one-shot patterns
         if re.search(r"\b(once|in\s+\d+)\b", text, re.IGNORECASE):
@@ -491,8 +500,10 @@ class NLScheduleParser:
             hour, minute = self._extract_time(text)
             return f"{minute} {hour} * * *"
 
-        # "weekly on <day>" or just "weekly"
-        if "weekly" in text:
+        # "weekly on <day>", "every monday", or just "weekly"
+        if "weekly" in text or (
+            re.search(r"\bevery\b", text, re.IGNORECASE) and any(d in text for d in _DAY_MAP)
+        ):
             day_num = self._extract_weekday(text)
             hour, minute = self._extract_time(text)
             return f"{minute} {hour} * * {day_num}"

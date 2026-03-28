@@ -191,6 +191,29 @@ class TestCronInference:
         assert result.job is not None
         assert result.job.schedule.cron_expr == "0 0 * * 5"
 
+    def test_every_monday_at_9(self, parser: NLScheduleParser) -> None:
+        """'every monday at 9:00' should be CRON weekly, not AT one-shot."""
+        result = parser.parse("every monday at 9:00")
+        assert result.success is True
+        assert result.inferred_kind == ScheduleKind.CRON
+        assert result.job is not None
+        assert result.job.schedule.cron_expr == "0 9 * * 1"
+        assert result.job.delete_after_run is False
+
+    def test_every_friday_at_6pm(self, parser: NLScheduleParser) -> None:
+        result = parser.parse("every friday at 6pm")
+        assert result.success is True
+        assert result.inferred_kind == ScheduleKind.CRON
+        assert result.job is not None
+        assert result.job.schedule.cron_expr == "0 18 * * 5"
+
+    def test_every_sunday(self, parser: NLScheduleParser) -> None:
+        result = parser.parse("every sunday at 10:00")
+        assert result.success is True
+        assert result.inferred_kind == ScheduleKind.CRON
+        assert result.job is not None
+        assert result.job.schedule.cron_expr == "0 10 * * 0"
+
 
 # ===========================================================================
 # AT parsing (one-shot)
@@ -486,31 +509,32 @@ class TestEdgeCases:
 # ===========================================================================
 
 
-class TestActionStoresOriginal:
-    """job.action stores the full original text — no regex extraction."""
+class TestActionEmpty:
+    """NL parser sets action="" — caller (tool handler) provides the action."""
 
     @pytest.fixture
     def parser(self) -> NLScheduleParser:
         return NLScheduleParser()
 
-    def test_action_is_original_text(self, parser: NLScheduleParser) -> None:
+    def test_action_is_empty_by_default(self, parser: NLScheduleParser) -> None:
         text = "remind me to check emails every 5 minutes"
         result = parser.parse(text)
         assert result.success
         assert result.job is not None
-        assert result.job.action == text
+        assert result.job.action == ""
 
-    def test_action_preserves_schedule_keywords(self, parser: NLScheduleParser) -> None:
+    def test_action_empty_for_schedule_only(self, parser: NLScheduleParser) -> None:
         text = "every 5 minutes"
         result = parser.parse(text)
         assert result.success
         assert result.job is not None
-        assert result.job.action == text
+        assert result.job.action == ""
 
-    def test_action_preserves_daily_context(self, parser: NLScheduleParser) -> None:
-        text = "daily at 9:00 generate daily standup summary"
+    def test_caller_can_set_action(self, parser: NLScheduleParser) -> None:
+        text = "daily at 9:00"
         result = parser.parse(text)
         assert result.success
         assert result.job is not None
-        # "daily" in "daily standup summary" is preserved — no regex noise
-        assert "daily standup summary" in result.job.action
+        assert result.job.action == ""
+        result.job.action = "generate daily standup summary"
+        assert result.job.action == "generate daily standup summary"

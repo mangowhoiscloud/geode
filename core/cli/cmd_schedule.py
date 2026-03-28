@@ -27,16 +27,17 @@ def _format_schedule_desc(job: _Any) -> str:
 
 def _print_job_status(job: _Any) -> None:
     """Print detailed status for a dynamic ScheduledJob."""
-    console.print(f"  Name: {job.name}")
-    console.print(f"  Schedule: {_format_schedule_desc(job)}")
-    state = "enabled" if job.enabled else "disabled"
-    console.print(f"  State: {state}")
+    state = "[success]ON[/success]" if job.enabled else "[muted]OFF[/muted]"
+    console.print(f"  {state} {job.name} ({_format_schedule_desc(job)})")
+    if job.action:
+        action_preview = job.action[:60] + ("..." if len(job.action) > 60 else "")
+        console.print(f"  Action: {action_preview}")
+    elif not job.action:
+        console.print("  [warning]Action: (empty — job fires but does nothing)[/warning]")
     if job.last_status:
-        console.print(f"  Last status: {job.last_status}")
-    if job.last_duration_ms is not None:
-        console.print(f"  Last duration: {job.last_duration_ms:.1f}ms")
+        console.print(f"  Last: {job.last_status} ({job.last_duration_ms:.0f}ms)")
     if job.active_hours:
-        console.print(f"  Active hours: {job.active_hours.start}-{job.active_hours.end}")
+        console.print(f"  Hours: {job.active_hours.start}-{job.active_hours.end}")
 
 
 def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
@@ -76,9 +77,14 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
                 for job in jobs:
                     state = "[success]ON[/success]" if job.enabled else "[muted]OFF[/muted]"
                     desc = _format_schedule_desc(job)
+                    action_hint = ""
+                    if job.action:
+                        action_hint = f" → {job.action[:40]}"
+                    else:
+                        action_hint = " [warning](no action)[/warning]"
                     console.print(
                         f"  {state}  [label]{job.job_id:<30}[/label] "
-                        f"[muted]{desc:<16}[/muted] {job.name}"
+                        f"[muted]{desc:<16}[/muted] {job.name}{action_hint}"
                     )
 
         console.print()
@@ -115,6 +121,9 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
         scheduler_service.save()  # persist immediately — prevent crash data loss
         console.print(f"  [success]Created: {result.job.job_id}[/success]")
         console.print(f"  Schedule: {_format_schedule_desc(result.job)}")
+        if not result.job.action:
+            console.print("  [warning]Action not set — job will fire but do nothing.[/warning]")
+            console.print("  [muted]Tip: use schedule_job tool with action param[/muted]")
         console.print()
         return
 
