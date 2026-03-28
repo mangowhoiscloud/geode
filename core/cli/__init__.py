@@ -1017,7 +1017,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                     _iso_conv = ConversationContext()
                     _, _, _iso_loop = _build_agentic_stack(
                         _iso_conv,
-                        mcp_manager=mcp_mgr,
+                        mcp_manager=None,  # no MCP — prevent subprocess leak
                         skill_registry=skill_registry,
                         verbose=False,
                         quiet=True,

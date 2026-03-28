@@ -285,7 +285,7 @@ CANNOT에 없는 것은 자유롭게 할 수 있다. 특히:
 ### 워크플로우 단계
 
 ```
-0. Board + Worktree → 1. GAP Audit → 2. Plan + Socratic Gate → 3. Implement+Test → 4. E2E Verify → 5. Docs-Sync → 6. PR → 7. Board
+0. Board + Worktree → 1. GAP Audit → 2. Plan + Socratic Gate → 3. Implement+Test → 4. E2E Verify → 5. Docs-Sync → 6. PR → 7. Rebuild → 8. Board
 ```
 
 #### 0. Board + Worktree Alloc
@@ -385,7 +385,24 @@ uv run geode analyze "Cowboy Bebop" --dry-run  # A (68.4) 변동 없음 확인
 | 파이프라인 노드 | `graph.py` + E2E |
 | LLM 어댑터 | `client.py` + E2E |
 
-#### 7. Progress Board
+#### 7. Rebuild & Restart
+
+main 머지 후 CLI와 serve를 재빌드하여 런타임을 최신 코드로 갱신한다.
+
+```bash
+# 1) geode serve 중지
+kill $(ps aux | grep "geode serve" | grep -v grep | awk '{print $2}')
+
+# 2) CLI editable 재설치 + 의존성 동기화
+uv tool install -e . --force
+uv sync
+
+# 3) 버전 확인 + serve 재시작
+geode version          # 버전 일치 확인
+geode serve &          # 백그라운드 재시작
+```
+
+#### 8. Progress Board
 
 main에서만 `docs/progress.md` 갱신. Backlog → In Progress → Done.
 
