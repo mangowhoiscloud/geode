@@ -98,6 +98,10 @@ MAX_TOOL_RESULT_TOKENS = 0  # backward-compat alias; canonical: settings.max_too
 TOOL_LAZY_LOAD_THRESHOLD = 50  # Above this count, skip MCP lazy loading
 
 
+class _ContextExhaustedError(Exception):
+    """Raised when context remains critical after pruning — unrecoverable."""
+
+
 @dataclass
 class AgenticResult:
     """Result of an agentic loop execution."""
@@ -106,7 +110,8 @@ class AgenticResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     rounds: int = 0
     error: str | None = None
-    # "natural" | "forced_text" | "max_rounds" | "time_budget_expired" | "llm_error"
+    # "natural" | "forced_text" | "max_rounds" | "time_budget_expired"
+    # | "llm_error" | "context_exhausted"
     termination_reason: str = "unknown"
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
 
@@ -478,6 +483,31 @@ class AgenticLoop:
                     rounds=round_idx + 1,
                     termination_reason="user_cancelled",
                 )
+            except _ContextExhaustedError as exc:
+                _spinner.stop()
+                log.warning("Context exhausted: %s", exc)
+                self._notify_context_event(
+                    "exhausted",
+                    original_count=len(messages),
+                    new_count=len(messages),
+                )
+                self._sync_messages_to_context(messages)
+                result = AgenticResult(
+                    text=(
+                        "Context window exhausted after pruning. "
+                        "Your conversation is preserved — start a new request "
+                        "or use /compact to manually reduce context."
+                    ),
+                    tool_calls=self._tool_processor.tool_log,
+                    rounds=round_idx + 1,
+                    error="context_exhausted",
+                    termination_reason="context_exhausted",
+                )
+                return self._finalize_and_return(
+                    result,
+                    user_input,
+                    round_idx + 1,
+                )
             finally:
                 _spinner.stop()
 
@@ -685,6 +715,13 @@ class AgenticLoop:
 
                 strategy = self._resolve_overflow_strategy(metrics, settings)
                 self._apply_overflow_strategy(strategy, messages, settings)
+
+                # Re-check: if still critical after pruning, context is exhausted
+                post = check_context(messages, self.model, system_prompt=system)
+                if post.is_critical:
+                    raise _ContextExhaustedError(
+                        f"Context exhausted: {post.usage_pct:.0f}% after pruning"
+                    )
 
             elif metrics.is_warning:
                 # For non-Anthropic providers, 80% triggers client compaction
