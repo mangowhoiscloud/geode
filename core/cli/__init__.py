@@ -908,7 +908,10 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         n_connected = mcp_mgr.startup(on_progress=_on_mcp_progress)
 
     n_skills = len(skill_registry._skills) if hasattr(skill_registry, "_skills") else 0
-    spinner.stop(f"\x1b[1;32mok\x1b[0m Bootstrap (MCP {n_connected}/{n_total}, Skills {n_skills})")
+    parts = [f"MCP {n_connected}/{n_total}"]
+    if n_skills > 0:
+        parts.append(f"Skills {n_skills}")
+    spinner.stop(f"\x1b[1;32mok\x1b[0m Bootstrap ({', '.join(parts)})")
 
     # Key gate (REPL-only: interactive prompt if API key missing)
     readiness = boot.readiness
