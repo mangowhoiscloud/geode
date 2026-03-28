@@ -345,17 +345,54 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         from core.config import settings
         from core.orchestration.plan_mode import PlanExecutionMode, PlanMode
 
+        goal = kwargs.get("goal", "")
         ip_name = kwargs.get("ip_name", "")
-        if not ip_name:
-            return _clarify("create_plan", ["ip_name"], "어떤 IP의 분석 계획을 세울까요?")
-        template = kwargs.get("template", "full_pipeline")
-        planner = PlanMode()
-        plan = planner.create_plan(ip_name, template=template)
-        summary = planner.present_plan(plan)
+        custom_steps = kwargs.get("steps", [])
+        plan_summary: dict[str, Any] = {}
+
+        # IP 분석: 기존 파이프라인 템플릿 사용
+        if ip_name:
+            template = kwargs.get("template", "full_pipeline")
+            planner = PlanMode()
+            plan = planner.create_plan(ip_name, template=template)
+            plan_summary = planner.present_plan(plan)
+            plan_title = ip_name
+        elif goal:
+            # 범용 계획: LLM이 제공한 steps 또는 goal 기반 자동 생성
+            import uuid
+
+            from core.orchestration.plan_mode import AnalysisPlan, PlanStep
+
+            plan_id = f"plan_{uuid.uuid4().hex[:8]}"
+            if custom_steps:
+                steps = [
+                    PlanStep(
+                        step_id=f"step_{i}",
+                        description=desc,
+                        node_name="agentic",
+                        estimated_time_s=10.0,
+                    )
+                    for i, desc in enumerate(custom_steps, 1)
+                ]
+            else:
+                steps = [
+                    PlanStep(
+                        step_id="step_1",
+                        description=goal,
+                        node_name="agentic",
+                        estimated_time_s=30.0,
+                    )
+                ]
+            plan = AnalysisPlan(plan_id=plan_id, ip_name=goal, steps=steps)
+            planner = PlanMode()
+            plan_summary = {"goal": goal, "steps": len(steps)}
+            plan_title = goal
+        else:
+            return _clarify("create_plan", ["goal"], "어떤 작업의 계획을 세울까요?")
 
         # Display plan steps with HITL approval prompt
         console.print()
-        console.print(f"  [header]● Plan: {ip_name}[/header]")
+        console.print(f"  [header]● Plan: {plan_title}[/header]")
         console.print()
         for i, step in enumerate(plan.steps, 1):
             console.print(f"    [bold]{i}.[/bold] {step.description}")
@@ -402,7 +439,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
                 "template": template,
                 "step_count": plan.step_count,
                 "steps": [s.description for s in plan.steps],
-                "summary": summary,
+                "summary": plan_summary,
                 "execution_mode": PlanExecutionMode.AUTO.value,
                 "auto_executed": True,
                 "execution_result": exec_result,
@@ -422,7 +459,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             "template": template,
             "step_count": plan.step_count,
             "steps": [s.description for s in plan.steps],
-            "summary": summary,
+            "summary": plan_summary,
             "execution_mode": PlanExecutionMode.MANUAL.value,
             "hint": ("Use approve_plan, reject_plan, or modify_plan to proceed."),
         }

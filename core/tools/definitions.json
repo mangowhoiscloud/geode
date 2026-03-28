@@ -442,15 +442,24 @@
   },
   {
     "name": "create_plan",
-    "description": "분석 실행 계획을 생성합니다. 사용자가 계획을 세우거나 사전 검토를 요청할 때 사용하세요.",
+    "description": "작업 실행 계획을 생성합니다. 복잡한 요청(3+ 단계, 고비용 작업)에 대해 사전 검토를 위한 계획을 세웁니다. 일반 요청은 goal에 목표를 적고, IP 분석은 ip_name을 사용하세요.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
       "type": "object",
       "properties": {
+        "goal": {
+          "type": "string",
+          "description": "실행 목표 (e.g. 'AI 트렌드 리서치 후 리포트 작성', 'Berserk 분석')"
+        },
+        "steps": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "계획 단계 목록 (e.g. ['웹 검색', '데이터 수집', '분석', '리포트 작성']). 생략 시 자동 생성."
+        },
         "ip_name": {
           "type": "string",
-          "description": "IP name to plan analysis for (e.g. 'Berserk')"
+          "description": "IP 분석용 이름 (e.g. 'Berserk'). 설정 시 파이프라인 템플릿 사용."
         },
         "template": {
           "type": "string",
@@ -458,11 +467,11 @@
             "full_pipeline",
             "prospect"
           ],
-          "description": "Plan template: full_pipeline (전체 9단계) or prospect (간소화 6단계). Default: full_pipeline"
+          "description": "IP 분석 템플릿. ip_name 설정 시에만 유효."
         }
       },
       "required": [
-        "ip_name"
+        "goal"
       ]
     }
   },

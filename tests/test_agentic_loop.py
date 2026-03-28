@@ -948,8 +948,10 @@ class TestPlanDelegateTools:
     def test_create_plan_schema(self) -> None:
         tool = next(t for t in AGENTIC_TOOLS if t["name"] == "create_plan")
         schema = tool["input_schema"]
+        assert "goal" in schema["properties"]
+        assert "goal" in schema["required"]
+        # ip_name is optional (for IP pipeline template)
         assert "ip_name" in schema["properties"]
-        assert "ip_name" in schema["required"]
 
     def test_approve_plan_schema(self) -> None:
         tool = next(t for t in AGENTIC_TOOLS if t["name"] == "approve_plan")
