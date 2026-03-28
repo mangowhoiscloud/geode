@@ -326,7 +326,11 @@ class ToolExecutor:
                 task_elapsed,
             )
 
-        results = self._sub_agent_manager.delegate(sub_tasks, on_progress=_on_progress)
+        # announce=False: delegate_task returns full results via tool_result,
+        # so skip announce queue to avoid double context injection.
+        results = self._sub_agent_manager.delegate(
+            sub_tasks, on_progress=_on_progress, announce=False
+        )
 
         # Final summary line
         from core.cli.ui.agentic_ui import render_subagent_complete
