@@ -825,7 +825,7 @@ def _build_system_handlers(
 def _build_execution_handlers() -> dict[str, Any]:
     """Build execution-related tool handlers."""
     from core.cli import _scheduler_service_ctx
-    from core.cli.commands import cmd_generate, cmd_schedule, cmd_trigger
+    from core.cli.commands import cmd_generate, cmd_trigger
 
     def handle_generate_data(**kwargs: Any) -> dict[str, Any]:
         count = kwargs.get("count", 5)
@@ -890,8 +890,44 @@ def _build_execution_handlers() -> dict[str, Any]:
                     "error": str(exc),
                 }
 
-        sched_args = f"{sub_action} {target_id}".strip() if sub_action else ""
-        cmd_schedule(sched_args, scheduler_service=svc)
+        # Data-only: no cmd_schedule() call — avoids console.print in quiet/isolated sessions.
+        # enable/disable/delete/run handled directly via SchedulerService.
+        if sub_action in ("enable", "disable") and target_id and svc:
+            new_state = sub_action == "enable"
+            updated = svc.update_job(target_id, enabled=new_state)
+            if updated:
+                svc.save()
+            return {
+                "status": "ok" if updated else "error",
+                "action": "schedule",
+                "sub_action": sub_action,
+                "target_id": target_id,
+                "error": "" if updated else f"Job not found: {target_id}",
+            }
+
+        if sub_action == "delete" and target_id and svc:
+            removed = svc.remove_job(target_id)
+            if removed:
+                svc.save()
+            return {
+                "status": "ok" if removed else "error",
+                "action": "schedule",
+                "sub_action": "delete",
+                "target_id": target_id,
+                "error": "" if removed else f"Job not found: {target_id}",
+            }
+
+        if sub_action == "run" and target_id and svc:
+            result = svc.run_now(target_id)
+            return {
+                "status": result.get("status", "ok"),
+                "action": "schedule",
+                "sub_action": "run",
+                "target_id": target_id,
+                "error": result.get("error", ""),
+            }
+
+        # list / status — return structured data
         try:
             from core.automation.predefined import PREDEFINED_AUTOMATIONS
 
@@ -909,7 +945,12 @@ def _build_execution_handlers() -> dict[str, Any]:
         if svc is not None:
             try:
                 dynamic = [
-                    {"id": j.job_id, "name": j.name, "enabled": j.enabled}
+                    {
+                        "id": j.job_id,
+                        "name": j.name,
+                        "enabled": j.enabled,
+                        "action": j.action[:60] if j.action else "",
+                    }
                     for j in svc.list_jobs(include_disabled=True)
                     if not j.job_id.startswith("predefined:")
                 ]
