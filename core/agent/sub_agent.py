@@ -59,6 +59,16 @@ def drain_announced_results(parent_session_key: str) -> list[SubAgentResult]:
     return results
 
 
+def cleanup_announce_queue(parent_session_key: str) -> None:
+    """Remove orphan announce queue entry for a terminated session.
+
+    Called on session end to prevent unbounded accumulation when parent
+    sessions crash or are abandoned without draining.
+    """
+    with _announce_lock:
+        _announce_queue.pop(parent_session_key, None)
+
+
 def get_subagent_context() -> tuple[bool, str]:
     """Return (is_subagent, child_session_key) from thread-local."""
     is_sub = getattr(_subagent_context, "is_subagent", False)
@@ -275,6 +285,10 @@ class SubAgentManager:
             )
             with self._records_lock:
                 self._run_records[task.task_id] = record
+                # Evict oldest records to prevent unbounded growth
+                if len(self._run_records) > 200:
+                    oldest_key = next(iter(self._run_records))
+                    self._run_records.pop(oldest_key, None)
 
             config = IsolationConfig(
                 session_id=task.task_id,
