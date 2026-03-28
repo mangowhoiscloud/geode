@@ -19,6 +19,7 @@
 | ~~task-tools~~ | ~~Task Tool 노출 — task_create/update/get/list/stop + definitions.json + handlers~~ | ~~P1~~ | ~~#466~~ | **Done** |
 | ~~kent-beck-p5~~ | ~~Kent Beck Phase 5 — 핸들러 레지스트리 + Executor 분해~~ | ~~P2~~ | ~~#467~~ | **Done** |
 | ~~action-summary~~ | ~~Action Summary — 결정론적 Tier1~~ | ~~P1~~ | ~~#507~~ | **Done** |
+| autonomous-safety | 야간 무인 3조건 — 비용 자동 정지 + 런타임 래칫 + 다양성 강제 | P0 | — | 무인 배치 전제조건 |
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~#470~~ | **Done** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
@@ -45,6 +46,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
+| autonomous-safety | 야간 무인 배치 3조건 — 비용 상한 자동 정지 + 런타임 래칫 + 다양성 강제 | @mangowhoiscloud | feature/autonomous-safety | 2026-03-28 | OpenClaw 리서치 기반 |
 
 ### In Review
 
