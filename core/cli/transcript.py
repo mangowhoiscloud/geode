@@ -8,7 +8,8 @@ Captures: user messages, assistant responses, tool calls/results,
 vault saves, costs, errors — everything needed to reconstruct
 "what exactly happened in this session."
 
-Storage: .geode/journal/transcripts/{session_id}.jsonl
+Storage: ~/.geode/journal/transcripts/{project-slug}/{session_id}.jsonl
+(user home, not project dir — matches Claude Code / Codex CLI pattern)
 """
 
 from __future__ import annotations
@@ -22,7 +23,21 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-DEFAULT_TRANSCRIPT_DIR = Path(".geode") / "journal" / "transcripts"
+
+def _get_default_transcript_dir() -> Path:
+    """Return ~/.geode/journal/transcripts/{project-slug}/.
+
+    Project slug is derived from CWD (same pattern as Claude Code).
+    Falls back to 'default' if CWD cannot be resolved.
+    """
+    try:
+        slug = str(Path.cwd()).replace("/", "-")
+    except OSError:
+        slug = "default"
+    return Path.home() / ".geode" / "journal" / "transcripts" / slug
+
+
+DEFAULT_TRANSCRIPT_DIR = _get_default_transcript_dir()
 MAX_TEXT_CHARS = 500
 MAX_INPUT_CHARS = 300
 CLEANUP_AGE_DAYS = 30
