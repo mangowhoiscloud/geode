@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
   <img src="https://img.shields.io/badge/Opus%204.6-1M%20context-1e293b?style=flat-square" alt="Opus 4.6">
-  <img src="https://img.shields.io/badge/47%20tools-MCP%20native-1e293b?style=flat-square" alt="47 Tools">
+  <img src="https://img.shields.io/badge/52%20tools-MCP%20native-1e293b?style=flat-square" alt="52 Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -76,7 +76,7 @@ cd geode && uv sync
 | 기능 | 설명 |
 |------|------|
 | **`while(tool_use)` Loop** | 모든 자율 행동의 핵심 프리미티브. 서브에이전트, 계획 실행, 배치 분석 전부 AgenticLoop 인스턴스 |
-| **47 Tools + MCP** | 네이티브 47개 도구 + MCP 카탈로그 44종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
+| **52 Tools + MCP** | 네이티브 52개 도구 + MCP 카탈로그 44종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
 | **Sub-Agent** | 부모 역량 전체 상속, 최대 5 병렬, Token Guard, DAG 의존성 |
 | **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain |
 | **4-Tier Memory** | SOUL → User Profile → Organization → Project → Session |
@@ -235,7 +235,7 @@ main-only 수정. 3-Checkpoint 필수. TaskCreate ↔ 칸반 task_id 1:1 매핑.
 
 주요 구성:
 - **Agentic Loop**: Claude Opus 4.6 기반 `while(tool_use)` 루프. max 50 rounds, 1M context.
-- **Tool Hierarchy**: Built-in(47) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
+- **Tool Hierarchy**: Built-in(52) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
 - **Sub-Agent**: 부모 역량 전체 상속, MAX_CONCURRENT=5, Token Guard.
 - **Memory**: SOUL → User Profile → Organization → Project → Session. ContextAssembler 280자 압축.
 - **Domain Plugin**: `DomainPort` Protocol로 파이프라인 교체. Game IP 기본 탑재 (LangGraph 9-node).

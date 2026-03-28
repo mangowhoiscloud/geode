@@ -38,6 +38,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.32.0] — 2026-03-28
 
 ### Added
+- **스케줄 잡 비동기 실행** — REPL drain loop의 isolated 스케줄 잡을 `IsolatedRunner.run_async()`로 전환. 메인 REPL 스레드 블로킹 해소. OpenClaw agentTurn 패턴: 데몬 스레드에서 fresh AgenticLoop 실행, 완료 시 dim 상태줄 콜백.
+- **MODEL_SWITCHED hook** --- `HookEvent.MODEL_SWITCHED` 추가 (45 -> 46). `AgenticLoop.update_model()` 발화, `bootstrap.py`에 `model_switch_logger` 핸들러 등록.
+- **Filesystem hook plugin auto-discovery** --- `bootstrap.py`에서 `.geode/hooks/` + `core/hooks/plugins/` 자동 스캔 및 등록. `HookPluginLoader`를 부트스트랩에 통합.
+- **README docs-sync** --- 도구(52), Hook(46) 수치를 실측값으로 갱신.
 - **Autonomous safety 3조건** — (1) 비용 상한 자동 정지: 세션 비용 budget 초과 시 루프 중단 (Karpathy P3). (2) 런타임 래칫: 동일 에러 3회 수렴 감지 시 모델 에스컬레이션 후 재시도 (Karpathy P4). (3) 다양성 강제: 동일 도구 5회 연속 호출 시 다른 접근 유도 힌트 주입.
 - **Plan-first 프롬프트 가이드** — 복잡한 요청(3+ 스텝, 고비용)에 대해 LLM이 자발적으로 `create_plan` 호출 후 사용자 승인 대기. Claude Code 패턴.
 - **Plan HITL UI 보강** — 계획 표시 시 승인/수정/거부 안내 표시. plan_id 노출.

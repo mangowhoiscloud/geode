@@ -101,6 +101,9 @@ class HookEvent(Enum):
     TOOL_APPROVAL_GRANTED = "tool_approval_granted"
     TOOL_APPROVAL_DENIED = "tool_approval_denied"
 
+    # Model switching (agentic loop model change observability)
+    MODEL_SWITCHED = "model_switched"
+
 
 @dataclass
 class HookResult:

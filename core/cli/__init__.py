@@ -933,6 +933,14 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
     except Exception:
         log.debug("SchedulerService initialization skipped", exc_info=True)
 
+    # Isolated runner for async scheduled job execution (OpenClaw agentTurn)
+    from core.orchestration.isolated_execution import (
+        IsolatedRunner,
+        IsolationConfig,
+    )
+
+    _sched_runner = IsolatedRunner()
+
     console.print()  # blank line before prompt
 
     # Build tool handlers, executor, and AgenticLoop (shared factory)
@@ -983,6 +991,18 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
             )
             console.print()
 
+    # Completion callback for async scheduled jobs (prints dim status on finish)
+    def _on_sched_complete(result: Any, *, job_id: str) -> None:
+        from core.orchestration.isolated_execution import IsolationResult
+
+        if isinstance(result, IsolationResult):
+            status = "ok" if result.success else "err"
+            summary = result.summary or result.output[:120] or "(no output)"
+        else:
+            status = "ok"
+            summary = str(result)[:120] if result else "(no output)"
+        console.print(f"  [dim]scheduled:{job_id} → {status} — {summary}[/dim]")
+
     while True:
         # Drain scheduled actions before prompting (scheduler fires in background thread)
         try:
@@ -992,20 +1012,42 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                     continue
                 prompt = f"[scheduled-job:{job_id}] {fired_action}"
                 if isolated:
-                    # OpenClaw agentTurn: silent background execution
-                    iso_conv = ConversationContext()
-                    _, _, iso_loop = _build_agentic_stack(
-                        iso_conv,
+                    # OpenClaw agentTurn: async execution in background thread
+                    # Non-blocking — returns immediately, result delivered via callback
+                    _iso_conv = ConversationContext()
+                    _, _, _iso_loop = _build_agentic_stack(
+                        _iso_conv,
                         mcp_manager=mcp_mgr,
                         skill_registry=skill_registry,
                         verbose=False,
                         quiet=True,
                     )
-                    result = iso_loop.run(prompt)
-                    status = "ok" if not result.error else "err"
-                    console.print(f"  [dim]scheduled:{job_id} → {status}[/dim]")
+                    _captured_job_id = job_id
+                    _captured_prompt = prompt
+                    _captured_loop = _iso_loop
+
+                    def _run_isolated(
+                        *,
+                        _loop: Any = _captured_loop,
+                        _p: str = _captured_prompt,
+                        _jid: str = _captured_job_id,
+                    ) -> str:
+                        r = _loop.run(_p)
+                        _on_sched_complete(r, job_id=_jid)
+                        return r.text if r and r.text else ""
+
+                    _sched_runner.run_async(
+                        _run_isolated,
+                        config=IsolationConfig(
+                            prefix=f"scheduled:{job_id}",
+                            post_to_main=False,
+                            timeout_s=300.0,
+                        ),
+                    )
+                    console.print(f"  [dim]scheduled:{job_id} → dispatched (async)[/dim]")
                 else:
-                    # OpenClaw systemEvent: inject into main session (visible)
+                    # OpenClaw systemEvent: inject into main session (blocking by design)
+                    console.print(f"\n  [muted]Scheduler: running job {job_id}[/muted]")
                     agentic.run(prompt)
         except _queue_mod.Empty:
             pass

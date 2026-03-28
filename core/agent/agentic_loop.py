@@ -335,13 +335,16 @@ class AgenticLoop:
         update_session_model(model)
         log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
 
-        # Fire MODEL_SWITCHED hook when the model actually changed
-        if old_model != model and self._hooks:
+        # Fire MODEL_SWITCHED hook for observability
+        if self._hooks and old_model != model:
+            from core.hooks import HookEvent
+
             self._hooks.trigger(
                 HookEvent.MODEL_SWITCHED,
                 {
                     "from_model": old_model,
                     "to_model": model,
+                    "reason": "user_switch",
                 },
             )
 
