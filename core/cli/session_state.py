@@ -30,7 +30,13 @@ _user_task_graph_ctx: ContextVar[Any] = ContextVar("user_task_graph", default=No
 # Multi-IP LRU analysis result cache
 # ---------------------------------------------------------------------------
 
-_RESULT_CACHE_DIR = Path(".geode/result_cache")
+def _get_result_cache_dir() -> Path:
+    from core.paths import get_project_data_dir
+
+    return get_project_data_dir() / "result_cache"
+
+
+_RESULT_CACHE_DIR = _get_result_cache_dir()
 _RESULT_CACHE_MAX = 8
 
 

@@ -20,7 +20,13 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-_RESULT_CACHE_DIR = Path(".geode/result_cache")
+def _get_result_cache_dir() -> Path:
+    from core.paths import get_project_data_dir
+
+    return get_project_data_dir() / "result_cache"
+
+
+_RESULT_CACHE_DIR = _get_result_cache_dir()
 _RESULT_CACHE_MAX = 8
 _DEFAULT_TTL_SECONDS = 86400  # 24 hours
 

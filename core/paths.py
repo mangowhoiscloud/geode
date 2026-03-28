@@ -117,6 +117,7 @@ def get_project_snapshots_dir(workspace_path: str | Path | None = None) -> Path:
 _OLD_JOURNAL_DIR = PROJECT_GEODE_DIR / "journal"
 _OLD_SESSION_DIR = PROJECT_GEODE_DIR / "session"
 _OLD_SNAPSHOT_DIR = PROJECT_GEODE_DIR / "snapshots"
+_OLD_RESULT_CACHE_DIR = PROJECT_GEODE_DIR / "result_cache"
 _OLD_VAULT_DIR = PROJECT_GEODE_DIR / "vault"
 _OLD_MODELS_DIR = PROJECT_GEODE_DIR / "models"
 
@@ -141,6 +142,12 @@ def resolve_snapshots_dir(workspace_path: str | Path | None = None) -> Path:
     """Resolve snapshots directory with backward-compat fallback."""
     new = get_project_snapshots_dir(workspace_path)
     return _resolve_with_fallback(new, _OLD_SNAPSHOT_DIR)
+
+
+def resolve_result_cache_dir(workspace_path: str | Path | None = None) -> Path:
+    """Resolve result cache directory with backward-compat fallback."""
+    new = get_project_data_dir(workspace_path) / "result_cache"
+    return _resolve_with_fallback(new, _OLD_RESULT_CACHE_DIR)
 
 
 def resolve_vault_dir() -> Path:
