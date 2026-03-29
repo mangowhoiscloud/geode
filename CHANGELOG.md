@@ -26,7 +26,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.37.0] — 2026-03-30
+## [0.37.1] — 2026-03-30
+
+### Fixed
+- **serve auto-start cwd** — `start_serve_if_needed()` resolves GEODE project root via `__file__` path. Works from any directory.
+- **sys.executable mismatch** — `shutil.which("geode")` instead of `sys.executable` for subprocess spawn.
+- **SessionMode.IPC quiet** — `quiet=True` suppresses AgenticLoop UI on serve terminal; results via IPC JSON only.
+- **Thin client UX** — thinking spinner during prompt relay, status line (model/rounds/tools) after response, serve auto-start spinner.
+- **tool_calls dict handling** — CLIPoller handles both dict and object tool call formats.
+- **auto-start timeout** — 10s → 30s (MCP 13-server startup takes ~20s).
+
+### Known Issues
+- `/model` (interactive menu) requires terminal — does not work in thin mode. Use `/model <name>` with explicit arg.
 
 ## [0.37.0] — 2026-03-30
 
