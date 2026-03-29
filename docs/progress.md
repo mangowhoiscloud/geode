@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-29 (세션 46 — shared-services 착수)
+> 마지막 갱신: 2026-03-29 (세션 46 — shared-services 완료, v0.35.0)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -49,12 +49,17 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| shared-services | SharedServices Gateway — single factory, time_budget, HookSystem, ContextVar | @mangowhoiscloud | feature/shared-services | 2026-03-29 | 프론티어 리서치 완료 (Codex+OpenClaw 패턴) |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-03-29 — 세션 46)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| shared-services | SharedServices Gateway — single factory + time_budget + HookSystem + ContextVar | #525 | @mangowhoiscloud | 2026-03-29 |
 
 ### Done (2026-03-29 — 세션 45-46)
 
