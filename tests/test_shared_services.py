@@ -16,8 +16,8 @@ from core.gateway.shared_services import (
 class TestSessionMode:
     """SessionMode enum values and completeness."""
 
-    def test_three_modes_exist(self) -> None:
-        assert set(SessionMode) == {"repl", "daemon", "scheduler"}
+    def test_four_modes_exist(self) -> None:
+        assert set(SessionMode) == {"repl", "ipc", "daemon", "scheduler"}
 
     def test_all_modes_have_defaults(self) -> None:
         for mode in SessionMode:

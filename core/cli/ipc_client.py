@@ -20,6 +20,32 @@ log = logging.getLogger(__name__)
 DEFAULT_SOCKET_PATH = Path.home() / ".geode" / "cli.sock"
 
 
+def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10.0) -> bool:
+    """Start serve in background if not running. Returns True when ready."""
+    import subprocess
+    import sys
+
+    if is_serve_running(socket_path):
+        return True
+
+    log.info("Starting geode serve in background...")
+    subprocess.Popen(  # noqa: S603 — fixed args, no untrusted input
+        [sys.executable, "-m", "geode.cli", "serve"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+    # Wait for socket to appear
+    import time
+
+    for _ in range(int(timeout_s * 10)):
+        if is_serve_running(socket_path):
+            return True
+        time.sleep(0.1)
+    return False
+
+
 def is_serve_running(socket_path: Path | None = None) -> bool:
     """Check if geode serve is running by probing the socket."""
     path = socket_path or DEFAULT_SOCKET_PATH
@@ -93,6 +119,19 @@ class IPCClient:
         if not self._sock:
             return {"type": "error", "message": "Not connected"}
         self._send({"type": "prompt", "text": text})
+        response = self._recv()
+        if response is None:
+            return {"type": "error", "message": "Connection lost"}
+        return response
+
+    def send_command(self, cmd: str, args: str = "") -> dict[str, Any]:
+        """Send a slash command to serve and wait for result.
+
+        Returns {"type": "command_result", "cmd": ..., "status": "ok"/"error"}.
+        """
+        if not self._sock:
+            return {"type": "error", "message": "Not connected"}
+        self._send({"type": "command", "cmd": cmd, "args": args})
         response = self._recv()
         if response is None:
             return {"type": "error", "message": "Connection lost"}
