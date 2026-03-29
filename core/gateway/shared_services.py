@@ -144,6 +144,9 @@ class SharedServices:
         # Filter DANGEROUS tools for headless modes (PolicyChain enforcement)
         handlers = self.tool_handlers
         if mode in (SessionMode.SCHEDULER, SessionMode.DAEMON):
+            denied = _HEADLESS_DENIED_TOOLS & set(handlers)
+            if denied:
+                log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
             handlers = {k: v for k, v in handlers.items() if k not in _HEADLESS_DENIED_TOOLS}
 
         # Build sub-agent manager + executor + loop

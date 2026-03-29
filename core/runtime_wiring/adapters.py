@@ -247,9 +247,11 @@ def build_gateway() -> None:
                 log.warning("Gateway binding reload failed: %s", reload_exc)
 
         if config_path and config_path.exists():
-            _binding_watcher = ConfigWatcher()
-            _binding_watcher.watch(config_path, _reload_bindings, name="gateway-bindings")
-            _binding_watcher.start()
+            _watcher = ConfigWatcher()
+            _watcher.watch(config_path, _reload_bindings, name="gateway-bindings")
+            _watcher.start()
+            # Attach to manager to prevent GC (daemon thread lifetime)
+            manager._binding_watcher = _watcher  # type: ignore[attr-defined]
     except Exception as exc:
         _plugin_status["gateway_hot_reload"] = "unavailable"
         log.debug("Gateway binding hot-reload not available: %s", exc)
