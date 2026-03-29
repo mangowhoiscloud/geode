@@ -1062,14 +1062,11 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
     )
 
     _sched_runner = IsolatedRunner()
-    from core.orchestration.lane_queue import LaneQueue
-
-    _sched_lane_queue = LaneQueue()
-    _sched_lane = _sched_lane_queue.add_lane("scheduler", max_concurrent=2, timeout_s=300.0)
 
     console.print()  # blank line before prompt
 
     # Build SharedServices gateway (single factory for all modes)
+    # Unified LaneQueue created inside build_shared_services() if not provided.
     from core.gateway.shared_services import SessionMode, build_shared_services
 
     services = build_shared_services(
@@ -1077,6 +1074,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         skill_registry=skill_registry,
         verbose=verbose,
     )
+    _sched_lane = services.lane_queue.get_lane("scheduler")
 
     # Wire module-level hooks for _fire_hook() callers
     global _hooks_ctx
@@ -1908,6 +1906,7 @@ def serve(
         mcp_manager=runtime.mcp_manager,
         skill_registry=runtime.skill_registry,
         hook_system=runtime.hooks,
+        lane_queue=runtime.lane_queue,
     )
 
     # Wire module-level hooks so _fire_hook() works in serve mode
@@ -1938,10 +1937,7 @@ def serve(
         console.print("  [warning]Scheduler init failed — running without scheduler[/warning]")
 
     _sched_runner = IsolatedRunner()
-    from core.orchestration.lane_queue import LaneQueue as _ServeLaneQueue
-
-    _serve_lane_queue = _ServeLaneQueue()
-    _serve_sched_lane = _serve_lane_queue.add_lane("scheduler", max_concurrent=2, timeout_s=300.0)
+    _serve_sched_lane = _gw_services.lane_queue.get_lane("scheduler")
 
     def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
         """Process a gateway message with multi-turn context.

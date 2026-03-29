@@ -95,6 +95,7 @@ class SharedServices:
     mcp_manager: Any = None
     skill_registry: Any = None
     hook_system: Any = None  # HookSystem — never None after init
+    lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     tool_handlers: dict[str, Any] = field(default_factory=dict)
 
     # Resolved once at bootstrap
@@ -188,8 +189,9 @@ class SharedServices:
         from core.config import settings
         from core.orchestration.isolated_execution import IsolatedRunner
 
+        global_lane = self.lane_queue.get_lane("global") if self.lane_queue else None
         return SubAgentManager(
-            IsolatedRunner(hooks=self.hook_system),
+            IsolatedRunner(hooks=self.hook_system, lane=global_lane),
             action_handlers=self.tool_handlers,
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
@@ -219,6 +221,7 @@ def build_shared_services(
     mcp_manager: Any = None,
     skill_registry: Any = None,
     hook_system: Any = None,
+    lane_queue: Any = None,
     verbose: bool = False,
 ) -> SharedServices:
     """Construct SharedServices with resolved config values.
@@ -259,10 +262,17 @@ def build_shared_services(
     except Exception:
         log.debug("Cost budget resolution failed, using 0 (unlimited)")
 
+    # Build unified LaneQueue if not provided
+    if lane_queue is None:
+        from core.runtime_wiring.infra import build_default_lanes
+
+        lane_queue = build_default_lanes()
+
     return SharedServices(
         mcp_manager=mcp_manager,
         skill_registry=skill_registry,
         hook_system=hook_system,
+        lane_queue=lane_queue,
         tool_handlers=tool_handlers,
         _model=_settings.model,
         _provider=_resolve_provider(_settings.model),

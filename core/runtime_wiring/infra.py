@@ -115,10 +115,17 @@ def build_default_registry() -> ToolRegistry:
 
 
 def build_default_lanes() -> LaneQueue:
-    """Build default LaneQueue with session + global lanes."""
+    """Build the unified LaneQueue — single concurrency gate for the entire process.
+
+    All execution paths (gateway, scheduler, sub-agents) route through this
+    LaneQueue.  IsolatedRunner uses the ``global`` lane instead of its own
+    internal Semaphore.
+    """
     queue = LaneQueue()
     queue.add_lane("session", max_concurrent=1)  # Serial per session
-    queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY)
+    queue.add_lane("global", max_concurrent=5, timeout_s=30.0)  # IsolatedRunner cap
+    queue.add_lane("gateway", max_concurrent=2, timeout_s=120.0)  # Gateway messages
+    queue.add_lane("scheduler", max_concurrent=2, timeout_s=300.0)  # Scheduled jobs
     return queue
 
 

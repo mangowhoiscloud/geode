@@ -90,9 +90,8 @@ class IsolatedRunner:
         result = runner.run(req, config=config)
     """
 
-    MAX_CONCURRENT = 5  # Max parallel isolated executions
     MAX_RESULTS_CACHE = 200  # Evict oldest results beyond this limit
-    SEMAPHORE_WAIT_S = 30.0  # Wait up to 30s for a slot (was 0 = immediate reject)
+    SLOT_WAIT_S = 30.0  # Wait up to 30s for a lane slot
     KILL_WAIT_S = 5.0  # Wait for process death after SIGKILL
 
     # Subprocess env whitelist — only these vars are forwarded to child processes.
@@ -113,13 +112,17 @@ class IsolatedRunner:
         "GEODE_DATA_DIR",
     }
 
-    def __init__(self, hooks: HookSystem | None = None) -> None:
+    def __init__(
+        self,
+        hooks: HookSystem | None = None,
+        lane: Any | None = None,
+    ) -> None:
         self._hooks = hooks
+        self._lane = lane  # Lane("global") from unified LaneQueue
         self._results: dict[str, IsolationResult] = {}
         self._active: dict[str, threading.Thread | subprocess.Popen[bytes]] = {}
         self._cancel_flags: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
-        self._semaphore = threading.Semaphore(self.MAX_CONCURRENT)
 
     # ------------------------------------------------------------------
     # Public API
@@ -251,21 +254,34 @@ class IsolatedRunner:
         return self._execute_thread(fn_or_request, args, kwargs, config)
 
     def _acquire_slot(self, config: IsolationConfig) -> IsolationResult | None:
-        """Acquire a semaphore slot. Returns an error result if timed out."""
-        acquired = self._semaphore.acquire(timeout=self.SEMAPHORE_WAIT_S)
+        """Acquire a lane slot. Returns an error result if timed out.
+
+        Uses the ``global`` Lane from the unified LaneQueue when available.
+        If no lane was injected, runs without concurrency gating (tests).
+        """
+        if self._lane is None:
+            return None  # No gating (backward compat for tests)
+        key = config.session_id
+        acquired = self._lane.acquire_timeout(key, self.SLOT_WAIT_S)
         if not acquired:
             return IsolationResult(
                 session_id=config.session_id,
                 success=False,
                 error=(
-                    f"Concurrency limit reached (max {self.MAX_CONCURRENT}) "
-                    f"after {self.SEMAPHORE_WAIT_S}s wait"
+                    f"Lane '{self._lane.name}' full "
+                    f"(max {self._lane.max_concurrent}) "
+                    f"after {self.SLOT_WAIT_S}s wait"
                 ),
                 started_at=time.time(),
                 completed_at=time.time(),
                 metadata=dict(config.metadata),
             )
         return None
+
+    def _release_slot(self, config: IsolationConfig) -> None:
+        """Release a lane slot acquired by :meth:`_acquire_slot`."""
+        if self._lane is not None:
+            self._lane.manual_release(config.session_id)
 
     # ------------------------------------------------------------------
     # Thread mode (existing behavior, for callables and tests)
@@ -375,7 +391,7 @@ class IsolatedRunner:
             return result
         finally:
             if acquired:
-                self._semaphore.release()
+                self._release_slot(config)
 
     # ------------------------------------------------------------------
     # Subprocess mode (WorkerRequest → python -m core.agent.worker)
@@ -498,7 +514,7 @@ class IsolatedRunner:
             with self._lock:
                 self._active.pop(config.session_id, None)
             if acquired:
-                self._semaphore.release()
+                self._release_slot(config)
 
     @staticmethod
     def _save_stderr(session_id: str, stderr_bytes: bytes) -> None:
