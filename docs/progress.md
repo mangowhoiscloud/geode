@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-29 (세션 46 — shared-services 완료, v0.35.0)
+> 마지막 갱신: 2026-03-29 (세션 46 — system-hardening 착수)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -13,6 +13,7 @@
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
 | ~~shared-services~~ | ~~SharedServices Gateway — single factory + time_budget migration + HookSystem wiring + ContextVar fix~~ | ~~P0~~ | ~~shared-services-gateway.md~~ | **In Progress** |
+| ~~system-hardening~~ | ~~System Hardening — agentic_ref race, orchestration locks, SubAgent safety, HookSystem wiring, Scheduler daemon~~ | ~~P0~~ | ~~system-hardening.md~~ | **In Progress** |
 | concurrency-redesign | 동시성 시스템 재설계 — 워크로드별 세마포어 분리 + Gateway 제한 + 데드라인 큐잉 | P1 | — | 감사 완료, 구현 미착수 |
 | ~~i18n-english~~ | ~~LLM 소비 문서 영어 전환 — 39 files (GEODE.md, CLAUDE.md, definitions.json, SKILL.md ×30, rules, PROJECT.md)~~ | ~~P1~~ | ~~#523~~ | **Done** |
 | ~~kent-beck-p1~~ | ~~Phase 1 — dry-run 파싱 + Safety 상수 추출~~ | ~~P0~~ | ~~#462~~ | **Done** |
@@ -49,6 +50,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
+| system-hardening | System Hardening — C1-C4 + H1-H9 + M1 + Scheduler daemon | @mangowhoiscloud | feature/system-hardening | 2026-03-29 | 감사 결과 기반 |
 
 ### In Review
 
