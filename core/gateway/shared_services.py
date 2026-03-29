@@ -36,7 +36,6 @@ class SessionMode(StrEnum):
     REPL = "repl"  # Interactive — hitl=2, verbose=user, time=unlimited
     DAEMON = "daemon"  # Slack/Discord poller — hitl=0, quiet, time=config
     SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
-    FORK = "fork"  # Skill context:fork — hitl=0, quiet, time=60s
 
 
 # ---------------------------------------------------------------------------
@@ -60,12 +59,6 @@ _MODE_DEFAULTS: dict[SessionMode, dict[str, Any]] = {
         "hitl_level": 0,
         "quiet": True,
         "time_budget_s": 300.0,  # 5 min cap
-        "max_rounds": 0,
-    },
-    SessionMode.FORK: {
-        "hitl_level": 0,
-        "quiet": True,
-        "time_budget_s": 60.0,
         "max_rounds": 0,
     },
 }

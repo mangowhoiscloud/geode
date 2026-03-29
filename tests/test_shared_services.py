@@ -16,8 +16,8 @@ from core.gateway.shared_services import (
 class TestSessionMode:
     """SessionMode enum values and completeness."""
 
-    def test_four_modes_exist(self) -> None:
-        assert set(SessionMode) == {"repl", "daemon", "scheduler", "fork"}
+    def test_three_modes_exist(self) -> None:
+        assert set(SessionMode) == {"repl", "daemon", "scheduler"}
 
     def test_all_modes_have_defaults(self) -> None:
         for mode in SessionMode:
@@ -37,10 +37,6 @@ class TestSessionMode:
         d = _MODE_DEFAULTS[SessionMode.SCHEDULER]
         assert d["time_budget_s"] == 300.0
         assert d["max_rounds"] == 0  # unlimited rounds, time-based only
-
-    def test_fork_has_short_timeout(self) -> None:
-        d = _MODE_DEFAULTS[SessionMode.FORK]
-        assert d["time_budget_s"] == 60.0
 
     def test_no_mode_uses_nonzero_max_rounds(self) -> None:
         """All modes use time-based constraints, not round limits."""
@@ -95,10 +91,6 @@ class TestSharedServicesCreateSession:
     def test_scheduler_time_budget(self, services: SharedServices) -> None:
         _, loop = services.create_session(SessionMode.SCHEDULER)
         assert loop._time_budget_s == 300.0
-
-    def test_fork_time_budget(self, services: SharedServices) -> None:
-        _, loop = services.create_session(SessionMode.FORK)
-        assert loop._time_budget_s == 60.0
 
     def test_time_budget_override(self, services: SharedServices) -> None:
         _, loop = services.create_session(

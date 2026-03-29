@@ -199,36 +199,28 @@ def bootstrap_geode(
 def _build_agentic_stack_minimal(prompt: str, *, quiet: bool = True) -> Any:
     """Build a minimal isolated AgenticLoop and run a prompt (for context:fork skills).
 
-    Returns AgenticResult.  Uses SharedServices.create_session(FORK) when
-    available, falls back to inline construction for import-time safety.
+    Returns AgenticResult.  Inline construction — no SharedServices overhead.
+    Fork is a lightweight one-shot execution, not a session mode.
     """
-    try:
-        from core.gateway.shared_services import SessionMode, build_shared_services
+    from core.agent.agentic_loop import AgenticLoop
+    from core.agent.conversation import ConversationContext
+    from core.agent.tool_executor import ToolExecutor
+    from core.config import _resolve_provider
+    from core.config import settings as _stk_settings
 
-        services = build_shared_services()
-        _executor, loop = services.create_session(SessionMode.FORK)
-        return loop.run(prompt)
-    except Exception:
-        # Fallback: inline construction (no SharedServices available)
-        from core.agent.agentic_loop import AgenticLoop
-        from core.agent.conversation import ConversationContext
-        from core.agent.tool_executor import ToolExecutor
-        from core.config import _resolve_provider
-        from core.config import settings as _stk_settings
-
-        conversation = ConversationContext()
-        handlers = _build_tool_handlers_for_fork()
-        executor = ToolExecutor(action_handlers=handlers, hitl_level=0)
-        loop = AgenticLoop(
-            conversation,
-            executor,
-            model=_stk_settings.model,
-            provider=_resolve_provider(_stk_settings.model),
-            quiet=quiet,
-            time_budget_s=60.0,
-            max_rounds=0,
-        )
-        return loop.run(prompt)
+    conversation = ConversationContext()
+    handlers = _build_tool_handlers_for_fork()
+    executor = ToolExecutor(action_handlers=handlers, hitl_level=0)
+    loop = AgenticLoop(
+        conversation,
+        executor,
+        model=_stk_settings.model,
+        provider=_resolve_provider(_stk_settings.model),
+        quiet=quiet,
+        time_budget_s=60.0,
+        max_rounds=0,
+    )
+    return loop.run(prompt)
 
 
 def _build_tool_handlers_for_fork() -> dict[str, Any]:
