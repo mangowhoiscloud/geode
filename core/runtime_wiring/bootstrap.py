@@ -506,3 +506,36 @@ def build_prompt_assembler(
         skill_registry=skill_registry,
         hooks=hooks,
     )
+
+
+# ---------------------------------------------------------------------------
+# Unified bootstrap: MCP, Skills, Readiness (moved from cli/bootstrap.py)
+# ---------------------------------------------------------------------------
+
+
+def build_mcp_manager() -> Any:
+    """Load MCP server config (lazy — no subprocess connections yet)."""
+    from core.mcp.manager import get_mcp_manager
+
+    mgr = get_mcp_manager()
+    mgr.load_config()
+    return mgr
+
+
+def build_skill_registry() -> Any:
+    """Load all skill definitions from 4-tier priority directories."""
+    from core.skills.skills import SkillLoader, SkillRegistry
+
+    registry = SkillRegistry()
+    try:
+        SkillLoader().load_all(registry=registry)
+    except Exception:
+        log.debug("Skill loading skipped", exc_info=True)
+    return registry
+
+
+def build_readiness() -> Any:
+    """Check API key availability for all configured providers."""
+    from core.cli.startup import check_readiness
+
+    return check_readiness()

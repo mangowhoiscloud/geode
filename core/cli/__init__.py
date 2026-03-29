@@ -1749,10 +1749,10 @@ def serve(
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
-    # Unified bootstrap (same init as REPL: domain, memory, readiness, MCP, skills, handlers)
-    from core.cli.bootstrap import bootstrap_geode
+    # ContextVars only (domain, memory, profile, env) — no resource creation
+    from core.cli.bootstrap import setup_contextvars
 
-    boot = bootstrap_geode(load_env=True)
+    setup_contextvars(load_env=True)
 
     from core.config import settings
 
@@ -1801,9 +1801,14 @@ def serve(
         gateway.gateway_time_budget_s if hasattr(gateway, "gateway_time_budget_s") else 120.0
     )
     _gw_services = build_shared_services(
-        mcp_manager=boot.mcp_manager,
-        skill_registry=boot.skill_registry,
+        mcp_manager=runtime.mcp_manager,
+        skill_registry=runtime.skill_registry,
+        hook_system=runtime.hooks,
     )
+
+    # Wire module-level hooks so _fire_hook() works in serve mode
+    global _hooks_ctx
+    _hooks_ctx = _gw_services.hook_system
 
     # --- Scheduler daemon (same SchedulerService as REPL, drain in main loop) ---
     import queue as _queue_mod
@@ -1930,6 +1935,12 @@ def serve(
             _sched_svc.save()
             _sched_svc.stop()
             log.info("Scheduler stopped, state saved")
+        # MCP cleanup
+        if runtime and runtime.mcp_manager:
+            try:
+                runtime.mcp_manager.shutdown()
+            except Exception:
+                log.debug("MCP shutdown error", exc_info=True)
         if _webhook_server is not None:
             _webhook_server.shutdown()
         gateway.stop()
