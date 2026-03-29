@@ -157,7 +157,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     loop = AgenticLoop(
         conversation,
         executor,
-        max_rounds=50,
+        max_rounds=0,  # unlimited — controlled by timeout_s from parent
         max_tokens=32768,
         model=request.model,
         provider=request.provider,

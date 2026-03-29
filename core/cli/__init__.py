@@ -1738,6 +1738,9 @@ def serve(
     from core.gateway.shared_services import SessionMode, build_shared_services
 
     _gw_max_turns = gateway.gateway_max_turns if hasattr(gateway, "gateway_max_turns") else 20
+    _gw_time_budget = (
+        gateway.gateway_time_budget_s if hasattr(gateway, "gateway_time_budget_s") else 120.0
+    )
     _gw_services = build_shared_services(
         mcp_manager=boot.mcp_manager,
         skill_registry=boot.skill_registry,
@@ -1768,6 +1771,7 @@ def serve(
             SessionMode.DAEMON,
             conversation=ctx,
             system_suffix=_GATEWAY_SUFFIX,
+            time_budget_override=_gw_time_budget,
             propagate_context=True,
         )
         try:

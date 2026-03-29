@@ -5,11 +5,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from core.gateway.shared_services import (
+    _MODE_DEFAULTS,
     SessionMode,
     SharedServices,
-    _MODE_DEFAULTS,
     build_shared_services,
 )
 
