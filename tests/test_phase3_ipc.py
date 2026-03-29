@@ -164,9 +164,11 @@ class TestCLIChannelIntegration:
         mock_result.rounds = 3
         mock_result.tool_calls = []
         mock_result.termination_reason = "natural"
+        mock_result.summary = ""
 
         mock_loop = MagicMock()
         mock_loop.run.return_value = mock_result
+        mock_loop.model = "test-model"
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
 
         poller = CLIPoller(mock_services, socket_path=sock_path)

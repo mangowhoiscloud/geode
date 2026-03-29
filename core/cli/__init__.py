@@ -877,29 +877,54 @@ def _thin_interactive_loop() -> None:
 
                 # All other commands → relay to serve
                 response = client.send_command(cmd, args)
+                # Render captured output from serve (ANSI-styled text)
+                output = response.get("output", "")
+                if output:
+                    import sys as _sys
+
+                    _sys.stdout.write(output)
+                    _sys.stdout.flush()
                 if response.get("status") == "error":
                     console.print(f"  [error]{response.get('message', 'Command failed')}[/error]")
                 elif response.get("should_break"):
                     break
                 continue
 
-            # Free text → relay as prompt
+            # Free text → relay as prompt (streaming agentic UI)
+            import sys as _sys
+
             from core.cli.ui.status import TextSpinner
 
             _spinner = TextSpinner("Thinking...")
             _spinner.start()
-            response = client.send_prompt(user_input)
-            _spinner.stop()
+            _stream_ctx: dict[str, bool] = {"started": False}
+
+            def _on_stream(data: str, *, _sp: Any = _spinner, _ctx: Any = _stream_ctx) -> None:
+                if not _ctx["started"]:
+                    _sp.stop()
+                    _ctx["started"] = True
+                _sys.stdout.write(data)
+                _sys.stdout.flush()
+
+            response = client.send_prompt(user_input, on_stream=_on_stream)
+            _stream_started = _stream_ctx["started"]
+            if not _stream_started:
+                _spinner.stop()
             if response.get("type") == "error" and "Connection lost" in response.get("message", ""):
                 console.print("\n  [error]Connection to serve lost[/error]\n")
                 break
-            _render_ipc_response(response)
+            _render_ipc_response(response, streamed=_stream_started)
     finally:
         client.close()
 
 
-def _render_ipc_response(response: dict[str, Any]) -> None:
-    """Render an IPC response from serve."""
+def _render_ipc_response(response: dict[str, Any], *, streamed: bool = False) -> None:
+    """Render an IPC response from serve.
+
+    When *streamed* is True, the agentic UI (tool calls, token usage) was
+    already rendered in real-time via streaming events — only the final
+    text response needs rendering.
+    """
     rtype = response.get("type", "")
 
     if rtype == "error":
@@ -907,12 +932,13 @@ def _render_ipc_response(response: dict[str, Any]) -> None:
         return
 
     if rtype == "result":
-        # Tool calls
-        tool_calls = response.get("tool_calls", [])
-        for tc in tool_calls:
-            console.print(f"  [dim]\u25b8 {tc.get('name', '?')}[/dim]")
+        if not streamed:
+            # Fallback: no streaming happened — show tool call summary
+            tool_calls = response.get("tool_calls", [])
+            for tc in tool_calls:
+                console.print(f"  [dim]\u25b8 {tc.get('name', '?')}[/dim]")
 
-        # Main text
+        # Main text (always render — this is the LLM's final response)
         text = response.get("text", "")
         if text:
             from rich.markdown import Markdown
@@ -921,18 +947,20 @@ def _render_ipc_response(response: dict[str, Any]) -> None:
             console.print(Markdown(text))
             console.print()
 
-        # Status line (model, rounds, tools)
-        model = response.get("model", "")
-        rounds = response.get("rounds", 0)
-        parts = []
-        if model:
-            parts.append(f"\u2722 {model}")
-        if rounds:
-            parts.append(f"{rounds} rounds")
-        if tool_calls:
-            parts.append(f"{len(tool_calls)} tools")
-        if parts:
-            console.print(f"  [dim]{' · '.join(parts)}[/dim]")
+        if not streamed:
+            # Fallback status line when streaming wasn't available
+            model = response.get("model", "")
+            rounds = response.get("rounds", 0)
+            tool_calls = response.get("tool_calls", [])
+            parts = []
+            if model:
+                parts.append(f"\u2722 {model}")
+            if rounds:
+                parts.append(f"{rounds} rounds")
+            if tool_calls:
+                parts.append(f"{len(tool_calls)} tools")
+            if parts:
+                console.print(f"  [dim]{' · '.join(parts)}[/dim]")
         return
 
     # Fallback: unexpected response type
@@ -1426,6 +1454,10 @@ def serve(
     console.print("  [dim]Press Ctrl+C to stop[/dim]")
     console.print()
 
+    # Readiness check — needed by /analyze, /run, /status via IPC
+    readiness = check_readiness()
+    _set_readiness(readiness)
+
     # Build runtime (wires env, notifications, gateway + MCP startup)
     # MCP startup is now inside _build_gateway() via mcp.startup()
     runtime = _build_runtime_for_serve()
@@ -1568,7 +1600,7 @@ def serve(
     try:
         from core.gateway.pollers.cli_poller import CLIPoller
 
-        _cli_poller = CLIPoller(_gw_services)
+        _cli_poller = CLIPoller(_gw_services, scheduler_service=_sched_svc)
         _cli_poller.start()
         console.print(f"  [success]CLI channel: {_cli_poller.socket_path}[/success]")
     except Exception:
