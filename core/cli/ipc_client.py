@@ -22,7 +22,7 @@ DEFAULT_SOCKET_PATH = Path.home() / ".geode" / "cli.sock"
 
 def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10.0) -> bool:
     """Start serve in background if not running. Returns True when ready."""
-    import subprocess
+    import subprocess  # nosec B404 — used for controlled serve daemon spawn
     import sys
 
     if is_serve_running(socket_path):
