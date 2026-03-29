@@ -129,7 +129,9 @@ class TestWorkerSubprocess:
         assert result["success"] is False
         assert "task_id" in result.get("error", "").lower() or result["task_id"] == "unknown"
 
-    def test_result_backup_file_created(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_result_backup_file_created(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Worker should save a backup result file."""
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         # Import and call main directly to test backup

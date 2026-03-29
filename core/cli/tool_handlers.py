@@ -1040,7 +1040,7 @@ def _build_delegated_handlers() -> dict[str, Any]:
 
 def _build_mcp_handler(
     mcp_manager: Any,
-    agentic_ref: list[Any] | None,
+    agentic_ref: list[Any] | None = None,
 ) -> dict[str, Any]:
     """Build MCP server installation handler."""
 
@@ -1083,10 +1083,13 @@ def _build_mcp_handler(
         if not ok:
             return {"status": "error", "message": f"Failed to save {best.name}"}
 
-        # Hot-reload tools into running AgenticLoop
+        # Hot-reload tools into running AgenticLoop (via ContextVar)
         added = 0
-        if agentic_ref and agentic_ref[0] is not None:
-            added = agentic_ref[0].refresh_tools()
+        from core.cli.session_state import get_current_loop
+
+        _loop = get_current_loop()
+        if _loop is not None:
+            added = _loop.refresh_tools()
 
         # Check for missing env vars
         missing = [k for k in best.env_keys if not _os.environ.get(k)]
@@ -1203,8 +1206,9 @@ def _build_tool_handlers(
     """Build tool name -> handler function mapping for ToolExecutor.
 
     Each handler receives tool_input kwargs and returns a dict result.
-    ``mcp_manager`` and ``agentic_ref`` are used by install_mcp_server.
+    ``mcp_manager`` is used by install_mcp_server.
     ``skill_registry`` is used by generate_report for skill-enhanced narrative.
+    ``agentic_ref`` is deprecated — handlers use ``_current_loop_ctx`` ContextVar.
 
     Delegates to group-specific builder functions and merges the results.
     """

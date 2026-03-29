@@ -34,6 +34,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - **Scheduler drain exception safety** — semaphore leak on `create_session()` failure fixed. `main_loop.run()` exception no longer kills the drain loop. Init failure in serve promoted to `log.warning`.
 
+## [0.35.1] — 2026-03-29
+
+### Fixed
+- **C1: agentic_ref race** — removed shared mutable `agentic_ref[0]` from SharedServices. Tool handlers now use `_current_loop_ctx` ContextVar (per-thread, no cross-session contamination). Scheduler can no longer corrupt REPL's loop pointer.
+- **C2: TaskGraph thread safety** — `threading.Lock` on `get_ready_tasks()`, `mark_running()`, `mark_completed()`, `mark_failed()`, `add_task()`. Prevents double-execution from concurrent state transitions.
+- **C3: IsolatedRunner semaphore leak** — semaphore release guarded by `acquired` flag. Timeout on `_acquire_slot` no longer leaks extra permits beyond `MAX_CONCURRENT`.
+- **C4: LaneQueue acquire_all()** — tracks acquired semaphores separately from active tracking. Partial failure only releases actually-acquired semaphores.
+- **H1: Zombie thread cleanup** — timeout threads removed from `_active`/`_cancel_flags` tracking.
+- **H2: Announce double-publish** — atomic check-and-set inside `_announce_lock`.
+- **H3: Announce orphan TTL** — 300s auto-expiry for stale queue entries.
+- **H4: Subprocess env whitelist** — 10 safe vars only (no full `os.environ` copy).
+- **H8: TaskBridge evaluator lock** — `_evaluator_lock` on counter increment.
+- **M1: MODEL_SWITCHED duplicate** — removed duplicate C7 handler registration.
+
+### Changed
+- **HookEvent count 46→40** — removed 6 orphan events: CONTEXT_WARNING, PROMPT_DRIFT_DETECTED, GATEWAY_MESSAGE/RESPONSE, MCP_SERVER_STARTED/STOPPED.
+
 ## [0.35.0] — 2026-03-29
 
 ### Added

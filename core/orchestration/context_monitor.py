@@ -1,7 +1,7 @@
 """Context Overflow Detection — proactive token budget monitoring.
 
 Monitors conversation context size against model context window limits.
-Emits CONTEXT_WARNING (>=80%) and CONTEXT_CRITICAL (>=95%) hook events
+Emits CONTEXT_CRITICAL (>=95%) hook events
 before the API returns a context overflow error.
 
 Karpathy P6 Context Budget pattern: detect and compress before hitting limits.

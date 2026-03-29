@@ -48,6 +48,24 @@ _subagent_context = threading.local()
 _announce_queue: dict[str, list[SubAgentResult]] = {}
 _announce_lock = threading.Lock()
 
+# TTL-based orphan cleanup for announce queue entries that are never drained
+# (e.g. parent session crashed or was abandoned).
+_announce_timestamps: dict[str, float] = {}
+_ANNOUNCE_TTL_S = 300.0  # 5 min TTL for orphan results
+
+
+def _cleanup_stale_announces() -> None:
+    """Remove announce queue entries older than TTL."""
+    now = time.time()
+    with _announce_lock:
+        stale_keys = [
+            k for k, ts in _announce_timestamps.items()
+            if now - ts > _ANNOUNCE_TTL_S
+        ]
+        for k in stale_keys:
+            _announce_queue.pop(k, None)
+            _announce_timestamps.pop(k, None)
+
 
 def drain_announced_results(parent_session_key: str) -> list[SubAgentResult]:
     """Drain all announced results for a parent session (thread-safe).
@@ -55,8 +73,10 @@ def drain_announced_results(parent_session_key: str) -> list[SubAgentResult]:
     Returns the list of completed SubAgentResults and clears the queue.
     Called by AgenticLoop._check_announced_results() each round.
     """
+    _cleanup_stale_announces()
     with _announce_lock:
         results = _announce_queue.pop(parent_session_key, [])
+        _announce_timestamps.pop(parent_session_key, None)
     return results
 
 
@@ -68,6 +88,7 @@ def cleanup_announce_queue(parent_session_key: str) -> None:
     """
     with _announce_lock:
         _announce_queue.pop(parent_session_key, None)
+        _announce_timestamps.pop(parent_session_key, None)
 
 
 def get_subagent_context() -> tuple[bool, str]:
@@ -425,11 +446,12 @@ class SubAgentManager:
         OpenClaw Spawn+Announce pattern: child completes -> parent is
         notified asynchronously -> parent injects summary into context.
         """
-        if child_result.announced:
-            return
-        child_result.announced = True
         with _announce_lock:
+            if child_result.announced:
+                return
+            child_result.announced = True
             _announce_queue.setdefault(parent_session_key, []).append(child_result)
+            _announce_timestamps.setdefault(parent_session_key, time.time())
         log.debug(
             "Announced result: task_id=%s to parent=%s (status=%s)",
             child_result.task_id,
@@ -571,7 +593,17 @@ class SubAgentManager:
         Production sub-agents (P2-B with action_handlers) use subprocess via
         WorkerRequest instead. This method is kept for backward compatibility
         with tests and legacy task_handler consumers.
+
+        NOTE: Thread mode cannot enforce denied_tools because the task_handler
+        callback is opaque. Use subprocess mode (action_handlers) for security.
         """
+        if self._denied_tools:
+            log.warning(
+                "Thread mode does not enforce denied_tools for task %s. "
+                "Use subprocess mode (action_handlers) for security.",
+                task.task_id,
+            )
+
         from core.memory.session_key import build_subagent_session_key
 
         child_key = build_subagent_session_key(task.args.get("ip_name", "unknown"), task.task_id)

@@ -10,7 +10,7 @@
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
-# GEODE v0.35.0 — Autonomous Execution Harness
+# GEODE v0.35.1 — Autonomous Execution Harness
 
 범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
 
@@ -153,7 +153,7 @@ graph LR
 graph LR
     L0["L0 CLI & Agent<br/>AgenticLoop, SubAgent"] --> L1["L1 Infra<br/>Port/Adapter DI"]
     L0 --> L3["L3 Orchestration<br/>TaskGraph, LaneQueue"]
-    L0 --> HK["Hooks (cross-cutting)<br/>46 events"]
+    L0 --> HK["Hooks (cross-cutting)<br/>40 events"]
     L0 --> L4["L4 Extensibility<br/>Tools(47), MCP(44)"]
     L4 --> L5["L5 Domain<br/>DomainPort Plugin"]
     L0 --> L2["L2 Memory<br/>4-Tier + Checkpoint"]

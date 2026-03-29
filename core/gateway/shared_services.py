@@ -77,16 +77,15 @@ class SharedServices:
     returns a fully-wired ``(ToolExecutor, AgenticLoop)`` pair that
     automatically receives hooks, MCP, skills, cost budget, and time budget.
 
-    The ``agentic_ref`` is a mutable ``[loop]`` list shared across handler
-    closures — ``create_session()`` updates ``ref[0]`` to the latest loop,
-    so tool handlers (e.g. ``install_mcp_server``) always see the current one.
+    No shared mutable state — each ``create_session()`` returns independent
+    instances.  Tool handlers that need the current loop read from
+    ``_current_loop_ctx`` ContextVar (per-thread, no race condition).
     """
 
     mcp_manager: Any = None
     skill_registry: Any = None
     hook_system: Any = None  # HookSystem — never None after init
     tool_handlers: dict[str, Any] = field(default_factory=dict)
-    agentic_ref: list[Any] = field(default_factory=lambda: [None])
 
     # Resolved once at bootstrap
     _model: str = ""
@@ -157,8 +156,10 @@ class SharedServices:
             system_suffix=system_suffix,
             quiet=quiet,
         )
-        # Update mutable ref so tool handler closures see the latest loop
-        self.agentic_ref[0] = loop
+        # Set per-thread ContextVar so tool handlers see the correct loop
+        from core.cli.session_state import set_current_loop
+
+        set_current_loop(loop)
         return executor, loop
 
     # --- internal helpers -----------------------------------------------------
@@ -204,8 +205,8 @@ def build_shared_services(
 ) -> SharedServices:
     """Construct SharedServices with resolved config values.
 
-    Builds tool handlers with a shared ``agentic_ref`` so handler closures
-    always see the current AgenticLoop.  If *hook_system* is None, a default
+    Tool handlers read the current loop from ``_current_loop_ctx`` ContextVar
+    (per-thread, no shared mutable ref).  If *hook_system* is None, a default
     HookSystem is built via ``build_hooks()``.
     """
     from core.config import _resolve_provider
@@ -222,14 +223,12 @@ def build_shared_services(
             stuck_timeout_s=getattr(_settings, "stuck_timeout_s", 600.0),
         )
 
-    # Build tool handlers with shared agentic_ref
-    agentic_ref: list[Any] = [None]
+    # Build tool handlers — no agentic_ref (uses ContextVar instead)
     from core.cli.tool_handlers import _build_tool_handlers
 
     tool_handlers = _build_tool_handlers(
         verbose=verbose,
         mcp_manager=mcp_manager,
-        agentic_ref=agentic_ref,
         skill_registry=skill_registry,
     )
 
@@ -247,7 +246,6 @@ def build_shared_services(
         skill_registry=skill_registry,
         hook_system=hook_system,
         tool_handlers=tool_handlers,
-        agentic_ref=agentic_ref,
         _model=_settings.model,
         _provider=_resolve_provider(_settings.model),
         _cost_budget=cost_budget,

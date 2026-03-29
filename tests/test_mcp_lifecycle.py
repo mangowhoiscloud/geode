@@ -5,7 +5,7 @@ Covers:
 - Signal handler registration/unregistration
 - StdioMCPClient PID tracking and close timeout
 - Health check with auto-restart
-- HookEvent MCP_SERVER_STARTED / MCP_SERVER_STOPPED existence
+- HookEvent orphan pruning verification (MCP_SERVER_* removed in H6)
 - Idempotent shutdown
 - Atexit safety net registration
 """
@@ -28,20 +28,14 @@ from core.mcp.stdio_client import _CLOSE_TIMEOUT_S, StdioMCPClient
 class TestMCPHookEvents:
     """Verify MCP lifecycle hook events exist."""
 
-    def test_mcp_server_started_event(self) -> None:
-        assert hasattr(HookEvent, "MCP_SERVER_STARTED")
-        assert HookEvent.MCP_SERVER_STARTED.value == "mcp_server_started"
+    def test_mcp_server_events_pruned(self) -> None:
+        """MCP_SERVER_STARTED/STOPPED were orphan events — removed in H6."""
+        assert not hasattr(HookEvent, "MCP_SERVER_STARTED")
+        assert not hasattr(HookEvent, "MCP_SERVER_STOPPED")
 
-    def test_mcp_server_stopped_event(self) -> None:
-        assert hasattr(HookEvent, "MCP_SERVER_STOPPED")
-        assert HookEvent.MCP_SERVER_STOPPED.value == "mcp_server_stopped"
-
-    def test_hook_event_count_includes_mcp(self) -> None:
-        """Total hook events should be 39 (includes TURN_COMPLETE + 2 MCP_SERVER_* + 2 CONTEXT_* + 2 SESSION_*)."""
-        assert len(HookEvent) == 46
-
-        """Total hook events should be 38 (includes TURN_COMPLETE + 2 MCP_SERVER_* + 3 CONTEXT_*)."""
-        assert len(HookEvent) == 46
+    def test_hook_event_count(self) -> None:
+        """Total hook events after H6 orphan pruning."""
+        assert len(HookEvent) == 40
 
 
 # ---------------------------------------------------------------------------

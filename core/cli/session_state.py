@@ -24,6 +24,17 @@ _search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
 _readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
 _scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", default=None)
 _user_task_graph_ctx: ContextVar[Any] = ContextVar("user_task_graph", default=None)
+_current_loop_ctx: ContextVar[Any] = ContextVar("current_agentic_loop", default=None)
+
+
+def set_current_loop(loop: Any) -> None:
+    """Set the current AgenticLoop for this thread/context."""
+    _current_loop_ctx.set(loop)
+
+
+def get_current_loop() -> Any:
+    """Get the current AgenticLoop for this thread/context."""
+    return _current_loop_ctx.get()
 
 
 # ---------------------------------------------------------------------------
