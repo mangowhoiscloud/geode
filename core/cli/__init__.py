@@ -890,7 +890,7 @@ def _thin_interactive_loop() -> None:
         client.close()
 
 
-def _render_ipc_response(response: dict) -> None:
+def _render_ipc_response(response: dict[str, Any]) -> None:
     """Render an IPC response from serve."""
     rtype = response.get("type", "")
 

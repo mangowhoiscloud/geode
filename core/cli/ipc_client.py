@@ -29,7 +29,7 @@ def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10
         return True
 
     log.info("Starting geode serve in background...")
-    subprocess.Popen(  # noqa: S603 — fixed args, no untrusted input
+    subprocess.Popen(  # noqa: S603  # nosec B603 — fixed args, no untrusted input
         [sys.executable, "-m", "geode.cli", "serve"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
