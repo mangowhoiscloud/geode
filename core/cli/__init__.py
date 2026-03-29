@@ -12,6 +12,7 @@ import logging
 import signal
 import sys
 import termios
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -953,6 +954,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
     )
 
     _sched_runner = IsolatedRunner()
+    _sched_semaphore = threading.Semaphore(2)  # Max 2 concurrent scheduled jobs
 
     console.print()  # blank line before prompt
 
@@ -1027,10 +1029,18 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 if isolated:
                     # OpenClaw agentTurn: async execution in background thread
                     # Non-blocking — returns immediately, result delivered via callback
+                    # Concurrency gate: max 2 scheduled jobs in parallel
+                    if not _sched_semaphore.acquire(timeout=0):
+                        log.warning("Scheduler slots full (max 2), skipping job %s", job_id)
+                        console.print(
+                            f"  [dim]scheduled:{job_id} → skipped (slots full)[/dim]"
+                        )
+                        continue
+
                     _iso_conv = ConversationContext()
                     _, _, _iso_loop = _build_agentic_stack(
                         _iso_conv,
-                        mcp_manager=None,  # no MCP — prevent subprocess leak
+                        mcp_manager=mcp_mgr,  # share singleton — reuses existing connections
                         skill_registry=skill_registry,
                         verbose=False,
                         quiet=True,
@@ -1039,16 +1049,21 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                     _captured_job_id = job_id
                     _captured_prompt = prompt
                     _captured_loop = _iso_loop
+                    _captured_sem = _sched_semaphore
 
                     def _run_isolated(
                         *,
                         _loop: Any = _captured_loop,
                         _p: str = _captured_prompt,
                         _jid: str = _captured_job_id,
+                        _sem: threading.Semaphore = _captured_sem,
                     ) -> str:
-                        r = _loop.run(_p)
-                        _on_sched_complete(r, job_id=_jid)
-                        return r.text if r and r.text else ""
+                        try:
+                            r = _loop.run(_p)
+                            _on_sched_complete(r, job_id=_jid)
+                            return r.text if r and r.text else ""
+                        finally:
+                            _sem.release()
 
                     _sched_runner.run_async(
                         _run_isolated,
