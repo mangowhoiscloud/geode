@@ -38,6 +38,16 @@ class SessionMode(StrEnum):
     SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
 
 
+# Tools denied for headless execution (SCHEDULER, DAEMON).
+# DANGEROUS tools require HITL approval which headless modes cannot provide.
+_HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
+    {
+        "run_bash",
+        "delegate_task",
+    }
+)
+
+
 # ---------------------------------------------------------------------------
 # Mode-specific defaults (no max_rounds — time only)
 # ---------------------------------------------------------------------------
@@ -133,10 +143,18 @@ class SharedServices:
 
             conversation = ConversationContext()
 
+        # Filter DANGEROUS tools for headless modes (PolicyChain enforcement)
+        handlers = self.tool_handlers
+        if mode in (SessionMode.SCHEDULER, SessionMode.DAEMON):
+            denied = _HEADLESS_DENIED_TOOLS & set(handlers)
+            if denied:
+                log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
+            handlers = {k: v for k, v in handlers.items() if k not in _HEADLESS_DENIED_TOOLS}
+
         # Build sub-agent manager + executor + loop
         sub_mgr = self._build_sub_agent_manager()
         executor = ToolExecutor(
-            action_handlers=self.tool_handlers,
+            action_handlers=handlers,
             mcp_manager=self.mcp_manager,
             sub_agent_manager=sub_mgr,
             hitl_level=hitl,

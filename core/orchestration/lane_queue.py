@@ -97,6 +97,36 @@ class Lane:
             self._semaphore.release()
             log.debug("Lane '%s' released by %s", self.name, key)
 
+    def try_acquire(self, key: str) -> bool:
+        """Non-blocking acquire for async patterns (e.g. scheduler).
+
+        Returns True if a slot was acquired, False if lane is full.
+        Caller must call :meth:`manual_release` when done.
+        """
+        acquired = self._semaphore.acquire(timeout=0)
+        if not acquired:
+            self._stats.inc_timeouts()
+            return False
+        with self._lock:
+            self._active[key] = time.time()
+        self._stats.inc_acquired()
+        log.debug(
+            "Lane '%s' try_acquire by %s (%d/%d active)",
+            self.name,
+            key,
+            self.active_count,
+            self.max_concurrent,
+        )
+        return True
+
+    def manual_release(self, key: str) -> None:
+        """Release a slot acquired via :meth:`try_acquire`."""
+        with self._lock:
+            self._active.pop(key, None)
+        self._stats.inc_released()
+        self._semaphore.release()
+        log.debug("Lane '%s' manual_release by %s", self.name, key)
+
     def get_active(self) -> dict[str, float]:
         """Get active work items with elapsed time."""
         now = time.time()
