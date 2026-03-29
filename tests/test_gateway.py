@@ -45,7 +45,7 @@ class TestChannelBinding:
         binding = ChannelBinding(channel="slack")
         assert binding.auto_respond is True
         assert binding.require_mention is False
-        assert binding.max_rounds == 5
+        assert binding.time_budget_s == 120.0
         assert binding.channel_id == ""
 
     def test_specific_binding(self):
@@ -53,7 +53,7 @@ class TestChannelBinding:
             channel="discord",
             channel_id="123456",
             require_mention=True,
-            max_rounds=3,
+            time_budget_s=60.0,
         )
         assert binding.channel_id == "123456"
         assert binding.require_mention is True
@@ -104,7 +104,7 @@ class TestChannelManager:
         # Add generic binding
         manager.add_binding(ChannelBinding(channel="slack"))
         # Add specific binding
-        manager.add_binding(ChannelBinding(channel="slack", channel_id="C12345", max_rounds=10))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C12345", time_budget_s=60.0))
 
         msg = InboundMessage(
             channel="slack",

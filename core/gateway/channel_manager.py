@@ -53,7 +53,7 @@ class ChannelManager:
         self._lock = threading.Lock()
         self._stats: dict[str, int] = {"received": 0, "processed": 0, "ignored": 0}
         # Gateway-level defaults (overridden by config.toml [gateway])
-        self.gateway_max_rounds: int = 30
+        self.gateway_time_budget_s: float = 120.0  # default 2 min per message
         self.gateway_max_turns: int = 20
 
     def register_poller(self, poller: BasePoller) -> None:
@@ -227,7 +227,7 @@ class ChannelManager:
                     "channel_id": b.channel_id or "*",
                     "auto_respond": b.auto_respond,
                     "require_mention": b.require_mention,
-                    "max_rounds": b.max_rounds,
+                    "time_budget_s": b.time_budget_s,
                 }
                 for b in self._bindings
             ]
@@ -251,8 +251,11 @@ class ChannelManager:
         gw = config.get("gateway", {})
 
         # Gateway-level defaults
-        if "max_rounds" in gw:
-            self.gateway_max_rounds = int(gw["max_rounds"])
+        if "time_budget_s" in gw:
+            self.gateway_time_budget_s = float(gw["time_budget_s"])
+        elif "max_rounds" in gw:
+            # Legacy: convert max_rounds to approximate time budget (10s/round)
+            self.gateway_time_budget_s = float(int(gw["max_rounds"]) * 10)
         if "max_turns" in gw:
             self.gateway_max_turns = int(gw["max_turns"])
 
@@ -263,28 +266,32 @@ class ChannelManager:
         with self._lock:
             self._bindings.clear()
 
-        # Per-binding max_rounds falls back to gateway-level default
-        default_max_rounds = self.gateway_max_rounds
+        # Per-binding time_budget_s falls back to gateway-level default
+        default_time_budget = self.gateway_time_budget_s
 
         loaded = 0
         for rule in rules:
             if not isinstance(rule, dict) or "channel" not in rule:
                 continue
+            # Support both time_budget_s and legacy max_rounds
+            tb = rule.get("time_budget_s")
+            if tb is None and "max_rounds" in rule:
+                tb = float(int(rule["max_rounds"]) * 10)
             binding = ChannelBinding(
                 channel=rule["channel"],
                 channel_id=rule.get("channel_id", ""),
                 auto_respond=rule.get("auto_respond", True),
                 require_mention=rule.get("require_mention", False),
                 allowed_tools=rule.get("allowed_tools", []),
-                max_rounds=rule.get("max_rounds", default_max_rounds),
+                time_budget_s=float(tb) if tb is not None else default_time_budget,
             )
             self.add_binding(binding)
             loaded += 1
 
         log.info(
-            "Loaded %d gateway bindings from config (max_rounds=%d, max_turns=%d)",
+            "Loaded %d gateway bindings from config (time_budget=%.0fs, max_turns=%d)",
             loaded,
-            self.gateway_max_rounds,
+            self.gateway_time_budget_s,
             self.gateway_max_turns,
         )
         return loaded

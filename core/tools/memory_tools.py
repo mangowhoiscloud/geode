@@ -27,7 +27,9 @@ log = logging.getLogger(__name__)
 _default_session_store_ctx: ContextVar[SessionStorePort | None] = ContextVar(
     "default_session_store", default=None
 )
-_project_memory: ProjectMemory | None = None
+_project_memory_ctx: ContextVar[ProjectMemory | None] = ContextVar(
+    "project_memory_tools", default=None
+)
 _org_memory_ctx: ContextVar[MonoLakeOrganizationMemory | None] = ContextVar(
     "org_memory_tools", default=None
 )
@@ -39,9 +41,8 @@ def set_default_session_store(store: SessionStorePort) -> None:
 
 
 def set_project_memory(mem: ProjectMemory | None) -> None:
-    """Set the module-level project memory for memory tools."""
-    global _project_memory
-    _project_memory = mem
+    """Set the context-local project memory for memory tools."""
+    _project_memory_ctx.set(mem)
 
 
 def set_org_memory(mem: MonoLakeOrganizationMemory | None) -> None:
@@ -135,7 +136,7 @@ class MemorySearchTool:
 
         # Project tier (MEMORY.md + rules)
         if tier in ("project", "all") and len(matches) < limit:
-            proj = _project_memory
+            proj = _project_memory_ctx.get()
             if proj is not None:
                 # Search MEMORY.md content
                 memory_text = proj.load_memory()
@@ -310,7 +311,7 @@ class MemorySaveTool:
 
         # Persistent write to MEMORY.md (P1.5)
         if persistent:
-            proj = _project_memory
+            proj = _project_memory_ctx.get()
             if proj is not None:
                 from core.memory.project import ProjectMemory
 
@@ -375,7 +376,7 @@ class RuleCreateTool:
         paths: list[str] = kwargs["paths"]
         content: str = kwargs["content"]
 
-        proj = _project_memory
+        proj = _project_memory_ctx.get()
         if proj is None:
             return {"result": {"created": False, "error": "Project memory not available"}}
 
@@ -424,7 +425,7 @@ class RuleUpdateTool:
         rule_name: str = kwargs["name"]
         content: str = kwargs["content"]
 
-        proj = _project_memory
+        proj = _project_memory_ctx.get()
         if proj is None:
             return {"result": {"updated": False, "error": "Project memory not available"}}
 
@@ -464,7 +465,7 @@ class RuleDeleteTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         rule_name: str = kwargs["name"]
 
-        proj = _project_memory
+        proj = _project_memory_ctx.get()
         if proj is None:
             return {"result": {"deleted": False, "error": "Project memory not available"}}
 
@@ -499,7 +500,7 @@ class RuleListTool:
         }
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
-        proj = _project_memory
+        proj = _project_memory_ctx.get()
         if proj is None:
             return {"result": {"rules": [], "error": "Project memory not available"}}
 
@@ -530,7 +531,7 @@ class NoteSaveTool:
         key: str = kwargs["key"]
         content: str = kwargs["content"]
 
-        proj = _project_memory
+        proj = _project_memory_ctx.get()
         if proj is None:
             return {"error": "Project memory not available"}
 
@@ -561,7 +562,7 @@ class NoteReadTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs.get("query", "")
 
-        proj = _project_memory
+        proj = _project_memory_ctx.get()
         if proj is None:
             return {"error": "Project memory not available"}
 

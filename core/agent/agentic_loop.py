@@ -127,7 +127,7 @@ class AgenticLoop:
         execute tools → feed results back → continue
     """
 
-    DEFAULT_MAX_ROUNDS = 50
+    DEFAULT_MAX_ROUNDS = 0  # 0 = unlimited (time-based control via time_budget_s)
     DEFAULT_MAX_TOKENS = 32768
     WRAP_UP_HEADROOM = 2  # force text response N rounds before max
     _WRAP_UP_TIME_HEADROOM_S = 30.0  # force text 30s before time budget expires
