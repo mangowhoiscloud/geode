@@ -26,7 +26,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.37.0] — 2026-03-30
 
 ### Changed
 - **Thin-only architecture** — standalone REPL eliminated (~487 lines deleted). `geode` always connects to serve via IPC; auto-starts serve if not running. Single code path for all execution: CLI, Slack/Discord, Scheduler all route through `acquire_all(key, ["session", "global"])`.
