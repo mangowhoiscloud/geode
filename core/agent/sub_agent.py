@@ -24,6 +24,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from core.agent.worker import WorkerRequest
 from core.hooks import HookEvent, HookSystem
 from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.isolated_execution import (
@@ -211,7 +212,7 @@ class SubAgentManager:
         mcp_manager: Any | None = None,
         skill_registry: Any | None = None,
         depth: int = 0,
-        max_depth: int = 2,
+        max_depth: int = 1,  # Depth=1 enforced (Claude Code pattern: sub-agents cannot recurse)
         # Sandbox hardening: tool scope restriction
         denied_tools: set[str] | None = None,
     ) -> None:
@@ -301,11 +302,15 @@ class SubAgentManager:
                     "child_session_key": child_key,
                 },
             )
-            sid = self._runner.run_async(
-                self._execute_subtask,
-                args=(task,),
-                config=config,
-            )
+            # Route: P2-B (action_handlers set) → subprocess via WorkerRequest
+            #        Legacy (task_handler only) → thread via _execute_subtask
+            if self._action_handlers is not None:
+                fn_or_request = self._build_worker_request(task)
+                sid = self._runner.run_async(fn_or_request, config=config)
+            else:
+                sid = self._runner.run_async(
+                    self._execute_subtask, args=(task,), config=config
+                )
             session_ids.append((task, sid))
             log.debug(
                 "SubAgent launched: %s (%s) key=%s",
@@ -432,6 +437,31 @@ class SubAgentManager:
             child_result.status,
         )
 
+    def _build_worker_request(self, task: SubTask) -> WorkerRequest:
+        """Build a WorkerRequest for subprocess execution (Phase 2).
+
+        The subprocess inherits API keys via env vars. Domain context,
+        model config, and denied tools are passed explicitly.
+        """
+        from core.config import Settings, _resolve_provider
+        from core.domains.port import get_domain_or_none
+
+        settings = Settings()
+        domain = get_domain_or_none()
+        denied = list(self._denied_tools | {"delegate_task"})
+
+        return WorkerRequest(
+            task_id=task.task_id,
+            task_type=task.task_type,
+            description=task.description,
+            args=task.args,
+            denied_tools=denied,
+            model=settings.model,
+            provider=_resolve_provider(settings.model),
+            timeout_s=self._timeout_s,
+            domain=domain.name if domain else "",
+        )
+
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:
         """Resolve agent context.
 
@@ -536,11 +566,11 @@ class SubAgentManager:
             )
 
     def _execute_subtask(self, task: SubTask) -> str:
-        """Execute a single sub-task (runs in isolated thread).
+        """Execute a single sub-task in thread mode (legacy handler path only).
 
-        P2-B: if ``action_handlers`` is set, creates a full AgenticLoop with
-        the parent's tools, MCP, skills, and memory.  Falls back to the legacy
-        ``task_handler`` function for backward compatibility.
+        Production sub-agents (P2-B with action_handlers) use subprocess via
+        WorkerRequest instead. This method is kept for backward compatibility
+        with tests and legacy task_handler consumers.
         """
         from core.memory.session_key import build_subagent_session_key
 
@@ -548,11 +578,6 @@ class SubAgentManager:
         _subagent_context.is_subagent = True
         _subagent_context.child_session_key = child_key
         try:
-            # P2-B: Full AgenticLoop path
-            if self._action_handlers is not None:
-                return self._execute_with_agentic_loop(task)
-
-            # Legacy path: simple task_handler function
             return self._execute_with_handler(task)
         except Exception as exc:
             log.error("SubTask %s failed: %s", task.task_id, exc, exc_info=True)
@@ -560,96 +585,6 @@ class SubAgentManager:
         finally:
             _subagent_context.is_subagent = False
             _subagent_context.child_session_key = ""
-
-    def _execute_with_agentic_loop(self, task: SubTask) -> str:
-        """Run sub-task through a full AgenticLoop (P2-B)."""
-        from core.agent.agentic_loop import AgenticLoop
-        from core.agent.conversation import ConversationContext
-        from core.agent.tool_executor import ToolExecutor
-        from core.config import settings
-
-        # 1. Propagate ContextVars to child thread
-        _propagate_context_vars()
-
-        # GAP 6: Create isolated memory store for this sub-agent task
-        from core.memory.agent_memory import AgentMemoryStore
-
-        agent_memory = AgentMemoryStore(task.task_id)
-
-        # 2. Fresh conversation context (independent context window)
-        conversation = ConversationContext(max_turns=200)
-
-        # 3. Filter denied tools from action_handlers (sandbox hardening)
-        filtered_handlers = self._action_handlers
-        if self._denied_tools and self._action_handlers:
-            filtered_handlers = {
-                k: v for k, v in self._action_handlers.items() if k not in self._denied_tools
-            }
-
-        # 4. Build child SubAgentManager if depth allows recursion
-        child_sam: SubAgentManager | None = None
-        if self._depth < self._max_depth:
-            child_sam = SubAgentManager(
-                runner=IsolatedRunner(),
-                action_handlers=filtered_handlers,
-                mcp_manager=self._mcp_manager,
-                skill_registry=self._skill_registry,
-                depth=self._depth + 1,
-                max_depth=self._max_depth,
-                timeout_s=self._timeout_s,
-                hooks=self._hooks,
-                agent_registry=self._agent_registry,
-                parent_session_key=self._parent_session_key,
-                denied_tools=self._denied_tools,
-            )
-
-        # 5. ToolExecutor with filtered handler set
-        executor = ToolExecutor(
-            action_handlers=filtered_handlers,
-            sub_agent_manager=child_sam,
-            mcp_manager=self._mcp_manager,
-            auto_approve=True,  # sub-agents skip HITL prompts
-        )
-
-        # 5. AgenticLoop (same capabilities + model/provider as parent)
-        from core.config import _resolve_provider
-
-        loop = AgenticLoop(
-            conversation,
-            executor,
-            max_rounds=settings.subagent_max_rounds,
-            max_tokens=settings.subagent_max_tokens,
-            model=settings.model,
-            provider=_resolve_provider(settings.model),
-            mcp_manager=self._mcp_manager,
-            skill_registry=self._skill_registry,
-            quiet=True,  # suppress spinner — parent handles UI
-        )
-
-        # 6. Run: use task description as user prompt
-        prompt = task.description
-        if task.args:
-            prompt += f"\n\nParameters: {json.dumps(task.args, ensure_ascii=False)}"
-        agentic_result = loop.run(prompt)
-
-        # 7. Build SubAgentResult
-        text = agentic_result.text if agentic_result else ""
-
-        # GAP 6: Persist sub-agent summary to isolated memory
-        if text:
-            agent_memory.save("summary", text[:500])
-            agent_memory.save("status", "ok")
-
-        result = SubAgentResult(
-            task_id=task.task_id,
-            task_type=task.task_type,
-            status="ok" if text else "error",
-            depth=self._depth,
-            summary=text[:500] if text else "No response from sub-agent",
-            data={"response": text},
-            error_message=None if text else "Empty response",
-        )
-        return result.to_json()
 
     def _execute_with_handler(self, task: SubTask) -> str:
         """Legacy path: simple task_handler function call."""
@@ -766,29 +701,6 @@ class SubAgentManager:
         if "depth" in lower:
             return ErrorCategory.DEPTH_EXCEEDED
         return ErrorCategory.UNKNOWN
-
-
-# ---------------------------------------------------------------------------
-# ContextVar propagation for sub-agent threads (P2-B)
-# ---------------------------------------------------------------------------
-
-
-def _propagate_context_vars() -> None:
-    """Propagate memory ContextVars to the current (child) thread.
-
-    Python ``contextvars`` do not automatically inherit across threads.
-    This function re-initializes memory bindings so that tools like
-    ``note_read``, ``memory_search`` work inside sub-agents.
-    """
-    try:
-        from core.memory.organization import MonoLakeOrganizationMemory
-        from core.memory.project import ProjectMemory
-        from core.tools.memory_tools import set_org_memory, set_project_memory
-
-        set_project_memory(ProjectMemory())
-        set_org_memory(MonoLakeOrganizationMemory())
-    except Exception:
-        log.debug("ContextVar propagation skipped (memory modules unavailable)")
 
 
 # ---------------------------------------------------------------------------

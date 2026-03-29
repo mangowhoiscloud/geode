@@ -26,6 +26,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.34.0] — 2026-03-29
+
+### Added
+- **Sub-Agent Subprocess Isolation** — `WorkerRequest`/`WorkerResult` 데이터 계약 + `core.agent.worker` subprocess worker. IsolatedRunner가 callable(thread) / WorkerRequest(subprocess) 자동 라우팅. 크래시 격리 + SIGKILL timeout.
+- **3-Entry-Point 리소스 공유 감사** — REPL/serve/scheduler 전체 리소스 맵 시각화 + 5건 결함 식별.
+
+### Changed
+- **Sub-Agent max_depth 2→1** — Claude Code 패턴 정합. 서브에이전트 재귀 금지.
+- **IsolatedRunner Semaphore Wait** — 즉시 거부(0s) → 대기(30s). 동시성 제어 개선.
+
+### Architecture
+- **Shared Services GAP 식별** — HookSystem 미연결(CRITICAL), module-level globals 스레드 비안전(HIGH), ContextVar 미전파(HIGH), _readiness 레이스(MEDIUM), _result_cache 충돌(LOW). 다음 버전에서 수정 예정.
+
 ## [0.33.0] — 2026-03-29
 
 ### Added

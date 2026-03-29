@@ -4,7 +4,7 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.33.0
+- **Version**: 0.34.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -50,7 +50,7 @@ L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 
 서브에이전트는 부모의 tools/MCP/skills/memory를 상속받아 독립 컨텍스트에서 병렬 실행.
 `SubAgentManager` → `CoalescingQueue`(250ms dedup) → `TaskGraph`(DAG) → `IsolatedRunner`(MAX_CONCURRENT=5).
-제어: max_depth=2, max_total=15, timeout=120s, auto_approve=True(STANDARD만), max_rounds=50, max_tokens=32768, time_budget_s=0 (부모와 동일).
+제어: max_depth=1(재귀 금지), max_total=15, timeout=120s, auto_approve=True(STANDARD만), max_rounds=50, max_tokens=32768, time_budget_s=0 (부모와 동일).
 
 **메모리 격리 규칙:**
 - 서브에이전트는 부모 메모리 스냅샷을 읽기 전용으로 상속

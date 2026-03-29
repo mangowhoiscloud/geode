@@ -5,7 +5,6 @@ Extracted from core.runtime as standalone functions (formerly GeodeRuntime stati
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -79,7 +78,7 @@ def build_automation(
     trigger_manager.start_scheduler()
 
     # Advanced scheduler service (3-type: AT/EVERY/CRON + active hours)
-    from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+    from core.automation.scheduler import SchedulerService
 
     scheduler_service = SchedulerService(
         trigger_manager=trigger_manager,

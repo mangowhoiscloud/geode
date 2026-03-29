@@ -481,10 +481,16 @@ class TestIsolatedRunnerAsync:
         for ev in started_events:
             ev.wait(timeout=2.0)
 
-        # The next synchronous run should fail with concurrency limit
-        result = runner.run(lambda: "over-limit")
-        assert result.success is False
-        assert "Concurrency limit" in (result.error or "")
+        # The next synchronous run should fail with concurrency limit.
+        # Use a short wait to avoid 30s default; slots are genuinely full.
+        orig = runner.SEMAPHORE_WAIT_S
+        runner.SEMAPHORE_WAIT_S = 0.1
+        try:
+            result = runner.run(lambda: "over-limit")
+            assert result.success is False
+            assert "Concurrency limit" in (result.error or "")
+        finally:
+            runner.SEMAPHORE_WAIT_S = orig
 
         # Release all
         for b in barriers:
