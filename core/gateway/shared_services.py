@@ -62,7 +62,7 @@ _MODE_DEFAULTS: dict[SessionMode, dict[str, Any]] = {
     },
     SessionMode.IPC: {
         "hitl_level": 0,  # auto-approve (WRITE ok, DANGEROUS policy-blocked)
-        "quiet": False,
+        "quiet": True,  # suppress serve-side UI; results sent via IPC JSON
         "time_budget_s": 0.0,  # unlimited (interactive via IPC)
         "max_rounds": 0,
     },

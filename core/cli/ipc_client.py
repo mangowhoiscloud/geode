@@ -55,8 +55,13 @@ def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10
             return True
 
         log.info("Starting geode serve in background...")
+        # Use 'geode' CLI binary (not sys.executable which may point to wrong Python)
+        import shutil
+
+        geode_bin = shutil.which("geode")
+        cmd = [geode_bin, "serve"] if geode_bin else [sys.executable, "-m", "geode.cli", "serve"]
         subprocess.Popen(  # noqa: S603  # nosec B603 — fixed args, no untrusted input
-            [sys.executable, "-m", "geode.cli", "serve"],
+            cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
