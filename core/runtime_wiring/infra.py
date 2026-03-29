@@ -124,11 +124,13 @@ def build_default_lanes() -> LaneQueue:
     from core.orchestration.lane_queue import SessionLane
 
     queue = LaneQueue()
-    queue.set_session_lane(SessionLane(
-        max_sessions=256,
-        idle_timeout_s=300.0,
-        timeout_s=300.0,
-    ))
+    queue.set_session_lane(
+        SessionLane(
+            max_sessions=256,
+            idle_timeout_s=300.0,
+            timeout_s=300.0,
+        )
+    )
     queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY, timeout_s=30.0)
     return queue
 
