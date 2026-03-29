@@ -115,6 +115,10 @@ class RuntimeCoreConfig:
     profile_store: ProfileStore | None = None
     profile_rotator: ProfileRotator | None = None
     cooldown_tracker: CooldownTracker | None = None
+    # Unified bootstrap: resources previously in bootstrap_geode() only
+    mcp_manager: Any = None
+    skill_registry: Any = None
+    readiness: Any = None
 
 
 @dataclass
@@ -181,6 +185,10 @@ class GeodeRuntime:
         self.ip_name = core.ip_name
         self.run_id = ""
         self.is_subagent: bool = False
+        # Unified bootstrap resources
+        self.mcp_manager = core.mcp_manager
+        self.skill_registry = core.skill_registry
+        self.readiness = core.readiness
         self._compiled_graph: CompiledStateGraph[Any, None, Any, Any] | None = None
         # Unpack automation (L4.5)
         auto = automation or RuntimeAutomationConfig()
@@ -254,6 +262,11 @@ class GeodeRuntime:
         config_watcher = bootstrap.build_config_watcher()
         lane_queue = infra.build_default_lanes()
 
+        # Unified bootstrap: MCP, Skills, Readiness
+        mcp_manager = bootstrap.build_mcp_manager()
+        skill_registry = bootstrap.build_skill_registry()
+        readiness = bootstrap.build_readiness()
+
         # Plugin wiring (MCP adapters + Gateway)
         adapter_wiring.build_plugins()
 
@@ -305,6 +318,9 @@ class GeodeRuntime:
             profile_store=profile_store,
             profile_rotator=profile_rotator,
             cooldown_tracker=cooldown_tracker,
+            mcp_manager=mcp_manager,
+            skill_registry=skill_registry,
+            readiness=readiness,
         )
         automation_config = RuntimeAutomationConfig(**automation)
         memory_config = RuntimeMemoryConfig(

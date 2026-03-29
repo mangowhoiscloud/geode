@@ -85,17 +85,11 @@ class GeodeBootstrap:
             log.debug("User profile propagation skipped", exc_info=True)
 
 
-def bootstrap_geode(
-    *,
-    verbose: bool = False,
-    load_env: bool = False,
-) -> GeodeBootstrap:
-    """Single initialization for both REPL and serve.
+def setup_contextvars(*, load_env: bool = False) -> None:
+    """Initialize ContextVars only (domain, memory, profile, env).
 
-    Args:
-        verbose: Enable verbose logging.
-        load_env: Load .env files into ``os.environ``
-            (serve needs this; REPL typically does not).
+    No resource creation. Call before GeodeRuntime.create() so that
+    domain adapter and memory ContextVars are available to all layers.
     """
     if load_env:
         import os
@@ -155,6 +149,19 @@ def bootstrap_geode(
         set_user_profile(user_profile)
     except Exception:
         log.debug("User profile context skipped", exc_info=True)
+
+
+def bootstrap_geode(
+    *,
+    verbose: bool = False,
+    load_env: bool = False,
+) -> GeodeBootstrap:
+    """REPL bootstrap — ContextVars + MCP + Skills + Handlers.
+
+    For serve mode, use ``setup_contextvars()`` + ``GeodeRuntime.create()``
+    directly instead.
+    """
+    setup_contextvars(load_env=load_env)
 
     # 3. Readiness
     from core.cli import _set_readiness
