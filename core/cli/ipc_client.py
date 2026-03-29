@@ -21,29 +21,55 @@ DEFAULT_SOCKET_PATH = Path.home() / ".geode" / "cli.sock"
 
 
 def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10.0) -> bool:
-    """Start serve in background if not running. Returns True when ready."""
+    """Start serve in background if not running. Returns True when ready.
+
+    Uses a pidfile lock to prevent TOCTOU race when multiple thin clients
+    attempt to start serve simultaneously.
+    """
+    import fcntl
     import subprocess  # nosec B404 — used for controlled serve daemon spawn
     import sys
+    import time
 
     if is_serve_running(socket_path):
         return True
 
-    log.info("Starting geode serve in background...")
-    subprocess.Popen(  # noqa: S603  # nosec B603 — fixed args, no untrusted input
-        [sys.executable, "-m", "geode.cli", "serve"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    # Pidfile lock prevents duplicate serve spawn (TOCTOU fix)
+    lock_path = (socket_path or DEFAULT_SOCKET_PATH).with_suffix(".startup.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        lock_fd = open(lock_path, "w")  # noqa: SIM115
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        # Another client is already starting serve — just wait
+        log.debug("Another client is starting serve, waiting...")
+        for _ in range(int(timeout_s * 10)):
+            if is_serve_running(socket_path):
+                return True
+            time.sleep(0.1)
+        return False
 
-    # Wait for socket to appear
-    import time
-
-    for _ in range(int(timeout_s * 10)):
+    try:
+        # Re-check after acquiring lock (serve may have started while waiting)
         if is_serve_running(socket_path):
             return True
-        time.sleep(0.1)
-    return False
+
+        log.info("Starting geode serve in background...")
+        subprocess.Popen(  # noqa: S603  # nosec B603 — fixed args, no untrusted input
+            [sys.executable, "-m", "geode.cli", "serve"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+        for _ in range(int(timeout_s * 10)):
+            if is_serve_running(socket_path):
+                return True
+            time.sleep(0.1)
+        return False
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        lock_fd.close()
 
 
 def is_serve_running(socket_path: Path | None = None) -> bool:
