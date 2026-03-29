@@ -55,7 +55,6 @@ class TestSharedServicesCreateSession:
             skill_registry=MagicMock(),
             hook_system=MagicMock(),
             tool_handlers={"test_tool": lambda **kw: {"ok": True}},
-            agentic_ref=[None],
             _model="claude-sonnet-4-6",
             _provider="anthropic",
             _cost_budget=5.0,
@@ -104,12 +103,12 @@ class TestSharedServicesCreateSession:
         )
         assert "gateway instructions" in loop._system_suffix
 
-    def test_agentic_ref_updated(self, services: SharedServices) -> None:
-        """create_session updates the shared agentic_ref."""
-        _, loop1 = services.create_session(SessionMode.REPL)
-        assert services.agentic_ref[0] is loop1
-        _, loop2 = services.create_session(SessionMode.DAEMON)
-        assert services.agentic_ref[0] is loop2
+    def test_current_loop_ctx_set(self, services: SharedServices) -> None:
+        """create_session sets _current_loop_ctx ContextVar."""
+        from core.cli.session_state import get_current_loop
+
+        _, loop = services.create_session(SessionMode.REPL)
+        assert get_current_loop() is loop
 
     def test_conversation_injected(self, services: SharedServices) -> None:
         from core.agent.conversation import ConversationContext
@@ -157,6 +156,61 @@ class TestBuildSharedServices:
     def test_model_resolved(self) -> None:
         services = build_shared_services()
         assert services._model != ""
+
+    def test_no_agentic_ref_attribute(self) -> None:
+        """SharedServices should not have agentic_ref (removed in system-hardening)."""
+        services = build_shared_services()
+        assert not hasattr(services, "agentic_ref")
+
+
+class TestSchedulerREPLIsolation:
+    """Verify scheduler sessions don't corrupt REPL state."""
+
+    @pytest.fixture()
+    def services(self) -> SharedServices:
+        return SharedServices(
+            mcp_manager=MagicMock(),
+            skill_registry=MagicMock(),
+            hook_system=MagicMock(),
+            tool_handlers={"test_tool": lambda **kw: {"ok": True}},
+            _model="claude-sonnet-4-6",
+            _provider="anthropic",
+            _cost_budget=5.0,
+        )
+
+    def test_scheduler_does_not_corrupt_repl_loop(self, services: SharedServices) -> None:
+        """Scheduler create_session sets ContextVar per-thread, not shared ref."""
+        import threading
+
+        from core.cli.session_state import get_current_loop
+
+        # REPL session in main thread
+        _, repl_loop = services.create_session(SessionMode.REPL)
+        assert get_current_loop() is repl_loop
+
+        # Scheduler session in background thread
+        sched_loops: list = []
+        errors: list = []
+
+        def sched_worker() -> None:
+            try:
+                _, sched_loop = services.create_session(
+                    SessionMode.SCHEDULER, propagate_context=False
+                )
+                sched_loops.append(sched_loop)
+            except Exception as exc:
+                errors.append(exc)
+
+        t = threading.Thread(target=sched_worker)
+        t.start()
+        t.join(timeout=5)
+
+        assert not errors, f"Scheduler thread error: {errors}"
+        assert len(sched_loops) == 1
+
+        # REPL's ContextVar should still point to repl_loop (not scheduler's)
+        assert get_current_loop() is repl_loop
+        assert sched_loops[0] is not repl_loop
 
     def test_explicit_hook_system_used(self) -> None:
         mock_hooks = MagicMock()
