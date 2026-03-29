@@ -884,7 +884,15 @@ def _thin_interactive_loop() -> None:
                 continue
 
             # Free text → relay as prompt
+            from core.cli.ui.status import TextSpinner
+
+            _spinner = TextSpinner("Thinking...")
+            _spinner.start()
             response = client.send_prompt(user_input)
+            _spinner.stop()
+            if response.get("type") == "error" and "Connection lost" in response.get("message", ""):
+                console.print("\n  [error]Connection to serve lost[/error]\n")
+                break
             _render_ipc_response(response)
     finally:
         client.close()
@@ -899,9 +907,12 @@ def _render_ipc_response(response: dict[str, Any]) -> None:
         return
 
     if rtype == "result":
-        for tc in response.get("tool_calls", []):
+        # Tool calls
+        tool_calls = response.get("tool_calls", [])
+        for tc in tool_calls:
             console.print(f"  [dim]\u25b8 {tc.get('name', '?')}[/dim]")
 
+        # Main text
         text = response.get("text", "")
         if text:
             from rich.markdown import Markdown
@@ -910,9 +921,22 @@ def _render_ipc_response(response: dict[str, Any]) -> None:
             console.print(Markdown(text))
             console.print()
 
+        # Status line (model, rounds, tools)
+        model = response.get("model", "")
         rounds = response.get("rounds", 0)
-        if rounds > 1:
-            console.print(f"  [dim]{rounds} rounds[/dim]")
+        parts = []
+        if model:
+            parts.append(f"\u2722 {model}")
+        if rounds:
+            parts.append(f"{rounds} rounds")
+        if tool_calls:
+            parts.append(f"{len(tool_calls)} tools")
+        if parts:
+            console.print(f"  [dim]{' · '.join(parts)}[/dim]")
+        return
+
+    # Fallback: unexpected response type
+    console.print(f"\n  [dim]{response}[/dim]\n")
 
 
 # ---------------------------------------------------------------------------
@@ -933,11 +957,18 @@ def main(
         _welcome_screen()
 
         # Ensure serve is running (auto-start if needed)
-        from core.cli.ipc_client import start_serve_if_needed
+        from core.cli.ipc_client import is_serve_running, start_serve_if_needed
 
-        if not start_serve_if_needed(timeout_s=30):
-            console.print("  [error]Failed to start geode serve[/error]")
-            console.print("  [dim]Try manually: geode serve &[/dim]")
+        if not is_serve_running():
+            from core.cli.ui.status import TextSpinner
+
+            spinner = TextSpinner("Starting serve...")
+            spinner.start()
+            ready = start_serve_if_needed(timeout_s=30)
+            spinner.stop()
+            if not ready:
+                console.print("  [error]Failed to start geode serve[/error]")
+                console.print("  [dim]Try manually: geode serve &[/dim]")
             raise typer.Exit(1)
 
         console.print("  [muted]Connected to serve via IPC[/muted]")

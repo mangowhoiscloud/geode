@@ -209,17 +209,23 @@ class CLIPoller:
 
                 tool_calls = []
                 if result and result.tool_calls:
-                    tool_calls = [
-                        {"name": tc.name, "args": tc.arguments}
-                        for tc in result.tool_calls
-                        if hasattr(tc, "name")
-                    ]
+                    for tc in result.tool_calls:
+                        if isinstance(tc, dict):
+                            tool_calls.append({"name": tc.get("name", "?"), "args": tc.get("input", {})})
+                        elif hasattr(tc, "name"):
+                            tool_calls.append({"name": tc.name, "args": getattr(tc, "arguments", {})})
+                # Extract model/cost from last LLM call metadata if available
+                model = getattr(loop, "model", "unknown")
+                summary = getattr(result, "summary", "") if result else ""
+
                 return {
                     "type": "result",
                     "text": result.text if result else "",
                     "rounds": result.rounds if result else 0,
                     "tool_calls": tool_calls,
                     "termination": (result.termination_reason if result else "unknown"),
+                    "model": model,
+                    "summary": summary,
                 }
             except Exception as exc:
                 log.warning("CLI prompt execution error", exc_info=True)
