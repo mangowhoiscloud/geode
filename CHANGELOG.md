@@ -28,29 +28,43 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.37.0] — 2026-03-30
 
+## [0.37.0] — 2026-03-30
+
 ### Changed
 - **Thin-only architecture** — standalone REPL eliminated (~487 lines deleted). `geode` always connects to serve via IPC; auto-starts serve if not running. Single code path for all execution: CLI, Slack/Discord, Scheduler all route through `acquire_all(key, ["session", "global"])`.
 - **SessionMode.IPC** — new session mode for thin CLI client. `hitl=0` (WRITE allowed, DANGEROUS policy-blocked). Replaces `SessionMode.REPL` for IPC connections.
 - **CLIPoller hardened** — `acquire_all()` gating, `chmod 0o600` on Unix socket, `command` type in IPC protocol for slash command relay.
 - **SessionLane — per-key serialization** — replaced 4-lane system (session/global/gateway/scheduler) with OpenClaw pattern: `SessionLane` (per-session-key `Semaphore(1)`) + `Lane("global", max=8)`. Same session key serializes, different keys parallel. `acquire_all(key, ["session", "global"])` unifies all execution paths. OpenClaw defect fixes: `max_sessions=256` cap, `cleanup_idle()` eviction.
+- **Unified bootstrap** — `serve()` no longer calls `bootstrap_geode()`. Uses `setup_contextvars()` + `GeodeRuntime.create()` directly. ONE HookSystem, ONE MCP manager, ONE SkillRegistry across all entry points. Resolves C1/C2/H1/H4/H5 from structural audit.
 
 ### Added
-- **H3: CLIChannel IPC** — Unix domain socket (`~/.geode/cli.sock`) connects thin CLI client to `geode serve`. `CLIPoller` accepts local connections, creates REPL sessions via SharedServices. `IPCClient` auto-detects serve and delegates agentic execution over line-delimited JSON protocol. Fallback to standalone when serve is not running.
+- **CLIChannel IPC** — Unix domain socket (`~/.geode/cli.sock`) connects thin CLI client to `geode serve`. `CLIPoller` accepts local connections, creates REPL sessions via SharedServices. `IPCClient` auto-detects serve and delegates agentic execution over line-delimited JSON protocol. Fallback to standalone when serve is not running.
 - **Scheduler in serve mode** — `SchedulerService` extracted from REPL into `geode serve`. Scheduled jobs now fire in headless mode. Shared `_drain_scheduler_queue()` helper eliminates duplication between REPL and serve paths.
-
-### Changed
-- **Unified bootstrap** — `serve()` no longer calls `bootstrap_geode()`. Uses `setup_contextvars()` + `GeodeRuntime.create()` directly. ONE HookSystem, ONE MCP manager, ONE SkillRegistry across all entry points. Resolves C1/C2/H1/H4/H5 from structural audit.
+- **Lane.acquire_timeout()** — blocking-with-timeout acquisition for Lane semaphores.
+- **SessionLane class** — per-key `Semaphore(1)`, `max_sessions=256`, idle cleanup at 300s.
+- **Serve auto-start** — background daemon spawn with pidfile lock. `geode` thin CLI auto-starts serve if not running.
+- **IPC command type** — slash command server-side relay via `command` type in IPC protocol.
 
 ### Fixed
 - **C3: Dual Scheduler race** — `fcntl.flock(LOCK_EX/LOCK_SH)` on `jobs.json` save/load. REPL and serve can no longer corrupt shared job store via concurrent file access.
 - **H2: Scheduler → LaneQueue** — replaced ad-hoc `Semaphore(2)` with `Lane.try_acquire()`/`manual_release()`. Scheduler concurrency now routes through the central LaneQueue system.
 - **M2: Scheduler PolicyChain** — `create_session(SCHEDULER/DAEMON)` filters DANGEROUS tools (`run_bash`, `delegate_task`). Headless modes can no longer invoke tools requiring HITL approval.
 - **M3: Stuck job detection** — `running_since_ms` field tracks active jobs. `detect_stuck_jobs()` runs each tick, marks jobs exceeding 10min threshold as `stuck`, fires hook.
+- **TOCTOU race in start_serve_if_needed** — pidfile lock prevents race between check and spawn.
+- **Sub-agent depth guard** — explicit `if depth >= max_depth` check replaces implicit gating.
 - **Scheduler drain exception safety** — lane slot leak on `create_session()` failure fixed. `main_loop.run()` exception no longer kills the drain loop. Init failure in serve promoted to `log.warning`.
 - **P1 batch (5 fixes)** — C3/C4 regression tests, WorkerRequest `time_budget_s` pass-through, thread-mode `denied_tools` raises (was warn), announce TTL reset (`setdefault` → assignment), subprocess env whitelist +2 vars.
 
+### Removed
+- **CoalescingQueue** — 148 lines, no-op callback, 0 trigger rate. Removed entirely.
+- **Standalone REPL `_interactive_loop`** — ~487 lines eliminated. All execution routes through serve.
+- **Gateway/scheduler named lanes** — replaced by SessionLane per-key serialization.
+- **IsolatedRunner internal Semaphore** — replaced by `Lane("global", max=8)`.
+
 ### Architecture
+- **6-Layer → 4-Layer Stack** — Model → Runtime → Harness → Agent, with orthogonal Domain (`⊥ Domain`). Simplified from previous L0-L5 numbering.
 - **M1: Config-driven pollers** — `build_gateway()` reads `[gateway] pollers` from `config.toml`. Dynamic `_POLLER_REGISTRY` replaces hardcoded `register_poller()` calls. Default: all three (slack, discord, telegram).
+- **19 legacy docs moved to archive** — outdated architecture and plan documents relocated to `docs/archive/`.
 
 ## [0.35.1] — 2026-03-29
 
