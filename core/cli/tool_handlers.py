@@ -1040,7 +1040,6 @@ def _build_delegated_handlers() -> dict[str, Any]:
 
 def _build_mcp_handler(
     mcp_manager: Any,
-    agentic_ref: list[Any] | None = None,
 ) -> dict[str, Any]:
     """Build MCP server installation handler."""
 
@@ -1200,7 +1199,6 @@ def _build_tool_handlers(
     verbose: bool = False,
     *,
     mcp_manager: Any = None,
-    agentic_ref: list[Any] | None = None,
     skill_registry: Any = None,
 ) -> dict[str, Any]:
     """Build tool name -> handler function mapping for ToolExecutor.
@@ -1208,7 +1206,6 @@ def _build_tool_handlers(
     Each handler receives tool_input kwargs and returns a dict result.
     ``mcp_manager`` is used by install_mcp_server.
     ``skill_registry`` is used by generate_report for skill-enhanced narrative.
-    ``agentic_ref`` is deprecated — handlers use ``_current_loop_ctx`` ContextVar.
 
     Delegates to group-specific builder functions and merges the results.
     """
@@ -1227,7 +1224,7 @@ def _build_tool_handlers(
     handlers.update(_build_delegated_handlers())
     handlers.update(_build_notification_handlers())
     handlers.update(_build_calendar_handlers())
-    handlers.update(_build_mcp_handler(mcp_manager, agentic_ref))
+    handlers.update(_build_mcp_handler(mcp_manager))
     handlers.update(_build_context_handlers())
     handlers.update(_build_task_handlers())
     return handlers
