@@ -9,13 +9,11 @@ M3: Stuck job detection
 
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # C3: File lock on jobs.json
