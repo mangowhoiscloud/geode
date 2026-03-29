@@ -11,26 +11,26 @@ paths:
   - "*trend*"
 ---
 
-## 스케줄 실행 시 날짜 인식 규칙 (Date-Aware Schedule)
+## Date-Aware Schedule Execution Rules
 
-### 원칙
-LLM의 학습 데이터 cutoff 이후 시점이므로, 모든 스케줄/배치 작업 실행 시 반드시 다음을 수행:
+### Principle
+Since the LLM's training data cutoff may have passed, all schedule/batch job executions must perform the following:
 
-### 실행 프로토콜
-1. **날짜 확인 (필수 1단계)**: 작업 시작 전 반드시 `general_web_search("today's date")` 또는 `run_bash("date")` 로 현재 날짜 확인
-2. **날짜 태깅**: 모든 검색 쿼리에 확인된 연도/월 포함 (예: "LLM 개발자 채용 2026년 3월")
-3. **freshness 필터**: 웹 검색 시 가능하면 freshness='pw' (최근 7일) 또는 'pm' (최근 31일) 적용
-4. **결과 검증**: 검색 결과의 날짜가 현재 시점과 일치하는지 교차 확인
-5. **cutoff 경고**: 웹 검색 없이 LLM 지식만으로 시간 민감 정보를 제공할 경우 반드시 ⚠️ cutoff 경고 표시
+### Execution Protocol
+1. **Date Verification (Mandatory Step 1)**: Before starting any task, always verify the current date using `general_web_search("today's date")` or `run_bash("date")`
+2. **Date Tagging**: Include the verified year/month in all search queries (e.g., "LLM developer jobs March 2026")
+3. **Freshness Filter**: When performing web searches, apply freshness='pw' (past 7 days) or 'pm' (past 31 days) when possible
+4. **Result Verification**: Cross-check that the dates in search results match the current time
+5. **Cutoff Warning**: When providing time-sensitive information using only LLM knowledge without web search, always display a ⚠️ cutoff warning
 
-### 적용 범위
-- 채용 공고 검색
-- 뉴스/트렌드 수집
-- 가격/시장 데이터 조회
-- IP 최신 동향 분석
-- 모든 시간 민감(time-sensitive) 스케줄 작업
+### Scope
+- Job posting searches
+- News/trend collection
+- Price/market data lookups
+- IP latest trend analysis
+- All time-sensitive scheduled tasks
 
-### 금지 사항
-- ❌ 날짜 확인 없이 "최신" 정보라고 주장
-- ❌ cutoff 이전 학습 데이터를 현재 사실로 제시
-- ❌ 검색 결과 날짜 미확인 상태로 전달
+### Prohibited Actions
+- ❌ Claiming information is "latest" without date verification
+- ❌ Presenting pre-cutoff training data as current facts
+- ❌ Delivering search results without verifying their dates

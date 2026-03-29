@@ -1,7 +1,7 @@
 [
   {
     "name": "list_ips",
-    "description": "사용 가능한 IP 목록을 표시합니다. 사용자가 어떤 IP가 있는지 물어볼 때 사용하세요.",
+    "description": "Displays the list of available IPs. Use when the user asks what IPs are available.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -12,7 +12,7 @@
   },
   {
     "name": "analyze_ip",
-    "description": "특정 IP를 분석합니다. 사용자가 IP 이름을 말하거나 분석을 요청할 때 사용하세요. IP 이름만 단독으로 입력한 경우에도 이 도구를 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이', 'fixture로만' 등을 명시하면 반드시 dry_run=true로 설정하세요. dry_run=false (live 분석) 시 claude-opus-4-6 + gpt-5.4로 ~8회 LLM 호출, ~$0.15 비용이 발생합니다. 실행 전 사용자에게 비용을 안내하세요.",
+    "description": "Analyzes a specific IP. Use when the user mentions an IP name or requests analysis. Also use this tool when the user inputs only an IP name. If the user specifies 'dry-run', '드라이런' (Korean for dry-run), 'LLM 없이' (Korean for without LLM), 'fixture로만' (Korean for fixture-only), you MUST set dry_run=true. When dry_run=false (live analysis), it makes ~8 LLM calls using claude-opus-4-6 + gpt-5.4, costing ~$0.15. Inform the user of the cost before execution.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -34,7 +34,7 @@
   },
   {
     "name": "search_ips",
-    "description": "키워드나 장르로 IP를 검색합니다. 사용자가 특정 장르나 키워드로 IP를 찾을 때 사용하세요.",
+    "description": "Searches IPs by keyword or genre. Use when the user wants to find IPs by a specific genre or keyword.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -42,7 +42,7 @@
       "properties": {
         "query": {
           "type": "string",
-          "description": "검색 키워드 또는 장르 (e.g. 'dark fantasy', '소울라이크')"
+          "description": "Search keyword or genre (e.g. 'dark fantasy', '소울라이크')"
         }
       },
       "required": [
@@ -52,7 +52,7 @@
   },
   {
     "name": "compare_ips",
-    "description": "두 IP를 비교 분석합니다. 사용자가 두 IP를 비교하고 싶을 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true.",
+    "description": "Performs a comparative analysis of two IPs. Use when the user wants to compare two IPs. If the user specifies 'dry-run', '드라이런' (Korean for dry-run), 'LLM 없이' (Korean for without LLM), set dry_run=true.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -60,11 +60,11 @@
       "properties": {
         "ip_a": {
           "type": "string",
-          "description": "첫 번째 IP 이름"
+          "description": "First IP name"
         },
         "ip_b": {
           "type": "string",
-          "description": "두 번째 IP 이름"
+          "description": "Second IP name"
         },
         "dry_run": {
           "type": "boolean",
@@ -79,7 +79,7 @@
   },
   {
     "name": "show_help",
-    "description": "슬래시 명령어 목록을 표시합니다. 사용자가 명령어 목록이나 도움말 메뉴를 명시적으로 요청할 때만 사용하세요. 일반적인 질문(분석 방식, 역할, 의견 등)에는 이 도구를 사용하지 마세요 — 그런 경우 텍스트로 직접 응답하세요.",
+    "description": "Displays the list of slash commands. Use ONLY when the user explicitly requests a command list or help menu. Do NOT use for general questions (about analysis methods, roles, opinions, etc.) — respond with text directly in those cases.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -90,7 +90,7 @@
   },
   {
     "name": "generate_report",
-    "description": "IP 분석 결과를 리포트로 생성합니다. 사용자가 리포트, 보고서, report 생성을 요청할 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true.",
+    "description": "Generates a report from IP analysis results. Use when the user requests a report or document generation. If the user specifies 'dry-run', '드라이런' (Korean for dry-run), 'LLM 없이' (Korean for without LLM), set dry_run=true.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -112,7 +112,7 @@
   },
   {
     "name": "batch_analyze",
-    "description": "여러 IP를 동시에 배치 분석합니다. 사용자가 전체/다수 IP를 한번에 분석하거나 순위를 보고 싶을 때 사용하세요. 사용자가 'dry-run', '드라이런', 'LLM 없이' 등을 명시하면 dry_run=true.",
+    "description": "Batch-analyzes multiple IPs simultaneously. Use when the user wants to analyze all or many IPs at once, or wants to see rankings. If the user specifies 'dry-run', '드라이런' (Korean for dry-run), 'LLM 없이' (Korean for without LLM), set dry_run=true.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -120,15 +120,15 @@
       "properties": {
         "top": {
           "type": "integer",
-          "description": "분석할 최대 IP 수 (기본값: 20)"
+          "description": "Maximum number of IPs to analyze (default: 20)"
         },
         "genre": {
           "type": "string",
-          "description": "장르 필터 (e.g. 'Dark Fantasy', 'Cyberpunk'). 없으면 전체."
+          "description": "Genre filter (e.g. 'Dark Fantasy', 'Cyberpunk'). Omit for all."
         },
         "stream": {
           "type": "boolean",
-          "description": "스트리밍 모드 사용 여부 (기본값: false)"
+          "description": "Whether to use streaming mode (default: false)"
         },
         "dry_run": {
           "type": "boolean",
@@ -140,7 +140,7 @@
   },
   {
     "name": "check_status",
-    "description": "GEODE 시스템 상태와 MCP 서버 목록을 확인합니다. 사용자가 시스템 상태, MCP 서버 목록/연결 상태, 건강 체크, 모델 정보, 설정을 물어볼 때 사용하세요.",
+    "description": "Checks the GEODE system status and MCP server list. Use when the user asks about system status, MCP server list/connection status, health check, model info, or configuration.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -151,7 +151,7 @@
   },
   {
     "name": "switch_model",
-    "description": "LLM 모델이나 앙상블 모드를 변경합니다. 사용자가 모델 변경, 앙상블 모드 전환을 요청할 때 사용하세요.",
+    "description": "Switches the LLM model or ensemble mode. Use when the user requests a model change or ensemble mode switch.",
     "category": "model",
     "cost_tier": "free",
     "input_schema": {
@@ -159,7 +159,7 @@
       "properties": {
         "model_hint": {
           "type": "string",
-          "description": "원하는 모델이나 모드 힌트 (e.g. 'opus', 'haiku', 'gpt', 'cross', 'ensemble'). 없으면 모델 선택 메뉴 표시."
+          "description": "Desired model or mode hint (e.g. 'opus', 'haiku', 'gpt', 'cross', 'ensemble'). If omitted, displays the model selection menu."
         }
       },
       "required": []
@@ -167,7 +167,7 @@
   },
   {
     "name": "memory_search",
-    "description": "메모리에서 과거 분석 결과, 인사이트, 규칙을 검색합니다. 사용자가 이전 분석 기록이나 학습된 패턴을 물어볼 때 사용하세요.",
+    "description": "Searches memory for past analysis results, insights, and rules. Use when the user asks about previous analysis records or learned patterns.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -175,7 +175,7 @@
       "properties": {
         "query": {
           "type": "string",
-          "description": "검색 키워드 (IP 이름, 장르, 패턴 등)"
+          "description": "Search keyword (IP name, genre, pattern, etc.)"
         },
         "tier": {
           "type": "string",
@@ -185,7 +185,7 @@
             "organization",
             "all"
           ],
-          "description": "검색할 메모리 계층. 기본값: all"
+          "description": "Memory tier to search. Default: all"
         }
       },
       "required": [
@@ -195,7 +195,7 @@
   },
   {
     "name": "memory_save",
-    "description": "메모리에 정보를 저장합니다. 사용자가 '이거 기억해', '저장해둬' 같은 요청을 할 때 사용하세요.",
+    "description": "Saves information to memory. Use when the user requests 'remember this', 'save this', etc.",
     "category": "memory",
     "cost_tier": "cheap",
     "input_schema": {
@@ -203,11 +203,11 @@
       "properties": {
         "key": {
           "type": "string",
-          "description": "저장할 데이터의 식별 키 (e.g. 'berserk_insight')"
+          "description": "Identifier key for the data to save (e.g. 'berserk_insight')"
         },
         "content": {
           "type": "string",
-          "description": "저장할 내용"
+          "description": "Content to save"
         }
       },
       "required": [
@@ -218,7 +218,7 @@
   },
   {
     "name": "manage_rule",
-    "description": "분석 규칙을 생성, 수정, 삭제, 조회합니다. 사용자가 분석 규칙을 관리하거나, 패턴을 학습시키려 할 때 사용하세요.",
+    "description": "Creates, updates, deletes, or lists analysis rules. Use when the user wants to manage analysis rules or train patterns.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -232,22 +232,22 @@
             "delete",
             "list"
           ],
-          "description": "수행할 작업"
+          "description": "Action to perform"
         },
         "name": {
           "type": "string",
-          "description": "규칙 이름 (create/update/delete 시 필수)"
+          "description": "Rule name (required for create/update/delete)"
         },
         "paths": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "규칙이 적용될 IP 패턴 (create 시, e.g. ['*anime*', '*cowboy*'])"
+          "description": "IP patterns the rule applies to (for create, e.g. ['*anime*', '*cowboy*'])"
         },
         "content": {
           "type": "string",
-          "description": "규칙 내용 (create/update 시)"
+          "description": "Rule content (for create/update)"
         }
       },
       "required": [
@@ -257,7 +257,7 @@
   },
   {
     "name": "set_api_key",
-    "description": "API 키를 설정합니다. 사용자가 API 키 설정, 변경을 요청할 때 사용하세요.",
+    "description": "Sets an API key. Use when the user requests API key setup or change.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -265,7 +265,7 @@
       "properties": {
         "key_value": {
           "type": "string",
-          "description": "API 키 값 (없으면 현재 상태 표시)"
+          "description": "API key value (if omitted, displays current status)"
         }
       },
       "required": []
@@ -273,7 +273,7 @@
   },
   {
     "name": "manage_auth",
-    "description": "인증 프로필을 관리합니다. 사용자가 인증, 프로필, 자격증명을 관리하려 할 때 사용하세요.",
+    "description": "Manages authentication profiles. Use when the user wants to manage authentication, profiles, or credentials.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -281,7 +281,7 @@
       "properties": {
         "sub_action": {
           "type": "string",
-          "description": "수행할 작업 (add, remove, list). 없으면 상태 표시."
+          "description": "Action to perform (add, remove, list). If omitted, displays status."
         }
       },
       "required": []
@@ -289,7 +289,7 @@
   },
   {
     "name": "generate_data",
-    "description": "테스트/데모용 합성 IP 데이터를 생성합니다. 사용자가 테스트 데이터, 샘플 데이터, 데모 데이터 생성을 요청할 때 사용하세요.",
+    "description": "Generates synthetic IP data for testing/demo purposes. Use when the user requests test data, sample data, or demo data generation.",
     "category": "data",
     "cost_tier": "cheap",
     "input_schema": {
@@ -297,11 +297,11 @@
       "properties": {
         "count": {
           "type": "integer",
-          "description": "생성할 IP 수 (기본값: 5, 최대: 20)"
+          "description": "Number of IPs to generate (default: 5, max: 20)"
         },
         "genre": {
           "type": "string",
-          "description": "장르 필터 (e.g. 'mecha', 'dark_fantasy')"
+          "description": "Genre filter (e.g. 'mecha', 'dark_fantasy')"
         }
       },
       "required": []
@@ -338,7 +338,7 @@
   },
   {
     "name": "trigger_event",
-    "description": "이벤트 또는 크론 트리거를 관리하거나 수동 실행합니다. 사용자가 트리거, 이벤트 발생, 수동 실행을 요청할 때 사용하세요.",
+    "description": "Manages event or cron triggers, or fires them manually. Use when the user requests trigger management, event firing, or manual execution.",
     "category": "scheduling",
     "cost_tier": "cheap",
     "input_schema": {
@@ -346,11 +346,11 @@
       "properties": {
         "sub_action": {
           "type": "string",
-          "description": "수행할 작업 (list, fire). 없으면 목록 표시."
+          "description": "Action to perform (list, fire). If omitted, displays list."
         },
         "event_name": {
           "type": "string",
-          "description": "발생시킬 이벤트 이름 (fire 시)"
+          "description": "Name of the event to fire (for fire action)"
         }
       },
       "required": []
@@ -381,7 +381,7 @@
   },
   {
     "name": "delegate_task",
-    "description": "서브에이전트에게 작업을 위임하여 병렬로 실행합니다. 사용자가 여러 IP를 동시에 분석하거나, 병렬 작업을 요청할 때 사용하세요.",
+    "description": "Delegates a task to a sub-agent for parallel execution. Use when the user wants to analyze multiple IPs simultaneously or requests parallel tasks.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -438,7 +438,7 @@
   },
   {
     "name": "create_plan",
-    "description": "작업 실행 계획을 생성합니다. 복잡한 요청(3+ 단계, 고비용 작업)에 대해 사전 검토를 위한 계획을 세웁니다. 일반 요청은 goal에 목표를 적고, IP 분석은 ip_name을 사용하세요.",
+    "description": "Creates an execution plan for a task. Builds a plan for pre-review of complex requests (3+ steps, expensive operations). For general requests, put the goal in the goal field; for IP analysis, use ip_name.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -446,16 +446,16 @@
       "properties": {
         "goal": {
           "type": "string",
-          "description": "실행 목표 (e.g. 'AI 트렌드 리서치 후 리포트 작성', 'Berserk 분석')"
+          "description": "Execution goal (e.g. 'Research AI trends and write a report', 'Analyze Berserk')"
         },
         "steps": {
           "type": "array",
           "items": {"type": "string"},
-          "description": "계획 단계 목록 (e.g. ['웹 검색', '데이터 수집', '분석', '리포트 작성']). 생략 시 자동 생성."
+          "description": "List of plan steps (e.g. ['web search', 'data collection', 'analysis', 'report writing']). Auto-generated if omitted."
         },
         "ip_name": {
           "type": "string",
-          "description": "IP 분석용 이름 (e.g. 'Berserk'). 설정 시 파이프라인 템플릿 사용."
+          "description": "IP name for analysis (e.g. 'Berserk'). Uses pipeline template when set."
         },
         "template": {
           "type": "string",
@@ -463,7 +463,7 @@
             "full_pipeline",
             "prospect"
           ],
-          "description": "IP 분석 템플릿. ip_name 설정 시에만 유효."
+          "description": "IP analysis template. Only effective when ip_name is set."
         }
       },
       "required": [
@@ -473,7 +473,7 @@
   },
   {
     "name": "approve_plan",
-    "description": "생성된 분석 계획을 승인하고 실행합니다. create_plan으로 계획을 먼저 생성한 후 사용하세요.",
+    "description": "Approves a generated analysis plan and executes it. Use after first creating a plan with create_plan.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -491,7 +491,7 @@
   },
   {
     "name": "youtube_search",
-    "description": "YouTube에서 IP 관련 영상과 참여 지표를 검색합니다. IP의 YouTube 인기도를 확인할 때 사용하세요.",
+    "description": "Searches YouTube for IP-related videos and engagement metrics. Use to check an IP's YouTube popularity.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -513,7 +513,7 @@
   },
   {
     "name": "reddit_sentiment",
-    "description": "Reddit에서 IP 관련 커뮤니티 감성을 분석합니다. IP의 Reddit 커뮤니티 반응을 확인할 때 사용하세요.",
+    "description": "Analyzes IP-related community sentiment on Reddit. Use to check community reactions to an IP on Reddit.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -535,7 +535,7 @@
   },
   {
     "name": "steam_info",
-    "description": "Steam 상점에서 IP 관련 게임 정보와 리뷰를 조회합니다. IP의 Steam 데이터를 확인할 때 사용하세요.",
+    "description": "Retrieves IP-related game information and reviews from the Steam store. Use to check an IP's Steam data.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -553,7 +553,7 @@
   },
   {
     "name": "google_trends",
-    "description": "Google Trends에서 IP의 검색 관심도를 조회합니다. IP의 트렌드를 확인할 때 사용하세요.",
+    "description": "Retrieves search interest data for an IP from Google Trends. Use to check an IP's trend data.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -575,7 +575,7 @@
   },
   {
     "name": "web_fetch",
-    "description": "URL에서 텍스트 콘텐츠를 가져옵니다. 사용자가 URL을 제공하거나 웹 페이지 내용을 요청할 때 사용하세요.",
+    "description": "Fetches text content from a URL. Use when the user provides a URL or requests web page content.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -597,7 +597,7 @@
   },
   {
     "name": "general_web_search",
-    "description": "웹에서 최신 정보를 검색합니다. 3사 네이티브 웹 검색(Anthropic → OpenAI → GLM) fallback chain으로 안정적 검색. 사용자가 현재 정보, 뉴스, 트렌드를 물어볼 때 이 도구를 우선 사용하세요.",
+    "description": "Searches the web for up-to-date information. Uses a 3-provider native web search fallback chain (Anthropic -> OpenAI -> GLM) for reliable results. Prefer this tool when the user asks about current information, news, or trends.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -619,7 +619,7 @@
   },
   {
     "name": "read_document",
-    "description": "로컬 파일을 읽습니다 (markdown, text, JSON). 사용자가 파일 내용을 보고 싶을 때 사용하세요.",
+    "description": "Reads a local file (markdown, text, JSON). Use when the user wants to view file contents.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -641,7 +641,7 @@
   },
   {
     "name": "note_save",
-    "description": "사용자 메모를 영구 저장합니다. 사용자가 '기억해', '저장해', 'remember this' 등을 요청할 때 사용하세요.",
+    "description": "Permanently saves a user note. Use when the user says 'remember this', 'save this', etc.",
     "category": "memory",
     "cost_tier": "cheap",
     "input_schema": {
@@ -664,7 +664,7 @@
   },
   {
     "name": "note_read",
-    "description": "저장된 메모를 읽습니다. 사용자가 이전에 저장한 정보를 물어볼 때 사용하세요.",
+    "description": "Reads saved notes. Use when the user asks about previously saved information.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -680,7 +680,7 @@
   },
   {
     "name": "reject_plan",
-    "description": "생성된 분석 계획을 거부합니다. 계획이 마음에 들지 않을 때 사용하세요.",
+    "description": "Rejects a generated analysis plan. Use when the plan is not satisfactory.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -688,11 +688,11 @@
       "properties": {
         "plan_id": {
           "type": "string",
-          "description": "거부할 계획 ID"
+          "description": "Plan ID to reject"
         },
         "reason": {
           "type": "string",
-          "description": "거부 사유 (선택)"
+          "description": "Rejection reason (optional)"
         }
       },
       "required": []
@@ -700,7 +700,7 @@
   },
   {
     "name": "modify_plan",
-    "description": "생성된 분석 계획을 수정합니다. 템플릿 변경, 단계 제거 가능.",
+    "description": "Modifies a generated analysis plan. Supports template changes and step removal.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -708,7 +708,7 @@
       "properties": {
         "plan_id": {
           "type": "string",
-          "description": "수정할 계획 ID"
+          "description": "Plan ID to modify"
         },
         "template": {
           "type": "string",
@@ -716,14 +716,14 @@
             "full_pipeline",
             "prospect"
           ],
-          "description": "변경할 템플릿"
+          "description": "Template to change to"
         },
         "remove_steps": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "제거할 단계 ID 목록"
+          "description": "List of step IDs to remove"
         }
       },
       "required": []
@@ -731,7 +731,7 @@
   },
   {
     "name": "list_plans",
-    "description": "생성된 분석 계획 목록을 조회합니다.",
+    "description": "Lists all generated analysis plans.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -742,7 +742,7 @@
   },
   {
     "name": "rate_result",
-    "description": "분석 결과에 대해 평점을 매깁니다. 사용자 피드백 수집용.",
+    "description": "Rates an analysis result. Used for collecting user feedback.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -750,15 +750,15 @@
       "properties": {
         "ip_name": {
           "type": "string",
-          "description": "평가할 IP 이름"
+          "description": "IP name to rate"
         },
         "rating": {
           "type": "integer",
-          "description": "평점 (1-5)"
+          "description": "Rating (1-5)"
         },
         "comment": {
           "type": "string",
-          "description": "평가 코멘트 (선택)"
+          "description": "Rating comment (optional)"
         }
       },
       "required": [
@@ -769,7 +769,7 @@
   },
   {
     "name": "accept_result",
-    "description": "분석 결과를 수락합니다.",
+    "description": "Accepts an analysis result.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -777,7 +777,7 @@
       "properties": {
         "ip_name": {
           "type": "string",
-          "description": "수락할 IP 이름"
+          "description": "IP name to accept"
         }
       },
       "required": [
@@ -787,7 +787,7 @@
   },
   {
     "name": "reject_result",
-    "description": "분석 결과를 거부합니다. 재분석이 필요할 때.",
+    "description": "Rejects an analysis result. Use when re-analysis is needed.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -795,11 +795,11 @@
       "properties": {
         "ip_name": {
           "type": "string",
-          "description": "거부할 IP 이름"
+          "description": "IP name to reject"
         },
         "reason": {
           "type": "string",
-          "description": "거부 사유"
+          "description": "Rejection reason"
         }
       },
       "required": [
@@ -809,7 +809,7 @@
   },
   {
     "name": "rerun_node",
-    "description": "파이프라인의 특정 노드를 재실행합니다. scoring, verification, synthesizer만 가능.",
+    "description": "Re-runs a specific pipeline node. Only scoring, verification, and synthesizer are supported.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -822,11 +822,11 @@
             "verification",
             "synthesizer"
           ],
-          "description": "재실행할 노드 이름"
+          "description": "Name of the node to re-run"
         },
         "ip_name": {
           "type": "string",
-          "description": "대상 IP 이름"
+          "description": "Target IP name"
         }
       },
       "required": [
@@ -837,7 +837,7 @@
   },
   {
     "name": "install_mcp_server",
-    "description": "MCP 서버를 검색하고 설치합니다. 외부 도구/서비스 연결 요청 시 사용.",
+    "description": "Searches for and installs MCP servers. Use when connecting to external tools/services.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -845,7 +845,7 @@
       "properties": {
         "query": {
           "type": "string",
-          "description": "설치할 MCP 서버 검색어 (예: 'linkedin', 'steam', 'web search', 'memory')"
+          "description": "Search query for the MCP server to install (e.g. 'linkedin', 'steam', 'web search', 'memory')"
         }
       },
       "required": [
@@ -855,7 +855,7 @@
   },
   {
     "name": "profile_show",
-    "description": "사용자 프로필을 표시합니다. 사용자가 프로필, 내 정보, 설정된 역할을 물어볼 때 사용하세요.",
+    "description": "Displays the user profile. Use when the user asks about their profile, personal info, or assigned roles.",
     "category": "profile",
     "cost_tier": "free",
     "input_schema": {
@@ -866,7 +866,7 @@
   },
   {
     "name": "profile_update",
-    "description": "사용자 프로필을 업데이트합니다. 사용자가 역할, 전문 분야, 이름, 팀 정보를 설정하거나 변경할 때 사용하세요.",
+    "description": "Updates the user profile. Use when the user wants to set or change their role, expertise, name, or team info.",
     "category": "profile",
     "cost_tier": "cheap",
     "input_schema": {
@@ -874,23 +874,23 @@
       "properties": {
         "role": {
           "type": "string",
-          "description": "역할 (e.g. 'AI Engineer', 'Data Scientist')"
+          "description": "Role (e.g. 'AI Engineer', 'Data Scientist')"
         },
         "expertise": {
           "type": "string",
-          "description": "전문 분야 (e.g. 'ML, NLP, Game Analytics')"
+          "description": "Area of expertise (e.g. 'ML, NLP, Game Analytics')"
         },
         "name": {
           "type": "string",
-          "description": "이름"
+          "description": "Name"
         },
         "team": {
           "type": "string",
-          "description": "팀/부서"
+          "description": "Team/department"
         },
         "bio": {
           "type": "string",
-          "description": "자유 형식 자기소개"
+          "description": "Free-form bio"
         }
       },
       "required": []
@@ -898,7 +898,7 @@
   },
   {
     "name": "profile_preference",
-    "description": "사용자 선호 설정을 조회하거나 변경합니다. 언어, 출력 형식, 관심 도메인 등.",
+    "description": "Views or changes user preference settings. Includes language, output format, domains of interest, etc.",
     "category": "profile",
     "cost_tier": "cheap",
     "input_schema": {
@@ -906,11 +906,11 @@
       "properties": {
         "key": {
           "type": "string",
-          "description": "설정 키 (e.g. 'language', 'output_format', 'domains_of_interest')"
+          "description": "Setting key (e.g. 'language', 'output_format', 'domains_of_interest')"
         },
         "value": {
           "type": "string",
-          "description": "설정할 값 (생략 시 현재 값 조회)"
+          "description": "Value to set (if omitted, returns current value)"
         }
       },
       "required": [
@@ -920,7 +920,7 @@
   },
   {
     "name": "profile_learn",
-    "description": "사용자의 패턴이나 인사이트를 학습합니다. 반복되는 선호, 워크플로우 패턴, 도메인 관심사를 자동 기억할 때 사용하세요.",
+    "description": "Learns user patterns and insights. Use to automatically remember recurring preferences, workflow patterns, and domain interests.",
     "category": "profile",
     "cost_tier": "cheap",
     "input_schema": {
@@ -928,7 +928,7 @@
       "properties": {
         "pattern": {
           "type": "string",
-          "description": "기억할 패턴/인사이트"
+          "description": "Pattern/insight to remember"
         },
         "category": {
           "type": "string",
@@ -939,7 +939,7 @@
             "preference",
             "tool_usage"
           ],
-          "description": "패턴 카테고리 (기본값: general)"
+          "description": "Pattern category (default: general)"
         }
       },
       "required": [
@@ -949,7 +949,7 @@
   },
   {
     "name": "send_notification",
-    "description": "외부 메시징 서비스로 알림을 보냅니다. Slack, Discord, Telegram 채널에 메시지를 전송합니다.",
+    "description": "Sends a notification via an external messaging service. Delivers messages to Slack, Discord, or Telegram channels.",
     "category": "notification",
     "cost_tier": "free",
     "input_schema": {
@@ -992,7 +992,7 @@
   },
   {
     "name": "calendar_list_events",
-    "description": "캘린더 일정을 조회합니다. Google Calendar, Apple Calendar에서 일정을 가져옵니다.",
+    "description": "Lists calendar events. Retrieves events from Google Calendar or Apple Calendar.",
     "category": "calendar",
     "cost_tier": "free",
     "input_schema": {
@@ -1020,7 +1020,7 @@
   },
   {
     "name": "calendar_create_event",
-    "description": "캘린더에 새 일정을 생성합니다. Google Calendar 또는 Apple Calendar에 이벤트를 추가합니다.",
+    "description": "Creates a new calendar event. Adds an event to Google Calendar or Apple Calendar.",
     "category": "calendar",
     "cost_tier": "free",
     "input_schema": {
@@ -1059,7 +1059,7 @@
   },
   {
     "name": "calendar_sync_scheduler",
-    "description": "GEODE 스케줄러와 외부 캘린더를 동기화합니다. 스케줄러 작업을 캘린더에 반영하거나, 캘린더 일정을 스케줄러로 가져옵니다.",
+    "description": "Synchronizes the GEODE scheduler with an external calendar. Pushes scheduler jobs to the calendar, or imports calendar events into the scheduler.",
     "category": "calendar",
     "cost_tier": "free",
     "input_schema": {
@@ -1072,7 +1072,7 @@
             "pull",
             "both"
           ],
-          "description": "Sync direction: push (scheduler→calendar), pull (calendar→scheduler), both"
+          "description": "Sync direction: push (scheduler->calendar), pull (calendar->scheduler), both"
         }
       },
       "required": []
@@ -1080,7 +1080,7 @@
   },
   {
     "name": "manage_context",
-    "description": "대화 컨텍스트를 관리합니다. 사용자가 '컨텍스트 정리', '대화 초기화', '컨텍스트 줄여줘', 'compact', 'clear context', '대화 리셋', '토큰 확인' 등을 요청할 때 사용하세요.",
+    "description": "Manages conversation context. Use when the user requests 'clean up context', 'reset conversation', 'reduce context', 'compact', 'clear context', 'check tokens', etc.",
     "category": "model",
     "cost_tier": "free",
     "input_schema": {
@@ -1089,11 +1089,11 @@
         "action": {
           "type": "string",
           "enum": ["compact", "clear", "status"],
-          "description": "compact: 대화 압축, clear: 전체 초기화, status: 현재 토큰 사용량 확인"
+          "description": "compact: compress conversation, clear: full reset, status: check current token usage"
         },
         "force": {
           "type": "boolean",
-          "description": "true이면 확인 없이 실행 (clear 시 적용). 기본값 false."
+          "description": "If true, executes without confirmation (applies to clear). Default: false."
         }
       },
       "required": ["action"]
@@ -1101,7 +1101,7 @@
   },
   {
     "name": "task_create",
-    "description": "새 작업(task)을 생성합니다. 복잡한 요청을 단계별 작업으로 분해하거나 진행 상황을 추적할 때 사용하세요.",
+    "description": "Creates a new task. Use to break down complex requests into step-by-step tasks or to track progress.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1109,15 +1109,15 @@
       "properties": {
         "subject": {
           "type": "string",
-          "description": "작업 제목 (imperative form, e.g. 'Analyze Berserk IP')"
+          "description": "Task title (imperative form, e.g. 'Analyze Berserk IP')"
         },
         "description": {
           "type": "string",
-          "description": "작업 상세 설명 (선택)"
+          "description": "Detailed task description (optional)"
         },
         "metadata": {
           "type": "object",
-          "description": "추가 메타데이터 (선택) — {priority, source, tool_name, tool_args}"
+          "description": "Additional metadata (optional) — {priority, source, tool_name, tool_args}"
         }
       },
       "required": ["subject"]
@@ -1125,7 +1125,7 @@
   },
   {
     "name": "task_update",
-    "description": "기존 작업의 상태나 내용을 변경합니다. 작업을 시작하거나 완료 처리할 때 사용하세요.",
+    "description": "Updates the status or content of an existing task. Use to start a task or mark it as completed.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1133,28 +1133,28 @@
       "properties": {
         "task_id": {
           "type": "string",
-          "description": "변경할 task ID (task_create 반환값)"
+          "description": "Task ID to update (from task_create return value)"
         },
         "status": {
           "type": "string",
           "enum": ["in_progress", "completed", "failed"],
-          "description": "새 상태 (in_progress: 작업 시작, completed: 완료, failed: 실패)"
+          "description": "New status (in_progress: start task, completed: done, failed: failed)"
         },
         "subject": {
           "type": "string",
-          "description": "변경할 작업 제목 (선택)"
+          "description": "Updated task title (optional)"
         },
         "description": {
           "type": "string",
-          "description": "변경할 설명 (선택)"
+          "description": "Updated description (optional)"
         },
         "owner": {
           "type": "string",
-          "description": "작업 담당자 (선택, e.g. 'subagent-1')"
+          "description": "Task assignee (optional, e.g. 'subagent-1')"
         },
         "metadata": {
           "type": "object",
-          "description": "메타데이터 병합 (선택, null 값으로 키 삭제)"
+          "description": "Metadata to merge (optional, use null values to delete keys)"
         }
       },
       "required": ["task_id"]
@@ -1162,7 +1162,7 @@
   },
   {
     "name": "task_get",
-    "description": "특정 작업의 상세 정보를 조회합니다.",
+    "description": "Retrieves detailed information for a specific task.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1170,7 +1170,7 @@
       "properties": {
         "task_id": {
           "type": "string",
-          "description": "조회할 task ID"
+          "description": "Task ID to retrieve"
         }
       },
       "required": ["task_id"]
@@ -1178,7 +1178,7 @@
   },
   {
     "name": "task_list",
-    "description": "전체 작업 목록을 조회합니다. 현재 진행 상황을 파악하거나 다음 작업을 결정할 때 사용하세요.",
+    "description": "Lists all tasks. Use to check current progress or decide the next task.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1187,7 +1187,7 @@
         "status_filter": {
           "type": "string",
           "enum": ["pending", "in_progress", "completed", "failed", "all"],
-          "description": "상태 필터 (기본값: all)"
+          "description": "Status filter (default: all)"
         }
       },
       "required": []
@@ -1195,7 +1195,7 @@
   },
   {
     "name": "task_stop",
-    "description": "실행 중인 작업을 취소(실패 처리)합니다. 다운스트림 의존 작업도 함께 스킵됩니다.",
+    "description": "Cancels (marks as failed) a running task. Downstream dependent tasks are also skipped.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1203,11 +1203,11 @@
       "properties": {
         "task_id": {
           "type": "string",
-          "description": "취소할 task ID"
+          "description": "Task ID to cancel"
         },
         "reason": {
           "type": "string",
-          "description": "취소 사유 (선택)"
+          "description": "Cancellation reason (optional)"
         }
       },
       "required": ["task_id"]

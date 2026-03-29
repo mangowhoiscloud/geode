@@ -1,62 +1,62 @@
 ---
 name: weekly-retro
-description: 주간 회고 — git log + 메모리 기반 작업 요약 + 다음 주 계획. "회고", "주간", "retrospective", "이번 주", "weekly", "retro" 키워드로 트리거.
+description: Weekly retrospective — git log + memory-based work summary + next week planning. Triggers: 'retrospective', '회고', '주간', 'weekly', 'retro', '이번 주'.
 tools: run_bash, memory_save
 risk: safe
 ---
 
 # Weekly Retrospective
 
-지난 주 작업을 자동 요약하고 다음 주 계획을 수립합니다.
+Automatically summarizes the past week's work and creates a plan for the next week.
 
-## 데이터 소스
+## Data Sources
 
-1. **git log** — 최근 7일 커밋 (main + develop)
-2. **progress.md** — 칸반 보드 Done 항목
-3. **CHANGELOG.md** — 릴리스 기록
-4. **프로젝트 메모리** — 인사이트, 의사결정 기록
+1. **git log** — Commits from the last 7 days (main + develop)
+2. **progress.md** — Done items on the kanban board
+3. **CHANGELOG.md** — Release records
+4. **Project memory** — Insights and decision records
 
-## 회고 형식
+## Retrospective Format
 
 ```markdown
-## 주간 회고 — YYYY-MM-DD ~ YYYY-MM-DD
+## Weekly Retrospective — YYYY-MM-DD ~ YYYY-MM-DD
 
-### 완료한 작업
-| PR | 작업 | 분류 |
-|----|------|------|
+### Completed Work
+| PR | Task | Category |
+|----|------|----------|
 | #NNN | ... | feat/fix/refactor |
 
-### 수치
-- 커밋: N개
-- PR 머지: N개
-- 테스트 증감: +N / -N (현재 XXXX)
-- 모듈 수: NNN
+### Metrics
+- Commits: N
+- PRs merged: N
+- Test delta: +N / -N (current XXXX)
+- Module count: NNN
 
-### 잘한 점
+### What Went Well
 - ...
 
-### 개선할 점
+### What to Improve
 - ...
 
-### 다음 주 계획
-- [ ] 항목 1 (우선순위)
-- [ ] 항목 2
-- [ ] 항목 3
+### Next Week Plan
+- [ ] Item 1 (priority)
+- [ ] Item 2
+- [ ] Item 3
 
-### 배운 것
+### Lessons Learned
 - ...
 ```
 
-## 스케줄 연동
+## Schedule Integration
 
 ```
-/schedule create "every friday at 18:00" action="이번 주 회고 생성해"
+/schedule create "every friday at 18:00" action="Generate this week's retrospective"
 ```
 
-## 지침
+## Guidelines
 
-- `git log --oneline --since="7 days ago"` 기반 실측
-- 커밋 메시지에서 feat/fix/refactor/docs 자동 분류
-- 칸반(progress.md) Done 섹션과 교차 검증
-- "다음 주 계획"은 Backlog에서 우선순위 기반 추천
-- 완료 후 memory_save로 회고 기록
+- Based on actual data from `git log --oneline --since="7 days ago"`
+- Auto-classify from commit messages: feat/fix/refactor/docs
+- Cross-validate with kanban (progress.md) Done section
+- "Next Week Plan" recommends items from Backlog based on priority
+- After completion, record the retrospective via memory_save

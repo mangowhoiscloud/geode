@@ -38,12 +38,12 @@ def build_graph() -> StateGraph:
 
 | Mode | Destination | Description |
 |------|-------------|-------------|
-| `full_pipeline` | signals | 전체 분석 |
-| `cortex_only` | signals | 데이터 로드 후 전체 분석 |
-| `discovery` | signals | 발굴 모드 |
-| `analysis` | signals | 분석 모드 |
-| `evaluation` | evaluators | 평가만 재실행 |
-| `scoring` | scoring | 점수만 재계산 |
+| `full_pipeline` | signals | Full analysis |
+| `cortex_only` | signals | Full analysis after data load |
+| `discovery` | signals | Discovery mode |
+| `analysis` | signals | Analysis mode |
+| `evaluation` | evaluators | Re-run evaluation only |
+| `scoring` | scoring | Recalculate scoring only |
 
 ## Send API Detail
 

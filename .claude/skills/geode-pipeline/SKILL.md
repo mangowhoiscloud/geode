@@ -1,6 +1,6 @@
 ---
 name: geode-pipeline
-description: GEODE LangGraph StateGraph 파이프라인 구축 가이드. 7-node topology, Send API 병렬 분석, Conditional Edges, Reducer 패턴, graph.stream() 진행 추적. "pipeline", "graph", "topology", "node", "send api", "langgraph", "stategraph" 키워드로 트리거.
+description: GEODE LangGraph StateGraph pipeline construction guide. 7-node topology, Send API parallel analysis, Conditional Edges, Reducer patterns, graph.stream() progress tracking. Triggers on "pipeline", "graph", "topology", "node", "send api", "langgraph", "stategraph".
 ---
 
 # GEODE Pipeline (LangGraph StateGraph)
