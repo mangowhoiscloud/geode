@@ -95,6 +95,14 @@ class IsolatedRunner:
     SEMAPHORE_WAIT_S = 30.0  # Wait up to 30s for a slot (was 0 = immediate reject)
     KILL_WAIT_S = 5.0  # Wait for process death after SIGKILL
 
+    # Subprocess env whitelist — only these vars are forwarded to child processes.
+    # Prevents accidental leakage of secrets or shell-specific vars.
+    _SUBPROCESS_ENV_WHITELIST: set[str] = {
+        "PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM",
+        "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "ZHIPUAI_API_KEY",
+        "PYTHONPATH", "VIRTUAL_ENV",
+    }
+
     def __init__(self, hooks: HookSystem | None = None) -> None:
         self._hooks = hooks
         self._results: dict[str, IsolationResult] = {}
@@ -304,7 +312,17 @@ class IsolatedRunner:
 
         try:
             if thread.is_alive():
-                # Timeout — thread still running (zombie thread, known limitation)
+                # Timeout — thread still running (zombie thread, known limitation).
+                # Clean up tracking state so the zombie doesn't hold a slot
+                # in _active / _cancel_flags.  The thread itself cannot be
+                # killed in CPython, but at least we stop tracking it.
+                with self._lock:
+                    self._active.pop(config.session_id, None)
+                    self._cancel_flags.pop(config.session_id, None)
+                log.warning(
+                    "Zombie thread: session %s still running after timeout",
+                    config.session_id,
+                )
                 result = IsolationResult(
                     session_id=config.session_id,
                     success=False,
@@ -313,11 +331,6 @@ class IsolatedRunner:
                     started_at=started,
                     completed_at=completed,
                     metadata=dict(config.metadata),
-                )
-                log.warning(
-                    "Isolated session %s timed out after %.1fs",
-                    config.session_id,
-                    config.timeout_s,
                 )
             elif error_holder:
                 result = IsolationResult(
@@ -377,12 +390,16 @@ class IsolatedRunner:
         proc: subprocess.Popen[bytes] | None = None
 
         try:
+            safe_env = {
+                k: v for k, v in os.environ.items()
+                if k in self._SUBPROCESS_ENV_WHITELIST
+            }
             proc = subprocess.Popen(  # noqa: S603 — fixed args, no untrusted input
                 [sys.executable, "-m", "core.agent.worker"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                env=os.environ.copy(),
+                env=safe_env,
             )
 
             # Track process for cancel()
