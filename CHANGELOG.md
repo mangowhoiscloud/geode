@@ -31,6 +31,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **Scheduler in serve mode** — `SchedulerService` extracted from REPL into `geode serve`. Scheduled jobs now fire in headless mode. Shared `_drain_scheduler_queue()` helper eliminates duplication between REPL and serve paths.
 
+### Changed
+- **Unified bootstrap** — `serve()` no longer calls `bootstrap_geode()`. Uses `setup_contextvars()` + `GeodeRuntime.create()` directly. ONE HookSystem, ONE MCP manager, ONE SkillRegistry across all entry points. Resolves C1/C2/H1/H4/H5 from structural audit.
+
 ### Fixed
 - **Scheduler drain exception safety** — semaphore leak on `create_session()` failure fixed. `main_loop.run()` exception no longer kills the drain loop. Init failure in serve promoted to `log.warning`.
 - **P1 batch (5 fixes)** — C3/C4 regression tests, WorkerRequest `time_budget_s` pass-through, thread-mode `denied_tools` raises (was warn), announce TTL reset (`setdefault` → assignment), subprocess env whitelist +2 vars.
