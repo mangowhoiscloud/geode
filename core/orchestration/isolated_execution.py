@@ -109,6 +109,8 @@ class IsolatedRunner:
         "ZHIPUAI_API_KEY",
         "PYTHONPATH",
         "VIRTUAL_ENV",
+        "GEODE_CONFIG_PATH",
+        "GEODE_DATA_DIR",
     }
 
     def __init__(self, hooks: HookSystem | None = None) -> None:
