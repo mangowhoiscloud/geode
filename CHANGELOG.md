@@ -26,6 +26,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Scheduler in serve mode** — `SchedulerService` extracted from REPL into `geode serve`. Scheduled jobs now fire in headless mode. Shared `_drain_scheduler_queue()` helper eliminates duplication between REPL and serve paths.
+
+### Fixed
+- **Scheduler drain exception safety** — semaphore leak on `create_session()` failure fixed. `main_loop.run()` exception no longer kills the drain loop. Init failure in serve promoted to `log.warning`.
+
 ## [0.35.1] — 2026-03-29
 
 ### Fixed
