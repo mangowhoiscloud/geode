@@ -26,7 +26,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.36.0] — 2026-03-30
 
 ### Added
 - **H3: CLIChannel IPC** — Unix domain socket (`~/.geode/cli.sock`) connects thin CLI client to `geode serve`. `CLIPoller` accepts local connections, creates REPL sessions via SharedServices. `IPCClient` auto-detects serve and delegates agentic execution over line-delimited JSON protocol. Fallback to standalone when serve is not running.
