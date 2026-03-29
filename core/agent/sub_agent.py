@@ -7,7 +7,7 @@ sub-agent delegation.
 Orchestration integration:
 - TaskGraph: DAG-based dependency tracking per sub-task
 - HookSystem: Event emission on task lifecycle (start/complete/fail)
-- CoalescingQueue: Deduplication of repeated requests within a time window
+- Deduplication of repeated task_id submissions via seen-set
 - AgentRegistry: Agent-aware execution with context injection
 """
 
@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from core.agent.worker import WorkerRequest
 from core.hooks import HookEvent, HookSystem
-from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.isolated_execution import (
     IsolatedRunner,
     IsolationConfig,
@@ -209,7 +208,7 @@ class SubAgentManager:
     Orchestration features:
     - **TaskGraph**: DAG-based dependency tracking per sub-task.
     - **HookSystem**: Emits SUBAGENT_STARTED/COMPLETED/FAILED events.
-    - **CoalescingQueue**: Deduplicates identical task_id submissions.
+    - **Dedup**: Filters duplicate task_id submissions via seen-set.
     - **AgentRegistry**: Resolves agent definitions for context injection.
     - **Full AgenticLoop inheritance** (P2-B): sub-agents get the same tools,
       MCP, skills, memory as the parent.  Controlled by ``depth`` / ``max_depth``.
@@ -222,7 +221,6 @@ class SubAgentManager:
         *,
         timeout_s: float = 120.0,
         hooks: HookSystem | None = None,
-        coalescing: CoalescingQueue | None = None,
         agent_registry: AgentRegistry | None = None,
         parent_session_key: str = "",
         # P2-B: Full AgenticLoop inheritance
@@ -240,7 +238,6 @@ class SubAgentManager:
         self._timeout_s = timeout_s
         self._time_budget_s = time_budget_s
         self._hooks = hooks
-        self._coalescing = coalescing
         self._agent_registry = agent_registry
         self._parent_session_key = parent_session_key
         self._run_records: dict[str, SubagentRunRecord] = {}
@@ -538,31 +535,15 @@ class SubAgentManager:
         return graph
 
     def _deduplicate(self, tasks: list[SubTask]) -> list[SubTask]:
-        if self._coalescing is None:
-            seen: set[str] = set()
-            unique: list[SubTask] = []
-            for task in tasks:
-                if task.task_id not in seen:
-                    seen.add(task.task_id)
-                    unique.append(task)
-                else:
-                    log.debug(
-                        "Dedup: skipping duplicate task_id=%s",
-                        task.task_id,
-                    )
-            return unique
-
-        unique = []
+        """Filter duplicate task_id submissions via seen-set."""
+        seen: set[str] = set()
+        unique: list[SubTask] = []
         for task in tasks:
-            key = f"subagent:{task.task_id}"
-            is_new = self._coalescing.submit(key, lambda _k, _d: None, None)
-            if is_new:
+            if task.task_id not in seen:
+                seen.add(task.task_id)
                 unique.append(task)
             else:
-                log.debug(
-                    "Coalesced: task_id=%s already pending",
-                    task.task_id,
-                )
+                log.debug("Dedup: skipping duplicate task_id=%s", task.task_id)
         return unique
 
     def _emit_hook(
