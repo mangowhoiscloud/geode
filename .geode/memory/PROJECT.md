@@ -1,58 +1,58 @@
 # GEODE Project Memory
 
-## 프로젝트 개요
-- 목적: 범용 자율 실행 에이전트 (게임 IP 분석은 도메인 플러그인)
-- 파이프라인: Cortex → Signals → Analysts → Evaluators → Scoring → Synthesis
+## Project Overview
+- Purpose: General-purpose autonomous execution agent (Game IP analysis is a domain plugin)
+- Pipeline: Cortex → Signals → Analysts → Evaluators → Scoring → Synthesis
 
-## 분석 규칙
-- .geode/rules/ 디렉토리의 .md 파일이 자동 로딩됩니다
+## Analysis Rules
+- .md files in the .geode/rules/ directory are auto-loaded
 
-## 자주 분석하는 IP
-- Berserk: 다크 판타지, S-tier, conversion_failure
-- Cowboy Bebop: SF 느와르, A-tier, undermarketed
-- Ghost in the Shell: 사이버펑크, B-tier, discovery_failure
+## Frequently Analyzed IPs
+- Berserk: Dark fantasy, S-tier, conversion_failure
+- Cowboy Bebop: SF noir, A-tier, undermarketed
+- Ghost in the Shell: Cyberpunk, B-tier, discovery_failure
 
-## 팀 특화 루브릭 오버라이드
-- (없음 — 기본 14-axis 루브릭 사용)
+## Team-Specific Rubric Overrides
+- (None — using default 14-axis rubric)
 
-## 최근 인사이트
+## Recent Insights
 - 2026-03-29: [Berserk] tier=?, score=0.00
 - 2026-03-29: [unknown] tier=?, score=0.00
-- 2026-03-24: geode_slack_integration_test: GEODE Slack 통합 테스트 완료 — 3개 시나리오 성공 (기록 시각: 2026-03-24 11:51:25 KST)
-- 2026-03-24: huggingface_trending_2026_march: ## Hugging Face 트렌딩 동향 조사 (2026년 3월 24일 기준)
-### 1. 플랫폼 성장 현황
-- 사용자 1,300만명, 공개 모델 200만+, 공개 데이터셋 50만+ (2025년 기준)
-- Fortune 500 기업 중 30% 이상이 HF 인증 계정 보유
-- NVIDIA가 Big Tech 중 가장 활발한 기여자
+- 2026-03-24: geode_slack_integration_test: GEODE Slack integration test completed — 3 scenarios succeeded (recorded at: 2026-03-24 11:51:25 KST)
+- 2026-03-24: huggingface_trending_2026_march: ## Hugging Face Trending Survey (as of March 24, 2026)
+### 1. Platform Growth Status
+- 13 million users, 2 million+ public models, 500K+ public datasets (as of 2025)
+- Over 30% of Fortune 500 companies have HF verified accounts
+- NVIDIA is the most active contributor among Big Tech
 
-### 2. 트렌딩 모델 (2026년 2~3월)
-- **DeepSeek-R1 (중국)**: 가장 많은 좋아요를 받은 모델, 미국 Meta Llama 중심에서 국제적 다양화
-- **Z.AI GLM-4.7-Flash**: MoE 아키텍처(30B 총/3B 활성), 경량 배포 최적화, 에이전틱/추론/코딩 특화
-- **Meta SAM3 (Segment Anything 3)**: 0.9B 파라미터, 이미지+비디오 통합 세그멘테이션, 오픈 어휘 프롬프트
-- **MiniMax-M2.1**: 229B-10B Active MoE, 다국어 코딩 에이전트, Claude Sonnet 4.5 대비 다국어 우위
-- 한국 모델 3개가 2026년 2월 동시 트렌딩 (LG AI Research, SK Telecom, Naver Cloud, NC AI, Upstage)
+### 2. Trending Models (February-March 2026)
+- **DeepSeek-R1 (China)**: Most-liked model, diversifying internationally away from US Meta Llama dominance
+- **Z.AI GLM-4.7-Flash**: MoE architecture (30B total/3B active), optimized for lightweight deployment, specialized in agentic/reasoning/coding
+- **Meta SAM3 (Segment Anything 3)**: 0.9B parameters, unified image+video segmentation, open vocabulary prompting
+- **MiniMax-M2.1**: 229B-10B Active MoE, multilingual coding agent, multilingual advantage over Claude Sonnet 4.5
+- 3 Korean models trending simultaneously in February 2026 (LG AI Research, SK Telecom, Naver Cloud, NC AI, Upstage)
 
-### 3. 트렌딩 논문 TOP 10 (2026년 3월 22일)
-1. Generation Models Know Space: 3D 장면 이해 (84표)
-2. SAMA: 비디오 편집 (61표)
-3. 3DreamBooth: 3D 주체 기반 비디오 생성 (49표)
-4. FASTER: 실시간 Flow VLA (48표)
-5. Nemotron-Cascade 2: Cascade RL + 다중 도메인 증류 (47표)
-6. Bridging Semantic and Kinematic: 디퓨전 기반 모션 토크나이저 (39표)
-7. Memento-Skills: 에이전트가 에이전트를 설계 (36표)
-8. MonoArt: 단안 관절 3D 복원 (31표)
-9. Cubic Discrete Diffusion: 고차원 이산 시각 생성 (30표)
-10. LVOmniBench: 장시간 오디오-비디오 이해 벤치마크 (27표)
+### 3. Trending Papers TOP 10 (March 22, 2026)
+1. Generation Models Know Space: 3D Scene Understanding (84 votes)
+2. SAMA: Video Editing (61 votes)
+3. 3DreamBooth: 3D Subject-Driven Video Generation (49 votes)
+4. FASTER: Real-Time Flow VLA (48 votes)
+5. Nemotron-Cascade 2: Cascade RL + Multi-Domain Distillation (47 votes)
+6. Bridging Semantic and Kinematic: Diffusion-Based Motion Tokenizer (39 votes)
+7. Memento-Skills: Agents Designing Agents (36 votes)
+8. MonoArt: Monocular Articulated 3D Reconstruction (31 votes)
+9. Cubic Discrete Diffusion: High-Dimensional Discrete Visual Generation (30 votes)
+10. LVOmniBench: Long Audio-Video Understanding Benchmark (27 votes)
 
-### 4. 주요 트렌드 키워드
-- **에이전틱 AI**: 자율 에이전트 설계, 멀티턴 에이전트 워크플로우
-- **3D/비디오 생성**: 3D 장면 이해, 비디오 편집, 3D 비디오 생성
-- **MoE 경량화**: 대규모 파라미터 + 소수 활성화로 효율적 배포
-- **중국 오픈소스 급성장**: 월간 다운로드에서 미국 추월, 전체 다운로드의 41%
-- **개인 개발자 부상**: 독립 개발자가 전체 다운로드의 39% 차지
-- **국가 AI 주권**: 한국, 스위스, EU 등 국가 단위 오픈소스 AI 투자
+### 4. Key Trend Keywords
+- **Agentic AI**: Autonomous agent design, multi-turn agent workflows
+- **3D/Video Generation**: 3D scene understanding, video editing, 3D video generation
+- **MoE Lightweight**: Large parameter count + few active parameters for efficient deployment
+- **Rapid Growth of Chinese Open Source**: Surpassing US in monthly downloads, 41% of total downloads
+- **Rise of Individual Developers**: Independent developers account for 39% of total downloads
+- **National AI Sovereignty**: Country-level open-source AI investment in Korea, Switzerland, EU, etc.
 
-### 출처
+### Sources
 - https://huggingface.co/blog/huggingface/state-of-os-hf-spring-2026
 - https://huggingface-paper-explorer.vercel.app/
 - https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/what-is-trending-in-hugging-face-on-microsoft-foundry-feb-2-2026/4490602

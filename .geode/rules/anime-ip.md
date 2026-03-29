@@ -6,12 +6,12 @@ paths:
   - "*ghost*"
 ---
 
-# 애니메이션 IP 분석 규칙
+# Animation IP Analysis Rules
 
-## 데이터 소스 우선순위
-1. YouTube (트레일러, 리뷰 영상)
+## Data Source Priority
+1. YouTube (trailers, review videos)
 2. Reddit (r/anime, r/gaming)
 
-## 특수 고려사항
-- 원작 시즌 방영 중이면 Growth Velocity(J) 가중치 상향
-- 원작 완결 후 2년 이상이면 Expansion Potential(F) 감점
+## Special Considerations
+- If the original series is currently airing, increase Growth Velocity(J) weight
+- If more than 2 years have passed since the original ended, penalize Expansion Potential(F)

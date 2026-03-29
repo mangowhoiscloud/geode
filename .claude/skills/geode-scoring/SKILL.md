@@ -1,6 +1,6 @@
 ---
 name: geode-scoring
-description: GEODE 점수 산출 공식 가이드. PSM Engine (ATT, Z-value, Rosenbaum Gamma), 14-axis rubric, Final Score 가중치, Tier 판정, 6-subscore 계산. architecture-v6 §13.8 SOT 정합성 보장. "score", "scoring", "psm", "tier", "rubric", "formula", "가중치", "점수" 키워드로 트리거.
+description: GEODE scoring formula guide. PSM Engine (ATT, Z-value, Rosenbaum Gamma), 14-axis rubric, Final Score weights, Tier classification, 6-subscore calculation. Ensures architecture-v6 §13.8 SOT consistency. Triggers on "score", "scoring", "psm", "tier", "rubric", "formula", "가중치", "점수".
 ---
 
 # GEODE Scoring System

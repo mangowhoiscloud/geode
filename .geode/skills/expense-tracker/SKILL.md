@@ -1,48 +1,48 @@
 ---
 name: expense-tracker
-description: 에이전틱 엔지니어링 투자/지출 추적. "지출", "비용", "expense", "투자", "cost", "얼마 썼" 키워드로 트리거.
+description: Track agentic engineering investment/expenses. Triggers: 'expense', '지출', '비용', 'cost', '투자', '얼마 썼'.
 tools: memory_save
 risk: safe
 ---
 
 # Expense Tracker
 
-에이전틱 엔지니어링 프로젝트의 투자 비용을 추적하고 분석합니다.
+Tracks and analyzes investment costs for agentic engineering projects.
 
-## 추적 카테고리
+## Tracking Categories
 
-| 카테고리 | 항목 예시 |
-|----------|----------|
-| **API 비용** | Anthropic, OpenAI, ZhipuAI 월별 사용량 |
-| **인프라** | 서버, 도메인, CI/CD, GitHub |
-| **도구/서비스** | MCP 서버 API 키, SaaS 구독 |
-| **학습** | 강의, 서적, 컨퍼런스 |
-| **하드웨어** | GPU, 맥북, 모니터 |
+| Category | Example Items |
+|----------|---------------|
+| **API Costs** | Anthropic, OpenAI, ZhipuAI monthly usage |
+| **Infrastructure** | Servers, domains, CI/CD, GitHub |
+| **Tools/Services** | MCP server API keys, SaaS subscriptions |
+| **Learning** | Courses, books, conferences |
+| **Hardware** | GPU, MacBook, monitors |
 
-## 보고서 형식
+## Report Format
 
 ```markdown
-## 투자 현황 — YYYY-MM-DD 기준
+## Investment Status — as of YYYY-MM-DD
 
-### 누적 투자 (25.10 ~ 현재)
-- **총액**: ₩XX,XXX,XXX
-- **API 비용**: ₩...
-- **인프라**: ₩...
-- **도구**: ₩...
+### Cumulative Investment (25.10 ~ present)
+- **Total**: ₩XX,XXX,XXX
+- **API Costs**: ₩...
+- **Infrastructure**: ₩...
+- **Tools**: ₩...
 
-### 월별 추이
-| 월 | API | 인프라 | 기타 | 합계 |
-|---|---|---|---|---|
+### Monthly Trends
+| Month | API | Infrastructure | Other | Total |
+|-------|-----|----------------|-------|-------|
 
-### 인사이트
-- 가장 큰 비용 항목: ...
-- 전월 대비 변화: ...
-- 절감 가능 항목: ...
+### Insights
+- Largest cost item: ...
+- Month-over-month change: ...
+- Potential savings: ...
 ```
 
-## 지침
+## Guidelines
 
-- 사용자가 금액을 알려주면 memory_save로 기록
-- 기존 메모리에서 과거 지출 데이터 조회
-- 원화(₩) 기준, 달러 환산 병기
-- API 비용은 프로바이더별 분류
+- When the user provides amounts, record them via memory_save
+- Query past expense data from existing memory
+- Use KRW (₩) as the base, with USD equivalent noted alongside
+- Classify API costs by provider

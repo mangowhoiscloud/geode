@@ -1,6 +1,6 @@
 ---
 name: geode-analysis
-description: GEODE Analyst/Evaluator 구현 가이드. 4 Analysts (game_mechanics, player_experience, growth_potential, discovery), 3 Evaluators (quality_judge, hidden_value, community_momentum), Clean Context 앵커링 방지, Structured JSON Output. "analyst", "evaluator", "분석", "clean context", "앵커링", "루브릭" 키워드로 트리거.
+description: GEODE Analyst/Evaluator implementation guide. 4 Analysts (game_mechanics, player_experience, growth_potential, discovery), 3 Evaluators (quality_judge, hidden_value, community_momentum), Clean Context anchoring prevention, Structured JSON Output. Triggers on "analyst", "evaluator", "분석", "clean context", "앵커링", "루브릭".
 ---
 
 # GEODE Analysis Layer
