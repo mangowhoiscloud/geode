@@ -1350,11 +1350,13 @@ def _thin_interactive_loop() -> None:
             if user_input.startswith("/"):
                 cmd = user_input.split()[0].lower()
                 if cmd in ("/help", "/exit", "/quit", "/clear"):
-                    from core.cli.commands import handle_command as _hcmd
-
                     try:
-                        _hcmd(cmd, user_input[len(cmd) :].strip())
-                    except SystemExit:
+                        _handle_command(
+                            cmd,
+                            user_input[len(cmd) :].strip(),
+                            False,
+                        )
+                    except (SystemExit, EOFError):
                         break
                     continue
 

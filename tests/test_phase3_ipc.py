@@ -6,17 +6,15 @@ IPCClient (client), including connection, prompt relay, and error handling.
 
 from __future__ import annotations
 
-import json
-import socket
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 # Unix domain socket paths must be < 104 chars on macOS.
 # pytest tmp_path is too long, so we use /tmp/ directly.
-_SOCK_PREFIX = Path("/tmp/geode-test-ipc")
+_SOCK_PREFIX = Path("/tmp/geode-test-ipc")  # noqa: S108
 
 
 @pytest.fixture(autouse=True)
