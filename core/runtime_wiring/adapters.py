@@ -131,6 +131,7 @@ _POLLER_REGISTRY: dict[str, str] = {
     "slack": "core.gateway.pollers.slack_poller:SlackPoller",
     "discord": "core.gateway.pollers.discord_poller:DiscordPoller",
     "telegram": "core.gateway.pollers.telegram_poller:TelegramPoller",
+    # CLI poller is registered separately in serve() (not config-driven)
 }
 
 _DEFAULT_POLLERS: list[str] = ["slack", "discord", "telegram"]

@@ -1305,6 +1305,88 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Thin REPL — delegates to geode serve via IPC
+# ---------------------------------------------------------------------------
+
+
+def _thin_interactive_loop() -> None:
+    """Thin CLI client that relays prompts to geode serve via IPC.
+
+    Called when serve is detected running. Skips heavy bootstrap (MCP,
+    skills, memory) — serve owns all shared resources.  Local slash
+    commands (/help, /exit, /clear, /model) are handled locally.
+    """
+    from core.cli.ipc_client import IPCClient
+
+    client = IPCClient()
+    if not client.connect():
+        console.print(
+            "  [warning]Failed to connect to serve — falling back to standalone[/warning]"
+        )
+        _interactive_loop()
+        return
+
+    console.print(f"  [success]Connected to serve (session: {client.session_id})[/success]")
+    console.print("  [muted]Thin mode — MCP/skills/memory managed by serve[/muted]")
+    console.print()
+
+    try:
+        while True:
+            console.show_cursor(True)
+            try:
+                user_input = _read_multiline_input("[header]>[/header] ")
+            except (KeyboardInterrupt, EOFError):
+                console.print("\n  [muted]Goodbye.[/muted]\n")
+                break
+
+            if not user_input:
+                continue
+
+            if user_input.strip().lower() in ("exit", "quit", "q"):
+                console.print("  [muted]Goodbye.[/muted]\n")
+                break
+
+            # Local-only slash commands
+            if user_input.startswith("/"):
+                cmd = user_input.split()[0].lower()
+                if cmd in ("/help", "/exit", "/quit", "/clear"):
+                    from core.cli.commands import handle_command as _hcmd
+
+                    try:
+                        _hcmd(cmd, user_input[len(cmd):].strip())
+                    except SystemExit:
+                        break
+                    continue
+
+            # Relay to serve via IPC
+            response = client.send_prompt(user_input)
+
+            if response.get("type") == "error":
+                console.print(f"\n  [error]{response.get('message', 'Unknown error')}[/error]\n")
+                continue
+
+            if response.get("type") == "result":
+                # Render tool calls
+                for tc in response.get("tool_calls", []):
+                    console.print(f"  [dim]\u25b8 {tc.get('name', '?')}[/dim]")
+
+                # Render text
+                text = response.get("text", "")
+                if text:
+                    from rich.markdown import Markdown
+
+                    console.print()
+                    console.print(Markdown(text))
+                    console.print()
+
+                rounds = response.get("rounds", 0)
+                if rounds > 1:
+                    console.print(f"  [dim]{rounds} rounds[/dim]")
+    finally:
+        client.close()
+
+
+# ---------------------------------------------------------------------------
 # Typer commands
 # ---------------------------------------------------------------------------
 
@@ -1320,12 +1402,20 @@ def main(
     """GEODE — Autonomous Research Harness."""
     if ctx.invoked_subcommand is None:
         _welcome_screen()
-        resume_id: str | None = None
-        if continue_session:
-            resume_id = "__latest__"
-        elif resume:
-            resume_id = resume
-        _interactive_loop(resume_session_id=resume_id)
+
+        # Auto-detect serve: use thin IPC client when available
+        from core.cli.ipc_client import is_serve_running
+
+        if is_serve_running() and not continue_session and not resume:
+            console.print("  [muted]Detected geode serve — connecting via IPC...[/muted]")
+            _thin_interactive_loop()
+        else:
+            resume_id: str | None = None
+            if continue_session:
+                resume_id = "__latest__"
+            elif resume:
+                resume_id = resume
+            _interactive_loop(resume_session_id=resume_id)
 
 
 @app.command()
@@ -1916,6 +2006,18 @@ def serve(
     # Start pollers
     gateway.start()
     console.print("  [success]Gateway started. Listening...[/success]")
+
+    # CLI Channel — Unix socket for thin CLI client IPC
+    _cli_poller = None
+    try:
+        from core.gateway.pollers.cli_poller import CLIPoller
+
+        _cli_poller = CLIPoller(_gw_services)
+        _cli_poller.start()
+        console.print(f"  [success]CLI channel: {_cli_poller.socket_path}[/success]")
+    except Exception:
+        log.warning("CLI channel init failed", exc_info=True)
+
     console.print()
 
     # Block until Ctrl+C
@@ -1956,6 +2058,8 @@ def serve(
                 runtime.mcp_manager.shutdown()
             except Exception:
                 log.debug("MCP shutdown error", exc_info=True)
+        if _cli_poller is not None:
+            _cli_poller.stop()
         if _webhook_server is not None:
             _webhook_server.shutdown()
         gateway.stop()
