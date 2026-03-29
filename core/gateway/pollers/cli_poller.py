@@ -57,9 +57,7 @@ class _StreamingWriter:
         if not text:
             return 0
         try:
-            payload = json.dumps(
-                {"type": "stream", "data": text}, ensure_ascii=False
-            ) + "\n"
+            payload = json.dumps({"type": "stream", "data": text}, ensure_ascii=False) + "\n"
             self._client.sendall(payload.encode("utf-8"))
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass  # client disconnected — silently drop
@@ -246,7 +244,10 @@ class CLIPoller:
 
             try:
                 return self._run_prompt_streaming(
-                    text, loop, session_id, msg.get("_client"),
+                    text,
+                    loop,
+                    session_id,
+                    msg.get("_client"),
                 )
             except Exception as exc:
                 log.warning("CLI prompt execution error", exc_info=True)
@@ -294,9 +295,7 @@ class CLIPoller:
         try:
             lane_queue = self._services.lane_queue
             if lane_queue is not None:
-                with lane_queue.acquire_all(
-                    f"cli:{session_id}", ["session", "global"]
-                ):
+                with lane_queue.acquire_all(f"cli:{session_id}", ["session", "global"]):
                     result = loop.run(text)
             else:
                 result = loop.run(text)
@@ -313,15 +312,19 @@ class CLIPoller:
         if result and result.tool_calls:
             for tc in result.tool_calls:
                 if isinstance(tc, dict):
-                    tool_calls.append({
-                        "name": tc.get("name", "?"),
-                        "args": tc.get("input", {}),
-                    })
+                    tool_calls.append(
+                        {
+                            "name": tc.get("name", "?"),
+                            "args": tc.get("input", {}),
+                        }
+                    )
                 elif hasattr(tc, "name"):
-                    tool_calls.append({
-                        "name": tc.name,
-                        "args": getattr(tc, "arguments", {}),
-                    })
+                    tool_calls.append(
+                        {
+                            "name": tc.name,
+                            "args": getattr(tc, "arguments", {}),
+                        }
+                    )
         model = getattr(loop, "model", "unknown")
         summary = getattr(result, "summary", "") if result else ""
 
