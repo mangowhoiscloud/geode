@@ -77,6 +77,7 @@ class CLIPoller:
         self._socket_path.parent.mkdir(parents=True, exist_ok=True)
         self._server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._server.bind(str(self._socket_path))
+        os.chmod(str(self._socket_path), 0o600)  # User-only access
         self._server.listen(1)
         self._server.settimeout(1.0)
 
@@ -127,7 +128,11 @@ class CLIPoller:
                 self._active_client = None
 
     def _handle_client(self, client: socket.socket) -> None:
-        """Handle a connected CLI client session."""
+        """Handle a connected CLI client session.
+
+        Creates an IPC-mode session (DANGEROUS blocked, WRITE allowed)
+        gated by SessionLane + Global Lane via acquire_all().
+        """
         from core.agent.conversation import ConversationContext
         from core.gateway.shared_services import SessionMode
 
@@ -136,9 +141,9 @@ class CLIPoller:
         conversation = ConversationContext()
         session_id = f"cli-{os.urandom(4).hex()}"
 
-        # Create a REPL session backed by serve's SharedServices
+        # Create an IPC session backed by serve's SharedServices
         _executor, loop = self._services.create_session(
-            SessionMode.REPL,
+            SessionMode.IPC,
             conversation=conversation,
             propagate_context=True,
         )
@@ -157,7 +162,7 @@ class CLIPoller:
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
                     msg = json.loads(line.decode("utf-8"))
-                    response = self._process_message(msg, loop, conversation)
+                    response = self._process_message(msg, loop, conversation, session_id)
                     if response is None:
                         # Exit signal
                         self._send(client, {"type": "exit_ack"})
@@ -180,6 +185,7 @@ class CLIPoller:
         msg: dict[str, Any],
         loop: Any,
         conversation: Any,
+        session_id: str,
     ) -> dict[str, Any] | None:
         """Process a single client message. Returns response dict or None for exit."""
         msg_type = msg.get("type", "")
@@ -193,7 +199,14 @@ class CLIPoller:
                 return {"type": "error", "message": "Empty prompt"}
 
             try:
-                result = loop.run(text)
+                # Gate through SessionLane + Global Lane
+                lane_queue = self._services.lane_queue
+                if lane_queue is not None:
+                    with lane_queue.acquire_all(f"cli:{session_id}", ["session", "global"]):
+                        result = loop.run(text)
+                else:
+                    result = loop.run(text)
+
                 tool_calls = []
                 if result and result.tool_calls:
                     tool_calls = [
@@ -212,7 +225,39 @@ class CLIPoller:
                 log.warning("CLI prompt execution error", exc_info=True)
                 return {"type": "error", "message": str(exc)}
 
+        if msg_type == "command":
+            return self._handle_command_on_server(msg, loop)
+
         return {"type": "error", "message": f"Unknown message type: {msg_type}"}
+
+    def _handle_command_on_server(self, msg: dict[str, Any], loop: Any) -> dict[str, Any]:
+        """Execute a slash command on the server side."""
+        cmd = msg.get("cmd", "")
+        args = msg.get("args", "")
+        try:
+            from core.cli import _handle_command
+
+            should_break, _verbose, _resume = _handle_command(
+                cmd,
+                args,
+                False,
+                skill_registry=self._services.skill_registry,
+                mcp_manager=self._services.mcp_manager,
+            )
+            return {
+                "type": "command_result",
+                "cmd": cmd,
+                "status": "ok",
+                "should_break": should_break,
+            }
+        except Exception as exc:
+            log.warning("CLI command error: %s %s", cmd, exc, exc_info=True)
+            return {
+                "type": "command_result",
+                "cmd": cmd,
+                "status": "error",
+                "message": str(exc),
+            }
 
     @staticmethod
     def _send(client: socket.socket, data: dict[str, Any]) -> None:

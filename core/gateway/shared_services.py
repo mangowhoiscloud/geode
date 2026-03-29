@@ -33,13 +33,14 @@ log = logging.getLogger(__name__)
 class SessionMode(StrEnum):
     """Execution mode — determines behavior defaults, not shared resources."""
 
-    REPL = "repl"  # Interactive — hitl=2, verbose=user, time=unlimited
+    REPL = "repl"  # Interactive terminal — hitl=2, verbose=user, time=unlimited
+    IPC = "ipc"  # Thin CLI via Unix socket — hitl=0, WRITE ok, DANGEROUS blocked
     DAEMON = "daemon"  # Slack/Discord poller — hitl=0, quiet, time=config
     SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
 
 
-# Tools denied for headless execution (SCHEDULER, DAEMON).
-# DANGEROUS tools require HITL approval which headless modes cannot provide.
+# Tools denied for non-terminal execution (IPC, DAEMON, SCHEDULER).
+# DANGEROUS tools require interactive terminal which these modes cannot provide.
 _HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
@@ -58,6 +59,12 @@ _MODE_DEFAULTS: dict[SessionMode, dict[str, Any]] = {
         "quiet": False,
         "time_budget_s": 0.0,  # unlimited (interactive)
         "max_rounds": 0,  # unlimited
+    },
+    SessionMode.IPC: {
+        "hitl_level": 0,  # auto-approve (WRITE ok, DANGEROUS policy-blocked)
+        "quiet": False,
+        "time_budget_s": 0.0,  # unlimited (interactive via IPC)
+        "max_rounds": 0,
     },
     SessionMode.DAEMON: {
         "hitl_level": 0,
@@ -146,7 +153,7 @@ class SharedServices:
 
         # Filter DANGEROUS tools for headless modes (PolicyChain enforcement)
         handlers = self.tool_handlers
-        if mode in (SessionMode.SCHEDULER, SessionMode.DAEMON):
+        if mode in (SessionMode.IPC, SessionMode.SCHEDULER, SessionMode.DAEMON):
             denied = _HEADLESS_DENIED_TOOLS & set(handlers)
             if denied:
                 log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
