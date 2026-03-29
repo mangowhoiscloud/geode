@@ -14,7 +14,7 @@
 |---------|----------|:--------:|------|------|
 | ~~shared-services~~ | ~~SharedServices Gateway — single factory + time_budget migration + HookSystem wiring + ContextVar fix~~ | ~~P0~~ | ~~shared-services-gateway.md~~ | **In Progress** |
 | concurrency-redesign | 동시성 시스템 재설계 — 워크로드별 세마포어 분리 + Gateway 제한 + 데드라인 큐잉 | P1 | — | 감사 완료, 구현 미착수 |
-| i18n-english | LLM 소비 문서 영어 전환 — GEODE.md, definitions.json, SKILL.md, router.md, PROJECT.md | P1 | — | LLM 라우팅 정확도 |
+| ~~i18n-english~~ | ~~LLM 소비 문서 영어 전환 — 39 files (GEODE.md, CLAUDE.md, definitions.json, SKILL.md ×30, rules, PROJECT.md)~~ | ~~P1~~ | ~~#523~~ | **Done** |
 | ~~kent-beck-p1~~ | ~~Phase 1 — dry-run 파싱 + Safety 상수 추출~~ | ~~P0~~ | ~~#462~~ | **Done** |
 | ~~kent-beck-p2~~ | ~~Phase 2 — Provider 디스패치 딕셔너리 통합~~ | ~~P0~~ | ~~#463~~ | **Done** |
 | ~~kent-beck-p3~~ | ~~Kent Beck Phase 3 — CLI God Object 분해 (~800줄 감소)~~ | ~~P1~~ | ~~#464~~ | **Done** |

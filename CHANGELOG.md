@@ -36,6 +36,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Sub-Agent max_depth 2→1** — Claude Code 패턴 정합. 서브에이전트 재귀 금지.
 - **IsolatedRunner Semaphore Wait** — 즉시 거부(0s) → 대기(30s). 동시성 제어 개선.
 
+### Changed
+- **LLM-consumed documents English conversion** — All 39 files injected into LLM context (GEODE.md, CLAUDE.md, definitions.json, SKILL.md ×30, rules ×4, PROJECT.md, decomposer.md) converted to English. Korean trigger keywords retained for bilingual input matching. Added i18n convention rule to CLAUDE.md (#523).
+
 ### Architecture
 - **Shared Services GAP 식별** — HookSystem 미연결(CRITICAL), module-level globals 스레드 비안전(HIGH), ContextVar 미전파(HIGH), _readiness 레이스(MEDIUM), _result_cache 충돌(LOW). 다음 버전에서 수정 예정.
 
