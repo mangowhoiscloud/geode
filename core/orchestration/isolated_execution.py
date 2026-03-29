@@ -13,7 +13,7 @@ import dataclasses
 import json
 import logging
 import os
-import subprocess
+import subprocess  # nosec B404 — subprocess used for controlled worker process spawn only
 import sys
 import threading
 import time
@@ -98,9 +98,17 @@ class IsolatedRunner:
     # Subprocess env whitelist — only these vars are forwarded to child processes.
     # Prevents accidental leakage of secrets or shell-specific vars.
     _SUBPROCESS_ENV_WHITELIST: set[str] = {
-        "PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM",
-        "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "ZHIPUAI_API_KEY",
-        "PYTHONPATH", "VIRTUAL_ENV",
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "LC_ALL",
+        "TERM",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "ZHIPUAI_API_KEY",
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
     }
 
     def __init__(self, hooks: HookSystem | None = None) -> None:
@@ -390,11 +398,8 @@ class IsolatedRunner:
         proc: subprocess.Popen[bytes] | None = None
 
         try:
-            safe_env = {
-                k: v for k, v in os.environ.items()
-                if k in self._SUBPROCESS_ENV_WHITELIST
-            }
-            proc = subprocess.Popen(  # noqa: S603 — fixed args, no untrusted input
+            safe_env = {k: v for k, v in os.environ.items() if k in self._SUBPROCESS_ENV_WHITELIST}
+            proc = subprocess.Popen(  # noqa: S603  # nosec B603 — fixed args, no untrusted input
                 [sys.executable, "-m", "core.agent.worker"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,

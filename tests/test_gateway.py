@@ -104,7 +104,9 @@ class TestChannelManager:
         # Add generic binding
         manager.add_binding(ChannelBinding(channel="slack"))
         # Add specific binding
-        manager.add_binding(ChannelBinding(channel="slack", channel_id="C12345", time_budget_s=60.0))
+        manager.add_binding(
+            ChannelBinding(channel="slack", channel_id="C12345", time_budget_s=60.0)
+        )
 
         msg = InboundMessage(
             channel="slack",
