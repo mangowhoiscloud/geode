@@ -11,7 +11,6 @@ from core.agent.conversation import ConversationContext
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.agent.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, WRITE_TOOLS, ToolExecutor
 from core.hooks import HookEvent, HookSystem
-from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.isolated_execution import IsolatedRunner
 
 # ---------------------------------------------------------------------------
@@ -530,7 +529,7 @@ class TestSubAgentManager:
 
 
 class TestSubAgentOrchestration:
-    """Tests for TaskGraph, HookSystem, and CoalescingQueue integration."""
+    """Tests for TaskGraph, HookSystem, and SubAgent integration."""
 
     @pytest.fixture
     def handler(self) -> Any:
@@ -640,24 +639,18 @@ class TestSubAgentOrchestration:
         task_ids = {r.task_id for r in results}
         assert task_ids == {"t1", "t2"}
 
-    def test_coalescing_queue_dedup(self, handler: Any) -> None:
-        """Verify CoalescingQueue-based dedup."""
+    def test_seen_set_dedup(self, handler: Any) -> None:
+        """Verify seen-set dedup within a single delegate call."""
         runner = IsolatedRunner()
-        queue = CoalescingQueue(window_ms=5000)  # long window so timers don't fire
-        manager = SubAgentManager(runner, handler, timeout_s=10, coalescing=queue)
+        manager = SubAgentManager(runner, handler, timeout_s=10)
 
-        # First batch
-        tasks1 = [SubTask("t1", "Task 1", "analyze", {})]
-        results1 = manager.delegate(tasks1)
-        assert len(results1) == 1
-
-        # Second batch with same task_id — should be coalesced
-        tasks2 = [SubTask("t1", "Task 1 again", "analyze", {})]
-        results2 = manager.delegate(tasks2)
-        assert len(results2) == 0  # coalesced away
-
-        # Cleanup
-        queue.cancel_all()
+        # Duplicate task_id in same batch — second should be filtered
+        tasks = [
+            SubTask("t1", "Task 1", "analyze", {}),
+            SubTask("t1", "Task 1 again", "analyze", {}),
+        ]
+        results = manager.delegate(tasks)
+        assert len(results) == 1
 
     def test_hooks_property(self, handler: Any, hooks: HookSystem) -> None:
         """Verify hooks property is accessible."""

@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 from core.hooks import HookEvent, HookSystem
 from core.memory.session import InMemorySessionStore
-from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog
@@ -237,10 +236,6 @@ class TestDefaultBuilders:
 
 
 class TestRuntimeNewComponents:
-    def test_coalescing_wired(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        assert isinstance(runtime.coalescing, CoalescingQueue)
-
     def test_config_watcher_wired(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         assert isinstance(runtime.config_watcher, ConfigWatcher)

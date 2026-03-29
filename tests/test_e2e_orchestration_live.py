@@ -15,7 +15,6 @@ from typing import Any
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.graph import compile_graph
 from core.hooks import HookEvent, HookSystem
-from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.isolated_execution import IsolatedRunner
 from core.orchestration.task_system import Task, TaskGraph, TaskStatus
 from core.state import GeodeState
@@ -248,32 +247,25 @@ class TestSubAgentOrchestrationLive:
         for r in results:
             assert r.output["score"] == 85.0
 
-    def test_coalescing_prevents_duplicate_execution(self) -> None:
-        """Doc 1 §3-3: CoalescingQueue dedup across batches."""
+    def test_dedup_prevents_duplicate_in_batch(self) -> None:
+        """Seen-set dedup within a single delegate call."""
         runner = IsolatedRunner()
-        call_count = 0
 
-        def counting_handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
-            nonlocal call_count
-            call_count += 1
-            return {"call": call_count}
+        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            return {"ok": True}
 
-        queue = CoalescingQueue(window_ms=5000)
-        manager = SubAgentManager(runner, counting_handler, timeout_s=10, coalescing=queue)
+        manager = SubAgentManager(runner, handler, timeout_s=10)
 
-        # First batch
-        r1 = manager.delegate([SubTask("dup1", "First", "analyze", {})])
-        assert len(r1) == 1
-
-        # Second batch — same key should be coalesced
-        r2 = manager.delegate([SubTask("dup1", "Duplicate", "analyze", {})])
-        assert len(r2) == 0
-
-        # Different key should execute
-        r3 = manager.delegate([SubTask("dup2", "Different", "search", {})])
-        assert len(r3) == 1
-
-        queue.cancel_all()
+        # Same task_id twice in one batch — second filtered
+        results = manager.delegate(
+            [
+                SubTask("dup1", "First", "analyze", {}),
+                SubTask("dup1", "Duplicate", "analyze", {}),
+                SubTask("dup2", "Different", "search", {}),
+            ]
+        )
+        assert len(results) == 2
+        assert {r.task_id for r in results} == {"dup1", "dup2"}
 
     def test_mixed_success_and_failure(self) -> None:
         """Some tasks succeed, some fail — verify per-task hook events."""

@@ -5,7 +5,6 @@ Centralizes creation and lifecycle of all infrastructure singletons:
 - InMemorySessionStore
 - PolicyChain with default policies
 - ToolRegistry with analysis tools
-- CoalescingQueue for request deduplication
 - ConfigWatcher for hot reload
 - StuckDetector for long-running task detection
 - LaneQueue for concurrency control
@@ -55,7 +54,6 @@ from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
 from core.memory.project import ProjectMemory
 from core.memory.session_key import build_session_key, build_thread_config
-from core.orchestration.coalescing import CoalescingQueue
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog
@@ -86,7 +84,6 @@ log = logging.getLogger(__name__)
 DEFAULT_SESSION_TTL = 3600.0  # 1 hour
 DEFAULT_LOG_DIR = Path.home() / ".geode" / "runs"
 DEFAULT_STUCK_TIMEOUT_S = 7200.0  # 2 hours
-COALESCING_WINDOW_MS = 250.0  # Deduplication window for sub-agent tasks
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +101,6 @@ class RuntimeCoreConfig:
     tool_registry: ToolRegistry
     run_log: RunLog
     llm_adapter: LLMClientPort
-    coalescing: CoalescingQueue
     config_watcher: ConfigWatcher
     stuck_detector: StuckDetector
     lane_queue: LaneQueue
@@ -176,7 +172,6 @@ class GeodeRuntime:
         self.profile_store = core.profile_store
         self.profile_rotator = core.profile_rotator
         self.cooldown_tracker = core.cooldown_tracker or CooldownTracker()
-        self.coalescing = core.coalescing
         self.config_watcher = core.config_watcher
         self.stuck_detector = core.stuck_detector
         self.lane_queue = core.lane_queue
@@ -258,7 +253,6 @@ class GeodeRuntime:
         tool_registry = infra.build_default_registry()
         profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
         llm_adapter, secondary_adapter = infra.build_llm_adapters(tool_registry, policy_chain)
-        coalescing = CoalescingQueue(window_ms=COALESCING_WINDOW_MS)
         config_watcher = bootstrap.build_config_watcher()
         lane_queue = infra.build_default_lanes()
 
@@ -307,7 +301,6 @@ class GeodeRuntime:
             tool_registry=tool_registry,
             run_log=run_log,
             llm_adapter=llm_adapter,
-            coalescing=coalescing,
             config_watcher=config_watcher,
             stuck_detector=stuck_detector,
             lane_queue=lane_queue,
@@ -507,7 +500,6 @@ class GeodeRuntime:
             health["feedback_loop"] = self.feedback_loop.stats.to_dict()
 
         health["stuck_tasks"] = len(self.stuck_detector.check_stuck())
-        health["coalescing_pending"] = self.coalescing.pending_count
         health["lanes"] = self.lane_queue.list_lanes()
 
         if self.task_graph is not None:
@@ -521,7 +513,6 @@ class GeodeRuntime:
 
     def shutdown(self) -> None:
         """Clean shutdown of background components."""
-        self.coalescing.cancel_all()
         self.config_watcher.stop()
         self.stuck_detector.stop_monitor()
         if self.scheduler_service:

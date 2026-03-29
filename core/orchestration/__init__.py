@@ -1,1 +1,1 @@
-"""L3 Orchestration — execution control: TaskGraph, PlanMode, LaneQueue, CoalescingQueue."""
+"""Harness — execution control: TaskGraph, PlanMode, SessionLane, LaneQueue."""
