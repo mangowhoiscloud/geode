@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-28 (세션 45 — #500 context-long-session 머지)
+> 마지막 갱신: 2026-03-29 (세션 46 — shared-services 착수)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -12,7 +12,7 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
-| shared-services | Shared Services 레이어 — HookSystem 연결 + globals→ContextVar + scheduler ContextVar 전파 | P0 | — | 3 entry points 리소스 정합 |
+| ~~shared-services~~ | ~~SharedServices Gateway — single factory + time_budget migration + HookSystem wiring + ContextVar fix~~ | ~~P0~~ | ~~shared-services-gateway.md~~ | **In Progress** |
 | concurrency-redesign | 동시성 시스템 재설계 — 워크로드별 세마포어 분리 + Gateway 제한 + 데드라인 큐잉 | P1 | — | 감사 완료, 구현 미착수 |
 | i18n-english | LLM 소비 문서 영어 전환 — GEODE.md, definitions.json, SKILL.md, router.md, PROJECT.md | P1 | — | LLM 라우팅 정확도 |
 | ~~kent-beck-p1~~ | ~~Phase 1 — dry-run 파싱 + Safety 상수 추출~~ | ~~P0~~ | ~~#462~~ | **Done** |
@@ -49,17 +49,19 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| skill-2.0 | Skill 2.0 — Progressive Disclosure + fork + Dynamic Context + Multi-scope | @mangowhoiscloud | feature/skill-2.0 | 2026-03-29 | Agent Skills spec 정합 |
+| shared-services | SharedServices Gateway — single factory, time_budget, HookSystem, ContextVar | @mangowhoiscloud | feature/shared-services | 2026-03-29 | 프론티어 리서치 완료 (Codex+OpenClaw 패턴) |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 
-### Done (2026-03-29 — 세션 45)
+### Done (2026-03-29 — 세션 45-46)
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| skill-2.0 | Skill 2.0 — Progressive Disclosure + fork + Dynamic Context + Multi-scope | #521 | @mangowhoiscloud | 2026-03-29 |
+| subprocess-isolation | Sub-Agent Subprocess Isolation + IsolatedRunner dual-mode | v0.34.0 | @mangowhoiscloud | 2026-03-29 |
 | scheduler-async-drain | 스케줄 잡 비동기 실행 — IsolatedRunner.run_async() 전환 | #519 #520 | @mangowhoiscloud | 2026-03-29 |
 
 ### Done (2026-03-27 — 세션 44)
