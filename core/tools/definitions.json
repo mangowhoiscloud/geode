@@ -309,7 +309,7 @@
   },
   {
     "name": "schedule_job",
-    "description": "반복 작업 스케줄을 관리합니다. create 시 expression(언제)과 action(무엇을)을 함께 지정해야 합니다.",
+    "description": "Manage scheduled jobs. For create: MUST provide both expression (WHEN) and action (WHAT). The action is a natural language prompt that AgenticLoop will execute at the scheduled time.",
     "category": "scheduling",
     "cost_tier": "cheap",
     "input_schema": {
@@ -317,28 +317,20 @@
       "properties": {
         "sub_action": {
           "type": "string",
-          "enum": [
-            "list",
-            "create",
-            "delete",
-            "status",
-            "enable",
-            "disable",
-            "run"
-          ],
-          "description": "수행할 작업. create: 새 스케줄 생성, delete: 삭제, status: 상태 조회, list: 목록."
+          "enum": ["list", "create", "delete", "status", "enable", "disable", "run"],
+          "description": "Action to perform."
         },
         "target_id": {
           "type": "string",
-          "description": "대상 스케줄/작업 ID (enable/disable/run/delete/status 시)"
+          "description": "Job ID for delete/enable/disable/run/status."
         },
         "expression": {
           "type": "string",
-          "description": "자연어 스케줄 표현식 — 언제 실행할지 (create 시). Examples: 'every 5 minutes', 'daily at 9:00', 'every monday at 9:00', 'every 2 hours during 09:00-18:00'"
+          "description": "Schedule expression in English. Examples: 'every 5 minutes', 'daily at 9:00', 'every monday at 9:00'. Required for create."
         },
         "action": {
           "type": "string",
-          "description": "실행할 작업 내용 — 무엇을 할지 (create 시 필수). 스케줄 시점에 AgenticLoop이 수행할 프롬프트. Example: 'ML Engineer 채용 공고를 검색하고 요약해서 이메일로 보내줘'"
+          "description": "What to do when fired — a natural language prompt. Example: 'Search AI papers and create digest'. REQUIRED for create."
         }
       },
       "required": ["sub_action"]
