@@ -1040,11 +1040,14 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                     _iso_conv = ConversationContext()
                     _, _, _iso_loop = _build_agentic_stack(
                         _iso_conv,
-                        mcp_manager=mcp_mgr,  # share singleton — reuses existing connections
+                        mcp_manager=mcp_mgr,
                         skill_registry=skill_registry,
                         verbose=False,
                         quiet=True,
-                        hitl_level=0,  # unattended — skip all HITL/MCP approval
+                        hitl_level=0,
+                        cost_budget=agentic._cost_budget,
+                        time_budget_s=min(agentic._time_budget_s or 300.0, 300.0),
+                        hooks=agentic._hooks if hasattr(agentic, "_hooks") else None,
                     )
                     _captured_job_id = job_id
                     _captured_prompt = prompt
