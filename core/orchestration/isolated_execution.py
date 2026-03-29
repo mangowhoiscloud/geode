@@ -264,6 +264,7 @@ class IsolatedRunner:
         slot_error = self._acquire_slot(config)
         if slot_error is not None:
             return slot_error
+        acquired = True
 
         started = time.time()
         result_holder: list[IsolationResult] = []
@@ -350,7 +351,8 @@ class IsolatedRunner:
 
             return result
         finally:
-            self._semaphore.release()
+            if acquired:
+                self._semaphore.release()
 
     # ------------------------------------------------------------------
     # Subprocess mode (WorkerRequest → python -m core.agent.worker)
@@ -369,6 +371,7 @@ class IsolatedRunner:
         slot_error = self._acquire_slot(config)
         if slot_error is not None:
             return slot_error
+        acquired = True
 
         started = time.time()
         proc: subprocess.Popen[bytes] | None = None
@@ -470,7 +473,8 @@ class IsolatedRunner:
         finally:
             with self._lock:
                 self._active.pop(config.session_id, None)
-            self._semaphore.release()
+            if acquired:
+                self._semaphore.release()
 
     @staticmethod
     def _save_stderr(session_id: str, stderr_bytes: bytes) -> None:

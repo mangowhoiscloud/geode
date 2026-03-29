@@ -17,6 +17,7 @@ Node → Task mapping:
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 from core.hooks import HookEvent, HookSystem
@@ -58,6 +59,7 @@ class TaskGraphHookBridge:
         self._prefix = ip_prefix
         self._evaluator_done_count = 0  # exit + error combined
         self._evaluator_has_error = False
+        self._evaluator_lock = threading.Lock()
         self._hooks: HookSystem | None = None
 
     @property
@@ -141,9 +143,10 @@ class TaskGraphHookBridge:
 
         # Evaluator counting: complete after all N done (exit + error)
         if node == "evaluator":
-            self._evaluator_done_count += 1
-            if self._evaluator_done_count < _EVALUATOR_EXPECTED_COUNT:
-                return
+            with self._evaluator_lock:
+                self._evaluator_done_count += 1
+                if self._evaluator_done_count < _EVALUATOR_EXPECTED_COUNT:
+                    return
             # All evaluators done — complete if no errors occurred
             tid = f"{self._prefix}_evaluators"
             task = self._graph.get_task(tid)

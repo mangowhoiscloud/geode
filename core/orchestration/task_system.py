@@ -11,6 +11,7 @@ Multi-IP analyses create separate task subgraphs per IP.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -89,6 +90,7 @@ class TaskGraph:
     def __init__(self) -> None:
         self._tasks: dict[str, Task] = {}
         self._stats = _TaskGraphStats()
+        self._lock = threading.Lock()
 
     @property
     def stats(self) -> _TaskGraphStats:
@@ -104,9 +106,10 @@ class TaskGraph:
         Raises:
             ValueError: If task ID already exists.
         """
-        if task.task_id in self._tasks:
-            raise ValueError(f"Task '{task.task_id}' already exists in the graph")
-        self._tasks[task.task_id] = task
+        with self._lock:
+            if task.task_id in self._tasks:
+                raise ValueError(f"Task '{task.task_id}' already exists in the graph")
+            self._tasks[task.task_id] = task
         log.debug("Task added: %s (deps=%s)", task.task_id, task.dependencies)
 
     def get_task(self, task_id: str) -> Task | None:
@@ -118,45 +121,51 @@ class TaskGraph:
 
         Returns tasks that can be executed in parallel.
         """
-        ready: list[Task] = []
-        for task in self._tasks.values():
-            if task.status != TaskStatus.PENDING:
-                continue
-            if self._dependencies_satisfied(task):
-                task.status = TaskStatus.READY
-                ready.append(task)
-        return ready
+        with self._lock:
+            ready: list[Task] = []
+            for task in self._tasks.values():
+                if task.status != TaskStatus.PENDING:
+                    continue
+                if self._dependencies_satisfied(task):
+                    task.status = TaskStatus.READY
+                    ready.append(task)
+            return ready
 
     def mark_running(self, task_id: str) -> None:
         """Mark a task as running."""
-        task = self._require_task(task_id)
-        if task.status not in (TaskStatus.PENDING, TaskStatus.READY):
-            raise ValueError(f"Cannot start task '{task_id}' in status '{task.status.value}'")
-        task.status = TaskStatus.RUNNING
-        task.started_at = time.time()
-        self._stats.started += 1
+        with self._lock:
+            task = self._require_task(task_id)
+            if task.status not in (TaskStatus.PENDING, TaskStatus.READY):
+                raise ValueError(f"Cannot start task '{task_id}' in status '{task.status.value}'")
+            task.status = TaskStatus.RUNNING
+            task.started_at = time.time()
+            self._stats.started += 1
         log.debug("Task running: %s", task_id)
 
     def mark_completed(self, task_id: str, *, result: Any = None) -> None:
         """Mark a task as completed with an optional result."""
-        task = self._require_task(task_id)
-        if task.status != TaskStatus.RUNNING:
-            raise ValueError(f"Cannot complete task '{task_id}' in status '{task.status.value}'")
-        task.status = TaskStatus.COMPLETED
-        task.result = result
-        task.completed_at = time.time()
-        self._stats.completed += 1
+        with self._lock:
+            task = self._require_task(task_id)
+            if task.status != TaskStatus.RUNNING:
+                raise ValueError(
+                    f"Cannot complete task '{task_id}' in status '{task.status.value}'"
+                )
+            task.status = TaskStatus.COMPLETED
+            task.result = result
+            task.completed_at = time.time()
+            self._stats.completed += 1
         log.debug("Task completed: %s (%.3fs)", task_id, task.elapsed_s or 0)
 
     def mark_failed(self, task_id: str, *, error: str = "") -> None:
         """Mark a task as failed."""
-        task = self._require_task(task_id)
-        if task.status in (TaskStatus.COMPLETED, TaskStatus.SKIPPED):
-            raise ValueError(f"Cannot fail task '{task_id}' in status '{task.status.value}'")
-        task.status = TaskStatus.FAILED
-        task.error = error
-        task.completed_at = time.time()
-        self._stats.failed += 1
+        with self._lock:
+            task = self._require_task(task_id)
+            if task.status in (TaskStatus.COMPLETED, TaskStatus.SKIPPED):
+                raise ValueError(f"Cannot fail task '{task_id}' in status '{task.status.value}'")
+            task.status = TaskStatus.FAILED
+            task.error = error
+            task.completed_at = time.time()
+            self._stats.failed += 1
         log.warning("Task failed: %s — %s", task_id, error)
 
     def mark_skipped(self, task_id: str) -> None:
