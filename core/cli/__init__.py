@@ -958,12 +958,23 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
 
     console.print()  # blank line before prompt
 
-    # Build tool handlers, executor, and AgenticLoop (shared factory)
-    _last_verbose = verbose
-    agentic_ref, executor, agentic = _build_agentic_stack(
-        conversation,
+    # Build SharedServices gateway (single factory for all modes)
+    from core.gateway.shared_services import SessionMode, build_shared_services
+
+    services = build_shared_services(
         mcp_manager=mcp_mgr,
         skill_registry=skill_registry,
+        verbose=verbose,
+    )
+
+    # Wire module-level hooks for _fire_hook() callers
+    global _hooks_ctx
+    _hooks_ctx = services.hook_system
+
+    _last_verbose = verbose
+    executor, agentic = services.create_session(
+        SessionMode.REPL,
+        conversation=conversation,
         verbose=verbose,
     )
 
@@ -1038,16 +1049,10 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                         continue
 
                     _iso_conv = ConversationContext()
-                    _, _, _iso_loop = _build_agentic_stack(
-                        _iso_conv,
-                        mcp_manager=mcp_mgr,
-                        skill_registry=skill_registry,
-                        verbose=False,
-                        quiet=True,
-                        hitl_level=0,
-                        cost_budget=agentic._cost_budget,
-                        time_budget_s=min(agentic._time_budget_s or 300.0, 300.0),
-                        hooks=agentic._hooks if hasattr(agentic, "_hooks") else None,
+                    _, _iso_loop = services.create_session(
+                        SessionMode.SCHEDULER,
+                        conversation=_iso_conv,
+                        propagate_context=True,
                     )
                     _captured_job_id = job_id
                     _captured_prompt = prompt
@@ -1136,7 +1141,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                 verbose,
                 skill_registry=skill_registry,
                 mcp_manager=mcp_mgr,
-                agentic_ref=agentic_ref,
+                agentic_ref=services.agentic_ref,
             )
             if should_break:
                 break
@@ -1156,10 +1161,9 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
             # Update handlers if verbose changed
             if verbose != _last_verbose:
                 _last_verbose = verbose
-                agentic_ref, executor, agentic = _build_agentic_stack(
-                    conversation,
-                    mcp_manager=mcp_mgr,
-                    skill_registry=skill_registry,
+                executor, agentic = services.create_session(
+                    SessionMode.REPL,
+                    conversation=conversation,
                     verbose=verbose,
                 )
         else:
@@ -1730,18 +1734,21 @@ def serve(
         "- Format responses for messaging: use short paragraphs, avoid excessive markdown."
     )
 
-    # Read gateway config from ChannelManager (loaded from config.toml)
-    _gw_max_rounds = gateway.gateway_max_rounds if hasattr(gateway, "gateway_max_rounds") else 30
+    # Build SharedServices for serve mode (same factory as REPL)
+    from core.gateway.shared_services import SessionMode, build_shared_services
+
     _gw_max_turns = gateway.gateway_max_turns if hasattr(gateway, "gateway_max_turns") else 20
+    _gw_services = build_shared_services(
+        mcp_manager=boot.mcp_manager,
+        skill_registry=boot.skill_registry,
+    )
 
     def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
         """Process a gateway message with multi-turn context.
 
-        Uses the same _build_agentic_stack() factory as REPL — only
-        system_suffix, hitl_level, and quiet differ.
+        Uses SharedServices.create_session(DAEMON) — same shared resources
+        as REPL, only mode-specific behavior differs.
         """
-        boot.propagate_to_thread()  # Fix ContextVar propagation for daemon thread
-
         session_key = metadata.get("session_key", "")
 
         # --- Load prior conversation from session store ---
@@ -1756,15 +1763,12 @@ def serve(
                     session_key,
                 )
 
-        # Same factory as REPL — only output behavior differs
-        _ref, _executor, loop = _build_agentic_stack(
-            ctx,
-            mcp_manager=boot.mcp_manager,
-            skill_registry=boot.skill_registry,
-            hitl_level=0,
-            max_rounds=_gw_max_rounds,
+        # Single factory — DAEMON mode (hitl=0, quiet, time-based)
+        _executor, loop = _gw_services.create_session(
+            SessionMode.DAEMON,
+            conversation=ctx,
             system_suffix=_GATEWAY_SUFFIX,
-            quiet=True,
+            propagate_context=True,
         )
         try:
             result = loop.run(content)
