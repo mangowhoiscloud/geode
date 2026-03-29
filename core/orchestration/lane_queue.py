@@ -149,26 +149,31 @@ class LaneQueue:
             key: Work item identifier.
             lane_names: Lane names to acquire in order.
         """
-        acquired_lanes: list[Lane] = []
+        acquired_sems: list[Lane] = []
         try:
             for name in lane_names:
                 lane = self._lanes.get(name)
                 if lane is None:
                     raise KeyError(f"Lane '{name}' not found")
-                lane._semaphore.acquire(timeout=lane.timeout_s)
+                if not lane._semaphore.acquire(timeout=lane.timeout_s):
+                    raise TimeoutError(
+                        f"Lane '{name}' timeout after {lane.timeout_s}s "
+                        f"(max_concurrent={lane.max_concurrent})"
+                    )
+                acquired_sems.append(lane)
                 with lane._lock:
                     lane._active[key] = time.time()
                 lane._stats.inc_acquired()
-                acquired_lanes.append(lane)
 
             yield
 
         finally:
-            for lane in reversed(acquired_lanes):
+            for lane in reversed(acquired_sems):
+                lane._semaphore.release()
+            for lane in reversed(acquired_sems):
                 with lane._lock:
                     lane._active.pop(key, None)
                 lane._stats.inc_released()
-                lane._semaphore.release()
 
     def status(self) -> dict[str, Any]:
         """Get status of all lanes."""

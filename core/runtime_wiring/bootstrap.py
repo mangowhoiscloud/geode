@@ -328,14 +328,6 @@ def build_hooks(
 
     _register_plugin("tool_approval_hook", _reg_tool_approval)
 
-    # C7: Model switch observability hook (MODEL_SWITCHED -> log)
-    hooks.register(
-        HookEvent.MODEL_SWITCHED,
-        lambda e, d: log.info("Model switched: %s -> %s", d.get("from_model"), d.get("to_model")),
-        name="model_switch_logger",
-        priority=90,
-    )
-
     # C8: Filesystem hook plugin auto-discovery (.geode/hooks/ + core/hooks/plugins/)
     def _reg_filesystem_plugins() -> None:
         from core.hooks.discovery import HookPluginLoader

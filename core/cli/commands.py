@@ -954,9 +954,12 @@ def cmd_skill_invoke(skill_registry: _Any, arg: str, *, agentic_ref: _Any = None
             console.print(f"  [error]Skill fork failed: {exc}[/error]")
     else:
         # Inline execution: inject rendered body as user message into main loop
-        if agentic_ref and agentic_ref[0] is not None:
+        from core.cli.session_state import get_current_loop
+
+        _loop = get_current_loop()
+        if _loop is not None:
             prompt = f"[skill:{name}] {rendered}"
-            result = agentic_ref[0].run(prompt)
+            result = _loop.run(prompt)
             from core.cli.ui.agentic_ui import render_status_line
 
             render_status_line()

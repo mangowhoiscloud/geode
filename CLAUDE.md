@@ -4,7 +4,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.35.0
+- **Version**: 0.35.1
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -212,7 +212,7 @@ Tool definitions are centrally managed in `core/tools/definitions.json` (47 tool
 - **Verbose gating**: Debug prints only with `--verbose` flag
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
-- **Hook-driven**: `core.hooks` — 46 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`, `SESSION_*`, `TURN_COMPLETE`, `LLM_CALL_*`, `TOOL_APPROVAL_*`, `MODEL_SWITCHED`) for extensibility. Cross-cutting; accessible from all layers via `from core.hooks import HookSystem, HookEvent`.
+- **Hook-driven**: `core.hooks` — 40 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`, `SESSION_*`, `TURN_COMPLETE`, `LLM_CALL_*`, `TOOL_APPROVAL_*`, `MODEL_SWITCHED`) for extensibility. Cross-cutting; accessible from all layers via `from core.hooks import HookSystem, HookEvent`.
 - **Domain Plugin**: `DomainPort` Protocol — per-domain pipeline swappable (`set_domain()` / `get_domain()`). Non-domain infrastructure uses direct imports (minimizing ContextVar DI).
 - **LLM-consumed content in English**: All files injected into LLM context (system prompts, tool definitions, skill metadata, memory, rules) must be written in English. Korean trigger keywords may be retained for bilingual input matching. This improves LLM routing accuracy and tool selection reliability.
 
