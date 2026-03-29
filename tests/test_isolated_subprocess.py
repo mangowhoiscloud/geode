@@ -76,14 +76,17 @@ class TestSubprocessMode:
         # but should not raise
         assert isinstance(cancelled, bool)
 
-    def test_subprocess_semaphore_wait(self) -> None:
-        """Subprocess mode should wait SEMAPHORE_WAIT_S for a slot."""
-        runner = IsolatedRunner()
-        runner.SEMAPHORE_WAIT_S = 0.1  # Short wait for test
+    def test_subprocess_lane_wait(self) -> None:
+        """Subprocess mode should wait SLOT_WAIT_S for a lane slot."""
+        from core.orchestration.lane_queue import Lane
+
+        lane = Lane("global", max_concurrent=5, timeout_s=30.0)
+        runner = IsolatedRunner(lane=lane)
+        runner.SLOT_WAIT_S = 0.1  # Short wait for test
 
         # Fill all slots with blocking threads
         barriers = []
-        for _i in range(runner.MAX_CONCURRENT):
+        for _i in range(5):
             barrier = threading.Event()
             barriers.append(barrier)
             runner.run_async(
@@ -97,7 +100,7 @@ class TestSubprocessMode:
         cfg = IsolationConfig(session_id="sem-001", timeout_s=5, post_to_main=False)
         result = runner.run(req, config=cfg)
         assert result.success is False
-        assert "Concurrency limit" in (result.error or "")
+        assert "full" in (result.error or "").lower() or "limit" in (result.error or "").lower()
 
         # Cleanup
         for b in barriers:

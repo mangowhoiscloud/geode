@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Unified LaneQueue (Option B)** — 3 independent LaneQueue instances + IsolatedRunner Semaphore(5) consolidated into single LaneQueue with 4 named lanes: `session`(1), `global`(5), `gateway`(2), `scheduler`(2). IsolatedRunner is now a pure executor — concurrency gated by `Lane("global")` instead of internal semaphore. SharedServices owns the unified LaneQueue.
+
 ### Added
 - **H3: CLIChannel IPC** — Unix domain socket (`~/.geode/cli.sock`) connects thin CLI client to `geode serve`. `CLIPoller` accepts local connections, creates REPL sessions via SharedServices. `IPCClient` auto-detects serve and delegates agentic execution over line-delimited JSON protocol. Fallback to standalone when serve is not running.
 - **Scheduler in serve mode** — `SchedulerService` extracted from REPL into `geode serve`. Scheduled jobs now fire in headless mode. Shared `_drain_scheduler_queue()` helper eliminates duplication between REPL and serve paths.

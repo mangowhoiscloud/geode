@@ -97,6 +97,29 @@ class Lane:
             self._semaphore.release()
             log.debug("Lane '%s' released by %s", self.name, key)
 
+    def acquire_timeout(self, key: str, timeout_s: float) -> bool:
+        """Blocking acquire with explicit timeout (for IsolatedRunner).
+
+        Returns True if a slot was acquired within *timeout_s*.
+        Caller must call :meth:`manual_release` when done.
+        """
+        acquired = self._semaphore.acquire(timeout=timeout_s)
+        if not acquired:
+            self._stats.inc_timeouts()
+            return False
+        with self._lock:
+            self._active[key] = time.time()
+        self._stats.inc_acquired()
+        log.debug(
+            "Lane '%s' acquire_timeout(%.1fs) by %s (%d/%d active)",
+            self.name,
+            timeout_s,
+            key,
+            self.active_count,
+            self.max_concurrent,
+        )
+        return True
+
     def try_acquire(self, key: str) -> bool:
         """Non-blocking acquire for async patterns (e.g. scheduler).
 

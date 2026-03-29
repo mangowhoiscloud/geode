@@ -163,16 +163,15 @@ def build_gateway() -> None:
         set_gateway(None)
         return
 
-    # Wire Lane Queue for gateway concurrency control
-    lane_queue = None
-    try:
-        from core.orchestration.lane_queue import LaneQueue
+    # Use the unified LaneQueue from runtime (gateway lane already registered)
+    from core.runtime_wiring.infra import build_default_lanes
 
-        lane_queue = LaneQueue()
-        lane_queue.add_lane("gateway", max_concurrent=2, timeout_s=120.0)
+    try:
+        lane_queue = build_default_lanes()
     except Exception as exc:
         _plugin_status["gateway_lane_queue"] = "unavailable"
         log.warning("Plugin gateway_lane_queue: %s", exc)
+        lane_queue = None
 
     manager = ChannelManager(lane_queue=lane_queue)
     notification = get_notification()
