@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import queue
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -216,6 +217,65 @@ class TestDrainSchedulerQueue:
 
 
 # ---------------------------------------------------------------------------
+# Error path tests (Beck P1: exception safety)
+# ---------------------------------------------------------------------------
+
+
+class TestDrainErrorPaths:
+    """Verify exception safety in drain loop."""
+
+    def test_create_session_failure_releases_semaphore(
+        self,
+        action_queue: queue.Queue,
+        mock_runner: MagicMock,
+    ) -> None:
+        """Semaphore must be released if create_session() raises."""
+        failing_services = MagicMock()
+        failing_services.create_session.side_effect = RuntimeError("MCP down")
+        sem = threading.Semaphore(2)
+        action_queue.put(("job-err", "fail task", True))
+
+        count = _drain_scheduler_queue(
+            action_queue=action_queue,
+            services=failing_services,
+            runner=mock_runner,
+            semaphore=sem,
+            force_isolated=True,
+        )
+
+        assert count == 1
+        mock_runner.run_async.assert_not_called()
+        # Semaphore should NOT be leaked — verify by acquiring both slots
+        assert sem.acquire(timeout=0)
+        assert sem.acquire(timeout=0)
+
+    def test_main_loop_exception_continues_drain(
+        self,
+        action_queue: queue.Queue,
+        mock_services: MagicMock,
+        mock_runner: MagicMock,
+        semaphore: threading.Semaphore,
+    ) -> None:
+        """main_loop.run() exception should not kill the drain loop."""
+        failing_loop = MagicMock()
+        failing_loop.run.side_effect = RuntimeError("loop crashed")
+        action_queue.put(("j1", "first", False))
+        action_queue.put(("j2", "second", False))
+
+        count = _drain_scheduler_queue(
+            action_queue=action_queue,
+            services=mock_services,
+            runner=mock_runner,
+            semaphore=semaphore,
+            force_isolated=False,
+            main_loop=failing_loop,
+        )
+
+        assert count == 2
+        assert failing_loop.run.call_count == 2  # both attempted despite error
+
+
+# ---------------------------------------------------------------------------
 # SchedulerService lifecycle
 # ---------------------------------------------------------------------------
 
@@ -239,7 +299,7 @@ class TestSchedulerServiceLifecycle:
         svc.add_job(job)
         assert svc.job_count == 1
 
-    def test_save_and_load_roundtrip(self, tmp_path: MagicMock) -> None:
+    def test_save_and_load_roundtrip(self, tmp_path: Path) -> None:
         """Jobs should persist across save/load cycle."""
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
@@ -272,7 +332,7 @@ class TestSchedulerServiceLifecycle:
         svc.stop()
         assert not svc.is_running
 
-    def test_graceful_shutdown_saves(self, tmp_path: MagicMock) -> None:
+    def test_graceful_shutdown_saves(self, tmp_path: Path) -> None:
         """Graceful shutdown pattern: save() then stop()."""
         from core.automation.scheduler import SchedulerService
 

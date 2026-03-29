@@ -141,52 +141,62 @@ def _drain_scheduler_queue(
                         on_skip(job_id)
                     continue
 
-                _iso_conv = ConversationContext()
-                from core.gateway.shared_services import SessionMode
+                _sem_acquired = True
+                try:
+                    _iso_conv = ConversationContext()
+                    from core.gateway.shared_services import SessionMode
 
-                _, _iso_loop = services.create_session(
-                    SessionMode.SCHEDULER,
-                    conversation=_iso_conv,
-                    propagate_context=True,
-                )
-                _cap_loop = _iso_loop
-                _cap_prompt = prompt
-                _cap_jid = job_id
-                _cap_sem = semaphore
-                _cap_cb = on_complete
+                    _, _iso_loop = services.create_session(
+                        SessionMode.SCHEDULER,
+                        conversation=_iso_conv,
+                        propagate_context=True,
+                    )
+                    _cap_loop = _iso_loop
+                    _cap_prompt = prompt
+                    _cap_jid = job_id
+                    _cap_sem = semaphore
+                    _cap_cb = on_complete
 
-                def _run_isolated(
-                    *,
-                    _loop: Any = _cap_loop,
-                    _p: str = _cap_prompt,
-                    _jid: str = _cap_jid,
-                    _sem: threading.Semaphore = _cap_sem,
-                    _cb: Any = _cap_cb,
-                ) -> str:
-                    try:
-                        r = _loop.run(_p)
-                        if _cb:
-                            _cb(r, job_id=_jid)
-                        return r.text if r and r.text else ""
-                    finally:
-                        _sem.release()
+                    def _run_isolated(
+                        *,
+                        _loop: Any = _cap_loop,
+                        _p: str = _cap_prompt,
+                        _jid: str = _cap_jid,
+                        _sem: threading.Semaphore = _cap_sem,
+                        _cb: Any = _cap_cb,
+                    ) -> str:
+                        try:
+                            r = _loop.run(_p)
+                            if _cb:
+                                _cb(r, job_id=_jid)
+                            return r.text if r and r.text else ""
+                        finally:
+                            _sem.release()
 
-                runner.run_async(
-                    _run_isolated,
-                    config=IsolationConfig(
-                        prefix=f"scheduled:{job_id}",
-                        post_to_main=False,
-                        timeout_s=300.0,
-                    ),
-                )
-                if on_dispatch:
-                    on_dispatch(job_id)
+                    runner.run_async(
+                        _run_isolated,
+                        config=IsolationConfig(
+                            prefix=f"scheduled:{job_id}",
+                            post_to_main=False,
+                            timeout_s=300.0,
+                        ),
+                    )
+                    _sem_acquired = False  # ownership transferred to _run_isolated
+                    if on_dispatch:
+                        on_dispatch(job_id)
+                except Exception:
+                    if _sem_acquired:
+                        semaphore.release()
+                    log.warning("Scheduler job %s dispatch failed", job_id, exc_info=True)
             else:
                 # Non-isolated: inject into main session (REPL only)
                 if main_loop is not None:
                     if on_main_run:
                         on_main_run(job_id)
-                    main_loop.run(prompt)
+                    try:
+                        main_loop.run(prompt)
+                    except Exception:
+                        log.warning("Scheduler job %s main-loop failed", job_id, exc_info=True)
     except _q.Empty:
         pass
     return count
@@ -1817,7 +1827,8 @@ def serve(
         _n_jobs = _sched_svc.job_count
         console.print(f"  [success]Scheduler started ({_n_jobs} jobs loaded)[/success]")
     except Exception:
-        log.debug("SchedulerService init skipped in serve", exc_info=True)
+        log.warning("SchedulerService init failed in serve", exc_info=True)
+        console.print("  [warning]Scheduler init failed — running without scheduler[/warning]")
 
     _sched_runner = IsolatedRunner()
     _sched_semaphore = threading.Semaphore(2)
