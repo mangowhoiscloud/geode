@@ -355,7 +355,7 @@ def _render_search_results(query: str, results: list[Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Interactive REPL — OpenClaw-style dual routing
+# Thin CLI + serve — OpenClaw-style gateway routing
 # ---------------------------------------------------------------------------
 
 

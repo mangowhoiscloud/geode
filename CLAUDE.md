@@ -4,12 +4,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.35.1
+- **Version**: 0.36.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 189
-- **Tests**: 3344+
+- **Modules**: 191
+- **Tests**: 3433+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -18,7 +18,7 @@ A general-purpose autonomous execution agent built on LangGraph. Autonomously pe
 # Install
 uv sync
 
-# Interactive REPL (primary interface)
+# Thin CLI (auto-starts serve daemon if needed)
 uv run geode
 
 # Natural language CLI
@@ -35,22 +35,23 @@ uv run geode analyze "Cowboy Bebop" --verbose
 
 ## Architecture
 
-6-Layer Architecture.
+4-Layer Stack (Model → Runtime → Harness → Agent) + orthogonal Domain.
 
 ```
-L0: CLI & AGENT      — Typer CLI, AgenticLoop, SubAgentManager, Batch
-L1: INFRASTRUCTURE   — ClaudeAdapter, OpenAIAdapter, MCP Adapters (Ports co-located with consumers)
-L2: MEMORY           — Organization > Project > Session + User Profile (4-Tier + Hybrid L1/L2)
-L3: ORCHESTRATION    — TaskGraph DAG, PlanMode, CoalescingQueue, LaneQueue (hooks separated)
-L4: EXTENSIBILITY    — ToolRegistry(47), PolicyChain, Skills, MCP Catalog(44), Reports
-L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
+AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
+HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(40 events)
+RUNTIME:  ToolRegistry(52), MCP Catalog(44), Skills, Memory(4-Tier), Reports
+MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback)
+─────────────────────────────────────────────────────────────────
+⊥ DOMAIN: DomainPort Protocol, GameIPDomain (cross-cutting, binds to Runtime + Harness via Port)
 ```
 
 ### Sub-Agent System
 
 Sub-agents inherit parent tools/MCP/skills/memory and execute in parallel within independent contexts.
-`SubAgentManager` → `CoalescingQueue`(250ms dedup) → `TaskGraph`(DAG) → `IsolatedRunner`(MAX_CONCURRENT=5).
-Controls: max_depth=1 (no recursion), max_total=15, timeout=120s, auto_approve=True(STANDARD only), max_rounds=0 (unlimited), max_tokens=32768, time_budget_s=0 (same as parent, time-based control).
+`SubAgentManager` → `TaskGraph`(DAG) → `IsolatedRunner`(gated by Lane("global", max=8)).
+Controls: max_depth=1 (explicit depth guard + denied_tools), max_total=15, timeout=120s, auto_approve=True(STANDARD only), max_rounds=0 (unlimited), max_tokens=32768, time_budget_s=0 (same as parent, time-based control).
+All execution paths: `SessionLane.acquire(key)` → `Lane("global").acquire(key)` → execute.
 
 **Memory Isolation Rules:**
 - Sub-agents inherit parent memory snapshots as read-only
@@ -96,11 +97,30 @@ START → router → signals → analyst×4 (Send API)
 - **Typed Evaluator Output**: Per-evaluator Pydantic models enforce required axes in structured output
 - **Confidence Multiplier**: `final = base × (0.7 + 0.3 × confidence/100)`
 
+### Gateway Runtime (Thin-Only Architecture)
+
+```
+geode (thin CLI) ──── Unix socket IPC ────→ geode serve (unified daemon)
+                                              │
+                                        GeodeRuntime (ONE)
+                                         ├── SessionLane (per-key serial, max_sessions=256)
+                                         ├── Lane("global", max=8)
+                                         ├── CLIPoller   → SessionMode.IPC (hitl=0, DANGEROUS blocked)
+                                         ├── Gateway     → SessionMode.DAEMON (hitl=0)
+                                         └── Scheduler   → SessionMode.SCHEDULER (hitl=0, 300s cap)
+
+All paths: acquire_all(session_key, ["session", "global"]) → create_session(mode) → execute
+```
+
+- **Thin-Only**: `geode` always connects to serve via IPC. Auto-starts serve if not running.
+- **SessionMode.IPC**: hitl=0 (WRITE allowed, DANGEROUS policy-blocked). For thin CLI clients.
+- **SessionLane**: Same session key → serial. Different keys → parallel. Idle cleanup at 300s.
+
 ## SOT (Source of Truth)
 
 | Document | Path | Content |
 |----------|------|---------|
-| Layer Plan | `docs/architecture/layer-implementation-plan.md` | 6-layer roadmap |
+| Architecture | `CLAUDE.md` § Architecture | 4-layer stack (Model→Runtime→Harness→Agent) |
 | Orchestration | `docs/architecture/orchestration-tools-hooks-plans.md` | L3/L4 design |
 | CLAUDE.md | `CLAUDE.md` | Architecture overview + conventions (this file) |
 
@@ -124,7 +144,7 @@ uv run mypy core/
 
 ### Expected Test Results
 
-2000+ tests pass. 3 IP fixtures produce tier spread:
+3433+ tests pass. 3 IP fixtures produce tier spread:
 - Berserk: **S** (81.2) — conversion_failure
 - Cowboy Bebop: **A** (68.4) — undermarketed
 - Ghost in the Shell: **B** (51.7) — discovery_failure
@@ -349,7 +369,7 @@ Code changes → repeat 3 quality gates. Fix on failure.
 ```bash
 uv run ruff check core/ tests/      # Lint: 0 errors
 uv run mypy core/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"   # Test: 3344+ pass
+uv run pytest tests/ -m "not live"   # Test: 3433+ pass
 ```
 
 #### 4. E2E Verify
@@ -360,7 +380,14 @@ See `geode-e2e` skill.
 uv run geode analyze "Cowboy Bebop" --dry-run  # Verify A (68.4) unchanged
 ```
 
-4-persona verification team review: see `verification-team` skill (for large-scale changes).
+5-persona verification team review: see `verification-team` + `anti-deception-checklist` skills (for large-scale changes).
+
+**5-Persona Verification Team:**
+1. **Kent Beck** — Design quality, test coverage, dead code, simplicity (XP/TDD)
+2. **Andrej Karpathy** — Constraints, ratchets, context budget, time budgets (autoresearch)
+3. **Peter Steinberger** — Session isolation, Lane Queue, lifecycle, plugin architecture (OpenClaw)
+4. **Boris Cherny** — Tool safety (HITL), sub-agent isolation, permission model (Claude Code)
+5. **Anti-Deception Checklist** — Fake success detection: test deletion, lint bypass, coverage regression, stub disguise, secret exposure
 
 #### 5. Docs-Sync
 
@@ -413,7 +440,7 @@ Update `docs/progress.md` only from main. Backlog → In Progress → Done.
 |------|---------|----------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -m "not live"` | 3344+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 3433+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 ## Custom Skills (Scaffold)
@@ -432,7 +459,7 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget | 10 autonomous agent design principles (P1-P10) |
 | `openclaw-patterns` | gateway, session, binding, lane, plugin | Agent system design patterns (OpenClaw) |
 | `frontier-harness-research` | research, gap, frontier, harness, case study | Frontier harness 4-system comparative research process |
-| `verification-team` | verification, review, verify, inspect | 4-persona verification (Beck/Karpathy/Steinberger/Cherny) |
+| `verification-team` | verification, review, verify, inspect | 5-persona verification (Beck/Karpathy/Steinberger/Cherny + Anti-Deception) |
 | `tech-blog-writer` | blog, posting, tech blog | Technical blog writing guide |
 | `explore-reason-act` | explore, reason, root cause, read before write | 3-phase explore-reason-act before code modification (REODE backport) |
 | `anti-deception-checklist` | deception, fake success, regression | Fake success prevention verification checklist (REODE backport) |
