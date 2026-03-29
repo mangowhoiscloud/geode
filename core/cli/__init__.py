@@ -12,7 +12,6 @@ import logging
 import signal
 import sys
 import termios
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -106,7 +105,7 @@ def _drain_scheduler_queue(
     action_queue: Any,
     services: Any,
     runner: Any,
-    semaphore: threading.Semaphore,
+    scheduler_lane: Any,
     force_isolated: bool = False,
     main_loop: Any | None = None,
     on_complete: Any | None = None,
@@ -118,6 +117,9 @@ def _drain_scheduler_queue(
 
     Shared by both REPL and serve modes.  In serve mode ``force_isolated``
     is True because there is no interactive main session to inject into.
+
+    Uses ``Lane.try_acquire`` / ``manual_release`` for concurrency control
+    through the central LaneQueue (replacing ad-hoc Semaphore).
 
     Returns the number of jobs drained.
     """
@@ -135,13 +137,18 @@ def _drain_scheduler_queue(
             prompt = f"[scheduled-job:{job_id}] {fired_action}"
 
             if isolated or force_isolated:
-                if not semaphore.acquire(timeout=0):
-                    log.warning("Scheduler slots full (max 2), skipping job %s", job_id)
+                lane_key = f"scheduled:{job_id}"
+                if not scheduler_lane.try_acquire(lane_key):
+                    log.warning(
+                        "Scheduler lane full (max %d), skipping job %s",
+                        scheduler_lane.max_concurrent,
+                        job_id,
+                    )
                     if on_skip:
                         on_skip(job_id)
                     continue
 
-                _sem_acquired = True
+                _lane_acquired = True
                 try:
                     _iso_conv = ConversationContext()
                     from core.gateway.shared_services import SessionMode
@@ -154,7 +161,8 @@ def _drain_scheduler_queue(
                     _cap_loop = _iso_loop
                     _cap_prompt = prompt
                     _cap_jid = job_id
-                    _cap_sem = semaphore
+                    _cap_lane = scheduler_lane
+                    _cap_key = lane_key
                     _cap_cb = on_complete
 
                     def _run_isolated(
@@ -162,7 +170,8 @@ def _drain_scheduler_queue(
                         _loop: Any = _cap_loop,
                         _p: str = _cap_prompt,
                         _jid: str = _cap_jid,
-                        _sem: threading.Semaphore = _cap_sem,
+                        _lane: Any = _cap_lane,
+                        _key: str = _cap_key,
                         _cb: Any = _cap_cb,
                     ) -> str:
                         try:
@@ -171,7 +180,7 @@ def _drain_scheduler_queue(
                                 _cb(r, job_id=_jid)
                             return r.text if r and r.text else ""
                         finally:
-                            _sem.release()
+                            _lane.manual_release(_key)
 
                     runner.run_async(
                         _run_isolated,
@@ -181,12 +190,12 @@ def _drain_scheduler_queue(
                             timeout_s=300.0,
                         ),
                     )
-                    _sem_acquired = False  # ownership transferred to _run_isolated
+                    _lane_acquired = False  # ownership transferred to _run_isolated
                     if on_dispatch:
                         on_dispatch(job_id)
                 except Exception:
-                    if _sem_acquired:
-                        semaphore.release()
+                    if _lane_acquired:
+                        scheduler_lane.manual_release(lane_key)
                     log.warning("Scheduler job %s dispatch failed", job_id, exc_info=True)
             else:
                 # Non-isolated: inject into main session (REPL only)
@@ -1053,7 +1062,10 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
     )
 
     _sched_runner = IsolatedRunner()
-    _sched_semaphore = threading.Semaphore(2)  # Max 2 concurrent scheduled jobs
+    from core.orchestration.lane_queue import LaneQueue
+
+    _sched_lane_queue = LaneQueue()
+    _sched_lane = _sched_lane_queue.add_lane("scheduler", max_concurrent=2, timeout_s=300.0)
 
     console.print()  # blank line before prompt
 
@@ -1134,7 +1146,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
             action_queue=_action_queue,
             services=services,
             runner=_sched_runner,
-            semaphore=_sched_semaphore,
+            scheduler_lane=_sched_lane,
             force_isolated=False,
             main_loop=agentic,
             on_complete=_on_sched_complete,
@@ -1834,7 +1846,10 @@ def serve(
         console.print("  [warning]Scheduler init failed — running without scheduler[/warning]")
 
     _sched_runner = IsolatedRunner()
-    _sched_semaphore = threading.Semaphore(2)
+    from core.orchestration.lane_queue import LaneQueue as _ServeLaneQueue
+
+    _serve_lane_queue = _ServeLaneQueue()
+    _serve_sched_lane = _serve_lane_queue.add_lane("scheduler", max_concurrent=2, timeout_s=300.0)
 
     def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
         """Process a gateway message with multi-turn context.
@@ -1920,7 +1935,7 @@ def serve(
                 action_queue=_sched_queue,
                 services=_gw_services,
                 runner=_sched_runner,
-                semaphore=_sched_semaphore,
+                scheduler_lane=_serve_sched_lane,
                 force_isolated=True,
                 on_complete=lambda result, *, job_id: log.info(
                     "scheduled:%s completed", job_id
