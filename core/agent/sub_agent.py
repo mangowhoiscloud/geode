@@ -233,10 +233,12 @@ class SubAgentManager:
         max_depth: int = 1,  # Depth=1 enforced (Claude Code pattern: sub-agents cannot recurse)
         # Sandbox hardening: tool scope restriction
         denied_tools: set[str] | None = None,
+        time_budget_s: float = 0.0,
     ) -> None:
         self._runner = runner
         self._task_handler = task_handler
         self._timeout_s = timeout_s
+        self._time_budget_s = time_budget_s
         self._hooks = hooks
         self._coalescing = coalescing
         self._agent_registry = agent_registry
@@ -446,7 +448,7 @@ class SubAgentManager:
                 return
             child_result.announced = True
             _announce_queue.setdefault(parent_session_key, []).append(child_result)
-            _announce_timestamps.setdefault(parent_session_key, time.time())
+            _announce_timestamps[parent_session_key] = time.time()
         log.debug(
             "Announced result: task_id=%s to parent=%s (status=%s)",
             child_result.task_id,
@@ -476,6 +478,7 @@ class SubAgentManager:
             model=settings.model,
             provider=_resolve_provider(settings.model),
             timeout_s=self._timeout_s,
+            time_budget_s=self._time_budget_s,
             domain=domain.name if domain else "",
         )
 
@@ -593,10 +596,9 @@ class SubAgentManager:
         callback is opaque. Use subprocess mode (action_handlers) for security.
         """
         if self._denied_tools:
-            log.warning(
-                "Thread mode does not enforce denied_tools for task %s. "
-                "Use subprocess mode (action_handlers) for security.",
-                task.task_id,
+            raise RuntimeError(
+                f"Thread mode cannot enforce denied_tools for task {task.task_id}. "
+                "Use subprocess mode (action_handlers) for security."
             )
 
         from core.memory.session_key import build_subagent_session_key

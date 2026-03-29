@@ -584,3 +584,41 @@ class TestEdgeCases:
         # Should not raise
         result = runner.run(lambda: "ok")
         assert result.success is True
+
+
+# ---------------------------------------------------------------------------
+# C3 Regression: Semaphore leak on timeout (v0.35.1 fix)
+# ---------------------------------------------------------------------------
+
+
+class TestSemaphoreLeakRegression:
+    """Verify the `acquired` flag prevents double-release on timeout."""
+
+    def test_timeout_releases_semaphore_exactly_once(self) -> None:
+        """After a timeout, the semaphore must be released exactly once.
+
+        Regression for C3: without the `acquired` flag, a timeout could
+        cause extra permits on the semaphore.
+        """
+        runner = IsolatedRunner()
+        initial_value = runner._semaphore._value  # type: ignore[attr-defined]
+
+        # Run a function that exceeds the timeout
+        result = runner.run(
+            lambda: time.sleep(5.0),
+            config=IsolationConfig(timeout_s=0.1),
+        )
+
+        assert not result.success
+        # Semaphore should return to its initial value (no leak)
+        assert runner._semaphore._value == initial_value  # type: ignore[attr-defined]
+
+    def test_normal_completion_releases_semaphore(self) -> None:
+        """Normal completion should also release exactly once."""
+        runner = IsolatedRunner()
+        initial_value = runner._semaphore._value  # type: ignore[attr-defined]
+
+        result = runner.run(lambda: "fast")
+
+        assert result.success
+        assert runner._semaphore._value == initial_value  # type: ignore[attr-defined]

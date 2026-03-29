@@ -26,6 +26,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.36.0] — 2026-03-30
+
+### Added
+- **H3: CLIChannel IPC** — Unix domain socket (`~/.geode/cli.sock`) connects thin CLI client to `geode serve`. `CLIPoller` accepts local connections, creates REPL sessions via SharedServices. `IPCClient` auto-detects serve and delegates agentic execution over line-delimited JSON protocol. Fallback to standalone when serve is not running.
+- **Scheduler in serve mode** — `SchedulerService` extracted from REPL into `geode serve`. Scheduled jobs now fire in headless mode. Shared `_drain_scheduler_queue()` helper eliminates duplication between REPL and serve paths.
+
+### Changed
+- **Unified bootstrap** — `serve()` no longer calls `bootstrap_geode()`. Uses `setup_contextvars()` + `GeodeRuntime.create()` directly. ONE HookSystem, ONE MCP manager, ONE SkillRegistry across all entry points. Resolves C1/C2/H1/H4/H5 from structural audit.
+
+### Fixed
+- **C3: Dual Scheduler race** — `fcntl.flock(LOCK_EX/LOCK_SH)` on `jobs.json` save/load. REPL and serve can no longer corrupt shared job store via concurrent file access.
+- **H2: Scheduler → LaneQueue** — replaced ad-hoc `Semaphore(2)` with `Lane.try_acquire()`/`manual_release()`. Scheduler concurrency now routes through the central LaneQueue system.
+- **M2: Scheduler PolicyChain** — `create_session(SCHEDULER/DAEMON)` filters DANGEROUS tools (`run_bash`, `delegate_task`). Headless modes can no longer invoke tools requiring HITL approval.
+- **M3: Stuck job detection** — `running_since_ms` field tracks active jobs. `detect_stuck_jobs()` runs each tick, marks jobs exceeding 10min threshold as `stuck`, fires hook.
+- **Scheduler drain exception safety** — lane slot leak on `create_session()` failure fixed. `main_loop.run()` exception no longer kills the drain loop. Init failure in serve promoted to `log.warning`.
+- **P1 batch (5 fixes)** — C3/C4 regression tests, WorkerRequest `time_budget_s` pass-through, thread-mode `denied_tools` raises (was warn), announce TTL reset (`setdefault` → assignment), subprocess env whitelist +2 vars.
+
+### Architecture
+- **M1: Config-driven pollers** — `build_gateway()` reads `[gateway] pollers` from `config.toml`. Dynamic `_POLLER_REGISTRY` replaces hardcoded `register_poller()` calls. Default: all three (slack, discord, telegram).
+
 ## [0.35.1] — 2026-03-29
 
 ### Fixed

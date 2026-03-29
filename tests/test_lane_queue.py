@@ -134,3 +134,41 @@ class TestLaneQueue:
 
         release.set()
         t.join(timeout=1.0)
+
+
+# ---------------------------------------------------------------------------
+# C4 Regression: acquire_all partial failure (v0.35.1 fix)
+# ---------------------------------------------------------------------------
+
+
+class TestAcquireAllPartialFailure:
+    """Verify partial failure releases only acquired semaphores."""
+
+    def test_second_lane_timeout_releases_first(self) -> None:
+        """If 2nd lane times out, 1st lane semaphore must be released.
+
+        Regression for C4: without tracking acquired sems separately,
+        a partial failure could leak the first lane's semaphore.
+        """
+        q = LaneQueue()
+        q.add_lane("fast", max_concurrent=1, timeout_s=5.0)
+        q.add_lane("slow", max_concurrent=1, timeout_s=0.1)
+
+        # Exhaust the slow lane
+        slow = q.get_lane("slow")
+        assert slow is not None
+        slow._semaphore.acquire()
+
+        # acquire_all should fail on slow lane, but release fast lane
+        fast = q.get_lane("fast")
+        assert fast is not None
+        initial_fast = fast._semaphore._value  # type: ignore[attr-defined]
+
+        with pytest.raises(TimeoutError, match="slow"), q.acquire_all("job-x", ["fast", "slow"]):
+            pass  # should not reach here
+
+        # Fast lane semaphore must be released (no leak)
+        assert fast._semaphore._value == initial_fast  # type: ignore[attr-defined]
+
+        # Cleanup
+        slow._semaphore.release()

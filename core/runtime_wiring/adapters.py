@@ -127,18 +127,35 @@ def build_calendar_adapter() -> None:
     set_calendar(composite)
 
 
-def build_gateway() -> None:
-    """Build and inject Gateway with channel pollers.
+_POLLER_REGISTRY: dict[str, str] = {
+    "slack": "core.gateway.pollers.slack_poller:SlackPoller",
+    "discord": "core.gateway.pollers.discord_poller:DiscordPoller",
+    "telegram": "core.gateway.pollers.telegram_poller:TelegramPoller",
+    # CLI poller is registered separately in serve() (not config-driven)
+}
 
-    Creates ChannelManager with Slack/Discord/Telegram pollers.
-    Pollers only start if their credentials are configured and
-    gateway_enabled=True in settings.
+_DEFAULT_POLLERS: list[str] = ["slack", "discord", "telegram"]
+
+
+def _load_poller_class(dotted_path: str) -> type:
+    """Dynamically import a poller class from 'module.path:ClassName'."""
+    import importlib
+
+    module_path, class_name = dotted_path.rsplit(":", 1)
+    module = importlib.import_module(module_path)
+    cls: type = getattr(module, class_name)
+    return cls
+
+
+def build_gateway() -> None:
+    """Build and inject Gateway with config-driven channel pollers.
+
+    Reads ``[gateway] pollers`` from ``.geode/config.toml`` to determine
+    which pollers to register. Defaults to all three (slack, discord,
+    telegram) when the config key is absent.
     """
     from core.config import settings
     from core.gateway.channel_manager import ChannelManager, set_gateway
-    from core.gateway.pollers.discord_poller import DiscordPoller
-    from core.gateway.pollers.slack_poller import SlackPoller
-    from core.gateway.pollers.telegram_poller import TelegramPoller
     from core.mcp.notification_port import get_notification
 
     if not settings.gateway_enabled:
@@ -161,7 +178,9 @@ def build_gateway() -> None:
     notification = get_notification()
     poll_interval = settings.gateway_poll_interval_s
 
-    # Load bindings from TOML config (hot-reloadable)
+    # Load config from TOML
+    toml_config: dict[str, Any] = {}
+    config_path = None
     try:
         import tomllib
         from pathlib import Path
@@ -186,33 +205,32 @@ def build_gateway() -> None:
         set_gateway(None)
         return
 
-    manager.register_poller(
-        SlackPoller(
-            manager,
-            mcp_manager=mcp,
-            notification=notification,
-            poll_interval_s=poll_interval,
-        )
-    )
-    manager.register_poller(
-        DiscordPoller(
-            manager,
-            mcp_manager=mcp,
-            notification=notification,
-            poll_interval_s=poll_interval,
-        )
-    )
-    manager.register_poller(
-        TelegramPoller(
-            manager,
-            mcp_manager=mcp,
-            notification=notification,
-            poll_interval_s=poll_interval,
-        )
-    )
+    # Config-driven poller registration
+    enabled_pollers: list[str] = toml_config.get("gateway", {}).get("pollers", _DEFAULT_POLLERS)
+
+    for poller_name in enabled_pollers:
+        dotted = _POLLER_REGISTRY.get(poller_name)
+        if dotted is None:
+            log.warning("Unknown poller '%s' in config — skipped", poller_name)
+            continue
+        try:
+            poller_cls = _load_poller_class(dotted)
+            manager.register_poller(
+                poller_cls(
+                    manager,
+                    mcp_manager=mcp,
+                    notification=notification,
+                    poll_interval_s=poll_interval,
+                )
+            )
+        except Exception as exc:
+            log.warning("Poller '%s' init failed: %s", poller_name, exc)
 
     # Hot-reload bindings on config.toml change
     try:
+        import tomllib
+        from pathlib import Path
+
         from core.orchestration.hot_reload import ConfigWatcher
 
         def _reload_bindings(path: Any, mtime: float) -> None:
@@ -226,16 +244,20 @@ def build_gateway() -> None:
             except Exception as reload_exc:
                 log.warning("Gateway binding reload failed: %s", reload_exc)
 
-        if config_path.exists():
-            _binding_watcher = ConfigWatcher()
-            _binding_watcher.watch(config_path, _reload_bindings, name="gateway-bindings")
-            _binding_watcher.start()
+        if config_path and config_path.exists():
+            _watcher = ConfigWatcher()
+            _watcher.watch(config_path, _reload_bindings, name="gateway-bindings")
+            _watcher.start()
+            # Attach to manager to prevent GC (daemon thread lifetime)
+            manager._binding_watcher = _watcher  # type: ignore[attr-defined]
     except Exception as exc:
         _plugin_status["gateway_hot_reload"] = "unavailable"
         log.debug("Gateway binding hot-reload not available: %s", exc)
 
     set_gateway(manager)
-    log.info("Gateway built with %d pollers", len(manager._pollers))
+    log.info(
+        "Gateway built with %d pollers (configured: %s)", len(manager._pollers), enabled_pollers
+    )
 
 
 def build_plugins() -> None:

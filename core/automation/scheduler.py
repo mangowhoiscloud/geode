@@ -13,6 +13,7 @@ Architecture-v6 SS4.5: Automation Layer -- Advanced Scheduler (P4).
 
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
 import os
@@ -95,8 +96,9 @@ class ScheduledJob:
     created_at_ms: float = 0.0
     next_run_at_ms: float | None = None
     last_run_at_ms: float | None = None
-    last_status: str = ""  # "ok" | "error" | "skipped"
+    last_status: str = ""  # "ok" | "error" | "skipped" | "stuck"
     last_duration_ms: float = 0.0
+    running_since_ms: float | None = None  # Set when executing, cleared on completion
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +130,7 @@ def _job_to_dict(job: ScheduledJob) -> dict[str, Any]:
         "last_run_at_ms": job.last_run_at_ms,
         "last_status": job.last_status,
         "last_duration_ms": job.last_duration_ms,
+        "running_since_ms": job.running_since_ms,
     }
 
 
@@ -161,6 +164,7 @@ def _job_from_dict(data: dict[str, Any]) -> ScheduledJob:
         last_run_at_ms=data.get("last_run_at_ms"),
         last_status=data.get("last_status", ""),
         last_duration_ms=data.get("last_duration_ms", 0.0),
+        running_since_ms=data.get("running_since_ms"),
     )
 
 
@@ -563,6 +567,8 @@ class SchedulerService:
         status = "ok"
         error = ""
 
+        job.running_since_ms = start
+
         try:
             if job.callback is not None:
                 job.callback({"job_id": job.job_id, "name": job.name, **job.metadata})
@@ -580,6 +586,7 @@ class SchedulerService:
             log.warning("Job '%s' failed: %s", job.job_id, exc)
 
         duration = time.time() * 1000 - start
+        job.running_since_ms = None
 
         # Update job state
         job.last_run_at_ms = now
@@ -627,25 +634,45 @@ class SchedulerService:
     # -- Persistence --------------------------------------------------------
 
     def save(self) -> None:
-        """Atomically persist the job store to disk (tmp + rename)."""
+        """Atomically persist the job store to disk (tmp + rename).
+
+        Uses ``fcntl.flock(LOCK_EX)`` to prevent inter-process race when
+        REPL and serve both access the same ``jobs.json``.
+        """
         path = Path(self._store_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {jid: _job_to_dict(j) for jid, j in self._jobs.items()}
         payload = json.dumps(data, ensure_ascii=False, indent=2)
-        tmp_path = path.with_suffix(".json.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            f.write(payload)
-        os.replace(str(tmp_path), str(path))
+        lock_path = path.with_suffix(".json.lock")
+        with open(lock_path, "w") as lf:
+            fcntl.flock(lf, fcntl.LOCK_EX)
+            try:
+                tmp_path = path.with_suffix(".json.tmp")
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    f.write(payload)
+                os.replace(str(tmp_path), str(path))
+            finally:
+                fcntl.flock(lf, fcntl.LOCK_UN)
         log.debug("Scheduler state saved to %s (%d jobs)", path, len(data))
 
     def load(self) -> None:
-        """Load job store from disk."""
+        """Load job store from disk.
+
+        Uses ``fcntl.flock(LOCK_SH)`` to coordinate with concurrent saves.
+        """
         path = Path(self._store_path)
         if not path.exists():
             log.debug("No scheduler store at %s", path)
             return
-        with open(path, encoding="utf-8") as f:
-            data: dict[str, Any] = json.load(f)
+        lock_path = path.with_suffix(".json.lock")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(lock_path, "w") as lf:
+            fcntl.flock(lf, fcntl.LOCK_SH)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data: dict[str, Any] = json.load(f)
+            finally:
+                fcntl.flock(lf, fcntl.LOCK_UN)
         loaded = 0
         for _jid, jdata in data.items():
             try:
@@ -685,11 +712,53 @@ class SchedulerService:
         """Whether the background loop is active."""
         return self._thread is not None and self._thread.is_alive()
 
+    @property
+    def job_count(self) -> int:
+        """Number of registered jobs."""
+        return len(self._jobs)
+
+    # -- Stuck job detection ---------------------------------------------------
+
+    STUCK_TIMEOUT_MS: float = 600_000.0  # 10 minutes
+
+    def detect_stuck_jobs(self, now_ms: float | None = None) -> list[str]:
+        """Detect and mark jobs that have been running longer than STUCK_TIMEOUT_MS.
+
+        Returns a list of stuck job IDs.
+        """
+        now = now_ms if now_ms is not None else time.time() * 1000
+        stuck: list[str] = []
+        with self._lock:
+            for job in self._jobs.values():
+                if (
+                    job.running_since_ms is not None
+                    and (now - job.running_since_ms) > self.STUCK_TIMEOUT_MS
+                ):
+                    elapsed_s = (now - job.running_since_ms) / 1000
+                    log.warning(
+                        "Stuck job detected: '%s' running for %.0fs (threshold %.0fs)",
+                        job.job_id,
+                        elapsed_s,
+                        self.STUCK_TIMEOUT_MS / 1000,
+                    )
+                    job.last_status = "stuck"
+                    job.running_since_ms = None
+                    stuck.append(job.job_id)
+        if stuck and self._hooks:
+            from core.hooks import HookEvent
+
+            self._hooks.trigger(
+                HookEvent.TRIGGER_FIRED,
+                {"stuck_jobs": stuck, "source": "scheduler_stuck_detection"},
+            )
+        return stuck
+
     def _loop(self, interval_s: float) -> None:
         """Background tick loop."""
         while not self._stop_event.is_set():
             try:
                 self.check_due_jobs()
+                self.detect_stuck_jobs()
             except Exception as exc:
                 log.warning("Scheduler tick error: %s", exc)
             self._stop_event.wait(interval_s)
