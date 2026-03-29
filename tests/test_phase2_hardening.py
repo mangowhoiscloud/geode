@@ -218,7 +218,9 @@ class TestM2SchedulerPolicyChain:
             services.create_session(SessionMode.SCHEDULER)
             # ToolExecutor should receive filtered handlers
             call_kwargs = te_init.call_args
-            handlers = call_kwargs.kwargs.get("action_handlers", call_kwargs.args[0] if call_kwargs.args else {})
+            handlers = call_kwargs.kwargs.get(
+                "action_handlers", call_kwargs.args[0] if call_kwargs.args else {}
+            )
             assert "run_bash" not in handlers
             assert "delegate_task" not in handlers
             assert "web_search" in handlers
@@ -245,7 +247,9 @@ class TestM2SchedulerPolicyChain:
         ):
             services.create_session(SessionMode.REPL)
             call_kwargs = te_init.call_args
-            handlers = call_kwargs.kwargs.get("action_handlers", call_kwargs.args[0] if call_kwargs.args else {})
+            handlers = call_kwargs.kwargs.get(
+                "action_handlers", call_kwargs.args[0] if call_kwargs.args else {}
+            )
             assert "run_bash" in handlers
 
 

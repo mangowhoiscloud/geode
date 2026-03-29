@@ -1353,7 +1353,7 @@ def _thin_interactive_loop() -> None:
                     from core.cli.commands import handle_command as _hcmd
 
                     try:
-                        _hcmd(cmd, user_input[len(cmd):].strip())
+                        _hcmd(cmd, user_input[len(cmd) :].strip())
                     except SystemExit:
                         break
                     continue
@@ -2039,9 +2039,7 @@ def serve(
                 runner=_sched_runner,
                 scheduler_lane=_serve_sched_lane,
                 force_isolated=True,
-                on_complete=lambda result, *, job_id: log.info(
-                    "scheduled:%s completed", job_id
-                ),
+                on_complete=lambda result, *, job_id: log.info("scheduled:%s completed", job_id),
                 on_dispatch=lambda jid: log.info("scheduled:%s dispatched", jid),
                 on_skip=lambda jid: log.warning("scheduled:%s skipped (slots full)", jid),
             )

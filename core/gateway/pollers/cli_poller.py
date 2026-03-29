@@ -206,9 +206,7 @@ class CLIPoller:
                     "text": result.text if result else "",
                     "rounds": result.rounds if result else 0,
                     "tool_calls": tool_calls,
-                    "termination": (
-                        result.termination_reason if result else "unknown"
-                    ),
+                    "termination": (result.termination_reason if result else "unknown"),
                 }
             except Exception as exc:
                 log.warning("CLI prompt execution error", exc_info=True)

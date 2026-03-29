@@ -40,10 +40,12 @@ class SessionMode(StrEnum):
 
 # Tools denied for headless execution (SCHEDULER, DAEMON).
 # DANGEROUS tools require HITL approval which headless modes cannot provide.
-_HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset({
-    "run_bash",
-    "delegate_task",
-})
+_HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
+    {
+        "run_bash",
+        "delegate_task",
+    }
+)
 
 
 # ---------------------------------------------------------------------------

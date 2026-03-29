@@ -206,9 +206,7 @@ def build_gateway() -> None:
         return
 
     # Config-driven poller registration
-    enabled_pollers: list[str] = toml_config.get("gateway", {}).get(
-        "pollers", _DEFAULT_POLLERS
-    )
+    enabled_pollers: list[str] = toml_config.get("gateway", {}).get("pollers", _DEFAULT_POLLERS)
 
     for poller_name in enabled_pollers:
         dotted = _POLLER_REGISTRY.get(poller_name)
