@@ -153,7 +153,7 @@ graph LR
 graph LR
     L0["L0 CLI & Agent<br/>AgenticLoop, SubAgent"] --> L1["L1 Infra<br/>Port/Adapter DI"]
     L0 --> L3["L3 Orchestration<br/>TaskGraph, LaneQueue"]
-    L0 --> HK["Hooks (cross-cutting)<br/>46 events"]
+    L0 --> HK["Hooks (cross-cutting)<br/>40 events"]
     L0 --> L4["L4 Extensibility<br/>Tools(47), MCP(44)"]
     L4 --> L5["L5 Domain<br/>DomainPort Plugin"]
     L0 --> L2["L2 Memory<br/>4-Tier + Checkpoint"]

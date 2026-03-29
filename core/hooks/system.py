@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (46 events)."""
+    """Pipeline lifecycle events (40 events)."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -57,7 +57,6 @@ class HookEvent(Enum):
 
     # Prompt Assembly (ADR-007) + Drift Detection (Karpathy P4)
     PROMPT_ASSEMBLED = "prompt_assembled"
-    PROMPT_DRIFT_DETECTED = "prompt_drift_detected"
 
     # SubAgent lifecycle
     SUBAGENT_STARTED = "subagent_started"
@@ -69,19 +68,10 @@ class HookEvent(Enum):
     TOOL_RECOVERY_SUCCEEDED = "tool_recovery_succeeded"
     TOOL_RECOVERY_FAILED = "tool_recovery_failed"
 
-    # Gateway (inbound messaging)
-    GATEWAY_MESSAGE_RECEIVED = "gateway_message_received"
-    GATEWAY_RESPONSE_SENT = "gateway_response_sent"
-
-    # MCP server lifecycle
-    MCP_SERVER_STARTED = "mcp_server_started"
-    MCP_SERVER_STOPPED = "mcp_server_stopped"
-
     # Agentic turn lifecycle (OpenClaw command:new pattern)
     TURN_COMPLETE = "turn_complete"
 
     # Context overflow detection (Karpathy P6 Context Budget)
-    CONTEXT_WARNING = "context_warning"
     CONTEXT_CRITICAL = "context_critical"
     CONTEXT_OVERFLOW_ACTION = "context_overflow_action"
 

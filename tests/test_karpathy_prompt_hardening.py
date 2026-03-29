@@ -350,17 +350,13 @@ class TestSkillDiscoveryOrder:
 
 
 class TestHookEventTypes:
-    def test_prompt_drift_detected_event_exists(self):
-        """PROMPT_DRIFT_DETECTED should be a valid hook event."""
-        assert hasattr(HookEvent, "PROMPT_DRIFT_DETECTED")
-        assert HookEvent.PROMPT_DRIFT_DETECTED.value == "prompt_drift_detected"
+    def test_prompt_drift_detected_event_pruned(self):
+        """PROMPT_DRIFT_DETECTED was an orphan event — removed in H6."""
+        assert not hasattr(HookEvent, "PROMPT_DRIFT_DETECTED")
 
     def test_hook_event_count(self):
-        """Total hook events should be 39 (+1 TURN_COMPLETE + 2 SESSION_*)."""
-        assert len(HookEvent) == 46
-
-        """Total hook events should be 38 (+1 TURN_COMPLETE + CONTEXT_OVERFLOW_ACTION)."""
-        assert len(HookEvent) == 46
+        """Total hook events after H6 orphan pruning."""
+        assert len(HookEvent) == 40
 
 
 # ---------------------------------------------------------------------------
