@@ -71,6 +71,18 @@ cd geode && uv sync
   9 nodes · 8 LLM calls · ~45s
 ```
 
+### Real-World Case — Legacy Migration (REODE)
+
+| Metric | Value |
+|--------|-------|
+| Codebase | 5,523 files (241 Java + 355 JSP + 47 XML) |
+| Migration | Java 1.8 → 22, Spring 4 → 6 |
+| Result | 83/83 tests + FE/BE E2E verified |
+| Cost | ~$388 (33 sessions, 1,133 LLM rounds) |
+| Time | 5h 48m (autonomous, zero human intervention) |
+
+> REODE — a sibling project sharing GEODE's `while(tool_use)` loop with a legacy migration domain plugin. Client feedback: *"exceeded expectations."*
+
 ---
 
 ## Highlights
