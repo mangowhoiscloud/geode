@@ -54,7 +54,7 @@ class TestPropagateToThread:
         def worker() -> None:
             try:
                 boot.propagate_to_thread()
-                results["project"] = _mem_mod._project_memory
+                results["project"] = _mem_mod._project_memory_ctx.get()
                 results["org"] = _org_memory_ctx.get()
             except Exception as exc:
                 errors.append(exc)

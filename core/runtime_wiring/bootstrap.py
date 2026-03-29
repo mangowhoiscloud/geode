@@ -195,7 +195,7 @@ def build_hooks(
         from core.tools import memory_tools
 
         def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
-            pm = memory_tools._project_memory
+            pm = memory_tools._project_memory_ctx.get()
             if pm is None:
                 return
             text = data.get("text", "")
