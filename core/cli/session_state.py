@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 # Thread-safe singletons for REPL session via contextvars
 _search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
-_readiness: Any = None
+_readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
 _scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", default=None)
 _user_task_graph_ctx: ContextVar[Any] = ContextVar("user_task_graph", default=None)
 
@@ -121,14 +121,13 @@ def _get_search_engine() -> IPSearchEngine:
 
 
 def _get_readiness() -> ReadinessReport | None:
-    """Get the module-level ReadinessReport."""
-    return cast("ReadinessReport | None", _readiness)
+    """Get the context-local ReadinessReport."""
+    return cast("ReadinessReport | None", _readiness_ctx.get())
 
 
 def _set_readiness(report: ReadinessReport) -> None:
-    """Set the module-level ReadinessReport."""
-    global _readiness
-    _readiness = report
+    """Set the context-local ReadinessReport."""
+    _readiness_ctx.set(report)
 
 
 def _get_last_result() -> dict[str, Any] | None:

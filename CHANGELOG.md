@@ -26,6 +26,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.35.0] — 2026-03-29
+
+### Added
+- **SharedServices Gateway** — single factory for all session modes (REPL/DAEMON/SCHEDULER/FORK). Codex CLI `ThreadManagerState` + OpenClaw Gateway pattern. `create_session(mode)` guarantees identical shared resources across all entry points.
+- **SessionMode enum** — `REPL` (hitl=2, interactive), `DAEMON` (hitl=0, Slack/Discord), `SCHEDULER` (hitl=0, 300s cap), `FORK` (hitl=0, 60s cap).
+
+### Changed
+- **Time-based constraints** — `DEFAULT_MAX_ROUNDS=0` (unlimited) for all modes. `time_budget_s` is the sole execution constraint. `ChannelBinding.max_rounds` replaced by `time_budget_s` (120s default). Legacy `max_rounds` config auto-converted.
+- **GATEWAY → DAEMON** — external channel poller mode renamed to `DAEMON`. "Gateway" now refers to the SharedServices layer.
+
+### Fixed
+- **HookSystem wired** — `build_hooks()` called at bootstrap, injected into every `create_session()`. `_fire_hook()` now works (was permanently None).
+- **Globals → ContextVar** — `_project_memory`, `_user_profile`, `_readiness` converted from module-level globals to `ContextVar`. Thread-safe across DAEMON/SCHEDULER threads.
+- **Scheduler ContextVar propagation** — `propagate_context=True` in `create_session(SCHEDULER)` re-injects domain/memory/profile before job execution.
+
+### Architecture
+- **5 Shared Services GAPs resolved** — HookSystem(CRITICAL→fixed), globals(HIGH→fixed), scheduler propagation(HIGH→fixed), _readiness(MEDIUM→fixed), _result_cache(LOW→already had Lock).
+
 ## [0.34.0] — 2026-03-29
 
 ### Added

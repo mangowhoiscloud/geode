@@ -33,5 +33,4 @@ class ChannelBinding:
     auto_respond: bool = True  # Auto-send response back to channel
     require_mention: bool = False  # Only respond when @mentioned
     allowed_tools: list[str] = field(default_factory=list)  # Empty = all tools
-    max_rounds: int = 5  # AgenticLoop round limit for gateway messages
-    time_budget_s: float = 0.0  # Wall-clock timeout (0 = use max_rounds only)
+    time_budget_s: float = 120.0  # Wall-clock timeout per message (seconds)

@@ -4,11 +4,11 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.34.0
+- **Version**: 0.35.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 188
+- **Modules**: 189
 - **Tests**: 3344+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -50,7 +50,7 @@ L5: DOMAIN PLUGINS   — DomainPort Protocol, GameIPDomain, LangGraph StateGraph
 
 Sub-agents inherit parent tools/MCP/skills/memory and execute in parallel within independent contexts.
 `SubAgentManager` → `CoalescingQueue`(250ms dedup) → `TaskGraph`(DAG) → `IsolatedRunner`(MAX_CONCURRENT=5).
-Controls: max_depth=1 (no recursion), max_total=15, timeout=120s, auto_approve=True(STANDARD only), max_rounds=50, max_tokens=32768, time_budget_s=0 (same as parent).
+Controls: max_depth=1 (no recursion), max_total=15, timeout=120s, auto_approve=True(STANDARD only), max_rounds=0 (unlimited), max_tokens=32768, time_budget_s=0 (same as parent, time-based control).
 
 **Memory Isolation Rules:**
 - Sub-agents inherit parent memory snapshots as read-only
