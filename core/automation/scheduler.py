@@ -685,6 +685,11 @@ class SchedulerService:
         """Whether the background loop is active."""
         return self._thread is not None and self._thread.is_alive()
 
+    @property
+    def job_count(self) -> int:
+        """Number of registered jobs."""
+        return len(self._jobs)
+
     def _loop(self, interval_s: float) -> None:
         """Background tick loop."""
         while not self._stop_event.is_set():
