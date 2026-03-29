@@ -10,6 +10,7 @@ Protocol: line-delimited JSON over Unix socket (matches CLIPoller server).
 from __future__ import annotations
 
 import json
+import os
 import logging
 import socket
 from pathlib import Path
@@ -55,16 +56,25 @@ def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10
             return True
 
         log.info("Starting geode serve in background...")
-        # Use 'geode' CLI binary (not sys.executable which may point to wrong Python)
         import shutil
 
         geode_bin = shutil.which("geode")
         cmd = [geode_bin, "serve"] if geode_bin else [sys.executable, "-m", "geode.cli", "serve"]
+
+        # Resolve serve working directory: needs .geode/config.toml
+        serve_cwd = os.environ.get("GEODE_HOME")
+        if not serve_cwd:
+            # Find project root via this file's location (core/cli/ipc_client.py → ../../)
+            pkg_dir = Path(__file__).resolve().parent.parent.parent
+            if (pkg_dir / ".geode" / "config.toml").exists():
+                serve_cwd = str(pkg_dir)
+
         subprocess.Popen(  # noqa: S603  # nosec B603 — fixed args, no untrusted input
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
+            cwd=serve_cwd,
         )
 
         for _ in range(int(timeout_s * 10)):

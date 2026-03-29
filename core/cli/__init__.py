@@ -935,7 +935,7 @@ def main(
         # Ensure serve is running (auto-start if needed)
         from core.cli.ipc_client import start_serve_if_needed
 
-        if not start_serve_if_needed():
+        if not start_serve_if_needed(timeout_s=30):
             console.print("  [error]Failed to start geode serve[/error]")
             console.print("  [dim]Try manually: geode serve &[/dim]")
             raise typer.Exit(1)
