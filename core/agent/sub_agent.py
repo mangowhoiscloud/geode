@@ -58,10 +58,7 @@ def _cleanup_stale_announces() -> None:
     """Remove announce queue entries older than TTL."""
     now = time.time()
     with _announce_lock:
-        stale_keys = [
-            k for k, ts in _announce_timestamps.items()
-            if now - ts > _ANNOUNCE_TTL_S
-        ]
+        stale_keys = [k for k, ts in _announce_timestamps.items() if now - ts > _ANNOUNCE_TTL_S]
         for k in stale_keys:
             _announce_queue.pop(k, None)
             _announce_timestamps.pop(k, None)
@@ -329,9 +326,7 @@ class SubAgentManager:
                 fn_or_request = self._build_worker_request(task)
                 sid = self._runner.run_async(fn_or_request, config=config)
             else:
-                sid = self._runner.run_async(
-                    self._execute_subtask, args=(task,), config=config
-                )
+                sid = self._runner.run_async(self._execute_subtask, args=(task,), config=config)
             session_ids.append((task, sid))
             log.debug(
                 "SubAgent launched: %s (%s) key=%s",

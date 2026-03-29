@@ -593,8 +593,6 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
         console.print()
 
 
-
-
 def _render_agentic_result(result: AgenticResult) -> None:
     """Render the final result from an agentic loop execution."""
     if result.error == "llm_call_failed":
@@ -905,9 +903,7 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
                     # Concurrency gate: max 2 scheduled jobs in parallel
                     if not _sched_semaphore.acquire(timeout=0):
                         log.warning("Scheduler slots full (max 2), skipping job %s", job_id)
-                        console.print(
-                            f"  [dim]scheduled:{job_id} → skipped (slots full)[/dim]"
-                        )
+                        console.print(f"  [dim]scheduled:{job_id} → skipped (slots full)[/dim]")
                         continue
 
                     _iso_conv = ConversationContext()
