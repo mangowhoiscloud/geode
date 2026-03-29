@@ -4,12 +4,12 @@
 
 LangGraph 기반 범용 자율 실행 에이전트. 리서치, 분석, 자동화, 스케줄링을 자율적으로 수행합니다.
 
-- **Version**: 0.32.1
+- **Version**: 0.33.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 187
-- **Tests**: 3303+
+- **Modules**: 188
+- **Tests**: 3344+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -348,7 +348,7 @@ Progress Board 기록 후 Worktree 할당. 완료 후: `git push` → `git workt
 ```bash
 uv run ruff check core/ tests/      # Lint: 0 errors
 uv run mypy core/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"   # Test: 3303+ pass
+uv run pytest tests/ -m "not live"   # Test: 3344+ pass
 ```
 
 #### 4. E2E Verify
@@ -412,7 +412,7 @@ main에서만 `docs/progress.md` 갱신. Backlog → In Progress → Done.
 |--------|--------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -m "not live"` | 3303+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 3344+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 ## Custom Skills (Scaffold)

@@ -12,6 +12,9 @@
 
 | task_id | 작업 내용 | 우선순위 | plan | 비고 |
 |---------|----------|:--------:|------|------|
+| shared-services | Shared Services 레이어 — HookSystem 연결 + globals→ContextVar + scheduler ContextVar 전파 | P0 | — | 3 entry points 리소스 정합 |
+| concurrency-redesign | 동시성 시스템 재설계 — 워크로드별 세마포어 분리 + Gateway 제한 + 데드라인 큐잉 | P1 | — | 감사 완료, 구현 미착수 |
+| i18n-english | LLM 소비 문서 영어 전환 — GEODE.md, definitions.json, SKILL.md, router.md, PROJECT.md | P1 | — | LLM 라우팅 정확도 |
 | ~~kent-beck-p1~~ | ~~Phase 1 — dry-run 파싱 + Safety 상수 추출~~ | ~~P0~~ | ~~#462~~ | **Done** |
 | ~~kent-beck-p2~~ | ~~Phase 2 — Provider 디스패치 딕셔너리 통합~~ | ~~P0~~ | ~~#463~~ | **Done** |
 | ~~kent-beck-p3~~ | ~~Kent Beck Phase 3 — CLI God Object 분해 (~800줄 감소)~~ | ~~P1~~ | ~~#464~~ | **Done** |
@@ -46,6 +49,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
+| skill-2.0 | Skill 2.0 — Progressive Disclosure + fork + Dynamic Context + Multi-scope | @mangowhoiscloud | feature/skill-2.0 | 2026-03-29 | Agent Skills spec 정합 |
 
 ### In Review
 

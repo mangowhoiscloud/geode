@@ -26,6 +26,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.33.0] — 2026-03-29
+
+### Added
+- **Skill 2.0** — Agent Skills spec 정합. Progressive Disclosure 3-tier (metadata→body→resources), multi-scope discovery (4-priority dirs), `context: fork` (subagent 실행), `!`cmd`` dynamic context, `$ARGUMENTS` 치환, `user-invocable` 제어. `/skill <name> [args]` 명령어 추가 (#521).
+- **런타임 스킬 9종** — deep-researcher, daily-briefing, job-hunter, arxiv-digest, youtube-planner, slack-digest, expense-tracker, pr-reviewer, weekly-retro.
+- **워크플로우 Step 7 Rebuild & Restart** — main 머지 후 CLI/serve 재빌드를 필수 단계로 명시.
+- **Playwright MCP** — config.toml + Claude Code MCP 활성화.
+
+### Fixed
+- **스케줄 잡 중복 생성 방지** — `add_job()` dedup: 동일 schedule+action의 enabled 잡 거부.
+- **좀비 MCP subprocess** — isolated 세션이 singleton MCPServerManager 재사용으로 새 subprocess 미스폰.
+- **RLIMIT_NPROC fork 실패** — macOS에서 사용자 전체 프로세스 한도 64 설정 제거. CPU/FSIZE 유지.
+- **IsolatedRunner._results 메모리 누적** — MAX_RESULTS_CACHE=200 oldest eviction.
+- **_announce_queue 세션 종료 정리** — `cleanup_announce_queue()` + `mark_session_completed()` 호출.
+- **_run_records 누적** — max 200 eviction.
+- **스케줄 잡 action 필수화** — tool_handler에서 action 없이 create 시 에러 반환. 도구 스키마 영어 전환.
+- **predefined 잡 자동 등록 제거** — action/callback 없는 게임 IP 전용 잡 8개 매 serve 재시작 시 재등록 차단.
+- **Skills 0 표시 생략** — 런타임 스킬 미등록 시 불필요한 혼동 방지.
+- **Scheduler/Gateway에 cost_budget + time_budget + hooks 전파** — REPL과 동일 자원 공유.
+- **brave-search config.toml 잔류 제거** — v0.31.0 삭제 후 config 미정리.
+
+### Architecture
+- **유저 데이터 경로 이동** — session/snapshot/journal/result_cache/transcript를 `{project}/.geode/` → `~/.geode/projects/{slug}/`로 이동. Claude Code/Codex CLI 패턴 정합. 프로젝트 git 오염 방지.
+
+---
+
 ## [0.32.1] — 2026-03-29
 
 ### Added
