@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from core.cli import _drain_scheduler_queue
-from core.orchestration.lane_queue import Lane
+from core.orchestration.lane_queue import Lane, SessionLane
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -42,8 +42,13 @@ def mock_runner() -> MagicMock:
 
 
 @pytest.fixture()
-def scheduler_lane() -> Lane:
-    return Lane("scheduler", max_concurrent=2, timeout_s=300.0)
+def session_lane() -> SessionLane:
+    return SessionLane(max_sessions=10)
+
+
+@pytest.fixture()
+def global_lane() -> Lane:
+    return Lane("global", max_concurrent=8, timeout_s=30.0)
 
 
 # ---------------------------------------------------------------------------
@@ -59,14 +64,16 @@ class TestDrainSchedulerQueue:
         action_queue: queue.Queue,
         mock_services: MagicMock,
         mock_runner: MagicMock,
-        scheduler_lane: Lane,
+        session_lane: SessionLane,
+        global_lane: Lane,
     ) -> None:
         """Empty queue should drain nothing and return 0."""
         count = _drain_scheduler_queue(
             action_queue=action_queue,
             services=mock_services,
             runner=mock_runner,
-            scheduler_lane=scheduler_lane,
+            session_lane=session_lane,
+            global_lane=global_lane,
             force_isolated=True,
         )
         assert count == 0
@@ -77,7 +84,8 @@ class TestDrainSchedulerQueue:
         action_queue: queue.Queue,
         mock_services: MagicMock,
         mock_runner: MagicMock,
-        scheduler_lane: Lane,
+        session_lane: SessionLane,
+        global_lane: Lane,
     ) -> None:
         """Isolated job should be dispatched via runner.run_async()."""
         action_queue.put(("job-1", "do something", True))
@@ -87,7 +95,8 @@ class TestDrainSchedulerQueue:
             action_queue=action_queue,
             services=mock_services,
             runner=mock_runner,
-            scheduler_lane=scheduler_lane,
+            session_lane=session_lane,
+            global_lane=global_lane,
             force_isolated=False,
             on_dispatch=lambda jid: dispatched.append(jid),
         )
@@ -101,7 +110,8 @@ class TestDrainSchedulerQueue:
         action_queue: queue.Queue,
         mock_services: MagicMock,
         mock_runner: MagicMock,
-        scheduler_lane: Lane,
+        session_lane: SessionLane,
+        global_lane: Lane,
     ) -> None:
         """In serve mode (force_isolated=True), non-isolated jobs run isolated."""
         action_queue.put(("job-2", "run report", False))  # isolated=False
@@ -110,7 +120,8 @@ class TestDrainSchedulerQueue:
             action_queue=action_queue,
             services=mock_services,
             runner=mock_runner,
-            scheduler_lane=scheduler_lane,
+            session_lane=session_lane,
+            global_lane=global_lane,
             force_isolated=True,  # serve mode
         )
 
@@ -123,7 +134,8 @@ class TestDrainSchedulerQueue:
         action_queue: queue.Queue,
         mock_services: MagicMock,
         mock_runner: MagicMock,
-        scheduler_lane: Lane,
+        session_lane: SessionLane,
+        global_lane: Lane,
     ) -> None:
         """Non-isolated job in REPL mode should use main_loop.run()."""
         action_queue.put(("job-3", "check status", False))
@@ -134,7 +146,8 @@ class TestDrainSchedulerQueue:
             action_queue=action_queue,
             services=mock_services,
             runner=mock_runner,
-            scheduler_lane=scheduler_lane,
+            session_lane=session_lane,
+            global_lane=global_lane,
             force_isolated=False,
             main_loop=main_loop,
             on_main_run=lambda jid: main_runs.append(jid),
@@ -146,14 +159,15 @@ class TestDrainSchedulerQueue:
         assert "[scheduled-job:job-3]" in main_loop.run.call_args[0][0]
         assert main_runs == ["job-3"]
 
-    def test_lane_full_skips_job(
+    def test_global_full_skips_job(
         self,
         action_queue: queue.Queue,
         mock_services: MagicMock,
         mock_runner: MagicMock,
+        session_lane: SessionLane,
     ) -> None:
-        """Jobs should be skipped when scheduler lane is full."""
-        full_lane = Lane("scheduler", max_concurrent=0)  # zero capacity — always full
+        """Jobs should be skipped when global lane is full."""
+        full_global = Lane("global", max_concurrent=0)  # zero capacity
         action_queue.put(("job-4", "important task", True))
         skipped: list[str] = []
 
@@ -161,7 +175,8 @@ class TestDrainSchedulerQueue:
             action_queue=action_queue,
             services=mock_services,
             runner=mock_runner,
-            scheduler_lane=full_lane,
+            session_lane=session_lane,
+            global_lane=full_global,
             force_isolated=True,
             on_skip=lambda jid: skipped.append(jid),
         )
@@ -175,7 +190,8 @@ class TestDrainSchedulerQueue:
         action_queue: queue.Queue,
         mock_services: MagicMock,
         mock_runner: MagicMock,
-        scheduler_lane: Lane,
+        session_lane: SessionLane,
+        global_lane: Lane,
     ) -> None:
         """Jobs with empty fired_action should be silently skipped."""
         action_queue.put(("job-5", "", True))
@@ -184,7 +200,8 @@ class TestDrainSchedulerQueue:
             action_queue=action_queue,
             services=mock_services,
             runner=mock_runner,
-            scheduler_lane=scheduler_lane,
+            session_lane=session_lane,
+            global_lane=global_lane,
             force_isolated=True,
         )
 
@@ -196,18 +213,20 @@ class TestDrainSchedulerQueue:
         action_queue: queue.Queue,
         mock_services: MagicMock,
         mock_runner: MagicMock,
+        session_lane: SessionLane,
     ) -> None:
         """Multiple queued jobs should all be drained in one call."""
         action_queue.put(("j1", "task one", True))
         action_queue.put(("j2", "task two", True))
         action_queue.put(("j3", "task three", True))
-        big_lane = Lane("scheduler", max_concurrent=5, timeout_s=300.0)
+        big_global = Lane("global", max_concurrent=8, timeout_s=30.0)
 
         count = _drain_scheduler_queue(
             action_queue=action_queue,
             services=mock_services,
             runner=mock_runner,
-            scheduler_lane=big_lane,
+            session_lane=session_lane,
+            global_lane=big_global,
             force_isolated=True,
         )
 
@@ -224,37 +243,40 @@ class TestDrainSchedulerQueue:
 class TestDrainErrorPaths:
     """Verify exception safety in drain loop."""
 
-    def test_create_session_failure_releases_lane(
+    def test_create_session_failure_releases_lanes(
         self,
         action_queue: queue.Queue,
         mock_runner: MagicMock,
+        session_lane: SessionLane,
+        global_lane: Lane,
     ) -> None:
-        """Lane slot must be released if create_session() raises."""
+        """Both lanes must be released if create_session() raises."""
         failing_services = MagicMock()
         failing_services.create_session.side_effect = RuntimeError("MCP down")
-        lane = Lane("scheduler", max_concurrent=2, timeout_s=300.0)
         action_queue.put(("job-err", "fail task", True))
 
         count = _drain_scheduler_queue(
             action_queue=action_queue,
             services=failing_services,
             runner=mock_runner,
-            scheduler_lane=lane,
+            session_lane=session_lane,
+            global_lane=global_lane,
             force_isolated=True,
         )
 
         assert count == 1
         mock_runner.run_async.assert_not_called()
-        # Lane should NOT be leaked — verify by acquiring both slots
-        assert lane.try_acquire("check-1")
-        assert lane.try_acquire("check-2")
+        # Lanes should NOT be leaked
+        assert session_lane.active_count == 0
+        assert global_lane.active_count == 0
 
     def test_main_loop_exception_continues_drain(
         self,
         action_queue: queue.Queue,
         mock_services: MagicMock,
         mock_runner: MagicMock,
-        scheduler_lane: Lane,
+        session_lane: SessionLane,
+        global_lane: Lane,
     ) -> None:
         """main_loop.run() exception should not kill the drain loop."""
         failing_loop = MagicMock()
@@ -266,13 +288,14 @@ class TestDrainErrorPaths:
             action_queue=action_queue,
             services=mock_services,
             runner=mock_runner,
-            scheduler_lane=scheduler_lane,
+            session_lane=session_lane,
+            global_lane=global_lane,
             force_isolated=False,
             main_loop=failing_loop,
         )
 
         assert count == 2
-        assert failing_loop.run.call_count == 2  # both attempted despite error
+        assert failing_loop.run.call_count == 2
 
 
 # ---------------------------------------------------------------------------

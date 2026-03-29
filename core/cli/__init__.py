@@ -18,7 +18,6 @@ from typing import Any
 import typer
 
 from core import __version__
-from core.agent.agentic_loop import AgenticResult
 from core.agent.conversation import ConversationContext
 from core.cli.commands import (
     cmd_apply,
@@ -68,7 +67,6 @@ from core.cli.startup import (
     auto_generate_env,
     check_readiness,
     env_setup_wizard,
-    key_registration_gate,
     render_readiness,
     setup_project_memory,
     setup_user_profile,
@@ -105,7 +103,8 @@ def _drain_scheduler_queue(
     action_queue: Any,
     services: Any,
     runner: Any,
-    scheduler_lane: Any,
+    session_lane: Any,
+    global_lane: Any,
     force_isolated: bool = False,
     main_loop: Any | None = None,
     on_complete: Any | None = None,
@@ -118,8 +117,8 @@ def _drain_scheduler_queue(
     Shared by both REPL and serve modes.  In serve mode ``force_isolated``
     is True because there is no interactive main session to inject into.
 
-    Uses ``Lane.try_acquire`` / ``manual_release`` for concurrency control
-    through the central LaneQueue (replacing ad-hoc Semaphore).
+    Uses SessionLane (per-key serial) + Global Lane (capacity) for
+    concurrency control through the unified LaneQueue.
 
     Returns the number of jobs drained.
     """
@@ -137,18 +136,23 @@ def _drain_scheduler_queue(
             prompt = f"[scheduled-job:{job_id}] {fired_action}"
 
             if isolated or force_isolated:
-                lane_key = f"scheduled:{job_id}"
-                if not scheduler_lane.try_acquire(lane_key):
-                    log.warning(
-                        "Scheduler lane full (max %d), skipping job %s",
-                        scheduler_lane.max_concurrent,
-                        job_id,
-                    )
+                lane_key = f"sched:{job_id}"
+
+                # Dual acquire: session (per-key serial) + global (capacity)
+                if not session_lane.try_acquire(lane_key):
+                    log.warning("Session key busy, skipping job %s", job_id)
                     if on_skip:
                         on_skip(job_id)
                     continue
 
-                _lane_acquired = True
+                if not global_lane.try_acquire(lane_key):
+                    session_lane.manual_release(lane_key)
+                    log.warning("Global lane full, skipping job %s", job_id)
+                    if on_skip:
+                        on_skip(job_id)
+                    continue
+
+                _lanes_acquired = True
                 try:
                     _iso_conv = ConversationContext()
                     from core.gateway.shared_services import SessionMode
@@ -161,7 +165,8 @@ def _drain_scheduler_queue(
                     _cap_loop = _iso_loop
                     _cap_prompt = prompt
                     _cap_jid = job_id
-                    _cap_lane = scheduler_lane
+                    _cap_sess = session_lane
+                    _cap_glob = global_lane
                     _cap_key = lane_key
                     _cap_cb = on_complete
 
@@ -170,7 +175,8 @@ def _drain_scheduler_queue(
                         _loop: Any = _cap_loop,
                         _p: str = _cap_prompt,
                         _jid: str = _cap_jid,
-                        _lane: Any = _cap_lane,
+                        _sess: Any = _cap_sess,
+                        _glob: Any = _cap_glob,
                         _key: str = _cap_key,
                         _cb: Any = _cap_cb,
                     ) -> str:
@@ -180,7 +186,8 @@ def _drain_scheduler_queue(
                                 _cb(r, job_id=_jid)
                             return r.text if r and r.text else ""
                         finally:
-                            _lane.manual_release(_key)
+                            _glob.manual_release(_key)
+                            _sess.manual_release(_key)
 
                     runner.run_async(
                         _run_isolated,
@@ -190,12 +197,13 @@ def _drain_scheduler_queue(
                             timeout_s=300.0,
                         ),
                     )
-                    _lane_acquired = False  # ownership transferred to _run_isolated
+                    _lanes_acquired = False  # ownership transferred to _run_isolated
                     if on_dispatch:
                         on_dispatch(job_id)
                 except Exception:
-                    if _lane_acquired:
-                        scheduler_lane.manual_release(lane_key)
+                    if _lanes_acquired:
+                        global_lane.manual_release(lane_key)
+                        session_lane.manual_release(lane_key)
                     log.warning("Scheduler job %s dispatch failed", job_id, exc_info=True)
             else:
                 # Non-isolated: inject into main session (REPL only)
@@ -347,7 +355,7 @@ def _render_search_results(query: str, results: list[Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Interactive REPL — OpenClaw-style dual routing
+# Thin CLI + serve — OpenClaw-style gateway routing
 # ---------------------------------------------------------------------------
 
 
@@ -703,38 +711,6 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
         console.print()
 
 
-def _render_agentic_result(result: AgenticResult) -> None:
-    """Render the final result from an agentic loop execution."""
-    if result.error == "llm_call_failed":
-        console.print()
-        console.print("  [warning]LLM call failed. Try again or check your API key.[/warning]")
-        console.print("  [muted]Use /help for available commands.[/muted]")
-        console.print()
-        return
-
-    if result.text:
-        console.print()
-        # Render markdown if the response contains markdown indicators
-        if any(md in result.text for md in ("## ", "| ", "```", "**", "- [")):
-            from rich.markdown import Markdown
-            from rich.padding import Padding
-
-            md = Markdown(result.text)
-            console.print(Padding(md, (0, 2)))
-        else:
-            console.print(f"  {result.text}")
-        console.print()
-
-    if result.tool_calls:
-        tool_names = [tc["tool"] for tc in result.tool_calls]
-        log.debug(
-            "Agentic loop: %d rounds, %d tool calls (%s)",
-            result.rounds,
-            len(result.tool_calls),
-            ", ".join(tool_names),
-        )
-
-
 def _restore_terminal() -> None:
     """Restore terminal to sane cooked mode.
 
@@ -846,349 +822,28 @@ def _read_multiline_input(prompt: str) -> str:
     return text
 
 
-def _interactive_loop(resume_session_id: str | None = None) -> None:
-    """Claude Code / OpenClaw-style interactive REPL.
-
-    Three routing paths:
-      /command  → deterministic dispatch (commands.py)
-      free-text → agentic loop (AgenticLoop, multi-turn + multi-intent)
-      fallback  → single-shot NL Router (when agentic unavailable)
-
-    Args:
-        resume_session_id: If provided, auto-resume this session at startup.
-            Use "__latest__" to resume the most recent session (--continue flag).
-    """
-    verbose = False
-    conversation = ConversationContext()
-
-    # Inject ConversationContext for slash commands (/compact, /clear, /model guard)
-    from core.cli.commands import set_conversation_context
-
-    set_conversation_context(conversation)
-
-    # --- Unified bootstrap (domain, memory, readiness, MCP, skills) ---
-    from core.cli.bootstrap import bootstrap_geode
-    from core.cli.ui.status import TextSpinner
-
-    spinner = TextSpinner("Initializing...")
-    spinner.start()
-
-    boot = bootstrap_geode()
-    mcp_mgr = boot.mcp_manager
-    skill_registry = boot.skill_registry
-
-    # Eagerly connect MCP servers with live progress
-    n_total = len(mcp_mgr._servers) if mcp_mgr and hasattr(mcp_mgr, "_servers") else 0
-    n_connected = 0
-    if mcp_mgr and n_total > 0:
-        spinner.update(f"Loading MCP (0/{n_total})...")
-
-        def _on_mcp_progress(done: int, total: int, name: str) -> None:
-            spinner.update(f"Loading MCP ({done}/{total})...")
-
-        n_connected = mcp_mgr.startup(on_progress=_on_mcp_progress)
-
-    n_skills = len(skill_registry._skills) if hasattr(skill_registry, "_skills") else 0
-    parts = [f"MCP {n_connected}/{n_total}"]
-    if n_skills > 0:
-        parts.append(f"Skills {n_skills}")
-    spinner.stop(f"\x1b[1;32mok\x1b[0m Bootstrap ({', '.join(parts)})")
-
-    # Key gate (REPL-only: interactive prompt if API key missing)
-    readiness = boot.readiness
-    if readiness is None or readiness.blocked:
-        key = key_registration_gate()
-        if key is None:
-            return  # user quit
-        readiness = check_readiness()
-        _set_readiness(readiness)
-
-    # Scheduler (REPL-only: cron + /schedule command)
-    import queue as _queue_mod
-
-    _action_queue: _queue_mod.Queue[tuple[str, str, bool]] = _queue_mod.Queue()
-    try:
-        from core.automation.scheduler import SchedulerService
-
-        _sched_svc = SchedulerService(action_queue=_action_queue)
-        _sched_svc.load()
-        _sched_svc.start()
-        _scheduler_service_ctx.set(_sched_svc)
-    except Exception:
-        log.debug("SchedulerService initialization skipped", exc_info=True)
-
-    # Isolated runner for async scheduled job execution (OpenClaw agentTurn)
-    from core.orchestration.isolated_execution import (
-        IsolatedRunner,
-    )
-
-    _sched_runner = IsolatedRunner()
-    from core.orchestration.lane_queue import LaneQueue
-
-    _sched_lane_queue = LaneQueue()
-    _sched_lane = _sched_lane_queue.add_lane("scheduler", max_concurrent=2, timeout_s=300.0)
-
-    console.print()  # blank line before prompt
-
-    # Build SharedServices gateway (single factory for all modes)
-    from core.gateway.shared_services import SessionMode, build_shared_services
-
-    services = build_shared_services(
-        mcp_manager=mcp_mgr,
-        skill_registry=skill_registry,
-        verbose=verbose,
-    )
-
-    # Wire module-level hooks for _fire_hook() callers
-    global _hooks_ctx
-    _hooks_ctx = services.hook_system
-
-    _last_verbose = verbose
-    executor, agentic = services.create_session(
-        SessionMode.REPL,
-        conversation=conversation,
-        verbose=verbose,
-    )
-
-    # Initialize session meter for status line
-    from core.cli.ui.agentic_ui import init_session_meter
-
-    init_session_meter(model=agentic.model)
-
-    # Fire SESSION_START for dynamic context injection (OpenClaw agent:bootstrap)
-    _fire_hook(
-        HookEvent.SESSION_START,
-        {
-            "model": agentic.model,
-            "session_id": getattr(agentic, "_session_id", ""),
-            "resumed": resume_session_id is not None,
-        },
-    )
-
-    # Auto-resume: --continue (latest) or --resume <id>
-    if resume_session_id is not None:
-        from core.cli.session_checkpoint import SessionCheckpoint
-
-        _cp = SessionCheckpoint()
-        if resume_session_id == "__latest__":
-            _resumable = _cp.list_resumable()
-            _state = _resumable[0] if _resumable else None
-        else:
-            _state = _cp.load(resume_session_id)
-        if _state is not None and _state.status in ("active", "paused"):
-            conversation.messages = list(_state.messages)
-            agentic._session_id = _state.session_id
-            console.print(f"  [success]Session restored: {_state.session_id}[/success]")
-            if _state.user_input:
-                console.print(f"  [muted]Last input: {_state.user_input[:80]}[/muted]")
-            console.print(f"  [muted]{len(_state.messages)} messages restored[/muted]")
-            console.print()
-        elif resume_session_id != "__latest__":
-            console.print(
-                f"  [warning]Session not found or not resumable: {resume_session_id}[/warning]"
-            )
-            console.print()
-
-    # Completion callback for async scheduled jobs (prints dim status on finish)
-    def _on_sched_complete(result: Any, *, job_id: str) -> None:
-        from core.orchestration.isolated_execution import IsolationResult
-
-        if isinstance(result, IsolationResult):
-            status = "ok" if result.success else "err"
-            summary = result.summary or result.output[:120] or "(no output)"
-        else:
-            status = "ok"
-            summary = str(result)[:120] if result else "(no output)"
-        console.print(f"  [dim]scheduled:{job_id} → {status} — {summary}[/dim]")
-
-    while True:
-        # Drain scheduled actions before prompting (scheduler fires in background thread)
-        _drain_scheduler_queue(
-            action_queue=_action_queue,
-            services=services,
-            runner=_sched_runner,
-            scheduler_lane=_sched_lane,
-            force_isolated=False,
-            main_loop=agentic,
-            on_complete=_on_sched_complete,
-            on_dispatch=lambda jid: console.print(
-                f"  [dim]scheduled:{jid} → dispatched (async)[/dim]"
-            ),
-            on_skip=lambda jid: console.print(
-                f"  [dim]scheduled:{jid} → skipped (slots full)[/dim]"
-            ),
-            on_main_run=lambda jid: console.print(
-                f"\n  [muted]Scheduler: running job {jid}[/muted]"
-            ),
-        )
-
-        # Defensive: restore terminal state before each prompt
-        # (Rich Status/Live may leave cursor hidden or echo off)
-        console.show_cursor(True)
-
-        try:
-            user_input = _read_multiline_input("[header]>[/header] ")
-        except (KeyboardInterrupt, EOFError):
-            from core.cli.ui.agentic_ui import render_session_cost_summary
-
-            _fire_hook(
-                HookEvent.SESSION_END,
-                {
-                    "model": agentic.model,
-                    "session_id": getattr(agentic, "_session_id", ""),
-                },
-            )
-            agentic.mark_session_completed()
-            render_session_cost_summary()
-            console.print("\n  [muted]Goodbye.[/muted]\n")
-            break
-
-        if not user_input:
-            continue
-
-        # Bare exit/quit → immediate shutdown (no LLM round-trip)
-        if user_input.strip().lower() in ("exit", "quit", "q"):
-            from core.cli.ui.agentic_ui import render_session_cost_summary
-
-            _fire_hook(
-                HookEvent.SESSION_END,
-                {
-                    "model": agentic.model,
-                    "session_id": getattr(agentic, "_session_id", ""),
-                },
-            )
-            agentic.mark_session_completed()
-            render_session_cost_summary()
-            console.print("  [muted]Goodbye.[/muted]\n")
-            break
-
-        # Multi-line paste → always route to agentic (never slash-dispatch)
-        is_multiline = "\n" in user_input
-        if not is_multiline and user_input.startswith("/"):
-            # Slash command → deterministic routing (OpenClaw Binding)
-            cmd = user_input.split()[0].lower()
-            args = user_input[len(cmd) :].strip()
-            should_break, verbose, resume_state = _handle_command(
-                cmd,
-                args,
-                verbose,
-                skill_registry=skill_registry,
-                mcp_manager=mcp_mgr,
-            )
-            if should_break:
-                break
-            # /resume: inject saved messages into ConversationContext
-            if resume_state is not None:
-                conversation.messages = list(resume_state.messages)
-                agentic._session_id = resume_state.session_id
-                log.info(
-                    "Session restored: %s (%d messages)",
-                    resume_state.session_id,
-                    len(resume_state.messages),
-                )
-            # Sync model/provider to AgenticLoop after /model command
-            # (fixes model caching bug: /model changes were not reflected)
-            if settings.model != agentic.model:
-                agentic.update_model(settings.model)
-            # Update handlers if verbose changed
-            if verbose != _last_verbose:
-                _last_verbose = verbose
-                executor, agentic = services.create_session(
-                    SessionMode.REPL,
-                    conversation=conversation,
-                    verbose=verbose,
-                )
-        else:
-            # Agentic loop: multi-turn + multi-intent (online) or offline regex
-            # Key management is handled via /key command or set_api_key tool.
-            try:
-                # Snapshot cumulative metrics before this turn
-                from core.cli.ui.agentic_ui import mark_turn_start
-
-                mark_turn_start()
-
-                result = agentic.run(user_input)
-                _render_agentic_result(result)
-                # Claude Code-style status line after each result
-                from core.cli.ui.agentic_ui import render_status_line
-
-                render_status_line()
-
-                # Turn-end action summary (per-tool detail + header)
-                if result and result.tool_calls:
-                    from core.cli.ui.agentic_ui import get_session_meter, render_action_summary
-
-                    _meter = get_session_meter()
-                    _turn_elapsed = _meter.turn_elapsed_s if _meter else 0.0
-                    _turn_cost = 0.0
-                    try:
-                        from core.llm.token_tracker import get_tracker as _get_tk
-
-                        _tk = _get_tk()
-                        import core.cli.ui.agentic_ui as _ui_mod
-
-                        _snap = _ui_mod._turn_snapshot
-                        if _snap is not None:
-                            _delta = _tk.delta_since(_snap)
-                            _turn_cost = _delta.total_cost_usd
-                        else:
-                            _turn_cost = _tk.accumulator.total_cost_usd
-                    except Exception:
-                        log.debug("Turn cost calculation failed", exc_info=True)
-                    result.summary = render_action_summary(
-                        result.tool_calls,
-                        result.rounds,
-                        _turn_elapsed,
-                        _turn_cost,
-                    )
-            except KeyboardInterrupt:
-                console.show_cursor(True)
-                console.print("\n  [dim]Interrupted.[/dim]\n")
-            except Exception as exc:
-                console.show_cursor(True)
-                log.error("Agentic loop error: %s", exc, exc_info=True)
-                console.print(f"\n  [error]Error: {exc}[/error]\n")
-
-    # Clean shutdown: MCP servers → SchedulerService
-    if mcp_mgr is not None:
-        try:
-            mcp_mgr.shutdown()
-        except Exception:
-            log.debug("MCP shutdown error", exc_info=True)
-
-    _sched = _scheduler_service_ctx.get(None)
-    if _sched is not None:
-        try:
-            _sched.save()
-            _sched.stop()
-        except Exception:
-            log.debug("SchedulerService shutdown error", exc_info=True)
-
-
 # ---------------------------------------------------------------------------
 # Thin REPL — delegates to geode serve via IPC
 # ---------------------------------------------------------------------------
 
 
-def _thin_interactive_loop() -> None:
-    """Thin CLI client that relays prompts to geode serve via IPC.
+_LOCAL_COMMANDS = frozenset({"/help", "/exit", "/quit", "/clear"})
 
-    Called when serve is detected running. Skips heavy bootstrap (MCP,
-    skills, memory) — serve owns all shared resources.  Local slash
-    commands (/help, /exit, /clear, /model) are handled locally.
+
+def _thin_interactive_loop() -> None:
+    """Thin CLI client — all execution delegated to geode serve via IPC.
+
+    Local commands: /help, /exit, /quit, /clear
+    Everything else: relayed to serve (prompts + slash commands)
     """
     from core.cli.ipc_client import IPCClient
 
     client = IPCClient()
     if not client.connect():
-        console.print(
-            "  [warning]Failed to connect to serve — falling back to standalone[/warning]"
-        )
-        _interactive_loop()
+        console.print("  [error]Failed to connect to serve[/error]")
         return
 
-    console.print(f"  [success]Connected to serve (session: {client.session_id})[/success]")
-    console.print("  [muted]Thin mode — MCP/skills/memory managed by serve[/muted]")
+    console.print(f"  [success]Session: {client.session_id}[/success]")
     console.print()
 
     try:
@@ -1207,46 +862,57 @@ def _thin_interactive_loop() -> None:
                 console.print("  [muted]Goodbye.[/muted]\n")
                 break
 
-            # Local-only slash commands
-            if user_input.startswith("/"):
+            # Slash commands
+            if "\n" not in user_input and user_input.startswith("/"):
                 cmd = user_input.split()[0].lower()
-                if cmd in ("/help", "/exit", "/quit", "/clear"):
+                args = user_input[len(cmd) :].strip()
+
+                # Local-only commands
+                if cmd in _LOCAL_COMMANDS:
                     try:
-                        _handle_command(
-                            cmd,
-                            user_input[len(cmd) :].strip(),
-                            False,
-                        )
+                        _handle_command(cmd, args, False)
                     except (SystemExit, EOFError):
                         break
                     continue
 
-            # Relay to serve via IPC
-            response = client.send_prompt(user_input)
-
-            if response.get("type") == "error":
-                console.print(f"\n  [error]{response.get('message', 'Unknown error')}[/error]\n")
+                # All other commands → relay to serve
+                response = client.send_command(cmd, args)
+                if response.get("status") == "error":
+                    console.print(f"  [error]{response.get('message', 'Command failed')}[/error]")
+                elif response.get("should_break"):
+                    break
                 continue
 
-            if response.get("type") == "result":
-                # Render tool calls
-                for tc in response.get("tool_calls", []):
-                    console.print(f"  [dim]\u25b8 {tc.get('name', '?')}[/dim]")
-
-                # Render text
-                text = response.get("text", "")
-                if text:
-                    from rich.markdown import Markdown
-
-                    console.print()
-                    console.print(Markdown(text))
-                    console.print()
-
-                rounds = response.get("rounds", 0)
-                if rounds > 1:
-                    console.print(f"  [dim]{rounds} rounds[/dim]")
+            # Free text → relay as prompt
+            response = client.send_prompt(user_input)
+            _render_ipc_response(response)
     finally:
         client.close()
+
+
+def _render_ipc_response(response: dict[str, Any]) -> None:
+    """Render an IPC response from serve."""
+    rtype = response.get("type", "")
+
+    if rtype == "error":
+        console.print(f"\n  [error]{response.get('message', 'Unknown error')}[/error]\n")
+        return
+
+    if rtype == "result":
+        for tc in response.get("tool_calls", []):
+            console.print(f"  [dim]\u25b8 {tc.get('name', '?')}[/dim]")
+
+        text = response.get("text", "")
+        if text:
+            from rich.markdown import Markdown
+
+            console.print()
+            console.print(Markdown(text))
+            console.print()
+
+        rounds = response.get("rounds", 0)
+        if rounds > 1:
+            console.print(f"  [dim]{rounds} rounds[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -1266,19 +932,16 @@ def main(
     if ctx.invoked_subcommand is None:
         _welcome_screen()
 
-        # Auto-detect serve: use thin IPC client when available
-        from core.cli.ipc_client import is_serve_running
+        # Ensure serve is running (auto-start if needed)
+        from core.cli.ipc_client import start_serve_if_needed
 
-        if is_serve_running() and not continue_session and not resume:
-            console.print("  [muted]Detected geode serve — connecting via IPC...[/muted]")
-            _thin_interactive_loop()
-        else:
-            resume_id: str | None = None
-            if continue_session:
-                resume_id = "__latest__"
-            elif resume:
-                resume_id = resume
-            _interactive_loop(resume_session_id=resume_id)
+        if not start_serve_if_needed():
+            console.print("  [error]Failed to start geode serve[/error]")
+            console.print("  [dim]Try manually: geode serve &[/dim]")
+            raise typer.Exit(1)
+
+        console.print("  [muted]Connected to serve via IPC[/muted]")
+        _thin_interactive_loop()
 
 
 @app.command()
@@ -1769,6 +1432,7 @@ def serve(
         mcp_manager=runtime.mcp_manager,
         skill_registry=runtime.skill_registry,
         hook_system=runtime.hooks,
+        lane_queue=runtime.lane_queue,
     )
 
     # Wire module-level hooks so _fire_hook() works in serve mode
@@ -1799,10 +1463,8 @@ def serve(
         console.print("  [warning]Scheduler init failed — running without scheduler[/warning]")
 
     _sched_runner = IsolatedRunner()
-    from core.orchestration.lane_queue import LaneQueue as _ServeLaneQueue
-
-    _serve_lane_queue = _ServeLaneQueue()
-    _serve_sched_lane = _serve_lane_queue.add_lane("scheduler", max_concurrent=2, timeout_s=300.0)
+    _serve_session_lane = _gw_services.lane_queue.session_lane
+    _serve_global_lane = _gw_services.lane_queue.get_lane("global")
 
     def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
         """Process a gateway message with multi-turn context.
@@ -1900,12 +1562,16 @@ def serve(
                 action_queue=_sched_queue,
                 services=_gw_services,
                 runner=_sched_runner,
-                scheduler_lane=_serve_sched_lane,
+                session_lane=_serve_session_lane,
+                global_lane=_serve_global_lane,
                 force_isolated=True,
                 on_complete=lambda result, *, job_id: log.info("scheduled:%s completed", job_id),
                 on_dispatch=lambda jid: log.info("scheduled:%s dispatched", jid),
                 on_skip=lambda jid: log.warning("scheduled:%s skipped (slots full)", jid),
             )
+            # Periodic idle session cleanup
+            if _serve_session_lane:
+                _serve_session_lane.cleanup_idle()
             _time.sleep(1.0)
     finally:
         # Scheduler graceful shutdown (save state before stopping)

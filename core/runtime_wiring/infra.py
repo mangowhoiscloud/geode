@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Default configuration
 # ---------------------------------------------------------------------------
-DEFAULT_GLOBAL_CONCURRENCY = 4
+DEFAULT_GLOBAL_CONCURRENCY = 8
 
 
 # ---------------------------------------------------------------------------
@@ -115,10 +115,23 @@ def build_default_registry() -> ToolRegistry:
 
 
 def build_default_lanes() -> LaneQueue:
-    """Build default LaneQueue with session + global lanes."""
+    """Build the unified LaneQueue — single concurrency gate for the entire process.
+
+    OpenClaw pattern: SessionLane → Global Lane → Execute.
+    SessionLane provides per-key serialization (same session key → serial).
+    Global Lane provides total system capacity (max 8 concurrent).
+    """
+    from core.orchestration.lane_queue import SessionLane
+
     queue = LaneQueue()
-    queue.add_lane("session", max_concurrent=1)  # Serial per session
-    queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY)
+    queue.set_session_lane(
+        SessionLane(
+            max_sessions=256,
+            idle_timeout_s=300.0,
+            timeout_s=300.0,
+        )
+    )
+    queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY, timeout_s=30.0)
     return queue
 
 

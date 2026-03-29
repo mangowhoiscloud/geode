@@ -33,13 +33,14 @@ log = logging.getLogger(__name__)
 class SessionMode(StrEnum):
     """Execution mode — determines behavior defaults, not shared resources."""
 
-    REPL = "repl"  # Interactive — hitl=2, verbose=user, time=unlimited
+    REPL = "repl"  # Interactive terminal — hitl=2, verbose=user, time=unlimited
+    IPC = "ipc"  # Thin CLI via Unix socket — hitl=0, WRITE ok, DANGEROUS blocked
     DAEMON = "daemon"  # Slack/Discord poller — hitl=0, quiet, time=config
     SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
 
 
-# Tools denied for headless execution (SCHEDULER, DAEMON).
-# DANGEROUS tools require HITL approval which headless modes cannot provide.
+# Tools denied for non-terminal execution (IPC, DAEMON, SCHEDULER).
+# DANGEROUS tools require interactive terminal which these modes cannot provide.
 _HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
@@ -58,6 +59,12 @@ _MODE_DEFAULTS: dict[SessionMode, dict[str, Any]] = {
         "quiet": False,
         "time_budget_s": 0.0,  # unlimited (interactive)
         "max_rounds": 0,  # unlimited
+    },
+    SessionMode.IPC: {
+        "hitl_level": 0,  # auto-approve (WRITE ok, DANGEROUS policy-blocked)
+        "quiet": False,
+        "time_budget_s": 0.0,  # unlimited (interactive via IPC)
+        "max_rounds": 0,
     },
     SessionMode.DAEMON: {
         "hitl_level": 0,
@@ -95,6 +102,7 @@ class SharedServices:
     mcp_manager: Any = None
     skill_registry: Any = None
     hook_system: Any = None  # HookSystem — never None after init
+    lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     tool_handlers: dict[str, Any] = field(default_factory=dict)
 
     # Resolved once at bootstrap
@@ -145,7 +153,7 @@ class SharedServices:
 
         # Filter DANGEROUS tools for headless modes (PolicyChain enforcement)
         handlers = self.tool_handlers
-        if mode in (SessionMode.SCHEDULER, SessionMode.DAEMON):
+        if mode in (SessionMode.IPC, SessionMode.SCHEDULER, SessionMode.DAEMON):
             denied = _HEADLESS_DENIED_TOOLS & set(handlers)
             if denied:
                 log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
@@ -188,8 +196,9 @@ class SharedServices:
         from core.config import settings
         from core.orchestration.isolated_execution import IsolatedRunner
 
+        global_lane = self.lane_queue.get_lane("global") if self.lane_queue else None
         return SubAgentManager(
-            IsolatedRunner(hooks=self.hook_system),
+            IsolatedRunner(hooks=self.hook_system, lane=global_lane),
             action_handlers=self.tool_handlers,
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
@@ -219,6 +228,7 @@ def build_shared_services(
     mcp_manager: Any = None,
     skill_registry: Any = None,
     hook_system: Any = None,
+    lane_queue: Any = None,
     verbose: bool = False,
 ) -> SharedServices:
     """Construct SharedServices with resolved config values.
@@ -259,10 +269,17 @@ def build_shared_services(
     except Exception:
         log.debug("Cost budget resolution failed, using 0 (unlimited)")
 
+    # Build unified LaneQueue if not provided
+    if lane_queue is None:
+        from core.runtime_wiring.infra import build_default_lanes
+
+        lane_queue = build_default_lanes()
+
     return SharedServices(
         mcp_manager=mcp_manager,
         skill_registry=skill_registry,
         hook_system=hook_system,
+        lane_queue=lane_queue,
         tool_handlers=tool_handlers,
         _model=_settings.model,
         _provider=_resolve_provider(_settings.model),

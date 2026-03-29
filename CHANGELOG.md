@@ -26,7 +26,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.36.0] — 2026-03-30
+## [0.37.0] — 2026-03-30
+
+### Changed
+- **Thin-only architecture** — standalone REPL eliminated (~487 lines deleted). `geode` always connects to serve via IPC; auto-starts serve if not running. Single code path for all execution: CLI, Slack/Discord, Scheduler all route through `acquire_all(key, ["session", "global"])`.
+- **SessionMode.IPC** — new session mode for thin CLI client. `hitl=0` (WRITE allowed, DANGEROUS policy-blocked). Replaces `SessionMode.REPL` for IPC connections.
+- **CLIPoller hardened** — `acquire_all()` gating, `chmod 0o600` on Unix socket, `command` type in IPC protocol for slash command relay.
+- **SessionLane — per-key serialization** — replaced 4-lane system (session/global/gateway/scheduler) with OpenClaw pattern: `SessionLane` (per-session-key `Semaphore(1)`) + `Lane("global", max=8)`. Same session key serializes, different keys parallel. `acquire_all(key, ["session", "global"])` unifies all execution paths. OpenClaw defect fixes: `max_sessions=256` cap, `cleanup_idle()` eviction.
 
 ### Added
 - **H3: CLIChannel IPC** — Unix domain socket (`~/.geode/cli.sock`) connects thin CLI client to `geode serve`. `CLIPoller` accepts local connections, creates REPL sessions via SharedServices. `IPCClient` auto-detects serve and delegates agentic execution over line-delimited JSON protocol. Fallback to standalone when serve is not running.

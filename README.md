@@ -10,7 +10,7 @@
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
-# GEODE v0.36.0 — Autonomous Execution Harness
+# GEODE v0.37.0 — Autonomous Execution Harness
 
 범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
 
@@ -86,7 +86,7 @@ cd geode && uv sync
 | **20 Runtime Skills** | `.geode/skills/` — 도메인별 지식을 프롬프트로 주입. 파이프라인, 스코어링, 검증, 아키텍처 패턴 등 |
 | **46 Runtime Hooks** | 파이프라인/노드/검증/메모리/서브에이전트 라이프사이클 이벤트 — GEODE 런타임 제어 |
 | **5-Layer Verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM(Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
-| **Safety** | 4-tier HITL(SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, PolicyChain 6-layer |
+| **Safety** | 4-tier HITL(SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, PolicyChain |
 
 ---
 
@@ -102,13 +102,13 @@ cd geode && uv sync
 
 ```
 geode/
-├── core/                          # 202 modules, 6-Layer Architecture
+├── core/                          # 191 modules, 4-Layer Stack
 │   ├── agent/                     # L0: AgenticLoop, ToolCallProcessor, SubAgentManager
 │   ├── cli/                       # L0: REPL, Commands, UI
 │   ├── llm/                       # L1: Claude/OpenAI/GLM Adapters, Router, Prompts
 │   ├── memory/                    # L2: 4-Tier Memory, Context Assembly, User Profile
 │   ├── hooks/                     # HookSystem(46) — cross-cutting lifecycle events
-│   ├── orchestration/             # L3: TaskGraph, PlanMode, LaneQueue, CoalescingQueue
+│   ├── orchestration/             # L3: TaskGraph, PlanMode, SessionLane, LaneQueue(global:8)
 │   ├── tools/                     # L4: 54 Tool Definitions + Handlers
 │   ├── skills/                    # L4: Skill Templates
 │   ├── mcp/                       # L4: MCP Catalog(44) + Manager
@@ -116,9 +116,9 @@ geode/
 │   ├── gateway/                   # Slack Gateway (geode serve)
 │   ├── runtime_wiring/            # Runtime bootstrap modules (5-module split)
 │   └── verification/              # Guardrails, BiasBuster, Cross-LLM
-├── tests/                         # 3202+ tests
+├── tests/                         # 3433+ tests
 ├── docs/                          # Architecture, Workflow, Plans
-│   ├── architecture.md            # 6-Layer + Mermaid diagrams
+│   ├── architecture/              # Hook system, orchestration decisions
 │   ├── workflow.md                # CANNOT/CAN, GitFlow, Kanban
 │   ├── setup.md                   # Installation, API keys, Slack
 │   └── progress.md                # Kanban board (multi-agent shared)
@@ -127,7 +127,7 @@ geode/
 └── pyproject.toml                 # uv package config
 ```
 
-[Architecture details →](docs/architecture.md) | [Hook System →](docs/architecture/hook-system.md) | [Full source tree →](docs/architecture.md#project-structure)
+[Hook System →](docs/architecture/hook-system.md)
 
 ### `.geode/` -- Agent Context Lifecycle
 
@@ -147,37 +147,33 @@ graph LR
     style C fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
 ```
 
-### `core/` -- 6-Layer Architecture
+### `core/` -- 4-Layer Stack (Model → Runtime → Harness → Agent)
 
 ```mermaid
 graph LR
-    L0["L0 CLI & Agent<br/>AgenticLoop, SubAgent"] --> L1["L1 Infra<br/>Port/Adapter DI"]
-    L0 --> L3["L3 Orchestration<br/>TaskGraph, LaneQueue"]
-    L0 --> HK["Hooks (cross-cutting)<br/>40 events"]
-    L0 --> L4["L4 Extensibility<br/>Tools(47), MCP(44)"]
-    L4 --> L5["L5 Domain<br/>DomainPort Plugin"]
-    L0 --> L2["L2 Memory<br/>4-Tier + Checkpoint"]
+    AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
+    HA --> RT["Runtime<br/>Tools(52), MCP(44)<br/>Memory, Skills"]
+    RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
-    style L0 fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
-    style L1 fill:#1e293b,stroke:#10b981,color:#e2e8f0
-    style L2 fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-    style L3 fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style HK fill:#1e293b,stroke:#f97316,color:#e2e8f0
-    style L4 fill:#1e293b,stroke:#ef4444,color:#e2e8f0
-    style L5 fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
+    AG -.-> DP["⊥ Domain<br/>DomainPort Protocol"]
+    HA -.-> DP
+    RT -.-> DP
+
+    style AG fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style HA fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style RT fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style MD fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
+    style DP fill:#1e293b,stroke:#06b6d4,color:#e2e8f0,stroke-dasharray: 5 5
 ```
 
 | Layer | 핵심 | 진입점 |
 |-------|------|--------|
-| **L0** | CLI, AgenticLoop, SubAgentManager | `core/cli/agentic_loop.py` |
-| **L1** | LLM Adapters (Claude, OpenAI, GLM) | `core/llm/` |
-| **L2** | SOUL → User → Org → Project → Session | `core/memory/` |
-| **Hooks** | HookSystem(46) — cross-cutting lifecycle | `core/hooks/` → [hook-system.md](docs/architecture/hook-system.md) |
-| **L3** | TaskGraph DAG, PlanMode, LaneQueue | `core/orchestration/` |
-| **L4** | ToolRegistry(54), MCP Catalog(44), Skills | `core/tools/` |
-| **L5** | DomainPort Protocol, GameIPDomain | `core/domains/` |
-
-[Architecture details →](docs/architecture.md)
+| **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
+| **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(40) | `core/orchestration/`, `core/hooks/` |
+| **Runtime** | ToolRegistry(52), MCP Catalog(44), Skills, Memory(4-Tier) | `core/tools/`, `core/memory/` |
+| **Model** | ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback) | `core/llm/` |
+| | | |
+| **⊥ Domain** | DomainPort Protocol, GameIPDomain (cross-cutting, binds to Runtime + Harness via Port) | `core/domains/` |
 
 ### GitFlow + Worktree
 
@@ -204,7 +200,7 @@ while CI fails:
 
 | Job | 역할 | 실패 시 |
 |-----|------|---------|
-| `pytest` | 3,202 테스트 전체 실행 | 실패 테스트 자동 수정 후 재시도 |
+| `pytest` | 3,433 테스트 전체 실행 | 실패 테스트 자동 수정 후 재시도 |
 | `mypy` | 타입 체크 strict 모드 | 타입 힌트 추가 후 재시도 |
 | `ruff` | 린트 + 포매팅 | auto-fix 적용 후 재시도 |
 | `import-order` | 임포트 정렬 검증 | isort 적용 후 재시도 |
@@ -229,14 +225,40 @@ main-only 수정. 3-Checkpoint 필수. TaskCreate ↔ 칸반 task_id 1:1 매핑.
 <details>
 <summary><strong>Architecture Overview</strong></summary>
 
-6-Layer Architecture + `while(tool_use)` Agentic Loop + Sub-Agent System + 4-Tier Memory.
+4-Layer Stack (Model → Runtime → Harness → Agent) + `while(tool_use)` Agentic Loop + Sub-Agent System + 4-Tier Memory.
 
-모든 상세 내용과 Mermaid 다이어그램은 [Architecture](docs/architecture.md) 문서를 참고하세요.
+```mermaid
+graph TD
+    CLI["geode<br/>(thin CLI)"] -->|Unix socket IPC| SERVE["geode serve<br/>(unified daemon)"]
+
+    SERVE --> RT["GeodeRuntime"]
+    RT --> SL["SessionLane<br/>per-key serial"]
+    RT --> GL["Lane global:8<br/>total capacity"]
+
+    SL --> CLIP["CLIPoller<br/>SessionMode.IPC"]
+    SL --> GW["Gateway Pollers<br/>Slack / Discord"]
+    SL --> SCHED["Scheduler<br/>60s tick"]
+
+    GL --> CLIP
+    GL --> GW
+    GL --> SCHED
+
+    style CLI fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
+    style SERVE fill:#1e293b,stroke:#10b981,color:#e2e8f0
+    style RT fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+    style SL fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
+    style GL fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
+    style CLIP fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
+    style GW fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
+    style SCHED fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
+```
 
 주요 구성:
-- **Agentic Loop**: Claude Opus 4.6 기반 `while(tool_use)` 루프. max 50 rounds, 1M context.
+- **Thin-Only**: `geode` = thin CLI. serve 필수 (자동 시작). 모든 실행은 IPC → serve 경유.
+- **SessionLane**: per-session-key `Semaphore(1)`. 같은 key 직렬, 다른 key 병렬. `max_sessions=256`.
+- **Agentic Loop**: Claude Opus 4.6 기반 `while(tool_use)` 루프. 1M context.
 - **Tool Hierarchy**: Built-in(52) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
-- **Sub-Agent**: 부모 역량 전체 상속, MAX_CONCURRENT=5, Token Guard.
+- **Sub-Agent**: 부모 역량 전체 상속, Lane("global") gating, depth guard, Token Guard.
 - **Memory**: SOUL → User Profile → Organization → Project → Session. ContextAssembler 280자 압축.
 - **Domain Plugin**: `DomainPort` Protocol로 파이프라인 교체. Game IP 기본 탑재 (LangGraph 9-node).
 
@@ -255,7 +277,7 @@ CANNOT(가드레일)이 CAN(자유도)보다 먼저 온다. 7단계 워크플로
 |------|---------|--------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 3202+ pass |
+| Test | `uv run pytest tests/ -q` | 3433+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 </details>
