@@ -457,7 +457,10 @@ class TestIsolatedRunnerAsync:
         assert runner.cancel("nonexistent-session") is False
 
     def test_concurrent_limit_enforcement(self) -> None:
-        runner = IsolatedRunner()
+        from core.orchestration.lane_queue import Lane
+
+        lane = Lane("global", max_concurrent=5, timeout_s=30.0)
+        runner = IsolatedRunner(lane=lane)
         barriers: list[threading.Event] = []
         started_events: list[threading.Event] = []
 
@@ -466,9 +469,9 @@ class TestIsolatedRunnerAsync:
             barriers[idx].wait(timeout=10.0)
             return f"done-{idx}"
 
-        # Start MAX_CONCURRENT sessions
+        # Start 5 sessions (global lane max_concurrent)
         sids: list[str] = []
-        for i in range(IsolatedRunner.MAX_CONCURRENT):
+        for i in range(5):
             barrier = threading.Event()
             started_event = threading.Event()
             barriers.append(barrier)
@@ -483,14 +486,14 @@ class TestIsolatedRunnerAsync:
 
         # The next synchronous run should fail with concurrency limit.
         # Use a short wait to avoid 30s default; slots are genuinely full.
-        orig = runner.SEMAPHORE_WAIT_S
-        runner.SEMAPHORE_WAIT_S = 0.1
+        orig = runner.SLOT_WAIT_S
+        runner.SLOT_WAIT_S = 0.1
         try:
             result = runner.run(lambda: "over-limit")
             assert result.success is False
-            assert "Concurrency limit" in (result.error or "")
+            assert "full" in (result.error or "").lower() or "limit" in (result.error or "").lower()
         finally:
-            runner.SEMAPHORE_WAIT_S = orig
+            runner.SLOT_WAIT_S = orig
 
         # Release all
         for b in barriers:
@@ -591,34 +594,33 @@ class TestEdgeCases:
 # ---------------------------------------------------------------------------
 
 
-class TestSemaphoreLeakRegression:
-    """Verify the `acquired` flag prevents double-release on timeout."""
+class TestSlotLeakRegression:
+    """Verify lane slot release on timeout/completion (no leak)."""
 
-    def test_timeout_releases_semaphore_exactly_once(self) -> None:
-        """After a timeout, the semaphore must be released exactly once.
+    def test_timeout_releases_slot_exactly_once(self) -> None:
+        """After a timeout, the lane slot must be released exactly once."""
+        from core.orchestration.lane_queue import Lane
 
-        Regression for C3: without the `acquired` flag, a timeout could
-        cause extra permits on the semaphore.
-        """
-        runner = IsolatedRunner()
-        initial_value = runner._semaphore._value  # type: ignore[attr-defined]
+        lane = Lane("global", max_concurrent=5, timeout_s=30.0)
+        runner = IsolatedRunner(lane=lane)
 
-        # Run a function that exceeds the timeout
         result = runner.run(
             lambda: time.sleep(5.0),
             config=IsolationConfig(timeout_s=0.1),
         )
 
         assert not result.success
-        # Semaphore should return to its initial value (no leak)
-        assert runner._semaphore._value == initial_value  # type: ignore[attr-defined]
+        # Lane should have 0 active (slot released)
+        assert lane.active_count == 0
 
-    def test_normal_completion_releases_semaphore(self) -> None:
-        """Normal completion should also release exactly once."""
-        runner = IsolatedRunner()
-        initial_value = runner._semaphore._value  # type: ignore[attr-defined]
+    def test_normal_completion_releases_slot(self) -> None:
+        """Normal completion should release lane slot."""
+        from core.orchestration.lane_queue import Lane
+
+        lane = Lane("global", max_concurrent=5, timeout_s=30.0)
+        runner = IsolatedRunner(lane=lane)
 
         result = runner.run(lambda: "fast")
 
         assert result.success
-        assert runner._semaphore._value == initial_value  # type: ignore[attr-defined]
+        assert lane.active_count == 0

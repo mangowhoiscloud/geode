@@ -224,10 +224,16 @@ class TestDefaultBuilders:
         queue = _build_default_lanes()
         assert "session" in queue.list_lanes()
         assert "global" in queue.list_lanes()
+        assert "gateway" in queue.list_lanes()
+        assert "scheduler" in queue.list_lanes()
         session = queue.get_lane("session")
         assert session is not None and session.max_concurrent == 1
         global_lane = queue.get_lane("global")
-        assert global_lane is not None and global_lane.max_concurrent == 4
+        assert global_lane is not None and global_lane.max_concurrent == 5
+        gateway = queue.get_lane("gateway")
+        assert gateway is not None and gateway.max_concurrent == 2
+        scheduler = queue.get_lane("scheduler")
+        assert scheduler is not None and scheduler.max_concurrent == 2
 
 
 class TestRuntimeNewComponents:
