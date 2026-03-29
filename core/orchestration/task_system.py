@@ -170,10 +170,11 @@ class TaskGraph:
 
     def mark_skipped(self, task_id: str) -> None:
         """Mark a task as skipped (e.g., due to upstream failure)."""
-        task = self._require_task(task_id)
-        task.status = TaskStatus.SKIPPED
-        task.completed_at = time.time()
-        self._stats.skipped += 1
+        with self._lock:
+            task = self._require_task(task_id)
+            task.status = TaskStatus.SKIPPED
+            task.completed_at = time.time()
+            self._stats.skipped += 1
         log.debug("Task skipped: %s", task_id)
 
     def propagate_failure(self, task_id: str) -> list[str]:
@@ -181,17 +182,22 @@ class TaskGraph:
 
         Returns list of task IDs that were skipped.
         """
-        skipped: list[str] = []
-        to_skip = self._get_dependents(task_id)
+        with self._lock:
+            skipped: list[str] = []
+            to_skip = self._get_dependents(task_id)
 
-        while to_skip:
-            current = to_skip.pop(0)
-            if current.is_terminal:
-                continue
-            self.mark_skipped(current.task_id)
-            skipped.append(current.task_id)
-            # Also skip dependents of skipped tasks
-            to_skip.extend(self._get_dependents(current.task_id))
+            while to_skip:
+                current = to_skip.pop(0)
+                if current.is_terminal:
+                    continue
+                # Inline skipped-marking (lock already held)
+                task = self._require_task(current.task_id)
+                task.status = TaskStatus.SKIPPED
+                task.completed_at = time.time()
+                self._stats.skipped += 1
+                skipped.append(current.task_id)
+                # Also skip dependents of skipped tasks
+                to_skip.extend(self._get_dependents(current.task_id))
 
         if skipped:
             log.info(

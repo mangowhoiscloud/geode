@@ -69,7 +69,7 @@ _MODE_DEFAULTS: dict[SessionMode, dict[str, Any]] = {
     SessionMode.DAEMON: {
         "hitl_level": 0,
         "quiet": True,
-        "time_budget_s": 0.0,  # resolved from config at runtime
+        "time_budget_s": 120.0,  # matches gateway_time_budget_s default
         "max_rounds": 0,
     },
     SessionMode.SCHEDULER: {

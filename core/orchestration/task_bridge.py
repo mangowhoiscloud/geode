@@ -171,8 +171,9 @@ class TaskGraphHookBridge:
 
         # Evaluator: count toward done, fail immediately on first error
         if node == "evaluator":
-            self._evaluator_done_count += 1
-            self._evaluator_has_error = True
+            with self._evaluator_lock:
+                self._evaluator_done_count += 1
+                self._evaluator_has_error = True
             tid = f"{self._prefix}_evaluators"
             task = self._graph.get_task(tid)
             if task and not task.is_terminal:

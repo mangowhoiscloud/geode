@@ -26,7 +26,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.37.0] — 2026-03-30
 
 ## [0.37.0] — 2026-03-30
 
