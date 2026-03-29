@@ -105,7 +105,8 @@ def _drain_scheduler_queue(
     action_queue: Any,
     services: Any,
     runner: Any,
-    scheduler_lane: Any,
+    session_lane: Any,
+    global_lane: Any,
     force_isolated: bool = False,
     main_loop: Any | None = None,
     on_complete: Any | None = None,
@@ -118,8 +119,8 @@ def _drain_scheduler_queue(
     Shared by both REPL and serve modes.  In serve mode ``force_isolated``
     is True because there is no interactive main session to inject into.
 
-    Uses ``Lane.try_acquire`` / ``manual_release`` for concurrency control
-    through the central LaneQueue (replacing ad-hoc Semaphore).
+    Uses SessionLane (per-key serial) + Global Lane (capacity) for
+    concurrency control through the unified LaneQueue.
 
     Returns the number of jobs drained.
     """
@@ -137,18 +138,23 @@ def _drain_scheduler_queue(
             prompt = f"[scheduled-job:{job_id}] {fired_action}"
 
             if isolated or force_isolated:
-                lane_key = f"scheduled:{job_id}"
-                if not scheduler_lane.try_acquire(lane_key):
-                    log.warning(
-                        "Scheduler lane full (max %d), skipping job %s",
-                        scheduler_lane.max_concurrent,
-                        job_id,
-                    )
+                lane_key = f"sched:{job_id}"
+
+                # Dual acquire: session (per-key serial) + global (capacity)
+                if not session_lane.try_acquire(lane_key):
+                    log.warning("Session key busy, skipping job %s", job_id)
                     if on_skip:
                         on_skip(job_id)
                     continue
 
-                _lane_acquired = True
+                if not global_lane.try_acquire(lane_key):
+                    session_lane.manual_release(lane_key)
+                    log.warning("Global lane full, skipping job %s", job_id)
+                    if on_skip:
+                        on_skip(job_id)
+                    continue
+
+                _lanes_acquired = True
                 try:
                     _iso_conv = ConversationContext()
                     from core.gateway.shared_services import SessionMode
@@ -161,7 +167,8 @@ def _drain_scheduler_queue(
                     _cap_loop = _iso_loop
                     _cap_prompt = prompt
                     _cap_jid = job_id
-                    _cap_lane = scheduler_lane
+                    _cap_sess = session_lane
+                    _cap_glob = global_lane
                     _cap_key = lane_key
                     _cap_cb = on_complete
 
@@ -170,7 +177,8 @@ def _drain_scheduler_queue(
                         _loop: Any = _cap_loop,
                         _p: str = _cap_prompt,
                         _jid: str = _cap_jid,
-                        _lane: Any = _cap_lane,
+                        _sess: Any = _cap_sess,
+                        _glob: Any = _cap_glob,
                         _key: str = _cap_key,
                         _cb: Any = _cap_cb,
                     ) -> str:
@@ -180,7 +188,8 @@ def _drain_scheduler_queue(
                                 _cb(r, job_id=_jid)
                             return r.text if r and r.text else ""
                         finally:
-                            _lane.manual_release(_key)
+                            _glob.manual_release(_key)
+                            _sess.manual_release(_key)
 
                     runner.run_async(
                         _run_isolated,
@@ -190,12 +199,13 @@ def _drain_scheduler_queue(
                             timeout_s=300.0,
                         ),
                     )
-                    _lane_acquired = False  # ownership transferred to _run_isolated
+                    _lanes_acquired = False  # ownership transferred to _run_isolated
                     if on_dispatch:
                         on_dispatch(job_id)
                 except Exception:
-                    if _lane_acquired:
-                        scheduler_lane.manual_release(lane_key)
+                    if _lanes_acquired:
+                        global_lane.manual_release(lane_key)
+                        session_lane.manual_release(lane_key)
                     log.warning("Scheduler job %s dispatch failed", job_id, exc_info=True)
             else:
                 # Non-isolated: inject into main session (REPL only)
@@ -1074,7 +1084,8 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
         skill_registry=skill_registry,
         verbose=verbose,
     )
-    _sched_lane = services.lane_queue.get_lane("scheduler")
+    _session_lane = services.lane_queue.session_lane
+    _global_lane = services.lane_queue.get_lane("global")
 
     # Wire module-level hooks for _fire_hook() callers
     global _hooks_ctx
@@ -1144,7 +1155,8 @@ def _interactive_loop(resume_session_id: str | None = None) -> None:
             action_queue=_action_queue,
             services=services,
             runner=_sched_runner,
-            scheduler_lane=_sched_lane,
+            session_lane=_session_lane,
+            global_lane=_global_lane,
             force_isolated=False,
             main_loop=agentic,
             on_complete=_on_sched_complete,
@@ -1937,7 +1949,8 @@ def serve(
         console.print("  [warning]Scheduler init failed — running without scheduler[/warning]")
 
     _sched_runner = IsolatedRunner()
-    _serve_sched_lane = _gw_services.lane_queue.get_lane("scheduler")
+    _serve_session_lane = _gw_services.lane_queue.session_lane
+    _serve_global_lane = _gw_services.lane_queue.get_lane("global")
 
     def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
         """Process a gateway message with multi-turn context.
@@ -2035,12 +2048,16 @@ def serve(
                 action_queue=_sched_queue,
                 services=_gw_services,
                 runner=_sched_runner,
-                scheduler_lane=_serve_sched_lane,
+                session_lane=_serve_session_lane,
+                global_lane=_serve_global_lane,
                 force_isolated=True,
                 on_complete=lambda result, *, job_id: log.info("scheduled:%s completed", job_id),
                 on_dispatch=lambda jid: log.info("scheduled:%s dispatched", jid),
                 on_skip=lambda jid: log.warning("scheduled:%s skipped (slots full)", jid),
             )
+            # Periodic idle session cleanup
+            if _serve_session_lane:
+                _serve_session_lane.cleanup_idle()
             _time.sleep(1.0)
     finally:
         # Scheduler graceful shutdown (save state before stopping)

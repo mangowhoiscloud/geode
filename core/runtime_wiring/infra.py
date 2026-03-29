@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Default configuration
 # ---------------------------------------------------------------------------
-DEFAULT_GLOBAL_CONCURRENCY = 4
+DEFAULT_GLOBAL_CONCURRENCY = 8
 
 
 # ---------------------------------------------------------------------------
@@ -117,15 +117,21 @@ def build_default_registry() -> ToolRegistry:
 def build_default_lanes() -> LaneQueue:
     """Build the unified LaneQueue — single concurrency gate for the entire process.
 
-    All execution paths (gateway, scheduler, sub-agents) route through this
-    LaneQueue.  IsolatedRunner uses the ``global`` lane instead of its own
-    internal Semaphore.
+    OpenClaw pattern: SessionLane → Global Lane → Execute.
+    SessionLane provides per-key serialization (same session key → serial).
+    Global Lane provides total system capacity (max 8 concurrent).
     """
+    from core.orchestration.lane_queue import SessionLane
+
     queue = LaneQueue()
-    queue.add_lane("session", max_concurrent=1)  # Serial per session
-    queue.add_lane("global", max_concurrent=5, timeout_s=30.0)  # IsolatedRunner cap
-    queue.add_lane("gateway", max_concurrent=2, timeout_s=120.0)  # Gateway messages
-    queue.add_lane("scheduler", max_concurrent=2, timeout_s=300.0)  # Scheduled jobs
+    queue.set_session_lane(
+        SessionLane(
+            max_sessions=256,
+            idle_timeout_s=300.0,
+            timeout_s=300.0,
+        )
+    )
+    queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY, timeout_s=30.0)
     return queue
 
 
