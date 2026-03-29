@@ -45,6 +45,7 @@ class WorkerRequest:
     model: str = "claude-opus-4-6"
     provider: str = "anthropic"
     timeout_s: float = 120.0
+    time_budget_s: float = 0.0  # 0 = inherit parent's budget
     domain: str = ""  # Domain adapter name (e.g. "game_ip") or ""
     isolation: str = ""  # Reserved for Phase 3: "worktree" etc.
 
