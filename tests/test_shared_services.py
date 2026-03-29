@@ -92,15 +92,11 @@ class TestSharedServicesCreateSession:
         assert loop._time_budget_s == 300.0
 
     def test_time_budget_override(self, services: SharedServices) -> None:
-        _, loop = services.create_session(
-            SessionMode.DAEMON, time_budget_override=120.0
-        )
+        _, loop = services.create_session(SessionMode.DAEMON, time_budget_override=120.0)
         assert loop._time_budget_s == 120.0
 
     def test_system_suffix_passed(self, services: SharedServices) -> None:
-        _, loop = services.create_session(
-            SessionMode.DAEMON, system_suffix="gateway instructions"
-        )
+        _, loop = services.create_session(SessionMode.DAEMON, system_suffix="gateway instructions")
         assert "gateway instructions" in loop._system_suffix
 
     def test_current_loop_ctx_set(self, services: SharedServices) -> None:
