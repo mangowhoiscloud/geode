@@ -87,25 +87,12 @@ def build_automation(
     )
     scheduler_service.load()
 
-    from core.automation.predefined import PREDEFINED_AUTOMATIONS
-
-    for tmpl in PREDEFINED_AUTOMATIONS:
-        if tmpl.enabled and not tmpl.schedule.startswith("event:"):
-            job = ScheduledJob(
-                job_id=f"predefined:{tmpl.id}",
-                name=tmpl.name,
-                schedule=Schedule(
-                    kind=ScheduleKind.CRON,
-                    cron_expr=tmpl.schedule,
-                ),
-                enabled=tmpl.enabled,
-                metadata={
-                    "source": "predefined",
-                    "template_id": tmpl.id,
-                },
-            )
-            with contextlib.suppress(ValueError):
-                scheduler_service.add_job(job)
+    # Predefined automations are domain-specific templates (game_ip).
+    # They require a wired callback to be useful. Without callback/action,
+    # they fire as empty jobs consuming resources.
+    # Registration is skipped — users can enable predefined templates
+    # via /schedule enable <template_id> when a domain plugin provides
+    # the callback wiring.
 
     if settings.scheduler_auto_start:
         scheduler_service.start(
