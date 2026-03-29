@@ -1,69 +1,69 @@
 ---
 name: youtube-planner
-description: YouTube 영상 기획 — 아이디어 → 구조 → 스크립트 초안. "영상", "콘텐츠", "스크립트", "youtube", "유튜브", "썸네일", "기획" 키워드로 트리거.
+description: YouTube video planning — idea to structure to script draft. Triggers: 'youtube', '유튜브', '영상', '콘텐츠', '스크립트', '썸네일', '기획'.
 tools: web_search, web_fetch, memory_save
 risk: safe
 ---
 
 # YouTube Planner
 
-@mango_fr 채널의 영상 기획을 지원합니다. 아이디어 발굴부터 스크립트 초안까지.
+Supports video planning for the @mango_fr channel. From idea discovery to script drafts.
 
-## 채널 프로필
+## Channel Profile
 
-- **채널**: @mango_fr
-- **주제**: 에이전틱 엔지니어링, 자율 실행 하네스, LLM 실전 운용
-- **톤**: 기술 심화 + 실전 경험 공유, 한국어
-- **타겟**: AI/ML 엔지니어, 에이전트 시스템 관심 개발자
+- **Channel**: @mango_fr
+- **Topics**: Agentic engineering, autonomous execution harnesses, hands-on LLM operation
+- **Tone**: Deep technical + real-world experience sharing, Korean
+- **Target Audience**: AI/ML engineers, developers interested in agent systems
 
-## 워크플로우
+## Workflow
 
-### 1. 아이디어 발굴
-- 최근 GEODE 개발에서 배운 교훈
-- 트렌딩 AI 논문/뉴스와 연결
-- 커뮤니티에서 자주 묻는 질문
+### 1. Idea Discovery
+- Lessons learned from recent GEODE development
+- Connect with trending AI papers/news
+- Frequently asked questions from the community
 
-### 2. 구조 설계
+### 2. Structure Design
 ```
-Hook (15초): 시청자 문제 제기
-문제 정의 (1분): 왜 이게 중요한지
-해결 과정 (5-8분): 코드 + 아키텍처 + 실패담
-결과 (1분): 비포/애프터
-마무리 (30초): 핵심 정리 + 다음 영상 예고
+Hook (15s): Present viewer's problem
+Problem Definition (1min): Why this matters
+Solution Process (5-8min): Code + architecture + failure stories
+Result (1min): Before/after
+Wrap-up (30s): Key takeaway + next video preview
 ```
 
-### 3. 스크립트 초안
-- 구어체 한국어 (존댓말)
-- 코드 블록은 화면에 보여줄 핵심만
-- 타임스탬프 표시
+### 3. Script Draft
+- Conversational Korean (polite form)
+- Code blocks limited to key parts shown on screen
+- Include timestamps
 
-## 출력 형식
+## Output Format
 
 ```markdown
-## 영상 기획 — [제목]
+## Video Plan — [Title]
 
-### 메타
-- 예상 길이: N분
-- 카테고리: [에이전트/LLM/아키텍처/트러블슈팅]
-- 키워드: tag1, tag2, tag3
+### Meta
+- Estimated length: N min
+- Category: [Agent/LLM/Architecture/Troubleshooting]
+- Keywords: tag1, tag2, tag3
 
-### 구조
+### Structure
 1. Hook: ...
-2. 문제: ...
-3. 해결: ...
-4. 결과: ...
+2. Problem: ...
+3. Solution: ...
+4. Result: ...
 
-### 스크립트 초안
-[타임스탬프별 대본]
+### Script Draft
+[Script by timestamp]
 
-### 썸네일 아이디어
-- 텍스트: ...
-- 비주얼: ...
+### Thumbnail Ideas
+- Text: ...
+- Visual: ...
 ```
 
-## 지침
+## Guidelines
 
-- GEODE 실제 개발 경험을 소재로 우선
-- 추상적 개념보다 구체적 코드/아키텍처
-- 10분 이내 영상 기준
-- 완료 후 memory_save로 기획 기록
+- Prioritize actual GEODE development experience as material
+- Prefer concrete code/architecture over abstract concepts
+- Target videos under 10 minutes
+- After completion, record the plan via memory_save

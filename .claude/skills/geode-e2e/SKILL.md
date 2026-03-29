@@ -1,149 +1,149 @@
 ---
 name: geode-e2e
-description: Live E2E 검증 + LangSmith Observability + 품질 점검 패턴. Mock/Live 테스트 티어, 시나리오 매핑, _make_loop() 패턴, ReadinessReport 제어, 트레이스 검증. "e2e", "live test", "검증", "langsmith", "tracing", "observability", "품질 점검" 키워드로 트리거.
+description: Live E2E verification + LangSmith Observability + quality inspection patterns. Mock/Live test tiers, scenario mapping, _make_loop() pattern, ReadinessReport control, trace verification. Triggers on "e2e", "live test", "검증", "langsmith", "tracing", "observability", "품질 점검".
 ---
 
 ## Test Tiers
 
-| Tier | 파일 | LLM 호출 | 실행 시간 | 용도 |
-|------|------|---------|----------|------|
+| Tier | File | LLM Calls | Execution Time | Purpose |
+|------|------|-----------|----------------|---------|
 | **Mock** | `test_agentic_loop.py`, `test_e2e.py`, `test_e2e_orchestration_live.py` | No | ~3s | CI/CD, regression |
-| **Live** | `test_e2e_live_llm.py` | Yes (Anthropic API) | ~5min | 실제 동작 검증 |
+| **Live** | `test_e2e_live_llm.py` | Yes (Anthropic API) | ~5min | Real behavior verification |
 
-## Live Test 실행
+## Live Test Execution
 
 ```bash
-# .env 로드 + live marker 테스트만 실행
+# Load .env + run live-marked tests only
 set -a && source .env && set +a && uv run pytest tests/test_e2e_live_llm.py -v -m live
 
-# 특정 시나리오만
+# Specific scenario only
 uv run pytest tests/test_e2e_live_llm.py::TestAgenticLoopLive::test_1_2_single_tool -v
 
-# 오프라인 모드만 (API 비용 없음)
+# Offline mode only (no API cost)
 uv run pytest tests/test_e2e_live_llm.py::TestOfflineModeLive -v
 ```
 
-## 시나리오 매핑 (docs/e2e/e2e-orchestration-scenarios.md)
+## Scenario Mapping (docs/e2e/e2e-orchestration-scenarios.md)
 
-### §1 AgenticLoop (실제 Anthropic API)
+### §1 AgenticLoop (Real Anthropic API)
 
-| ID | 시나리오 | 검증 포인트 |
-|----|---------|-----------|
-| 1-1 | 텍스트 응답 ("안녕하세요") | tool_calls=[], rounds=1, text 비어있지 않음 |
-| 1-2 | 단일 도구 ("IP 목록 보여줘") | list_ips tool 호출, result에 error 없음 |
-| 1-3 | 순차 도구 ("분석하고 비교해줘") | analyze_ip → compare_ips 순서, rounds >= 2 |
-| 1-4 | 병렬 도구 ("둘 다 검색해줘") | tool_calls >= 2 |
-| 1-5 | Max rounds 가드레일 | rounds <= max_rounds, error="max_rounds" |
-| 1-7 | 멀티턴 컨텍스트 | turn_count 증가, 이전 분석 참조 |
+| ID | Scenario | Verification Points |
+|----|----------|---------------------|
+| 1-1 | Text response ("Hello") | tool_calls=[], rounds=1, text not empty |
+| 1-2 | Single tool ("Show IP list") | list_ips tool called, no error in result |
+| 1-3 | Sequential tools ("Analyze then compare") | analyze_ip → compare_ips order, rounds >= 2 |
+| 1-4 | Parallel tools ("Search both") | tool_calls >= 2 |
+| 1-5 | Max rounds guardrail | rounds <= max_rounds, error="max_rounds" |
+| 1-7 | Multi-turn context | turn_count increases, references previous analysis |
 
 ### §4 LangSmith Tracing
 
-| ID | 검증 포인트 |
-|----|-----------|
-| 4-2 | LangSmith 'geode' 프로젝트에 AgenticLoop 트레이스 존재 |
+| ID | Verification Points |
+|----|---------------------|
+| 4-2 | AgenticLoop trace exists in LangSmith 'geode' project |
 
-### §5 Full Pipeline (실제 LLM)
+### §5 Full Pipeline (Real LLM)
 
-| ID | 시나리오 | 검증 포인트 |
-|----|---------|-----------|
-| 5-1 | 단일 IP (Berserk) | tier in S/A/B/C, score > 0, analyses = 4, synthesis 존재 |
-| 5-2 | 3 IP 스모크 | 3개 모두 유효한 tier + score |
-| 5-3 | 피드백 루프 | synthesizer 방문, high confidence → gather 미방문 |
+| ID | Scenario | Verification Points |
+|----|----------|---------------------|
+| 5-1 | Single IP (Berserk) | tier in S/A/B/C, score > 0, analyses = 4, synthesis exists |
+| 5-2 | 3 IP smoke test | All 3 have valid tier + score |
+| 5-3 | Feedback loop | synthesizer visited, high confidence → gather not visited |
 
 ### §6 Plan/Sub-agent NL Integration
 
-| ID | 시나리오 | 검증 포인트 |
-|----|---------|-----------|
-| 6-1 | Plan NL ("계획 세워줘") | create_plan tool 호출, plan_id 반환 |
-| 6-2 | Plan Approve NL ("승인해") | approve_plan tool 호출 |
-| 6-3 | Delegate NL ("병렬로 처리해") | delegate_task tool 호출 |
+| ID | Scenario | Verification Points |
+|----|----------|---------------------|
+| 6-1 | Plan NL ("Make a plan") | create_plan tool called, plan_id returned |
+| 6-2 | Plan Approve NL ("Approve it") | approve_plan tool called |
+| 6-3 | Delegate NL ("Process in parallel") | delegate_task tool called |
 | 6-4 | Plan Offline | regex → plan action |
 | 6-5 | Delegate Offline | regex → delegate action |
 
 ### §C5 Offline Mode
 
-| ID | 검증 포인트 |
-|----|-----------|
+| ID | Verification Points |
+|----|---------------------|
 | offline-list | regex → list action, rounds=1 |
 | offline-analyze | regex → analyze action |
-| offline-help | 미인식 → help fallback |
+| offline-help | unrecognized → help fallback |
 | offline-plan | regex → plan action ("계획", "plan") |
 | offline-delegate | regex → delegate action ("병렬", "parallel") |
 
-## 핵심 패턴
+## Key Patterns
 
-### 1. _make_loop() — 완전한 테스트 환경 구성
+### 1. _make_loop() — Complete test environment setup
 
 ```python
 def _make_loop(*, force_dry_run=False):
-    # 1. ReadinessReport 설정 (force_dry_run 제어)
-    # 2. _build_tool_handlers() → 20개 핸들러 등록 (plan/delegate 포함)
+    # 1. ReadinessReport setup (force_dry_run control)
+    # 2. _build_tool_handlers() → Register 20 handlers (including plan/delegate)
     # 3. ToolExecutor(action_handlers=handlers)
     # 4. AgenticLoop(context, executor)
 ```
 
-**주의**: `ToolExecutor()`를 핸들러 없이 생성하면 모든 tool 호출이 `Unknown tool` 에러 반환. 반드시 `_build_tool_handlers()`로 핸들러를 등록할 것.
+**Note**: Creating `ToolExecutor()` without handlers causes all tool calls to return `Unknown tool` errors. Always register handlers via `_build_tool_handlers()`.
 
-### 2. ReadinessReport — dry-run 제어
+### 2. ReadinessReport — dry-run control
 
 ```python
 readiness = check_readiness()
-readiness.force_dry_run = False  # 실제 LLM 호출 허용
+readiness.force_dry_run = False  # Allow real LLM calls
 readiness.has_api_key = True
 _set_readiness(readiness)
 ```
 
-`_build_tool_handlers()` 내부에서 `_get_readiness().force_dry_run`을 읽어 analyze_ip 등의 dry_run 기본값을 결정함.
+Inside `_build_tool_handlers()`, `_get_readiness().force_dry_run` is read to determine the dry_run default for analyze_ip, etc.
 
-### 3. LangSmith 트레이스 검증
+### 3. LangSmith Trace Verification
 
 ```python
 import time
 from langsmith import Client
 
-time.sleep(3)  # async flush 대기
+time.sleep(3)  # Wait for async flush
 client = Client()
 runs = list(client.list_runs(project_name="geode", limit=5))
 assert any("AgenticLoop" in (r.name or "") for r in runs)
 ```
 
-### 4. 품질 점검 체크리스트
+### 4. Quality Inspection Checklist
 
-라이브 테스트 실행 후 반드시 확인:
+Mandatory checks after running live tests:
 
-- [ ] **Tool 실행 성공**: tool_calls의 result에 `error` 키 없음
-- [ ] **핸들러 등록**: `_build_tool_handlers()` 사용, 빈 ToolExecutor 금지
-- [ ] **ReadinessReport**: `force_dry_run=False` 확인 (라이브 테스트에서)
-- [ ] **토큰 비용**: LangSmith metrics에서 cost_usd 확인
-- [ ] **파이프라인 모드**: `dry-run (no LLM)` vs 실제 모델명 확인
-- [ ] **LangSmith 트레이스**: pending 상태 run이 없는지 확인
-- [ ] **Claude Code UI**: tool call 시 `▸`/`✓`/`✗` 마커 출력 확인
-- [ ] **Plan/Delegate NL**: "계획 세워줘"→plan, "병렬로"→delegate 매핑 확인
+- [ ] **Tool execution success**: No `error` key in tool_calls results
+- [ ] **Handler registration**: Using `_build_tool_handlers()`, no empty ToolExecutor
+- [ ] **ReadinessReport**: Confirmed `force_dry_run=False` (for live tests)
+- [ ] **Token cost**: Check cost_usd in LangSmith metrics
+- [ ] **Pipeline mode**: Confirm `dry-run (no LLM)` vs actual model name
+- [ ] **LangSmith traces**: Verify no pending-state runs
+- [ ] **Claude Code UI**: Confirm `▸`/`✓`/`✗` markers output on tool calls
+- [ ] **Plan/Delegate NL**: Confirm "계획 세워줘"→plan, "병렬로"→delegate mapping
 
-## 환경 변수
+## Environment Variables
 
 ```bash
-# .env (필수)
+# .env (required)
 ANTHROPIC_API_KEY=sk-ant-...
 LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=lsv2_pt_...
 LANGCHAIN_PROJECT=geode
 ```
 
-## 업데이트 규칙
+## Update Rules
 
-기능 변경 시 이 순서로 E2E 테스트를 업데이트:
+When features change, update E2E tests in this order:
 
-1. **시나리오 문서** 갱신: `docs/e2e/e2e-orchestration-scenarios.md`
-2. **Mock 테스트** 갱신: `test_agentic_loop.py`, `test_e2e.py`, `test_e2e_orchestration_live.py`
-3. **Live 테스트** 갱신: `test_e2e_live_llm.py`
-4. **이 스킬** 갱신: 시나리오 매핑 테이블 + 검증 포인트
+1. **Scenario document**: `docs/e2e/e2e-orchestration-scenarios.md`
+2. **Mock tests**: `test_agentic_loop.py`, `test_e2e.py`, `test_e2e_orchestration_live.py`
+3. **Live tests**: `test_e2e_live_llm.py`
+4. **This skill**: Scenario mapping tables + verification points
 
-### 변경 유형별 가이드
+### Per-Change Type Guide
 
-| 변경 | Mock 테스트 | Live 테스트 | 시나리오 문서 |
-|------|-----------|-----------|------------|
-| 새 tool 추가 | ToolExecutor mock 추가 | 1-2류 시나리오 추가 | §1 추가 |
-| 파이프라인 노드 추가 | 5-1류 visited_nodes 갱신 | 5-1류 assert 갱신 | §5 추가 |
-| LLM 어댑터 변경 | 4-* tracing mock 갱신 | 4-2 LangSmith 검증 | §4 갱신 |
-| Offline 패턴 추가 | nl_router regex 테스트 | offline-* 시나리오 추가 | §C5 갱신 |
+| Change | Mock Tests | Live Tests | Scenario Doc |
+|--------|-----------|-----------|--------------|
+| New tool added | Add ToolExecutor mock | Add 1-2 type scenario | Add to §1 |
+| Pipeline node added | Update 5-1 type visited_nodes | Update 5-1 type asserts | Add to §5 |
+| LLM adapter changed | Update 4-* tracing mock | Verify 4-2 LangSmith | Update §4 |
+| Offline pattern added | Test nl_router regex | Add offline-* scenario | Update §C5 |

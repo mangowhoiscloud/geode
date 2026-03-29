@@ -1,44 +1,44 @@
 ---
 name: deep-researcher
-description: 주제에 대해 웹 검색 → 수집 → 분석 → 보고서 생성. "조사해", "리서치", "research", "알아봐", "찾아봐", "트렌드", "동향" 키워드로 트리거.
+description: Systematic web search, collection, analysis, and report generation on a topic. Triggers: 'research', '리서치', '조사해', '알아봐', '찾아봐', '트렌드', '동향'.
 tools: web_search, web_fetch, memory_save
 risk: safe
 ---
 
 # Deep Researcher
 
-주어진 주제에 대해 체계적으로 조사하고 구조화된 보고서를 생성합니다.
+Systematically investigates a given topic and generates a structured report.
 
-## 워크플로우
+## Workflow
 
-1. **주제 분해**: 사용자 요청을 3-5개 검색 쿼리로 분해
-2. **병렬 수집**: web_search로 다각도 검색 (한국어 + 영어)
-3. **심층 수집**: 상위 3-5개 URL을 web_fetch로 본문 수집
-4. **교차 검증**: 2개 이상 소스에서 확인된 정보만 채택
-5. **보고서 생성**: 구조화된 마크다운 보고서 작성
-6. **저장**: memory_save로 프로젝트 메모리에 인사이트 기록
+1. **Topic decomposition**: Break the user request into 3-5 search queries
+2. **Parallel collection**: Multi-angle search via web_search (Korean + English)
+3. **Deep collection**: Fetch body text from top 3-5 URLs via web_fetch
+4. **Cross-validation**: Only adopt information confirmed by 2+ sources
+5. **Report generation**: Write a structured markdown report
+6. **Save**: Record insights to project memory via memory_save
 
-## 보고서 형식
+## Report Format
 
 ```markdown
-## [주제] 조사 보고서
-> 조사일: YYYY-MM-DD | 소스: N개
+## [Topic] Research Report
+> Date: YYYY-MM-DD | Sources: N
 
-### 핵심 발견
-- 발견 1 (출처: ...)
-- 발견 2 (출처: ...)
+### Key Findings
+- Finding 1 (source: ...)
+- Finding 2 (source: ...)
 
-### 상세 분석
-[섹션별 정리]
+### Detailed Analysis
+[Organized by section]
 
-### 출처
-- [제목](URL) — 요약
+### Sources
+- [Title](URL) — Summary
 ```
 
-## 지침
+## Guidelines
 
-- 검색은 최소 3회, 다른 키워드로 수행
-- 단일 소스 의존 금지 — 교차 검증 필수
-- 날짜가 중요한 정보는 최신 소스 우선
-- 추측과 사실을 명확히 구분
-- 보고서는 한국어로 작성 (원문 인용은 원어 유지)
+- Perform at least 3 searches with different keywords
+- No single-source dependency — cross-validation required
+- Prioritize recent sources for time-sensitive information
+- Clearly distinguish speculation from facts
+- Write report in English (keep original-language citations as-is)

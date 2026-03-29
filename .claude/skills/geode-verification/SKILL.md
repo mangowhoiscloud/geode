@@ -1,6 +1,6 @@
 ---
 name: geode-verification
-description: GEODE 검증 시스템 가이드. Guardrails G1-G4 (Schema, Range, Grounding, Consistency), BiasBuster (Confirmation, Recency, Anchoring bias), Cross-LLM 교차 검증, Cause Classification Decision Tree (6 types → 5 actions). "verification", "guardrail", "bias", "biasbuster", "cross-llm", "cause", "검증", "decision tree" 키워드로 트리거.
+description: GEODE verification system guide. Guardrails G1-G4 (Schema, Range, Grounding, Consistency), BiasBuster (Confirmation, Recency, Anchoring bias), Cross-LLM cross-verification, Cause Classification Decision Tree (6 types → 5 actions). Triggers on "verification", "guardrail", "bias", "biasbuster", "cross-llm", "cause", "검증", "decision tree".
 ---
 
 # GEODE Verification System

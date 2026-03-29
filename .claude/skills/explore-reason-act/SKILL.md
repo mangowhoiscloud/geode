@@ -1,72 +1,72 @@
 ---
 name: explore-reason-act
-description: 코드 수정 전 탐색-추론-실행 3단계 필수 워크플로우. Read-before-Write 강제, 근본 원인 가설 수립, 최소 변경 적용. "explore", "탐색", "reason", "추론", "read before write", "근본 원인", "root cause" 키워드로 트리거.
+description: Mandatory 3-phase explore-reason-act workflow before code modification. Enforces read-before-write, root cause hypothesis formulation, minimal change application. Triggered by "explore" ("탐색"), "reason" ("추론"), "read before write", "root cause" ("근본 원인") keywords.
 user-invocable: false
 ---
 
 # Explore-Reason-Act Methodology
 
-코드를 수정하기 전에 반드시 **Explore -> Reason -> Act** 사이클을 따른다.
-탐색 없이 수정하는 것이 잘못된 수정과 반복 실패의 #1 원인이다.
+Before modifying code, always follow the **Explore -> Reason -> Act** cycle.
+Modifying without exploration is the #1 cause of incorrect fixes and repeated failures.
 
 ## Phase 1: Explore (Read Before Write)
 
-코드 변경 전 필수 탐색 패턴:
+Mandatory exploration patterns before code changes:
 
 ```bash
-# 1. 에러 컨텍스트 파악 (실패 파일 + 주변 라인)
+# 1. Understand error context (failing file + surrounding lines)
 grep -rn "ERROR_SYMBOL" core/ tests/ --include="*.py" -l
 
-# 2. 변경 대상 심볼의 모든 사용처 확인
+# 2. Find all usage sites of the target symbol
 grep -rn "ClassName\|function_name" core/ tests/ --include="*.py"
 
-# 3. 의존성 체인 확인
+# 3. Check the dependency chain
 grep -rn "from.*import.*ClassName" core/ --include="*.py"
 
-# 4. 테스트 기대값 확인
+# 4. Check test expectations
 grep -rn "ClassName\|function_name" tests/ --include="*.py"
 ```
 
-규칙:
-- 읽지 않은 파일을 편집하지 않는다
-- grep 확인 없이 심볼 존재를 가정하지 않는다
-- 에러 라인만이 아닌 전체 함수/클래스를 읽는다
-- 최소 2단계 호출자/피호출자를 확인한다
-- 10개 이상 파일에서 동일 에러 시 공통 근본 원인을 찾는다
+Rules:
+- Do not edit a file you have not read
+- Do not assume a symbol exists without grep verification
+- Read the entire function/class, not just the error line
+- Check at least 2 levels of callers/callees
+- If 10+ files have the same error, find the common root cause
 
-## Phase 2: Reason (가설 수립)
+## Phase 2: Reason (Hypothesis Formulation)
 
-수정 코드를 작성하기 전에 명시한다:
+State the following before writing fix code:
 
-1. **관찰**: "파일 A, B, C에서 X를 확인했다"
-2. **가설**: "근본 원인은 Y이다. 근거: Z"
-3. **예측**: "Y를 수정하면 A, B, C의 에러가 동시에 해결된다"
-4. **영향 범위**: "이 변경은 N개 파일 / M개 호출 지점에 영향"
+1. **Observation**: "I confirmed X in files A, B, C"
+2. **Hypothesis**: "The root cause is Y. Evidence: Z"
+3. **Prediction**: "Fixing Y will simultaneously resolve errors in A, B, C"
+4. **Impact scope**: "This change affects N files / M call sites"
 
-금지 패턴:
-- 공통 근본 원인이 있는데 컴파일러 에러를 개별 수정
-- 소스나 문서를 읽지 않고 API 시그니처 추측
-- pyproject.toml/config 확인 없이 의존성 버전 가정
+Prohibited patterns:
+- Fixing compiler errors individually when a common root cause exists
+- Guessing API signatures without reading source or documentation
+- Assuming dependency versions without checking pyproject.toml/config
 
-## Phase 3: Act (최소 변경 적용)
+## Phase 3: Act (Apply Minimal Changes)
 
-1. 근본 원인에 대한 최소 변경만 적용
-2. 변경 직후 즉시 빌드/테스트 실행
-3. 새 에러 발생 시 Phase 1로 복귀 (수정 스택 금지)
-4. 3회 반복 후에도 미해결 시 에스컬레이션
+1. Apply only the minimal change for the root cause
+2. Run build/test immediately after the change
+3. If new errors occur, return to Phase 1 (no stacking fixes)
+4. Escalate if unresolved after 3 iterations
 
 ## Output Contract
 
-모든 수정 시도는 반드시 포함:
-- `exploration_summary`: 무엇을 읽었고 무엇을 발견했는지
-- `hypothesis`: 증거 기반 근본 원인 가설
-- `change_description`: 무엇을 왜 변경했는지
-- `verification`: 변경 후 빌드/테스트 결과
+Every fix attempt must include:
+- `exploration_summary`: What was read and what was discovered
+- `hypothesis`: Evidence-based root cause hypothesis
+- `change_description`: What was changed and why
+- `verification`: Build/test results after the change
 
-## GEODE 적용
+## GEODE Application
 
-| 상황 | Explore | Reason | Act |
-|------|---------|--------|-----|
-| 파이프라인 노드 수정 | `graph.py` + 노드 파일 + state.py 전부 읽기 | Reducer 충돌 가설 | 노드 1개만 수정, stream 테스트 |
-| 도구 추가 | `definitions.json` + `tool_handlers.py` + `tool_executor.py` 읽기 | 기존 도구 패턴 분석 | 패턴 준수 구현, 단위 테스트 |
-| 메모리 변경 | `context.py` + session/project/org 계층 읽기 | 4-tier 조립 순서 확인 | 해당 tier만 수정, 조립 테스트 |
+| Scenario | Explore | Reason | Act |
+|----------|---------|--------|-----|
+| Pipeline node modification | Read `graph.py` + node file + state.py entirely | Reducer conflict hypothesis | Modify only 1 node, stream test |
+| Tool addition | Read `definitions.json` + `tool_handlers.py` + `tool_executor.py` | Analyze existing tool patterns | Implement following the pattern, unit test |
+| Memory change | Read `context.py` + session/project/org hierarchy | Verify 4-tier assembly order | Modify only the relevant tier, assembly test |
