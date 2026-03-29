@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-29 (세션 46 — system-hardening 착수)
+> 마지막 갱신: 2026-03-29 (세션 46 — system-hardening 완료, v0.35.1)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -50,7 +50,6 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| system-hardening | System Hardening — C1-C4 + H1-H9 + M1 + Scheduler daemon | @mangowhoiscloud | feature/system-hardening | 2026-03-29 | 감사 결과 기반 |
 
 ### In Review
 
@@ -58,6 +57,10 @@
 |---------|----------|-----|------|-----|------|
 
 ### Done (2026-03-29 — 세션 46)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| system-hardening | System Hardening — C1-C4 + H1-H8 + M1 (11 fixes) | #526 | @mangowhoiscloud | 2026-03-29 |
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
