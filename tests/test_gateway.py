@@ -391,11 +391,12 @@ class TestAllowedToolsEnforcement:
 
 class TestLaneQueueIntegration:
     def test_route_with_lane_queue(self):
-        """Messages should flow through gateway lane when available."""
-        from core.orchestration.lane_queue import LaneQueue
+        """Messages should flow through session + global lanes."""
+        from core.orchestration.lane_queue import LaneQueue, SessionLane
 
         lq = LaneQueue()
-        lq.add_lane("gateway", max_concurrent=2)
+        lq.set_session_lane(SessionLane(max_sessions=10))
+        lq.add_lane("global", max_concurrent=8)
 
         manager = ChannelManager(lane_queue=lq)
         manager.set_processor(lambda c, m: f"processed: {c}")
