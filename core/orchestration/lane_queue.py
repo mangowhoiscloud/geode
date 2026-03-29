@@ -30,7 +30,7 @@ class Lane:
     """A single concurrency lane with semaphore-based limiting.
 
     Usage:
-        lane = Lane("global", max_concurrent=4)
+        lane = Lane("global", max_concurrent=8)
         with lane.acquire("ip:berserk:analysis"):
             # ... do work ...
     """

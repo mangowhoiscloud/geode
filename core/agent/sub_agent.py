@@ -274,6 +274,24 @@ class SubAgentManager:
         if not tasks:
             return []
 
+        # Explicit depth guard (defense-in-depth alongside denied_tools)
+        if self._depth >= self._max_depth:
+            log.warning(
+                "Sub-agent depth limit reached (%d/%d), rejecting %d tasks",
+                self._depth,
+                self._max_depth,
+                len(tasks),
+            )
+            return [
+                SubResult(
+                    task_id=t.task_id,
+                    description=t.description,
+                    success=False,
+                    error=f"Depth limit exceeded ({self._depth}/{self._max_depth})",
+                )
+                for t in tasks
+            ]
+
         tasks = self._deduplicate(tasks)
         if not tasks:
             log.info("All tasks coalesced — nothing to execute")
