@@ -156,31 +156,33 @@ class IPCClient:
         text: str,
         *,
         on_stream: Any = None,
+        on_event: Any = None,
     ) -> dict[str, Any]:
         """Send a prompt and wait for the result.
 
-        When *on_stream* is provided (callable(str) -> None), intermediate
-        ``{"type": "stream"}`` messages are passed to it in real-time so the
-        thin client can render agentic UI (tool calls, results, tokens)
-        progressively.
+        Callbacks:
+            on_stream(data: str): raw console output (ANSI-styled text)
+            on_event(event: dict): structured events (tool_start, tool_end)
 
         Returns the final ``{"type": "result", ...}`` dict.
-        On error, returns ``{"type": "error", "message": "..."}``.
         """
         if not self._sock:
             return {"type": "error", "message": "Not connected"}
         self._send({"type": "prompt", "text": text})
 
-        # Read messages until the final result arrives
         while True:
             response = self._recv()
             if response is None:
                 return {"type": "error", "message": "Connection lost"}
-            if response.get("type") == "stream":
+            rtype = response.get("type", "")
+            if rtype == "stream":
                 if on_stream is not None:
                     on_stream(response.get("data", ""))
                 continue
-            # Any non-stream message is the final response
+            if rtype in ("tool_start", "tool_end"):
+                if on_event is not None:
+                    on_event(response)
+                continue
             return response
 
     def send_command(self, cmd: str, args: str = "") -> dict[str, Any]:

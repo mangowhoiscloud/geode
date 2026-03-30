@@ -20,11 +20,18 @@ Usage::
 from __future__ import annotations
 
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from core.cli.ui.console import console
+
+# Thread-local IPC writer for structured tool events.
+# When set (by CLIPoller._run_prompt_streaming), OperationLogger sends
+# tool_start/tool_end events instead of console.print — enabling the
+# thin client to render per-tool spinners with in-place ✓ updates.
+_ipc_writer_local = threading.local()
 
 # ───────────────────────────────────────────────────────────────────────────
 # SessionMeter — session-level timing for status line
@@ -140,22 +147,39 @@ class OperationLogger:
 
     def log_tool_call(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         """Log a tool call. Returns True if visible, False if collapsed."""
+        tool_id = self._total_tool_count
         self._total_tool_count += 1
         self._tool_type_counts[tool_name] = self._tool_type_counts.get(tool_name, 0) + 1
         if self._quiet:
             return False
+
+        # Build args preview string
+        args_parts: list[str] = []
+        for k, v in tool_input.items():
+            if isinstance(v, str):
+                args_parts.append(f'{k}="{v}"')
+            elif isinstance(v, bool):
+                args_parts.append(f"{k}={str(v).lower()}")
+            elif isinstance(v, dict):
+                args_parts.append(f"{k}={json.dumps(v, ensure_ascii=False)}")
+            else:
+                args_parts.append(f"{k}={v}")
+        args_str = ", ".join(args_parts)
+
+        # IPC mode: send structured event (client renders spinner + ✓)
+        writer = getattr(_ipc_writer_local, "writer", None)
+        if writer is not None:
+            writer.send_event(
+                "tool_start",
+                id=tool_id,
+                name=tool_name,
+                args_preview=args_str[:120],
+            )
+            self._visible_count += 1
+            return True
+
+        # Direct mode: console.print
         if self._visible_count < self.COLLAPSE_THRESHOLD:
-            args_parts: list[str] = []
-            for k, v in tool_input.items():
-                if isinstance(v, str):
-                    args_parts.append(f'{k}="{v}"')
-                elif isinstance(v, bool):
-                    args_parts.append(f"{k}={str(v).lower()}")
-                elif isinstance(v, dict):
-                    args_parts.append(f"{k}={json.dumps(v, ensure_ascii=False)}")
-                else:
-                    args_parts.append(f"{k}={v}")
-            args_str = ", ".join(args_parts)
             console.print(
                 f"  ⎿ [tool_name]▸ {tool_name}[/tool_name]([tool_args]{args_str}[/tool_args])"
             )
@@ -171,15 +195,27 @@ class OperationLogger:
 
         Also tracks per-type last summary for grouped finalize display.
         """
-        # Build summary string (needed for both visible rendering and grouping)
         summary = self._build_result_summary(tool_name, result)
-
-        # Track per-type last summary for grouped display
         self._tool_type_last_summary[tool_name] = summary
 
         if not visible or self._quiet:
             return
-        if result.get("error"):
+
+        is_error = bool(result.get("error"))
+
+        # IPC mode: send structured event
+        writer = getattr(_ipc_writer_local, "writer", None)
+        if writer is not None:
+            writer.send_event(
+                "tool_end",
+                name=tool_name,
+                summary=summary[:80],
+                error=result.get("error", "") if is_error else "",
+            )
+            return
+
+        # Direct mode: console.print
+        if is_error:
             console.print(f"  ⎿ [error]✗ {tool_name}[/error] — {result['error']}")
             return
         console.print(f"  ⎿ [success]✓ {tool_name}[/success] → {summary}")

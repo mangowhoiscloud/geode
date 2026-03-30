@@ -56,12 +56,19 @@ class _StreamingWriter:
     def write(self, text: str) -> int:
         if not text:
             return 0
+        self._send_json({"type": "stream", "data": text})
+        return len(text)
+
+    def send_event(self, event_type: str, **data: Any) -> None:
+        """Send a structured event (tool_start, tool_end, etc.)."""
+        self._send_json({"type": event_type, **data})
+
+    def _send_json(self, obj: dict[str, Any]) -> None:
         try:
-            payload = json.dumps({"type": "stream", "data": text}, ensure_ascii=False) + "\n"
+            payload = json.dumps(obj, ensure_ascii=False) + "\n"
             self._client.sendall(payload.encode("utf-8"))
         except (BrokenPipeError, ConnectionResetError, OSError):
-            pass  # client disconnected — silently drop
-        return len(text)
+            pass
 
     def flush(self) -> None:
         pass
@@ -275,6 +282,7 @@ class CLIPoller:
         experience.  After completion, the console is restored and a
         final ``result`` message is sent.
         """
+        from core.cli.ui.agentic_ui import _ipc_writer_local
         from core.cli.ui.console import redirect_console
 
         # Enable agentic UI for this run (same as old REPL)
@@ -287,6 +295,9 @@ class CLIPoller:
         # Redirect console + spinner output to streaming writer
         writer = _StreamingWriter(client) if client else None
         _redirect = redirect_console(writer) if writer else None
+        # Set IPC writer for OperationLogger structured events
+        if writer:
+            _ipc_writer_local.writer = writer
 
         try:
             if _redirect:
@@ -300,6 +311,8 @@ class CLIPoller:
         finally:
             if _redirect:
                 _redirect.__exit__(None, None, None)
+            if writer:
+                _ipc_writer_local.writer = None
             loop._quiet = old_quiet
             if old_op_quiet is not None:
                 loop._op_logger._quiet = old_quiet
