@@ -1,8 +1,9 @@
 """CLI Poller — Unix domain socket server for thin CLI client IPC.
 
-Accepts a single CLI client connection at a time. Each connected client
-gets a REPL-mode session backed by serve's SharedServices (same MCP,
-skills, hooks, memory as Slack/Discord pollers).
+Accepts multiple concurrent CLI client connections. Each connected client
+gets an independent IPC session backed by serve's SharedServices (same MCP,
+skills, hooks, memory as Slack/Discord pollers). SessionLane per-key
+serialization ensures same-session ordering; different sessions run in parallel.
 
 Protocol: line-delimited JSON over Unix domain socket.
 
@@ -101,7 +102,8 @@ class CLIPoller:
         self._server: socket.socket | None = None
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
-        self._active_client: socket.socket | None = None
+        self._active_clients: set[socket.socket] = set()
+        self._clients_lock = threading.Lock()
         self._scheduler_service = scheduler_service
 
     @property
@@ -125,7 +127,7 @@ class CLIPoller:
         self._server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._server.bind(str(self._socket_path))
         os.chmod(str(self._socket_path), 0o600)  # User-only access
-        self._server.listen(1)
+        self._server.listen(5)  # backlog for concurrent CLI connections
         self._server.settimeout(1.0)
 
         self._stop_event.clear()
@@ -142,9 +144,11 @@ class CLIPoller:
         import contextlib
 
         self._stop_event.set()
-        if self._active_client:
-            with contextlib.suppress(OSError):
-                self._active_client.close()
+        with self._clients_lock:
+            for client in list(self._active_clients):
+                with contextlib.suppress(OSError):
+                    client.close()
+            self._active_clients.clear()
         if self._server:
             with contextlib.suppress(OSError):
                 self._server.close()
@@ -157,22 +161,40 @@ class CLIPoller:
         log.info("CLI channel stopped")
 
     def _accept_loop(self) -> None:
-        """Accept loop — one client at a time."""
+        """Accept loop — spawns a handler thread per client."""
         while not self._stop_event.is_set():
             try:
                 assert self._server is not None
                 client, _ = self._server.accept()
-                self._active_client = client
-                log.info("CLI client connected")
-                self._handle_client(client)
+                with self._clients_lock:
+                    self._active_clients.add(client)
+                log.info("CLI client connected (%d active)", len(self._active_clients))
+                t = threading.Thread(
+                    target=self._client_thread,
+                    args=(client,),
+                    name=f"geode-cli-{os.urandom(2).hex()}",
+                    daemon=True,
+                )
+                t.start()
             except TimeoutError:
                 continue
             except OSError:
                 if not self._stop_event.is_set():
                     log.warning("CLI accept error", exc_info=True)
                 break
-            finally:
-                self._active_client = None
+
+    def _client_thread(self, client: socket.socket) -> None:
+        """Run _handle_client and clean up on exit."""
+        try:
+            self._handle_client(client)
+        finally:
+            with self._clients_lock:
+                self._active_clients.discard(client)
+            import contextlib
+
+            with contextlib.suppress(OSError):
+                client.close()
+            log.info("CLI client session ended (%d active)", len(self._active_clients))
 
     def _handle_client(self, client: socket.socket) -> None:
         """Handle a connected CLI client session.
