@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-31 (세션 51 — UI/UX 마감)
+> 마지막 갱신: 2026-03-31 (세션 51 — UI/UX polish 완료)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -54,12 +54,17 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| ui-ux-polish | UI/UX 마감 — CLI 출력 폴리싱 + 사용자 경험 개선 | @mangowhoiscloud | feature/ui-ux-polish | 2026-03-31 | 세션 51 |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-03-31 — 세션 51)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| ui-ux-polish | CLI UI/UX 간소화 — Claude Code-style status line, finalize IPC 가드, session cost compact | #568 | @mangowhoiscloud | 2026-03-31 |
 
 ### Done (2026-03-30 — 세션 50)
 
