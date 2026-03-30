@@ -497,6 +497,22 @@ def scoring_node(state: GeodeState) -> dict[str, Any]:
             momentum=momentum,
         )
 
+        # B4: degraded results penalty — reduce confidence proportionally
+        degraded_analysts = sum(1 for a in analyses if getattr(a, "is_degraded", False))
+        degraded_evals = sum(1 for e in evaluations.values() if getattr(e, "is_degraded", False))
+        total_sources = len(analyses) + len(evaluations)
+        degraded_count = degraded_analysts + degraded_evals
+        if degraded_count > 0 and total_sources > 0:
+            penalty = 1.0 - (degraded_count / total_sources) * 0.5
+            confidence = confidence * penalty
+            log.warning(
+                "B4: %d/%d sources degraded — confidence penalty %.2f → %.1f",
+                degraded_count,
+                total_sources,
+                penalty,
+                confidence,
+            )
+
         # Clamp all subscores to [0, 100] for normalization safety
         quality_score = max(0.0, min(100.0, quality_score))
         recovery = max(0.0, min(100.0, recovery))

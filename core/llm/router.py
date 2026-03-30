@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os as _os
+import random
 import re
 import time
 from collections.abc import Callable, Iterator
@@ -285,6 +286,7 @@ async def call_with_failover(
         return None, None
 
     last_error: Exception | None = None
+    _t0_failover = time.monotonic()
 
     for model_idx, current_model in enumerate(allowed_models):
         for attempt in range(_max_retries):
@@ -301,7 +303,8 @@ async def call_with_failover(
                 return None, None
             except _RETRYABLE_ERRORS as exc:
                 last_error = exc
-                wait = min(_base_delay * (2**attempt), _max_delay)
+                wait = random.uniform(0, min(_base_delay * (2**attempt), _max_delay))
+                _elapsed = time.monotonic() - _t0_failover
                 log.debug(
                     "Failover: model=%s attempt=%d/%d error=%s, retrying in %.1fs",
                     current_model,
@@ -309,6 +312,18 @@ async def call_with_failover(
                     _max_retries,
                     type(exc).__name__,
                     wait,
+                )
+                # Emit retry_wait event for UX (elapsed timer + interrupt hint)
+                _fire_hook(
+                    "retry_wait",
+                    {
+                        "model": current_model,
+                        "attempt": attempt + 1,
+                        "max_retries": _max_retries,
+                        "delay_s": wait,
+                        "elapsed_s": _elapsed,
+                        "error_type": type(exc).__name__,
+                    },
                 )
                 if attempt < _max_retries - 1:
                     await _asyncio.sleep(wait)
@@ -462,6 +477,64 @@ def _retry_provider_aware(
     )
 
 
+T_Result = TypeVar("T_Result")
+
+
+def _cross_provider_dispatch(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
+    primary_provider: str,
+    primary_model: str,
+    dispatch_fn: Callable[[str, str], T_Result],
+    function_name: str,
+) -> T_Result:
+    """Execute dispatch_fn(provider, model) with opt-in cross-provider fallback.
+
+    When ``settings.llm_cross_provider_failover`` is True and the primary
+    provider chain is exhausted, iterates through ``llm_cross_provider_order``
+    trying each remaining provider's primary model.
+    """
+    providers: list[tuple[str, str]] = [(primary_provider, primary_model)]
+    if settings.llm_cross_provider_failover:
+        for p in settings.llm_cross_provider_order:
+            if p != primary_provider:
+                chain = _get_fallback_chain(p)
+                if chain:
+                    providers.append((p, chain[0]))
+
+    last_exc: Exception | None = None
+    for idx, (provider, model) in enumerate(providers):
+        try:
+            return dispatch_fn(provider, model)
+        except Exception as exc:
+            last_exc = exc
+            if idx < len(providers) - 1:
+                next_p, next_m = providers[idx + 1]
+                log.warning(
+                    "Cross-provider fallback: %s(%s) -> %s(%s) [%s]",
+                    provider,
+                    model,
+                    next_p,
+                    next_m,
+                    function_name,
+                )
+                _fire_hook(
+                    "fallback_cross_provider",
+                    {
+                        "from_provider": provider,
+                        "to_provider": next_p,
+                        "from_model": model,
+                        "to_model": next_m,
+                        "function": function_name,
+                        "error": str(exc),
+                    },
+                )
+                continue
+            raise
+
+    # Unreachable when providers is non-empty; satisfies type checker
+    assert last_exc is not None
+    raise last_exc
+
+
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -507,7 +580,7 @@ def call_llm(
     """Synchronous LLM call with provider-aware routing and failover.
 
     Routes to Anthropic, OpenAI, or GLM SDK based on the model name.
-    Returns text content.
+    Returns text content. Supports cross-provider fallback when enabled.
     """
     target_model = model or settings.model
     provider = _resolve_provider(target_model)
@@ -515,85 +588,80 @@ def call_llm(
     if seed is not None:
         log.info("Reproducibility seed=%d requested (logged for auditing)", seed)
 
-    # Hook: LLM_CALL_START
-    _fire_hook(
-        "llm_call_start",
-        {"model": target_model, "provider": provider, "function": "call_llm"},
-    )
-    t0 = time.monotonic()
+    def _dispatch(p: str, m: str) -> str:
+        _fire_hook(
+            "llm_call_start",
+            {"model": m, "provider": p, "function": "call_llm"},
+        )
+        t0 = time.monotonic()
+        try:
+            if p != "anthropic":
+                oa_client = _get_provider_client(p)
 
-    try:
-        # Non-Anthropic providers: use OpenAI-compatible SDK
-        if provider != "anthropic":
-            oa_client = _get_provider_client(provider)
+                def _do_call_openai(*, model: str) -> str:
+                    response = oa_client.chat.completions.create(
+                        model=model,
+                        max_completion_tokens=max_tokens,
+                        temperature=temperature,
+                        messages=[
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        timeout=120.0,
+                    )
+                    _record_openai_usage(response, model)
+                    choice = response.choices[0]
+                    return choice.message.content or ""
 
-            def _do_call_openai(*, model: str) -> str:
-                response = oa_client.chat.completions.create(
-                    model=model,
-                    max_completion_tokens=max_tokens,
-                    temperature=temperature,
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    timeout=120.0,
-                )
-                _record_openai_usage(response, model)
-                choice = response.choices[0]
-                return choice.message.content or ""
+                result: str = _retry_provider_aware(_do_call_openai, model=m, provider=p)
+            else:
+                client = get_anthropic_client()
+                system_cached = _system_with_cache(system)
 
-            result: str = _retry_provider_aware(
-                _do_call_openai, model=target_model, provider=provider
+                def _do_call(*, model: str) -> str:
+                    response = client.messages.create(
+                        model=model,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        system=system_cached,
+                        messages=[{"role": "user", "content": user}],
+                    )
+                    _record_response_usage(response, model)
+
+                    block = response.content[0]
+                    if not hasattr(block, "text"):
+                        raise TypeError(f"Expected TextBlock, got {type(block)}")
+                    return block.text
+
+                result = _retry_with_backoff(_do_call, model=m)
+        except Exception as exc:
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            _fire_hook(
+                "llm_call_end",
+                {
+                    "model": m,
+                    "provider": p,
+                    "function": "call_llm",
+                    "latency_ms": elapsed_ms,
+                    "error": str(exc),
+                },
             )
-        else:
-            # Anthropic path (original)
-            client = get_anthropic_client()
-            system_cached = _system_with_cache(system)
+            raise
 
-            def _do_call(*, model: str) -> str:
-                response = client.messages.create(
-                    model=model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    system=system_cached,
-                    messages=[{"role": "user", "content": user}],
-                )
-                _record_response_usage(response, model)
-
-                block = response.content[0]
-                if not hasattr(block, "text"):
-                    raise TypeError(f"Expected TextBlock, got {type(block)}")
-                return block.text
-
-            result = _retry_with_backoff(_do_call, model=target_model)
-    except Exception as exc:
-        # Hook: LLM_CALL_END (error)
         elapsed_ms = (time.monotonic() - t0) * 1000
         _fire_hook(
             "llm_call_end",
             {
-                "model": target_model,
-                "provider": provider,
+                "model": m,
+                "provider": p,
                 "function": "call_llm",
                 "latency_ms": elapsed_ms,
-                "error": str(exc),
+                "error": None,
             },
         )
-        raise
+        return result
 
-    # Hook: LLM_CALL_END (success)
-    elapsed_ms = (time.monotonic() - t0) * 1000
-    _fire_hook(
-        "llm_call_end",
-        {
-            "model": target_model,
-            "provider": provider,
-            "function": "call_llm",
-            "latency_ms": elapsed_ms,
-            "error": None,
-        },
-    )
-    return result
+    return _cross_provider_dispatch(provider, target_model, _dispatch, "call_llm")
 
 
 @maybe_traceable(run_type="llm", name="call_llm_parsed")  # type: ignore[untyped-decorator]
@@ -606,101 +674,99 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
     max_tokens: int = 4096,
     temperature: float = 0.3,
 ) -> T:
-    """LLM call with provider-aware structured output routing."""
+    """LLM call with provider-aware structured output routing.
+
+    Supports cross-provider fallback when enabled.
+    """
     target_model = model or settings.model
     provider = _resolve_provider(target_model)
 
-    # Hook: LLM_CALL_START
-    _fire_hook(
-        "llm_call_start",
-        {"model": target_model, "provider": provider, "function": "call_llm_parsed"},
-    )
-    t0 = time.monotonic()
+    def _dispatch(p: str, m: str) -> T:
+        _fire_hook(
+            "llm_call_start",
+            {"model": m, "provider": p, "function": "call_llm_parsed"},
+        )
+        t0 = time.monotonic()
+        try:
+            if p != "anthropic":
+                oa_client = _get_provider_client(p)
 
-    try:
-        # Non-Anthropic providers: use OpenAI-compatible beta.chat.completions.parse()
-        if provider != "anthropic":
-            oa_client = _get_provider_client(provider)
-
-            def _do_call_openai(*, model: str) -> T:
-                response = oa_client.beta.chat.completions.parse(
-                    model=model,
-                    max_completion_tokens=max_tokens,
-                    temperature=temperature,
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    response_format=output_model,
-                    timeout=120.0,
-                )
-                _record_openai_usage(response, model, label="parsed")
-
-                choice = response.choices[0]
-                if choice.message.parsed is None:
-                    raise ValueError(
-                        "LLM returned no structured output. "
-                        "Verify the prompt constrains the response format "
-                        "and the Pydantic model matches the schema."
+                def _do_call_openai(*, model: str) -> T:
+                    response = oa_client.beta.chat.completions.parse(
+                        model=model,
+                        max_completion_tokens=max_tokens,
+                        temperature=temperature,
+                        messages=[
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        response_format=output_model,
+                        timeout=120.0,
                     )
-                return choice.message.parsed  # type: ignore[no-any-return]
+                    _record_openai_usage(response, model, label="parsed")
 
-            result: T = _retry_provider_aware(
-                _do_call_openai, model=target_model, provider=provider
+                    choice = response.choices[0]
+                    if choice.message.parsed is None:
+                        raise ValueError(
+                            "LLM returned no structured output. "
+                            "Verify the prompt constrains the response format "
+                            "and the Pydantic model matches the schema."
+                        )
+                    return choice.message.parsed  # type: ignore[no-any-return]
+
+                result: T = _retry_provider_aware(_do_call_openai, model=m, provider=p)
+            else:
+                client = get_anthropic_client()
+                system_cached = _system_with_cache(system)
+
+                def _do_call(*, model: str) -> T:
+                    response = client.messages.parse(
+                        model=model,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        system=system_cached,
+                        messages=[{"role": "user", "content": user}],
+                        output_format=output_model,
+                    )
+                    _record_response_usage(response, model, label="parsed")
+
+                    if response.parsed_output is None:
+                        raise ValueError(
+                            "LLM returned no structured output. "
+                            "Verify the prompt constrains the response format "
+                            "and the Pydantic model matches the schema."
+                        )
+                    return response.parsed_output
+
+                result = _retry_with_backoff(_do_call, model=m)
+        except Exception as exc:
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            _fire_hook(
+                "llm_call_end",
+                {
+                    "model": m,
+                    "provider": p,
+                    "function": "call_llm_parsed",
+                    "latency_ms": elapsed_ms,
+                    "error": str(exc),
+                },
             )
-        else:
-            # Anthropic path (original)
-            client = get_anthropic_client()
-            system_cached = _system_with_cache(system)
+            raise
 
-            def _do_call(*, model: str) -> T:
-                response = client.messages.parse(
-                    model=model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    system=system_cached,
-                    messages=[{"role": "user", "content": user}],
-                    output_format=output_model,
-                )
-                _record_response_usage(response, model, label="parsed")
-
-                if response.parsed_output is None:
-                    raise ValueError(
-                        "LLM returned no structured output. "
-                        "Verify the prompt constrains the response format "
-                        "and the Pydantic model matches the schema."
-                    )
-                return response.parsed_output
-
-            result = _retry_with_backoff(_do_call, model=target_model)
-    except Exception as exc:
-        # Hook: LLM_CALL_END (error)
         elapsed_ms = (time.monotonic() - t0) * 1000
         _fire_hook(
             "llm_call_end",
             {
-                "model": target_model,
-                "provider": provider,
+                "model": m,
+                "provider": p,
                 "function": "call_llm_parsed",
                 "latency_ms": elapsed_ms,
-                "error": str(exc),
+                "error": None,
             },
         )
-        raise
+        return result
 
-    # Hook: LLM_CALL_END (success)
-    elapsed_ms = (time.monotonic() - t0) * 1000
-    _fire_hook(
-        "llm_call_end",
-        {
-            "model": target_model,
-            "provider": provider,
-            "function": "call_llm_parsed",
-            "latency_ms": elapsed_ms,
-            "error": None,
-        },
-    )
-    return result
+    return _cross_provider_dispatch(provider, target_model, _dispatch, "call_llm_parsed")
 
 
 @maybe_traceable(run_type="llm", name="call_llm_json")  # type: ignore[untyped-decorator]
@@ -762,192 +828,185 @@ def call_llm_with_tools(
     temperature: float = 0.3,
     max_tool_rounds: int = 5,
 ) -> ToolUseResult:
-    """LLM call with tool-use loop and provider-aware routing."""
+    """LLM call with tool-use loop and provider-aware routing.
+
+    Supports cross-provider fallback when enabled.
+    """
     target_model = model or settings.model
     provider = _resolve_provider(target_model)
 
-    # Hook: LLM_CALL_START
-    _fire_hook(
-        "llm_call_start",
-        {"model": target_model, "provider": provider, "function": "call_llm_with_tools"},
-    )
-    t0_tools = time.monotonic()
+    def _dispatch(p: str, m: str) -> ToolUseResult:
+        _fire_hook(
+            "llm_call_start",
+            {"model": m, "provider": p, "function": "call_llm_with_tools"},
+        )
+        t0_tools = time.monotonic()
 
-    try:
-        # Non-Anthropic providers: delegate to OpenAIAdapter.generate_with_tools
-        if provider != "anthropic":
-            from core.llm.providers.openai import OpenAIAdapter
+        try:
+            if p != "anthropic":
+                from core.llm.providers.openai import OpenAIAdapter
 
-            adapter = OpenAIAdapter(default_model=target_model)
-            # Override client for GLM provider
-            if provider == "glm":
-                from core.llm.providers import openai as _openai_provider
+                adapter = OpenAIAdapter(default_model=m)
+                if p == "glm":
+                    from core.llm.providers import openai as _openai_provider
 
-                orig_get = _openai_provider._get_openai_client
+                    orig_get = _openai_provider._get_openai_client
 
-                def _glm_client_override() -> Any:
-                    return _get_provider_client("glm")
+                    def _glm_client_override() -> Any:
+                        return _get_provider_client("glm")
 
-                _openai_provider._get_openai_client = _glm_client_override
-                try:
-                    oai_result: ToolUseResult = adapter.generate_with_tools(
+                    _openai_provider._get_openai_client = _glm_client_override
+                    try:
+                        oai_result: ToolUseResult = adapter.generate_with_tools(
+                            system,
+                            user,
+                            tools=tools,
+                            tool_executor=tool_executor,
+                            model=m,
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            max_tool_rounds=max_tool_rounds,
+                        )
+                    finally:
+                        _openai_provider._get_openai_client = orig_get
+                    tools_result = oai_result
+                else:
+                    oai_result2: ToolUseResult = adapter.generate_with_tools(
                         system,
                         user,
                         tools=tools,
                         tool_executor=tool_executor,
-                        model=target_model,
+                        model=m,
                         max_tokens=max_tokens,
                         temperature=temperature,
                         max_tool_rounds=max_tool_rounds,
                     )
-                finally:
-                    _openai_provider._get_openai_client = orig_get
-                tools_result = oai_result
+                    tools_result = oai_result2
             else:
-                oai_result2: ToolUseResult = adapter.generate_with_tools(
-                    system,
-                    user,
-                    tools=tools,
-                    tool_executor=tool_executor,
-                    model=target_model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    max_tool_rounds=max_tool_rounds,
-                )
-                tools_result = oai_result2
-        else:
-            # Anthropic path (original)
-            client = get_anthropic_client()
-            system_cached = _system_with_cache(system)
+                client = get_anthropic_client()
+                system_cached = _system_with_cache(system)
 
-            all_tool_calls: list[ToolCallRecord] = []
-            all_usage: list[LLMUsage] = []
-            messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
+                all_tool_calls: list[ToolCallRecord] = []
+                all_usage: list[LLMUsage] = []
+                messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
 
-            # Apply cache_control to tool definitions for Anthropic prompt caching
-            cached_tools: list[dict[str, Any]] = []
-            for i, tool in enumerate(tools):
-                tool_copy = dict(tool)
-                if i == len(tools) - 1:
-                    tool_copy["cache_control"] = {"type": "ephemeral"}
-                cached_tools.append(tool_copy)
-            tools = cached_tools
+                cached_tools: list[dict[str, Any]] = []
+                for i, tool in enumerate(tools):
+                    tool_copy = dict(tool)
+                    if i == len(tools) - 1:
+                        tool_copy["cache_control"] = {"type": "ephemeral"}
+                    cached_tools.append(tool_copy)
+                tools_for_api = cached_tools
 
-            for round_idx in range(max_tool_rounds):
-                is_last_round = round_idx == max_tool_rounds - 1
-                tool_choice: dict[str, str] | None = (
-                    {"type": "none"} if is_last_round else {"type": "auto"}
-                )
-
-                def _do_call(
-                    *,
-                    model: str,
-                    _tc: dict[str, str] | None = tool_choice,
-                ) -> Any:
-                    return client.messages.create(  # type: ignore[call-overload]
-                        model=model,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        system=system_cached,
-                        messages=messages,
-                        tools=tools,
-                        tool_choice=_tc,
+                for round_idx in range(max_tool_rounds):
+                    is_last_round = round_idx == max_tool_rounds - 1
+                    tool_choice: dict[str, str] | None = (
+                        {"type": "none"} if is_last_round else {"type": "auto"}
                     )
 
-                response = _retry_with_backoff(_do_call, model=target_model)
+                    def _do_call(
+                        *,
+                        model: str,
+                        _tc: dict[str, str] | None = tool_choice,
+                    ) -> Any:
+                        return client.messages.create(  # type: ignore[call-overload]
+                            model=model,
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            system=system_cached,
+                            messages=messages,
+                            tools=tools_for_api,
+                            tool_choice=_tc,
+                        )
 
-                # Track usage
-                usage = _record_response_usage(response, target_model, label="tools")
-                if usage is not None:
-                    all_usage.append(usage)
+                    response = _retry_with_backoff(_do_call, model=m)
 
-                # Check if model wants to use tools
-                if response.stop_reason != "tool_use":
-                    # Extract final text
-                    text = ""
-                    for block in response.content:
-                        if hasattr(block, "text"):
-                            text += block.text
+                    usage = _record_response_usage(response, m, label="tools")
+                    if usage is not None:
+                        all_usage.append(usage)
+
+                    if response.stop_reason != "tool_use":
+                        text = ""
+                        for block in response.content:
+                            if hasattr(block, "text"):
+                                text += block.text
+                        tools_result = ToolUseResult(
+                            text=text,
+                            tool_calls=all_tool_calls,
+                            usage=all_usage,
+                            rounds=round_idx + 1,
+                        )
+                        break
+
+                    assistant_content = response.content
+                    tool_result_blocks: list[dict[str, Any]] = []
+
+                    for block in assistant_content:
+                        if block.type != "tool_use":
+                            continue
+                        tool_name = block.name
+                        tool_input = block.input
+                        t0_tool = time.time()
+                        try:
+                            tool_output: dict[str, Any] = tool_executor(tool_name, **tool_input)
+                        except Exception as exc:
+                            log.warning("Tool '%s' execution failed: %s", tool_name, exc)
+                            tool_output = {"error": str(exc)}
+                        elapsed_ms_tool = (time.time() - t0_tool) * 1000
+
+                        all_tool_calls.append(
+                            ToolCallRecord(
+                                tool_name=tool_name,
+                                tool_input=tool_input,
+                                tool_result=tool_output,
+                                duration_ms=elapsed_ms_tool,
+                            )
+                        )
+                        tool_result_blocks.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": json.dumps(tool_output),
+                            }
+                        )
+
+                    messages.append({"role": "assistant", "content": assistant_content})
+                    messages.append({"role": "user", "content": tool_result_blocks})
+                else:
                     tools_result = ToolUseResult(
-                        text=text,
+                        text="",
                         tool_calls=all_tool_calls,
                         usage=all_usage,
-                        rounds=round_idx + 1,
+                        rounds=max_tool_rounds,
                     )
-                    break
+        except Exception as exc:
+            elapsed_ms_total = (time.monotonic() - t0_tools) * 1000
+            _fire_hook(
+                "llm_call_end",
+                {
+                    "model": m,
+                    "provider": p,
+                    "function": "call_llm_with_tools",
+                    "latency_ms": elapsed_ms_total,
+                    "error": str(exc),
+                },
+            )
+            raise
 
-                # Process tool_use blocks
-                assistant_content = response.content
-                tool_result_blocks: list[dict[str, Any]] = []
-
-                for block in assistant_content:
-                    if block.type != "tool_use":
-                        continue
-                    tool_name = block.name
-                    tool_input = block.input
-                    t0_tool = time.time()
-                    try:
-                        tool_output: dict[str, Any] = tool_executor(tool_name, **tool_input)
-                    except Exception as exc:
-                        log.warning("Tool '%s' execution failed: %s", tool_name, exc)
-                        tool_output = {"error": str(exc)}
-                    elapsed_ms_tool = (time.time() - t0_tool) * 1000
-
-                    all_tool_calls.append(
-                        ToolCallRecord(
-                            tool_name=tool_name,
-                            tool_input=tool_input,
-                            tool_result=tool_output,
-                            duration_ms=elapsed_ms_tool,
-                        )
-                    )
-                    tool_result_blocks.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": json.dumps(tool_output),
-                        }
-                    )
-
-                # Append assistant + tool_result messages for next round
-                messages.append({"role": "assistant", "content": assistant_content})
-                messages.append({"role": "user", "content": tool_result_blocks})
-            else:
-                # for-loop exhausted without break — return last state
-                tools_result = ToolUseResult(
-                    text="",
-                    tool_calls=all_tool_calls,
-                    usage=all_usage,
-                    rounds=max_tool_rounds,
-                )
-    except Exception as exc:
-        # Hook: LLM_CALL_END (error)
         elapsed_ms_total = (time.monotonic() - t0_tools) * 1000
         _fire_hook(
             "llm_call_end",
             {
-                "model": target_model,
-                "provider": provider,
+                "model": m,
+                "provider": p,
                 "function": "call_llm_with_tools",
                 "latency_ms": elapsed_ms_total,
-                "error": str(exc),
+                "error": None,
             },
         )
-        raise
+        return tools_result
 
-    # Hook: LLM_CALL_END (success)
-    elapsed_ms_total = (time.monotonic() - t0_tools) * 1000
-    _fire_hook(
-        "llm_call_end",
-        {
-            "model": target_model,
-            "provider": provider,
-            "function": "call_llm_with_tools",
-            "latency_ms": elapsed_ms_total,
-            "error": None,
-        },
-    )
-    return tools_result
+    return _cross_provider_dispatch(provider, target_model, _dispatch, "call_llm_with_tools")
 
 
 @maybe_traceable(run_type="llm", name="call_llm_streaming")  # type: ignore[untyped-decorator]
@@ -1294,6 +1353,8 @@ class AgenticLLMPort(Protocol):
 
     @property
     def fallback_chain(self) -> list[str]: ...
+
+    last_error: Exception | None
 
     async def agentic_call(
         self,

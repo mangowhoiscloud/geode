@@ -26,6 +26,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.38.0] — 2026-03-30
+
+### Added
+- **LLM Resilience Hardening** — 14-item 3-phase plan fully implemented across Agentic Loop, Domain DAG, and shared LLM infrastructure:
+  - **Backoff jitter** (C1) — full jitter (`random.uniform`) replaces deterministic delay, preventing thundering herd.
+  - **Cross-provider failover** (C1-b) — `_cross_provider_dispatch()` in router.py; opt-in via `llm_cross_provider_failover`.
+  - **Degraded fallback** (B1) — retry-exhausted analyst/evaluator/scoring nodes return `is_degraded=True` results instead of crashing the pipeline.
+  - **Pipeline timeout** (B3) — `invoke_with_timeout()` with `PIPELINE_TIMEOUT` hook event. Config: `pipeline_timeout_s` (default 600s).
+  - **Degraded scoring penalty** (B4) — degraded sources proportionally reduce confidence in final score.
+  - **Verification enrichment loop** (B5) — guardrails/biasbuster failure triggers gather loopback (before confidence check).
+  - **Evaluator partial retry** (B6) — non-degraded evaluators skipped on re-iteration (mirrors analyst pattern).
+  - **Iteration history trimming** (B7) — custom reducer caps `iteration_history` at 10 entries.
+  - **Fallback cost ratio** (C2) — `llm_max_fallback_cost_ratio` filters expensive fallback models upfront.
+  - **Error propagation** (B2) — pipeline `state["errors"]` included in MCP caller output.
+  - **Gather retryable** (B8) — gather node added to `_RETRYABLE_NODES`.
+  - **Cost budget hardening** (A2) — specific exceptions, 80% proactive warning, hard termination.
+  - **Checkpoint resume** (A3) — `SessionCheckpoint` per-round save, auto-checkpoint before failures.
+  - **Aggressive context recovery** — continue loop after context exhaustion with summarize + halved-keep prune.
+- **Error classification** — `core/llm/errors.py`: typed error hierarchy (rate limit, auth, billing, context overflow) with severity + hint.
+- **HookSystem 42 events** — `FALLBACK_CROSS_PROVIDER` + `PIPELINE_TIMEOUT` (40 → 42).
+- **Resilience test suite** — 34 new tests covering all resilience scenarios.
+
+### Fixed
+- **Sequential tool rendering duplicates** — `ToolCallTracker` accumulated completed entries across batches, causing stale lines (e.g. `sequentialthinking` showing duplicate spinner rows). Now clears previous batch on new batch start.
+
 ## [0.37.2] — 2026-03-30
 
 ### Added

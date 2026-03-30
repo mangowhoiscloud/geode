@@ -515,7 +515,20 @@ class AgenticLoop:
                 )
             except _ContextExhaustedError as exc:
                 _spinner.stop()
-                log.warning("Context exhausted: %s", exc)
+                log.warning("Context exhausted: %s — attempting aggressive recovery", exc)
+
+                # Aggressive recovery: prune harder + summarize tool results
+                recovered = self._aggressive_context_recovery(system_prompt, messages)
+                if recovered:
+                    self._notify_context_event(
+                        "prune",
+                        original_count=len(messages) + recovered,
+                        new_count=len(messages),
+                    )
+                    log.info("Aggressive recovery succeeded — continuing loop")
+                    continue  # retry LLM call with pruned context
+
+                # Recovery failed — break loop
                 self._notify_context_event(
                     "exhausted",
                     original_count=len(messages),
@@ -524,7 +537,7 @@ class AgenticLoop:
                 self._sync_messages_to_context(messages)
                 result = AgenticResult(
                     text=(
-                        "Context window exhausted after pruning. "
+                        "Context window exhausted after aggressive pruning. "
                         "Your conversation is preserved — start a new request "
                         "or use /compact to manually reduce context."
                     ),
@@ -544,6 +557,28 @@ class AgenticLoop:
                     _ipc_writer.send_event("thinking_end")
 
             if response is None:
+                # Emit classified error for UX (severity + actionable hint)
+                adapter_exc = getattr(self._adapter, "last_error", None)
+                if adapter_exc is not None:
+                    from core.llm.errors import classify_llm_error
+
+                    _et, _sev, _hint = classify_llm_error(adapter_exc)
+                    if not self._quiet:
+                        from core.cli.ui.agentic_ui import emit_llm_error
+
+                        emit_llm_error(
+                            _et,
+                            _sev,
+                            _hint,
+                            self.model,
+                            self._provider,
+                            attempt=self._consecutive_llm_failures + 1,
+                        )
+
+                # Auto-checkpoint before escalation/failure so user can resume
+                self._sync_messages_to_context(messages)
+                self._save_checkpoint(user_input, round_idx=round_idx)
+
                 # Feature 3/4: Model escalation on consecutive LLM failures
                 self._consecutive_llm_failures += 1
                 if self._consecutive_llm_failures >= self._ESCALATION_THRESHOLD:
@@ -564,9 +599,6 @@ class AgenticLoop:
                         )
                         self._consecutive_llm_failures = 0
                         continue
-
-                # Persist intermediate tool-use messages so next turn sees them
-                self._sync_messages_to_context(messages)
                 detail = self._last_llm_error or "unknown error"
                 text = (
                     f"LLM call failed ({detail}). "
@@ -593,6 +625,24 @@ class AgenticLoop:
 
                     _cost_tracker = _get_cost_tracker()
                     _session_cost = _cost_tracker.accumulator.total_cost_usd
+
+                    # Proactive warning at 80% of budget (once per session)
+                    _warn_threshold = self._cost_budget * 0.8
+                    if (
+                        _session_cost >= _warn_threshold
+                        and _session_cost < self._cost_budget
+                        and not getattr(self, "_budget_warned", False)
+                    ):
+                        self._budget_warned = True
+                        if not self._quiet:
+                            from core.cli.ui.agentic_ui import emit_budget_warning
+
+                            emit_budget_warning(
+                                self._cost_budget,
+                                _session_cost,
+                                pct=_session_cost / self._cost_budget * 100,
+                            )
+
                     if _session_cost >= self._cost_budget:
                         from core.cli.ui.agentic_ui import emit_cost_budget_exceeded
 
@@ -909,6 +959,63 @@ class AgenticLoop:
                     original_count=original_count,
                     new_count=len(pruned),
                 )
+
+    def _aggressive_context_recovery(self, system: str, messages: list[dict[str, Any]]) -> int:
+        """Last-resort context recovery: aggressive prune + tool result summarization.
+
+        Called when normal compaction/prune at 95% still leaves context critical.
+        Two-phase approach:
+          1. Summarize large tool results (>5% of window) to compact summaries
+          2. Prune with halved keep_recent (keep fewer messages)
+        Returns number of messages freed, or 0 if recovery failed.
+        """
+        try:
+            from core.config import settings
+            from core.orchestration.context_monitor import (
+                check_context,
+                prune_oldest_messages,
+                summarize_tool_results,
+            )
+
+            original_count = len(messages)
+
+            # Phase 1: summarize large tool_result blocks in-place
+            ctx_window = getattr(
+                check_context(messages, self.model, system_prompt=system),
+                "context_window",
+                200_000,
+            )
+            summarized = summarize_tool_results(messages, ctx_window)
+            if summarized > 0:
+                log.info("Aggressive recovery: summarized %d tool results", summarized)
+
+            # Check if summarization alone resolved it
+            post = check_context(messages, self.model, system_prompt=system)
+            if not post.is_critical:
+                return original_count - len(messages) + summarized
+
+            # Phase 2: prune with halved keep_recent
+            aggressive_keep = max(3, settings.compact_keep_recent // 2)
+            pruned = prune_oldest_messages(messages, keep_recent=aggressive_keep)
+            if len(pruned) < len(messages):
+                messages.clear()
+                messages.extend(pruned)
+                log.info(
+                    "Aggressive prune: %d → %d messages (keep_recent=%d)",
+                    original_count,
+                    len(pruned),
+                    aggressive_keep,
+                )
+
+            # Final check
+            post2 = check_context(messages, self.model, system_prompt=system)
+            if not post2.is_critical:
+                return original_count - len(messages)
+
+            return 0  # recovery failed
+        except Exception:
+            log.warning("Aggressive context recovery failed", exc_info=True)
+            return 0
 
     def _notify_context_event(
         self,

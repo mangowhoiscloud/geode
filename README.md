@@ -12,7 +12,7 @@
 
 [한국어](README.ko.md)
 
-# GEODE v0.37.2 — Long-running Autonomous Execution Harness
+# GEODE v0.38.0 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous execution agent. Performs research, analysis, automation, and scheduling from a single natural-language command.
 

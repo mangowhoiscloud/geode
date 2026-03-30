@@ -75,8 +75,11 @@ CONFIDENCE_THRESHOLD = 0.7
 DEFAULT_MAX_ITERATIONS = 5
 
 # Nodes eligible for node-level retry on failure (Phase 3-A)
-_RETRYABLE_NODES = frozenset({"analyst", "evaluator", "scoring"})
+_RETRYABLE_NODES = frozenset({"analyst", "evaluator", "scoring", "gather"})
 _NODE_MAX_RETRIES = 1
+
+# Nodes that return degraded results instead of crashing the pipeline (B1)
+_DEGRADABLE_NODES = frozenset({"analyst", "evaluator", "scoring"})
 
 # Node → specific hook event mapping
 _NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
@@ -84,6 +87,81 @@ _NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
     "evaluator": HookEvent.EVALUATOR_COMPLETE,
     "scoring": HookEvent.SCORING_COMPLETE,
 }
+
+
+def _make_degraded_result(node_name: str, exc: Exception, state: Any) -> dict[str, Any]:
+    """B1: Return degraded fallback instead of crashing the pipeline.
+
+    Reuses existing degraded patterns from analysts.py / evaluators.py.
+    """
+    from core.state import AnalysisResult, EvaluatorResult
+
+    err_msg = f"{node_name}: {type(exc).__name__}: {exc}"
+
+    if node_name == "analyst":
+        atype = state.get("_analyst_type", "unknown") if isinstance(state, dict) else "unknown"
+        return {
+            "analyses": [
+                AnalysisResult(
+                    analyst_type=atype,
+                    score=1.0,
+                    key_finding="[DEGRADED] Node retry exhausted",
+                    reasoning=str(exc),
+                    evidence=["retry_exhausted"],
+                    confidence=0.0,
+                    is_degraded=True,
+                )
+            ],
+            "errors": [err_msg],
+        }
+
+    if node_name == "evaluator":
+        etype = state.get("_evaluator_type", "unknown") if isinstance(state, dict) else "unknown"
+        _NEUTRAL = 3.0
+        _default_axes: dict[str, dict[str, float]] = {
+            "quality_judge": dict.fromkeys(
+                (
+                    "a_score",
+                    "b_score",
+                    "c_score",
+                    "b1_score",
+                    "c1_score",
+                    "c2_score",
+                    "m_score",
+                    "n_score",
+                ),
+                _NEUTRAL,
+            ),
+            "community_momentum": {
+                "j_score": _NEUTRAL,
+                "k_score": _NEUTRAL,
+                "l_score": _NEUTRAL,
+            },
+        }
+        _hidden = {"d_score": _NEUTRAL, "e_score": _NEUTRAL, "f_score": _NEUTRAL}
+        return {
+            "evaluations": {
+                etype: EvaluatorResult(
+                    evaluator_type=etype,
+                    axes=_default_axes.get(etype, _hidden),
+                    composite_score=0.0,
+                    rationale="[DEGRADED] Node retry exhausted",
+                    is_degraded=True,
+                )
+            },
+            "errors": [err_msg],
+        }
+
+    if node_name == "scoring":
+        return {
+            "final_score": 0.0,
+            "tier": "C",
+            "analyst_confidence": 0.0,
+            "subscores": {},
+            "errors": [err_msg],
+        }
+
+    return {"errors": [err_msg]}
 
 
 def _make_hooked_node(
@@ -238,6 +316,15 @@ def _make_hooked_node(
                     continue
                 hook_data["error"] = str(exc)
                 hooks.trigger(HookEvent.NODE_ERROR, hook_data)
+
+                # B1: degradable nodes return degraded results instead of crashing
+                if node_name in _DEGRADABLE_NODES:
+                    log.warning(
+                        "Node '%s' retry exhausted — returning degraded result",
+                        node_name,
+                    )
+                    return _make_degraded_result(node_name, exc, effective_state)
+
                 hooks.trigger(HookEvent.PIPELINE_ERROR, hook_data)
                 raise
 
@@ -457,14 +544,31 @@ def build_graph(
     # Use injected thresholds via closure for configurability
     def _configured_should_continue(state: GeodeState) -> str:
         guardrails = state.get("guardrails")
-        if guardrails and not guardrails.all_passed:
-            log.warning("Guardrails failed — proceeding in demo mode")
+        biasbuster = state.get("biasbuster")
 
         confidence = state.get("analyst_confidence", 0.0)
         iteration = state.get("iteration", 1)
         max_iter = state.get("max_iterations", max_iterations)
 
         conf_normalized = confidence / 100.0 if confidence > 1.0 else confidence
+
+        # B5: verification failure triggers enrichment loop (before confidence check)
+        verification_failed = (guardrails and not guardrails.all_passed) or (
+            biasbuster and not biasbuster.overall_pass
+        )
+        if verification_failed and iteration < max_iter:
+            log.warning(
+                "Verification failed (guardrails=%s, biasbuster=%s)"
+                " — looping back (iteration %d/%d)",
+                getattr(guardrails, "all_passed", None),
+                getattr(biasbuster, "overall_pass", None),
+                iteration,
+                max_iter,
+            )
+            from core.cli.ui.agentic_ui import emit_feedback_loop
+
+            emit_feedback_loop(iteration, conf_normalized * 100, confidence_threshold * 100)
+            return "gather"
 
         # Dynamic Graph: enrichment_needed lowers confidence threshold
         # to encourage at least one feedback loop for mid-range scores
@@ -636,3 +740,44 @@ def compile_graph(
     # yielding intermediate state dicts after each node execution.
     # Use graph.stream() in CLI/UI layers for real-time progress bars.
     return graph.compile(**compile_kwargs)
+
+
+class PipelineTimeoutError(Exception):
+    """B3: Pipeline execution exceeded configured timeout."""
+
+
+def invoke_with_timeout(
+    graph: CompiledStateGraph[Any, None, Any, Any],
+    state: dict[str, Any],
+    config: Any | None = None,
+    timeout_s: float = 0.0,
+    hooks: HookSystem | None = None,
+) -> Any:
+    """B3: Invoke graph with optional timeout guard.
+
+    Args:
+        timeout_s: Max seconds (0 = use settings.pipeline_timeout_s, negative = no timeout).
+    Returns:
+        Final state dict. On timeout, raises PipelineTimeoutError.
+    """
+    import concurrent.futures
+
+    if timeout_s == 0.0:
+        timeout_s = settings.pipeline_timeout_s
+    if timeout_s <= 0:
+        return graph.invoke(state, config=config)
+
+    def _run() -> Any:
+        return graph.invoke(state, config=config)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_run)
+        try:
+            return future.result(timeout=timeout_s)
+        except concurrent.futures.TimeoutError:
+            log.error("Pipeline timeout after %.0fs", timeout_s)
+            if hooks:
+                hooks.trigger(HookEvent.PIPELINE_TIMEOUT, {"timeout_s": timeout_s})
+            raise PipelineTimeoutError(
+                f"Pipeline execution exceeded {timeout_s}s timeout"
+            ) from None

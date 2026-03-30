@@ -12,6 +12,17 @@ from pydantic import BaseModel, Field, model_validator
 
 from core.verification.rights_risk import RightsRiskResult
 
+_ITERATION_HISTORY_MAX = 10
+
+
+def _add_and_trim_history(
+    left: list[dict[str, Any]], right: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """B7: reducer that appends then trims to last N entries."""
+    merged = left + right
+    return merged[-_ITERATION_HISTORY_MAX:]
+
+
 # ---------------------------------------------------------------------------
 # Type aliases for Literal types (used by synthesizer.py etc.)
 # ---------------------------------------------------------------------------
@@ -276,7 +287,7 @@ class GeodeState(TypedDict, total=False):
     # Feedback Loop (L3)
     iteration: int  # Current iteration count (starts at 1)
     max_iterations: int  # Maximum allowed iterations before force-proceeding
-    iteration_history: Annotated[list[dict[str, Any]], operator.add]  # Per-iteration snapshots
+    iteration_history: Annotated[list[dict[str, Any]], _add_and_trim_history]  # B7: capped at 10
 
     # Telemetry
     run_id: str  # Unique pipeline execution ID

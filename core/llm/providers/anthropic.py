@@ -224,6 +224,7 @@ class ClaudeAgenticAdapter:
 
     def __init__(self) -> None:
         self._client: Any | None = None
+        self.last_error: Exception | None = None
 
     @property
     def provider_name(self) -> str:
@@ -310,6 +311,7 @@ class ClaudeAgenticAdapter:
         except KeyboardInterrupt:
             raise UserCancelledError("LLM call interrupted by user") from None
         except LLMBadRequestError as exc:
+            self.last_error = exc
             msg = str(exc)
             # Billing/credit errors — propagate as BillingError for clean UI
             if "credit balance" in msg.lower() or "billing" in msg.lower():
@@ -337,7 +339,8 @@ class ClaudeAgenticAdapter:
                     len(tools),
                 )
             return None
-        except Exception:
+        except Exception as exc:
+            self.last_error = exc
             log.warning("Agentic LLM call failed", exc_info=True)
             return None
 
