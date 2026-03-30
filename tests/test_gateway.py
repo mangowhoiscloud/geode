@@ -396,6 +396,7 @@ class TestLaneQueueIntegration:
 
         lq = LaneQueue()
         lq.set_session_lane(SessionLane(max_sessions=10))
+        lq.add_lane("gateway", max_concurrent=4)
         lq.add_lane("global", max_concurrent=8)
 
         manager = ChannelManager(lane_queue=lq)
