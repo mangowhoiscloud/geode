@@ -50,7 +50,6 @@ graph TB
         direction LR
         L2_TURN["turn_auto_memory<br/><b>P85</b><br/><i>TURN_COMPLETE → 인사이트</i>"]:::reactNode
         L2_DRIFT_SNAP["drift_auto_snapshot<br/><b>P80</b><br/><i>DRIFT → 상태 캡처</i>"]:::reactNode
-        L2_MEM["memory_write_back<br/><b>P85</b><br/><i>PIPELINE_END → MEMORY.md</i>"]:::reactNode
         L2_SNAP["pipeline_end_snapshot<br/><b>P80</b><br/><i>PIPELINE_END → 스냅샷</i>"]:::reactNode
         L2_TRIG["drift_pipeline_trigger<br/><b>P70</b><br/><i>DRIFT → 재분석</i>"]:::reactNode
     end

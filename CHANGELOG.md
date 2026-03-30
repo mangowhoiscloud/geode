@@ -26,6 +26,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.39.0] — 2026-03-31
+
+### Added
+- **IPC pipeline event parity** — thin client now receives all pipeline data that direct CLI renders:
+  - Signals (YouTube views, Reddit subscribers, FanArt YoY%) in `pipeline_gather` event
+  - PSM causal inference (ATT%, Z-value, Rosenbaum Gamma) in `pipeline_score` event with significance indicators
+  - Pipeline warnings/errors in `pipeline_result` event
+  - Guardrail failure details in `pipeline_verification` event
+- **ToolCallTracker.suspend()** — erases rendered spinner lines and resets cursor position, preventing ANSI cursor-up from corrupting interleaved pipeline/stream output
+- **Pipeline ip_name tagging** — `set_pipeline_ip()` thread-local for forward-compatible parallel UI (Option B: IP-sequential queueing)
+- **Gateway context overflow recovery** — pre-call context check prevents 400 errors; auto-clear session on context exhaustion; i18n exhaustion messages via Haiku
+- **CJK-aware tool tracker** — `_truncate_display()` uses `unicodedata.east_asian_width` for correct CJK character width; spinner moved to left side
+
+### Fixed
+- **list_ips spinner duplication** — `stop()` called per stream chunk reprinted spinner each time; now uses `suspend()` with position reset
+- **analyze_ip spinner/panel collision** — 9 pipeline event handlers changed from `_clear_activity_line()` to `_suppress_all_spinners()`, stopping tracker before writing
+- **Rich Panel cursor-up interference** — stale `_line_count` caused cursor-up to erase interleaved pipeline event output
+- **400 error silent swallow** — `call_with_failover` now re-raises context-overflow BadRequestError instead of returning None
+
+### Removed
+- **Stub insight generator** — `PIPELINE_END→add_insight` hook removed; generated broken `tier=?/score=0.00` entries because synthesizer input state didn't reliably contain scoring results. Pipeline results are recorded in journal (`runs.jsonl`) via JournalHook.
+
 ## [0.38.0] — 2026-03-30
 
 ### Added
