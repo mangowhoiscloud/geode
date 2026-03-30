@@ -827,17 +827,21 @@ def _read_multiline_input(prompt: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-_LOCAL_COMMANDS = frozenset({"/help", "/exit", "/quit", "/clear"})
+_LOCAL_COMMANDS = frozenset({"/help", "/clear"})
 
 # Commands that need TTY interaction locally, then relay the result to serve
 _TTY_LOCAL_COMMANDS = frozenset({"/model", "/auth"})
 
 
-def _thin_interactive_loop() -> None:
+def _thin_interactive_loop(
+    *,
+    resume_session: str = "",
+    continue_latest: bool = False,
+) -> None:
     """Thin CLI client — all execution delegated to geode serve via IPC.
 
-    Local commands: /help, /exit, /quit, /clear
-    Everything else: relayed to serve (prompts + slash commands)
+    Local commands: /help, /clear
+    Everything else (including /quit, /exit): relayed to serve
     """
     from core.cli.ipc_client import IPCClient
 
@@ -847,6 +851,24 @@ def _thin_interactive_loop() -> None:
         return
 
     console.print(f"  [success]Session: {client.session_id}[/success]")
+
+    # Resume a previous session if requested
+    if resume_session or continue_latest:
+        result = client.request_resume(
+            session_id=resume_session,
+            continue_latest=continue_latest,
+        )
+        if result.get("type") == "resumed":
+            sid = result.get("session_id", "")
+            rnd = result.get("round_idx", 0)
+            msgs = result.get("message_count", 0)
+            model = result.get("model", "")
+            console.print(
+                f"  [success]Resumed:[/success] {sid}"
+                f"  [muted](round {rnd}, {msgs} messages, {model})[/muted]"
+            )
+        else:
+            console.print(f"  [warning]{result.get('message', 'Resume failed')}[/warning]")
     console.print()
 
     try:
@@ -862,7 +884,14 @@ def _thin_interactive_loop() -> None:
                 continue
 
             if user_input.strip().lower() in ("exit", "quit", "q"):
-                console.print("  [muted]Goodbye.[/muted]\n")
+                # Relay /quit to serve for session cost summary
+                response = client.send_command("/quit", "")
+                output = response.get("output", "")
+                if output:
+                    import sys as _sys
+
+                    _sys.stdout.write(output)
+                    _sys.stdout.flush()
                 break
 
             # Slash commands
@@ -1039,7 +1068,10 @@ def main(
                 raise typer.Exit(1)
 
         console.print("  [muted]Connected to serve via IPC[/muted]")
-        _thin_interactive_loop()
+        _thin_interactive_loop(
+            resume_session=resume,
+            continue_latest=continue_session,
+        )
 
 
 @app.command()

@@ -263,6 +263,9 @@ class CLIPoller:
         if msg_type == "command":
             return self._handle_command_on_server(msg, loop)
 
+        if msg_type == "resume":
+            return self._handle_resume(msg, loop, conversation)
+
         return {"type": "error", "message": f"Unknown message type: {msg_type}"}
 
     def _run_prompt_streaming(
@@ -383,6 +386,59 @@ class CLIPoller:
                 "status": "error",
                 "message": str(exc),
             }
+
+    def _handle_resume(
+        self,
+        msg: dict[str, Any],
+        loop: Any,
+        conversation: Any,
+    ) -> dict[str, Any]:
+        """Load a session checkpoint and restore conversation context."""
+        try:
+            from core.cli.session_checkpoint import SessionCheckpoint
+
+            cp = SessionCheckpoint()
+
+            state = None
+            if msg.get("continue"):
+                sessions = cp.list_resumable()
+                if sessions:
+                    state = sessions[0]
+            else:
+                sid = msg.get("session_id", "")
+                if sid:
+                    state = cp.load(sid)
+            if state is None:
+                return {"type": "resume_error", "message": "No resumable session found"}
+
+            # Restore conversation messages
+            conversation.messages.clear()
+            conversation.messages.extend(state.messages)
+
+            # Sync loop session_id for checkpoint continuity
+            loop._session_id = state.session_id
+
+            # Restore model if different
+            if state.model and state.model != loop.model:
+                loop.update_model(state.model)
+
+            log.info(
+                "Session resumed: %s (round=%d, messages=%d)",
+                state.session_id,
+                state.round_idx,
+                len(state.messages),
+            )
+            return {
+                "type": "resumed",
+                "session_id": state.session_id,
+                "round_idx": state.round_idx,
+                "model": state.model,
+                "user_input": state.user_input,
+                "message_count": len(state.messages),
+            }
+        except Exception as exc:
+            log.warning("Session resume failed", exc_info=True)
+            return {"type": "resume_error", "message": str(exc)}
 
     def _propagate_contextvars(self) -> None:
         """Set ContextVars needed by slash command handlers in this thread.

@@ -41,6 +41,13 @@ def _test_sock() -> Path:
 class TestIPCClient:
     """Test the thin CLI IPC client."""
 
+    def test_request_resume_not_connected(self) -> None:
+        from core.cli.ipc_client import IPCClient
+
+        client = IPCClient()
+        result = client.request_resume(continue_latest=True)
+        assert result["type"] == "resume_error"
+
     def test_is_serve_running_no_socket(self, tmp_path: Path) -> None:
         from core.cli.ipc_client import is_serve_running
 
@@ -301,3 +308,152 @@ class TestCLIChannelIntegration:
             poller.stop()
 
         assert not is_serve_running(sock_path)
+
+    def test_quit_relayed_returns_should_break(self) -> None:
+        """P1 fix: /quit should relay to serve and return should_break=True."""
+        from core.cli.ipc_client import IPCClient
+        from core.gateway.pollers.cli_poller import CLIPoller
+
+        sock_path = _test_sock()
+        mock_services = MagicMock()
+        mock_loop = MagicMock()
+        mock_services.create_session.return_value = (MagicMock(), mock_loop)
+
+        poller = CLIPoller(mock_services, socket_path=sock_path)
+        poller.start()
+        time.sleep(0.1)
+
+        try:
+            client = IPCClient(socket_path=sock_path)
+            client.connect()
+
+            result = client.send_command("/quit", "")
+            assert result["type"] == "command_result"
+            assert result.get("should_break") is True
+            # Output should contain "Goodbye" from _handle_command
+            assert "Goodbye" in result.get("output", "")
+
+            client.close()
+        finally:
+            poller.stop()
+
+    def test_resume_with_checkpoint(self) -> None:
+        """P2 fix: resume message should load checkpoint into conversation."""
+        from core.cli.ipc_client import IPCClient
+        from core.gateway.pollers.cli_poller import CLIPoller
+
+        sock_path = _test_sock()
+        mock_services = MagicMock()
+        mock_loop = MagicMock()
+        mock_loop.model = "claude-opus-4-6"
+        mock_services.create_session.return_value = (MagicMock(), mock_loop)
+
+        poller = CLIPoller(mock_services, socket_path=sock_path)
+        poller.start()
+        time.sleep(0.1)
+
+        try:
+            # Save a checkpoint first
+            from core.cli.session_checkpoint import SessionCheckpoint, SessionState
+
+            cp = SessionCheckpoint()
+            state = SessionState(
+                session_id="s-test123",
+                round_idx=3,
+                model="claude-opus-4-6",
+                status="active",
+                messages=[
+                    {"role": "user", "content": "hello"},
+                    {"role": "assistant", "content": "hi there"},
+                ],
+                user_input="hello",
+            )
+            cp.save(state)
+
+            client = IPCClient(socket_path=sock_path)
+            client.connect()
+
+            result = client.request_resume(session_id="s-test123")
+            assert result["type"] == "resumed"
+            assert result["session_id"] == "s-test123"
+            assert result["round_idx"] == 3
+            assert result["message_count"] == 2
+
+            client.close()
+        finally:
+            poller.stop()
+
+    def test_resume_continue_latest(self) -> None:
+        """P2 fix: --continue should resume the most recent session."""
+        from core.cli.ipc_client import IPCClient
+        from core.gateway.pollers.cli_poller import CLIPoller
+
+        sock_path = _test_sock()
+        mock_services = MagicMock()
+        mock_loop = MagicMock()
+        mock_loop.model = "claude-opus-4-6"
+        mock_services.create_session.return_value = (MagicMock(), mock_loop)
+
+        poller = CLIPoller(mock_services, socket_path=sock_path)
+        poller.start()
+        time.sleep(0.1)
+
+        try:
+            from core.cli.session_checkpoint import SessionCheckpoint, SessionState
+
+            cp = SessionCheckpoint()
+            cp.save(SessionState(
+                session_id="s-old",
+                round_idx=1,
+                model="claude-opus-4-6",
+                status="active",
+                messages=[{"role": "user", "content": "old"}],
+                user_input="old",
+            ))
+            time.sleep(0.01)  # ensure different updated_at
+            cp.save(SessionState(
+                session_id="s-latest",
+                round_idx=5,
+                model="claude-opus-4-6",
+                status="active",
+                messages=[{"role": "user", "content": "latest"}],
+                user_input="latest",
+            ))
+
+            client = IPCClient(socket_path=sock_path)
+            client.connect()
+
+            result = client.request_resume(continue_latest=True)
+            assert result["type"] == "resumed"
+            assert result["session_id"] == "s-latest"
+            assert result["round_idx"] == 5
+
+            client.close()
+        finally:
+            poller.stop()
+
+    def test_resume_no_sessions(self) -> None:
+        """Resume should return error when no sessions exist."""
+        from core.cli.ipc_client import IPCClient
+        from core.gateway.pollers.cli_poller import CLIPoller
+
+        sock_path = _test_sock()
+        mock_services = MagicMock()
+        mock_loop = MagicMock()
+        mock_loop.model = "claude-opus-4-6"
+        mock_services.create_session.return_value = (MagicMock(), mock_loop)
+
+        poller = CLIPoller(mock_services, socket_path=sock_path)
+        poller.start()
+        time.sleep(0.1)
+
+        try:
+            client = IPCClient(socket_path=sock_path)
+            client.connect()
+
+            result = client.request_resume(session_id="s-nonexistent")
+            assert result["type"] == "resume_error"
+
+            client.close()
+        finally:
+            poller.stop()
