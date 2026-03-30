@@ -137,6 +137,8 @@ class OperationLogger:
         self._tool_type_last_summary: dict[str, str] = {}
         self._total_tool_count = 0
         self._round_count = 0
+        # Per-tool start time for accurate server-side duration
+        self._tool_start_times: dict[str, float] = {}
 
     def begin_round(self, label: str = "AgenticLoop") -> None:
         """Start a new agentic round — print header if not yet shown."""
@@ -172,6 +174,9 @@ class OperationLogger:
             else:
                 args_parts.append(f"{k}={v}")
         args_str = ", ".join(args_parts)
+
+        # Track start time for server-side duration measurement
+        self._tool_start_times[tool_name] = time.monotonic()
 
         # IPC mode: send structured event (client renders spinner + ✓)
         writer = getattr(_ipc_writer_local, "writer", None)
@@ -210,14 +215,17 @@ class OperationLogger:
 
         is_error = bool(result.get("error"))
 
-        # IPC mode: send structured event
+        # IPC mode: send structured event with server-measured duration
         writer = getattr(_ipc_writer_local, "writer", None)
         if writer is not None:
+            start = self._tool_start_times.pop(tool_name, 0.0)
+            duration_s = round(time.monotonic() - start, 1) if start else 0.0
             writer.send_event(
                 "tool_end",
                 name=tool_name,
                 summary=summary[:80],
                 error=result.get("error", "") if is_error else "",
+                duration_s=duration_s,
             )
             return
 

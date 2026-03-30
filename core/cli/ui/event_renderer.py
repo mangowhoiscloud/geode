@@ -10,6 +10,7 @@ Replaces raw console stream for agentic UI — client owns all rendering.
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from typing import Any
 
@@ -28,7 +29,7 @@ class EventRenderer:
     def __init__(self) -> None:
         self._tool_tracker = ToolCallTracker()
         self._thinking = False
-        self._spinner_frame_idx = 0
+        self._thinking_thread: threading.Thread | None = None
         self._thinking_model = ""
         self._thinking_round = 0
         self._round_header_printed = False
@@ -66,7 +67,8 @@ class EventRenderer:
         self._thinking = True
         self._thinking_model = str(event.get("model", ""))
         self._thinking_round = int(event.get("round", 1))
-        self._render_thinking_frame()
+        self._thinking_thread = threading.Thread(target=self._animate_thinking, daemon=True)
+        self._thinking_thread.start()
 
     def _handle_thinking_end(self, _event: dict[str, Any]) -> None:
         self._stop_thinking()
@@ -284,6 +286,12 @@ class EventRenderer:
 
     _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
+    def _animate_thinking(self) -> None:
+        """Background animation loop for thinking spinner (80ms per frame)."""
+        while self._thinking:
+            self._render_thinking_frame()
+            time.sleep(0.08)
+
     def _render_thinking_frame(self) -> None:
         if not self._thinking:
             return
@@ -296,5 +304,8 @@ class EventRenderer:
     def _stop_thinking(self) -> None:
         if self._thinking:
             self._thinking = False
+            if self._thinking_thread:
+                self._thinking_thread.join(timeout=0.3)
+                self._thinking_thread = None
             self._out.write("\r\033[2K")
             self._out.flush()
