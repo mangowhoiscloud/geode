@@ -37,6 +37,9 @@ def gather_panel(
     monolake: dict[str, Any],
     signals: dict[str, Any],
 ) -> None:
+    from core.cli.ui.agentic_ui import emit_pipeline_gather
+
+    emit_pipeline_gather(ip_info, monolake)
     console.print("[step]▸ [GATHER][/step] Loading IP data from MonoLake...")
     tree = Tree("", guide_style="dim")
     tree.add(
@@ -61,6 +64,9 @@ def gather_panel(
 
 
 def analyst_panel(analyses: list[AnalysisResult]) -> None:
+    from core.cli.ui.agentic_ui import emit_pipeline_analysis
+
+    emit_pipeline_analysis(analyses)  # type: ignore[arg-type]
     console.print("[step]▸ [ANALYZE][/step] Running 4 Analysts (Clean Context)...")
     table = Table(show_header=True, header_style="bold", border_style="dim")
     table.add_column("Analyst", style="label", width=14)
@@ -79,6 +85,9 @@ def analyst_panel(analyses: list[AnalysisResult]) -> None:
 
 
 def evaluator_panel(evaluations: dict[str, EvaluatorResult]) -> None:
+    from core.cli.ui.agentic_ui import emit_pipeline_evaluation
+
+    emit_pipeline_evaluation(evaluations)
     console.print("[step]▸ [EVALUATE][/step] 14-Axis Rubric Scoring...")
     labels = {
         "quality_judge": "Quality",
@@ -111,6 +120,18 @@ def score_panel(
     subscores: dict[str, float],
     confidence: float = 0.0,
 ) -> None:
+    from core.cli.ui.agentic_ui import emit_pipeline_score
+
+    tier = (
+        "S"
+        if final_score >= 80
+        else "A"
+        if final_score >= 60
+        else "B"
+        if final_score >= 40
+        else "C"
+    )
+    emit_pipeline_score(final_score, subscores, confidence, tier)
     console.print("[step]▸ [SCORE][/step] PSM + Final Calculation")
 
     z_mark = "[success]\u2713[/success]" if psm.z_value > 1.645 else "[error]\u2717[/error]"
@@ -138,6 +159,9 @@ def score_panel(
 
 
 def verify_panel(guardrails_pass: bool, biasbuster_pass: bool) -> None:
+    from core.cli.ui.agentic_ui import emit_pipeline_verification
+
+    emit_pipeline_verification(guardrails_pass, biasbuster_pass)
     g_mark = "[success]\u2713[/success]" if guardrails_pass else "[error]\u2717[/error]"
     b_mark = "[success]\u2713[/success]" if biasbuster_pass else "[error]\u2717[/error]"
     console.print(f"[step]▸ [VERIFY][/step] Guardrails G1-G4 {g_mark} | BiasBuster {b_mark}")
