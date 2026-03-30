@@ -1,91 +1,138 @@
 # GEODE Setup Guide
 
-> [README](../README.md) | [Architecture](architecture.md) | [Workflow](workflow.md) | **Setup**
+> [README](../README.md) | [Context Lifecycle](architecture/context-lifecycle.md) | [Hook System](architecture/hook-system.md) | [Workflow](workflow.md) | **Setup**
 
 ## Installation
 
 ```bash
-uv sync
+git clone https://github.com/mangowhoiscloud/geode.git
+cd geode && uv sync
 ```
 
 ## Quick Start
 
 ```bash
-# Interactive REPL (primary interface)
+# Thin CLI (auto-starts serve daemon if needed)
 uv run geode
 
-# Natural language CLI
+# One-shot prompt
 uv run geode "summarize the latest AI research trends"
 
-# Game IP Domain Plugin (dry-run, no LLM)
+# Domain Plugin: Game IP (dry-run, no LLM)
 uv run geode analyze "Cowboy Bebop" --dry-run
+
+# Headless daemon (Slack/Discord/Telegram + scheduler)
+uv run geode serve
 ```
 
-API 키 없이 시작하면 자동으로 dry-run 모드로 전환됩니다.
+API key 없이 시작하면 자동으로 dry-run 모드로 전환됩니다.
+
+---
+
+## Architecture: Thin-Only
+
+```
+geode (thin CLI) ── Unix socket IPC ──→ geode serve (unified daemon)
+                                          │
+                                      GeodeRuntime
+                                       ├── CLIPoller    → SessionMode.IPC
+                                       ├── Gateway      → SessionMode.DAEMON (Slack/Discord)
+                                       └── Scheduler    → SessionMode.SCHEDULER (cron)
+```
+
+- `geode` = thin client. 모든 실행은 serve daemon으로 IPC relay.
+- serve가 미실행이면 자동 시작 (auto-start, 30s timeout).
+- 실시간 streaming: tool calls (▸), results (✓/✗), token usage (✢) thin client에 표시.
 
 ---
 
 ## Environment Setup
 
-```bash
-# 1. 환경 변수 설정
-cp .env.example .env
-
-# 2. .env 편집 — 최소 Anthropic API 키 입력
-ANTHROPIC_API_KEY=sk-ant-...
-
-# 3. REPL 시작
-uv run geode
-```
-
----
-
-## Global Installation
-
-어디서든 `geode` 명령 실행:
+### 1. API Keys
 
 ```bash
-cd /path/to/geode
-uv tool install . --force
-```
-
-설치 후 `geode`를 아무 디렉토리에서 실행할 수 있습니다.
-프로젝트별 `.env`가 없으면 `~/.geode/.env`에서 글로벌 키를 읽습니다.
-
----
-
-## Global API Keys (`~/.geode/.env`)
-
-```bash
+# Global keys (모든 프로젝트에 적용)
 mkdir -p ~/.geode
 cat > ~/.geode/.env << 'EOF'
-# LLM Providers
+# LLM Providers (최소 1개 필수)
 ANTHROPIC_API_KEY=sk-ant-...       # https://console.anthropic.com/settings/keys
 OPENAI_API_KEY=sk-proj-...         # https://platform.openai.com/api-keys
 ZAI_API_KEY=...                    # https://open.bigmodel.cn/usercenter/apikeys (optional)
-
-# Search & Data
-BRAVE_API_KEY=...                  # https://brave.com/search/api/
-GOOGLE_API_KEY=...                 # https://console.cloud.google.com/apis/credentials
-YOUTUBE_API_KEY=...                # Google API Key (YouTube Data API v3 enabled)
 
 # Messaging (Slack Gateway)
 SLACK_BOT_TOKEN=xoxb-...           # https://api.slack.com/apps → OAuth & Permissions
 SLACK_TEAM_ID=T...                 # Slack workspace settings
 
-# Observability (optional)
-LANGSMITH_API_KEY=lsv2_pt_...      # https://smith.langchain.com/settings
+# Gateway toggle
+GEODE_GATEWAY_ENABLED=true
 EOF
 chmod 600 ~/.geode/.env
 ```
 
-**Priority**: Environment variable > Project `.env` > `~/.geode/.env` > Code defaults
+**Key 우선순위**: Environment variable > Project `.env` > `~/.geode/.env`
+
+### 2. Project Setup
+
+```bash
+# .geode/ 구조 초기화
+uv run geode init
+
+# 또는 수동으로
+cp .env.example .env       # project-local keys (non-empty만 override)
+```
+
+### 3. Global CLI Install
+
+```bash
+uv tool install -e . --force
+geode version   # 어디서든 실행 가능
+```
+
+---
+
+## `geode serve` — Unified Daemon
+
+모든 실행 경로의 backbone. thin CLI, Slack, scheduler 모두 serve를 통합니다.
+
+### Commands
+
+```bash
+geode serve                # foreground (Ctrl+C to stop)
+geode serve -p 5.0         # poll interval 5초 (default: 3.0)
+
+# Background (production)
+nohup geode serve > /tmp/geode-serve.log 2>&1 &
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--poll`, `-p` | `3.0` | Gateway poll interval (seconds) |
+
+### Startup Sequence
+
+1. ContextVars (domain, memory, profile, env)
+2. Readiness check (API keys)
+3. GeodeRuntime (MCP 13 servers, 10-30s)
+4. SchedulerService (load jobs, start 60s tick)
+5. Gateway pollers (Slack, Discord, Telegram)
+6. CLIPoller (Unix socket `~/.geode/cli.sock`)
+
+### Auto-Start
+
+thin CLI (`geode`)는 serve 미실행 시 자동 시작합니다:
+
+```
+geode → is_serve_running()? → No → start_serve_if_needed(30s) → connect IPC
+```
+
+- Pidfile lock (`~/.geode/cli.startup.lock`)로 TOCTOU 방지
+- `start_new_session=True` + stdout DEVNULL로 background spawn
 
 ---
 
 ## Slack Gateway
-
-GEODE를 Slack 채널과 연결하면 메시지로 대화할 수 있습니다.
 
 ### 1. Slack Bot 생성
 
@@ -93,24 +140,10 @@ GEODE를 Slack 채널과 연결하면 메시지로 대화할 수 있습니다.
 - Bot Token Scopes: `chat:write`, `channels:history`, `channels:read`
 - Bot Token (`xoxb-...`)과 Team ID를 `~/.geode/.env`에 설정
 
-### 2. Gateway 활성화
+### 2. Channel Binding (`.geode/config.toml`)
 
 ```bash
-# ~/.geode/.env에 추가
-GEODE_GATEWAY_ENABLED=true
-```
-
-### 3. 채널 바인딩 (`.geode/config.toml`)
-
-`.geode/config.toml`이 없으면 Slack 폴러가 모니터링할 채널이 없어 **메시지를 수신하지 않습니다**.
-이 파일은 채널 ID(개인정보)를 포함하므로 git에 커밋하지 않습니다.
-
-```bash
-# 템플릿에서 복사
 cp .geode/config.toml.example .geode/config.toml
-
-# 채널 ID 편집
-vi .geode/config.toml
 ```
 
 ```toml
@@ -118,96 +151,132 @@ vi .geode/config.toml
 
 [[gateway.bindings.rules]]
 channel = "slack"
-channel_id = "C0XXXXXXXXX"  # Slack 채널 → 채널명 클릭 → 맨 아래 Channel ID
+channel_id = "C0XXXXXXXXX"   # Slack channel → click name → bottom "Channel ID"
 auto_respond = true
-require_mention = true       # true: @멘션 시에만 응답
+require_mention = true        # true: @mention only
 max_rounds = 5
-
-# 채널을 추가하려면 [[gateway.bindings.rules]] 블록을 반복
 ```
 
-**채널 ID 확인법**: Slack 채널 → 채널명 클릭 → 스크롤 맨 아래 `Channel ID: C0XXXXXXXXX`
-
-> **주의**: `git pull`로 코드를 업데이트해도 `.geode/config.toml`은 `.gitignore` 대상이므로 유지됩니다.
-> 단, 클린 클론 시에는 `config.toml.example`에서 다시 복사해야 합니다.
-
-### 4. 실행
+### 3. Verify
 
 ```bash
-# Headless (Gateway only, background)
-nohup geode serve > /tmp/geode-gateway.log 2>&1 &
-
-# Foreground (REPL + Gateway)
-geode
-```
-
-### 5. 동작 확인
-
-```bash
-# 프로세스 확인
-ps aux | grep "geode serve"
-
-# 로그에서 바인딩 로드 확인
-grep "binding" /tmp/geode-gateway.log
+geode serve &
+grep "binding" /tmp/geode-serve.log
 # → Channel binding added: slack/C0XXXXXXXXX (auto_respond=True)
-# → Loaded 4 gateway bindings from config
 
-# 로그에서 Slack 폴링 확인
-grep "Slack poller seeded" /tmp/geode-gateway.log
-# → Slack poller seeded ts=... for C0XXXXXXXXX (5 skipped)
+grep "Slack poller seeded" /tmp/geode-serve.log
+# → Slack poller seeded ts=... for C0XXXXXXXXX
 ```
 
-바인딩이 0개이거나 "seeded" 로그가 없으면 `.geode/config.toml`이 없거나 채널 ID가 잘못된 것입니다.
+### Reactions
 
-`geode serve`는 REPL 없이 Gateway만 실행합니다. MCP 서버 14종이 순차 연결되므로 시작까지 2-3분 소요됩니다.
-
-### 리액션
-
-`require_mention = true`인 채널에서 @멘션 메시지를 보내면:
-1. :eyes: 리액션 (수신 확인)
-2. AgenticLoop 처리
-3. :white_check_mark: 리액션 (완료)
-4. 스레드에 응답 전송
+@mention message → :eyes: (received) → AgenticLoop → :white_check_mark: (done) → thread reply
 
 ---
 
-## HITL Level
+## Scheduler
 
-자율성을 단계별로 조절합니다:
+### CLI Usage
 
 ```bash
-# 0 = 완전 자율 (모든 승인 생략)
-GEODE_HITL_LEVEL=0
+# Create (action required)
+/schedule create "every 5 minutes" "check system drift"
+/schedule create "daily at 9:00" "summarize today's news"
 
-# 1 = WRITE만 묻기 (bash/MCP는 자동 승인)
-GEODE_HITL_LEVEL=1
+# Manage
+/schedule list
+/schedule delete <job_id>
+/schedule enable <job_id>
+/schedule disable <job_id>
+/schedule run <job_id>
+```
 
-# 2 = 전부 묻기 (기본값)
-GEODE_HITL_LEVEL=2
+### Natural Language (via AgenticLoop)
+
+```
+> 매일 아침 9시에 뉴스 요약해줘
+  ▸ schedule_job(expression="daily at 9:00", action="summarize today's news")
+  ✓ schedule_job → Created: nl_abc12345
+```
+
+### Persistence
+
+- Jobs: `~/.geode/scheduler/jobs.json` (atomic write, fcntl lock)
+- Run logs: `~/.geode/scheduler/logs/{job_id}.jsonl` (auto-prune 2MB/2000 lines)
+- Guardrail: `action=""` jobs rejected (no zombie no-ops)
+
+---
+
+## Interactive Slash Commands
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `/help` | | Show all commands |
+| `/status` | | System status (model, API keys, MCP, mode) |
+| `/model [N\|name]` | | Show / switch LLM model |
+| `/key [provider] [value]` | | Show / set API key |
+| `/cost` | | LLM cost dashboard (session + monthly) |
+| `/verbose` | | Toggle verbose output |
+| `/mcp` | | MCP server status |
+| `/skills` | | Runtime skills list |
+| `/context` | `/ctx` | Context tiers display |
+| `/schedule` | `/sched` | Scheduler management |
+| `/trigger` | | Event trigger management |
+| `/auth` | | Auth profile management |
+| `/tasks` | `/t` | Task list |
+| `/clear` | | Clear conversation |
+| `/compact` | | Compact context |
+| `/analyze <IP>` | `/a` | IP analysis (Domain Plugin) |
+| `/run <IP>` | `/r` | Analysis with LLM |
+| `/search <query>` | `/s` | IP search |
+| `/list` | | Available IPs |
+| `/report <IP> [fmt]` | `/rpt` | Generate report (md/html/json) |
+| `/batch <IPs>` | `/b` | Batch analysis |
+| `/compare <A> <B>` | | Compare two IPs |
+| `/quit` | `/q` | Exit |
+
+---
+
+## CLI Commands (Typer)
+
+```bash
+geode                                  # Interactive thin CLI
+geode "prompt"                         # One-shot prompt via IPC
+geode --continue                       # Resume last session
+geode --resume <session_id>            # Resume specific session
+
+geode analyze "Berserk" --dry-run      # Domain Plugin analysis
+geode search "cyberpunk"               # IP search
+geode report "Berserk" -f html         # Report generation
+geode batch --top 5                    # Batch analysis
+geode list                             # Available IPs
+geode version                          # Version info
+geode init                             # Initialize .geode/ structure
+geode history                          # Execution history + cost
+geode serve [-p 3.0]                   # Headless daemon
 ```
 
 ---
 
-## Configuration
+## Configuration Reference
 
-`.env` 파일로 설정합니다 (전체 목록: `core/config.py`):
+`.env` variables (full list: `core/config.py`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | **LLM** | | |
 | `ANTHROPIC_API_KEY` | | Claude API key |
 | `OPENAI_API_KEY` | | GPT API key (Cross-LLM) |
+| `ZAI_API_KEY` | | ZhipuAI GLM key |
 | `GEODE_MODEL` | `claude-opus-4-6` | Default LLM model |
 | `GEODE_ENSEMBLE_MODE` | `single` | Ensemble mode (`single` / `cross`) |
+| **Gateway** | | |
+| `GEODE_GATEWAY_ENABLED` | `false` | Enable Slack/Discord gateway |
+| `SLACK_BOT_TOKEN` | | Slack bot token |
+| `SLACK_TEAM_ID` | | Slack workspace ID |
 | **Pipeline** | | |
 | `GEODE_CONFIDENCE_THRESHOLD` | `0.7` | Confidence gate |
 | `GEODE_MAX_ITERATIONS` | `5` | Max re-analysis iterations |
-| `GEODE_PLAN_AUTO_EXECUTE` | `false` | Plan auto-execute mode |
-| `GEODE_INTERRUPT_NODES` | | Interrupt nodes |
-| `GEODE_CHECKPOINT_DB` | `geode_checkpoints.db` | Checkpoint DB path |
-| **MCP** | | |
-| `GEODE_STEAM_MCP_URL` | | Steam MCP server URL |
-| `GEODE_BRAVE_API_KEY` | | Brave Search API key |
 | **Observability** | | |
 | `LANGCHAIN_TRACING_V2` | `false` | LangSmith tracing |
 | `LANGCHAIN_API_KEY` | | LangSmith API key |
@@ -217,52 +286,8 @@ GEODE_HITL_LEVEL=2
 ## Testing
 
 ```bash
-uv run pytest                                        # Full (3202+ passed)
-uv run pytest tests/test_e2e_live_llm.py -v -m live  # Live E2E
-uv run ruff check core/ tests/                       # Lint
-uv run mypy core/                                    # Type check (175 files)
-uv run bandit -r core/ -c pyproject.toml             # Security
-```
-
----
-
-## Usage
-
-### Interactive Mode
-
-```bash
-uv run geode
-```
-
-**Slash commands:**
-
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `/analyze <IP>` | `/a` | IP analysis (Domain Plugin) |
-| `/search <query>` | `/s` | Search |
-| `/report <IP> [fmt]` | `/rpt` | Report generation (md/html/json) |
-| `/list` | | IP list (Domain Plugin) |
-| `/batch [--top N]` | `/b` | Batch analysis |
-| `/compare <A> <B>` | | Comparison analysis |
-| `/schedule <cron>` | `/sched` | Schedule tasks |
-| `/mcp status\|tools\|reload\|add` | | MCP management |
-| `/skills` | | Skills list/detail |
-| `/status` | | System status |
-| `/model` | | LLM model selection |
-| `/verbose` | | Verbose output toggle |
-| `/quit` | `/q` | Quit |
-
-### CLI Mode
-
-```bash
-# General research queries
-uv run geode "summarize the latest AI agent framework trends"
-uv run geode "summarize this URL: https://example.com/article"
-uv run geode "schedule weekly Monday AI news briefing"
-
-# Domain Plugin: Game IP analysis
-uv run geode analyze "Berserk"                    # CLI analysis
-uv run geode search "cyberpunk"                   # Genre search
-uv run geode report "Berserk" -f html -o out.html # HTML report
-uv run geode batch --top 5                        # Batch analysis
+uv run pytest tests/ -m "not live" -q     # 3,422+ tests
+uv run ruff check core/ tests/            # Lint
+uv run mypy core/                         # Type check (190 modules)
+uv run geode analyze "Cowboy Bebop" --dry-run  # E2E invariant: A (68.4)
 ```
