@@ -549,7 +549,7 @@ class IsolatedRunner:
         }
 
         try:
-            self._hooks.trigger(HookEvent.PIPELINE_END, data)
+            self._hooks.trigger(HookEvent.SUBAGENT_COMPLETED, data)
             log.debug(
                 "PostToMain delivered for session %s (mode=%s)",
                 result.session_id,
