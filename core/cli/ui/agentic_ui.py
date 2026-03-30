@@ -614,6 +614,224 @@ def mark_turn_start() -> None:
         _turn_snapshot = None
 
 
+# ───────────────────────────────────────────────────────────────────────────
+# Structured IPC event emitters — AgenticLoop state changes
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def emit_model_escalation(from_model: str, to_model: str, failures: int) -> None:
+    """Emit model_escalation event when LLM failures trigger auto-switch."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "model_escalation",
+            from_model=from_model,
+            to_model=to_model,
+            failures=failures,
+        )
+        return
+    console.print(
+        f"  [warning]⚡ Model escalated: {from_model} → {to_model}"
+        f" (after {failures} failures)[/warning]"
+    )
+
+
+def emit_cost_budget_exceeded(budget: float, actual: float) -> None:
+    """Emit cost_budget_exceeded event when session cost hits limit."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("cost_budget_exceeded", budget=budget, actual=actual)
+        return
+    console.print(f"  [error]$ Cost budget exceeded: ${actual:.2f} / ${budget:.2f}[/error]")
+
+
+def emit_time_budget_expired(budget_s: float, elapsed_s: float, rounds: int) -> None:
+    """Emit time_budget_expired event when time limit reached."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "time_budget_expired",
+            budget_s=budget_s,
+            elapsed_s=elapsed_s,
+            rounds=rounds,
+        )
+        return
+    console.print(
+        f"  [warning]⏱ Time budget expired: {elapsed_s:.0f}s / {budget_s:.0f}s"
+        f" ({rounds} rounds)[/warning]"
+    )
+
+
+def emit_convergence_detected(error_pattern: str, rounds: int) -> None:
+    """Emit convergence_detected event when stuck loop is broken."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("convergence_detected", error=error_pattern, rounds=rounds)
+        return
+    console.print(
+        f"  [error]⟳ Convergence detected: repeating failure after {rounds} rounds[/error]"
+    )
+
+
+def emit_goal_decomposition(steps: list[str]) -> None:
+    """Emit goal_decomposition event when multi-step plan is created."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("goal_decomposition", steps=steps, count=len(steps))
+        return
+    console.print(f"  [dim]● Goal decomposed into {len(steps)} steps[/dim]")
+
+
+def emit_tool_backpressure(consecutive_errors: int) -> None:
+    """Emit tool_backpressure event when error recovery kicks in."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("tool_backpressure", consecutive_errors=consecutive_errors)
+        return
+    console.print(
+        f"  [warning]⏸ Tool backpressure: {consecutive_errors} consecutive errors[/warning]"
+    )
+
+
+def emit_tool_diversity_forced(tool_name: str, count: int) -> None:
+    """Emit tool_diversity_forced event when same tool repeated too many times."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("tool_diversity_forced", tool=tool_name, count=count)
+        return
+    console.print(
+        f"  [warning]⟳ Diversity forced: {tool_name} called {count}x consecutively[/warning]"
+    )
+
+
+def emit_model_switched(from_model: str, to_model: str, reason: str) -> None:
+    """Emit model_switched event for user-initiated model change."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "model_switched",
+            from_model=from_model,
+            to_model=to_model,
+            reason=reason,
+        )
+
+
+def emit_checkpoint_saved(session_id: str, round_idx: int) -> None:
+    """Emit checkpoint_saved event after session state is persisted."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("checkpoint_saved", session_id=session_id, round_idx=round_idx)
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Structured IPC event emitters — Pipeline milestones
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def emit_pipeline_gather(ip_info: dict[str, Any], monolake: dict[str, Any]) -> None:
+    """Emit pipeline_gather event with structured IP metadata."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is None:
+        return
+    writer.send_event(
+        "pipeline_gather",
+        ip_name=ip_info.get("ip_name", ""),
+        media_type=ip_info.get("media_type", ""),
+        release_year=ip_info.get("release_year", 0),
+        studio=ip_info.get("studio", ""),
+        dau=monolake.get("dau_current", 0),
+        revenue=monolake.get("revenue_ltm", 0),
+    )
+
+
+def emit_pipeline_analysis(analyses: list[dict[str, Any]]) -> None:
+    """Emit pipeline_analysis event with per-analyst scores."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is None:
+        return
+    items = []
+    for a in analyses:
+        items.append(
+            {
+                "analyst": getattr(a, "analyst_type", str(a)),
+                "score": getattr(a, "score", 0),
+                "finding": getattr(a, "key_finding", ""),
+            }
+        )
+    writer.send_event("pipeline_analysis", analysts=items, count=len(items))
+
+
+def emit_pipeline_evaluation(evaluations: dict[str, Any]) -> None:
+    """Emit pipeline_evaluation event with per-evaluator scores."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is None:
+        return
+    items = {}
+    for key, ev in evaluations.items():
+        items[key] = {
+            "score": getattr(ev, "composite_score", 0),
+            "rationale": getattr(ev, "rationale", "")[:100],
+        }
+    writer.send_event("pipeline_evaluation", evaluators=items, count=len(items))
+
+
+def emit_pipeline_score(
+    final_score: float,
+    subscores: dict[str, float],
+    confidence: float,
+    tier: str,
+) -> None:
+    """Emit pipeline_score event with PSM results."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is None:
+        return
+    writer.send_event(
+        "pipeline_score",
+        final_score=final_score,
+        subscores=subscores,
+        confidence=confidence,
+        tier=tier,
+    )
+
+
+def emit_pipeline_verification(guardrails_pass: bool, biasbuster_pass: bool) -> None:
+    """Emit pipeline_verification event."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is None:
+        return
+    writer.send_event(
+        "pipeline_verification",
+        guardrails_pass=guardrails_pass,
+        biasbuster_pass=biasbuster_pass,
+    )
+
+
+def emit_feedback_loop(iteration: int, confidence: float, threshold: float) -> None:
+    """Emit feedback_loop event when confidence loop re-runs."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "feedback_loop",
+            iteration=iteration,
+            confidence=confidence,
+            threshold=threshold,
+        )
+        return
+    console.print(
+        f"  [dim]⟳ Feedback loop iteration {iteration}:"
+        f" confidence {confidence:.1f}% < {threshold:.1f}%[/dim]"
+    )
+
+
+def emit_node_skipped(node: str, reason: str) -> None:
+    """Emit node_skipped event when pipeline node is dynamically skipped."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("node_skipped", node=node, reason=reason)
+        return
+    console.print(f"  [dim]⤳ Node skipped: {node} ({reason})[/dim]")
+
+
 def _fmt_tokens(n: int) -> str:
     """Format token count: 1200 → 1.2k, 500 → 500."""
     if n >= 1000:

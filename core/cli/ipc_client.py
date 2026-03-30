@@ -193,6 +193,24 @@ class IPCClient:
                 "subagent_progress",
                 "subagent_complete",
                 "session_cost",
+                # AgenticLoop state events
+                "model_escalation",
+                "cost_budget_exceeded",
+                "time_budget_expired",
+                "convergence_detected",
+                "goal_decomposition",
+                "tool_backpressure",
+                "tool_diversity_forced",
+                "model_switched",
+                "checkpoint_saved",
+                # Pipeline milestone events
+                "pipeline_gather",
+                "pipeline_analysis",
+                "pipeline_evaluation",
+                "pipeline_score",
+                "pipeline_verification",
+                "feedback_loop",
+                "node_skipped",
             ):
                 if on_event is not None:
                     on_event(response)
