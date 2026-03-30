@@ -48,6 +48,7 @@ def _get_pipeline_ip() -> str:
     """Get the current pipeline's IP name."""
     return getattr(_pipeline_ip_local, "ip_name", "")
 
+
 # ───────────────────────────────────────────────────────────────────────────
 # SessionMeter — session-level timing for status line
 # ───────────────────────────────────────────────────────────────────────────
