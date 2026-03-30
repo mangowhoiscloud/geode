@@ -927,18 +927,32 @@ def _thin_interactive_loop() -> None:
                 continue
 
             # Free text → relay as prompt (streaming agentic UI)
-            # No client-side spinner — serve streams ● AgenticLoop + ✢ Thinking
             import sys as _sys
 
-            _stream_started = False
+            from core.cli.ui.tool_tracker import ToolCallTracker
 
-            def _on_stream(data: str) -> None:
+            _stream_started = False
+            _tracker = ToolCallTracker()
+            _tr = _tracker  # bind for closures (B023)
+
+            def _on_stream(data: str, *, _t: Any = _tr) -> None:
                 nonlocal _stream_started
                 _stream_started = True
+                _t.stop()
                 _sys.stdout.write(data)
                 _sys.stdout.flush()
 
-            response = client.send_prompt(user_input, on_stream=_on_stream)
+            def _on_event(event: dict[str, object], *, _t: Any = _tr) -> None:
+                nonlocal _stream_started
+                _stream_started = True
+                etype = event.get("type", "")
+                if etype == "tool_start":
+                    _t.on_tool_start(event)
+                elif etype == "tool_end":
+                    _t.on_tool_end(event)
+
+            response = client.send_prompt(user_input, on_stream=_on_stream, on_event=_on_event)
+            _tracker.stop()
             if response.get("type") == "error" and "Connection lost" in response.get("message", ""):
                 console.print("\n  [error]Connection to serve lost[/error]\n")
                 break
