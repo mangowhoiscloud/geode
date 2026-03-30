@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.38.0"
+version = "0.39.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"

@@ -4,12 +4,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.38.0
+- **Version**: 0.39.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
 - **Modules**: 192
-- **Tests**: 3496+
+- **Tests**: 3509+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -144,7 +144,7 @@ uv run mypy core/
 
 ### Expected Test Results
 
-3496+ tests pass. 3 IP fixtures produce tier spread:
+3509+ tests pass. 3 IP fixtures produce tier spread:
 - Berserk: **S** (81.2) — conversion_failure
 - Cowboy Bebop: **A** (68.4) — undermarketed
 - Ghost in the Shell: **B** (51.7) — discovery_failure
