@@ -91,6 +91,9 @@ class HookEvent(Enum):
     TOOL_APPROVAL_GRANTED = "tool_approval_granted"
     TOOL_APPROVAL_DENIED = "tool_approval_denied"
 
+    # Cross-provider fallback (LLM resilience)
+    FALLBACK_CROSS_PROVIDER = "fallback_cross_provider"
+
 
 @dataclass
 class HookResult:

@@ -6,6 +6,7 @@ Shared by all providers (Anthropic, OpenAI, GLM).
 from __future__ import annotations
 
 import logging
+import random
 import threading
 import time
 from typing import Any
@@ -81,6 +82,7 @@ def retry_with_backoff_generic(
     retry_base_delay: float = RETRY_BASE_DELAY,
     retry_max_delay: float = RETRY_MAX_DELAY,
     provider_label: str = "LLM",
+    on_retry: Any | None = None,
 ) -> Any:
     """Generic retry with exponential backoff + model fallback + circuit breaker.
 
@@ -114,6 +116,7 @@ def retry_with_backoff_generic(
 
     models_to_try = [model] + [m for m in fallback_models if m != model]
     last_error: Exception | None = None
+    t0_retry = time.monotonic()
 
     for model_idx, current_model in enumerate(models_to_try):
         for attempt in range(max_retries):
@@ -123,7 +126,8 @@ def retry_with_backoff_generic(
                 return result
             except retryable_errors as exc:
                 last_error = exc
-                delay = min(retry_base_delay * (2**attempt), retry_max_delay)
+                delay = random.uniform(0, min(retry_base_delay * (2**attempt), retry_max_delay))
+                elapsed = time.monotonic() - t0_retry
                 log.warning(
                     "%s call failed (model=%s, attempt=%d/%d): %s. Retrying in %.1fs",
                     provider_label,
@@ -133,6 +137,18 @@ def retry_with_backoff_generic(
                     type(exc).__name__,
                     delay,
                 )
+                if on_retry is not None:
+                    import contextlib
+
+                    with contextlib.suppress(Exception):
+                        on_retry(
+                            model=current_model,
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            delay_s=delay,
+                            elapsed_s=elapsed,
+                            error_type=type(exc).__name__,
+                        )
                 time.sleep(delay)
             except Exception as exc:
                 if bad_request_error is not None and isinstance(exc, bad_request_error):

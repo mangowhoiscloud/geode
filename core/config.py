@@ -272,6 +272,10 @@ class Settings(BaseSettings):
     llm_retry_max_delay: float = 30.0  # max delay cap for retries (seconds)
     llm_max_retries: int = 3  # max retry attempts per model
 
+    # LLM — Cross-Provider Failover (opt-in)
+    llm_cross_provider_failover: bool = False  # cross-provider fallback on all retries exhausted
+    llm_cross_provider_order: list[str] = ["anthropic", "openai", "glm"]
+
 
 _settings_instance: Settings | None = None
 

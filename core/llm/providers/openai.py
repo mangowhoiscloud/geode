@@ -390,6 +390,7 @@ class OpenAIAgenticAdapter:
         self._client: Any | None = None
         self._client_lock = threading.Lock()
         self._circuit_breaker = CircuitBreaker()
+        self.last_error: Exception | None = None
 
     @property
     def provider_name(self) -> str:
@@ -485,7 +486,8 @@ class OpenAIAgenticAdapter:
             response, used_model = await call_with_failover(failover_models, _do_call)
         except KeyboardInterrupt:
             raise UserCancelledError("LLM call interrupted by user") from None
-        except Exception:
+        except Exception as exc:
+            self.last_error = exc
             log.warning("%s agentic LLM call failed", self.provider_name, exc_info=True)
             self._circuit_breaker.record_failure()
             return None

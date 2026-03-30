@@ -27,7 +27,7 @@ class TestLLMLifecycleEvents:
 
     def test_event_count_includes_llm_events(self) -> None:
         """40 events total after H6 orphan pruning."""
-        assert len(HookEvent) == 40
+        assert len(HookEvent) == 41
 
 
 class TestFireHook:
