@@ -4,12 +4,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.37.2
+- **Version**: 0.38.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 190
-- **Tests**: 3461+
+- **Modules**: 192
+- **Tests**: 3496+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -39,7 +39,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 
 ```
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
-HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(40 events)
+HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(42 events)
 RUNTIME:  ToolRegistry(52), MCP Catalog(44), Skills, Memory(4-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback)
 ─────────────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ All paths: acquire_all(session_key, ["session", "global"]) → create_session(mo
 | Document | Path | Content |
 |----------|------|---------|
 | Architecture | `CLAUDE.md` § Architecture | 4-layer stack (Model→Runtime→Harness→Agent) |
-| Hook System | `docs/architecture/hook-system.md` | HookSystem 40 events |
+| Hook System | `docs/architecture/hook-system.md` | HookSystem 42 events |
 | CLAUDE.md | `CLAUDE.md` | Architecture overview + conventions (this file) |
 
 ## Project Structure
@@ -144,7 +144,7 @@ uv run mypy core/
 
 ### Expected Test Results
 
-3461+ tests pass. 3 IP fixtures produce tier spread:
+3496+ tests pass. 3 IP fixtures produce tier spread:
 - Berserk: **S** (81.2) — conversion_failure
 - Cowboy Bebop: **A** (68.4) — undermarketed
 - Ghost in the Shell: **B** (51.7) — discovery_failure
@@ -232,7 +232,7 @@ Tool definitions are centrally managed in `core/tools/definitions.json` (47 tool
 - **Verbose gating**: Debug prints only with `--verbose` flag
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
-- **Hook-driven**: `core.hooks` — 40 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`, `SESSION_*`, `TURN_COMPLETE`, `LLM_CALL_*`, `TOOL_APPROVAL_*`, `MODEL_SWITCHED`) for extensibility. Cross-cutting; accessible from all layers via `from core.hooks import HookSystem, HookEvent`.
+- **Hook-driven**: `core.hooks` — 42 lifecycle events (incl. `SUBAGENT_*`, `TOOL_RECOVERY_*`, `CONTEXT_*`, `SESSION_*`, `TURN_COMPLETE`, `LLM_CALL_*`, `TOOL_APPROVAL_*`, `MODEL_SWITCHED`) for extensibility. Cross-cutting; accessible from all layers via `from core.hooks import HookSystem, HookEvent`.
 - **Domain Plugin**: `DomainPort` Protocol — per-domain pipeline swappable (`set_domain()` / `get_domain()`). Non-domain infrastructure uses direct imports (minimizing ContextVar DI).
 - **LLM-consumed content in English**: All files injected into LLM context (system prompts, tool definitions, skill metadata, memory, rules) must be written in English. Korean trigger keywords may be retained for bilingual input matching. This improves LLM routing accuracy and tool selection reliability.
 
@@ -369,7 +369,7 @@ Code changes → repeat 3 quality gates. Fix on failure.
 ```bash
 uv run ruff check core/ tests/      # Lint: 0 errors
 uv run mypy core/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"   # Test: 3461+ pass
+uv run pytest tests/ -m "not live"   # Test: 3496+ pass
 ```
 
 #### 4. E2E Verify
@@ -440,7 +440,7 @@ Update `docs/progress.md` only from main. Backlog → In Progress → Done.
 |------|---------|----------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -m "not live"` | 3461+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 3496+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 ## Custom Skills (Scaffold)

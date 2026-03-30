@@ -157,12 +157,16 @@ class EventRenderer:
         action = str(event.get("action", ""))
         before = int(event.get("before", 0))
         after = int(event.get("after", 0))
+        removed = int(event.get("removed", before - after))
+        tokens_est = int(event.get("tokens_estimate", removed * 250))
         if action == "exhausted":
             self._out.write("  \033[1;33m\u27f3 Context exhausted\033[0m\n")
         else:
             label = "compacted" if action == "compact" else "pruned"
+            tok_str = f", ~{tokens_est // 1000}k tokens freed" if tokens_est >= 1000 else ""
             self._out.write(
-                f"  \033[2m\u27f3 Context {label}: {before} \u2192 {after} messages\033[0m\n"
+                f"  \033[2m\u27f3 Context {label}: {before} \u2192 {after} messages"
+                f" ({removed} removed{tok_str})\033[0m\n"
             )
         self._out.flush()
 
@@ -208,6 +212,44 @@ class EventRenderer:
         self._out.flush()
 
     # -- AgenticLoop state change events --------------------------------------
+
+    def _handle_budget_warning(self, event: dict[str, Any]) -> None:
+        self._clear_activity_line()
+        budget = float(event.get("budget", 0))
+        actual = float(event.get("actual", 0))
+        pct = float(event.get("pct", 0))
+        self._out.write(
+            f"  \033[1;33m$ Budget warning: ${actual:.2f} / ${budget:.2f}"
+            f" ({pct:.0f}% used)\033[0m\n"
+        )
+        self._out.flush()
+
+    def _handle_retry_wait(self, event: dict[str, Any]) -> None:
+        self._clear_activity_line()
+        model = str(event.get("model", ""))
+        attempt = int(event.get("attempt", 0))
+        max_r = int(event.get("max_retries", 0))
+        delay = float(event.get("delay_s", 0))
+        elapsed = float(event.get("elapsed_s", 0))
+        self._out.write(
+            f"  \033[1;33m~ Retrying in {delay:.1f}s... "
+            f"[{model} \u00b7 {attempt}/{max_r} \u00b7 {elapsed:.0f}s elapsed] "
+            f"(Ctrl+C to skip)\033[0m\n"
+        )
+        self._out.flush()
+
+    def _handle_llm_error(self, event: dict[str, Any]) -> None:
+        self._clear_activity_line()
+        severity = str(event.get("severity", "warning"))
+        hint = str(event.get("hint", "LLM error"))
+        model = str(event.get("model", ""))
+        elapsed = float(event.get("elapsed_s", 0))
+        # Severity -> ANSI color: critical/error=31(red), warning=33(yellow), info=2(dim)
+        color = {"critical": "1;31", "error": "1;31", "warning": "1;33"}.get(severity, "2")
+        symbol = {"critical": "!!", "error": "!", "warning": "~"}.get(severity, "\u00b7")
+        suffix = f" [{model} \u00b7 {elapsed:.1f}s]" if model else ""
+        self._out.write(f"  \033[{color}m{symbol} {hint}{suffix}\033[0m\n")
+        self._out.flush()
 
     def _handle_model_escalation(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()

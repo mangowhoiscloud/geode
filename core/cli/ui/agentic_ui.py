@@ -185,7 +185,7 @@ class OperationLogger:
                 "tool_start",
                 id=tool_id,
                 name=tool_name,
-                args_preview=args_str[:120],
+                args_preview=args_str.replace("\n", " ")[:120],
             )
             self._visible_count += 1
             return True
@@ -488,11 +488,19 @@ def render_context_event(
     original_count: int = 0,
     new_count: int = 0,
 ) -> None:
-    """Render context compression notification."""
+    """Render context compression notification with detail."""
+    removed = original_count - new_count
+    # Rough estimate: ~250 tokens per message on average
+    tokens_est = removed * 250
     writer = getattr(_ipc_writer_local, "writer", None)
     if writer is not None:
         writer.send_event(
-            "context_event", action=event_type, before=original_count, after=new_count
+            "context_event",
+            action=event_type,
+            before=original_count,
+            after=new_count,
+            removed=removed,
+            tokens_estimate=tokens_est,
         )
         return
     if event_type == "exhausted":
@@ -501,7 +509,11 @@ def render_context_event(
         )
         return
     label = "compacted" if event_type == "compact" else "pruned"
-    console.print(f"  [dim]⟳ Context {label}: {original_count} → {new_count} messages[/dim]")
+    tok_str = f", ~{tokens_est // 1000}k tokens freed" if tokens_est >= 1000 else ""
+    console.print(
+        f"  [dim]⟳ Context {label}: {original_count} → {new_count} messages"
+        f" ({removed} removed{tok_str})[/dim]"
+    )
 
 
 def render_turn_summary(rounds: int, tool_count: int, elapsed_s: float, cost: float) -> None:
@@ -625,6 +637,74 @@ def mark_turn_start() -> None:
 # ───────────────────────────────────────────────────────────────────────────
 # Structured IPC event emitters — AgenticLoop state changes
 # ───────────────────────────────────────────────────────────────────────────
+
+
+def emit_budget_warning(budget: float, actual: float, pct: float) -> None:
+    """Emit proactive budget warning at 80% threshold."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("budget_warning", budget=budget, actual=actual, pct=pct)
+        return
+    console.print(
+        f"  [warning]$ Budget warning: ${actual:.2f} / ${budget:.2f} ({pct:.0f}% used)[/warning]"
+    )
+
+
+def emit_retry_wait(
+    model: str,
+    attempt: int,
+    max_retries: int,
+    delay_s: float,
+    elapsed_s: float,
+    error_type: str,
+) -> None:
+    """Emit retry_wait event during LLM retry backoff."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "retry_wait",
+            model=model,
+            attempt=attempt,
+            max_retries=max_retries,
+            delay_s=delay_s,
+            elapsed_s=elapsed_s,
+            error_type=error_type,
+        )
+        return
+    console.print(
+        f"  [warning]~ Retrying in {delay_s:.1f}s... "
+        f"[{model} · {attempt}/{max_retries} · {elapsed_s:.0f}s elapsed] "
+        f"(Ctrl+C to skip)[/warning]"
+    )
+
+
+def emit_llm_error(
+    error_type: str,
+    severity: str,
+    hint: str,
+    model: str,
+    provider: str,
+    attempt: int = 0,
+    elapsed_s: float = 0.0,
+) -> None:
+    """Emit llm_error event with severity classification and actionable hint."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "llm_error",
+            error_type=error_type,
+            severity=severity,
+            hint=hint,
+            model=model,
+            provider=provider,
+            attempt=attempt,
+            elapsed_s=elapsed_s,
+        )
+        return
+    # Severity -> Rich style mapping
+    style = {"critical": "error", "error": "error", "warning": "warning"}.get(severity, "dim")
+    symbol = {"critical": "!!", "error": "!", "warning": "~"}.get(severity, "·")
+    console.print(f"  [{style}]{symbol} {hint} [{model} · {elapsed_s:.1f}s][/{style}]")
 
 
 def emit_model_escalation(from_model: str, to_model: str, failures: int) -> None:

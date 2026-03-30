@@ -74,6 +74,11 @@ def create_mcp_server() -> Any:
                 "dry_run": dry_run,
             }
 
+            # B2: propagate pipeline errors to caller
+            pipeline_errors = result.get("errors", [])
+            if pipeline_errors:
+                output["errors"] = pipeline_errors
+
             synthesis = result.get("synthesis")
             if synthesis:
                 output["cause"] = synthesis.undervaluation_cause
