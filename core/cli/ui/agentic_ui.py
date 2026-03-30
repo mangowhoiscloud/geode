@@ -33,6 +33,22 @@ from core.cli.ui.console import console
 # thin client to render per-tool spinners with in-place ✓ updates.
 _ipc_writer_local = threading.local()
 
+# Thread-local pipeline IP name for forward-compatible event tagging.
+# Set by _run_analysis() before pipeline execution; read by emit_pipeline_*
+# functions to tag events with the originating IP (for future parallel UI).
+_pipeline_ip_local = threading.local()
+
+
+def set_pipeline_ip(ip_name: str) -> None:
+    """Set the current pipeline's IP name (thread-safe)."""
+    _pipeline_ip_local.ip_name = ip_name
+
+
+def _get_pipeline_ip() -> str:
+    """Get the current pipeline's IP name."""
+    return getattr(_pipeline_ip_local, "ip_name", "")
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # SessionMeter — session-level timing for status line
 # ───────────────────────────────────────────────────────────────────────────
@@ -814,11 +830,16 @@ def emit_checkpoint_saved(session_id: str, round_idx: int) -> None:
 # ───────────────────────────────────────────────────────────────────────────
 
 
-def emit_pipeline_gather(ip_info: dict[str, Any], monolake: dict[str, Any]) -> None:
-    """Emit pipeline_gather event with structured IP metadata."""
+def emit_pipeline_gather(
+    ip_info: dict[str, Any],
+    monolake: dict[str, Any],
+    signals: dict[str, Any] | None = None,
+) -> None:
+    """Emit pipeline_gather event with structured IP metadata + signals."""
     writer = getattr(_ipc_writer_local, "writer", None)
     if writer is None:
         return
+    sig = signals or {}
     writer.send_event(
         "pipeline_gather",
         ip_name=ip_info.get("ip_name", ""),
@@ -827,6 +848,9 @@ def emit_pipeline_gather(ip_info: dict[str, Any], monolake: dict[str, Any]) -> N
         studio=ip_info.get("studio", ""),
         dau=monolake.get("dau_current", 0),
         revenue=monolake.get("revenue_ltm", 0),
+        youtube_views=sig.get("youtube_views", 0),
+        reddit_subscribers=sig.get("reddit_subscribers", 0),
+        fan_art_yoy_pct=sig.get("fan_art_yoy_pct", 0),
     )
 
 
@@ -866,6 +890,8 @@ def emit_pipeline_score(
     subscores: dict[str, float],
     confidence: float,
     tier: str,
+    *,
+    psm: Any | None = None,
 ) -> None:
     """Emit pipeline_score event with PSM results."""
     writer = getattr(_ipc_writer_local, "writer", None)
@@ -877,11 +903,19 @@ def emit_pipeline_score(
         subscores=subscores,
         confidence=confidence,
         tier=tier,
+        att_pct=getattr(psm, "att_pct", 0) if psm else 0,
+        z_value=getattr(psm, "z_value", 0) if psm else 0,
+        rosenbaum_gamma=getattr(psm, "rosenbaum_gamma", 0) if psm else 0,
     )
 
 
-def emit_pipeline_verification(guardrails_pass: bool, biasbuster_pass: bool) -> None:
-    """Emit pipeline_verification event."""
+def emit_pipeline_verification(
+    guardrails_pass: bool,
+    biasbuster_pass: bool,
+    *,
+    details: list[str] | None = None,
+) -> None:
+    """Emit pipeline_verification event with optional failure details."""
     writer = getattr(_ipc_writer_local, "writer", None)
     if writer is None:
         return
@@ -889,6 +923,7 @@ def emit_pipeline_verification(guardrails_pass: bool, biasbuster_pass: bool) -> 
         "pipeline_verification",
         guardrails_pass=guardrails_pass,
         biasbuster_pass=biasbuster_pass,
+        details=details or [],
     )
 
 

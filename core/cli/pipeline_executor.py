@@ -14,6 +14,7 @@ from typing import Any
 
 from core.cli.ui.console import console
 from core.cli.ui.panels import (
+    _is_ipc,
     analyst_panel,
     evaluator_panel,
     gather_panel,
@@ -444,7 +445,10 @@ def _render_verification(result: dict[str, Any], *, verbose: bool) -> None:
     biasbuster = result.get("biasbuster")
     g_pass = guardrails.all_passed if guardrails else False
     b_pass = biasbuster.overall_pass if biasbuster else False
-    verify_panel(g_pass, b_pass)
+    fail_details: list[str] = []
+    if guardrails and not g_pass:
+        fail_details = [d for d in guardrails.details if "FAIL" in d]
+    verify_panel(g_pass, b_pass, details=fail_details)
     if guardrails and not g_pass:
         for detail in guardrails.details:
             if "FAIL" in detail:
@@ -463,11 +467,16 @@ def _render_result(result: dict[str, Any], *, skip_verification: bool, verbose: 
     _render_data_panels(result)
     if not skip_verification:
         _render_verification(result, verbose=verbose)
-    if result.get("synthesis"):
-        result_panel(result.get("tier", "?"), result.get("final_score", 0), result["synthesis"])
-    # Surface accumulated pipeline errors
     errors = result.get("errors", [])
-    if errors:
+    if result.get("synthesis"):
+        result_panel(
+            result.get("tier", "?"),
+            result.get("final_score", 0),
+            result["synthesis"],
+            errors=errors,
+        )
+    # Surface accumulated pipeline errors (direct mode only — IPC receives via event)
+    if errors and not _is_ipc():
         console.print(f"  [warning]Pipeline warnings ({len(errors)}):[/warning]")
         for err in errors:
             console.print(f"    [warning]- {err}[/warning]")
@@ -547,6 +556,11 @@ def _run_analysis(
 
     # Use the resolved fixture key for downstream operations
     ip_name = resolved
+
+    # Tag pipeline events with IP name (thread-safe, for future parallel UI)
+    from core.cli.ui.agentic_ui import set_pipeline_ip
+
+    set_pipeline_ip(ip_name)
 
     model = "dry-run (no LLM)" if dry_run else settings.model
     pipeline_mode = "full_pipeline"

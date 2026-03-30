@@ -404,6 +404,15 @@ class EventRenderer:
             dau_s = f"{dau:,}" if dau else "n/a"
             rev_s = f"${rev:,}" if rev else "n/a"
             self._out.write(f"    \033[2mDAU={dau_s} | Revenue={rev_s}\033[0m\n")
+        yt = int(event.get("youtube_views", 0))
+        rd = int(event.get("reddit_subscribers", 0))
+        fa = float(event.get("fan_art_yoy_pct", 0))
+        if yt or rd:
+            yt_s = f"{yt // 1_000_000}M" if yt >= 1_000_000 else f"{yt:,}"
+            rd_s = f"{rd // 1000}K" if rd >= 1000 else f"{rd:,}"
+            self._out.write(
+                f"    \033[2mYouTube {yt_s} | Reddit {rd_s} | FanArt {fa:+.0f}%\033[0m\n"
+            )
         self._out.flush()
 
     def _handle_pipeline_analysis(self, event: dict[str, Any]) -> None:
@@ -452,6 +461,17 @@ class EventRenderer:
         if conf > 0:
             self._out.write(f" \u00b7 confidence {conf:.1f}%")
         self._out.write("\n")
+        # PSM causal inference
+        att = float(event.get("att_pct", 0))
+        z = float(event.get("z_value", 0))
+        gamma = float(event.get("rosenbaum_gamma", 0))
+        if att or z:
+            z_ok = "\033[32m\u2713\033[0m" if z > 1.645 else "\033[31m\u2717\033[0m"
+            g_ok = "\033[32m\u2713\033[0m" if gamma <= 2.0 else "\033[31m\u2717\033[0m"
+            self._out.write(
+                f"    \033[2mPSM: ATT={att:+.1f}% | Z={z:.2f} ({z_ok}>1.645)"
+                f" | \u0393={gamma:.1f} ({g_ok}\u22642.0)\033[0m\n"
+            )
         # Subscores
         if isinstance(subscores, dict) and subscores:
             parts = [f"{k}={v:.1f}" for k, v in subscores.items()]
@@ -463,6 +483,9 @@ class EventRenderer:
         g = "\033[32m\u2713\033[0m" if event.get("guardrails_pass") else "\033[31m\u2717\033[0m"
         b = "\033[32m\u2713\033[0m" if event.get("biasbuster_pass") else "\033[31m\u2717\033[0m"
         self._out.write(f"  \033[36;1m\u25b8 VERIFY\033[0m Guardrails {g} | BiasBuster {b}\n")
+        details = event.get("details", [])
+        for d in details[:3]:
+            self._out.write(f"    \033[33m- {d}\033[0m\n")
         self._out.flush()
 
     def _handle_feedback_loop(self, event: dict[str, Any]) -> None:
@@ -500,6 +523,11 @@ class EventRenderer:
             self._out.write(f"    \033[2mTarget:\033[0m {segment}\n")
         if action:
             self._out.write(f"    \033[2mAction:\033[0m {action}\n")
+        errors = event.get("errors", [])
+        if errors:
+            self._out.write(f"    \033[1;33m\u26a0 {len(errors)} warnings\033[0m\n")
+            for err in errors[:5]:
+                self._out.write(f"      \033[33m- {err}\033[0m\n")
         self._out.write("\n")
         self._out.flush()
 

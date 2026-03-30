@@ -161,6 +161,9 @@ class TestPipelineEmitters:
             subscores={"psm": 85.0},
             confidence=92.0,
             tier="S",
+            att_pct=0,
+            z_value=0,
+            rosenbaum_gamma=0,
         )
 
     def test_emit_feedback_loop(self) -> None:
@@ -192,6 +195,7 @@ class TestPipelineEmitters:
             "pipeline_verification",
             guardrails_pass=True,
             biasbuster_pass=False,
+            details=[],
         )
 
     def test_no_writer_no_crash(self) -> None:
@@ -259,6 +263,22 @@ class TestEventRendererV2:
         renderer.on_event({"type": "pipeline_gather", "ip_name": "Berserk", "release_year": 1989})
         assert "Berserk" in renderer._out.getvalue()
 
+    def test_pipeline_gather_signals(self, renderer) -> None:
+        """G1: Signals (YouTube/Reddit/FanArt) rendered in gather event."""
+        renderer.on_event(
+            {
+                "type": "pipeline_gather",
+                "ip_name": "Berserk",
+                "youtube_views": 15_000_000,
+                "reddit_subscribers": 89_000,
+                "fan_art_yoy_pct": 12.5,
+            }
+        )
+        out = renderer._out.getvalue()
+        assert "YouTube 15M" in out
+        assert "Reddit 89K" in out
+        assert "+12%" in out
+
     def test_pipeline_analysis(self, renderer) -> None:
         renderer.on_event(
             {
@@ -286,13 +306,44 @@ class TestEventRendererV2:
         )
         assert "S" in renderer._out.getvalue()
 
+    def test_pipeline_score_psm(self, renderer) -> None:
+        """G2: PSM details (ATT/Z/Gamma) rendered in score event."""
+        renderer.on_event(
+            {
+                "type": "pipeline_score",
+                "final_score": 81.2,
+                "tier": "S",
+                "att_pct": 31.2,
+                "z_value": 2.45,
+                "rosenbaum_gamma": 1.8,
+            }
+        )
+        out = renderer._out.getvalue()
+        assert "ATT=+31.2%" in out
+        assert "Z=2.45" in out
+        assert "1.8" in out
+
     def test_pipeline_verification(self, renderer) -> None:
         renderer.on_event(
             {"type": "pipeline_verification", "guardrails_pass": True, "biasbuster_pass": False}
         )
         out = renderer._out.getvalue()
-        assert "✓" in out
-        assert "✗" in out
+        assert "\u2713" in out
+        assert "\u2717" in out
+
+    def test_pipeline_verification_details(self, renderer) -> None:
+        """G4: Guardrail failure details rendered in verification event."""
+        renderer.on_event(
+            {
+                "type": "pipeline_verification",
+                "guardrails_pass": False,
+                "biasbuster_pass": True,
+                "details": ["G2 FAIL: score out of range", "G3 FAIL: grounding < 0.5"],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert "G2 FAIL" in out
+        assert "G3 FAIL" in out
 
     def test_feedback_loop(self, renderer) -> None:
         renderer.on_event(
@@ -303,6 +354,21 @@ class TestEventRendererV2:
     def test_node_skipped(self, renderer) -> None:
         renderer.on_event({"type": "node_skipped", "node": "verification", "reason": "skip"})
         assert "verification" in renderer._out.getvalue()
+
+    def test_pipeline_result_errors(self, renderer) -> None:
+        """G3: Pipeline errors rendered in result event."""
+        renderer.on_event(
+            {
+                "type": "pipeline_result",
+                "tier": "A",
+                "final_score": 68.4,
+                "cause": "undermarketed",
+                "errors": ["Analyst timeout: growth_potential", "Evaluator retry: quality_judge"],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert "2 warnings" in out
+        assert "Analyst timeout" in out
 
     def test_pipeline_event_suspends_tracker(self, renderer) -> None:
         """Pipeline events suspend the tool tracker to prevent cursor-up interference."""

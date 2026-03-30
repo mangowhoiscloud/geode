@@ -21,66 +21,13 @@ def _make_hooks_and_memory(
 
 
 class TestPipelineEndMemoryWrite:
-    def test_pipeline_end_triggers_memory_write(self, tmp_path: Path):
-        """PIPELINE_END handler calls add_insight() with enriched data."""
-        hooks, mem = _make_hooks_and_memory(tmp_path)
-
-        build_automation(
-            hooks=hooks,
-            session_key="test-session",
-            ip_name="Berserk",
-            project_memory=mem,
-        )
-
-        # Simulate PIPELINE_END with enriched data
-        hooks.trigger(
-            HookEvent.PIPELINE_END,
-            {
-                "node": "synthesizer",
-                "ip_name": "Berserk",
-                "final_score": 0.85,
-                "tier": "S",
-                "synthesis_cause": "conversion_failure",
-                "synthesis_action": "marketing_push",
-                "dry_run": False,
-            },
-        )
-
-        content = mem.memory_file.read_text(encoding="utf-8")
-        assert "Berserk" in content
-        assert "tier=S" in content
-        assert "score=0.85" in content
-        assert "cause=conversion_failure" in content
-        assert "action=marketing_push" in content
-
-    def test_dry_run_skips_memory_write(self, tmp_path: Path):
-        """dry_run=True → add_insight() is NOT called."""
-        hooks, mem = _make_hooks_and_memory(tmp_path)
-
-        build_automation(
-            hooks=hooks,
-            session_key="test-session",
-            ip_name="Berserk",
-            project_memory=mem,
-        )
-
-        hooks.trigger(
-            HookEvent.PIPELINE_END,
-            {
-                "node": "synthesizer",
-                "ip_name": "Berserk",
-                "final_score": 0.85,
-                "tier": "S",
-                "dry_run": True,
-            },
-        )
-
-        content = mem.memory_file.read_text(encoding="utf-8")
-        # The insight section should be empty (only the header from ensure_structure)
-        assert "tier=S" not in content
+    """Memory write-back hook was removed (generated broken tier=?/score=0.00 entries).
+    Pipeline results are recorded in journal (runs.jsonl) via journal_hooks.
+    Remaining tests verify the hook registration doesn't crash without the callback.
+    """
 
     def test_no_project_memory_does_not_crash(self, tmp_path: Path):
-        """project_memory=None → handler is a no-op, no error."""
+        """project_memory=None → no error."""
         hooks = HookSystem()
 
         build_automation(
@@ -101,30 +48,6 @@ class TestPipelineEndMemoryWrite:
                 "dry_run": False,
             },
         )
-
-    def test_minimal_hook_data_still_writes(self, tmp_path: Path):
-        """Missing optional fields → insight still written with defaults."""
-        hooks, mem = _make_hooks_and_memory(tmp_path)
-
-        build_automation(
-            hooks=hooks,
-            session_key="test-session",
-            ip_name="TestIP",
-            project_memory=mem,
-        )
-
-        hooks.trigger(
-            HookEvent.PIPELINE_END,
-            {
-                "node": "synthesizer",
-                "ip_name": "TestIP",
-            },
-        )
-
-        content = mem.memory_file.read_text(encoding="utf-8")
-        assert "TestIP" in content
-        assert "tier=?" in content
-        assert "score=0.00" in content
 
 
 class TestEnrichedHookData:
