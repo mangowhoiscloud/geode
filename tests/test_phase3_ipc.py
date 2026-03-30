@@ -402,23 +402,27 @@ class TestCLIChannelIntegration:
             from core.cli.session_checkpoint import SessionCheckpoint, SessionState
 
             cp = SessionCheckpoint()
-            cp.save(SessionState(
-                session_id="s-old",
-                round_idx=1,
-                model="claude-opus-4-6",
-                status="active",
-                messages=[{"role": "user", "content": "old"}],
-                user_input="old",
-            ))
+            cp.save(
+                SessionState(
+                    session_id="s-old",
+                    round_idx=1,
+                    model="claude-opus-4-6",
+                    status="active",
+                    messages=[{"role": "user", "content": "old"}],
+                    user_input="old",
+                )
+            )
             time.sleep(0.01)  # ensure different updated_at
-            cp.save(SessionState(
-                session_id="s-latest",
-                round_idx=5,
-                model="claude-opus-4-6",
-                status="active",
-                messages=[{"role": "user", "content": "latest"}],
-                user_input="latest",
-            ))
+            cp.save(
+                SessionState(
+                    session_id="s-latest",
+                    round_idx=5,
+                    model="claude-opus-4-6",
+                    status="active",
+                    messages=[{"role": "user", "content": "latest"}],
+                    user_input="latest",
+                )
+            )
 
             client = IPCClient(socket_path=sock_path)
             client.connect()
