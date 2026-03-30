@@ -198,7 +198,7 @@ class TestPostToMain:
         def handler(event: Any, data: dict[str, Any]) -> None:
             captured.append(data)
 
-        hooks.register(HookEvent.PIPELINE_END, handler, name="capture")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(post_mode=PostToMainMode.SUMMARY, prefix="TestRun")
         result = runner.run(lambda: "some output", config=cfg)
@@ -219,7 +219,7 @@ class TestPostToMain:
         def handler(event: Any, data: dict[str, Any]) -> None:
             captured.append(data)
 
-        hooks.register(HookEvent.PIPELINE_END, handler, name="capture")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(post_mode=PostToMainMode.FULL)
         runner.run(lambda: "full output text", config=cfg)
@@ -235,7 +235,7 @@ class TestPostToMain:
         def handler(event: Any, data: dict[str, Any]) -> None:
             captured.append(data)
 
-        hooks.register(HookEvent.PIPELINE_END, handler, name="capture")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(post_mode=PostToMainMode.FULL, max_chars=100)
         runner.run(_large_output, args=(500,), config=cfg)
@@ -251,7 +251,7 @@ class TestPostToMain:
         def handler(event: Any, data: dict[str, Any]) -> None:
             captured.append(data)
 
-        hooks.register(HookEvent.PIPELINE_END, handler, name="capture")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(post_to_main=False)
         runner.run(lambda: "no posting", config=cfg)
@@ -272,7 +272,7 @@ class TestPostToMain:
         def handler(event: Any, data: dict[str, Any]) -> None:
             captured.append(data)
 
-        hooks.register(HookEvent.PIPELINE_END, handler, name="capture")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(prefix="AnalysisTask")
         runner.run(lambda: "ok", config=cfg)
@@ -286,7 +286,7 @@ class TestPostToMain:
         def handler(event: Any, data: dict[str, Any]) -> None:
             captured.append(data)
 
-        hooks.register(HookEvent.PIPELINE_END, handler, name="capture")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         runner.run(lambda: "ok")
 
@@ -300,7 +300,7 @@ class TestPostToMain:
         def handler(event: Any, data: dict[str, Any]) -> None:
             captured.append(data)
 
-        hooks.register(HookEvent.PIPELINE_END, handler, name="capture")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         runner.run(_exploding)
 
@@ -581,7 +581,7 @@ class TestEdgeCases:
         def bad_handler(event: Any, data: dict[str, Any]) -> None:
             raise ValueError("hook exploded")
 
-        hooks.register(HookEvent.PIPELINE_END, bad_handler, name="bad")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, bad_handler, name="bad")
         runner = IsolatedRunner(hooks=hooks)
 
         # Should not raise

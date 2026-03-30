@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any
 from unittest.mock import patch
 
 from core.cli.ui.agentic_ui import (
@@ -677,3 +678,101 @@ class TestBuildResultSummary:
         s = OperationLogger._build_result_summary("t", {"output": long_text})
         assert len(s) <= 80
         assert s.endswith("...")
+
+
+# ───────────────────────────────────────────────────────────────────
+# Cross-batch repeat counter (P2)
+# ───────────────────────────────────────────────────────────────────
+
+
+class TestRepeatCounter:
+    """Tests for EventRenderer cross-batch repeat counter."""
+
+    def _make_renderer(self) -> Any:
+        from core.cli.ui.event_renderer import EventRenderer
+
+        r = EventRenderer()
+        # Redirect output to avoid terminal noise in tests
+        import io
+
+        r._out = io.StringIO()
+        return r
+
+    def test_sequential_same_tool_enters_repeat(self) -> None:
+        """Two sequential single-tool batches with same name enter repeat mode."""
+        r = self._make_renderer()
+        # First batch
+        r.on_event({"type": "tool_start", "name": "memory_search", "args_preview": "q=test"})
+        r.on_event({"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.2})
+        assert r._last_batch_tool == "memory_search"
+
+        # Second batch — same tool → repeat mode
+        r.on_event({"type": "tool_start", "name": "memory_search", "args_preview": "q=test2"})
+        assert r._in_repeat is True
+
+        # Third end
+        r.on_event({"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.3})
+        assert r._repeat_count == 2
+
+    def test_flush_emits_summary_line(self) -> None:
+        """Flushing repeat mode emits ✓ tool ×N summary."""
+        r = self._make_renderer()
+        # Simulate 3 sequential calls
+        for _i in range(3):
+            r.on_event({"type": "tool_start", "name": "check_status", "args_preview": ""})
+            r.on_event({"type": "tool_end", "name": "check_status", "summary": "ok", "duration_s": 0.1})
+
+        assert r._in_repeat is True
+        assert r._repeat_count == 3
+        r._flush_repeat()
+        output = r._out.getvalue()
+        assert "\u00d73" in output  # ×3
+        assert "check_status" in output
+        assert r._in_repeat is False
+
+    def test_different_tool_flushes_repeat(self) -> None:
+        """Starting a different tool flushes the repeat accumulation."""
+        r = self._make_renderer()
+        # 2x memory_search
+        r.on_event({"type": "tool_start", "name": "memory_search"})
+        r.on_event({"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.1})
+        r.on_event({"type": "tool_start", "name": "memory_search"})
+        r.on_event({"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.1})
+        assert r._in_repeat is True
+
+        # Different tool → flush
+        r.on_event({"type": "tool_start", "name": "web_search", "args_preview": "q=new"})
+        assert r._in_repeat is False
+        output = r._out.getvalue()
+        assert "\u00d72" in output  # ×2 from flush
+
+    def test_parallel_batch_does_not_trigger_repeat(self) -> None:
+        """Multi-tool batches don't set _last_batch_tool."""
+        r = self._make_renderer()
+        r.on_event({"type": "tool_start", "name": "web_search"})
+        r.on_event({"type": "tool_start", "name": "read_file"})
+        r.on_event({"type": "tool_end", "name": "web_search", "summary": "ok", "duration_s": 0.1})
+        r.on_event({"type": "tool_end", "name": "read_file", "summary": "ok", "duration_s": 0.1})
+        assert r._last_batch_tool == ""
+
+    def test_stop_flushes_repeat(self) -> None:
+        """stop() flushes any pending repeat accumulation."""
+        r = self._make_renderer()
+        for _ in range(4):
+            r.on_event({"type": "tool_start", "name": "task_list"})
+            r.on_event({"type": "tool_end", "name": "task_list", "summary": "0 items", "duration_s": 0.05})
+        assert r._in_repeat is True
+        r.stop()
+        output = r._out.getvalue()
+        assert "\u00d74" in output  # ×4
+
+    def test_tokens_suppressed_during_repeat(self) -> None:
+        """Token events between repeated tools are suppressed."""
+        r = self._make_renderer()
+        r.on_event({"type": "tool_start", "name": "check_status"})
+        r.on_event({"type": "tool_end", "name": "check_status", "summary": "ok", "duration_s": 0.1})
+        r.on_event({"type": "tool_start", "name": "check_status"})
+        # Now in repeat mode — tokens should be suppressed
+        r.on_event({"type": "tokens", "model": "claude-opus-4-6", "input": 1000, "output": 50})
+        output = r._out.getvalue()
+        assert "claude-opus-4-6" not in output  # tokens line suppressed
