@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import shutil
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
+from io import StringIO
 
 from rich.console import Console
 from rich.theme import Theme
@@ -69,3 +72,30 @@ def _get_terminal_width() -> int | None:
 
 
 console = Console(theme=GEODE_THEME, width=_get_terminal_width())
+
+
+@contextmanager
+def capture_output() -> Generator[StringIO, None, None]:
+    """Capture console output with ANSI styling preserved.
+
+    Temporarily redirects the global console to a StringIO buffer with
+    ``force_terminal=True`` so that Rich markup is rendered as ANSI escape
+    codes.  The caller receives the buffer; after the block exits the
+    console is restored to its original state.
+
+    Usage::
+
+        with capture_output() as buf:
+            console.print("[bold]hello[/bold]")
+        text = buf.getvalue()   # contains ANSI-styled text
+    """
+    buf = StringIO()
+    old_file = console._file
+    old_force = console._force_terminal
+    console._file = buf
+    console._force_terminal = True
+    try:
+        yield buf
+    finally:
+        console._file = old_file
+        console._force_terminal = old_force

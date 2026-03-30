@@ -490,6 +490,14 @@ def cmd_auth(args: str) -> None:
 
 def _auth_add_interactive(store: ProfileStore, add_args: str) -> None:
     """Interactive auth profile addition."""
+    import sys
+
+    if not sys.stdin.isatty():
+        console.print("  [warning]/auth add requires an interactive terminal.[/warning]")
+        console.print("  [muted]Use /key <provider> <value> to set API keys directly.[/muted]")
+        console.print()
+        return
+
     from core.gateway.auth.profiles import AuthProfile, CredentialType
 
     # Level 1: Provider selection

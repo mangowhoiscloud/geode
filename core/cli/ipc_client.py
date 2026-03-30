@@ -10,8 +10,8 @@ Protocol: line-delimited JSON over Unix socket (matches CLIPoller server).
 from __future__ import annotations
 
 import json
-import os
 import logging
+import os
 import socket
 from pathlib import Path
 from typing import Any
@@ -151,19 +151,37 @@ class IPCClient:
     def connected(self) -> bool:
         return self._sock is not None
 
-    def send_prompt(self, text: str) -> dict[str, Any]:
+    def send_prompt(
+        self,
+        text: str,
+        *,
+        on_stream: Any = None,
+    ) -> dict[str, Any]:
         """Send a prompt and wait for the result.
 
-        Returns a dict with keys: type, text, rounds, tool_calls, termination.
-        On error, returns {"type": "error", "message": "..."}.
+        When *on_stream* is provided (callable(str) -> None), intermediate
+        ``{"type": "stream"}`` messages are passed to it in real-time so the
+        thin client can render agentic UI (tool calls, results, tokens)
+        progressively.
+
+        Returns the final ``{"type": "result", ...}`` dict.
+        On error, returns ``{"type": "error", "message": "..."}``.
         """
         if not self._sock:
             return {"type": "error", "message": "Not connected"}
         self._send({"type": "prompt", "text": text})
-        response = self._recv()
-        if response is None:
-            return {"type": "error", "message": "Connection lost"}
-        return response
+
+        # Read messages until the final result arrives
+        while True:
+            response = self._recv()
+            if response is None:
+                return {"type": "error", "message": "Connection lost"}
+            if response.get("type") == "stream":
+                if on_stream is not None:
+                    on_stream(response.get("data", ""))
+                continue
+            # Any non-stream message is the final response
+            return response
 
     def send_command(self, cmd: str, args: str = "") -> dict[str, Any]:
         """Send a slash command to serve and wait for result.
