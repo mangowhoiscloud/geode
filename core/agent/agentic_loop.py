@@ -102,6 +102,44 @@ class _ContextExhaustedError(Exception):
     """Raised when context remains critical after pruning — unrecoverable."""
 
 
+_EXHAUSTED_FALLBACK = (
+    "Context window exhausted. "
+    "This conversation has been automatically reset — "
+    "please start a new thread or send a new message to continue."
+)
+
+_EXHAUSTED_SYSTEM = (
+    "The conversation context has been exhausted and automatically reset. "
+    "Reply ONLY with a short notice (1-2 sentences) in the SAME language as the user's message. "
+    "Tell them the conversation was reset and they should start a new thread or send a new message."
+)
+
+
+def _context_exhausted_message(user_input: str) -> str:
+    """Generate context-exhausted message in the user's language via lightweight LLM call."""
+    try:
+        import anthropic
+
+        from core.config import ANTHROPIC_BUDGET, settings
+
+        if not settings.anthropic_api_key:
+            return _EXHAUSTED_FALLBACK
+
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        resp = client.messages.create(
+            model=ANTHROPIC_BUDGET,
+            max_tokens=150,
+            system=_EXHAUSTED_SYSTEM,
+            messages=[{"role": "user", "content": user_input[:200]}],
+        )
+        block = resp.content[0] if resp.content else None
+        text = block.text if block and hasattr(block, "text") else ""
+        return text or _EXHAUSTED_FALLBACK
+    except Exception:
+        log.debug("Exhausted message LLM call failed, using fallback", exc_info=True)
+        return _EXHAUSTED_FALLBACK
+
+
 @dataclass
 class AgenticResult:
     """Result of an agentic loop execution."""
@@ -481,6 +519,35 @@ class AgenticLoop:
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
             self._check_announced_results(messages)
 
+            # Pre-call context check — proactive compress/prune (prevents 400)
+            try:
+                self._check_context_overflow(system_prompt, messages)
+            except _ContextExhaustedError:
+                log.warning("Pre-call context exhausted — attempting aggressive recovery")
+                recovered = self._aggressive_context_recovery(system_prompt, messages)
+                if recovered:
+                    self._notify_context_event(
+                        "prune",
+                        original_count=len(messages) + recovered,
+                        new_count=len(messages),
+                    )
+                    log.info("Pre-call recovery succeeded — proceeding with pruned context")
+                else:
+                    self._notify_context_event(
+                        "exhausted",
+                        original_count=len(messages),
+                        new_count=len(messages),
+                    )
+                    self._sync_messages_to_context(messages)
+                    result = AgenticResult(
+                        text=_context_exhausted_message(user_input),
+                        tool_calls=self._tool_processor.tool_log,
+                        rounds=round_idx + 1,
+                        error="context_exhausted",
+                        termination_reason="context_exhausted",
+                    )
+                    return self._finalize_and_return(result, user_input, round_idx + 1)
+
             # Show spinner while waiting for LLM response
             # IPC mode: send structured event; direct mode: TextSpinner
             from core.cli.ui.agentic_ui import _ipc_writer_local
@@ -536,11 +603,7 @@ class AgenticLoop:
                 )
                 self._sync_messages_to_context(messages)
                 result = AgenticResult(
-                    text=(
-                        "Context window exhausted after aggressive pruning. "
-                        "Your conversation is preserved — start a new request "
-                        "or use /compact to manually reduce context."
-                    ),
+                    text=_context_exhausted_message(user_input),
                     tool_calls=self._tool_processor.tool_log,
                     rounds=round_idx + 1,
                     error="context_exhausted",
@@ -563,6 +626,20 @@ class AgenticLoop:
                     from core.llm.errors import classify_llm_error
 
                     _et, _sev, _hint = classify_llm_error(adapter_exc)
+
+                    # Context overflow from 400 → attempt recovery + retry
+                    if _et == "context_overflow":
+                        log.warning("Context overflow detected from 400 — attempting recovery")
+                        recovered = self._aggressive_context_recovery(system_prompt, messages)
+                        if recovered:
+                            self._notify_context_event(
+                                "prune",
+                                original_count=len(messages) + recovered,
+                                new_count=len(messages),
+                            )
+                            log.info("Context overflow recovery succeeded — retrying LLM call")
+                            continue  # retry with pruned context
+
                     if not self._quiet:
                         from core.cli.ui.agentic_ui import emit_llm_error
 

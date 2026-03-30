@@ -19,6 +19,19 @@ from __future__ import annotations
 import sys
 import threading
 import time
+import unicodedata
+
+
+def _truncate_display(text: str, max_width: int) -> str:
+    """Truncate text by display width, accounting for CJK wide characters."""
+    width = 0
+    for i, ch in enumerate(text):
+        w = 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+        if width + w > max_width - 3:  # room for "..."
+            return text[:i] + "..."
+        width += w
+    return text
+
 
 # Braille spinner frames (same as TextSpinner)
 _FRAMES = [
@@ -148,15 +161,16 @@ class ToolCallTracker:
             if t["done"]:
                 dur = f" ({float(t['duration']):.1f}s)"
                 if t["error"]:
-                    lines.append(f"\033[2K  \033[31m\u2717 {name}\033[0m — {t['error']}{dur}")
+                    err = _truncate_display(str(t["error"]), 60)
+                    lines.append(f"\033[2K  \033[31m\u2717 {name}\033[0m — {err}{dur}")
                 else:
-                    summary = t["summary"]
+                    summary = _truncate_display(str(t["summary"]), 60)
                     lines.append(f"\033[2K  \033[32m\u2713 {name}\033[0m → {summary}{dur}")
             else:
                 args = str(t["args"]).replace("\n", " ")
-                if len(args) > 60:
-                    args = args[:57] + "..."
-                lines.append(f"\033[2K  \033[35m\u25b8 {name}\033[0m({args}) {frame}")
+                # Truncate by display width — CJK chars occupy 2 columns
+                args = _truncate_display(args, 50)
+                lines.append(f"\033[2K  {frame} \033[35m{name}\033[0m({args})")
 
         output = "\n".join(lines)
         if lines:

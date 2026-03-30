@@ -294,7 +294,16 @@ async def call_with_failover(
                 result = await call_fn(current_model)
                 return result, current_model
             except _NON_RETRYABLE_ERRORS as exc:
-                # Non-retryable: fail immediately, do not try other models
+                # Context overflow → re-raise so adapter can set last_error
+                error_msg = str(exc).lower()
+                if "token" in error_msg or "context" in error_msg:
+                    log.warning(
+                        "Context overflow on model=%s: %s — propagating to adapter",
+                        current_model,
+                        type(exc).__name__,
+                    )
+                    raise
+                # Other non-retryable: fail immediately, do not try other models
                 log.warning(
                     "Non-retryable error on model=%s: %s — aborting failover",
                     current_model,
