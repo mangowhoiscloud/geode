@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-29 (세션 46 — system-hardening 완료, v0.35.1)
+> 마지막 갱신: 2026-03-30 (세션 50 — v0.38.0 LLM resilience + IPC UX + blog)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -14,7 +14,11 @@
 |---------|----------|:--------:|------|------|
 | ~~shared-services~~ | ~~SharedServices Gateway — single factory + time_budget migration + HookSystem wiring + ContextVar fix~~ | ~~P0~~ | ~~shared-services-gateway.md~~ | **In Progress** |
 | ~~system-hardening~~ | ~~System Hardening — agentic_ref race, orchestration locks, SubAgent safety, HookSystem wiring, Scheduler daemon~~ | ~~P0~~ | ~~system-hardening.md~~ | **In Progress** |
-| concurrency-redesign | 동시성 시스템 재설계 — 워크로드별 세마포어 분리 + Gateway 제한 + 데드라인 큐잉 | P1 | — | 감사 완료, 구현 미착수 |
+| ~~thin-only-arch~~ | ~~Thin-Only Architecture — REPL 제거, IPC 단일경로, SessionLane per-key~~ | ~~P0~~ | ~~#551-558~~ | **Done** v0.37.0-0.37.2 |
+| ~~llm-resilience~~ | ~~LLM Resilience Hardening — 14 GAP 3-Phase, degraded fallback, cross-provider~~ | ~~P0~~ | ~~#560~~ | **Done** v0.38.0 |
+| ~~stub-repeat-fix~~ | ~~Stub data origin fix + cross-batch repeat counter~~ | ~~P1~~ | ~~#562~~ | **Done** |
+| ~~blog-v37-v38~~ | ~~v0.37-0.38 기술 블로그 4건~~ | ~~P2~~ | ~~#564~~ | **Done** |
+| concurrency-redesign | 동시성 시스템 재설계 — 워크로드별 세마포어 분리 + Gateway 제한 + 데드라인 큐잉 | P1 | — | SessionLane으로 부분 해결, 나머지 미착수 |
 | ~~i18n-english~~ | ~~LLM 소비 문서 영어 전환 — 39 files (GEODE.md, CLAUDE.md, definitions.json, SKILL.md ×30, rules, PROJECT.md)~~ | ~~P1~~ | ~~#523~~ | **Done** |
 | ~~kent-beck-p1~~ | ~~Phase 1 — dry-run 파싱 + Safety 상수 추출~~ | ~~P0~~ | ~~#462~~ | **Done** |
 | ~~kent-beck-p2~~ | ~~Phase 2 — Provider 디스패치 딕셔너리 통합~~ | ~~P0~~ | ~~#463~~ | **Done** |
@@ -55,6 +59,15 @@
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-03-30 — 세션 50)
+
+| task_id | 작업 내용 | PR | 완료일 |
+|---------|----------|-----|--------|
+| thin-only-arch | Thin-Only Architecture + IPC + SessionLane + Event Schema V2 | #551-558 | 2026-03-30 |
+| llm-resilience | LLM Resilience Hardening 14-item 3-Phase | #560 | 2026-03-30 |
+| stub-repeat-fix | Stub data origin (PIPELINE_END → SUBAGENT_COMPLETED) + repeat counter | #562 | 2026-03-30 |
+| blog-v37-v38 | 기술 블로그 4건 (resilience, race condition, SessionLane, repeat counter) | #564 | 2026-03-30 |
 
 ### Done (2026-03-29 — 세션 46)
 
