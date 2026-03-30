@@ -150,9 +150,9 @@ class ChannelManager:
             content = f"[allowed_tools: {tools_hint}] {content}"
 
         try:
-            # Route through SessionLane → Global Lane (OpenClaw pattern)
+            # Route through SessionLane → Gateway Lane → Global Lane
             if self._lane_queue is not None:
-                with self._lane_queue.acquire_all(session_key, ["session", "global"]):
+                with self._lane_queue.acquire_all(session_key, ["session", "gateway", "global"]):
                     response = self._processor(content, metadata)
             else:
                 response = self._processor(content, metadata)

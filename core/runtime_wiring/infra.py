@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 # Default configuration
 # ---------------------------------------------------------------------------
 DEFAULT_GLOBAL_CONCURRENCY = 8
+DEFAULT_GATEWAY_CONCURRENCY = 4
 
 
 # ---------------------------------------------------------------------------
@@ -115,11 +116,23 @@ def build_default_registry() -> ToolRegistry:
 
 
 def build_default_lanes() -> LaneQueue:
-    """Build the unified LaneQueue — single concurrency gate for the entire process.
+    """Build the unified LaneQueue with workload-specific lanes.
 
-    OpenClaw pattern: SessionLane → Global Lane → Execute.
-    SessionLane provides per-key serialization (same session key → serial).
-    Global Lane provides total system capacity (max 8 concurrent).
+    OpenClaw pattern: SessionLane → Workload Lane → Global Lane → Execute.
+
+    Lane hierarchy::
+
+        SessionLane (per-key serial, max=256)
+            ↓
+        Workload Lanes (per-workload cap)
+        ├── "gateway"  (max=4)  — Slack/Discord/Telegram messages
+        └── (CLI/sub-agent use global only)
+            ↓
+        "global" (max=8) — total system capacity
+
+    Gateway messages acquire ["session", "gateway", "global"].
+    CLI/sub-agents acquire ["session", "global"] (no workload lane).
+    This prevents Gateway from starving CLI when busy.
     """
     from core.orchestration.lane_queue import SessionLane
 
@@ -131,6 +144,14 @@ def build_default_lanes() -> LaneQueue:
             timeout_s=300.0,
         )
     )
+    from core.config import settings
+
+    gw_max = (
+        settings.gateway_max_concurrent
+        if settings.gateway_max_concurrent > 0
+        else DEFAULT_GATEWAY_CONCURRENCY
+    )
+    queue.add_lane("gateway", max_concurrent=gw_max, timeout_s=30.0)
     queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY, timeout_s=30.0)
     return queue
 
