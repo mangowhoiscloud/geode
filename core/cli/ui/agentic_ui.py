@@ -140,10 +140,17 @@ class OperationLogger:
 
     def begin_round(self, label: str = "AgenticLoop") -> None:
         """Start a new agentic round — print header if not yet shown."""
-        if not self._header_printed and not self._quiet:
-            console.print(f"\n[bold]● {label}[/bold]")
-            self._header_printed = True
         self._round_count += 1
+        if self._quiet:
+            return
+        if self._header_printed:
+            return
+        self._header_printed = True
+        writer = getattr(_ipc_writer_local, "writer", None)
+        if writer is not None:
+            writer.send_event("round_start", round=self._round_count)
+        else:
+            console.print(f"\n[bold]● {label}[/bold]")
 
     def log_tool_call(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         """Log a tool call. Returns True if visible, False if collapsed."""
@@ -322,6 +329,16 @@ def render_tokens(
     cost_usd: float | None = None,
 ) -> None:
     """Render token usage line (Claude Code ✢ style)."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "tokens",
+            model=model,
+            input=input_tokens,
+            output=output_tokens,
+            cost=cost_usd or 0.0,
+        )
+        return
     in_str = _fmt_tokens(input_tokens)
     out_str = _fmt_tokens(output_tokens)
     time_str = f" · {elapsed_s:.1f}s" if elapsed_s else ""
@@ -371,30 +388,39 @@ def render_plan_steps(ip_name: str, steps: list[str]) -> None:
 
 def render_subagent_dispatch(task_id: str, task_type: str, description: str) -> None:
     """Render a sub-agent delegation line."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("subagent_dispatch", task_id=task_id, description=description)
+        return
     console.print(f'  [subagent]▸ delegate_task[/subagent]({task_type}, "{description}")')
 
 
 def render_subagent_progress(
     completed: int, total: int, latest_name: str, latest_time: float
 ) -> None:
-    """Render sub-agent progress with counter.
-
-    Shows progressive ``[completed/total]`` counter as each sub-agent finishes.
-    """
-    if completed < total:
-        console.print(
-            f"  [dim]⎿[/dim] [success]✓[/success] {latest_name} ({latest_time:.1f}s)"
-            f"  [{completed}/{total}]"
+    """Render sub-agent progress with counter."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "subagent_progress",
+            completed=completed,
+            total=total,
+            name=latest_name,
+            duration_s=round(latest_time, 1),
         )
-    else:
-        console.print(
-            f"  [dim]⎿[/dim] [success]✓[/success] {latest_name} ({latest_time:.1f}s)"
-            f"  [{completed}/{total}]"
-        )
+        return
+    console.print(
+        f"  [dim]⎿[/dim] [success]✓[/success] {latest_name} ({latest_time:.1f}s)"
+        f"  [{completed}/{total}]"
+    )
 
 
 def render_subagent_complete(count: int, elapsed_s: float) -> None:
     """Render sub-agent batch completion."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("subagent_complete", count=count, elapsed_s=round(elapsed_s, 1))
+        return
     console.print(f"  [success]✓ {count} sub-agents completed[/success] ({elapsed_s:.1f}s)")
     console.print()
 
@@ -454,16 +480,13 @@ def render_context_event(
     original_count: int = 0,
     new_count: int = 0,
 ) -> None:
-    """Render context compression notification.
-
-    Shows a dim notification when context is auto-compacted or pruned,
-    so the user knows conversation history was compressed.
-
-    Format::
-
-        ⟳ Context compacted: 45 → 12 messages
-        ⟳ Context pruned: 30 → 10 messages
-    """
+    """Render context compression notification."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "context_event", action=event_type, before=original_count, after=new_count
+        )
+        return
     if event_type == "exhausted":
         console.print(
             "  [warning]⟳ Context exhausted — pruning could not free enough space[/warning]"
