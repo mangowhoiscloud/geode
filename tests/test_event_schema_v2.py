@@ -330,9 +330,7 @@ class TestEventRendererV2:
 
     def test_stream_suspends_tracker(self, renderer) -> None:
         """on_stream() suspends the tool tracker before writing stream data."""
-        renderer._tool_tracker.on_tool_start(
-            {"name": "list_ips", "args_preview": ""}
-        )
+        renderer._tool_tracker.on_tool_start({"name": "list_ips", "args_preview": ""})
         assert renderer._tool_tracker._line_count > 0
 
         renderer.on_stream("  Available IPs\n  - Berserk\n")
