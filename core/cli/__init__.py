@@ -926,33 +926,29 @@ def _thin_interactive_loop() -> None:
                     break
                 continue
 
-            # Free text → relay as prompt (streaming agentic UI)
-            import sys as _sys
+            # Free text → relay as prompt (client-side direct rendering)
+            from core.cli.ui.event_renderer import EventRenderer
 
-            from core.cli.ui.tool_tracker import ToolCallTracker
-
+            _renderer = EventRenderer()
             _stream_started = False
-            _tracker = ToolCallTracker()
-            _tr = _tracker  # bind for closures (B023)
+            _r = _renderer  # bind for closures (B023)
 
-            def _on_stream(data: str, *, _t: Any = _tr) -> None:
+            def _on_stream(data: str, *, _rr: Any = _r) -> None:
                 nonlocal _stream_started
                 _stream_started = True
-                _t.stop()
-                _sys.stdout.write(data)
-                _sys.stdout.flush()
+                _rr.on_stream(data)
 
-            def _on_event(event: dict[str, object], *, _t: Any = _tr) -> None:
+            def _on_event(event: dict[str, object], *, _rr: Any = _r) -> None:
                 nonlocal _stream_started
                 _stream_started = True
-                etype = event.get("type", "")
-                if etype == "tool_start":
-                    _t.on_tool_start(event)
-                elif etype == "tool_end":
-                    _t.on_tool_end(event)
+                _rr.on_event(event)
 
-            response = client.send_prompt(user_input, on_stream=_on_stream, on_event=_on_event)
-            _tracker.stop()
+            response = client.send_prompt(
+                user_input,
+                on_stream=_on_stream,
+                on_event=_on_event,
+            )
+            _renderer.stop()
             if response.get("type") == "error" and "Connection lost" in response.get("message", ""):
                 console.print("\n  [error]Connection to serve lost[/error]\n")
                 break
