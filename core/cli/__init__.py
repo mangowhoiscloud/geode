@@ -1634,14 +1634,19 @@ def serve(
 
             # --- Persist conversation for next turn ---
             if session_key:
-                runtime.session_store.set(
-                    session_key,
-                    {
-                        "messages": ctx.messages,
-                        "thread_id": metadata.get("thread_id", ""),
-                        "channel": metadata.get("channel", ""),
-                    },
-                )
+                if result and result.termination_reason == "context_exhausted":
+                    # Context exhausted → clear session so next message starts fresh
+                    runtime.session_store.delete(session_key)
+                    log.info("Session cleared after context exhaustion: %s", session_key)
+                else:
+                    runtime.session_store.set(
+                        session_key,
+                        {
+                            "messages": ctx.messages,
+                            "thread_id": metadata.get("thread_id", ""),
+                            "channel": metadata.get("channel", ""),
+                        },
+                    )
 
             return result.text if result else ""
         except Exception as exc:

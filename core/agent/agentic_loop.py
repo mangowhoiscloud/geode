@@ -503,9 +503,9 @@ class AgenticLoop:
                     self._sync_messages_to_context(messages)
                     result = AgenticResult(
                         text=(
-                            "Context window exhausted before LLM call. "
-                            "Your conversation is preserved — start a new request "
-                            "or use /compact to manually reduce context."
+                            "Context window exhausted. "
+                            "This conversation has been automatically reset — "
+                            "please start a new thread or send a new message to continue."
                         ),
                         tool_calls=self._tool_processor.tool_log,
                         rounds=round_idx + 1,
@@ -571,8 +571,8 @@ class AgenticLoop:
                 result = AgenticResult(
                     text=(
                         "Context window exhausted after aggressive pruning. "
-                        "Your conversation is preserved — start a new request "
-                        "or use /compact to manually reduce context."
+                        "This conversation has been automatically reset — "
+                        "please start a new thread or send a new message to continue."
                     ),
                     tool_calls=self._tool_processor.tool_log,
                     rounds=round_idx + 1,
