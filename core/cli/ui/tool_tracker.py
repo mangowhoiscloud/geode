@@ -48,6 +48,11 @@ class ToolCallTracker:
     def on_tool_start(self, event: dict[str, object]) -> None:
         """Handle a tool_start event from serve."""
         with self._lock:
+            # Clear completed entries from previous batch to prevent
+            # stale lines re-rendering (e.g. sequential sequentialthinking calls)
+            if not self._running and self._tools and all(t["done"] for t in self._tools):
+                self._tools.clear()
+                self._line_count = 0
             self._tools.append(
                 {
                     "name": str(event.get("name", "?")),

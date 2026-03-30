@@ -664,6 +664,37 @@ class TestErrorPropagation:
 class TestCostRatioGuard:
     """Verify fallback cost ratio check skips expensive models."""
 
+    def test_sequential_tool_batch_clearing(self) -> None:
+        """Sequential tool calls clear completed entries from previous batch."""
+        from core.cli.ui.tool_tracker import ToolCallTracker
+
+        tracker = ToolCallTracker()
+        # First batch: single tool call
+        tracker.on_tool_start({"name": "sequentialthinking", "args_preview": 'thought="step 1"'})
+        tracker.on_tool_end({"name": "sequentialthinking", "summary": "ok"})
+        assert all(t["done"] for t in tracker._tools)
+        assert not tracker._running
+
+        # Second batch: should clear previous completed entries
+        tracker.on_tool_start({"name": "sequentialthinking", "args_preview": 'thought="step 2"'})
+        assert len(tracker._tools) == 1  # cleared old, added new
+        assert tracker._tools[0]["args"] == 'thought="step 2"'
+        tracker.stop()
+
+    def test_parallel_tools_not_cleared(self) -> None:
+        """Parallel tool calls within a batch are preserved."""
+        from core.cli.ui.tool_tracker import ToolCallTracker
+
+        tracker = ToolCallTracker()
+        tracker.on_tool_start({"name": "web_search", "args_preview": "q=A"})
+        tracker.on_tool_start({"name": "read_file", "args_preview": "path=/x"})
+        assert len(tracker._tools) == 2
+        assert tracker._running
+        # End first — second still running, batch not cleared
+        tracker.on_tool_end({"name": "web_search", "summary": "done"})
+        assert len(tracker._tools) == 2
+        tracker.stop()
+
     def test_cost_ratio_skip(self) -> None:
         """When ratio exceeds limit, fallback model is skipped."""
         from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
