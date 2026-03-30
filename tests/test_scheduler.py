@@ -54,6 +54,7 @@ def _make_job(
     at_ms: float = 0.0,
     cron_expr: str = "",
     callback: Any = None,
+    action: str = "test prompt",
     enabled: bool = True,
     delete_after_run: bool = False,
     active_hours: ActiveHours | None = None,
@@ -72,6 +73,7 @@ def _make_job(
         enabled=enabled,
         delete_after_run=delete_after_run,
         callback=callback,
+        action=action if callback is None else "",
         active_hours=active_hours,
     )
 
