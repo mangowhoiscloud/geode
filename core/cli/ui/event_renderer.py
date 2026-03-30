@@ -376,7 +376,7 @@ class EventRenderer:
     # -- Pipeline milestone events (client-side rendering) --------------------
 
     def _handle_pipeline_header(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
+        self._suppress_all_spinners()
         ip = str(event.get("ip_name", ""))
         mode = str(event.get("pipeline_mode", ""))
         model = str(event.get("model", ""))
@@ -387,7 +387,7 @@ class EventRenderer:
         self._out.flush()
 
     def _handle_pipeline_gather(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
+        self._suppress_all_spinners()
         name = str(event.get("ip_name", ""))
         year = event.get("release_year", "")
         media = str(event.get("media_type", ""))
@@ -407,7 +407,7 @@ class EventRenderer:
         self._out.flush()
 
     def _handle_pipeline_analysis(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
+        self._suppress_all_spinners()
         analysts = event.get("analysts", [])
         self._out.write(f"  \033[36;1m\u25b8 ANALYZE\033[0m {len(analysts)} analysts\n")
         for a in analysts:
@@ -419,7 +419,7 @@ class EventRenderer:
         self._out.flush()
 
     def _handle_pipeline_evaluation(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
+        self._suppress_all_spinners()
         evals = event.get("evaluators", {})
         self._out.write(f"  \033[36;1m\u25b8 EVALUATE\033[0m {len(evals)} evaluators\n")
         if isinstance(evals, dict):
@@ -439,7 +439,7 @@ class EventRenderer:
         self._out.flush()
 
     def _handle_pipeline_score(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
+        self._suppress_all_spinners()
         score = float(event.get("final_score", 0))
         tier = str(event.get("tier", "?"))
         conf = float(event.get("confidence", 0))
@@ -459,14 +459,14 @@ class EventRenderer:
         self._out.flush()
 
     def _handle_pipeline_verification(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
+        self._suppress_all_spinners()
         g = "\033[32m\u2713\033[0m" if event.get("guardrails_pass") else "\033[31m\u2717\033[0m"
         b = "\033[32m\u2713\033[0m" if event.get("biasbuster_pass") else "\033[31m\u2717\033[0m"
         self._out.write(f"  \033[36;1m\u25b8 VERIFY\033[0m Guardrails {g} | BiasBuster {b}\n")
         self._out.flush()
 
     def _handle_feedback_loop(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
+        self._suppress_all_spinners()
         iteration = int(event.get("iteration", 0))
         conf = float(event.get("confidence", 0))
         threshold = float(event.get("threshold", 0))
@@ -477,14 +477,14 @@ class EventRenderer:
         self._out.flush()
 
     def _handle_node_skipped(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
+        self._suppress_all_spinners()
         node = str(event.get("node", ""))
         reason = str(event.get("reason", ""))
         self._out.write(f"  \033[2m\u2933 Skipped: {node} ({reason})\033[0m\n")
         self._out.flush()
 
     def _handle_pipeline_result(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
+        self._suppress_all_spinners()
         tier = str(event.get("tier", "?"))
         score = float(event.get("final_score", 0))
         cause = str(event.get("cause", ""))
@@ -587,7 +587,7 @@ class EventRenderer:
         """Stop thinking + tool spinners, clear line for new content."""
         self._activity_suppressed = True
         self._stop_thinking()
-        self._tool_tracker.stop()
+        self._tool_tracker.suspend()
         self._out.write("\r\033[2K")
         self._out.flush()
 

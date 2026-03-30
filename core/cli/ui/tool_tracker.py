@@ -106,6 +106,28 @@ class ToolCallTracker:
         with self._lock:
             self._redraw()
 
+    def suspend(self) -> None:
+        """Stop animation and erase rendered lines. Resets cursor position.
+
+        Tools remain tracked. When ``on_tool_end`` is called later,
+        the completion line prints at the current cursor position
+        (no cursor-up) to avoid overwriting interleaved output.
+
+        Idempotent: second call is a no-op.
+        """
+        self._running = False
+        if self._spinner_thread:
+            self._spinner_thread.join(timeout=0.3)
+            self._spinner_thread = None
+        with self._lock:
+            if self._line_count > 0:
+                out = sys.stdout
+                for _ in range(self._line_count):
+                    out.write("\033[A\033[2K")
+                out.write("\r")
+                out.flush()
+            self._line_count = 0
+
     def _animate(self) -> None:
         while self._running:
             with self._lock:
