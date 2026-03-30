@@ -26,6 +26,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.37.2] — 2026-03-30
+
+### Fixed
+- **`/model` hot-swap (P0)** — `_apply_model()` now calls `loop.update_model()` on the active AgenticLoop. Model changes take effect immediately in the current IPC session without reconnecting.
+- **`/quit` session cost (P1)** — `/quit` and `/exit` now relay to serve instead of running locally. Session cost summary renders with real accumulator data from the serve process.
+
+### Added
+- **`--continue` / `--resume` (P2)** — IPC resume protocol wired end-to-end. `geode --continue` resumes the most recent session; `geode --resume <id>` resumes a specific session. Checkpoint messages and model are restored into the conversation context.
+- **IPC `resume` message type** — CLIPoller handles `{"type": "resume"}` messages, loads checkpoint via `SessionCheckpoint`, and restores conversation context + loop session ID.
+- **`IPCClient.request_resume()`** — thin client method to request session resume from serve.
+
 ## [0.37.1] — 2026-03-30
 
 ### Fixed

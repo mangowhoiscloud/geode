@@ -199,6 +199,33 @@ class IPCClient:
                 continue
             return response
 
+    def request_resume(
+        self,
+        session_id: str = "",
+        *,
+        continue_latest: bool = False,
+    ) -> dict[str, Any]:
+        """Request session resume from serve.
+
+        Args:
+            session_id: Specific session ID to resume (--resume <id>).
+            continue_latest: Resume the most recent session (--continue).
+
+        Returns {"type": "resumed", ...} or {"type": "resume_error", ...}.
+        """
+        if not self._sock:
+            return {"type": "resume_error", "message": "Not connected"}
+        payload: dict[str, Any] = {"type": "resume"}
+        if continue_latest:
+            payload["continue"] = True
+        elif session_id:
+            payload["session_id"] = session_id
+        self._send(payload)
+        response = self._recv()
+        if response is None:
+            return {"type": "resume_error", "message": "Connection lost"}
+        return response
+
     def send_command(self, cmd: str, args: str = "") -> dict[str, Any]:
         """Send a slash command to serve and wait for result.
 
