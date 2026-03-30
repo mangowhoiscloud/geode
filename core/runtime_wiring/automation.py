@@ -229,28 +229,7 @@ def wire_automation_hooks(
         priority=80,
     )
 
-    # Memory write-back: pipeline end -> add_insight to MEMORY.md (P0 auto-learning)
-    def _on_pipeline_end_memory(event: HookEvent, data: dict[str, Any]) -> None:
-        if project_memory is None:
-            return
-        if data.get("dry_run", False):
-            return  # dry_run은 기록하지 않음
-        ip = data.get("ip_name") or "unknown"
-        tier = data.get("tier") or "?"
-        score = data.get("final_score") or 0.0
-        cause = data.get("synthesis_cause", "")
-        action = data.get("synthesis_action", "")
-        insight = f"[{ip}] tier={tier}, score={score:.2f}"
-        if cause:
-            insight += f", cause={cause}"
-        if action:
-            insight += f", action={action}"
-        if not project_memory.add_insight(insight):
-            log.warning("Failed to write insight for IP=%s", ip)
-
-    hooks.register(
-        HookEvent.PIPELINE_END,
-        _on_pipeline_end_memory,
-        name="memory_write_back",
-        priority=85,
-    )
+    # Memory write-back removed: PIPELINE_END hook produced broken stub entries
+    # (tier=?, score=0.00) because effective_state in synthesizer node didn't
+    # reliably contain scoring results. Pipeline results are already recorded
+    # in journal (runs.jsonl) via journal_hooks.
