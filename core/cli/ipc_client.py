@@ -179,7 +179,21 @@ class IPCClient:
                 if on_stream is not None:
                     on_stream(response.get("data", ""))
                 continue
-            if rtype in ("tool_start", "tool_end"):
+            # Structured events — all non-stream, non-terminal types
+            if rtype in (
+                "tool_start",
+                "tool_end",
+                "tokens",
+                "round_start",
+                "thinking_start",
+                "thinking_end",
+                "turn_end",
+                "context_event",
+                "subagent_dispatch",
+                "subagent_progress",
+                "subagent_complete",
+                "session_cost",
+            ):
                 if on_event is not None:
                     on_event(response)
                 continue

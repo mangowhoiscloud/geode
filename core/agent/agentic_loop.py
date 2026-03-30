@@ -474,8 +474,16 @@ class AgenticLoop:
             self._check_announced_results(messages)
 
             # Show spinner while waiting for LLM response
-            label = "Thinking..." if round_idx == 0 else f"Thinking... (round {round_idx + 1})"
-            _spinner = TextSpinner(f"✢ {label}", quiet=self._quiet)
+            # IPC mode: send structured event; direct mode: TextSpinner
+            from core.cli.ui.agentic_ui import _ipc_writer_local
+
+            _ipc_writer = getattr(_ipc_writer_local, "writer", None)
+            if _ipc_writer is not None and not self._quiet:
+                _ipc_writer.send_event("thinking_start", model=self.model, round=round_idx + 1)
+                _spinner = TextSpinner("", quiet=True)  # no-op spinner
+            else:
+                label = "Thinking..." if round_idx == 0 else f"Thinking... (round {round_idx + 1})"
+                _spinner = TextSpinner(f"✢ {label}", quiet=self._quiet)
             _spinner.start()
             try:
                 response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
@@ -524,6 +532,8 @@ class AgenticLoop:
                 )
             finally:
                 _spinner.stop()
+                if _ipc_writer is not None and not self._quiet:
+                    _ipc_writer.send_event("thinking_end")
 
             if response is None:
                 # Feature 3/4: Model escalation on consecutive LLM failures

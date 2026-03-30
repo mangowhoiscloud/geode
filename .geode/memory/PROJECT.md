@@ -56,3 +56,7 @@
 - https://huggingface.co/blog/huggingface/state-of-os-hf-spring-2026
 - https://huggingface-paper-explorer.vercel.app/
 - https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/what-is-trending-in-hugging-face-on-microsoft-foundry-feb-2-2026/4490602
+
+## 최근 인사이트
+- 2026-03-30: [Berserk] tier=?, score=0.00
+- 2026-03-30: [unknown] tier=?, score=0.00
