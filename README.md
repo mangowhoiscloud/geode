@@ -21,22 +21,76 @@ A general-purpose autonomous execution agent. Performs research, analysis, autom
 
 ## Quick Start
 
+### Prerequisites
+
+| Tool | Install | Check |
+|------|---------|-------|
+| **Python 3.12+** | [python.org/downloads](https://www.python.org/downloads/) | `python3 --version` |
+| **Git** | [git-scm.com](https://git-scm.com/) | `git --version` |
+| **uv** (Python package manager) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `uv --version` |
+
+### Step 1 — Clone and install
+
 ```bash
-# Thin CLI (auto-starts serve daemon if needed)
-uv sync && uv run geode
-
-# Slack headless daemon
-geode serve
-
-# Install from Claude Code (leveraging Scaffold)
 git clone https://github.com/mangowhoiscloud/geode.git
-cd geode && uv sync
+cd geode
+uv sync          # installs all dependencies (takes ~30 seconds)
 ```
 
-> Starting without API keys automatically switches to dry-run mode.<br>
-> `geode serve` runs the agent from Slack channels without a CLI.<br>
-> First-time setup: `cp .geode/config.toml.example .geode/config.toml` and enter your channel ID. [Slack Gateway setup -->](docs/setup.md#slack-gateway)<br>
-> See the [Setup Guide](docs/setup.md) for detailed installation.
+### Step 2 — Add your API key
+
+```bash
+mkdir -p ~/.geode
+echo 'ANTHROPIC_API_KEY=sk-ant-your-key-here' > ~/.geode/.env
+chmod 600 ~/.geode/.env
+```
+
+Get your key at [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (free tier available).
+
+> No API key? GEODE still works in **dry-run mode** — all pipeline features run with fixture data, no LLM calls.
+
+### Step 3 — Run
+
+```bash
+uv run geode                                       # interactive CLI
+uv run geode "summarize the latest AI research"     # one-shot prompt
+uv run geode analyze "Cowboy Bebop" --dry-run       # Game IP analysis (no API key needed)
+```
+
+### Using an AI coding agent? Even easier.
+
+If you're using **Claude Code**, **Codex**, or any agentic coding tool, just paste this:
+
+```
+Clone https://github.com/mangowhoiscloud/geode.git, run uv sync,
+then run "uv run geode analyze Berserk --dry-run" to verify it works.
+```
+
+The agent reads CLAUDE.md, installs dependencies, and runs the verification — no manual steps needed.
+
+### What you'll see
+
+```
+$ uv run geode "what can you do?"
+
+● AgenticLoop
+  ⠋ ✢ Thinking...
+  ✓ show_help → ok (0.1s)
+
+  I can help with research, analysis, automation, and scheduling.
+  Use /help to see all available commands.
+
+  ✢ Worked for 3s · claude-opus-4-6 · ↓1.2k ↑200 · $0.0065
+```
+
+### Optional — Install globally
+
+```bash
+uv tool install -e . --force
+geode version    # now works from any directory
+```
+
+> See the [full Setup Guide](docs/setup.md) for Slack Gateway, multi-provider LLM, and advanced configuration.
 
 ---
 

@@ -12,7 +12,7 @@
 
 [English](README.md)
 
-# GEODE v0.37.2 — Autonomous Execution Harness
+# GEODE v0.39.0 — Autonomous Execution Harness
 
 범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
 
@@ -21,22 +21,76 @@
 
 ## Quick Start
 
+### 사전 준비
+
+| 도구 | 설치 방법 | 확인 |
+|------|----------|------|
+| **Python 3.12 이상** | [python.org/downloads](https://www.python.org/downloads/) | `python3 --version` |
+| **Git** | [git-scm.com](https://git-scm.com/) | `git --version` |
+| **uv** (패키지 매니저) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `uv --version` |
+
+### 1단계 — 다운로드 및 설치
+
 ```bash
-# Thin CLI (serve 데몬 자동 시작)
-uv sync && uv run geode
-
-# Slack 헤드리스 데몬
-geode serve
-
-# Claude Code에서 설치 (Scaffold 활용)
 git clone https://github.com/mangowhoiscloud/geode.git
-cd geode && uv sync
+cd geode
+uv sync          # 모든 의존성 설치 (~30초)
 ```
 
-> API 키 없이 시작하면 dry-run 모드로 자동 전환됩니다.<br>
-> `geode serve`는 CLI 없이 Slack 채널에서 에이전트를 운용합니다.<br>
-> 최초 설정: `cp .geode/config.toml.example .geode/config.toml` → 채널 ID 입력. [Slack Gateway 설정 →](docs/setup.md#slack-gateway)<br>
-> 상세 설치는 [Setup Guide](docs/setup.md)를 참고하세요.
+### 2단계 — API 키 등록
+
+```bash
+mkdir -p ~/.geode
+echo 'ANTHROPIC_API_KEY=sk-ant-여기에-키-입력' > ~/.geode/.env
+chmod 600 ~/.geode/.env
+```
+
+키 발급: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (무료 티어 가능)
+
+> API 키가 없어도 **dry-run 모드**로 동작합니다 — 파이프라인 전체가 fixture 데이터로 실행됩니다.
+
+### 3단계 — 실행
+
+```bash
+uv run geode                                       # 대화형 CLI
+uv run geode "최신 AI 연구 동향 요약해줘"              # 단발 프롬프트
+uv run geode analyze "Cowboy Bebop" --dry-run       # Game IP 분석 (키 불필요)
+```
+
+### AI 코딩 에이전트를 쓰고 있다면? 더 쉽습니다.
+
+**Claude Code**, **Codex** 등 에이전트 코딩 도구를 사용 중이라면, 아래 한 줄만 붙여넣으세요:
+
+```
+https://github.com/mangowhoiscloud/geode.git 클론하고, uv sync 실행한 다음,
+"uv run geode analyze Berserk --dry-run"으로 동작 확인해줘.
+```
+
+에이전트가 CLAUDE.md를 읽고, 의존성을 설치하고, 검증까지 알아서 수행합니다.
+
+### 실행 화면
+
+```
+$ uv run geode "뭘 할 수 있어?"
+
+● AgenticLoop
+  ⠋ ✢ Thinking...
+  ✓ show_help → ok (0.1s)
+
+  리서치, 분석, 자동화, 스케줄링을 도와드립니다.
+  /help로 전체 명령어를 확인하세요.
+
+  ✢ Worked for 3s · claude-opus-4-6 · ↓1.2k ↑200 · $0.0065
+```
+
+### 선택 — 전역 설치
+
+```bash
+uv tool install -e . --force
+geode version    # 어디서든 실행 가능
+```
+
+> 상세 설정(Slack Gateway, 멀티 LLM, 고급 설정)은 [Setup Guide](docs/setup.md)를 참고하세요.
 
 ---
 
