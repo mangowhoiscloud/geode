@@ -268,6 +268,45 @@ class TestApplyModel:
         # Should not write .env when model unchanged
         _apply_model(next(p for p in MODEL_PROFILES if p.id == settings.model))
 
+    def test_apply_model_hot_swaps_active_loop(self, tmp_path: Path, monkeypatch):
+        """P0 fix: _apply_model() should call loop.update_model() on the active loop."""
+        from unittest.mock import MagicMock
+
+        monkeypatch.chdir(tmp_path)
+        from core.config import settings
+
+        mock_loop = MagicMock()
+        mock_loop.model = settings.model
+
+        from core.cli import session_state
+
+        monkeypatch.setattr(session_state, "_current_loop_ctx", session_state._current_loop_ctx)
+        session_state.set_current_loop(mock_loop)
+
+        old = settings.model
+        try:
+            target = MODEL_PROFILES[3]  # GPT-5.4
+            _apply_model(target)
+            mock_loop.update_model.assert_called_once_with(target.id)
+        finally:
+            settings.model = old
+            session_state.set_current_loop(None)
+
+    def test_apply_model_no_loop_does_not_crash(self, tmp_path: Path, monkeypatch):
+        """When no active loop, _apply_model should still work (no crash)."""
+        monkeypatch.chdir(tmp_path)
+        from core.cli import session_state
+        from core.config import settings
+
+        session_state.set_current_loop(None)
+
+        old = settings.model
+        try:
+            _apply_model(MODEL_PROFILES[3])
+            assert settings.model == OPENAI_PRIMARY
+        finally:
+            settings.model = old
+
 
 class TestCmdBatch:
     def test_batch_command_registered(self):

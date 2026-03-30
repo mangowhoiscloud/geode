@@ -12,7 +12,7 @@
 
 [English](README.md)
 
-# GEODE v0.37.1 — Autonomous Execution Harness
+# GEODE v0.37.2 — Autonomous Execution Harness
 
 범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
 
