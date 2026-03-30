@@ -275,7 +275,7 @@ class CLIPoller:
         experience.  After completion, the console is restored and a
         final ``result`` message is sent.
         """
-        from core.cli.ui.console import console
+        from core.cli.ui.console import redirect_console
 
         # Enable agentic UI for this run (same as old REPL)
         old_quiet = getattr(loop, "_quiet", True)
@@ -284,15 +284,13 @@ class CLIPoller:
         if old_op_quiet is not None:
             loop._op_logger._quiet = False
 
-        # Redirect console to streaming writer (thread-local: only this thread)
+        # Redirect console + spinner output to streaming writer
         writer = _StreamingWriter(client) if client else None
-        old_file = console._file
-        old_force = console._force_terminal
-        if writer:
-            console._file = writer  # type: ignore[assignment]
-            console._force_terminal = True
+        _redirect = redirect_console(writer) if writer else None
 
         try:
+            if _redirect:
+                _redirect.__enter__()
             lane_queue = self._services.lane_queue
             if lane_queue is not None:
                 with lane_queue.acquire_all(f"cli:{session_id}", ["session", "global"]):
@@ -300,9 +298,8 @@ class CLIPoller:
             else:
                 result = loop.run(text)
         finally:
-            # Restore console and quiet state
-            console._file = old_file
-            console._force_terminal = old_force
+            if _redirect:
+                _redirect.__exit__(None, None, None)
             loop._quiet = old_quiet
             if old_op_quiet is not None:
                 loop._op_logger._quiet = old_quiet

@@ -15,6 +15,7 @@ import sys
 from collections.abc import Generator
 from contextlib import contextmanager
 from io import StringIO
+from typing import Any
 
 from rich.console import Console
 from rich.theme import Theme
@@ -79,9 +80,9 @@ def capture_output() -> Generator[StringIO, None, None]:
     """Capture console output with ANSI styling preserved.
 
     Temporarily redirects the global console to a StringIO buffer with
-    ``force_terminal=True`` so that Rich markup is rendered as ANSI escape
-    codes.  The caller receives the buffer; after the block exits the
-    console is restored to its original state.
+    ``force_terminal=True`` and a valid color system so that Rich markup
+    is rendered as ANSI escape codes — even when the process's stdout is
+    not a TTY (e.g. ``geode serve`` started with ``stdout=DEVNULL``).
 
     Usage::
 
@@ -89,13 +90,45 @@ def capture_output() -> Generator[StringIO, None, None]:
             console.print("[bold]hello[/bold]")
         text = buf.getvalue()   # contains ANSI-styled text
     """
+    from rich.color import ColorSystem
+
     buf = StringIO()
     old_file = console._file
     old_force = console._force_terminal
+    old_color = console._color_system
     console._file = buf
     console._force_terminal = True
+    if old_color is None:
+        console._color_system = ColorSystem.TRUECOLOR
     try:
         yield buf
     finally:
         console._file = old_file
         console._force_terminal = old_force
+        console._color_system = old_color
+
+
+@contextmanager
+def redirect_console(target: Any) -> Generator[None, None, None]:
+    """Redirect console output to *target* with ANSI styling preserved.
+
+    Like ``capture_output`` but writes to an arbitrary file-like object
+    (e.g. ``_StreamingWriter``) instead of a ``StringIO`` buffer.
+    Ensures ``_color_system`` is set so styles render even when the
+    process stdout is DEVNULL.
+    """
+    from rich.color import ColorSystem
+
+    old_file = console._file
+    old_force = console._force_terminal
+    old_color = console._color_system
+    console._file = target
+    console._force_terminal = True
+    if old_color is None:
+        console._color_system = ColorSystem.TRUECOLOR
+    try:
+        yield
+    finally:
+        console._file = old_file
+        console._force_terminal = old_force
+        console._color_system = old_color

@@ -17,13 +17,19 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from core.cli.ui.console import console
 from core.llm.router import LLMUsageAccumulator, get_usage_accumulator
 
 
 class TextSpinner:
-    """Non-invasive text spinner. No raw mode, no cursor hiding."""
+    """Non-invasive text spinner. No raw mode, no cursor hiding.
+
+    Output target is resolved at write-time: if the global console has
+    been redirected (e.g. via ``redirect_console()`` for IPC streaming),
+    the spinner writes through that redirect instead of ``sys.stdout``.
+    """
 
     FRAMES = [
         "\u280b",
@@ -44,6 +50,14 @@ class TextSpinner:
         self._thread: threading.Thread | None = None
         self._quiet = quiet  # suppress output (sub-agent, headless)
 
+    @staticmethod
+    def _out() -> Any:
+        """Resolve the output target — follows console redirect if active."""
+        target = console.file
+        if target is not None and target is not sys.__stdout__:
+            return target
+        return sys.stdout
+
     def start(self) -> None:
         if self._quiet:
             return
@@ -59,8 +73,9 @@ class TextSpinner:
         idx = 0
         while self._running:
             frame = self.FRAMES[idx % len(self.FRAMES)]
-            sys.stdout.write(f"\r\x1b[2K  {frame} {self._message}")
-            sys.stdout.flush()
+            out = self._out()
+            out.write(f"\r\x1b[2K  {frame} {self._message}")
+            out.flush()
             time.sleep(0.08)
             idx += 1
 
@@ -70,10 +85,11 @@ class TextSpinner:
             return
         if self._thread:
             self._thread.join(timeout=0.2)
-        sys.stdout.write("\r\x1b[2K")
+        out = self._out()
+        out.write("\r\x1b[2K")
         if final_message:
-            sys.stdout.write(f"  {final_message}\n")
-        sys.stdout.flush()
+            out.write(f"  {final_message}\n")
+        out.flush()
 
 
 @dataclass(frozen=True)
