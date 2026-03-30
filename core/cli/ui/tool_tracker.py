@@ -74,7 +74,12 @@ class ToolCallTracker:
                     t["done"] = True
                     t["summary"] = str(event.get("summary", "ok"))
                     t["error"] = str(event.get("error", ""))
-                    t["duration"] = time.monotonic() - float(t["start_time"])
+                    # Prefer server-measured duration (excludes IPC latency)
+                    server_dur = event.get("duration_s")
+                    if server_dur is not None and float(server_dur) > 0:
+                        t["duration"] = float(server_dur)
+                    else:
+                        t["duration"] = time.monotonic() - float(t["start_time"])
                     break
             self._redraw()
             if all(t["done"] for t in self._tools):
