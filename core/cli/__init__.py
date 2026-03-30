@@ -829,6 +829,9 @@ def _read_multiline_input(prompt: str) -> str:
 
 _LOCAL_COMMANDS = frozenset({"/help", "/exit", "/quit", "/clear"})
 
+# Commands that need TTY interaction locally, then relay the result to serve
+_TTY_LOCAL_COMMANDS = frozenset({"/model", "/auth"})
+
 
 def _thin_interactive_loop() -> None:
     """Thin CLI client — all execution delegated to geode serve via IPC.
@@ -875,6 +878,39 @@ def _thin_interactive_loop() -> None:
                         break
                     continue
 
+                # /model (no args): interactive picker locally, then relay
+                if cmd in _TTY_LOCAL_COMMANDS and not args:
+                    if cmd == "/model":
+                        import sys as _sys
+
+                        from core.cli.commands import _interactive_model_picker
+
+                        if _sys.stdin.isatty():
+                            _interactive_model_picker()
+                            # Relay the selected model to serve
+                            from core.config import settings
+
+                            response = client.send_command("/model", settings.model)
+                            output = response.get("output", "")
+                            if output:
+                                _sys.stdout.write(output)
+                                _sys.stdout.flush()
+                        else:
+                            response = client.send_command(cmd, args)
+                            output = response.get("output", "")
+                            if output:
+                                _sys.stdout.write(output)
+                                _sys.stdout.flush()
+                    else:
+                        response = client.send_command(cmd, args)
+                        output = response.get("output", "")
+                        if output:
+                            import sys as _sys
+
+                            _sys.stdout.write(output)
+                            _sys.stdout.flush()
+                    continue
+
                 # All other commands → relay to serve
                 response = client.send_command(cmd, args)
                 # Render captured output from serve (ANSI-styled text)
@@ -891,25 +927,18 @@ def _thin_interactive_loop() -> None:
                 continue
 
             # Free text → relay as prompt (streaming agentic UI)
+            # No client-side spinner — serve streams ● AgenticLoop + ✢ Thinking
             import sys as _sys
 
-            from core.cli.ui.status import TextSpinner
+            _stream_started = False
 
-            _spinner = TextSpinner("Thinking...")
-            _spinner.start()
-            _stream_ctx: dict[str, bool] = {"started": False}
-
-            def _on_stream(data: str, *, _sp: Any = _spinner, _ctx: Any = _stream_ctx) -> None:
-                if not _ctx["started"]:
-                    _sp.stop()
-                    _ctx["started"] = True
+            def _on_stream(data: str) -> None:
+                nonlocal _stream_started
+                _stream_started = True
                 _sys.stdout.write(data)
                 _sys.stdout.flush()
 
             response = client.send_prompt(user_input, on_stream=_on_stream)
-            _stream_started = _stream_ctx["started"]
-            if not _stream_started:
-                _spinner.stop()
             if response.get("type") == "error" and "Connection lost" in response.get("message", ""):
                 console.print("\n  [error]Connection to serve lost[/error]\n")
                 break
