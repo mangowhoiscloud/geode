@@ -972,6 +972,7 @@ def _thin_interactive_loop(
                 _stream_started = True
                 _rr.on_event(event)
 
+            _renderer.start_activity()  # persistent spinner until result
             response = client.send_prompt(
                 user_input,
                 on_stream=_on_stream,

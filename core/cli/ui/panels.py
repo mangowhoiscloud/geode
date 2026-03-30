@@ -1,4 +1,9 @@
-"""Rich panel rendering for each pipeline step."""
+"""Rich panel rendering for each pipeline step.
+
+In IPC mode (thin client), structured events are emitted and panel
+functions return early — the client renders from events, not raw ANSI.
+In local mode, Rich panels render to console as before.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +19,27 @@ from core.cli.ui.console import console
 from core.state import AnalysisResult, EvaluatorResult, PSMResult, SynthesisResult
 
 
+def _is_ipc() -> bool:
+    """Check if we're in IPC mode (thin client rendering)."""
+    from core.cli.ui.agentic_ui import _ipc_writer_local
+
+    return getattr(_ipc_writer_local, "writer", None) is not None
+
+
 def header_panel(ip_name: str, pipeline_mode: str, model: str) -> None:
+    if _is_ipc():
+        from core.cli.ui.agentic_ui import _ipc_writer_local
+
+        writer = getattr(_ipc_writer_local, "writer", None)
+        if writer is not None:
+            writer.send_event(
+                "pipeline_header",
+                ip_name=ip_name,
+                pipeline_mode=pipeline_mode,
+                model=model,
+                version=__version__,
+            )
+        return
     content = Text()
     content.append("  Analyzing: ", style="label")
     content.append(f"{ip_name}\n", style="value")
@@ -39,8 +64,11 @@ def gather_panel(
 ) -> None:
     from core.cli.ui.agentic_ui import emit_pipeline_gather
 
-    emit_pipeline_gather(ip_info, monolake)
-    console.print("[step]▸ [GATHER][/step] Loading IP data from MonoLake...")
+    if _is_ipc():
+        emit_pipeline_gather(ip_info, monolake)
+        return
+
+    console.print("[step]\u25b8 [GATHER][/step] Loading IP data from MonoLake...")
     tree = Tree("", guide_style="dim")
     tree.add(
         f"[label]IP:[/label] {ip_info['ip_name']} "
@@ -66,8 +94,11 @@ def gather_panel(
 def analyst_panel(analyses: list[AnalysisResult]) -> None:
     from core.cli.ui.agentic_ui import emit_pipeline_analysis
 
-    emit_pipeline_analysis(analyses)  # type: ignore[arg-type]
-    console.print("[step]▸ [ANALYZE][/step] Running 4 Analysts (Clean Context)...")
+    if _is_ipc():
+        emit_pipeline_analysis(analyses)  # type: ignore[arg-type]
+        return
+
+    console.print("[step]\u25b8 [ANALYZE][/step] Running 4 Analysts (Clean Context)...")
     table = Table(show_header=True, header_style="bold", border_style="dim")
     table.add_column("Analyst", style="label", width=14)
     table.add_column("Score", justify="center", width=7)
@@ -87,8 +118,11 @@ def analyst_panel(analyses: list[AnalysisResult]) -> None:
 def evaluator_panel(evaluations: dict[str, EvaluatorResult]) -> None:
     from core.cli.ui.agentic_ui import emit_pipeline_evaluation
 
-    emit_pipeline_evaluation(evaluations)
-    console.print("[step]▸ [EVALUATE][/step] 14-Axis Rubric Scoring...")
+    if _is_ipc():
+        emit_pipeline_evaluation(evaluations)
+        return
+
+    console.print("[step]\u25b8 [EVALUATE][/step] 14-Axis Rubric Scoring...")
     labels = {
         "quality_judge": "Quality",
         "hidden_value": "Hidden",
@@ -103,7 +137,6 @@ def evaluator_panel(evaluations: dict[str, EvaluatorResult]) -> None:
         label = labels.get(key, key.replace("_", " ").title())
         score = ev.composite_score
         score_style = "bold green" if score >= 80 else "yellow" if score >= 60 else "red"
-        # Truncate rationale to first sentence for table readability
         rationale = ev.rationale.split(".")[0] + "." if ev.rationale else ""
         table.add_row(
             label,
@@ -131,8 +164,12 @@ def score_panel(
         if final_score >= 40
         else "C"
     )
-    emit_pipeline_score(final_score, subscores, confidence, tier)
-    console.print("[step]▸ [SCORE][/step] PSM + Final Calculation")
+
+    if _is_ipc():
+        emit_pipeline_score(final_score, subscores, confidence, tier)
+        return
+
+    console.print("[step]\u25b8 [SCORE][/step] PSM + Final Calculation")
 
     z_mark = "[success]\u2713[/success]" if psm.z_value > 1.645 else "[error]\u2717[/error]"
     g_mark = "[success]\u2713[/success]" if psm.rosenbaum_gamma <= 2.0 else "[error]\u2717[/error]"
@@ -142,7 +179,8 @@ def score_panel(
         f"\u0393={psm.rosenbaum_gamma:.1f} ({g_mark}\u22642.0)"
     )
     console.print(
-        "  [muted]ATT=IP 노출 효과, Z>1.645=95% 유의, \u0393\u22642.0=인과 강건성 확인[/muted]"
+        "  [muted]ATT=IP effect, Z>1.645=95% significant,"
+        " \u0393\u22642.0=causal robustness[/muted]"
     )
 
     filled = int(final_score / 100 * 40)
@@ -161,10 +199,13 @@ def score_panel(
 def verify_panel(guardrails_pass: bool, biasbuster_pass: bool) -> None:
     from core.cli.ui.agentic_ui import emit_pipeline_verification
 
-    emit_pipeline_verification(guardrails_pass, biasbuster_pass)
+    if _is_ipc():
+        emit_pipeline_verification(guardrails_pass, biasbuster_pass)
+        return
+
     g_mark = "[success]\u2713[/success]" if guardrails_pass else "[error]\u2717[/error]"
     b_mark = "[success]\u2713[/success]" if biasbuster_pass else "[error]\u2717[/error]"
-    console.print(f"[step]▸ [VERIFY][/step] Guardrails G1-G4 {g_mark} | BiasBuster {b_mark}")
+    console.print(f"[step]\u25b8 [VERIFY][/step] Guardrails G1-G4 {g_mark} | BiasBuster {b_mark}")
     console.print()
 
 
@@ -173,6 +214,22 @@ def result_panel(
     final_score: float,
     synthesis: SynthesisResult,
 ) -> None:
+    if _is_ipc():
+        from core.cli.ui.agentic_ui import _ipc_writer_local
+
+        writer = getattr(_ipc_writer_local, "writer", None)
+        if writer is not None:
+            writer.send_event(
+                "pipeline_result",
+                tier=tier,
+                final_score=final_score,
+                cause=synthesis.undervaluation_cause,
+                narrative=synthesis.value_narrative[:200],
+                target_segment=synthesis.target_segment,
+                action=synthesis.action_type,
+            )
+        return
+
     tier_info = {
         "S": ("tier_s", "\u226580"),
         "A": ("tier_a", "60-79"),

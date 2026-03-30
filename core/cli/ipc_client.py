@@ -204,11 +204,13 @@ class IPCClient:
                 "model_switched",
                 "checkpoint_saved",
                 # Pipeline milestone events
+                "pipeline_header",
                 "pipeline_gather",
                 "pipeline_analysis",
                 "pipeline_evaluation",
                 "pipeline_score",
                 "pipeline_verification",
+                "pipeline_result",
                 "feedback_loop",
                 "node_skipped",
             ):
