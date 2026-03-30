@@ -304,6 +304,39 @@ class TestEventRendererV2:
         renderer.on_event({"type": "node_skipped", "node": "verification", "reason": "skip"})
         assert "verification" in renderer._out.getvalue()
 
+    def test_pipeline_event_suspends_tracker(self, renderer) -> None:
+        """Pipeline events suspend the tool tracker to prevent cursor-up interference."""
+        # Simulate tool_start for analyze_ip
+        renderer._tool_tracker.on_tool_start(
+            {"name": "analyze_ip", "args_preview": 'ip_name="Berserk"'}
+        )
+        assert renderer._tool_tracker._line_count > 0
+
+        # Pipeline event should suspend tracker
+        renderer.on_event(
+            {
+                "type": "pipeline_header",
+                "ip_name": "Berserk",
+                "pipeline_mode": "full_pipeline",
+                "model": "claude-opus-4-6",
+                "version": "0.38.0",
+            }
+        )
+        # Tracker line_count reset — no stale cursor-up
+        assert renderer._tool_tracker._line_count == 0
+        assert not renderer._tool_tracker._running
+        # Pipeline output was written
+        assert "Berserk" in renderer._out.getvalue()
+
+    def test_stream_suspends_tracker(self, renderer) -> None:
+        """on_stream() suspends the tool tracker before writing stream data."""
+        renderer._tool_tracker.on_tool_start({"name": "list_ips", "args_preview": ""})
+        assert renderer._tool_tracker._line_count > 0
+
+        renderer.on_stream("  Available IPs\n  - Berserk\n")
+        assert renderer._tool_tracker._line_count == 0
+        assert "Berserk" in renderer._out.getvalue()
+
 
 class TestIPCClientEventWhitelist:
     """All 28 event types are in IPCClient's event whitelist."""

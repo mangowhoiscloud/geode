@@ -695,6 +695,41 @@ class TestCostRatioGuard:
         assert len(tracker._tools) == 2
         tracker.stop()
 
+    def test_suspend_resets_line_count(self) -> None:
+        """suspend() erases lines and resets _line_count so on_tool_end prints at cursor."""
+        from core.cli.ui.tool_tracker import ToolCallTracker
+
+        tracker = ToolCallTracker()
+        tracker.on_tool_start({"name": "analyze_ip", "args_preview": 'ip_name="Berserk"'})
+        assert tracker._line_count > 0
+        assert tracker._running
+
+        # Suspend — simulates pipeline event arriving mid-tool
+        tracker.suspend()
+        assert tracker._line_count == 0
+        assert not tracker._running
+        assert tracker._spinner_thread is None
+
+        # on_tool_end after suspend — should not cursor-up (line_count=0)
+        tracker.on_tool_end({"name": "analyze_ip", "summary": "S · 81.2", "duration_s": 3.5})
+        assert tracker._tools[0]["done"] is True
+        # line_count should be 1 (the ✓ line, printed at current position)
+        assert tracker._line_count == 1
+
+    def test_suspend_idempotent(self) -> None:
+        """Second suspend() call is a no-op."""
+        from core.cli.ui.tool_tracker import ToolCallTracker
+
+        tracker = ToolCallTracker()
+        tracker.on_tool_start({"name": "list_ips", "args_preview": ""})
+        tracker.suspend()
+        assert tracker._line_count == 0
+        # Second call — should not raise or change state
+        tracker.suspend()
+        assert tracker._line_count == 0
+        assert tracker._spinner_thread is None
+        tracker.stop()
+
     def test_cost_ratio_skip(self) -> None:
         """When ratio exceeds limit, fallback model is skipped."""
         from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
