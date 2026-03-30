@@ -181,10 +181,17 @@ class IPCClient:
                 continue
             # Structured events — all non-stream, non-terminal types
             if rtype in (
-                "tool_start", "tool_end", "tokens", "round_start",
-                "thinking_start", "thinking_end", "turn_end",
-                "context_event", "subagent_dispatch",
-                "subagent_progress", "subagent_complete",
+                "tool_start",
+                "tool_end",
+                "tokens",
+                "round_start",
+                "thinking_start",
+                "thinking_end",
+                "turn_end",
+                "context_event",
+                "subagent_dispatch",
+                "subagent_progress",
+                "subagent_complete",
                 "session_cost",
             ):
                 if on_event is not None:
