@@ -65,7 +65,7 @@ def gather_panel(
     from core.cli.ui.agentic_ui import emit_pipeline_gather
 
     if _is_ipc():
-        emit_pipeline_gather(ip_info, monolake)
+        emit_pipeline_gather(ip_info, monolake, signals)
         return
 
     console.print("[step]\u25b8 [GATHER][/step] Loading IP data from MonoLake...")
@@ -166,7 +166,7 @@ def score_panel(
     )
 
     if _is_ipc():
-        emit_pipeline_score(final_score, subscores, confidence, tier)
+        emit_pipeline_score(final_score, subscores, confidence, tier, psm=psm)
         return
 
     console.print("[step]\u25b8 [SCORE][/step] PSM + Final Calculation")
@@ -195,11 +195,16 @@ def score_panel(
     console.print()
 
 
-def verify_panel(guardrails_pass: bool, biasbuster_pass: bool) -> None:
+def verify_panel(
+    guardrails_pass: bool,
+    biasbuster_pass: bool,
+    *,
+    details: list[str] | None = None,
+) -> None:
     from core.cli.ui.agentic_ui import emit_pipeline_verification
 
     if _is_ipc():
-        emit_pipeline_verification(guardrails_pass, biasbuster_pass)
+        emit_pipeline_verification(guardrails_pass, biasbuster_pass, details=details)
         return
 
     g_mark = "[success]\u2713[/success]" if guardrails_pass else "[error]\u2717[/error]"
@@ -212,6 +217,8 @@ def result_panel(
     tier: str,
     final_score: float,
     synthesis: SynthesisResult,
+    *,
+    errors: list[str] | None = None,
 ) -> None:
     if _is_ipc():
         from core.cli.ui.agentic_ui import _ipc_writer_local
@@ -226,6 +233,7 @@ def result_panel(
                 narrative=synthesis.value_narrative[:200],
                 target_segment=synthesis.target_segment,
                 action=synthesis.action_type,
+                errors=errors or [],
             )
         return
 
