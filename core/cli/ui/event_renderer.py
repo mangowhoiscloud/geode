@@ -40,6 +40,11 @@ class EventRenderer:
         renderer.stop()                      # everything OFF
     """
 
+    # Events suppressed during repeat mode (same tool called sequentially)
+    _REPEAT_SUPPRESSIBLE = frozenset(
+        {"tool_start", "tool_end", "tokens", "thinking_start", "thinking_end", "round_start"}
+    )
+
     def __init__(self) -> None:
         self._tool_tracker = ToolCallTracker()
         self._thinking = False
@@ -52,6 +57,13 @@ class EventRenderer:
         self._activity = False
         self._activity_suppressed = False
         self._activity_thread: threading.Thread | None = None
+        # Cross-batch repeat counter: collapses sequential same-tool calls
+        self._repeat_name: str = ""
+        self._repeat_count: int = 0
+        self._repeat_dur: float = 0.0
+        self._repeat_summary: str = ""
+        self._in_repeat: bool = False
+        self._last_batch_tool: str = ""  # tool name from last single-tool batch
 
     # -- Public API -----------------------------------------------------------
 
@@ -65,6 +77,27 @@ class EventRenderer:
     def on_event(self, event: dict[str, Any]) -> None:
         """Handle a structured event from serve."""
         etype = str(event.get("type", ""))
+
+        # Repeat mode: suppress intermediate events for sequential same-tool calls
+        if self._in_repeat and etype in self._REPEAT_SUPPRESSIBLE:
+            if etype == "tool_start":
+                name = str(event.get("name", ""))
+                if name == self._repeat_name:
+                    return  # same tool again, stay in repeat mode
+                self._flush_repeat()  # different tool, flush and handle normally
+            elif etype == "tool_end":
+                name = str(event.get("name", ""))
+                if name == self._repeat_name:
+                    self._repeat_count += 1
+                    dur = event.get("duration_s")
+                    if dur is not None:
+                        self._repeat_dur += float(str(dur))
+                    self._repeat_summary = str(event.get("summary", "ok"))
+                    return  # accumulated, stay in repeat mode
+                self._flush_repeat()
+            else:
+                return  # suppress tokens/thinking/round_start during repeat
+
         handler = getattr(self, f"_handle_{etype}", None)
         if handler:
             handler(event)
@@ -77,6 +110,7 @@ class EventRenderer:
 
     def stop(self) -> None:
         """Stop all spinners. Call when result arrives."""
+        self._flush_repeat()
         self._activity = False
         self._activity_suppressed = True
         self._stop_thinking()
@@ -111,16 +145,39 @@ class EventRenderer:
         self._activity_suppressed = False  # resume activity spinner
 
     def _handle_tool_start(self, event: dict[str, Any]) -> None:
+        name = str(event.get("name", ""))
+
+        # Detect repeat onset: same tool as last single-tool batch
+        if self._last_batch_tool and name == self._last_batch_tool:
+            # Enter repeat mode — suppress this tool_start
+            self._in_repeat = True
+            self._repeat_name = name
+            # count/dur/summary already set from last batch's tool_end
+            return
+
         self._activity_suppressed = True
         self._stop_thinking()
         self._tool_tracker.on_tool_start(event)
 
     def _handle_tool_end(self, event: dict[str, Any]) -> None:
+        name = str(event.get("name", ""))
         self._tool_tracker.on_tool_end(event)
         # Resume activity when all tools done
         with self._tool_tracker._lock:
-            if all(t["done"] for t in self._tool_tracker._tools):
-                self._activity_suppressed = False
+            tools = self._tool_tracker._tools
+            all_done = all(t["done"] for t in tools)
+            is_single = len(tools) == 1
+        if all_done:
+            self._activity_suppressed = False
+            # Track last single-tool batch for repeat detection
+            if is_single:
+                dur = event.get("duration_s")
+                self._last_batch_tool = name
+                self._repeat_count = 1
+                self._repeat_dur = float(str(dur)) if dur is not None else 0.0
+                self._repeat_summary = str(event.get("summary", "ok"))
+            else:
+                self._last_batch_tool = ""
 
     def _handle_tokens(self, event: dict[str, Any]) -> None:
         self._suppress_all_spinners()
@@ -451,6 +508,26 @@ class EventRenderer:
         if action:
             self._out.write(f"    \033[2mAction:\033[0m {action}\n")
         self._out.write("\n")
+        self._out.flush()
+
+    # -- Repeat mode helpers ---------------------------------------------------
+
+    def _flush_repeat(self) -> None:
+        """Emit accumulated repeat summary and exit repeat mode."""
+        if not self._in_repeat:
+            return
+        name = self._repeat_name
+        count = self._repeat_count
+        dur = self._repeat_dur
+        summary = self._repeat_summary
+        self._in_repeat = False
+        self._repeat_name = ""
+        self._last_batch_tool = ""
+        if count <= 1:
+            return
+        self._clear_activity_line()
+        dur_str = f" ({dur:.1f}s)" if dur > 0 else ""
+        self._out.write(f"  \033[32m\u2713 {name}\033[0m \u00d7{count} \u2192 {summary}{dur_str}\n")
         self._out.flush()
 
     # -- Internal helpers -----------------------------------------------------
