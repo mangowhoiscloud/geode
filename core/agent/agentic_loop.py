@@ -245,6 +245,10 @@ class AgenticLoop:
                 user_input=user_input,
             )
             self._checkpoint.save(state)
+
+            from core.cli.ui.agentic_ui import emit_checkpoint_saved
+
+            emit_checkpoint_saved(self._session_id, round_idx)
         except Exception:
             log.debug("Checkpoint save failed", exc_info=True)
 
@@ -340,18 +344,22 @@ class AgenticLoop:
         update_session_model(model)
         log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
 
-        # Fire MODEL_SWITCHED hook for observability
-        if self._hooks and old_model != model:
-            from core.hooks import HookEvent
+        # Fire MODEL_SWITCHED hook + IPC event for observability
+        if old_model != model:
+            from core.cli.ui.agentic_ui import emit_model_switched
 
-            self._hooks.trigger(
-                HookEvent.MODEL_SWITCHED,
-                {
-                    "from_model": old_model,
-                    "to_model": model,
-                    "reason": "user_switch",
-                },
-            )
+            emit_model_switched(old_model, model, "user_switch")
+            if self._hooks:
+                from core.hooks import HookEvent
+
+                self._hooks.trigger(
+                    HookEvent.MODEL_SWITCHED,
+                    {
+                        "from_model": old_model,
+                        "to_model": model,
+                        "reason": "user_switch",
+                    },
+                )
 
         # Proactively adapt context for the new model's context window
         self._adapt_context_for_model(model)
@@ -539,9 +547,17 @@ class AgenticLoop:
                 # Feature 3/4: Model escalation on consecutive LLM failures
                 self._consecutive_llm_failures += 1
                 if self._consecutive_llm_failures >= self._ESCALATION_THRESHOLD:
+                    old_model = self.model
                     escalated = self._try_model_escalation()
                     if escalated:
-                        # Retry with escalated model — continue to next round iteration
+                        # Emit structured event for thin client
+                        from core.cli.ui.agentic_ui import emit_model_escalation
+
+                        emit_model_escalation(
+                            old_model,
+                            self.model,
+                            self._consecutive_llm_failures,
+                        )
                         log.info(
                             "Model escalated after %d consecutive failures, retrying",
                             self._consecutive_llm_failures,
@@ -578,6 +594,9 @@ class AgenticLoop:
                     _cost_tracker = _get_cost_tracker()
                     _session_cost = _cost_tracker.accumulator.total_cost_usd
                     if _session_cost >= self._cost_budget:
+                        from core.cli.ui.agentic_ui import emit_cost_budget_exceeded
+
+                        emit_cost_budget_exceeded(self._cost_budget, _session_cost)
                         self._op_logger.finalize()
                         self._sync_messages_to_context(messages)
                         text = (
@@ -620,6 +639,12 @@ class AgenticLoop:
             self._update_tool_error_tracking(tool_results)
 
             if self._check_convergence_break():
+                from core.cli.ui.agentic_ui import emit_convergence_detected
+
+                emit_convergence_detected(
+                    self._recent_errors[-1] if self._recent_errors else "unknown",
+                    round_idx + 1,
+                )
                 self._op_logger.finalize()
                 self._sync_messages_to_context(messages)
                 result = AgenticResult(
@@ -635,6 +660,9 @@ class AgenticLoop:
 
             if self._total_consecutive_tool_errors >= 3:
                 # Backpressure: inject a cooldown hint
+                from core.cli.ui.agentic_ui import emit_tool_backpressure
+
+                emit_tool_backpressure(self._total_consecutive_tool_errors)
                 await asyncio.sleep(1.0)
                 backpressure_hint = {
                     "type": "text",
@@ -665,6 +693,10 @@ class AgenticLoop:
                     }
                     tool_results.append(diversity_hint)
                     self._consecutive_tool_tracker.clear()
+
+                    from core.cli.ui.agentic_ui import emit_tool_diversity_forced
+
+                    emit_tool_diversity_forced(_repeated_tool, 5)
                     log.warning(
                         "Diversity forcing: %s called 5x — injecting hint",
                         _repeated_tool,
@@ -681,6 +713,9 @@ class AgenticLoop:
         self._op_logger.finalize()
         elapsed = _time.monotonic() - self._loop_start_time
         if self._time_budget_s > 0 and elapsed >= self._time_budget_s:
+            from core.cli.ui.agentic_ui import emit_time_budget_expired
+
+            emit_time_budget_expired(self._time_budget_s, elapsed, round_idx)
             reason = "time_budget_expired"
             text = f"Time budget ({self._time_budget_s:.0f}s) expired after {round_idx} rounds."
         else:
@@ -1053,6 +1088,11 @@ class AgenticLoop:
                 lines.append(f"Reasoning: {result.reasoning}")
 
             plan_text = "\n".join(lines)
+
+            # Emit structured event for thin client
+            from core.cli.ui.agentic_ui import emit_goal_decomposition
+
+            emit_goal_decomposition([g.description for g in result.goals])
             log.info(
                 "GoalDecomposer: injecting %d-step plan into system prompt",
                 len(result.goals),

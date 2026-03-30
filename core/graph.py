@@ -269,6 +269,9 @@ def _skip_check_node(state: GeodeState) -> dict[str, Any]:
     """
     skip_nodes = state.get("skip_nodes", [])
     if "verification" in skip_nodes:
+        from core.cli.ui.agentic_ui import emit_node_skipped
+
+        emit_node_skipped("verification", "Dynamic Graph skip_nodes")
         log.info("Dynamic Graph: verification skipped (in skip_nodes)")
         return {
             "skipped_nodes": ["verification"],
@@ -492,6 +495,9 @@ def build_graph(
             )
             return "synthesizer"
 
+        from core.cli.ui.agentic_ui import emit_feedback_loop
+
+        emit_feedback_loop(iteration, conf_normalized * 100, effective_threshold * 100)
         log.info(
             "Confidence %.2f < %.2f — looping back (iteration %d/%d)",
             conf_normalized,

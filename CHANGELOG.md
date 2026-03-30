@@ -36,6 +36,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`--continue` / `--resume` (P2)** — IPC resume protocol wired end-to-end. `geode --continue` resumes the most recent session; `geode --resume <id>` resumes a specific session. Checkpoint messages and model are restored into the conversation context.
 - **IPC `resume` message type** — CLIPoller handles `{"type": "resume"}` messages, loads checkpoint via `SessionCheckpoint`, and restores conversation context + loop session ID.
 - **`IPCClient.request_resume()`** — thin client method to request session resume from serve.
+- **Event Schema V2 — 16 new structured IPC events** expanding coverage from 12 → 28 event types:
+  - AgenticLoop termination: `model_escalation`, `cost_budget_exceeded`, `time_budget_expired`, `convergence_detected`
+  - AgenticLoop strategy: `goal_decomposition`, `tool_backpressure`, `tool_diversity_forced`
+  - AgenticLoop lifecycle: `model_switched`, `checkpoint_saved`
+  - Pipeline milestones: `pipeline_gather`, `pipeline_analysis`, `pipeline_evaluation`, `pipeline_score`, `pipeline_verification`
+  - Pipeline control flow: `feedback_loop`, `node_skipped`
+- **EventRenderer V2** — client-side handlers for all 16 new events with ANSI rendering.
 
 ## [0.37.1] — 2026-03-30
 

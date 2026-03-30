@@ -155,6 +155,131 @@ class EventRenderer:
         self._out.write("\n")
         self._out.flush()
 
+    # -- AgenticLoop state change events --------------------------------------
+
+    def _handle_model_escalation(self, event: dict[str, Any]) -> None:
+        frm = str(event.get("from_model", ""))
+        to = str(event.get("to_model", ""))
+        n = int(event.get("failures", 0))
+        self._out.write(
+            f"  \033[1;33m⚡ Model escalated: {frm} → {to} (after {n} failures)\033[0m\n"
+        )
+        self._out.flush()
+
+    def _handle_cost_budget_exceeded(self, event: dict[str, Any]) -> None:
+        budget = float(event.get("budget", 0))
+        actual = float(event.get("actual", 0))
+        self._out.write(
+            f"  \033[1;31m$ Cost budget exceeded: ${actual:.2f} / ${budget:.2f}\033[0m\n"
+        )
+        self._out.flush()
+
+    def _handle_time_budget_expired(self, event: dict[str, Any]) -> None:
+        budget = float(event.get("budget_s", 0))
+        elapsed = float(event.get("elapsed_s", 0))
+        rounds = int(event.get("rounds", 0))
+        self._out.write(
+            f"  \033[1;33m⏱ Time expired: {elapsed:.0f}s / {budget:.0f}s ({rounds} rounds)\033[0m\n"
+        )
+        self._out.flush()
+
+    def _handle_convergence_detected(self, event: dict[str, Any]) -> None:
+        rounds = int(event.get("rounds", 0))
+        self._out.write(
+            f"  \033[1;31m⟳ Convergence: repeating failure after {rounds} rounds\033[0m\n"
+        )
+        self._out.flush()
+
+    def _handle_goal_decomposition(self, event: dict[str, Any]) -> None:
+        steps = event.get("steps", [])
+        self._out.write(f"  \033[2m● Goal decomposed into {len(steps)} steps\033[0m\n")
+        for i, s in enumerate(steps[:5], 1):
+            self._out.write(f"    \033[2m{i}. {s}\033[0m\n")
+        self._out.flush()
+
+    def _handle_tool_backpressure(self, event: dict[str, Any]) -> None:
+        n = int(event.get("consecutive_errors", 0))
+        self._out.write(f"  \033[1;33m⏸ Backpressure: {n} consecutive tool errors\033[0m\n")
+        self._out.flush()
+
+    def _handle_tool_diversity_forced(self, event: dict[str, Any]) -> None:
+        tool = str(event.get("tool", ""))
+        count = int(event.get("count", 0))
+        self._out.write(
+            f"  \033[1;33m⟳ Diversity: {tool} called {count}x — forcing alternative\033[0m\n"
+        )
+        self._out.flush()
+
+    def _handle_model_switched(self, event: dict[str, Any]) -> None:
+        frm = str(event.get("from_model", ""))
+        to = str(event.get("to_model", ""))
+        self._out.write(f"  \033[2m⇄ Model: {frm} → {to}\033[0m\n")
+        self._out.flush()
+
+    def _handle_checkpoint_saved(self, event: dict[str, Any]) -> None:
+        pass  # silent — no user-visible output needed
+
+    # -- Pipeline milestone events --------------------------------------------
+
+    def _handle_pipeline_gather(self, event: dict[str, Any]) -> None:
+        name = str(event.get("ip_name", ""))
+        year = event.get("release_year", "")
+        dau = int(event.get("dau", 0))
+        rev = int(event.get("revenue", 0))
+        self._out.write(f"  \033[36m▸ GATHER\033[0m {name} ({year}) — DAU={dau:,} Rev=${rev:,}\n")
+        self._out.flush()
+
+    def _handle_pipeline_analysis(self, event: dict[str, Any]) -> None:
+        analysts = event.get("analysts", [])
+        self._out.write(f"  \033[36m▸ ANALYZE\033[0m {len(analysts)} analysts\n")
+        for a in analysts:
+            name = str(a.get("analyst", ""))
+            score = float(a.get("score", 0))
+            finding = str(a.get("finding", ""))[:40]
+            self._out.write(f"    {name}: {score:.1f} — {finding}\n")
+        self._out.flush()
+
+    def _handle_pipeline_evaluation(self, event: dict[str, Any]) -> None:
+        evals = event.get("evaluators", {})
+        self._out.write(f"  \033[36m▸ EVALUATE\033[0m {len(evals)} evaluators\n")
+        if isinstance(evals, dict):
+            for key, val in evals.items():
+                score = float(val.get("score", 0)) if isinstance(val, dict) else 0
+                self._out.write(f"    {key}: {score:.0f}/100\n")
+        self._out.flush()
+
+    def _handle_pipeline_score(self, event: dict[str, Any]) -> None:
+        score = float(event.get("final_score", 0))
+        tier = str(event.get("tier", "?"))
+        conf = float(event.get("confidence", 0))
+        self._out.write(f"  \033[36m▸ SCORE\033[0m {tier} ({score:.1f})")
+        if conf > 0:
+            self._out.write(f" · confidence {conf:.1f}%")
+        self._out.write("\n")
+        self._out.flush()
+
+    def _handle_pipeline_verification(self, event: dict[str, Any]) -> None:
+        g = "✓" if event.get("guardrails_pass") else "✗"
+        b = "✓" if event.get("biasbuster_pass") else "✗"
+        self._out.write(f"  \033[36m▸ VERIFY\033[0m Guardrails {g} | BiasBuster {b}\n")
+        self._out.flush()
+
+    def _handle_feedback_loop(self, event: dict[str, Any]) -> None:
+        iteration = int(event.get("iteration", 0))
+        conf = float(event.get("confidence", 0))
+        threshold = float(event.get("threshold", 0))
+        self._out.write(
+            f"  \033[2m⟳ Feedback loop #{iteration}:"
+            f" confidence {conf:.1f}% < {threshold:.1f}%\033[0m\n"
+        )
+        self._out.flush()
+
+    def _handle_node_skipped(self, event: dict[str, Any]) -> None:
+        node = str(event.get("node", ""))
+        reason = str(event.get("reason", ""))
+        self._out.write(f"  \033[2m⤳ Skipped: {node} ({reason})\033[0m\n")
+        self._out.flush()
+
     # -- Internal helpers -----------------------------------------------------
 
     _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
