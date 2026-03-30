@@ -323,9 +323,7 @@ class EventRenderer:
             score = float(a.get("score", 0))
             finding = str(a.get("finding", ""))[:50]
             color = "32" if score >= 4.0 else "33" if score >= 3.0 else "31"
-            self._out.write(
-                f"    {name:<18} \033[{color}m{score:.1f}\033[0m  {finding}\n"
-            )
+            self._out.write(f"    {name:<18} \033[{color}m{score:.1f}\033[0m  {finding}\n")
         self._out.flush()
 
     def _handle_pipeline_evaluation(self, event: dict[str, Any]) -> None:
@@ -357,8 +355,7 @@ class EventRenderer:
         # Tier color
         tier_color = {"S": "1;35", "A": "1;32", "B": "1;33", "C": "1;31"}.get(tier, "1")
         self._out.write(
-            f"  \033[36;1m\u25b8 SCORE\033[0m "
-            f"\033[{tier_color}m{tier}\033[0m ({score:.1f}/100)"
+            f"  \033[36;1m\u25b8 SCORE\033[0m \033[{tier_color}m{tier}\033[0m ({score:.1f}/100)"
         )
         if conf > 0:
             self._out.write(f" \u00b7 confidence {conf:.1f}%")

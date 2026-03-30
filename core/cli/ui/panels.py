@@ -179,8 +179,7 @@ def score_panel(
         f"\u0393={psm.rosenbaum_gamma:.1f} ({g_mark}\u22642.0)"
     )
     console.print(
-        "  [muted]ATT=IP effect, Z>1.645=95% significant,"
-        " \u0393\u22642.0=causal robustness[/muted]"
+        "  [muted]ATT=IP effect, Z>1.645=95% significant, \u0393\u22642.0=causal robustness[/muted]"
     )
 
     filled = int(final_score / 100 * 40)
