@@ -342,9 +342,16 @@ class SchedulerService:
     def add_job(self, job: ScheduledJob) -> None:
         """Add a new scheduled job.
 
-        Raises ValueError if job_id already exists or a job with the same
-        schedule expression and action already exists (dedup).
+        Raises ValueError if:
+        - job_id already exists
+        - job has no action AND no callback (would be a no-op zombie)
+        - a job with the same schedule expression and action already exists (dedup)
         """
+        if not job.action and job.callback is None:
+            raise ValueError(
+                "Job must have an action or callback. "
+                "Empty-action jobs fire as no-ops and waste resources."
+            )
         with self._lock:
             if job.job_id in self._jobs:
                 raise ValueError(f"Job '{job.job_id}' already exists")
@@ -674,13 +681,20 @@ class SchedulerService:
             finally:
                 fcntl.flock(lf, fcntl.LOCK_UN)
         loaded = 0
+        zombies = 0
         for _jid, jdata in data.items():
             try:
                 job = _job_from_dict(jdata)
+                # Skip zombie jobs (no action, no callback) — auto-cleanup
+                if not job.action and job.callback is None:
+                    zombies += 1
+                    continue
                 self._jobs[job.job_id] = job
                 loaded += 1
             except Exception as exc:
                 log.warning("Skipping malformed job entry: %s", exc)
+        if zombies:
+            log.warning("Skipped %d zombie jobs (empty action) on load", zombies)
         log.info("Loaded %d jobs from %s", loaded, path)
 
     # -- Background runner --------------------------------------------------

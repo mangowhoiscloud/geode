@@ -47,6 +47,7 @@ class TestNLToSchedulerIntegration:
         result = parser.parse("every 5 minutes")
         assert result.success
         assert result.job is not None
+        result.job.action = "test action"
         svc.add_job(result.job)
         assert svc.get_job(result.job.job_id) is not None
         assert result.job.schedule.kind == ScheduleKind.EVERY
@@ -56,6 +57,7 @@ class TestNLToSchedulerIntegration:
         result = parser.parse("daily at 9:00")
         assert result.success
         assert result.job is not None
+        result.job.action = "test action"
         svc.add_job(result.job)
         job = svc.get_job(result.job.job_id)
         assert job is not None
@@ -65,6 +67,7 @@ class TestNLToSchedulerIntegration:
         result = parser.parse("in 30 minutes")
         assert result.success
         assert result.job is not None
+        result.job.action = "test action"
         svc.add_job(result.job)
         job = svc.get_job(result.job.job_id)
         assert job is not None
@@ -77,6 +80,7 @@ class TestNLToSchedulerIntegration:
         result = parser.parse("every 10 minutes during 09:00-18:00")
         assert result.success
         assert result.job is not None
+        result.job.action = "test action"
         svc.add_job(result.job)
         job = svc.get_job(result.job.job_id)
         assert job is not None
@@ -96,6 +100,7 @@ class TestNLToSchedulerIntegration:
     ) -> None:
         result = parser.parse("every 2 hours")
         assert result.success and result.job
+        result.job.action = "test action"
         svc.add_job(result.job)
         svc.save()
 
@@ -125,6 +130,7 @@ class TestPredefinedToScheduler:
                     name=tmpl.name,
                     schedule=Schedule(kind=ScheduleKind.CRON, cron_expr=tmpl.schedule),
                     enabled=tmpl.enabled,
+                    action=f"run {tmpl.id}",
                     metadata={
                         "source": "predefined",
                         "template_id": tmpl.id,
@@ -143,6 +149,7 @@ class TestPredefinedToScheduler:
             name=tmpl.name,
             schedule=Schedule(kind=ScheduleKind.CRON, cron_expr=tmpl.schedule),
             enabled=True,
+            action=f"run {tmpl.id}",
         )
         svc.add_job(job)
         with pytest.raises(ValueError, match="already exists"):
@@ -161,7 +168,7 @@ class TestCmdScheduleEnhanced:
         with patch("core.cli.cmd_schedule.console") as mock_console:
             cmd_schedule("", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
-            assert "Predefined Automations" in output
+            assert "Templates" in output
 
     def test_list_shows_dynamic_jobs(self, svc: SchedulerService) -> None:
         job = ScheduledJob(
@@ -169,18 +176,22 @@ class TestCmdScheduleEnhanced:
             name="Test Job",
             schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
             enabled=True,
+            action="check status",
         )
         svc.add_job(job)
         with patch("core.cli.cmd_schedule.console") as mock_console:
             cmd_schedule("list", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
-            assert "Dynamic Jobs" in output
+            assert "Scheduled Jobs" in output
             assert "dynamic:test1" in output
 
     def test_create_with_nl_expression(self, svc: SchedulerService) -> None:
         initial_count = len(svc.list_jobs(include_disabled=True))
         with patch("core.cli.cmd_schedule.console"):
-            cmd_schedule("create every 5 minutes", scheduler_service=svc)
+            cmd_schedule(
+                'create "every 5 minutes" "check system health"',
+                scheduler_service=svc,
+            )
         assert len(svc.list_jobs(include_disabled=True)) == initial_count + 1
 
     def test_create_invalid_expression(self, svc: SchedulerService) -> None:
@@ -200,6 +211,7 @@ class TestCmdScheduleEnhanced:
             job_id="del-me",
             name="To Delete",
             schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
+            action="test action",
         )
         svc.add_job(job)
         with patch("core.cli.cmd_schedule.console") as mock_console:
@@ -226,6 +238,7 @@ class TestCmdScheduleEnhanced:
             job_id="status-job",
             name="Status Test",
             schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=300_000),
+            action="check drift",
             last_status="ok",
             last_duration_ms=42.5,
         )
@@ -247,6 +260,7 @@ class TestCmdScheduleEnhanced:
             job_id="toggle-me",
             name="Toggle",
             schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
+            action="toggle test",
             enabled=False,
         )
         svc.add_job(job)
@@ -261,6 +275,7 @@ class TestCmdScheduleEnhanced:
             job_id="toggle-me2",
             name="Toggle2",
             schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
+            action="toggle test 2",
             enabled=True,
         )
         svc.add_job(job)
