@@ -997,7 +997,7 @@ def main(
             if not ready:
                 console.print("  [error]Failed to start geode serve[/error]")
                 console.print("  [dim]Try manually: geode serve &[/dim]")
-            raise typer.Exit(1)
+                raise typer.Exit(1)
 
         console.print("  [muted]Connected to serve via IPC[/muted]")
         _thin_interactive_loop()
