@@ -488,7 +488,7 @@ class TestToolTypeGrouping:
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_grouping_with_mixed_types(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        """8 tool calls of mixed types produce grouped summary in finalize()."""
+        """8 tool calls of mixed types produce compact aggregate summary."""
         logger = OperationLogger()
         logger.begin_round()
         # 3 web_search + 2 memory_search + 2 bash + 1 analyze_ip = 8
@@ -505,17 +505,13 @@ class TestToolTypeGrouping:
         calls = [str(c) for c in mock_console.print.call_args_list]
         combined = " ".join(calls)
 
-        # Should show grouped summary
-        assert "web_search (3)" in combined
-        assert "memory_search (2)" in combined
-        assert "run_bash (2)" in combined
-        assert "analyze_ip (1)" in combined
+        # Should show compact aggregate (no per-type breakdown)
         assert "8 tools" in combined
         assert "1 rounds" in combined
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_grouping_sorted_by_count(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        """Grouped types are sorted by count descending."""
+        """6+ tools produce compact aggregate summary."""
         logger = OperationLogger()
         logger.begin_round()
         # 1 alpha + 4 beta + 1 gamma = 6
@@ -529,11 +525,9 @@ class TestToolTypeGrouping:
         calls = [str(c) for c in mock_console.print.call_args_list]
         combined = " ".join(calls)
 
-        # beta should come first (4 > 1)
-        assert "beta (4)" in combined
-        beta_pos = combined.index("beta (4)")
-        alpha_pos = combined.index("alpha (1)")
-        assert beta_pos < alpha_pos
+        # Compact: just total count
+        assert "6 tools" in combined
+        assert "1 rounds" in combined
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_below_grouping_threshold_no_summary(self, mock_console) -> None:  # type: ignore[no-untyped-def]
@@ -549,7 +543,7 @@ class TestToolTypeGrouping:
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_exactly_6_tools_triggers_grouping(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        """Exactly 6 tools (GROUPING_THRESHOLD) triggers grouping."""
+        """Exactly 6 tools (GROUPING_THRESHOLD) triggers compact summary."""
         logger = OperationLogger()
         logger.begin_round()
         for i in range(6):
@@ -560,7 +554,6 @@ class TestToolTypeGrouping:
         calls = [str(c) for c in mock_console.print.call_args_list]
         combined = " ".join(calls)
 
-        assert "web_search (6)" in combined
         assert "6 tools" in combined
 
     @patch("core.cli.ui.agentic_ui.console")

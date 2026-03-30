@@ -25,6 +25,14 @@ def _fmt_tokens(n: int) -> str:
     return str(n)
 
 
+def _fmt_elapsed(seconds: float) -> str:
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    m, sec = divmod(s, 60)
+    return f"{m}m {sec}s"
+
+
 class EventRenderer:
     """Dispatches IPC events to appropriate rendering handlers.
 
@@ -64,6 +72,12 @@ class EventRenderer:
         self._repeat_summary: str = ""
         self._in_repeat: bool = False
         self._last_batch_tool: str = ""  # tool name from last single-tool batch
+        # Accumulated turn metrics — rendered once at stop()
+        self._turn_start: float = time.monotonic()
+        self._turn_model: str = ""
+        self._turn_in_tokens: int = 0
+        self._turn_out_tokens: int = 0
+        self._turn_cost: float = 0.0
 
     # -- Public API -----------------------------------------------------------
 
@@ -109,7 +123,7 @@ class EventRenderer:
         self._out.flush()
 
     def stop(self) -> None:
-        """Stop all spinners. Call when result arrives."""
+        """Stop all spinners and render turn status. Call when result arrives."""
         self._flush_repeat()
         self._activity = False
         self._activity_suppressed = True
@@ -121,6 +135,8 @@ class EventRenderer:
         # Clear any leftover spinner line
         self._out.write("\r\033[2K")
         self._out.flush()
+        # Render accumulated turn status (Claude Code style)
+        self._render_turn_status()
 
     # -- Core event handlers --------------------------------------------------
 
@@ -180,34 +196,15 @@ class EventRenderer:
                 self._last_batch_tool = ""
 
     def _handle_tokens(self, event: dict[str, Any]) -> None:
-        self._suppress_all_spinners()
-        model = str(event.get("model", ""))
-        in_tok = int(event.get("input", 0))
-        out_tok = int(event.get("output", 0))
-        cost = float(event.get("cost", 0))
-        in_str = _fmt_tokens(in_tok)
-        out_str = _fmt_tokens(out_tok)
-        cost_str = f" \u00b7 ${cost:.4f}" if cost > 0 else ""
-        self._out.write(
-            f"  \033[2m\u2722 {model} \u00b7 \u2193{in_str} \u2191{out_str}{cost_str}\033[0m\n"
-        )
-        self._out.flush()
-        self._activity_suppressed = False  # resume after tokens line
+        # Accumulate per-turn — rendered once at stop() as a single status line
+        self._turn_model = str(event.get("model", "")) or self._turn_model
+        self._turn_in_tokens += int(event.get("input", 0))
+        self._turn_out_tokens += int(event.get("output", 0))
+        self._turn_cost += float(event.get("cost", 0))
 
     def _handle_turn_end(self, event: dict[str, Any]) -> None:
-        rounds = int(event.get("rounds", 0))
-        tools = int(event.get("tools", 0))
-        elapsed = float(event.get("elapsed_s", 0))
-        cost = float(event.get("cost", 0))
-        if tools == 0:
-            return
-        parts = [f"{rounds} rounds", f"{tools} tools", f"{elapsed:.1f}s"]
-        if cost > 0:
-            parts.append(f"${cost:.3f}")
-        summary = " \u00b7 ".join(parts)
-        line = f"\u2500\u2500\u2500\u2500 {summary} \u2500\u2500\u2500\u2500"
-        self._out.write(f"\n  \033[2m{line}\033[0m\n")
-        self._out.flush()
+        # Render accumulated status line (Claude Code style)
+        self._render_turn_status()
 
     def _handle_context_event(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
@@ -255,17 +252,13 @@ class EventRenderer:
         cost = float(event.get("cost", 0))
         if calls == 0:
             return
-        self._out.write("\n  \033[1mSession Cost Summary\033[0m\n")
-        self._out.write(f"  \033[2mCalls:\033[0m {calls}\n")
+        in_str = _fmt_tokens(in_tok)
+        out_str = _fmt_tokens(out_tok)
         self._out.write(
-            f"  \033[2mTokens:\033[0m \u2193{_fmt_tokens(in_tok)} \u2191{_fmt_tokens(out_tok)}\n"
+            f"\n  \033[2mSession: {calls} calls \u00b7 "
+            f"\u2193{in_str} \u2191{out_str} \u00b7 "
+            f"\033[0m\033[1;33m${cost:.4f}\033[0m\n\n"
         )
-        self._out.write(f"  \033[1;33mTotal: ${cost:.4f}\033[0m\n")
-        breakdown = event.get("breakdown", {})
-        if isinstance(breakdown, dict) and len(breakdown) > 1:
-            for m, c in sorted(breakdown.items(), key=lambda x: -x[1]):
-                self._out.write(f"    \033[2m{m}:\033[0m ${c:.4f}\n")
-        self._out.write("\n")
         self._out.flush()
 
     # -- AgenticLoop state change events --------------------------------------
@@ -509,6 +502,29 @@ class EventRenderer:
             self._out.write(f"    \033[2mAction:\033[0m {action}\n")
         self._out.write("\n")
         self._out.flush()
+
+    # -- Turn status -----------------------------------------------------------
+
+    def _render_turn_status(self) -> None:
+        """Render Claude Code-style status line: ✢ Worked for Xs · model · ↓Nk ↑Nk · $X.XX"""
+        if self._turn_in_tokens == 0 and self._turn_out_tokens == 0:
+            return
+        elapsed = time.monotonic() - self._turn_start
+        in_str = _fmt_tokens(self._turn_in_tokens)
+        out_str = _fmt_tokens(self._turn_out_tokens)
+        parts = [f"\u2722 Worked for {_fmt_elapsed(elapsed)}"]
+        if self._turn_model:
+            parts.append(self._turn_model)
+        parts.append(f"\u2193{in_str} \u2191{out_str}")
+        if self._turn_cost > 0:
+            parts.append(f"${self._turn_cost:.4f}")
+        line = " \u00b7 ".join(parts)
+        self._out.write(f"\n  \033[2m{line}\033[0m\n")
+        self._out.flush()
+        # Reset so duplicate stop() calls don't double-render
+        self._turn_in_tokens = 0
+        self._turn_out_tokens = 0
+        self._turn_cost = 0.0
 
     # -- Repeat mode helpers ---------------------------------------------------
 

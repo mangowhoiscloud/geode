@@ -264,18 +264,16 @@ class OperationLogger:
         return " · ".join(summary_parts) if summary_parts else "ok"
 
     def finalize(self) -> None:
-        """Print collapsed count or grouped summary.
+        """Print collapsed count summary.
 
-        When total tool count >= GROUPING_THRESHOLD (6), renders a grouped
-        summary by tool type (e.g., ``web_search (3) · memory (2) · bash (1)``).
-        Otherwise, falls back to the simple collapsed count message.
+        In IPC mode: skip (client renders individual tool lines via ToolCallTracker).
+        In direct mode: show compact aggregate count when tools exceed threshold.
         """
+        # IPC mode — client already renders per-tool ✓ lines
+        writer = getattr(_ipc_writer_local, "writer", None)
+        if writer is not None:
+            return
         if self._total_tool_count >= self.GROUPING_THRESHOLD:
-            # Grouped summary: tool_type (count) sorted by count descending
-            sorted_types = sorted(self._tool_type_counts.items(), key=lambda x: -x[1])
-            type_parts = [f"{name} ({count})" for name, count in sorted_types]
-            group_line = " · ".join(type_parts)
-            console.print(f"  ⎿ [dim]{group_line}[/dim]")
             rounds = max(self._round_count, 1)
             console.print(f"  ⎿ [dim]{self._total_tool_count} tools · {rounds} rounds[/dim]")
         elif self._collapsed_count > 0:
