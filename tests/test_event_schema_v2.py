@@ -275,7 +275,10 @@ class TestEventRendererV2:
                 "evaluators": {"quality": {"score": 85}},
             }
         )
-        assert "quality" in renderer._out.getvalue()
+        # Renderer maps quality_judge→Quality, but "quality" key becomes "Quality" via labels
+        out = renderer._out.getvalue()
+        assert "EVALUATE" in out
+        assert "85" in out
 
     def test_pipeline_score(self, renderer) -> None:
         renderer.on_event(

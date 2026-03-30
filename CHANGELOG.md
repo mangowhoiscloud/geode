@@ -28,6 +28,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.37.2] — 2026-03-30
 
+### Added
+- **Persistent activity spinner** — thin client shows animated `Working...` spinner from prompt send until result arrives. Thinking/tool spinners override it; resumes between events.
+- **Pipeline client-side rendering** — `panels.py` detects IPC mode → emits structured event + returns early (no duplicate raw ANSI stream). Thin client renders all pipeline milestones from structured events.
+- **`pipeline_header` / `pipeline_result` events** — 2 new event types (28 → 30 total).
+
 ### Fixed
 - **Thinking spinner frozen** — `EventRenderer` thinking spinner was rendering 1 frame then freezing until next event. Now uses daemon thread animation (80ms per frame), matching `ToolCallTracker` pattern.
 - **Tool duration inaccurate** — `tool_end` event now includes server-measured `duration_s`. Client prefers server duration over client-side measurement (excludes IPC transport latency).
