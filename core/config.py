@@ -282,6 +282,9 @@ class Settings(BaseSettings):
     # Pipeline — timeout in seconds (B3: 0 = no timeout)
     pipeline_timeout_s: float = 600.0
 
+    # Concurrency — workload lane limits
+    gateway_max_concurrent: int = 4  # max simultaneous Gateway messages
+
 
 _settings_instance: Settings | None = None
 
