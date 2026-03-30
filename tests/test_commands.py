@@ -295,9 +295,8 @@ class TestApplyModel:
     def test_apply_model_no_loop_does_not_crash(self, tmp_path: Path, monkeypatch):
         """When no active loop, _apply_model should still work (no crash)."""
         monkeypatch.chdir(tmp_path)
-        from core.config import settings
-
         from core.cli import session_state
+        from core.config import settings
 
         session_state.set_current_loop(None)
 
