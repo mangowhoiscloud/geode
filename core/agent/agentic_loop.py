@@ -515,7 +515,20 @@ class AgenticLoop:
                 )
             except _ContextExhaustedError as exc:
                 _spinner.stop()
-                log.warning("Context exhausted: %s", exc)
+                log.warning("Context exhausted: %s — attempting aggressive recovery", exc)
+
+                # Aggressive recovery: prune harder + summarize tool results
+                recovered = self._aggressive_context_recovery(system_prompt, messages)
+                if recovered:
+                    self._notify_context_event(
+                        "prune",
+                        original_count=len(messages) + recovered,
+                        new_count=len(messages),
+                    )
+                    log.info("Aggressive recovery succeeded — continuing loop")
+                    continue  # retry LLM call with pruned context
+
+                # Recovery failed — break loop
                 self._notify_context_event(
                     "exhausted",
                     original_count=len(messages),
@@ -524,7 +537,7 @@ class AgenticLoop:
                 self._sync_messages_to_context(messages)
                 result = AgenticResult(
                     text=(
-                        "Context window exhausted after pruning. "
+                        "Context window exhausted after aggressive pruning. "
                         "Your conversation is preserved — start a new request "
                         "or use /compact to manually reduce context."
                     ),
@@ -946,6 +959,63 @@ class AgenticLoop:
                     original_count=original_count,
                     new_count=len(pruned),
                 )
+
+    def _aggressive_context_recovery(self, system: str, messages: list[dict[str, Any]]) -> int:
+        """Last-resort context recovery: aggressive prune + tool result summarization.
+
+        Called when normal compaction/prune at 95% still leaves context critical.
+        Two-phase approach:
+          1. Summarize large tool results (>5% of window) to compact summaries
+          2. Prune with halved keep_recent (keep fewer messages)
+        Returns number of messages freed, or 0 if recovery failed.
+        """
+        try:
+            from core.config import settings
+            from core.orchestration.context_monitor import (
+                check_context,
+                prune_oldest_messages,
+                summarize_tool_results,
+            )
+
+            original_count = len(messages)
+
+            # Phase 1: summarize large tool_result blocks in-place
+            ctx_window = getattr(
+                check_context(messages, self.model, system_prompt=system),
+                "context_window",
+                200_000,
+            )
+            summarized = summarize_tool_results(messages, ctx_window)
+            if summarized > 0:
+                log.info("Aggressive recovery: summarized %d tool results", summarized)
+
+            # Check if summarization alone resolved it
+            post = check_context(messages, self.model, system_prompt=system)
+            if not post.is_critical:
+                return original_count - len(messages) + summarized
+
+            # Phase 2: prune with halved keep_recent
+            aggressive_keep = max(3, settings.compact_keep_recent // 2)
+            pruned = prune_oldest_messages(messages, keep_recent=aggressive_keep)
+            if len(pruned) < len(messages):
+                messages.clear()
+                messages.extend(pruned)
+                log.info(
+                    "Aggressive prune: %d → %d messages (keep_recent=%d)",
+                    original_count,
+                    len(pruned),
+                    aggressive_keep,
+                )
+
+            # Final check
+            post2 = check_context(messages, self.model, system_prompt=system)
+            if not post2.is_critical:
+                return original_count - len(messages)
+
+            return 0  # recovery failed
+        except Exception:
+            log.warning("Aggressive context recovery failed", exc_info=True)
+            return 0
 
     def _notify_context_event(
         self,
