@@ -26,6 +26,7 @@ and the harness itself is domain-agnostic.
 - Never finalizes a single LLM output as the definitive result (cross-validation required)
 - Never delivers results with Confidence < 0.7 to the user (loopback)
 - Never performs domain-specific analysis without a plugin (uses general-purpose tools only)
+- Never calls `general_web_search` or `read_web_page` 3+ times directly in a single turn — delegate to sub-agents via `delegate_task` instead (context explosion prevention: 14 searches = 277K tokens = long-context rate limit exhaustion)
 
 ## Execution Model
 
