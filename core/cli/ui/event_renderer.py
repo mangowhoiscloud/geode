@@ -527,10 +527,7 @@ class EventRenderer:
             return
         self._clear_activity_line()
         dur_str = f" ({dur:.1f}s)" if dur > 0 else ""
-        self._out.write(
-            f"  \033[32m\u2713 {name}\033[0m"
-            f" \u00d7{count} \u2192 {summary}{dur_str}\n"
-        )
+        self._out.write(f"  \033[32m\u2713 {name}\033[0m \u00d7{count} \u2192 {summary}{dur_str}\n")
         self._out.flush()
 
     # -- Internal helpers -----------------------------------------------------

@@ -703,7 +703,9 @@ class TestRepeatCounter:
         r = self._make_renderer()
         # First batch
         r.on_event({"type": "tool_start", "name": "memory_search", "args_preview": "q=test"})
-        r.on_event({"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.2})
+        r.on_event(
+            {"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.2}
+        )
         assert r._last_batch_tool == "memory_search"
 
         # Second batch — same tool → repeat mode
@@ -711,7 +713,9 @@ class TestRepeatCounter:
         assert r._in_repeat is True
 
         # Third end
-        r.on_event({"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.3})
+        r.on_event(
+            {"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.3}
+        )
         assert r._repeat_count == 2
 
     def test_flush_emits_summary_line(self) -> None:
@@ -720,7 +724,9 @@ class TestRepeatCounter:
         # Simulate 3 sequential calls
         for _i in range(3):
             r.on_event({"type": "tool_start", "name": "check_status", "args_preview": ""})
-            r.on_event({"type": "tool_end", "name": "check_status", "summary": "ok", "duration_s": 0.1})
+            r.on_event(
+                {"type": "tool_end", "name": "check_status", "summary": "ok", "duration_s": 0.1}
+            )
 
         assert r._in_repeat is True
         assert r._repeat_count == 3
@@ -735,9 +741,13 @@ class TestRepeatCounter:
         r = self._make_renderer()
         # 2x memory_search
         r.on_event({"type": "tool_start", "name": "memory_search"})
-        r.on_event({"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.1})
+        r.on_event(
+            {"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.1}
+        )
         r.on_event({"type": "tool_start", "name": "memory_search"})
-        r.on_event({"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.1})
+        r.on_event(
+            {"type": "tool_end", "name": "memory_search", "summary": "ok", "duration_s": 0.1}
+        )
         assert r._in_repeat is True
 
         # Different tool → flush
@@ -760,7 +770,9 @@ class TestRepeatCounter:
         r = self._make_renderer()
         for _ in range(4):
             r.on_event({"type": "tool_start", "name": "task_list"})
-            r.on_event({"type": "tool_end", "name": "task_list", "summary": "0 items", "duration_s": 0.05})
+            r.on_event(
+                {"type": "tool_end", "name": "task_list", "summary": "0 items", "duration_s": 0.05}
+            )
         assert r._in_repeat is True
         r.stop()
         output = r._out.getvalue()
