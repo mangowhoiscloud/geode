@@ -76,8 +76,8 @@ class ToolCallTracker:
                     t["error"] = str(event.get("error", ""))
                     # Prefer server-measured duration (excludes IPC latency)
                     server_dur = event.get("duration_s")
-                    if server_dur is not None and float(server_dur) > 0:
-                        t["duration"] = float(server_dur)
+                    if server_dur is not None and float(str(server_dur)) > 0:
+                        t["duration"] = float(str(server_dur))
                     else:
                         t["duration"] = time.monotonic() - float(t["start_time"])
                     break
