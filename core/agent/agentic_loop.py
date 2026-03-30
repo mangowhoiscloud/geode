@@ -801,6 +801,20 @@ class AgenticLoop:
                 tool_results.append(backpressure_hint)
 
             # Feature 8: Diversity forcing — prevent same tool 5x consecutively
+            # Read/search tools are naturally repetitive — exempt from diversity forcing
+            _DIVERSITY_EXEMPT: frozenset[str] = frozenset(
+                {
+                    "read_file",
+                    "read_text_file",
+                    "search_files",
+                    "list_directory",
+                    "memory_search",
+                    "note_read",
+                    "web_search",
+                    "general_web_search",
+                    "sequentialthinking",
+                }
+            )
             for block in response.content:
                 if getattr(block, "type", None) == "tool_use":
                     self._consecutive_tool_tracker.append(getattr(block, "name", ""))
@@ -810,24 +824,27 @@ class AgenticLoop:
                 _last_5 = self._consecutive_tool_tracker[-5:]
                 if len(set(_last_5)) == 1:
                     _repeated_tool = _last_5[0]
-                    diversity_hint = {
-                        "type": "text",
-                        "text": (
-                            f"[system] The tool '{_repeated_tool}' has been called 5 times "
-                            "consecutively with similar results. "
-                            "Try a different approach or tool to make progress."
-                        ),
-                    }
-                    tool_results.append(diversity_hint)
-                    self._consecutive_tool_tracker.clear()
+                    if _repeated_tool in _DIVERSITY_EXEMPT:
+                        self._consecutive_tool_tracker.clear()
+                    else:
+                        diversity_hint = {
+                            "type": "text",
+                            "text": (
+                                f"[system] The tool '{_repeated_tool}' has been called 5 times "
+                                "consecutively with similar results. "
+                                "Try a different approach or tool to make progress."
+                            ),
+                        }
+                        tool_results.append(diversity_hint)
+                        self._consecutive_tool_tracker.clear()
 
-                    from core.cli.ui.agentic_ui import emit_tool_diversity_forced
+                        from core.cli.ui.agentic_ui import emit_tool_diversity_forced
 
-                    emit_tool_diversity_forced(_repeated_tool, 5)
-                    log.warning(
-                        "Diversity forcing: %s called 5x — injecting hint",
-                        _repeated_tool,
-                    )
+                        emit_tool_diversity_forced(_repeated_tool, 5)
+                        log.warning(
+                            "Diversity forcing: %s called 5x — injecting hint",
+                            _repeated_tool,
+                        )
 
             # Accumulate messages for next round
             # Convert content blocks to serializable format
