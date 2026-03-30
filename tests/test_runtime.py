@@ -223,6 +223,7 @@ class TestDefaultBuilders:
         queue = _build_default_lanes()
         assert "session" in queue.list_lanes()
         assert "global" in queue.list_lanes()
+        assert "gateway" in queue.list_lanes()
         # SessionLane (per-key serialization)
         sl = queue.session_lane
         assert sl is not None
@@ -230,9 +231,9 @@ class TestDefaultBuilders:
         # Global Lane (total capacity)
         global_lane = queue.get_lane("global")
         assert global_lane is not None and global_lane.max_concurrent == 8
-        # gateway/scheduler lanes removed (SessionLane replaces them)
-        assert queue.get_lane("gateway") is None
-        assert queue.get_lane("scheduler") is None
+        # Gateway Lane (workload-specific cap)
+        gw_lane = queue.get_lane("gateway")
+        assert gw_lane is not None and gw_lane.max_concurrent == 4
 
 
 class TestRuntimeNewComponents:
