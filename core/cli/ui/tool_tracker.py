@@ -68,6 +68,7 @@ class ToolCallTracker:
     def on_tool_end(self, event: dict[str, object]) -> None:
         """Handle a tool_end event from serve."""
         name = str(event.get("name", ""))
+        all_done = False
         with self._lock:
             for t in self._tools:
                 if t["name"] == name and not t["done"]:
@@ -81,9 +82,16 @@ class ToolCallTracker:
                     else:
                         t["duration"] = time.monotonic() - float(t["start_time"])
                     break
-            self._redraw()
-            if all(t["done"] for t in self._tools):
+            all_done = all(t["done"] for t in self._tools)
+            if all_done:
                 self._running = False
+            self._redraw()
+
+        # Join spinner thread outside lock to prevent stale frame after final redraw
+        if all_done and self._spinner_thread:
+            self._spinner_thread.join(timeout=0.5)
+            with self._lock:
+                self._redraw()  # final clean redraw without spinner
 
     def stop(self) -> None:
         """Stop the spinner and do a final redraw."""
@@ -118,7 +126,7 @@ class ToolCallTracker:
                     summary = t["summary"]
                     lines.append(f"\033[2K  \033[32m\u2713 {name}\033[0m → {summary}{dur}")
             else:
-                args = str(t["args"])
+                args = str(t["args"]).replace("\n", " ")
                 if len(args) > 60:
                     args = args[:57] + "..."
                 lines.append(f"\033[2K  \033[35m\u25b8 {name}\033[0m({args}) {frame}")

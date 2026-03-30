@@ -276,6 +276,12 @@ class Settings(BaseSettings):
     llm_cross_provider_failover: bool = False  # cross-provider fallback on all retries exhausted
     llm_cross_provider_order: list[str] = ["anthropic", "openai", "glm"]
 
+    # LLM — Fallback cost ratio control (C2: 0 = unlimited)
+    llm_max_fallback_cost_ratio: float = 0.0
+
+    # Pipeline — timeout in seconds (B3: 0 = no timeout)
+    pipeline_timeout_s: float = 600.0
+
 
 _settings_instance: Settings | None = None
 

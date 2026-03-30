@@ -185,7 +185,7 @@ class OperationLogger:
                 "tool_start",
                 id=tool_id,
                 name=tool_name,
-                args_preview=args_str[:120],
+                args_preview=args_str.replace("\n", " ")[:120],
             )
             self._visible_count += 1
             return True

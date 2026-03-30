@@ -571,14 +571,27 @@ def make_evaluator_sends(state: GeodeState) -> list[Any]:
     """Create Send objects for evaluators.
 
     Uses standard 3 evaluators for gamified IPs, or prospect_judge for prospect IPs.
+    B6: on iteration >= 2, skip evaluators with non-degraded results (mirror analyst pattern).
     """
     from langgraph.types import Send
 
     mode = state.get("pipeline_mode", "full_pipeline")
     etypes = PROSPECT_EVALUATOR_TYPES if mode == "prospect" else _get_evaluator_types()
 
+    # B6: partial retry — skip evaluators with good prior results on re-iteration
+    iteration = state.get("iteration", 1)
+    existing_evals: dict[str, Any] = state.get("evaluations", {})
+    skip_types: set[str] = set()
+    if iteration >= 2 and existing_evals:
+        for etype_key, eresult in existing_evals.items():
+            if not getattr(eresult, "is_degraded", False):
+                skip_types.add(etype_key)
+
     sends = []
     for etype in etypes:
+        if etype in skip_types:
+            log.info("B6 partial retry: skipping %s evaluator (good prior result)", etype)
+            continue
         send_state = {
             "ip_name": state.get("ip_name", ""),
             "ip_info": state.get("ip_info", {}),

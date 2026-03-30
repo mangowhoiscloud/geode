@@ -94,6 +94,9 @@ class HookEvent(Enum):
     # Cross-provider fallback (LLM resilience)
     FALLBACK_CROSS_PROVIDER = "fallback_cross_provider"
 
+    # Pipeline timeout (B3)
+    PIPELINE_TIMEOUT = "pipeline_timeout"
+
 
 @dataclass
 class HookResult:

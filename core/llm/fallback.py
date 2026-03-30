@@ -115,6 +115,32 @@ def retry_with_backoff_generic(
         )
 
     models_to_try = [model] + [m for m in fallback_models if m != model]
+
+    # C2: filter out fallback models that exceed cost ratio limit
+    from core.config import settings as _cfg
+
+    if _cfg.llm_max_fallback_cost_ratio > 0 and len(models_to_try) > 1:
+        from core.llm.token_tracker import MODEL_PRICING
+
+        primary_price = MODEL_PRICING.get(model)
+        if primary_price and primary_price.input > 0:
+            filtered = [model]
+            for fb_model in models_to_try[1:]:
+                fb_price = MODEL_PRICING.get(fb_model)
+                if fb_price and fb_price.input > 0:
+                    ratio = fb_price.input / primary_price.input
+                    if ratio > _cfg.llm_max_fallback_cost_ratio:
+                        log.warning(
+                            "C2: fallback %s→%s cost ratio %.1fx exceeds limit %.1fx — skipping",
+                            model,
+                            fb_model,
+                            ratio,
+                            _cfg.llm_max_fallback_cost_ratio,
+                        )
+                        continue
+                filtered.append(fb_model)
+            models_to_try = filtered
+
     last_error: Exception | None = None
     t0_retry = time.monotonic()
 
