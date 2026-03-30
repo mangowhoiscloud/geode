@@ -12,7 +12,9 @@ Client → Server:
     {"type": "exit"}
 
 Server → Client:
+    {"type": "stream", "data": "▸ tool_call(...)\\n"}   (during prompt execution)
     {"type": "result", "text": "...", "rounds": 3, "tool_calls": [...]}
+    {"type": "command_result", "cmd": "...", "output": "..."}
     {"type": "error", "message": "..."}
     {"type": "session", "session_id": "cli-abc123"}
 """
@@ -35,6 +37,42 @@ if TYPE_CHECKING:
 DEFAULT_SOCKET_PATH = Path.home() / ".geode" / "cli.sock"
 
 
+class _StreamingWriter:
+    """File-like object that relays console writes to a client socket.
+
+    Each ``write()`` call sends ``{"type": "stream", "data": "..."}`` over
+    the socket, so the thin client can render agentic UI (tool calls,
+    results, token usage) in real-time as the AgenticLoop executes.
+
+    Inspired by:
+    - Codex CLI item-based streaming (discrete events over API)
+    - OpenClaw System Events Queue (event → client relay)
+    - autoresearch P6 L1 capture (capture all stdout)
+    """
+
+    def __init__(self, client: socket.socket) -> None:
+        self._client = client
+
+    def write(self, text: str) -> int:
+        if not text:
+            return 0
+        try:
+            payload = json.dumps({"type": "stream", "data": text}, ensure_ascii=False) + "\n"
+            self._client.sendall(payload.encode("utf-8"))
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass  # client disconnected — silently drop
+        return len(text)
+
+    def flush(self) -> None:
+        pass
+
+    def isatty(self) -> bool:
+        return True  # trick Rich into applying ANSI styles
+
+    def fileno(self) -> int:
+        return -1
+
+
 class CLIPoller:
     """Unix domain socket server for CLI thin-client IPC.
 
@@ -49,6 +87,7 @@ class CLIPoller:
         services: SharedServices,
         *,
         socket_path: Path | None = None,
+        scheduler_service: Any = None,
     ) -> None:
         self._services = services
         self._socket_path = socket_path or DEFAULT_SOCKET_PATH
@@ -56,6 +95,7 @@ class CLIPoller:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._active_client: socket.socket | None = None
+        self._scheduler_service = scheduler_service
 
     @property
     def channel_name(self) -> str:
@@ -136,6 +176,9 @@ class CLIPoller:
         from core.agent.conversation import ConversationContext
         from core.gateway.shared_services import SessionMode
 
+        # ContextVars do NOT propagate to threads — set them explicitly
+        self._propagate_contextvars()
+
         client.settimeout(None)  # blocking reads
         buf = b""
         conversation = ConversationContext()
@@ -162,6 +205,7 @@ class CLIPoller:
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
                     msg = json.loads(line.decode("utf-8"))
+                    msg["_client"] = client  # pass socket for streaming
                     response = self._process_message(msg, loop, conversation, session_id)
                     if response is None:
                         # Exit signal
@@ -199,34 +243,12 @@ class CLIPoller:
                 return {"type": "error", "message": "Empty prompt"}
 
             try:
-                # Gate through SessionLane + Global Lane
-                lane_queue = self._services.lane_queue
-                if lane_queue is not None:
-                    with lane_queue.acquire_all(f"cli:{session_id}", ["session", "global"]):
-                        result = loop.run(text)
-                else:
-                    result = loop.run(text)
-
-                tool_calls = []
-                if result and result.tool_calls:
-                    for tc in result.tool_calls:
-                        if isinstance(tc, dict):
-                            tool_calls.append({"name": tc.get("name", "?"), "args": tc.get("input", {})})
-                        elif hasattr(tc, "name"):
-                            tool_calls.append({"name": tc.name, "args": getattr(tc, "arguments", {})})
-                # Extract model/cost from last LLM call metadata if available
-                model = getattr(loop, "model", "unknown")
-                summary = getattr(result, "summary", "") if result else ""
-
-                return {
-                    "type": "result",
-                    "text": result.text if result else "",
-                    "rounds": result.rounds if result else 0,
-                    "tool_calls": tool_calls,
-                    "termination": (result.termination_reason if result else "unknown"),
-                    "model": model,
-                    "summary": summary,
-                }
+                return self._run_prompt_streaming(
+                    text,
+                    loop,
+                    session_id,
+                    msg.get("_client"),
+                )
             except Exception as exc:
                 log.warning("CLI prompt execution error", exc_info=True)
                 return {"type": "error", "message": str(exc)}
@@ -236,24 +258,111 @@ class CLIPoller:
 
         return {"type": "error", "message": f"Unknown message type: {msg_type}"}
 
+    def _run_prompt_streaming(
+        self,
+        text: str,
+        loop: Any,
+        session_id: str,
+        client: socket.socket | None,
+    ) -> dict[str, Any]:
+        """Run a prompt with real-time console streaming to the client.
+
+        Redirects the global console to a ``_StreamingWriter`` so that
+        all agentic UI output (tool calls ▸, results ✓/✗, token usage ✢,
+        context events ⟳) is relayed to the thin client in real-time.
+
+        The loop runs with ``quiet=False`` — identical to the old REPL
+        experience.  After completion, the console is restored and a
+        final ``result`` message is sent.
+        """
+        from core.cli.ui.console import console
+
+        # Enable agentic UI for this run (same as old REPL)
+        old_quiet = getattr(loop, "_quiet", True)
+        old_op_quiet = getattr(loop, "_op_logger", None)
+        loop._quiet = False
+        if old_op_quiet is not None:
+            loop._op_logger._quiet = False
+
+        # Redirect console to streaming writer (thread-local: only this thread)
+        writer = _StreamingWriter(client) if client else None
+        old_file = console._file
+        old_force = console._force_terminal
+        if writer:
+            console._file = writer  # type: ignore[assignment]
+            console._force_terminal = True
+
+        try:
+            lane_queue = self._services.lane_queue
+            if lane_queue is not None:
+                with lane_queue.acquire_all(f"cli:{session_id}", ["session", "global"]):
+                    result = loop.run(text)
+            else:
+                result = loop.run(text)
+        finally:
+            # Restore console and quiet state
+            console._file = old_file
+            console._force_terminal = old_force
+            loop._quiet = old_quiet
+            if old_op_quiet is not None:
+                loop._op_logger._quiet = old_quiet
+
+        # Build final result (tool_calls already rendered via streaming)
+        tool_calls: list[dict[str, Any]] = []
+        if result and result.tool_calls:
+            for tc in result.tool_calls:
+                if isinstance(tc, dict):
+                    tool_calls.append(
+                        {
+                            "name": tc.get("name", "?"),
+                            "args": tc.get("input", {}),
+                        }
+                    )
+                elif hasattr(tc, "name"):
+                    tool_calls.append(
+                        {
+                            "name": tc.name,
+                            "args": getattr(tc, "arguments", {}),
+                        }
+                    )
+        model = getattr(loop, "model", "unknown")
+        summary = getattr(result, "summary", "") if result else ""
+
+        return {
+            "type": "result",
+            "text": result.text if result else "",
+            "rounds": result.rounds if result else 0,
+            "tool_calls": tool_calls,
+            "termination": (result.termination_reason if result else "unknown"),
+            "model": model,
+            "summary": summary,
+        }
+
     def _handle_command_on_server(self, msg: dict[str, Any], loop: Any) -> dict[str, Any]:
-        """Execute a slash command on the server side."""
+        """Execute a slash command on the server side.
+
+        Captures all console output (with ANSI styling) so it can be
+        relayed to the thin client for display.
+        """
         cmd = msg.get("cmd", "")
         args = msg.get("args", "")
         try:
             from core.cli import _handle_command
+            from core.cli.ui.console import capture_output
 
-            should_break, _verbose, _resume = _handle_command(
-                cmd,
-                args,
-                False,
-                skill_registry=self._services.skill_registry,
-                mcp_manager=self._services.mcp_manager,
-            )
+            with capture_output() as buf:
+                should_break, _verbose, _resume = _handle_command(
+                    cmd,
+                    args,
+                    False,
+                    skill_registry=self._services.skill_registry,
+                    mcp_manager=self._services.mcp_manager,
+                )
             return {
                 "type": "command_result",
                 "cmd": cmd,
                 "status": "ok",
+                "output": buf.getvalue(),
                 "should_break": should_break,
             }
         except Exception as exc:
@@ -264,6 +373,29 @@ class CLIPoller:
                 "status": "error",
                 "message": str(exc),
             }
+
+    def _propagate_contextvars(self) -> None:
+        """Set ContextVars needed by slash command handlers in this thread.
+
+        Python ContextVars do NOT inherit across threads. The CLI poller
+        thread must explicitly set readiness, scheduler_service, domain,
+        memory, and profile so that ``_handle_command()`` works correctly.
+        """
+        try:
+            from core.cli import _set_readiness
+            from core.cli.session_state import _scheduler_service_ctx
+            from core.cli.startup import check_readiness
+
+            _set_readiness(check_readiness())
+
+            if self._scheduler_service is not None:
+                _scheduler_service_ctx.set(self._scheduler_service)
+
+            # Domain, memory, profile — delegated to SharedServices helper
+            if hasattr(self._services, "_propagate_contextvars"):
+                self._services._propagate_contextvars()
+        except Exception:
+            log.debug("ContextVar propagation skipped", exc_info=True)
 
     @staticmethod
     def _send(client: socket.socket, data: dict[str, Any]) -> None:
