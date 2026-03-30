@@ -630,9 +630,7 @@ class AgenticLoop:
                     # Context overflow from 400 → attempt recovery + retry
                     if _et == "context_overflow":
                         log.warning("Context overflow detected from 400 — attempting recovery")
-                        recovered = self._aggressive_context_recovery(
-                            system_prompt, messages
-                        )
+                        recovered = self._aggressive_context_recovery(system_prompt, messages)
                         if recovered:
                             self._notify_context_event(
                                 "prune",
