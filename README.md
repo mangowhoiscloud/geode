@@ -12,7 +12,7 @@
 
 [한국어](README.ko.md)
 
-# GEODE v0.37.1 — Autonomous Execution Harness
+# GEODE v0.37.1 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous execution agent. Performs research, analysis, automation, and scheduling from a single natural-language command.
 
@@ -145,21 +145,29 @@ geode/
 
 ### `.geode/` -- Agent Context Lifecycle
 
-```mermaid
-graph LR
-    Init["geode init"] --> J["journal/<br/>runs + errors<br/>(append-only)"]
-    Init --> M["memory/<br/>PROJECT.md<br/>(max 50, rotate)"]
-    Init --> R["rules/<br/>domain rules<br/>(auto-generated)"]
-    Init --> V["vault/<br/>reports, research<br/>(permanent)"]
-    Init --> C["result_cache/<br/>SHA-256 + 24h TTL"]
+Every LLM call receives a 5-tier context hierarchy assembled from persistent stores.
 
-    style Init fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
-    style J fill:#1e293b,stroke:#10b981,color:#e2e8f0
-    style M fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style R fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-    style V fill:#1e293b,stroke:#ec4899,color:#e2e8f0
-    style C fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
 ```
+Tier 0    SOUL            GEODE.md — agent identity + constraints
+Tier 0.5  User Profile    ~/.geode/user_profile/ — role, expertise, language
+Tier 1    Organization    MonoLake — cross-project data (DAU, revenue, signals)
+Tier 2    Project         .geode/memory/PROJECT.md — analysis history (max 50, LRU)
+Tier 3    Session         In-memory — conversation, tool results, plans
+```
+
+```
+.geode/
+├── config.toml         # Gateway, MCP servers, model
+├── memory/             # T2: Project Memory (LRU rotate)
+├── rules/              # Auto-generated domain rules
+├── vault/              # Permanent artifacts (reports, research)
+├── skills/             # 20 runtime skill prompt injections
+└── result_cache/       # Pipeline LRU (SHA-256, 24h TTL)
+```
+
+Lower tiers override higher tiers. Budget: SOUL 10% | Org 25% | Project 25% | Session 40%.
+
+[Context Lifecycle (full architecture) -->](docs/architecture/context-lifecycle.md)
 
 ### `core/` -- 4-Layer Stack (Model --> Runtime --> Harness --> Agent)
 
