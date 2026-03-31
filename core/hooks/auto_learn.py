@@ -1,0 +1,186 @@
+"""Auto-learn hook — detects user patterns from turn data and persists to profile.
+
+Runs on TURN_COMPLETE. Deterministic regex detectors extract self-introductions,
+explicit preferences, language preferences, domain interests, and tool-usage
+frequency. Writes directly to FileBasedUserProfile.add_learned_pattern(),
+bypassing the WRITE tool gate.
+
+Noise control: min input length, slash-command exclusion, 60s cooldown,
+10-pattern-per-session cap, built-in dedup in FileBasedUserProfile.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import time
+from collections import Counter
+from collections.abc import Callable
+from typing import Any
+
+from core.hooks.system import HookEvent
+
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+_MIN_INPUT_LEN = 15
+_COOLDOWN_S = 60.0
+_MAX_PER_SESSION = 10
+_TOOL_USAGE_THRESHOLD = 5
+
+# ---------------------------------------------------------------------------
+# Detectors — each returns (pattern_text, category) or None
+# ---------------------------------------------------------------------------
+
+_RE_SELF_INTRO = re.compile(
+    r"(?i)\b(i\s+am|i'm|my\s+name\s+is|call\s+me|i\s+work\b|나는|저는|제\s*이름은)",
+)
+
+_RE_EXPLICIT_PREF = re.compile(
+    r"(?i)\b(i\s+prefer|i\s+like\s+to|always\s+use|don't\s+use|never\s+use"
+    r"|i\s+hate|please\s+always|from\s+now\s+on|앞으로|항상)",
+)
+
+_RE_LANG_PREF = re.compile(
+    r"(?i)(korean|english|japanese|chinese|한국어|영어|일본어|중국어)"
+    r"\s*"
+    r"(로|으로|in\s+|으로\s*)"
+    r"\s*"
+    r"(답변|응답|대답|respond|answer|reply|write)",
+)
+
+_RE_LANG_PREF_REV = re.compile(
+    r"(?i)(답변|응답|대답|respond|answer|reply|write)"
+    r".{0,20}"
+    r"(in\s+|using\s+)"
+    r"(korean|english|japanese|chinese|한국어|영어|일본어|중국어)",
+)
+
+_RE_DOMAIN_INTEREST = re.compile(
+    r"(?i)\b(interested\s+in|working\s+on|researching|studying"
+    r"|focused\s+on|specializ\w+\s+in|관심\s*분야|연구\s*중)",
+)
+
+
+def _detect_self_intro(user_input: str) -> tuple[str, str] | None:
+    if _RE_SELF_INTRO.search(user_input):
+        return (f"User self-intro: {user_input[:120]}", "preference")
+    return None
+
+
+def _detect_explicit_pref(user_input: str) -> tuple[str, str] | None:
+    if _RE_EXPLICIT_PREF.search(user_input):
+        return (f"User preference: {user_input[:120]}", "preference")
+    return None
+
+
+def _detect_language_pref(user_input: str) -> tuple[str, str] | None:
+    m = _RE_LANG_PREF.search(user_input) or _RE_LANG_PREF_REV.search(user_input)
+    if m:
+        return (f"Language preference: {user_input[:120]}", "preference")
+    return None
+
+
+def _detect_domain_interest(user_input: str) -> tuple[str, str] | None:
+    if _RE_DOMAIN_INTEREST.search(user_input):
+        return (f"Domain interest: {user_input[:120]}", "domain")
+    return None
+
+
+_INPUT_DETECTORS: list[Callable[[str], tuple[str, str] | None]] = [
+    _detect_language_pref,  # highest priority — short inputs like "한국어로 답변해줘"
+    _detect_self_intro,
+    _detect_explicit_pref,
+    _detect_domain_interest,
+]
+
+
+def detect_patterns(
+    user_input: str,
+    tool_calls: list[str],
+    tool_counter: Counter[str],
+) -> list[tuple[str, str]]:
+    """Run all detectors and return matched (pattern_text, category) pairs.
+
+    At most one input-based pattern and one tool-usage pattern per call.
+    """
+    results: list[tuple[str, str]] = []
+
+    # Input-based detectors (first match wins)
+    stripped = user_input.strip()
+    if stripped and not stripped.startswith("/"):
+        for detector in _INPUT_DETECTORS:
+            # Language preference can be short ("한국어로 답변해줘"); others need more context
+            min_len = 8 if detector is _detect_language_pref else _MIN_INPUT_LEN
+            if len(stripped) < min_len:
+                continue
+            hit = detector(stripped)
+            if hit is not None:
+                results.append(hit)
+                break  # first match only
+
+    # Tool-usage frequency detector
+    tool_counter.update(tool_calls)
+    for tool_name, count in tool_counter.items():
+        if count == _TOOL_USAGE_THRESHOLD:  # emit exactly once at threshold
+            results.append(
+                (f"Frequently uses {tool_name}", "tool_usage"),
+            )
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Hook handler factory
+# ---------------------------------------------------------------------------
+
+
+def make_auto_learn_handler() -> tuple[str, Callable[..., None]]:
+    """Create a TURN_COMPLETE handler that auto-learns user patterns.
+
+    Returns (handler_name, handler_fn) for hook registration.
+    """
+    # Per-session state (resets on process restart)
+    session_count = 0
+    last_learn_ts = 0.0
+    tool_counter: Counter[str] = Counter()
+
+    def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
+        nonlocal session_count, last_learn_ts
+
+        if session_count >= _MAX_PER_SESSION:
+            return
+
+        from core.tools.profile_tools import get_user_profile
+
+        profile = get_user_profile()
+        if profile is None:
+            return
+
+        user_input: str = data.get("user_input", "")
+        tool_calls: list[str] = data.get("tool_calls", [])
+
+        patterns = detect_patterns(user_input, tool_calls, tool_counter)
+        if not patterns:
+            return
+
+        now = time.monotonic()
+        if now - last_learn_ts < _COOLDOWN_S:
+            return
+
+        for pattern_text, category in patterns:
+            if session_count >= _MAX_PER_SESSION:
+                break
+            try:
+                saved = profile.add_learned_pattern(pattern_text, category)
+                if saved:
+                    session_count += 1
+                    last_learn_ts = now
+                    log.debug("auto-learn: saved [%s] %s", category, pattern_text[:60])
+            except Exception:
+                log.debug("auto-learn: failed to save pattern", exc_info=True)
+
+    return ("turn_auto_learn", _on_turn_complete)
