@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -32,6 +33,9 @@ def upsert_env(var_name: str, value: str) -> None:
         lines.append(f"{var_name}={value}")
 
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Keep os.environ in sync so Settings() re-instantiation picks up
+    # the new value (Pydantic reads os.environ before .env file).
+    os.environ[var_name] = value
 
 
 def parse_dry_run_flag(args: str) -> tuple[bool, str]:

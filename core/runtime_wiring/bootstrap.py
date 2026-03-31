@@ -454,7 +454,10 @@ def build_config_watcher() -> ConfigWatcher:
             return
 
         # Core settings
-        settings.model = new_settings.model
+        # NOTE: settings.model is intentionally NOT reloaded here.
+        # Model switching is user-facing state managed by /model command
+        # and switch_model tool. Hot-reloading it from .env would revert
+        # user's in-session model choice (os.environ stale vs .env fresh).
         settings.verbose = new_settings.verbose
         # L4.5 Drift Detection
         settings.drift_scan_cron = new_settings.drift_scan_cron
