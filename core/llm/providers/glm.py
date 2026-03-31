@@ -156,6 +156,15 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
 
         self._circuit_breaker.record_success()
 
+        # Track token usage/cost (was missing — GLM calls were $0.00)
+        if hasattr(response, "usage") and response.usage:
+            from core.llm.token_tracker import get_tracker
+
+            actual_model = used_model or model
+            in_tok = response.usage.prompt_tokens or 0
+            out_tok = response.usage.completion_tokens or 0
+            get_tracker().record(actual_model, in_tok, out_tok)
+
         if used_model and used_model != model:
             log.warning("Model failover: %s -> %s", model, used_model)
 
