@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-04-01 (세션 52 — v0.45.0 ML refinements)
+> 마지막 갱신: 2026-04-01 (세션 52 — v0.45.1 IPC ANSI fix + playwright routing)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -85,6 +85,9 @@
 | ml-metrics | SessionMetrics — p50/p95 latency, error rate, tool success rate | #618 | @mangowhoiscloud | 2026-04-01 |
 | ml-personalization | User preferences → 시스템 프롬프트 주입 (개인화) | #618 | @mangowhoiscloud | 2026-04-01 |
 | ml-scoring-config | Scoring weights → scoring_weights.yaml 외부화 | #618 | @mangowhoiscloud | 2026-04-01 |
+| ipc-ansi-race | IPC ANSI 경합 3건 수정 — tool_spinner, TextSpinner, pipeline_executor | #622 | @mangowhoiscloud | 2026-04-01 |
+| playwright-routing | 브라우저 자동화 playwright 우선, playwriter fallback | #622 | @mangowhoiscloud | 2026-04-01 |
+| check-status-version | check_status에 GEODE 버전 표시 | #622 | @mangowhoiscloud | 2026-04-01 |
 
 ### Done (2026-03-31 — 세션 51)
 
