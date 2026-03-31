@@ -303,13 +303,13 @@ async def call_with_failover(
                         type(exc).__name__,
                     )
                     raise
-                # Other non-retryable: fail immediately, do not try other models
+                # Other non-retryable: re-raise so adapter can set last_error
                 log.warning(
-                    "Non-retryable error on model=%s: %s — aborting failover",
+                    "Non-retryable error on model=%s: %s — propagating to adapter",
                     current_model,
                     type(exc).__name__,
                 )
-                return None, None
+                raise
             except _RETRYABLE_ERRORS as exc:
                 last_error = exc
                 wait = random.uniform(0, min(_base_delay * (2**attempt), _max_delay))

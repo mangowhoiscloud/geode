@@ -114,10 +114,12 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
         """GLM agentic call with native web_search injection."""
         client = self._ensure_client(model)
         if client is None:
+            self.last_error = ValueError(f"{self.provider_name} API key not configured")
             log.warning("No API key for %s agentic loop", self.provider_name)
             return None
 
         if not self._circuit_breaker.can_execute():
+            self.last_error = RuntimeError(f"{self.provider_name} circuit breaker is OPEN")
             log.warning("%s circuit breaker is OPEN, skipping call", self.provider_name)
             return None
 
@@ -145,7 +147,8 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
             response, used_model = await call_with_failover(failover_models, _do_call)
         except KeyboardInterrupt:
             raise UserCancelledError("LLM call interrupted by user") from None
-        except Exception:
+        except Exception as exc:
+            self.last_error = exc
             log.warning("%s agentic LLM call failed", self.provider_name, exc_info=True)
             self._circuit_breaker.record_failure()
             return None

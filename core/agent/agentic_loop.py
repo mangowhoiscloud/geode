@@ -383,13 +383,16 @@ class AgenticLoop:
         new_count = len(self._tools)
         return max(0, new_count - old_count)
 
-    def _sync_model_from_settings(self) -> None:
+    def _sync_model_from_settings(self) -> bool:
         """Check if settings.model diverged and apply the change safely.
 
         Called at the top of each agentic round — between LLM calls, never
         mid-call.  This replaces the old pattern of calling update_model()
         from inside a tool handler, which swapped the adapter while the
         current round was still processing tool results.
+
+        Returns True if the model was changed (caller should rebuild
+        system_prompt), False otherwise.
         """
         try:
             from core.config import settings
@@ -401,8 +404,10 @@ class AgenticLoop:
                     settings.model,
                 )
                 self.update_model(settings.model)
+                return True
         except Exception:
             log.debug("Model drift check failed", exc_info=True)
+        return False
 
     def update_model(self, model: str, provider: str | None = None) -> None:
         """Update model and provider without reconstructing the loop.
@@ -574,7 +579,11 @@ class AgenticLoop:
 
             # Model drift check: settings may have changed via switch_model tool
             # or /model command between rounds. Apply safely before next LLM call.
-            self._sync_model_from_settings()
+            if self._sync_model_from_settings():
+                # Rebuild system prompt for the new model (model card, context window)
+                system_prompt = self._build_system_prompt()
+                if decomposition_hint:
+                    system_prompt += "\n\n" + decomposition_hint
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
             self._check_announced_results(messages)
@@ -1464,7 +1473,11 @@ class AgenticLoop:
         )
 
         if response is None:
-            self._last_llm_error = f"All {self._provider} models exhausted"
+            adapter_err = getattr(self._adapter, "last_error", None)
+            if adapter_err:
+                self._last_llm_error = str(adapter_err)
+            else:
+                self._last_llm_error = f"All {self._provider} models exhausted"
 
         return response
 
