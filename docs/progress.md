@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-31 (세션 52 — v0.42.0 HookSystem audit complete)
+> 마지막 갱신: 2026-03-31 (세션 52 — v0.43.0 IPC HITL + bash safety + file tools)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -76,6 +76,10 @@
 | hook-system-audit | HookSystem audit (42→46) — 4 event, 12 logger, S4 fix, 3 trigger site | #596 | @mangowhoiscloud | 2026-03-31 |
 | transcript-cost-fix | transcript session_end total_cost 항상 $0 — TokenTracker accumulator 연결 | #597 | @mangowhoiscloud | 2026-03-31 |
 | model-card-price | model card 가격 $0.00 표시 — per-token→per-1M 변환 누락 | #601 | @mangowhoiscloud | 2026-03-31 |
+| bash-safety | SAFE_BASH_PREFIXES redirect/pipe HITL bypass 수정 + symlink 방어 | #600 | @mangowhoiscloud | 2026-03-31 |
+| file-tools | Glob/Grep/Edit/Write 전용 도구 — Claude Code-style 안전한 파일 조작 | #600 | @mangowhoiscloud | 2026-03-31 |
+| tool-error-migration | tool_error() 나머지 4 파일 마이그레이션 | #604 | @mangowhoiscloud | 2026-03-31 |
+| hitl-ipc-relay | IPC HITL 양방향 승인 프로토콜 — hitl_level 0→2 + approval relay | #605 | @mangowhoiscloud | 2026-03-31 |
 
 ### Done (2026-03-31 — 세션 51)
 
