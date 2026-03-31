@@ -313,7 +313,19 @@ class AgenticLoop:
             if text:
                 self._transcript.record_assistant_message(text)
             rounds = getattr(result, "rounds", 0)
-            self._transcript.record_session_end(rounds=rounds)
+
+            # Read accumulated cost from TokenTracker (was missing → always $0)
+            total_cost = 0.0
+            try:
+                from core.llm.token_tracker import get_tracker
+
+                total_cost = get_tracker().accumulator.total_cost_usd
+            except Exception:
+                log.debug("Could not read session cost from TokenTracker")
+
+            self._transcript.record_session_end(
+                rounds=rounds, total_cost=total_cost
+            )
         except Exception:
             log.debug("Transcript end recording failed", exc_info=True)
 
