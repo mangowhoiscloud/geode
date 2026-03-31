@@ -457,17 +457,32 @@ class MCPServerManager:
                 all_tools.append(normalised)
         return all_tools
 
+    # MCP server fallback hints: when a server is unavailable or fails,
+    # the error message includes a hint so the LLM can try an alternative.
+    _FALLBACK_HINTS: dict[str, str] = {
+        "playwriter": "playwright (playwright__browser_navigate, etc.)",
+        "puppeteer": "playwright (playwright__browser_navigate, etc.)",
+    }
+
     def call_tool(self, server_name: str, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on a specific MCP server."""
         client = self._get_client(server_name)
         if client is None:
-            return {"error": f"MCP server '{server_name}' not available"}
+            msg = f"MCP server '{server_name}' not available"
+            hint = self._FALLBACK_HINTS.get(server_name, "")
+            if hint:
+                msg += f". Fallback: use {hint} instead"
+            return {"error": msg}
 
         try:
             return client.call_tool(tool_name, args)
         except Exception as exc:
             log.error("MCP tool call failed: %s/%s: %s", server_name, tool_name, exc)
-            return {"error": f"MCP tool call failed: {exc}"}
+            msg = f"MCP tool call failed: {tool_name}"
+            hint = self._FALLBACK_HINTS.get(server_name, "")
+            if hint:
+                msg += f". Fallback: use {hint} instead"
+            return {"error": msg}
 
     def find_server_for_tool(self, tool_name: str) -> str | None:
         """Find which server provides a given tool."""

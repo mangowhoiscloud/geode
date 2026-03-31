@@ -383,3 +383,34 @@ class TestMCPManagerConnectAll:
 
         assert result == 2
         assert call_count == 3
+
+
+class TestMCPFallbackHints:
+    """Verify MCP fallback hints in error messages."""
+
+    def test_unavailable_server_with_hint(self) -> None:
+        """playwriter unavailable → error includes playwright fallback hint."""
+        mgr = MCPServerManager()
+        result = mgr.call_tool("playwriter", "navigate", {"url": "https://example.com"})
+        assert "error" in result
+        assert "playwright" in result["error"]
+        assert "Fallback" in result["error"]
+
+    def test_unavailable_server_without_hint(self) -> None:
+        """Unknown server unavailable → no fallback hint."""
+        mgr = MCPServerManager()
+        result = mgr.call_tool("unknown_server", "some_tool", {})
+        assert "error" in result
+        assert "Fallback" not in result["error"]
+
+    def test_failed_call_with_hint(self) -> None:
+        """playwriter call fails → error includes playwright fallback hint."""
+        mgr = MCPServerManager()
+        mock_client = MagicMock()
+        mock_client.call_tool.side_effect = ConnectionError("extension not running")
+
+        with patch.object(mgr, "_get_client", return_value=mock_client):
+            result = mgr.call_tool("playwriter", "navigate", {"url": "https://example.com"})
+        assert "error" in result
+        assert "playwright" in result["error"]
+        assert "Fallback" in result["error"]
