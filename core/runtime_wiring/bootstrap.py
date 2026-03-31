@@ -341,26 +341,39 @@ def build_hooks(
 
     # C9: Audit loggers — handler-less events that had triggers but no dedicated handler.
     # Table-driven registration (automation.py pattern) for observability.
-    # fmt: off
     _E = HookEvent
-    _AUDIT_LOGGER_HOOKS: list[tuple[HookEvent, str, str, list[str]]] = [
-        (_E.CONTEXT_CRITICAL,       "ctx_critical",   "Context critical: %.0f%% (%s)",       ["usage_pct", "model"]),
-        (_E.SUBAGENT_STARTED,       "sa_started",     "SubAgent started: %s (%s)",            ["task_id", "task_type"]),
-        (_E.LLM_CALL_START,         "llm_start",      "LLM call: %s (%s)",                   ["model", "function"]),
-        (_E.VERIFICATION_FAIL,      "verif_fail",     "Verification failed: %s — %s",        ["node", "ip_name"]),
-        (_E.TOOL_RECOVERY_ATTEMPTED,"recovery_try",   "Tool recovery attempted: %s",          ["tool_name"]),
-        (_E.TOOL_RECOVERY_FAILED,   "recovery_fail",  "Tool recovery failed: %s — %s",       ["tool_name", "error"]),
-        (_E.FALLBACK_CROSS_PROVIDER,"xprovider_fb",   "Cross-provider fallback: %s → %s",    ["from_model", "to_model"]),
-        (_E.PIPELINE_TIMEOUT,       "pipe_timeout",   "Pipeline timeout: %ss",                ["timeout_s"]),
-        (_E.POST_ANALYSIS,          "post_analysis",  "Post-analysis: %s",                    ["trigger_type"]),
-        (_E.SHUTDOWN_STARTED,       "shutdown",       "Shutdown started: %s active sessions",  ["active_sessions"]),
-        (_E.CONFIG_RELOADED,        "config_reload",  "Config reloaded: %s",                  ["config_path"]),
-        (_E.MCP_SERVER_FAILED,      "mcp_fail",       "MCP server failed: %s — %s",          ["server_name", "error"]),
+    _AL: list[tuple[HookEvent, str, str, list[str]]] = [
+        (
+            _E.CONTEXT_CRITICAL,
+            "ctx_critical",
+            "Context critical: %.0f%% (%s)",
+            ["usage_pct", "model"],
+        ),
+        (_E.SUBAGENT_STARTED, "sa_started", "SubAgent started: %s (%s)", ["task_id", "task_type"]),
+        (_E.LLM_CALL_START, "llm_start", "LLM call: %s (%s)", ["model", "function"]),
+        (_E.VERIFICATION_FAIL, "verif_fail", "Verification failed: %s — %s", ["node", "ip_name"]),
+        (_E.TOOL_RECOVERY_ATTEMPTED, "recovery_try", "Tool recovery attempted: %s", ["tool_name"]),
+        (
+            _E.TOOL_RECOVERY_FAILED,
+            "recovery_fail",
+            "Tool recovery failed: %s — %s",
+            ["tool_name", "error"],
+        ),
+        (
+            _E.FALLBACK_CROSS_PROVIDER,
+            "xprovider_fb",
+            "Cross-provider fallback: %s → %s",
+            ["from_model", "to_model"],
+        ),
+        (_E.PIPELINE_TIMEOUT, "pipe_timeout", "Pipeline timeout: %ss", ["timeout_s"]),
+        (_E.POST_ANALYSIS, "post_analysis", "Post-analysis: %s", ["trigger_type"]),
+        (_E.SHUTDOWN_STARTED, "shutdown", "Shutdown: %s active sessions", ["active_sessions"]),
+        (_E.CONFIG_RELOADED, "config_reload", "Config reloaded: %s", ["config_path"]),
+        (_E.MCP_SERVER_FAILED, "mcp_fail", "MCP server failed: %s — %s", ["server_name", "error"]),
     ]
-    # fmt: on
 
     def _reg_audit_loggers() -> None:
-        for event, name, tmpl, keys in _AUDIT_LOGGER_HOOKS:
+        for event, name, tmpl, keys in _AL:
 
             def _make(t: str, ks: list[str]) -> Any:
                 def _handler(_e: HookEvent, d: dict[str, Any]) -> None:

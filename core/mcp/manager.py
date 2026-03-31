@@ -42,7 +42,7 @@ _mcp_hooks: Any = None
 
 def set_mcp_hooks(hooks: Any) -> None:
     """Inject HookSystem for MCP server lifecycle events."""
-    global _mcp_hooks  # noqa: PLW0603
+    global _mcp_hooks
     _mcp_hooks = hooks
 
 
