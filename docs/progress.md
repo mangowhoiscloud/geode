@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-04-01 (세션 52 — v0.44.0 MCP registry API)
+> 마지막 갱신: 2026-04-01 (세션 52 — v0.45.0 ML refinements)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -82,6 +82,9 @@
 | hitl-ipc-relay | IPC HITL 양방향 승인 프로토콜 — hitl_level 0→2 + approval relay | #605 | @mangowhoiscloud | 2026-03-31 |
 | mcp-registry | MCP catalog → Anthropic registry API + 24h cache | #614 | @mangowhoiscloud | 2026-04-01 |
 | clear-reset | /clear TokenTracker 미초기화 — stale 비용/토큰 잔존 방지 | #608 | @mangowhoiscloud | 2026-03-31 |
+| ml-metrics | SessionMetrics — p50/p95 latency, error rate, tool success rate | #618 | @mangowhoiscloud | 2026-04-01 |
+| ml-personalization | User preferences → 시스템 프롬프트 주입 (개인화) | #618 | @mangowhoiscloud | 2026-04-01 |
+| ml-scoring-config | Scoring weights → scoring_weights.yaml 외부화 | #618 | @mangowhoiscloud | 2026-04-01 |
 
 ### Done (2026-03-31 — 세션 51)
 
