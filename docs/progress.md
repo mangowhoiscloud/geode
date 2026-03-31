@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-31 (세션 51 — UI/UX polish 완료)
+> 마지막 갱신: 2026-03-31 (세션 51 — context overflow + UI/UX + diversity)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -31,6 +31,8 @@
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~#470~~ | **Done** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
+| clear-compress-fix | /clear + /compress 슬래시·자연어 명령어 점검 — empty 후에도 context_overflow 발생 문제 | P1 | — | 세션 51 발견, 복구 경로 미작동 |
+| graceful-serve-drain | SIGTERM 시 진행 세션 완료 대기 (graceful shutdown) | P1 | — | 현재 즉시 종료 |
 | ~~mcp-simplify~~ | ~~MCP 카탈로그 단일화~~ | ~~P1~~ | ~~#469~~ | **Done** |
 | ~~scheduler-callback~~ | ~~스케줄러 callback 와이어링 — action 필드 + 큐 연결~~ | ~~P1~~ | ~~tool-mcp-architecture-review.md~~ | **Done** |
 | ~~scheduler-nl-fix~~ | ~~스케줄러 NL 정규식 제거 → 원문 저장 + LLM 프레이밍 위임~~ | ~~P0~~ | ~~#483~~ | **Done** |
@@ -65,6 +67,8 @@
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
 | ui-ux-polish | CLI UI/UX 간소화 — Claude Code-style status line, finalize IPC 가드, session cost compact | #568 | @mangowhoiscloud | 2026-03-31 |
+| context-overflow | Gateway context overflow recovery — pre-call check + 400 propagation + session auto-clear + LLM i18n + proactive summarization | #575 #581 | @mangowhoiscloud | 2026-03-31 |
+| diversity-exempt | read/search 도구 diversity forcing 면제 + CJK truncation + spinner 왼쪽 | #575 | @mangowhoiscloud | 2026-03-31 |
 
 ### Done (2026-03-30 — 세션 50)
 
