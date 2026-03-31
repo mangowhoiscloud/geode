@@ -35,8 +35,10 @@ class TestAuditLoggers:
         """build_hooks() registers audit logger handlers."""
         from unittest.mock import patch
 
-        with patch("core.runtime_wiring.bootstrap.RunLog"), \
-             patch("core.runtime_wiring.bootstrap.StuckDetector"):
+        with (
+            patch("core.runtime_wiring.bootstrap.RunLog"),
+            patch("core.runtime_wiring.bootstrap.StuckDetector"),
+        ):
             from core.runtime_wiring.bootstrap import build_hooks
 
             hooks, _, _ = build_hooks(

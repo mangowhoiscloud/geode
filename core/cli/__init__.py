@@ -1719,9 +1719,7 @@ def serve(
             if _gw_services and _gw_services.hook_system:
                 from core.hooks import HookEvent
 
-                _active_count = (
-                    _serve_session_lane.active_count if _serve_session_lane else 0
-                )
+                _active_count = _serve_session_lane.active_count if _serve_session_lane else 0
                 _gw_services.hook_system.trigger(
                     HookEvent.SHUTDOWN_STARTED,
                     {"active_sessions": _active_count},
