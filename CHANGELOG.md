@@ -26,6 +26,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.42.0] — 2026-03-31
+
+### Added
+- **HookSystem audit (42 → 46 events)** — 4 lifecycle event 추가 (SHUTDOWN_STARTED, CONFIG_RELOADED, MCP_SERVER_CONNECTED/FAILED) + 12 table-driven audit logger + S4 비대칭 수정 (memory_tools hook 발화) + 3 trigger site 추가
+
 ## [0.41.0] — 2026-03-31
 
 ### Fixed
