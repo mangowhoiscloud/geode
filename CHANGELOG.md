@@ -37,6 +37,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Model card 가격 $0.00** — per-token→per-1M 변환 누락 (모든 provider 공통)
 - **Transcript total_cost $0** — session_end에 TokenTracker accumulator 비용 전달 누락
 - **GLM 비용 추적 누락** — GlmAgenticAdapter에 get_tracker().record() 연결
+- **/clear TokenTracker 미초기화** — 대화 초기화 후 stale 비용/토큰 잔존 방지
 
 ## [0.42.0] — 2026-03-31
 
