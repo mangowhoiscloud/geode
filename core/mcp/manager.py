@@ -36,6 +36,28 @@ _GLOBAL_DOTENV_PATH = Path.home() / ".geode" / ".env"
 
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
 
+# Hook system injection (same pattern as core/llm/router.py)
+_mcp_hooks: Any = None
+
+
+def set_mcp_hooks(hooks: Any) -> None:
+    """Inject HookSystem for MCP server lifecycle events."""
+    global _mcp_hooks  # noqa: PLW0603
+    _mcp_hooks = hooks
+
+
+def _fire_mcp_hook(event_name: str, data: dict[str, Any]) -> None:
+    """Fire a hook event if HookSystem is available."""
+    if _mcp_hooks is None:
+        return
+    try:
+        from core.hooks import HookEvent
+
+        _mcp_hooks.trigger(HookEvent(event_name), data)
+    except Exception:
+        log.debug("MCP hook fire failed for %s", event_name, exc_info=True)
+
+
 # Singleton instance — prevents duplicate MCP server processes
 _singleton_instance: MCPServerManager | None = None
 _singleton_lock = __import__("threading").Lock()
@@ -422,8 +444,13 @@ class MCPServerManager:
         client = StdioMCPClient(command=command, args=args, env=env)
         if client.connect():
             self._clients[server_name] = client
+            _fire_mcp_hook("mcp_server_connected", {"server_name": server_name})
             return client
 
+        _fire_mcp_hook(
+            "mcp_server_failed",
+            {"server_name": server_name, "error": "Connection failed"},
+        )
         log.debug("MCP server not available (skipped): %s", server_name)
         return None
 

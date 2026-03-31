@@ -253,11 +253,14 @@ class GeodeRuntime:
         tool_registry = infra.build_default_registry()
         profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
         llm_adapter, secondary_adapter = infra.build_llm_adapters(tool_registry, policy_chain)
-        config_watcher = bootstrap.build_config_watcher()
+        config_watcher = bootstrap.build_config_watcher(hooks=hooks)
         lane_queue = infra.build_default_lanes()
 
         # Unified bootstrap: MCP, Skills, Readiness
         mcp_manager = bootstrap.build_mcp_manager()
+        from core.mcp.manager import set_mcp_hooks
+
+        set_mcp_hooks(hooks)
         skill_registry = bootstrap.build_skill_registry()
         readiness = bootstrap.build_readiness()
 
@@ -270,7 +273,7 @@ class GeodeRuntime:
             organization_memory,
             context_assembler,
             user_profile,
-        ) = bootstrap.build_memory(session_store=session_store)
+        ) = bootstrap.build_memory(session_store=session_store, hooks=hooks)
         automation = automation_wiring.build_automation(
             hooks=hooks,
             session_key=session_key,

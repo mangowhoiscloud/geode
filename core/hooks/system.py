@@ -97,6 +97,16 @@ class HookEvent(Enum):
     # Pipeline timeout (B3)
     PIPELINE_TIMEOUT = "pipeline_timeout"
 
+    # Serve lifecycle
+    SHUTDOWN_STARTED = "shutdown_started"
+
+    # Config hot-reload
+    CONFIG_RELOADED = "config_reloaded"
+
+    # MCP server lifecycle
+    MCP_SERVER_CONNECTED = "mcp_server_connected"
+    MCP_SERVER_FAILED = "mcp_server_failed"
+
 
 @dataclass
 class HookResult:

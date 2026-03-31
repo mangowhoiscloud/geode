@@ -5,7 +5,7 @@ from core.hooks import HookEvent, HookResult, HookSystem
 
 class TestHookEvent:
     def test_all_events_exist(self):
-        assert len(HookEvent) == 42
+        assert len(HookEvent) == 46
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_START.value == "pipeline_start"
@@ -19,6 +19,67 @@ class TestHookEvent:
         assert HookEvent.SCORING_COMPLETE.value == "scoring_complete"
         assert HookEvent.VERIFICATION_PASS.value == "verification_pass"
         assert HookEvent.VERIFICATION_FAIL.value == "verification_fail"
+
+    def test_new_audit_events(self):
+        """v0.42.0 audit: 4 new lifecycle events."""
+        assert HookEvent.SHUTDOWN_STARTED.value == "shutdown_started"
+        assert HookEvent.CONFIG_RELOADED.value == "config_reloaded"
+        assert HookEvent.MCP_SERVER_CONNECTED.value == "mcp_server_connected"
+        assert HookEvent.MCP_SERVER_FAILED.value == "mcp_server_failed"
+
+
+class TestAuditLoggers:
+    """Verify table-driven audit loggers register correctly."""
+
+    def test_audit_loggers_registered(self):
+        """build_hooks() registers audit logger handlers."""
+        from unittest.mock import patch
+
+        with patch("core.runtime_wiring.bootstrap.RunLog"), \
+             patch("core.runtime_wiring.bootstrap.StuckDetector"):
+            from core.runtime_wiring.bootstrap import build_hooks
+
+            hooks, _, _ = build_hooks(
+                session_key="test",
+                run_id="test-run",
+                log_dir=None,
+                stuck_timeout_s=60,
+            )
+
+        # Check a representative sample of audit loggers
+        all_hooks = hooks.list_hooks()
+        assert "ctx_critical" in all_hooks.get("context_critical", [])
+        assert "llm_start" in all_hooks.get("llm_call_start", [])
+        assert "shutdown" in all_hooks.get("shutdown_started", [])
+        assert "mcp_fail" in all_hooks.get("mcp_server_failed", [])
+
+
+class TestMemoryToolHooks:
+    """S4 fix: memory tools fire hook events symmetrically with CLI."""
+
+    def test_rule_create_fires_hook(self):
+        """RuleCreateTool.execute() fires RULE_CREATED hook."""
+        from unittest.mock import MagicMock, patch
+
+        from core.tools.memory_tools import RuleCreateTool, set_memory_hooks
+
+        mock_hooks = MagicMock()
+        set_memory_hooks(mock_hooks)
+
+        mock_proj = MagicMock()
+        mock_proj.create_rule.return_value = True
+
+        with patch("core.tools.memory_tools._project_memory_ctx") as ctx:
+            ctx.get.return_value = mock_proj
+            tool = RuleCreateTool()
+            tool.execute(name="test-rule", paths=["*.py"], content="rule body")
+
+        mock_hooks.trigger.assert_called_once()
+        call_args = mock_hooks.trigger.call_args
+        assert call_args[0][0].value == "rule_created"
+        assert call_args[0][1]["name"] == "test-rule"
+
+        set_memory_hooks(None)  # cleanup
 
 
 class TestHookResult:

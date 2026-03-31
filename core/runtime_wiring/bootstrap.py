@@ -339,12 +339,47 @@ def build_hooks(
 
     _register_plugin("filesystem_hook_plugins", _reg_filesystem_plugins)
 
+    # C9: Audit loggers — handler-less events that had triggers but no dedicated handler.
+    # Table-driven registration (automation.py pattern) for observability.
+    # fmt: off
+    _E = HookEvent
+    _AUDIT_LOGGER_HOOKS: list[tuple[HookEvent, str, str, list[str]]] = [
+        (_E.CONTEXT_CRITICAL,       "ctx_critical",   "Context critical: %.0f%% (%s)",       ["usage_pct", "model"]),
+        (_E.SUBAGENT_STARTED,       "sa_started",     "SubAgent started: %s (%s)",            ["task_id", "task_type"]),
+        (_E.LLM_CALL_START,         "llm_start",      "LLM call: %s (%s)",                   ["model", "function"]),
+        (_E.VERIFICATION_FAIL,      "verif_fail",     "Verification failed: %s — %s",        ["node", "ip_name"]),
+        (_E.TOOL_RECOVERY_ATTEMPTED,"recovery_try",   "Tool recovery attempted: %s",          ["tool_name"]),
+        (_E.TOOL_RECOVERY_FAILED,   "recovery_fail",  "Tool recovery failed: %s — %s",       ["tool_name", "error"]),
+        (_E.FALLBACK_CROSS_PROVIDER,"xprovider_fb",   "Cross-provider fallback: %s → %s",    ["from_model", "to_model"]),
+        (_E.PIPELINE_TIMEOUT,       "pipe_timeout",   "Pipeline timeout: %ss",                ["timeout_s"]),
+        (_E.POST_ANALYSIS,          "post_analysis",  "Post-analysis: %s",                    ["trigger_type"]),
+        (_E.SHUTDOWN_STARTED,       "shutdown",       "Shutdown started: %s active sessions",  ["active_sessions"]),
+        (_E.CONFIG_RELOADED,        "config_reload",  "Config reloaded: %s",                  ["config_path"]),
+        (_E.MCP_SERVER_FAILED,      "mcp_fail",       "MCP server failed: %s — %s",          ["server_name", "error"]),
+    ]
+    # fmt: on
+
+    def _reg_audit_loggers() -> None:
+        for event, name, tmpl, keys in _AUDIT_LOGGER_HOOKS:
+
+            def _make(t: str, ks: list[str]) -> Any:
+                def _handler(_e: HookEvent, d: dict[str, Any]) -> None:
+                    vals = tuple(d.get(k, "") for k in ks)
+                    log.info(t, *vals)
+
+                return _handler
+
+            hooks.register(event, _make(tmpl, keys), name=name, priority=90)
+
+    _register_plugin("audit_loggers", _reg_audit_loggers)
+
     return hooks, run_log, stuck_detector
 
 
 def build_memory(
     *,
     session_store: SessionStorePort,
+    hooks: Any = None,
 ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler, FileBasedUserProfile]:
     """Build L2 memory components: project, org, context assembler, user profile."""
     project_memory = ProjectMemory()
@@ -390,10 +425,11 @@ def build_memory(
     set_context_assembler(context_assembler)
 
     # Wire memory into memory tools via contextvars (P1 memory autonomy)
-    from core.tools.memory_tools import set_org_memory, set_project_memory
+    from core.tools.memory_tools import set_memory_hooks, set_org_memory, set_project_memory
 
     set_project_memory(project_memory)
     set_org_memory(organization_memory)
+    set_memory_hooks(hooks)
 
     # Wire user profile into profile tools via contextvars
     from core.tools.profile_tools import set_user_profile
@@ -426,7 +462,7 @@ def build_session_store(*, session_ttl: float) -> SessionStorePort:
     return session_store
 
 
-def build_config_watcher() -> ConfigWatcher:
+def build_config_watcher(*, hooks: HookSystem | None = None) -> ConfigWatcher:
     """Build ConfigWatcher and register .env hot-reload handler if .env exists."""
     config_watcher = ConfigWatcher(debounce_ms=CONFIG_WATCHER_DEBOUNCE_MS)
     env_path = Path(".env")
@@ -474,7 +510,15 @@ def build_config_watcher() -> ConfigWatcher:
         settings.model_registry_dir = new_settings.model_registry_dir
         # L2 Memory
         settings.session_ttl_hours = new_settings.session_ttl_hours
-        log.info("Settings hot-reload complete (12 fields updated)")
+        log.info("Settings hot-reload complete (11 fields updated)")
+        if hooks is not None:
+            try:
+                hooks.trigger(
+                    HookEvent.CONFIG_RELOADED,
+                    {"config_path": str(path), "fields_updated": 11},
+                )
+            except Exception:
+                log.debug("CONFIG_RELOADED hook failed", exc_info=True)
 
     config_watcher.watch(env_path, _on_config_change, name="dotenv")
     config_watcher.start()
