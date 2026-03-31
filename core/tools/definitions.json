@@ -640,6 +640,106 @@
     }
   },
   {
+    "name": "glob_files",
+    "description": "Find files by glob pattern (e.g. '**/*.py', 'core/**/*.json'). Results sorted by modification time. Use instead of run_bash for file discovery.",
+    "category": "discovery",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Glob pattern (e.g. '**/*.py', 'src/**/*.ts')"
+        },
+        "path": {
+          "type": "string",
+          "description": "Directory to search in (default: project root)"
+        }
+      },
+      "required": ["pattern"]
+    }
+  },
+  {
+    "name": "grep_files",
+    "description": "Search file contents using regex patterns. Returns matching files and optionally matching lines. Use instead of run_bash for content search.",
+    "category": "discovery",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Regex pattern to search for"
+        },
+        "path": {
+          "type": "string",
+          "description": "File or directory to search (default: project root)"
+        },
+        "glob": {
+          "type": "string",
+          "description": "File pattern filter (e.g. '*.py', '*.ts')"
+        },
+        "include_content": {
+          "type": "boolean",
+          "description": "Include matching lines in output (default: false)"
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Max files to return (default: 50)"
+        }
+      },
+      "required": ["pattern"]
+    }
+  },
+  {
+    "name": "edit_file",
+    "description": "Edit a file by exact string replacement. Provide old_string and new_string. Use instead of run_bash for file modifications. Requires HITL approval.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "Path to the file to edit"
+        },
+        "old_string": {
+          "type": "string",
+          "description": "Exact string to find and replace"
+        },
+        "new_string": {
+          "type": "string",
+          "description": "Replacement text"
+        },
+        "replace_all": {
+          "type": "boolean",
+          "description": "Replace all occurrences (default: false)"
+        }
+      },
+      "required": ["file_path", "old_string", "new_string"]
+    }
+  },
+  {
+    "name": "write_file",
+    "description": "Create a new file or overwrite an existing file. Parent directories created automatically. Use edit_file for partial changes. Requires HITL approval.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "Path to the file to create or overwrite"
+        },
+        "content": {
+          "type": "string",
+          "description": "Complete file content"
+        }
+      },
+      "required": ["file_path", "content"]
+    }
+  },
+  {
     "name": "note_save",
     "description": "Permanently saves a user note. Use when the user says 'remember this', 'save this', etc.",
     "category": "memory",

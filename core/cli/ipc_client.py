@@ -179,6 +179,11 @@ class IPCClient:
                 if on_stream is not None:
                     on_stream(response.get("data", ""))
                 continue
+            # HITL approval relay — serve requests user confirmation
+            if rtype == "approval_request":
+                decision = self._handle_approval_request(response)
+                self._send({"type": "approval_response", "decision": decision})
+                continue
             # Structured events — all non-stream, non-terminal types
             if rtype in (
                 "tool_start",
@@ -218,6 +223,34 @@ class IPCClient:
                     on_event(response)
                 continue
             return response
+
+    def _handle_approval_request(self, msg: dict[str, Any]) -> str:
+        """Display approval prompt to user and return decision."""
+        from rich.console import Console
+
+        c = Console()
+        tool = msg.get("tool_name", "?")
+        detail = msg.get("detail", "")
+        level = msg.get("safety_level", "write")
+
+        c.print()
+        label = "Write" if level == "write" else "Dangerous"
+        c.print(f"  [warning]{label} tool requires approval[/warning]")
+        c.print(f"  [dim]Tool:[/dim] [bold]{tool}[/bold]")
+        if detail:
+            c.print(f"  [dim]{detail}[/dim]")
+        c.print()
+
+        try:
+            resp = c.input("  [header]Allow? [Y/n/A][/header] ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            c.print()
+            return "n"
+        if resp in ("a", "always"):
+            return "a"
+        if resp in ("", "y", "yes"):
+            return "y"
+        return "n"
 
     def request_resume(
         self,

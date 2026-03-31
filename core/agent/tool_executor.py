@@ -98,6 +98,7 @@ class ToolExecutor:
         mcp_manager: Any | None = None,
         hitl_level: int = 2,
         hooks: HookSystem | None = None,
+        approval_callback: Callable[[str, str, str], str] | None = None,
     ) -> None:
         self._handlers: dict[str, Callable[..., dict[str, Any]]] = action_handlers or {}
         self._bash = bash_tool or BashTool()
@@ -107,6 +108,8 @@ class ToolExecutor:
         # HITL level: 0=autonomous, 1=write-only, 2=all prompts
         self._hitl_level = hitl_level
         self._hooks: HookSystem | None = hooks
+        # IPC approval relay: callback(tool_name, detail, safety_level) → 'y'/'n'/'a'
+        self._approval_callback = approval_callback
         # Per-server MCP approval cache — approve once per server per session
         # Thread-safe: ToolExecutor is per-AgenticLoop, but sub-agents may share.
         import threading
@@ -130,16 +133,17 @@ class ToolExecutor:
         except Exception:
             log.debug("Hook fire failed for %s", event_name, exc_info=True)
 
-    def _prompt_with_always(self, label: str, detail: str) -> str:
+    def _prompt_with_always(self, label: str, detail: str, *, safety_level: str = "write") -> str:
         """Show a [Y/n/A] prompt and return 'y', 'n', or 'a'.
 
-        Args:
-            label: Header text (e.g., "Bash command requires approval")
-            detail: Detail text already printed before this call
-
-        Returns:
-            'y' for yes, 'n' for no, 'a' for always (session-level)
+        Uses IPC approval relay callback if available (thin-client mode),
+        otherwise falls back to console.input() (direct terminal).
         """
+        # IPC mode: relay approval to thin client via callback
+        if self._approval_callback is not None:
+            return self._approval_callback(label, detail, safety_level)
+
+        # Direct terminal mode
         from core.cli import _restore_terminal
 
         _restore_terminal()
@@ -383,8 +387,14 @@ class ToolExecutor:
 
         # Safe read-only commands skip HITL approval for reduced friction.
         # Dangerous patterns are already blocked above (validate).
+        # Commands with redirects (>, >>), pipes (|), or chaining (;, &&)
+        # are NOT safe even if they start with a safe prefix.
         cmd_stripped = command.strip()
-        is_safe_cmd = any(cmd_stripped.startswith(p) for p in SAFE_BASH_PREFIXES)
+        _UNSAFE_CHARS = frozenset(">|;")
+        has_unsafe_chars = any(c in command for c in _UNSAFE_CHARS)
+        is_safe_cmd = not has_unsafe_chars and any(
+            cmd_stripped.startswith(p) for p in SAFE_BASH_PREFIXES
+        )
 
         if not is_safe_cmd:
             # HITL level 0/1: skip bash approval entirely

@@ -71,6 +71,43 @@ class _StreamingWriter:
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
 
+    def request_approval(
+        self,
+        tool_name: str,
+        detail: str,
+        safety_level: str = "write",
+    ) -> str:
+        """Send approval request to thin CLI and wait for response.
+
+        Returns 'y', 'n', or 'a' (always).
+        """
+        self._send_json(
+            {
+                "type": "approval_request",
+                "tool_name": tool_name,
+                "detail": detail,
+                "safety_level": safety_level,
+            }
+        )
+        # Block until thin client sends approval_response
+        try:
+            self._client.settimeout(120.0)  # 2 min for user decision
+            buf = b""
+            while True:
+                chunk = self._client.recv(4096)
+                if not chunk:
+                    return "n"
+                buf += chunk
+                if b"\n" in buf:
+                    line, _rest = buf.split(b"\n", 1)
+                    msg = json.loads(line.decode("utf-8"))
+                    if msg.get("type") == "approval_response":
+                        return str(msg.get("decision", "n"))
+        except (TimeoutError, OSError, json.JSONDecodeError):
+            return "n"
+        finally:
+            self._client.settimeout(None)
+
     def flush(self) -> None:
         pass
 
@@ -232,11 +269,18 @@ class CLIPoller:
         conversation = ConversationContext()
         session_id = f"cli-{os.urandom(4).hex()}"
 
+        # Build IPC approval relay: WRITE/DANGEROUS tools prompt thin CLI
+        _writer = _StreamingWriter(client)
+
+        def _ipc_approval(tool_name: str, detail: str, safety_level: str) -> str:
+            return _writer.request_approval(tool_name, detail, safety_level)
+
         # Create an IPC session backed by serve's SharedServices
         _executor, loop = self._services.create_session(
             SessionMode.IPC,
             conversation=conversation,
             propagate_context=True,
+            approval_callback=_ipc_approval,
         )
 
         # Send session ID to client

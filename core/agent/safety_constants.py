@@ -20,6 +20,8 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "general_web_search",
         "note_read",
         "read_document",
+        "glob_files",
+        "grep_files",
         "profile_show",
         "calendar_list_events",
     }
@@ -47,6 +49,8 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "calendar_sync_scheduler",
         "manage_context",
         "switch_model",
+        "edit_file",
+        "write_file",
     }
 )
 

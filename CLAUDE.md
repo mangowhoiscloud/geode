@@ -4,12 +4,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.42.0
+- **Version**: 0.43.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 192
-- **Tests**: 3555+
+- **Modules**: 193
+- **Tests**: 3590+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -144,7 +144,7 @@ uv run mypy core/
 
 ### Expected Test Results
 
-3555+ tests pass. 3 IP fixtures produce tier spread:
+3590+ tests pass. 3 IP fixtures produce tier spread:
 - Berserk: **S** (81.2) — conversion_failure
 - Cowboy Bebop: **A** (68.4) — undermarketed
 - Ghost in the Shell: **B** (51.7) — discovery_failure
@@ -369,7 +369,7 @@ Code changes → repeat 3 quality gates. Fix on failure.
 ```bash
 uv run ruff check core/ tests/      # Lint: 0 errors
 uv run mypy core/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"   # Test: 3555+ pass
+uv run pytest tests/ -m "not live"   # Test: 3590+ pass
 ```
 
 #### 4. E2E Verify
@@ -440,7 +440,7 @@ Update `docs/progress.md` only from main. Backlog → In Progress → Done.
 |------|---------|----------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -m "not live"` | 3555+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 3590+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 ## Custom Skills (Scaffold)
