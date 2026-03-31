@@ -4,10 +4,21 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/Opus%204.6-1M%20context-1e293b?style=flat-square" alt="Opus 4.6">
-  <img src="https://img.shields.io/badge/52%20tools-MCP%20native-1e293b?style=flat-square" alt="52 Tools">
+  <img src="https://img.shields.io/badge/56%20tools-MCP%20native-1e293b?style=flat-square" alt="56 Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Opus%204.6-1M-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Opus 4.6">
+  <img src="https://img.shields.io/badge/Sonnet%204.6-1M-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Sonnet 4.6">
+  <img src="https://img.shields.io/badge/Haiku%204.5-200K-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Haiku 4.5">
+  <img src="https://img.shields.io/badge/GPT--5.4-1M-412991?style=flat-square&logo=openai&logoColor=white" alt="GPT-5.4">
+  <img src="https://img.shields.io/badge/GPT--5.2-128K-412991?style=flat-square&logo=openai&logoColor=white" alt="GPT-5.2">
+  <img src="https://img.shields.io/badge/GPT--4.1-1M-412991?style=flat-square&logo=openai&logoColor=white" alt="GPT-4.1">
+  <img src="https://img.shields.io/badge/GLM--5-200K-1a73e8?style=flat-square" alt="GLM-5">
+  <img src="https://img.shields.io/badge/GLM--5--turbo-200K-1a73e8?style=flat-square" alt="GLM-5-turbo">
+  <img src="https://img.shields.io/badge/GLM--4.7--flash-free-1a73e8?style=flat-square" alt="GLM-4.7-flash">
 </p>
 
 [한국어](README.ko.md)
