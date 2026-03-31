@@ -393,15 +393,16 @@ class TestMCPFallbackHints:
         mgr = MCPServerManager()
         result = mgr.call_tool("playwriter", "navigate", {"url": "https://example.com"})
         assert "error" in result
-        assert "playwright" in result["error"]
-        assert "Fallback" in result["error"]
+        # Hint is in dedicated field (LLM-friendly structured error)
+        assert "playwright" in result.get("hint", "")
 
     def test_unavailable_server_without_hint(self) -> None:
         """Unknown server unavailable → no fallback hint."""
         mgr = MCPServerManager()
         result = mgr.call_tool("unknown_server", "some_tool", {})
         assert "error" in result
-        assert "Fallback" not in result["error"]
+        # No fallback server → hint should not mention fallback
+        assert "instead" not in result.get("hint", "").lower() or "playwright" not in result.get("hint", "")
 
     def test_failed_call_with_hint(self) -> None:
         """playwriter call fails → error includes playwright fallback hint."""
@@ -412,5 +413,5 @@ class TestMCPFallbackHints:
         with patch.object(mgr, "_get_client", return_value=mock_client):
             result = mgr.call_tool("playwriter", "navigate", {"url": "https://example.com"})
         assert "error" in result
-        assert "playwright" in result["error"]
-        assert "Fallback" in result["error"]
+        # Hint is in dedicated field (LLM-friendly structured error)
+        assert "playwright" in result.get("hint", "")

@@ -32,7 +32,14 @@ class WebFetchTool:
         try:
             import httpx
         except ImportError:
-            return {"error": "httpx not installed"}
+            from core.tools.base import tool_error
+
+            return tool_error(
+                "httpx not installed",
+                error_type="dependency",
+                recoverable=False,
+                hint="Install httpx: pip install httpx",
+            )
 
         try:
             try:
@@ -56,9 +63,25 @@ class WebFetchTool:
                 }
             }
         except httpx.HTTPStatusError as exc:
-            return {"error": f"HTTP {exc.response.status_code}: {url}"}
+            from core.tools.base import tool_error
+
+            status = exc.response.status_code
+            return tool_error(
+                f"HTTP {status}: {url}",
+                error_type="connection",
+                recoverable=status in (429, 500, 502, 503, 504),
+                hint="Retry later." if status == 429 else "Check URL or try a different source.",
+                context={"url": url, "status_code": status},
+            )
         except Exception as exc:
-            return {"error": f"Failed to fetch {url}: {exc}"}
+            from core.tools.base import tool_error
+
+            return tool_error(
+                f"Failed to fetch {url}: {exc}",
+                error_type="connection",
+                hint="Check URL validity or network connectivity.",
+                context={"url": url},
+            )
 
     @staticmethod
     def _html_to_text(html: str) -> str:
@@ -117,7 +140,15 @@ class GeneralWebSearchTool:
         if result:
             return result
 
-        return {"error": "All web search providers failed"}
+        from core.tools.base import tool_error
+
+        return tool_error(
+            "All web search providers failed",
+            error_type="connection",
+            recoverable=True,
+            hint="Retry or rephrase the query.",
+            context={"query": query},
+        )
 
     def _anthropic_search(self, query: str, max_results: int) -> dict[str, Any] | None:
         """Anthropic native web search via Messages API."""
