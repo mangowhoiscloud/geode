@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-31 (세션 52 — 200K token guard + LLM-friendly errors + graceful drain)
+> 마지막 갱신: 2026-03-31 (세션 52 — v0.41.0 + hook system audit)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -18,6 +18,7 @@
 | ~~llm-resilience~~ | ~~LLM Resilience Hardening — 14 GAP 3-Phase, degraded fallback, cross-provider~~ | ~~P0~~ | ~~#560~~ | **Done** v0.38.0 |
 | ~~stub-repeat-fix~~ | ~~Stub data origin fix + cross-batch repeat counter~~ | ~~P1~~ | ~~#562~~ | **Done** |
 | ~~blog-v37-v38~~ | ~~v0.37-0.38 기술 블로그 4건~~ | ~~P2~~ | ~~#564~~ | **Done** |
+| hook-system-audit | HookSystem 40 이벤트 전수 audit — dead code 4건 제거, handler 미등록 14건 연결, 구조결함 4건 수정, 누락 hook 3건 추가 | P0 | hook-system-audit.md | **In Progress** |
 | concurrency-redesign | 동시성 시스템 재설계 — 워크로드별 세마포어 분리 + Gateway 제한 + 데드라인 큐잉 | P1 | — | SessionLane으로 부분 해결, 나머지 미착수 |
 | ~~i18n-english~~ | ~~LLM 소비 문서 영어 전환 — 39 files (GEODE.md, CLAUDE.md, definitions.json, SKILL.md ×30, rules, PROJECT.md)~~ | ~~P1~~ | ~~#523~~ | **Done** |
 | ~~kent-beck-p1~~ | ~~Phase 1 — dry-run 파싱 + Safety 상수 추출~~ | ~~P0~~ | ~~#462~~ | **Done** |
@@ -56,6 +57,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
+| hook-system-audit | HookSystem 전수 audit — dead code, handler 미등록, 구조결함, 누락 hook | @mangowhoiscloud | feature/hook-system-audit | 2026-03-31 | Plan 단계 |
 
 ### In Review
 
@@ -69,6 +71,8 @@
 | 200k-token-guard | 200K 절대 토큰 가드 — rate limit pool 분리 방지 | #584 | @mangowhoiscloud | 2026-03-31 |
 | llm-friendly-errors | LLM 친화적 에러 메시지 — tool_error() + classify_tool_exception() | #585 | @mangowhoiscloud | 2026-03-31 |
 | graceful-serve-drain | Graceful serve drain — SIGTERM active session 대기 | #586 | @mangowhoiscloud | 2026-03-31 |
+| model-switch-crash | /model mid-call adapter swap crash — deferred model sync | #590 | @mangowhoiscloud | 2026-03-31 |
+| model-switch-persist | config_watcher settings.model 복귀 — hot-reload 제외 + os.environ 동기화 | #592 | @mangowhoiscloud | 2026-03-31 |
 
 ### Done (2026-03-31 — 세션 51)
 
