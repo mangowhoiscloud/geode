@@ -111,6 +111,9 @@ def build_automation(
         hooks,
         snapshot_manager=snapshot_manager,
         trigger_manager=trigger_manager,
+        feedback_loop=feedback_loop,
+        outcome_tracker=outcome_tracker,
+        drift_detector=drift_detector,
         session_key=session_key,
         ip_name=ip_name,
         project_memory=project_memory,
@@ -155,6 +158,9 @@ def wire_automation_hooks(
     *,
     snapshot_manager: Any,
     trigger_manager: Any,
+    feedback_loop: Any = None,
+    outcome_tracker: Any = None,
+    drift_detector: Any = None,
     session_key: str,
     ip_name: str,
     project_memory: Any,
@@ -233,3 +239,90 @@ def wire_automation_hooks(
     # (tier=?, score=0.00) because effective_state in synthesizer node didn't
     # reliably contain scoring results. Pipeline results are already recorded
     # in journal (runs.jsonl) via journal_hooks.
+
+    # ── Feedback Loop Integration (activates L4.5 dead code) ──────────────
+
+    # Handler #1: SCORING_COMPLETE → drift scan on subscores
+    if drift_detector and feedback_loop:
+
+        def _on_scoring_drift(event: HookEvent, data: dict[str, Any]) -> None:
+            subscores = data.get("subscores") or data.get("scores", {})
+            if not subscores:
+                return
+            try:
+                alerts = drift_detector.scan_all(subscores)
+                if alerts:
+                    log.info(
+                        "SCORING_COMPLETE: drift scan found %d alerts",
+                        len(alerts),
+                    )
+                    hooks.trigger(
+                        HookEvent.DRIFT_DETECTED,
+                        {"alerts": alerts, "ip_name": ip_name, "source": "scoring"},
+                    )
+            except Exception:
+                log.debug("Drift scan on SCORING_COMPLETE failed", exc_info=True)
+
+        hooks.register(
+            HookEvent.SCORING_COMPLETE,
+            _on_scoring_drift,
+            name="scoring_drift_scan",
+            priority=60,
+        )
+
+    # Handler #2: PIPELINE_END → schedule outcome tracking at T+30/90/180
+    if outcome_tracker:
+
+        def _on_pipeline_end_outcomes(event: HookEvent, data: dict[str, Any]) -> None:
+            target_ip = data.get("ip_name") or ip_name
+            if not target_ip:
+                return
+            try:
+                from core.automation.outcome_tracking import TrackingPoint
+
+                for tp in TrackingPoint:
+                    outcome_tracker.schedule(ip_name=target_ip, tracking_point=tp)
+                log.info(
+                    "PIPELINE_END: scheduled %d outcome checkpoints for %s",
+                    len(TrackingPoint),
+                    target_ip,
+                )
+            except Exception:
+                log.debug("Outcome scheduling on PIPELINE_END failed", exc_info=True)
+
+        hooks.register(
+            HookEvent.PIPELINE_END,
+            _on_pipeline_end_outcomes,
+            name="pipeline_end_outcomes",
+            priority=70,
+        )
+
+    # Handler #3: OUTCOME_COLLECTED → run feedback correlation cycle
+    if feedback_loop:
+
+        def _on_outcome_feedback(event: HookEvent, data: dict[str, Any]) -> None:
+            try:
+                auto_scores = data.get("auto_scores", [])
+                human_scores = data.get("human_scores", [])
+                cycle_id = data.get("cycle_id", "auto")
+                if not auto_scores:
+                    return
+                result = feedback_loop.run_cycle(
+                    auto_scores=auto_scores,
+                    human_scores=human_scores,
+                    cycle_id=cycle_id,
+                )
+                log.info(
+                    "OUTCOME_COLLECTED: feedback cycle %s — success=%s",
+                    result.cycle_id if hasattr(result, "cycle_id") else cycle_id,
+                    result.success if hasattr(result, "success") else "unknown",
+                )
+            except Exception:
+                log.debug("Feedback cycle on OUTCOME_COLLECTED failed", exc_info=True)
+
+        hooks.register(
+            HookEvent.OUTCOME_COLLECTED,
+            _on_outcome_feedback,
+            name="outcome_feedback_cycle",
+            priority=60,
+        )
