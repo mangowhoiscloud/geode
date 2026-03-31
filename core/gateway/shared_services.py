@@ -39,8 +39,8 @@ class SessionMode(StrEnum):
     SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
 
 
-# Tools denied for non-terminal execution (IPC, DAEMON, SCHEDULER).
-# DANGEROUS tools require interactive terminal which these modes cannot provide.
+# Tools denied for headless modes (DAEMON, SCHEDULER) — no user to approve.
+# IPC mode has HITL relay, so these tools are available with user approval.
 _HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
@@ -61,7 +61,7 @@ _MODE_DEFAULTS: dict[SessionMode, dict[str, Any]] = {
         "max_rounds": 0,  # unlimited
     },
     SessionMode.IPC: {
-        "hitl_level": 0,  # auto-approve (WRITE ok, DANGEROUS policy-blocked)
+        "hitl_level": 2,  # full HITL — approval relayed to thin CLI via IPC
         "quiet": True,  # suppress serve-side UI; results sent via IPC JSON
         "time_budget_s": 0.0,  # unlimited (interactive via IPC)
         "max_rounds": 0,
@@ -121,6 +121,7 @@ class SharedServices:
         time_budget_override: float | None = None,
         verbose: bool = False,
         propagate_context: bool = False,
+        **kwargs: Any,
     ) -> tuple[ToolExecutor, AgenticLoop]:
         """Build a fully-wired (ToolExecutor, AgenticLoop) for *mode*.
 
@@ -151,9 +152,10 @@ class SharedServices:
 
             conversation = ConversationContext()
 
-        # Filter DANGEROUS tools for headless modes (PolicyChain enforcement)
+        # Filter DANGEROUS tools for truly headless modes (no user to approve).
+        # IPC mode has HITL relay — tools are gated by approval, not denied.
         handlers = self.tool_handlers
-        if mode in (SessionMode.IPC, SessionMode.SCHEDULER, SessionMode.DAEMON):
+        if mode in (SessionMode.SCHEDULER, SessionMode.DAEMON):
             denied = _HEADLESS_DENIED_TOOLS & set(handlers)
             if denied:
                 log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
@@ -161,12 +163,14 @@ class SharedServices:
 
         # Build sub-agent manager + executor + loop
         sub_mgr = self._build_sub_agent_manager()
+        approval_cb = kwargs.get("approval_callback")
         executor = ToolExecutor(
             action_handlers=handlers,
             mcp_manager=self.mcp_manager,
             sub_agent_manager=sub_mgr,
             hitl_level=hitl,
             hooks=self.hook_system,
+            approval_callback=approval_cb,
         )
         loop = AgenticLoop(
             conversation,
