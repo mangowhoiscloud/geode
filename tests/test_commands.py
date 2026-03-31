@@ -268,8 +268,8 @@ class TestApplyModel:
         # Should not write .env when model unchanged
         _apply_model(next(p for p in MODEL_PROFILES if p.id == settings.model))
 
-    def test_apply_model_hot_swaps_active_loop(self, tmp_path: Path, monkeypatch):
-        """P0 fix: _apply_model() should call loop.update_model() on the active loop."""
+    def test_apply_model_defers_hot_swap(self, tmp_path: Path, monkeypatch):
+        """_apply_model() updates settings only — loop sync is deferred to round boundary."""
         from unittest.mock import MagicMock
 
         monkeypatch.chdir(tmp_path)
@@ -287,7 +287,10 @@ class TestApplyModel:
         try:
             target = MODEL_PROFILES[3]  # GPT-5.4
             _apply_model(target)
-            mock_loop.update_model.assert_called_once_with(target.id)
+            # _apply_model no longer calls loop.update_model() directly —
+            # AgenticLoop._sync_model_from_settings() handles it at round start.
+            mock_loop.update_model.assert_not_called()
+            assert settings.model == target.id
         finally:
             settings.model = old
             session_state.set_current_loop(None)

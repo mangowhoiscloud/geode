@@ -330,12 +330,10 @@ def _apply_model(selected: ModelProfile) -> None:
     settings.model = selected.id
     _upsert_env("GEODE_MODEL", selected.id)
 
-    # Hot-swap the active AgenticLoop model (P0 fix: /model mid-session)
-    from core.cli.session_state import get_current_loop
-
-    loop = get_current_loop()
-    if loop is not None:
-        loop.update_model(selected.id)
+    # Model hot-swap is deferred: AgenticLoop._sync_model_from_settings()
+    # checks settings.model at the start of each round and applies
+    # the change safely between LLM calls. Direct loop.update_model()
+    # during tool execution caused adapter swap mid-call → crash.
 
     console.print(
         f"  [success]Model[/success]  {old} → [bold]{selected.label}[/bold]"
