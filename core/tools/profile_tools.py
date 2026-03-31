@@ -13,9 +13,8 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
-from core.tools.base import tool_error
-
 from core.memory.user_profile import FileBasedUserProfile
+from core.tools.base import tool_error
 
 log = logging.getLogger(__name__)
 

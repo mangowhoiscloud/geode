@@ -195,7 +195,7 @@ class CalendarCreateEventTool:
         except Exception as exc:
             return tool_error(
                 f"Failed to create event: {exc}",
-                error_type="network",
+                error_type="connection",
                 hint="Check calendar API connectivity and retry.",
             )
 
@@ -249,7 +249,7 @@ class CalendarSyncSchedulerTool:
         except Exception as exc:
             return tool_error(
                 f"Calendar sync failed: {exc}",
-                error_type="network",
+                error_type="connection",
                 hint="Check calendar API connectivity and retry.",
             )
 
