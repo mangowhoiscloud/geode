@@ -75,6 +75,7 @@
 | glm-cost-tracking | GLM 비용 추적 누락 — GlmAgenticAdapter에 get_tracker().record() 연결 | #593 | @mangowhoiscloud | 2026-03-31 |
 | hook-system-audit | HookSystem audit (42→46) — 4 event, 12 logger, S4 fix, 3 trigger site | #596 | @mangowhoiscloud | 2026-03-31 |
 | transcript-cost-fix | transcript session_end total_cost 항상 $0 — TokenTracker accumulator 연결 | #597 | @mangowhoiscloud | 2026-03-31 |
+| model-card-price | model card 가격 $0.00 표시 — per-token→per-1M 변환 누락 | #601 | @mangowhoiscloud | 2026-03-31 |
 
 ### Done (2026-03-31 — 세션 51)
 
