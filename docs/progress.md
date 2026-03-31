@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-31 (세션 52 — v0.41.0 + hook system audit)
+> 마지막 갱신: 2026-03-31 (세션 52 — v0.41.0 + GLM cost tracking fix)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -73,6 +73,7 @@
 | graceful-serve-drain | Graceful serve drain — SIGTERM active session 대기 | #586 | @mangowhoiscloud | 2026-03-31 |
 | model-switch-crash | /model mid-call adapter swap crash — deferred model sync | #590 | @mangowhoiscloud | 2026-03-31 |
 | model-switch-persist | config_watcher settings.model 복귀 — hot-reload 제외 + os.environ 동기화 | #592 | @mangowhoiscloud | 2026-03-31 |
+| glm-cost-tracking | GLM 비용 추적 누락 — GlmAgenticAdapter에 get_tracker().record() 연결 | #593 | @mangowhoiscloud | 2026-03-31 |
 
 ### Done (2026-03-31 — 세션 51)
 
