@@ -41,7 +41,7 @@ class TestAuditLoggers:
         ):
             from core.runtime_wiring.bootstrap import build_hooks
 
-            hooks, _, _ = build_hooks(
+            hooks, _, _, _ = build_hooks(
                 session_key="test",
                 run_id="test-run",
                 log_dir=None,
