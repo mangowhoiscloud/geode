@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-31 (세션 51 — context overflow + hooks + /clear + /model fix)
+> 마지막 갱신: 2026-03-31 (세션 52 — 200K token guard + LLM-friendly errors + graceful drain)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -32,7 +32,7 @@
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~#470~~ | **Done** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
 | clear-compress-fix | /clear + /compress 슬래시·자연어 명령어 점검 — empty 후에도 context_overflow 발생 문제 | P1 | — | 세션 51 발견, 복구 경로 미작동 |
-| graceful-serve-drain | SIGTERM 시 진행 세션 완료 대기 (graceful shutdown) | P1 | — | 현재 즉시 종료 |
+| ~~graceful-serve-drain~~ | ~~SIGTERM 시 진행 세션 완료 대기 (graceful shutdown)~~ | ~~P1~~ | ~~#586~~ | **Done** v0.40.0 |
 | ~~mcp-simplify~~ | ~~MCP 카탈로그 단일화~~ | ~~P1~~ | ~~#469~~ | **Done** |
 | ~~scheduler-callback~~ | ~~스케줄러 callback 와이어링 — action 필드 + 큐 연결~~ | ~~P1~~ | ~~tool-mcp-architecture-review.md~~ | **Done** |
 | ~~scheduler-nl-fix~~ | ~~스케줄러 NL 정규식 제거 → 원문 저장 + LLM 프레이밍 위임~~ | ~~P0~~ | ~~#483~~ | **Done** |
@@ -61,6 +61,14 @@
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-03-31 — 세션 52)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| 200k-token-guard | 200K 절대 토큰 가드 — rate limit pool 분리 방지 | #584 | @mangowhoiscloud | 2026-03-31 |
+| llm-friendly-errors | LLM 친화적 에러 메시지 — tool_error() + classify_tool_exception() | #585 | @mangowhoiscloud | 2026-03-31 |
+| graceful-serve-drain | Graceful serve drain — SIGTERM active session 대기 | #586 | @mangowhoiscloud | 2026-03-31 |
 
 ### Done (2026-03-31 — 세션 51)
 
