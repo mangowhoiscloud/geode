@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-03-31 (세션 51 — context overflow + UI/UX + diversity)
+> 마지막 갱신: 2026-03-31 (세션 51 — context overflow + hooks + /clear + /model fix)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -69,6 +69,8 @@
 | ui-ux-polish | CLI UI/UX 간소화 — Claude Code-style status line, finalize IPC 가드, session cost compact | #568 | @mangowhoiscloud | 2026-03-31 |
 | context-overflow | Gateway context overflow recovery — pre-call check + 400 propagation + session auto-clear + LLM i18n + proactive summarization | #575 #581 | @mangowhoiscloud | 2026-03-31 |
 | diversity-exempt | read/search 도구 diversity forcing 면제 + CJK truncation + spinner 왼쪽 | #575 | @mangowhoiscloud | 2026-03-31 |
+| hook-session-wiring | SESSION_START/END hook trigger 연결 + enum 주석 정정 | #583 | @mangowhoiscloud | 2026-03-31 |
+| model-dedup | /model 중복 출력 suppress + /clear serve relay 수정 | #582 #583 | @mangowhoiscloud | 2026-03-31 |
 
 ### Done (2026-03-30 — 세션 50)
 
