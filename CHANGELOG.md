@@ -26,6 +26,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.43.0] — 2026-03-31
+
+### Added
+- **IPC HITL 릴레이** — thin CLI에서 WRITE/DANGEROUS 도구 승인 양방향 릴레이. serve 데몬이 approval 요청 → IPC → CLI 프롬프트 → 응답 반환
+
+### Fixed
+- **SAFE_BASH_PREFIXES HITL bypass** — redirect/pipe 포함 명령어 차단 + symlink 방어
+- **tool_error() 마이그레이션 완료** — calendar_tools(5), profile_tools(4), memory_tools(2), registry(1) 총 12개 raw error 구조화
+- **Model card 가격 $0.00** — per-token→per-1M 변환 누락 (모든 provider 공통)
+- **Transcript total_cost $0** — session_end에 TokenTracker accumulator 비용 전달 누락
+- **GLM 비용 추적 누락** — GlmAgenticAdapter에 get_tracker().record() 연결
+
 ## [0.42.0] — 2026-03-31
 
 ### Added
