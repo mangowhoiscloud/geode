@@ -627,7 +627,34 @@ def _convert_user_to_responses(content: Any) -> list[dict[str, Any]]:
 
 
 def _tools_to_openai(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert Anthropic tool definitions to OpenAI function-calling format."""
+    """Convert Anthropic tool definitions to OpenAI Responses API format.
+
+    Responses API uses flat structure: {type, name, description, parameters}
+    (NOT the nested Chat Completions format {type, function: {name, ...}}).
+    """
+    result: list[dict[str, Any]] = []
+    for t in tools:
+        name = t.get("name", "")
+        if not name:
+            continue
+        tool_def: dict[str, Any] = {
+            "type": "function",
+            "name": name,
+            "description": t.get("description", ""),
+        }
+        schema = t.get("input_schema")
+        if schema:
+            tool_def["parameters"] = schema
+        result.append(tool_def)
+    return result
+
+
+def _tools_to_chat_completions(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert Anthropic tool definitions to OpenAI Chat Completions format.
+
+    Chat Completions uses nested structure: {type: "function", function: {name, ...}}.
+    Used by GLM adapter which calls chat.completions.create.
+    """
     result: list[dict[str, Any]] = []
     for t in tools:
         name = t.get("name", "")

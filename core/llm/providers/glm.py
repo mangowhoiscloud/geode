@@ -69,7 +69,7 @@ from core.llm.errors import UserCancelledError  # noqa: E402
 from core.llm.providers.openai import (  # noqa: E402
     OpenAIAgenticAdapter,
     _convert_messages_to_openai,
-    _tools_to_openai,
+    _tools_to_chat_completions,
 )
 from core.llm.router import call_with_failover  # noqa: E402
 
@@ -123,7 +123,7 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
 
         tc_val = tool_choice.get("type", "auto") if isinstance(tool_choice, dict) else tool_choice
 
-        oai_tools = _tools_to_openai(tools)
+        oai_tools = _tools_to_chat_completions(tools)
         oai_tools.append(_GLM_NATIVE_WEB_SEARCH)
 
         oai_messages = _convert_messages_to_openai(system, messages)
