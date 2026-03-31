@@ -242,7 +242,7 @@ class GeodeRuntime:
         run_id = uuid.uuid4().hex[:12]
 
         # Core sub-systems
-        hooks, run_log, stuck_detector = bootstrap.build_hooks(
+        hooks, run_log, stuck_detector, session_metrics = bootstrap.build_hooks(
             session_key=session_key,
             run_id=run_id,
             log_dir=log_dir,

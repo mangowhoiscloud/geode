@@ -248,7 +248,7 @@ def build_shared_services(
     if hook_system is None:
         from core.runtime_wiring.bootstrap import build_hooks
 
-        hook_system, _run_log, _stuck = build_hooks(
+        hook_system, _run_log, _stuck, _metrics = build_hooks(
             session_key=f"geode-{uuid.uuid4().hex[:8]}",
             run_id=uuid.uuid4().hex[:12],
             log_dir=Path.home() / ".geode" / "runs",

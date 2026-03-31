@@ -1,0 +1,28 @@
+# Scoring formula weights — must sum to 1.0
+# Final = (w_exposure_lift × PSM + w_quality × Quality + ...) × confidence_multiplier
+#
+# Override in .geode/scoring_weights.yaml to customize per-project.
+
+weights:
+  exposure_lift: 0.25
+  quality: 0.20
+  recovery: 0.18
+  growth: 0.12
+  momentum: 0.20
+  developer: 0.05
+
+# Confidence multiplier: final = base × (base_factor + scale_factor × confidence/100)
+confidence_multiplier:
+  base_factor: 0.7
+  scale_factor: 0.3
+
+# Tier classification thresholds (descending order)
+tiers:
+  - threshold: 80.0
+    label: S
+  - threshold: 60.0
+    label: A
+  - threshold: 40.0
+    label: B
+  # Fallback tier for scores below all thresholds
+fallback_tier: C
