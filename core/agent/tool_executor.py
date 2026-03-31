@@ -277,7 +277,9 @@ class ToolExecutor:
             return raw
         except Exception as exc:
             log.error("Tool %s failed: %s", tool_name, exc, exc_info=True)
-            return {"error": str(exc)}
+            from core.tools.base import classify_tool_exception
+
+            return classify_tool_exception(exc, tool_name=tool_name)
 
     def _execute_delegate(self, tool_input: dict[str, Any]) -> dict[str, Any]:
         """Delegate task(s) to sub-agent. Supports single and batch."""

@@ -76,7 +76,14 @@ class RunAnalystTool:
         ip_name = kwargs["ip_name"]
 
         if analyst_type not in ANALYST_TYPES:
-            return {"error": f"Unknown analyst_type: {analyst_type}"}
+            from core.tools.base import tool_error
+
+            return tool_error(
+                f"Unknown analyst_type: {analyst_type}",
+                error_type="validation",
+                hint=f"Valid types: {', '.join(ANALYST_TYPES)}",
+                context={"analyst_type": analyst_type},
+            )
 
         result = get_dry_run_result(analyst_type, ip_name)
         return {
@@ -118,7 +125,14 @@ class RunEvaluatorTool:
             data = load_fixture(ip_name)
             expected = data.get("expected_results", {})
         except ValueError:
-            return {"error": f"Unknown IP: {ip_name}"}
+            from core.tools.base import tool_error
+
+            return tool_error(
+                f"Unknown IP: {ip_name}",
+                error_type="not_found",
+                hint="Use list_data_sources to see available IPs.",
+                context={"ip_name": ip_name},
+            )
 
         # Build evaluator-specific result from expected data
         if evaluator_type == "quality_judge":
@@ -145,7 +159,14 @@ class RunEvaluatorTool:
                     "ip_name": ip_name,
                 }
             }
-        return {"error": f"Unknown evaluator_type: {evaluator_type}"}
+        from core.tools.base import tool_error
+
+        return tool_error(
+            f"Unknown evaluator_type: {evaluator_type}",
+            error_type="validation",
+            hint="Valid types: quality_judge, hidden_value, community_momentum",
+            context={"evaluator_type": evaluator_type},
+        )
 
 
 class PSMCalculateTool:
@@ -180,7 +201,14 @@ class PSMCalculateTool:
                 }
             }
         except ValueError:
-            return {"error": f"Unknown IP: {ip_name}"}
+            from core.tools.base import tool_error
+
+            return tool_error(
+                f"Unknown IP: {ip_name}",
+                error_type="not_found",
+                hint="Use list_data_sources to see available IPs.",
+                context={"ip_name": ip_name},
+            )
 
 
 class ExplainScoreTool:
@@ -206,7 +234,14 @@ class ExplainScoreTool:
         try:
             data = load_fixture(ip_name)
         except ValueError:
-            return {"error": f"Unknown IP: {ip_name}"}
+            from core.tools.base import tool_error
+
+            return tool_error(
+                f"Unknown IP: {ip_name}",
+                error_type="not_found",
+                hint="Use list_data_sources to see available IPs.",
+                context={"ip_name": ip_name},
+            )
 
         expected = data.get("expected_results", {})
         ip_info = data.get("ip_info", {})

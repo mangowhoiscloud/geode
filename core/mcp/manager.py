@@ -466,23 +466,30 @@ class MCPServerManager:
 
     def call_tool(self, server_name: str, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on a specific MCP server."""
+        from core.tools.base import tool_error
+
         client = self._get_client(server_name)
         if client is None:
-            msg = f"MCP server '{server_name}' not available"
             hint = self._FALLBACK_HINTS.get(server_name, "")
-            if hint:
-                msg += f". Fallback: use {hint} instead"
-            return {"error": msg}
+            return tool_error(
+                f"MCP server '{server_name}' not available",
+                error_type="connection",
+                hint=f"Use {hint} instead" if hint else "Check server configuration.",
+                context={"server": server_name, "tool": tool_name},
+            )
 
         try:
             return client.call_tool(tool_name, args)
         except Exception as exc:
             log.error("MCP tool call failed: %s/%s: %s", server_name, tool_name, exc)
-            msg = f"MCP tool call failed: {tool_name}"
             hint = self._FALLBACK_HINTS.get(server_name, "")
-            if hint:
-                msg += f". Fallback: use {hint} instead"
-            return {"error": msg}
+            is_timeout = "timeout" in str(exc).lower()
+            return tool_error(
+                f"MCP tool call failed: {tool_name}",
+                error_type="timeout" if is_timeout else "connection",
+                hint=f"Use {hint} instead" if hint else "Retry or use an alternative tool.",
+                context={"server": server_name, "tool": tool_name},
+            )
 
     def find_server_for_tool(self, tool_name: str) -> str | None:
         """Find which server provides a given tool."""

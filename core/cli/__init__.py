@@ -1714,6 +1714,46 @@ def serve(
                 _serve_session_lane.cleanup_idle()
             _time.sleep(1.0)
     finally:
+        # --- Phase 1: stop accepting new connections ---
+        # Close the server socket so no new CLI clients connect during drain.
+        # Active client handler threads continue running.
+        if _cli_poller is not None:
+            _cli_poller.stop_accepting()
+
+        # --- Phase 2: drain active sessions ---
+        _drain_timeout_s = 30  # max seconds to wait for active sessions
+        _drain_poll_s = 0.5
+        _active = 0
+        if _serve_session_lane:
+            _active = _serve_session_lane.active_count
+        if _active > 0:
+            console.print()
+            console.print(
+                f"  [dim]Draining {_active} active session(s) "
+                f"(timeout {_drain_timeout_s}s)...[/dim]"
+            )
+            _deadline = _time.monotonic() + _drain_timeout_s
+            while _time.monotonic() < _deadline:
+                _active = _serve_session_lane.active_count if _serve_session_lane else 0
+                if _active == 0:
+                    break
+                _time.sleep(_drain_poll_s)
+            _remaining = _serve_session_lane.active_count if _serve_session_lane else 0
+            if _remaining > 0:
+                console.print(
+                    f"  [warning]Drain timeout: {_remaining} session(s) still active "
+                    f"— forcing shutdown[/warning]"
+                )
+                log.warning(
+                    "Drain timeout: %d sessions still active after %ds",
+                    _remaining,
+                    _drain_timeout_s,
+                )
+            else:
+                console.print("  [dim]All sessions drained.[/dim]")
+                log.info("Graceful drain completed")
+
+        # --- Phase 3: component shutdown ---
         # Scheduler graceful shutdown (save state before stopping)
         if _sched_svc is not None:
             _sched_svc.save()

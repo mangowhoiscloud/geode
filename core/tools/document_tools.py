@@ -33,17 +33,34 @@ class ReadDocumentTool:
 
         file_path = Path(file_path_str).resolve()
 
+        from core.tools.base import tool_error
+
         # Security: ensure path is within project directory
         try:
             file_path.relative_to(_PROJECT_ROOT)
         except ValueError:
-            return {"error": f"Access denied: path outside project directory ({_PROJECT_ROOT})"}
+            return tool_error(
+                f"Access denied: path outside project directory ({_PROJECT_ROOT})",
+                error_type="permission",
+                recoverable=False,
+                context={"file_path": str(file_path)},
+            )
 
         if not file_path.exists():
-            return {"error": f"File not found: {file_path}"}
+            return tool_error(
+                f"File not found: {file_path}",
+                error_type="not_found",
+                hint="Check the file path or use a different file.",
+                context={"file_path": str(file_path)},
+            )
 
         if not file_path.is_file():
-            return {"error": f"Not a file: {file_path}"}
+            return tool_error(
+                f"Not a file: {file_path}",
+                error_type="validation",
+                hint="Provide a path to a file, not a directory.",
+                context={"file_path": str(file_path)},
+            )
 
         try:
             lines = file_path.read_text(encoding="utf-8").splitlines()
@@ -58,4 +75,8 @@ class ReadDocumentTool:
                 }
             }
         except Exception as exc:
-            return {"error": f"Failed to read {file_path}: {exc}"}
+            return tool_error(
+                f"Failed to read {file_path}: {exc}",
+                error_type="internal",
+                context={"file_path": str(file_path)},
+            )
