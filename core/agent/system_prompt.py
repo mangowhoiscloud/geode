@@ -136,9 +136,10 @@ def _build_model_card(model: str) -> str:
             parts.append(f"Context window: {ctx_str} tokens.")
 
         if pricing:
-            parts.append(
-                f"Cost: ${pricing.input:.2f} input / ${pricing.output:.2f} output per 1M tokens."
-            )
+            # pricing.input/output are per-token; multiply back for per-1M display
+            in_per_m = pricing.input * 1_000_000
+            out_per_m = pricing.output * 1_000_000
+            parts.append(f"Cost: ${in_per_m:.2f} input / ${out_per_m:.2f} output per 1M tokens.")
 
         # Fallback chain
         from core.config import (
