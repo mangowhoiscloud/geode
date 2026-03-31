@@ -14,6 +14,7 @@ from contextvars import ContextVar
 from typing import Any
 
 from core.memory.user_profile import FileBasedUserProfile
+from core.tools.base import tool_error
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +59,12 @@ class ProfileShowTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         profile = _user_profile_ctx.get()
         if profile is None:
-            return {"error": "User profile not configured"}
+            return tool_error(
+                "User profile not configured.",
+                error_type="dependency",
+                recoverable=False,
+                hint="Profile initializes on first interaction. Try again after setup.",
+            )
 
         data = profile.load_profile()
         patterns = profile.get_learned_patterns()
@@ -124,7 +130,12 @@ class ProfileUpdateTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         profile = _user_profile_ctx.get()
         if profile is None:
-            return {"error": "User profile not configured"}
+            return tool_error(
+                "User profile not configured.",
+                error_type="dependency",
+                recoverable=False,
+                hint="Profile initializes on first interaction. Try again after setup.",
+            )
 
         # Merge with existing
         existing = profile.load_profile()
@@ -175,7 +186,12 @@ class ProfilePreferenceTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         profile = _user_profile_ctx.get()
         if profile is None:
-            return {"error": "User profile not configured"}
+            return tool_error(
+                "User profile not configured.",
+                error_type="dependency",
+                recoverable=False,
+                hint="Profile initializes on first interaction. Try again after setup.",
+            )
 
         key: str = kwargs["key"]
         value = kwargs.get("value")
@@ -237,7 +253,12 @@ class ProfileLearnTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         profile = _user_profile_ctx.get()
         if profile is None:
-            return {"error": "User profile not configured"}
+            return tool_error(
+                "User profile not configured.",
+                error_type="dependency",
+                recoverable=False,
+                hint="Profile initializes on first interaction. Try again after setup.",
+            )
 
         pattern: str = kwargs["pattern"]
         category: str = kwargs.get("category", "general")

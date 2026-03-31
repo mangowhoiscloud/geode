@@ -12,7 +12,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
-from core.tools.base import Tool
+from core.tools.base import Tool, tool_error
 
 if TYPE_CHECKING:
     from core.tools.policy import PolicyChain
@@ -85,7 +85,7 @@ class ToolSearchTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         query = kwargs.get("query", "").lower()
         if not query:
-            return {"error": "query is required"}
+            return tool_error("query is required", error_type="validation")
 
         matches: list[dict[str, Any]] = []
 
