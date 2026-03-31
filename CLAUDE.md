@@ -4,7 +4,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.43.0
+- **Version**: 0.44.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -40,7 +40,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 ```
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
 HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(46 events)
-RUNTIME:  ToolRegistry(52), MCP Catalog(44), Skills, Memory(4-Tier), Reports
+RUNTIME:  ToolRegistry(52), MCP Registry(API), Skills, Memory(4-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback)
 ─────────────────────────────────────────────────────────────────
 ⊥ DOMAIN: DomainPort Protocol, GameIPDomain (cross-cutting, binds to Runtime + Harness via Port)

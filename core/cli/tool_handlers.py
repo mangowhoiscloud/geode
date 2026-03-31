@@ -742,13 +742,6 @@ def _build_system_handlers(
         else:
             console.print("    [muted]No active servers[/muted]")
 
-        inactive = mcp_status["available_inactive"]
-        if inactive:
-            console.print()
-            console.print("  [header]MCP Available (env missing)[/header]")
-            for srv in inactive:
-                env_list = ", ".join(srv["missing_env"])
-                console.print(f"    [yellow]--[/yellow] {srv['name']} [dim]needs: {env_list}[/dim]")
         console.print()
 
         return {
@@ -1052,16 +1045,14 @@ def _build_mcp_handler(
     """Build MCP server installation handler."""
 
     def handle_install_mcp_server(**kwargs: Any) -> dict[str, Any]:
-        import os as _os
-
-        from core.mcp.catalog import search_catalog
+        from core.mcp.registry import search_registry
 
         query = kwargs.get("query", "")
-        matches = search_catalog(query)
+        matches = search_registry(query)
         if not matches:
             return {
                 "status": "not_found",
-                "message": f"'{query}'에 맞는 MCP 서버를 찾지 못했습니다.",
+                "message": f"No MCP server found for '{query}'. Try a different keyword.",
             }
 
         best = matches[0]
@@ -1073,46 +1064,20 @@ def _build_mcp_handler(
                 return {
                     "status": "already_installed",
                     "server": best.name,
-                    "message": f"{best.name}은 이미 설치되어 있습니다.",
+                    "message": f"{best.name} is already installed.",
                 }
 
-        if mcp_manager is None:
-            return {"status": "error", "message": "MCP manager not available"}
-
-        # Derive command + args from install_hint
-        if not best.install_hint:
-            return {"status": "error", "message": f"No install configuration for {best.name}"}
-        hint_parts = best.install_hint.split()
-        cmd = hint_parts[0]
-        args = hint_parts[1:]
-        env_map = {k: f"${{{k}}}" for k in best.env_keys} or None
-        ok = mcp_manager.add_server(best.name, cmd, args=args, env=env_map)
-        if not ok:
-            return {"status": "error", "message": f"Failed to save {best.name}"}
-
-        # Hot-reload tools into running AgenticLoop (via ContextVar)
-        added = 0
-        from core.cli.session_state import get_current_loop
-
-        _loop = get_current_loop()
-        if _loop is not None:
-            added = _loop.refresh_tools()
-
-        # Check for missing env vars
-        missing = [k for k in best.env_keys if not _os.environ.get(k)]
-
-        msg = f"{best.name} 설치 완료. {added}개 도구 추가됨."
-        if missing:
-            msg += f" 환경변수 필요: {', '.join(missing)}"
-
         return {
-            "status": "installed",
+            "status": "found",
             "server": best.name,
-            "install_hint": best.install_hint,
-            "tools_added": added,
-            "env_required": list(best.env_keys),
-            "env_missing": missing,
-            "message": msg,
+            "title": best.title,
+            "description": best.description,
+            "repository_url": best.repository_url,
+            "message": (
+                f"Found: {best.title} ({best.name}). "
+                f"Add it to .geode/config.toml [mcp.servers.{best.name}] "
+                f"with the appropriate command and args."
+            ),
         }
 
     return {

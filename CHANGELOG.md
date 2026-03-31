@@ -26,6 +26,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.44.0] — 2026-04-01
+
+### Changed
+- **MCP catalog → Anthropic registry API** — 44개 하드코딩 catalog.py 삭제 → `api.anthropic.com/mcp-registry/v0/servers` fetch + 24h 로컬 캐시. "MCP Available (env missing)" 섹션 제거, config-driven 단순화
+
 ## [0.43.0] — 2026-03-31
 
 ### Added

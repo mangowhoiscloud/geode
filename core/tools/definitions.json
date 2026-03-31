@@ -937,7 +937,7 @@
   },
   {
     "name": "install_mcp_server",
-    "description": "Searches for and installs MCP servers. Use when connecting to external tools/services.",
+    "description": "Searches the Anthropic MCP registry for available servers. Returns server info and setup instructions. Use when the user wants to find or add an MCP server.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {

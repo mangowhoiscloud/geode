@@ -343,45 +343,18 @@ class MCPServerManager:
         return total
 
     def get_status(self) -> dict[str, Any]:
-        """Build MCP status report: active servers + available-but-inactive.
+        """Build MCP status report: active servers from config.
 
         Returns:
             active: servers currently configured (from config.toml + json)
-            available_inactive: catalog entries with missing env vars
         """
-        from core.mcp.catalog import MCP_CATALOG
-
-        self._load_dotenv_cache()
-
         active: list[dict[str, str]] = []
         for name in sorted(self._servers):
-            entry = MCP_CATALOG.get(name)
-            desc = entry.description if entry else ""
-            active.append({"name": name, "description": desc})
-
-        # Available but inactive: catalog entries with env_keys not configured
-        available_inactive: list[dict[str, Any]] = []
-        for name, entry in sorted(MCP_CATALOG.items()):
-            if name in self._servers or not entry.env_keys:
-                continue
-            missing = [
-                k for k in entry.env_keys if not (os.environ.get(k) or self._dotenv_cache.get(k))
-            ]
-            if missing:
-                available_inactive.append(
-                    {
-                        "name": name,
-                        "description": entry.description,
-                        "missing_env": missing,
-                    }
-                )
+            active.append({"name": name, "description": ""})
 
         return {
             "active": active,
             "active_count": len(active),
-            "available_inactive": available_inactive,
-            "available_inactive_count": len(available_inactive),
-            "catalog_total": len(MCP_CATALOG),
         }
 
     def _load_dotenv_cache(self) -> None:

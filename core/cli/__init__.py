@@ -483,11 +483,7 @@ def _handle_command(
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
 
         # MCP status section
-        _mcp_st = (
-            mcp_manager.get_status()
-            if mcp_manager is not None
-            else {"active": [], "available_inactive": []}
-        )
+        _mcp_st = mcp_manager.get_status() if mcp_manager is not None else {"active": []}
         console.print()
         console.print("  [header]MCP Servers[/header]")
         for srv in _mcp_st["active"]:
@@ -495,12 +491,6 @@ def _handle_command(
             console.print(f"    [green]OK[/green] {srv['name']} [dim]{_desc}[/dim]")
         if not _mcp_st["active"]:
             console.print("    [muted]No active servers[/muted]")
-        if _mcp_st["available_inactive"]:
-            console.print()
-            console.print("  [header]MCP Available (env missing)[/header]")
-            for srv in _mcp_st["available_inactive"]:
-                _env = ", ".join(srv["missing_env"])
-                console.print(f"    [yellow]--[/yellow] {srv['name']} [dim]needs: {_env}[/dim]")
         console.print()
     elif action == "compare":
         parts = args.strip().split()
