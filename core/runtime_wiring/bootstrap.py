@@ -217,6 +217,20 @@ def build_hooks(
 
     _register_plugin("turn_memory_hook", _reg_turn_memory)
 
+    # C3b: Auto-learn user patterns on turn complete (Tier 0.5 cross-session memory)
+    def _reg_auto_learn() -> None:
+        from core.hooks.auto_learn import make_auto_learn_handler
+
+        name, handler = make_auto_learn_handler()
+        hooks.register(
+            HookEvent.TURN_COMPLETE,
+            handler,
+            name=name,
+            priority=84,
+        )
+
+    _register_plugin("turn_auto_learn", _reg_auto_learn)
+
     # C4: Session lifecycle hooks (OpenClaw agent:bootstrap pattern)
     def _reg_session_lifecycle() -> None:
         def _on_session_start(event: HookEvent, data: dict[str, Any]) -> None:
