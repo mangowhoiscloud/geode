@@ -483,11 +483,7 @@ def _handle_command(
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
 
         # MCP status section
-        _mcp_st = (
-            mcp_manager.get_status()
-            if mcp_manager is not None
-            else {"active": []}
-        )
+        _mcp_st = mcp_manager.get_status() if mcp_manager is not None else {"active": []}
         console.print()
         console.print("  [header]MCP Servers[/header]")
         for srv in _mcp_st["active"]:
