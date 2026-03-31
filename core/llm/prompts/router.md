@@ -85,6 +85,7 @@ Select the first applicable tool. Fall back to the second only if the first is u
 | Report generation | `generate_report` | — | — |
 | Planning | `create_plan` | — | `delegate_task` (simple plan) |
 | Parallel subtasks | `delegate_task` | `create_plan` → `approve_plan` | — |
+| Browser automation | `playwright__*` (Playwright MCP) | `playwriter__*` (Chrome extension, login-required sites) | — |
 | System status / MCP list | `check_status` | — | `analyze_ip` |
 
 ### MCP server management
