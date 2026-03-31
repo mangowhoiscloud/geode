@@ -18,6 +18,7 @@ from typing import Any
 
 from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
+from core.tools.base import tool_error
 from core.memory.project import ProjectMemory
 from core.memory.session import InMemorySessionStore
 
@@ -563,7 +564,12 @@ class NoteSaveTool:
 
         proj = _project_memory_ctx.get()
         if proj is None:
-            return {"error": "Project memory not available"}
+            return tool_error(
+                "Project memory not available.",
+                error_type="dependency",
+                recoverable=False,
+                hint="Project memory initializes from .geode/memory/. Check directory exists.",
+            )
 
         note_text = f"**{key}**: {content}"
         proj.add_insight(note_text)
@@ -594,7 +600,12 @@ class NoteReadTool:
 
         proj = _project_memory_ctx.get()
         if proj is None:
-            return {"error": "Project memory not available"}
+            return tool_error(
+                "Project memory not available.",
+                error_type="dependency",
+                recoverable=False,
+                hint="Project memory initializes from .geode/memory/. Check directory exists.",
+            )
 
         memory_text = proj.load_memory()
         if not query:

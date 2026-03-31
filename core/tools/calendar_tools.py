@@ -12,6 +12,8 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from core.tools.base import tool_error
+
 
 class CalendarListEventsTool:
     """Tool for listing calendar events."""
@@ -150,12 +152,21 @@ class CalendarCreateEventTool:
 
         adapter = get_calendar()
         if adapter is None or not adapter.is_available():
-            return {"error": "No calendar adapter available. Configure credentials."}
+            return tool_error(
+                "No calendar adapter available.",
+                error_type="dependency",
+                recoverable=False,
+                hint="Run /key to configure calendar API credentials.",
+            )
 
         title: str = kwargs["title"]
         start = _parse_datetime(kwargs["start_datetime"])
         if start is None:
-            return {"error": "Invalid start_datetime format. Use ISO format."}
+            return tool_error(
+                "Invalid start_datetime format.",
+                error_type="validation",
+                hint="Use ISO 8601 format, e.g. 2026-04-01T09:00:00.",
+            )
 
         end = _parse_datetime(kwargs.get("end_datetime"))
         if end is None:
@@ -182,7 +193,11 @@ class CalendarCreateEventTool:
                 }
             }
         except Exception as exc:
-            return {"error": f"Failed to create event: {exc}"}
+            return tool_error(
+                f"Failed to create event: {exc}",
+                error_type="network",
+                hint="Check calendar API connectivity and retry.",
+            )
 
 
 class CalendarSyncSchedulerTool:
@@ -220,14 +235,23 @@ class CalendarSyncSchedulerTool:
 
         bridge = get_calendar_bridge()
         if bridge is None:
-            return {"error": "Calendar bridge not available. Configure scheduler + calendar."}
+            return tool_error(
+                "Calendar bridge not available.",
+                error_type="dependency",
+                recoverable=False,
+                hint="Both scheduler and calendar adapters must be configured.",
+            )
 
         direction: str = kwargs.get("direction", "both")
         try:
             result = bridge.sync(direction=direction)
             return {"result": result}
         except Exception as exc:
-            return {"error": f"Calendar sync failed: {exc}"}
+            return tool_error(
+                f"Calendar sync failed: {exc}",
+                error_type="network",
+                hint="Check calendar API connectivity and retry.",
+            )
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
