@@ -1087,7 +1087,7 @@ class AgenticLoop:
 
         Called when normal compaction/prune at 95% still leaves context critical.
         Two-phase approach:
-          1. Summarize large tool results (>5% of window) to compact summaries
+          1. Summarize large tool results (>2% of window) to compact summaries
           2. Prune with halved keep_recent (keep fewer messages)
         Returns number of messages freed, or 0 if recovery failed.
         """
