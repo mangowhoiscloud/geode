@@ -120,6 +120,11 @@ class ContextAssembler:
                         career_summary = self._user_profile.get_career_summary()
                         if career_summary:
                             context["_career_summary"] = career_summary
+                    # User preferences for personalization
+                    if hasattr(self._user_profile, "get_preferences"):
+                        prefs = self._user_profile.get_preferences()
+                        if prefs:
+                            context["_user_preferences"] = prefs
                     context["_user_profile_loaded"] = True
                 else:
                     context["_user_profile_loaded"] = False

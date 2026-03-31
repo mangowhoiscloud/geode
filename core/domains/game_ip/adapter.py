@@ -35,6 +35,27 @@ def _load_cause_actions_yaml() -> dict[str, Any]:
     return data
 
 
+def _load_scoring_config() -> dict[str, Any]:
+    """Load scoring weights from config, with project-level override.
+
+    Priority: .geode/scoring_weights.yaml > built-in config/scoring_weights.yaml
+    """
+    # Project override
+    project_path = Path(".geode") / "scoring_weights.yaml"
+    if project_path.exists():
+        try:
+            data: dict[str, Any] = yaml.safe_load(project_path.read_text(encoding="utf-8"))
+            log.info("Scoring weights loaded from project override: %s", project_path)
+            return data
+        except Exception:
+            log.warning("Failed to load project scoring config, using built-in", exc_info=True)
+
+    # Built-in default
+    builtin_path = _CONFIG_DIR / "scoring_weights.yaml"
+    data = yaml.safe_load(builtin_path.read_text(encoding="utf-8"))
+    return data
+
+
 class GameIPDomain:
     """DomainPort implementation for game IP evaluation.
 
@@ -88,24 +109,34 @@ class GameIPDomain:
     # --- Scoring ---
 
     def get_scoring_weights(self) -> dict[str, float]:
-        return {
-            "exposure_lift": 0.25,
-            "quality": 0.20,
-            "recovery": 0.18,
-            "growth": 0.12,
-            "momentum": 0.20,
-            "developer": 0.05,
-        }
+        cfg = _load_scoring_config()
+        return cfg.get(
+            "weights",
+            {
+                "exposure_lift": 0.25,
+                "quality": 0.20,
+                "recovery": 0.18,
+                "growth": 0.12,
+                "momentum": 0.20,
+                "developer": 0.05,
+            },
+        )
 
     def get_confidence_multiplier_params(self) -> tuple[float, float]:
-        # final = base_score * (0.7 + 0.3 * confidence/100)
-        return (0.7, 0.3)
+        cfg = _load_scoring_config()
+        cm = cfg.get("confidence_multiplier", {})
+        return (cm.get("base_factor", 0.7), cm.get("scale_factor", 0.3))
 
     def get_tier_thresholds(self) -> list[tuple[float, str]]:
+        cfg = _load_scoring_config()
+        tiers = cfg.get("tiers", [])
+        if tiers:
+            return [(t["threshold"], t["label"]) for t in tiers]
         return [(80.0, "S"), (60.0, "A"), (40.0, "B")]
 
     def get_tier_fallback(self) -> str:
-        return "C"
+        cfg = _load_scoring_config()
+        return cfg.get("fallback_tier", "C")
 
     # --- Classification ---
 

@@ -232,7 +232,13 @@ class PromptAssembler:
         # Primary path: pre-formatted summary from ContextAssembler
         llm_summary = memory_ctx.get("_llm_summary")
         if llm_summary and isinstance(llm_summary, str):
-            return f"## Context from Memory\n{llm_summary}"
+            block = f"## Context from Memory\n{llm_summary}"
+            # Append user preferences for personalization
+            prefs = memory_ctx.get("_user_preferences")
+            if prefs and isinstance(prefs, dict):
+                pref_lines = [f"  {k}: {v}" for k, v in prefs.items()]
+                block += "\n\n## User Preferences\n" + "\n".join(pref_lines)
+            return block
 
         # Fallback path: build from individual keys (backward compatibility)
         parts: list[str] = ["## Context from Memory"]

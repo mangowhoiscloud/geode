@@ -386,7 +386,18 @@ def build_hooks(
 
     _register_plugin("audit_loggers", _reg_audit_loggers)
 
-    return hooks, run_log, stuck_detector
+    # C10: Structured metrics — p50/p95 latency, success rates
+    from core.orchestration.metrics import SessionMetrics, make_metrics_hook_handler
+
+    session_metrics = SessionMetrics()
+
+    def _reg_metrics() -> None:
+        for event_name, handler_name, handler_fn in make_metrics_hook_handler(session_metrics):
+            hooks.register(HookEvent(event_name), handler_fn, name=handler_name, priority=45)
+
+    _register_plugin("session_metrics", _reg_metrics)
+
+    return hooks, run_log, stuck_detector, session_metrics
 
 
 def build_memory(
