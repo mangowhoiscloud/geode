@@ -102,7 +102,7 @@ class _StreamingWriter:
                     line, _rest = buf.split(b"\n", 1)
                     msg = json.loads(line.decode("utf-8"))
                     if msg.get("type") == "approval_response":
-                        return msg.get("decision", "n")
+                        return str(msg.get("decision", "n"))
         except (TimeoutError, OSError, json.JSONDecodeError):
             return "n"
         finally:
