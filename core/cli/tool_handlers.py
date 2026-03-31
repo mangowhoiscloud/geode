@@ -708,14 +708,17 @@ def _build_system_handlers(
         return {"status": "ok", "action": "help", "commands": commands}
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
+        from importlib.metadata import version as _pkg_version
+
         from core.domains.game_ip.fixtures import FIXTURE_MAP as _FM
 
+        geode_version = _pkg_version("geode")
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
         mode = "full_llm" if (readiness and not readiness.force_dry_run) else "dry_run"
 
         console.print()
-        console.print("  [header]GEODE System Status[/header]")
+        console.print(f"  [header]GEODE v{geode_version}[/header]")
         console.print(f"  Model: [bold]{settings.model}[/bold]")
         console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
         ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
@@ -747,6 +750,7 @@ def _build_system_handlers(
         return {
             "status": "ok",
             "action": "status",
+            "version": geode_version,
             "model": settings.model,
             "ensemble": settings.ensemble_mode,
             "anthropic_configured": ant_ok,

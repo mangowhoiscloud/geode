@@ -200,12 +200,12 @@ Decision Tree on D-E-F axes:
 
 ## Tool Routing (AgenticLoop Direct)
 
-All free-text input goes directly to AgenticLoop. Claude sees all 47 tool definitions and autonomously selects via tool_use.
+All free-text input goes directly to AgenticLoop. Claude sees all 56 tool definitions and autonomously selects via tool_use.
 
 - `/command` -> commands.py slash command dispatch
 - Free text -> AgenticLoop.run() (while tool_use loop)
 
-Tool definitions are centrally managed in `core/tools/definitions.json` (47 tools).
+Tool definitions are centrally managed in `core/tools/definitions.json` (56 tools).
 
 **Tool Permission Levels** (spanning PolicyChain 6 layers):
 - **STANDARD**: Read/analysis tools — eligible for Sub-Agent auto_approve
