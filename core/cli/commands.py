@@ -1592,6 +1592,12 @@ def cmd_clear(args: str) -> None:
             return
 
     ctx.clear()
+
+    # Reset token tracker so stale cost/token counts don't persist
+    from core.llm.token_tracker import reset_tracker
+
+    reset_tracker()
+
     console.print(f"  [success]Conversation cleared[/success] ({msg_count} messages removed)")
     console.print()
 
