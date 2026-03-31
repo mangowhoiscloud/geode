@@ -179,9 +179,7 @@ _TOOLS_JSON_PATH = Path(__file__).resolve().parent / "definitions.json"
 
 def load_tool_definition(name: str) -> dict[str, Any]:
     """Load a single tool definition by name from definitions.json."""
-    all_tools: list[dict[str, Any]] = json.loads(
-        _TOOLS_JSON_PATH.read_text(encoding="utf-8")
-    )
+    all_tools: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
     for t in all_tools:
         if t["name"] == name:
             return t

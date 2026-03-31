@@ -952,5 +952,3 @@ def emit_node_skipped(node: str, reason: str) -> None:
         writer.send_event("node_skipped", node=node, reason=reason)
         return
     console.print(f"  [dim]⤳ Node skipped: {node} ({reason})[/dim]")
-
-
