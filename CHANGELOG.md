@@ -30,7 +30,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **200K 절대 토큰 가드** — 1M 컨텍스트 모델에서 200K 토큰 초과 시 rate limit pool 분리 방지. 퍼센트 기반 임계값(80%=800K)과 별개로 `ABSOLUTE_TOKEN_CEILING`이 tool result 요약 → compact 2단계 압축 실행
-- **LLM 친화적 에러 메시지** — `tool_error()` 헬퍼 + `classify_tool_exception()` 도입. `error_type` (validation/auth/rate_limit/network/timeout/internal), `recoverable` 플래그, `hints` 리스트로 구조화. tool_executor, MCP, web_tools, document_tools, analysis tools 적용
+- **LLM 친화적 에러 메시지** — `tool_error()` 헬퍼 + `classify_tool_exception()` 도입. `error_type` (validation/not_found/permission/connection/timeout/dependency/internal), `recoverable` 플래그, `hint`로 구조화. tool_executor, MCP, web_tools, document_tools, analysis tools 적용
+- **Graceful serve drain** — SIGTERM/SIGINT 시 3-phase shutdown: `stop_accepting()` (새 연결 차단) → `SessionLane.active_count` 폴링 (30s timeout) → component shutdown. 진행 중 세션 완료 대기
 
 ## [0.39.0] — 2026-03-31
 
