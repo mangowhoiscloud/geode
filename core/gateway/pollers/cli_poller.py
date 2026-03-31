@@ -139,8 +139,27 @@ class CLIPoller:
         self._thread.start()
         log.info("CLI channel listening on %s", self._socket_path)
 
+    def stop_accepting(self) -> None:
+        """Stop accepting new connections but let active handlers finish.
+
+        Closes the server socket and sets the stop event so the accept loop
+        exits. Active client handler threads continue running until their
+        current request completes.
+        """
+        import contextlib
+
+        self._stop_event.set()
+        if self._server:
+            with contextlib.suppress(OSError):
+                self._server.close()
+            self._server = None
+        if self._thread:
+            self._thread.join(timeout=5.0)
+            self._thread = None
+        log.info("CLI channel stopped accepting new connections")
+
     def stop(self) -> None:
-        """Stop the socket server and clean up."""
+        """Stop the socket server and clean up all clients."""
         import contextlib
 
         self._stop_event.set()
