@@ -35,7 +35,7 @@ class TestMCPHookEvents:
 
     def test_hook_event_count(self) -> None:
         """Total hook events after H6 orphan pruning."""
-        assert len(HookEvent) == 42
+        assert len(HookEvent) == 46
 
 
 # ---------------------------------------------------------------------------
