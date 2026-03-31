@@ -44,7 +44,17 @@ def _tool_spinner(label: str) -> Iterator[None]:
 
     Displays ``label`` with a spinner while the wrapped block runs,
     then clears it on exit so OperationLogger markers (✓/✗) render cleanly.
+
+    Skipped in IPC mode — thin CLI has its own ToolCallTracker spinner.
+    Running both causes ANSI cursor-up race → UI corruption.
     """
+    # IPC mode: ToolCallTracker on thin CLI handles the spinner
+    from core.cli.ui.agentic_ui import _ipc_writer_local
+
+    if getattr(_ipc_writer_local, "writer", None) is not None:
+        yield
+        return
+
     status = console.status(f"  [dim]✢ {label}[/dim]", spinner="dots", spinner_style="cyan")
     status.start()
     try:
