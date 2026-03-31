@@ -26,6 +26,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.41.0] — 2026-03-31
+
+### Fixed
+- **모델 전환 mid-call crash** — `switch_model` tool이 agentic loop 내부에서 `loop.update_model()` 직접 호출 → adapter mid-call 교체 → provider 불일치 crash. Deferred model sync로 수정: `_sync_model_from_settings()`가 라운드 경계에서 안전하게 적용. `switch_model` SAFE → WRITE 이동
+- **모델 전환 미유지** — `config_watcher`가 `.env` 변경 감지 후 `Settings()` 재생성 시 stale `os.environ`에서 원래 모델 읽어 `settings.model` 복귀. `settings.model`을 hot-reload 대상에서 제외 + `upsert_env()`에 `os.environ` 동기화 추가
+
 ## [0.40.0] — 2026-03-31
 
 ### Added
