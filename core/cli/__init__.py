@@ -916,14 +916,10 @@ def _thin_interactive_loop(
 
                         if _sys.stdin.isatty():
                             _interactive_model_picker()
-                            # Relay the selected model to serve
+                            # Relay to serve (suppress — picker already printed)
                             from core.config import settings
 
-                            response = client.send_command("/model", settings.model)
-                            output = response.get("output", "")
-                            if output:
-                                _sys.stdout.write(output)
-                                _sys.stdout.flush()
+                            client.send_command("/model", settings.model)
                         else:
                             response = client.send_command(cmd, args)
                             output = response.get("output", "")

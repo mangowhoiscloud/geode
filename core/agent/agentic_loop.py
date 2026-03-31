@@ -335,6 +335,18 @@ class AgenticLoop:
         self._save_checkpoint(user_input, round_idx=round_idx)
         if self._hooks:
             self._hooks.trigger(
+                HookEvent.SESSION_END,
+                {
+                    "model": self.model,
+                    "provider": self._provider,
+                    "session_id": self._session_id,
+                    "termination_reason": result.termination_reason,
+                    "rounds": result.rounds,
+                    "tool_count": len(result.tool_calls),
+                    "error": result.error,
+                },
+            )
+            self._hooks.trigger(
                 HookEvent.TURN_COMPLETE,
                 {
                     "user_input": user_input,
@@ -490,6 +502,19 @@ class AgenticLoop:
         if self._transcript is not None:
             self._transcript.record_session_start(model=self.model, provider=self._provider)
             self._transcript.record_user_message(user_input)
+
+        # Hook: SESSION_START
+        if self._hooks:
+            self._hooks.trigger(
+                HookEvent.SESSION_START,
+                {
+                    "model": self.model,
+                    "provider": self._provider,
+                    "session_id": self._session_id,
+                    "resumed": len(self.context.messages) > 1,
+                },
+            )
+
         messages = self.context.get_messages()
 
         system_prompt = self._build_system_prompt()
@@ -1062,7 +1087,7 @@ class AgenticLoop:
 
         Called when normal compaction/prune at 95% still leaves context critical.
         Two-phase approach:
-          1. Summarize large tool results (>5% of window) to compact summaries
+          1. Summarize large tool results (>2% of window) to compact summaries
           2. Prune with halved keep_recent (keep fewer messages)
         Returns number of messages freed, or 0 if recovery failed.
         """

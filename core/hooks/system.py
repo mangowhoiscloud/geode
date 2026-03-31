@@ -49,7 +49,7 @@ class HookEvent(Enum):
     TRIGGER_FIRED = "trigger_fired"
     POST_ANALYSIS = "post_analysis"
 
-    # Memory Autonomy (P0-C → P1.5)
+    # Memory Autonomy (triggered by memory_save/manage_rule tool handlers)
     MEMORY_SAVED = "memory_saved"
     RULE_CREATED = "rule_created"
     RULE_UPDATED = "rule_updated"
@@ -63,7 +63,7 @@ class HookEvent(Enum):
     SUBAGENT_COMPLETED = "subagent_completed"
     SUBAGENT_FAILED = "subagent_failed"
 
-    # Tool error recovery lifecycle
+    # Tool error recovery (triggered by ToolCallProcessor auto-recovery)
     TOOL_RECOVERY_ATTEMPTED = "tool_recovery_attempted"
     TOOL_RECOVERY_SUCCEEDED = "tool_recovery_succeeded"
     TOOL_RECOVERY_FAILED = "tool_recovery_failed"
