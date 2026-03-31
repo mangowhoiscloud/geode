@@ -323,9 +323,7 @@ class AgenticLoop:
             except Exception:
                 log.debug("Could not read session cost from TokenTracker")
 
-            self._transcript.record_session_end(
-                rounds=rounds, total_cost=total_cost
-            )
+            self._transcript.record_session_end(rounds=rounds, total_cost=total_cost)
         except Exception:
             log.debug("Transcript end recording failed", exc_info=True)
 
