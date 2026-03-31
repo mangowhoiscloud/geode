@@ -827,7 +827,7 @@ def _read_multiline_input(prompt: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-_LOCAL_COMMANDS = frozenset({"/help", "/clear"})
+_LOCAL_COMMANDS = frozenset({"/help"})
 
 # Commands that need TTY interaction locally, then relay the result to serve
 _TTY_LOCAL_COMMANDS = frozenset({"/model", "/auth"})
@@ -840,8 +840,8 @@ def _thin_interactive_loop(
 ) -> None:
     """Thin CLI client — all execution delegated to geode serve via IPC.
 
-    Local commands: /help, /clear
-    Everything else (including /quit, /exit): relayed to serve
+    Local commands: /help
+    Everything else (including /quit, /exit, /clear, /compact): relayed to serve
     """
     from core.cli.ipc_client import IPCClient
 
@@ -939,6 +939,10 @@ def _thin_interactive_loop(
                             _sys.stdout.write(output)
                             _sys.stdout.flush()
                     continue
+
+                # /clear: auto-force in IPC mode (no stdin for confirmation on serve)
+                if cmd == "/clear" and "--force" not in args:
+                    args = (args + " --force").strip()
 
                 # All other commands → relay to serve
                 response = client.send_command(cmd, args)
