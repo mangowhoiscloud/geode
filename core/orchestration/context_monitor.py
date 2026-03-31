@@ -126,9 +126,9 @@ def summarize_tool_results(
     """Replace large tool_result content with compact summaries.
 
     Mutates messages in-place. Returns the number of results summarized.
-    Only targets tool_result blocks exceeding 5% of the target context window.
+    Only targets tool_result blocks exceeding 2% of the target context window.
     """
-    threshold = target_window // 20  # 5% of context window in tokens
+    threshold = target_window // 50  # 2% of context window (~20K for 1M)
     summarized = 0
 
     for msg in messages:
