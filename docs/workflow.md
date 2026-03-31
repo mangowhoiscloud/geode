@@ -1,6 +1,6 @@
 # GEODE Development Workflow (Scaffold)
 
-> [README](../README.md) | [Architecture](architecture.md) | **Workflow** | [Setup](setup.md)
+> [README](../README.md) | [Architecture](architecture.md) | **Workflow** | [Setup](setup.md) | [한국어](workflow.ko.md)
 
 ## Overview
 

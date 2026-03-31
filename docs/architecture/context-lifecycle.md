@@ -1,5 +1,7 @@
 # `.geode/` -- Agent Context Lifecycle
 
+> **English** | [한국어](context-lifecycle.ko.md)
+
 The `.geode/` directory is the project-local persistent store for the agent. It survives across sessions and provides the context hierarchy that shapes every LLM call.
 
 ## Directory Layout

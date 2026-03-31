@@ -1,5 +1,7 @@
 # GEODE Orchestration Layer — Design Decision
 
+> [English](orchestration-decision.en.md) | **한국어**
+
 > **결론**: LangGraph StateGraph 자체가 오케스트레이션 레이어. 별도 레이어 불필요.
 
 ## 조사 대상

@@ -1,5 +1,7 @@
 # GEODE Hook System — 이벤트 기반 라이프사이클 제어
 
+> [English](hook-system.en.md) | **한국어**
+
 > **모듈**: `core/hooks/` (cross-cutting concern, L0~L5 전 레이어에서 접근)
 > **진입점**: `from core.hooks import HookSystem, HookEvent`
 > **이벤트**: 46개 | **등록 핸들러**: 18개 | **플러그인**: YAML + class-based

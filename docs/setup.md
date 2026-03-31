@@ -1,6 +1,6 @@
 # GEODE Setup Guide
 
-> [README](../README.md) | [Context Lifecycle](architecture/context-lifecycle.md) | [Hook System](architecture/hook-system.md) | [Workflow](workflow.md) | **Setup**
+> [README](../README.md) | [Context Lifecycle](architecture/context-lifecycle.md) | [Hook System](architecture/hook-system.md) | [Workflow](workflow.md) | **Setup** | [한국어](setup.ko.md)
 
 ## Installation
 
