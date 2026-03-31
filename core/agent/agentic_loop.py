@@ -970,6 +970,12 @@ class AgenticLoop:
         - OpenAI/GLM: no server-side compaction. Client triggers LLM-based compaction
           at 80% and emergency prune at 95%.
 
+        Absolute ceiling (200K tokens):
+        - Large-context models (1M) hit rate limit pool separation at >200K tokens.
+          Percentage thresholds (80%=800K) are too distant to catch this.
+          When estimated > 200K on a >200K-window model, force tool result
+          summarization + compact to stay under the ceiling.
+
         Compression strategy is delegated to the CONTEXT_OVERFLOW_ACTION hook handler.
         If no handler is registered or all fail, falls back to hardcoded defaults.
         """
@@ -1020,6 +1026,35 @@ class AgenticLoop:
                             metrics.usage_pct,
                             summarized,
                         )
+
+            elif metrics.is_ceiling_exceeded:
+                # Absolute 200K ceiling breached on a large-context model.
+                # Percentage is low (e.g. 20-30%) but tokens exceed the rate limit
+                # pool boundary. Summarize tool results first (lightest), then
+                # compact if still over.
+                from core.orchestration.context_monitor import (
+                    ABSOLUTE_TOKEN_CEILING,
+                    summarize_tool_results,
+                )
+
+                log.info(
+                    "Context ceiling: %d tokens > %dK ceiling (%.0f%% of %dK window) "
+                    "— compressing to avoid rate limit pool separation",
+                    metrics.estimated_tokens,
+                    ABSOLUTE_TOKEN_CEILING // 1000,
+                    metrics.usage_pct,
+                    metrics.context_window // 1000,
+                )
+
+                # Phase 1: summarize large tool results
+                summarized = summarize_tool_results(messages, ABSOLUTE_TOKEN_CEILING)
+                post = check_context(messages, self.model, system_prompt=system)
+
+                if post.is_ceiling_exceeded:
+                    # Phase 2: compact conversation
+                    strategy = {"strategy": "compact", "keep_recent": settings.compact_keep_recent}
+                    self._apply_overflow_strategy(strategy, messages, settings)
+
         except Exception:
             log.debug("Context monitor check failed", exc_info=True)
 
