@@ -447,10 +447,12 @@ class OpenAIAgenticAdapter:
 
         client = self._ensure_client(model)
         if client is None:
+            self.last_error = ValueError(f"{self.provider_name} API key not configured")
             log.warning("No API key for %s agentic loop", self.provider_name)
             return None
 
         if not self._circuit_breaker.can_execute():
+            self.last_error = RuntimeError(f"{self.provider_name} circuit breaker is OPEN")
             log.warning("%s circuit breaker is OPEN, skipping call", self.provider_name)
             return None
 

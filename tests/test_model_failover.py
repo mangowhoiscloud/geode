@@ -16,6 +16,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import anthropic
+import pytest
 from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY
 from core.llm.client import call_with_failover
 
@@ -126,7 +127,7 @@ class TestCallWithFailover:
         assert used_model is None
 
     def test_auth_error_aborts_immediately(self) -> None:
-        """AuthenticationError should NOT trigger failover — immediate abort."""
+        """AuthenticationError should NOT trigger failover — re-raised to adapter."""
         auth_err = _make_auth_error()
         call_count = {"n": 0}
 
@@ -134,16 +135,15 @@ class TestCallWithFailover:
             call_count["n"] += 1
             raise auth_err
 
-        response, used_model = asyncio.run(
-            call_with_failover(
-                [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY],
-                call_fn,
-                max_retries=3,
-                retry_base_delay=0.0,
+        with pytest.raises(anthropic.AuthenticationError):
+            asyncio.run(
+                call_with_failover(
+                    [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY],
+                    call_fn,
+                    max_retries=3,
+                    retry_base_delay=0.0,
+                )
             )
-        )
-        assert response is None
-        assert used_model is None
         # Only called once — no retry, no failover
         assert call_count["n"] == 1
 

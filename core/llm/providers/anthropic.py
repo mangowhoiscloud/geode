@@ -251,6 +251,7 @@ class ClaudeAgenticAdapter:
 
         api_key = settings.anthropic_api_key
         if not api_key:
+            self.last_error = ValueError("ANTHROPIC_API_KEY not configured")
             log.warning("No Anthropic API key for agentic loop")
             return None
 
