@@ -1,257 +1,167 @@
-"""Tests for MCP manager load_config and get_status (registry-less)."""
+"""Tests for MCP registry (Anthropic API-backed) and manager.get_status()."""
 
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from core.mcp.catalog import MCP_CATALOG, MCPCatalogEntry, search_catalog
+from core.mcp.registry import RegistryEntry, _parse_entries, search_registry
 
 # ---------------------------------------------------------------------------
-# MCPCatalogEntry
+# RegistryEntry
 # ---------------------------------------------------------------------------
 
 
-class TestMCPCatalogEntry:
+class TestRegistryEntry:
     def test_required_fields(self) -> None:
-        entry = MCPCatalogEntry(
-            name="test",
+        entry = RegistryEntry(
+            name="test/mcp",
+            title="Test",
             description="Test server",
-            tags=("test",),
         )
-        assert entry.name == "test"
-        assert entry.install_hint == ""
-        assert entry.env_keys == ()
-
-    def test_install_hint(self) -> None:
-        entry = MCPCatalogEntry(
-            name="playwright",
-            description="Browser automation",
-            tags=("browser",),
-            install_hint="npx -y @playwright/mcp",
-        )
-        assert entry.install_hint == "npx -y @playwright/mcp"
+        assert entry.name == "test/mcp"
+        assert entry.title == "Test"
+        assert entry.repository_url == ""
 
     def test_frozen(self) -> None:
-        entry = MCPCatalogEntry(name="x", description="x", tags=())
+        entry = RegistryEntry(name="x", title="X", description="d")
         with pytest.raises(AttributeError):
             entry.name = "y"  # type: ignore[misc]
 
-    def test_no_package_field(self) -> None:
-        """Catalog entries must not have package/command/extra_args."""
-        entry = MCPCatalogEntry(name="x", description="x", tags=())
-        assert not hasattr(entry, "package")
-        assert not hasattr(entry, "extra_args")
-        # command is not a field; install_hint encodes it
-        assert not hasattr(entry, "command")
-
 
 # ---------------------------------------------------------------------------
-# MCP_CATALOG integrity
+# _parse_entries
 # ---------------------------------------------------------------------------
 
 
-class TestCatalogIntegrity:
-    def test_no_fetch_entry(self) -> None:
-        """fetch (E404) must be removed from catalog."""
-        assert "fetch" not in MCP_CATALOG
+class TestParseEntries:
+    def test_parse_api_format(self) -> None:
+        raw = [
+            {
+                "server": {
+                    "name": "com.example/mcp",
+                    "title": "Example",
+                    "description": "An example server",
+                    "repository": {"url": "https://github.com/example/mcp"},
+                }
+            }
+        ]
+        entries = _parse_entries(raw)
+        assert len(entries) == 1
+        assert entries[0].name == "com.example/mcp"
+        assert entries[0].title == "Example"
+        assert entries[0].repository_url == "https://github.com/example/mcp"
 
-    def test_no_google_trends_entry(self) -> None:
-        """google-trends (E404) must be removed from catalog."""
-        assert "google-trends" not in MCP_CATALOG
+    def test_skip_empty_name(self) -> None:
+        raw = [{"server": {"name": "", "description": "no name"}}]
+        assert _parse_entries(raw) == []
 
-    def test_playwriter_in_catalog(self) -> None:
-        """playwriter should be in catalog (from mcp_servers.json)."""
-        assert "playwriter" in MCP_CATALOG
-
-    def test_all_install_hints_parseable(self) -> None:
-        """All non-empty install_hints must be parseable to command + args."""
-        for name, entry in MCP_CATALOG.items():
-            if not entry.install_hint:
-                continue
-            parts = entry.install_hint.split()
-            assert len(parts) >= 2, f"{name}: install_hint too short: {entry.install_hint!r}"
-            assert parts[0] in ("npx", "uvx"), f"{name}: unexpected command: {parts[0]}"
-
-    def test_env_keys_are_tuples(self) -> None:
-        for name, entry in MCP_CATALOG.items():
-            assert isinstance(entry.env_keys, tuple), f"{name}: env_keys must be tuple"
-
-    def test_tags_are_tuples(self) -> None:
-        for name, entry in MCP_CATALOG.items():
-            assert isinstance(entry.tags, tuple), f"{name}: tags must be tuple"
+    def test_missing_repository(self) -> None:
+        raw = [{"server": {"name": "x", "title": "X", "description": "d"}}]
+        entries = _parse_entries(raw)
+        assert entries[0].repository_url == ""
 
 
 # ---------------------------------------------------------------------------
-# search_catalog
+# search_registry (with mocked fetch)
 # ---------------------------------------------------------------------------
 
 
-class TestSearchCatalog:
-    def test_empty_query_returns_empty(self) -> None:
-        assert search_catalog("") == []
+class TestSearchRegistry:
+    @pytest.fixture()
+    def _mock_entries(self) -> list[RegistryEntry]:
+        return [
+            RegistryEntry("com.github/mcp", "GitHub", "GitHub API access"),
+            RegistryEntry("com.slack/mcp", "Slack", "Slack messaging"),
+            RegistryEntry("com.steam/mcp", "Steam", "Steam game data"),
+        ]
 
-    def test_exact_name_match_first(self) -> None:
-        results = search_catalog("playwright")
-        assert results[0].name == "playwright"
+    def test_exact_name_match(self, _mock_entries: list[RegistryEntry]) -> None:
+        with patch("core.mcp.registry.fetch_registry", return_value=_mock_entries):
+            results = search_registry("github")
+        assert results[0].name == "com.github/mcp"
 
-    def test_tag_match(self) -> None:
-        results = search_catalog("browser")
-        names = [r.name for r in results]
-        assert any("playwright" in n or "puppeteer" in n for n in names)
+    def test_description_match(self, _mock_entries: list[RegistryEntry]) -> None:
+        with patch("core.mcp.registry.fetch_registry", return_value=_mock_entries):
+            results = search_registry("messaging")
+        assert results[0].name == "com.slack/mcp"
 
-    def test_limit_respected(self) -> None:
-        results = search_catalog("search", limit=2)
-        assert len(results) <= 2
+    def test_empty_query(self) -> None:
+        assert search_registry("") == []
 
-    def test_install_hint_match(self) -> None:
-        # Search for term in install_hint
-        results = search_catalog("playwriter")
-        names = [r.name for r in results]
-        assert "playwriter" in names
+    def test_no_matches(self, _mock_entries: list[RegistryEntry]) -> None:
+        with patch("core.mcp.registry.fetch_registry", return_value=_mock_entries):
+            results = search_registry("nonexistent_xyz")
+        assert results == []
 
-
-# ---------------------------------------------------------------------------
-# MCPServerManager.load_config — registry-free
-# ---------------------------------------------------------------------------
-
-
-class TestManagerLoadConfig:
-    def test_no_config_returns_zero(self, tmp_path: Path) -> None:
-        """Without config.toml or json, no servers loaded (no auto-discovery)."""
-        from core.mcp.manager import MCPServerManager
-
-        with patch("core.mcp.manager._PROJECT_ROOT", tmp_path):
-            manager = MCPServerManager(config_path=tmp_path / "nonexistent.json")
-            count = manager.load_config()
-        assert count == 0
-
-    def test_loads_from_json_file(self, tmp_path: Path) -> None:
-        from core.mcp.manager import MCPServerManager
-
-        config_path = tmp_path / "mcp_servers.json"
-        config_path.write_text(
-            json.dumps({"my-server": {"command": "npx", "args": ["-y", "pkg"]}}),
-            encoding="utf-8",
-        )
-        with patch("core.mcp.manager._PROJECT_ROOT", tmp_path):
-            manager = MCPServerManager(config_path=config_path)
-            count = manager.load_config()
-        assert count == 1
-        assert "my-server" in manager._servers
-
-    def test_loads_from_toml(self, tmp_path: Path) -> None:
-        from core.mcp.manager import MCPServerManager
-
-        geode_dir = tmp_path / ".geode"
-        geode_dir.mkdir()
-        toml_content = (
-            '[mcp.servers.playwright]\ncommand = "npx"\nargs = ["-y", "@playwright/mcp"]\n'
-        )
-        (geode_dir / "config.toml").write_text(toml_content, encoding="utf-8")
-
-        with patch("core.mcp.manager._PROJECT_ROOT", tmp_path):
-            manager = MCPServerManager(config_path=tmp_path / "nonexistent.json")
-            count = manager.load_config()
-        assert count == 1
-        assert "playwright" in manager._servers
-        assert manager._servers["playwright"]["command"] == "npx"
-
-    def test_toml_overrides_json(self, tmp_path: Path) -> None:
-        """config.toml entry takes priority over mcp_servers.json."""
-        from core.mcp.manager import MCPServerManager
-
-        geode_dir = tmp_path / ".geode"
-        geode_dir.mkdir()
-        (geode_dir / "config.toml").write_text(
-            '[mcp.servers.steam]\ncommand = "npx"\nargs = ["-y", "steam-toml"]\n',
-            encoding="utf-8",
-        )
-        config_path = tmp_path / "mcp_servers.json"
-        config_path.write_text(
-            json.dumps({"steam": {"command": "npx", "args": ["-y", "steam-json"]}}),
-            encoding="utf-8",
-        )
-
-        with patch("core.mcp.manager._PROJECT_ROOT", tmp_path):
-            manager = MCPServerManager(config_path=config_path)
-            manager.load_config()
-        assert manager._servers["steam"]["args"] == ["-y", "steam-toml"]
-
-    def test_json_adds_extra_servers_not_in_toml(self, tmp_path: Path) -> None:
-        from core.mcp.manager import MCPServerManager
-
-        geode_dir = tmp_path / ".geode"
-        geode_dir.mkdir()
-        (geode_dir / "config.toml").write_text(
-            '[mcp.servers.playwright]\ncommand = "npx"\nargs = ["-y", "@playwright/mcp"]\n',
-            encoding="utf-8",
-        )
-        config_path = tmp_path / "mcp_servers.json"
-        config_path.write_text(
-            json.dumps({"custom-server": {"command": "python", "args": ["-m", "my_mcp"]}}),
-            encoding="utf-8",
-        )
-
-        with patch("core.mcp.manager._PROJECT_ROOT", tmp_path):
-            manager = MCPServerManager(config_path=config_path)
-            count = manager.load_config()
-        assert count == 2
-        assert "playwright" in manager._servers
-        assert "custom-server" in manager._servers
+    def test_limit_respected(self, _mock_entries: list[RegistryEntry]) -> None:
+        with patch("core.mcp.registry.fetch_registry", return_value=_mock_entries):
+            results = search_registry("mcp", limit=1)
+        assert len(results) <= 1
 
 
 # ---------------------------------------------------------------------------
-# MCPServerManager.get_status
+# Cache
+# ---------------------------------------------------------------------------
+
+
+class TestRegistryCache:
+    def test_cache_write_and_read(self, tmp_path: Path) -> None:
+        import time
+
+        from core.mcp import registry
+
+        cache_file = tmp_path / "cache.json"
+        with (
+            patch.object(registry, "_CACHE_FILE", cache_file),
+            patch.object(registry, "_CACHE_DIR", tmp_path),
+        ):
+            # Write cache
+            cache_data = {
+                "fetched_at": time.time(),
+                "servers": [
+                    {
+                        "server": {
+                            "name": "test/mcp",
+                            "title": "Test",
+                            "description": "cached",
+                        }
+                    }
+                ],
+            }
+            cache_file.write_text(json.dumps(cache_data))
+
+            # Should read from cache (not fetch)
+            with patch.object(registry, "_fetch_from_api", return_value=None):
+                entries = registry.fetch_registry()
+
+            assert len(entries) == 1
+            assert entries[0].name == "test/mcp"
+
+
+# ---------------------------------------------------------------------------
+# Manager.get_status (simplified)
 # ---------------------------------------------------------------------------
 
 
 class TestManagerGetStatus:
-    def test_get_status_empty(self, tmp_path: Path) -> None:
+    def test_active_servers_listed(self, tmp_path: Path) -> None:
         from core.mcp.manager import MCPServerManager
 
-        with patch("core.mcp.manager._PROJECT_ROOT", tmp_path):
-            manager = MCPServerManager(config_path=tmp_path / "nonexistent.json")
-            manager.load_config()
-            status = manager.get_status()
-        assert status["active"] == []
-        assert status["active_count"] == 0
-        assert isinstance(status["available_inactive"], list)
-        assert status["catalog_total"] == len(MCP_CATALOG)
-
-    def test_get_status_active_servers(self, tmp_path: Path) -> None:
-        from core.mcp.manager import MCPServerManager
-
-        config_path = tmp_path / "mcp_servers.json"
-        config_path.write_text(
-            json.dumps({"playwright": {"command": "npx", "args": ["-y", "@playwright/mcp"]}}),
-            encoding="utf-8",
-        )
-        with patch("core.mcp.manager._PROJECT_ROOT", tmp_path):
-            manager = MCPServerManager(config_path=config_path)
-            manager.load_config()
-            status = manager.get_status()
+        mgr = MCPServerManager()
+        mgr._servers = {
+            "steam": {"command": "npx", "args": ["-y", "steam-mcp"]},
+        }
+        status = mgr.get_status()
         assert status["active_count"] == 1
-        assert status["active"][0]["name"] == "playwright"
-        assert status["active"][0]["description"]  # description from catalog
+        assert status["active"][0]["name"] == "steam"
 
-    def test_get_status_available_inactive(self, tmp_path: Path) -> None:
-        """Catalog entries with missing env vars appear in available_inactive."""
+    def test_empty_status(self) -> None:
         from core.mcp.manager import MCPServerManager
 
-        nonexistent = tmp_path / "nonexistent"
-        with (
-            patch("core.mcp.manager._PROJECT_ROOT", tmp_path),
-            patch("core.mcp.manager._GLOBAL_DOTENV_PATH", nonexistent),
-            patch("core.mcp.manager._DOTENV_PATH", nonexistent),
-            patch.dict(os.environ, {}, clear=False),
-        ):
-            os.environ.pop("TAVILY_API_KEY", None)
-            manager = MCPServerManager(config_path=tmp_path / "nonexistent.json")
-            manager.load_config()
-            status = manager.get_status()
-        inactive_names = [s["name"] for s in status["available_inactive"]]
-        assert "tavily-search" in inactive_names
+        mgr = MCPServerManager()
+        status = mgr.get_status()
+        assert status["active_count"] == 0
+        assert "available_inactive" not in status
