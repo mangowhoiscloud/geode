@@ -6,6 +6,8 @@ tool_use API or autonomous agent patterns.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, Literal, Protocol, runtime_checkable
 
 # Valid values for tool metadata fields.
@@ -166,3 +168,21 @@ def classify_tool_exception(exc: Exception, tool_name: str = "") -> dict[str, An
         error_type="internal",
         hint=f"Unexpected error in {tool_name}." if tool_name else "",
     )
+
+
+# ---------------------------------------------------------------------------
+# Shared tool definition loader (was duplicated in sub_agent.py + bash_tool.py)
+# ---------------------------------------------------------------------------
+
+_TOOLS_JSON_PATH = Path(__file__).resolve().parent / "definitions.json"
+
+
+def load_tool_definition(name: str) -> dict[str, Any]:
+    """Load a single tool definition by name from definitions.json."""
+    all_tools: list[dict[str, Any]] = json.loads(
+        _TOOLS_JSON_PATH.read_text(encoding="utf-8")
+    )
+    for t in all_tools:
+        if t["name"] == name:
+            return t
+    raise KeyError(f"Tool '{name}' not found in {_TOOLS_JSON_PATH}")

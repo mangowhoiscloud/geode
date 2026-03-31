@@ -21,7 +21,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from core.agent.worker import WorkerRequest
@@ -32,6 +31,7 @@ from core.orchestration.isolated_execution import (
     IsolationResult,
 )
 from core.orchestration.task_system import Task, TaskGraph
+from core.tools.base import load_tool_definition
 
 if TYPE_CHECKING:
     from core.skills.agents import AgentRegistry
@@ -808,17 +808,4 @@ def _extract_analysis_summary(result: dict[str, Any], ip_name: str) -> dict[str,
     }
 
 
-# Tool definition loaded from centralized JSON
-_TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
-
-
-def _load_tool_definition(name: str) -> dict[str, Any]:
-    """Load a single tool definition by name from definitions.json."""
-    all_tools: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
-    for t in all_tools:
-        if t["name"] == name:
-            return t
-    raise KeyError(f"Tool '{name}' not found in {_TOOLS_JSON_PATH}")
-
-
-DELEGATE_TOOL_DEFINITION: dict[str, Any] = _load_tool_definition("delegate_task")
+DELEGATE_TOOL_DEFINITION: dict[str, Any] = load_tool_definition("delegate_task")

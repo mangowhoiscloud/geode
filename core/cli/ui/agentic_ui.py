@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.cli.ui.console import console
+from core.cli.ui.event_renderer import _fmt_tokens
 
 # Thread-local IPC writer for structured tool events.
 # When set (by CLIPoller._run_prompt_streaming), OperationLogger sends
@@ -953,8 +954,3 @@ def emit_node_skipped(node: str, reason: str) -> None:
     console.print(f"  [dim]⤳ Node skipped: {node} ({reason})[/dim]")
 
 
-def _fmt_tokens(n: int) -> str:
-    """Format token count: 1200 → 1.2k, 500 → 500."""
-    if n >= 1000:
-        return f"{n / 1000:.1f}k"
-    return str(n)

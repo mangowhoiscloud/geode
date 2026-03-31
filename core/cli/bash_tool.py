@@ -11,15 +11,15 @@ Sandbox hardening (v0.22.0):
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
 import resource
 import subprocess  # nosec B404 — intentional: BashTool requires shell execution
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
+
+from core.tools.base import load_tool_definition
 
 log = logging.getLogger(__name__)
 
@@ -155,17 +155,4 @@ class BashTool:
         return out
 
 
-# Tool definition loaded from centralized JSON
-_TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
-
-
-def _load_tool_definition(name: str) -> dict[str, Any]:
-    """Load a single tool definition by name from definitions.json."""
-    all_tools: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
-    for t in all_tools:
-        if t["name"] == name:
-            return t
-    raise KeyError(f"Tool '{name}' not found in {_TOOLS_JSON_PATH}")
-
-
-BASH_TOOL_DEFINITION: dict[str, Any] = _load_tool_definition("run_bash")
+BASH_TOOL_DEFINITION: dict[str, Any] = load_tool_definition("run_bash")
