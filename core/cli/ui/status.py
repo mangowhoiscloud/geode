@@ -61,6 +61,12 @@ class TextSpinner:
     def start(self) -> None:
         if self._quiet:
             return
+        # IPC mode: thin CLI has its own ToolCallTracker.
+        # Serve-side spinner would send raw ANSI over IPC → cursor race.
+        from core.cli.ui.agentic_ui import _ipc_writer_local
+
+        if getattr(_ipc_writer_local, "writer", None) is not None:
+            return
         self._running = True
         self._thread = threading.Thread(target=self._animate, daemon=True)
         self._thread.start()

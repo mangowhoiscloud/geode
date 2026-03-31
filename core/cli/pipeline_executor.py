@@ -200,7 +200,23 @@ def _execute_pipeline(
     config = runtime.thread_config
     input_state: GeodeState | None = initial_state
 
-    with console.status(_progress_line(done)) as status:
+    # IPC mode: skip Rich spinner (thin CLI renders its own progress).
+    # Serve-side Rich spinner sends raw ANSI over IPC → cursor race.
+    from contextlib import contextmanager
+
+    from core.cli.ui.agentic_ui import _ipc_writer_local
+
+    @contextmanager
+    def _noop_status() -> Any:
+        class _S:
+            def update(self, _msg: str) -> None:
+                pass
+
+        yield _S()
+
+    _is_ipc = getattr(_ipc_writer_local, "writer", None) is not None
+    _status_ctx = _noop_status() if _is_ipc else console.status(_progress_line(done))
+    with _status_ctx as status:
         try:
             while True:
                 for event in graph.stream(input_state, config=config):  # type: ignore[call-overload]
