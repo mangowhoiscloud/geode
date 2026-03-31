@@ -216,6 +216,32 @@ class TestGlmNativeWebSearch:
         # And it should be different from the parent
         assert GlmAgenticAdapter.agentic_call is not OpenAIAgenticAdapter.agentic_call
 
+    def test_glm_agentic_call_tracks_cost(self) -> None:
+        """GlmAgenticAdapter.agentic_call must call get_tracker().record()."""
+        import inspect
+
+        from core.llm.providers.glm import GlmAgenticAdapter
+
+        source = inspect.getsource(GlmAgenticAdapter.agentic_call)
+        assert "get_tracker" in source, "GLM agentic_call must call get_tracker().record()"
+        assert ".record(" in source, "GLM agentic_call must record token usage"
+
+    def test_glm_cost_is_nonzero(self) -> None:
+        """GLM models with non-free pricing must produce non-zero cost."""
+        from core.llm.token_tracker import TokenTracker
+
+        tracker = TokenTracker()
+        cost = tracker.calculate_cost("glm-5", 1000, 500)
+        assert cost > 0, "glm-5 should have non-zero cost"
+
+    def test_glm_free_tier_zero_cost(self) -> None:
+        """glm-4.7-flash (free tier) should produce zero cost."""
+        from core.llm.token_tracker import TokenTracker
+
+        tracker = TokenTracker()
+        cost = tracker.calculate_cost("glm-4.7-flash", 1000, 500)
+        assert cost == 0.0, "glm-4.7-flash is free tier"
+
 
 # ---------------------------------------------------------------------------
 # OpenAI: Responses API migration
