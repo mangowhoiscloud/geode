@@ -491,7 +491,10 @@ class ToolExecutor:
 
         t0 = time.monotonic()
         response = self._prompt_with_always(
-            "Allow?", f"{server}/{tool_name}", safety_level="mcp", tool_name=tool_name,
+            "Allow?",
+            f"{server}/{tool_name}",
+            safety_level="mcp",
+            tool_name=tool_name,
         )
         latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
@@ -569,7 +572,10 @@ class ToolExecutor:
 
         t0 = time.monotonic()
         response = self._prompt_with_always(
-            "Allow?", tool_name, safety_level="write", tool_name=tool_name,
+            "Allow?",
+            tool_name,
+            safety_level="write",
+            tool_name=tool_name,
         )
         latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
@@ -635,7 +641,10 @@ class ToolExecutor:
 
         t0 = time.monotonic()
         response = self._prompt_with_always(
-            "Proceed?", tool_name, safety_level="cost", tool_name=tool_name,
+            "Proceed?",
+            tool_name,
+            safety_level="cost",
+            tool_name=tool_name,
         )
         latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
@@ -698,7 +707,10 @@ class ToolExecutor:
 
         t0 = time.monotonic()
         response = self._prompt_with_always(
-            "Allow?", command, safety_level="dangerous", tool_name="run_bash",
+            "Allow?",
+            command,
+            safety_level="dangerous",
+            tool_name="run_bash",
         )
         latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
