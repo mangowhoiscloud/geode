@@ -32,7 +32,7 @@
 | graph-partial-state | graph.py 재시도 전 상태 스냅샷 (Karpathy P2) | P2 | — | 구조 변경 필요 |
 | ~~proxy-cleanup~~ | ~~구 경로 proxy 파일 최종 삭제~~ | ~~P3~~ | ~~#470~~ | **Done** |
 | e2e-phase6 | E2E 검증 Phase 6 — 서브에이전트, 스케줄러, 모델 전환, 세션 복원 | P2 | e2e-validation-plan.md | live LLM 필요 |
-| clear-compress-fix | /clear + /compress 슬래시·자연어 명령어 점검 — empty 후에도 context_overflow 발생 문제 | P1 | — | 세션 51 발견, 복구 경로 미작동 |
+| ~~clear-compress-fix~~ | ~~/clear + /compress 슬래시·자연어 명령어 점검 — empty 후에도 context_overflow 발생 문제~~ | ~~P1~~ | ~~#608~~ | **Done** v0.43.0 |
 | ~~graceful-serve-drain~~ | ~~SIGTERM 시 진행 세션 완료 대기 (graceful shutdown)~~ | ~~P1~~ | ~~#586~~ | **Done** v0.40.0 |
 | ~~mcp-simplify~~ | ~~MCP 카탈로그 단일화~~ | ~~P1~~ | ~~#469~~ | **Done** |
 | ~~scheduler-callback~~ | ~~스케줄러 callback 와이어링 — action 필드 + 큐 연결~~ | ~~P1~~ | ~~tool-mcp-architecture-review.md~~ | **Done** |
@@ -80,6 +80,7 @@
 | file-tools | Glob/Grep/Edit/Write 전용 도구 — Claude Code-style 안전한 파일 조작 | #600 | @mangowhoiscloud | 2026-03-31 |
 | tool-error-migration | tool_error() 나머지 4 파일 마이그레이션 | #604 | @mangowhoiscloud | 2026-03-31 |
 | hitl-ipc-relay | IPC HITL 양방향 승인 프로토콜 — hitl_level 0→2 + approval relay | #605 | @mangowhoiscloud | 2026-03-31 |
+| clear-reset | /clear TokenTracker 미초기화 — stale 비용/토큰 잔존 방지 | #608 | @mangowhoiscloud | 2026-03-31 |
 
 ### Done (2026-03-31 — 세션 51)
 
