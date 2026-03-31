@@ -383,8 +383,14 @@ class ToolExecutor:
 
         # Safe read-only commands skip HITL approval for reduced friction.
         # Dangerous patterns are already blocked above (validate).
+        # Commands with redirects (>, >>), pipes (|), or chaining (;, &&)
+        # are NOT safe even if they start with a safe prefix.
         cmd_stripped = command.strip()
-        is_safe_cmd = any(cmd_stripped.startswith(p) for p in SAFE_BASH_PREFIXES)
+        _UNSAFE_CHARS = frozenset(">|;")
+        has_unsafe_chars = any(c in command for c in _UNSAFE_CHARS)
+        is_safe_cmd = not has_unsafe_chars and any(
+            cmd_stripped.startswith(p) for p in SAFE_BASH_PREFIXES
+        )
 
         if not is_safe_cmd:
             # HITL level 0/1: skip bash approval entirely

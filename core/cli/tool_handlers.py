@@ -1001,6 +1001,10 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     "web_fetch": ("core.tools.web_tools", "WebFetchTool"),
     "general_web_search": ("core.tools.web_tools", "GeneralWebSearchTool"),
     "read_document": ("core.tools.document_tools", "ReadDocumentTool"),
+    "glob_files": ("core.tools.file_tools", "GlobTool"),
+    "grep_files": ("core.tools.file_tools", "GrepTool"),
+    "edit_file": ("core.tools.file_tools", "EditFileTool"),
+    "write_file": ("core.tools.file_tools", "WriteFileTool"),
     "note_save": ("core.tools.memory_tools", "NoteSaveTool"),
     "note_read": ("core.tools.memory_tools", "NoteReadTool"),
     # profile

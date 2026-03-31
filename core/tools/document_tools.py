@@ -31,9 +31,20 @@ class ReadDocumentTool:
         file_path_str: str = kwargs["file_path"]
         max_lines: int = kwargs.get("max_lines", 200)
 
-        file_path = Path(file_path_str).resolve()
+        raw_path = Path(file_path_str)
 
         from core.tools.base import tool_error
+
+        # Security: reject symlinks before resolve (prevents traversal)
+        if raw_path.is_symlink():
+            return tool_error(
+                f"Symlinks not allowed: {file_path_str}",
+                error_type="permission",
+                recoverable=False,
+                context={"file_path": file_path_str},
+            )
+
+        file_path = raw_path.resolve()
 
         # Security: ensure path is within project directory
         try:
