@@ -51,7 +51,15 @@ class TestToolError:
 
     @pytest.mark.parametrize(
         "error_type",
-        ["validation", "not_found", "permission", "connection", "timeout", "dependency", "internal"],
+        [
+            "validation",
+            "not_found",
+            "permission",
+            "connection",
+            "timeout",
+            "dependency",
+            "internal",
+        ],
     )
     def test_all_error_types_accepted(self, error_type: str):
         result = tool_error("test", error_type=error_type)

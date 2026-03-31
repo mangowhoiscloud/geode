@@ -402,7 +402,9 @@ class TestMCPFallbackHints:
         result = mgr.call_tool("unknown_server", "some_tool", {})
         assert "error" in result
         # No fallback server → hint should not mention fallback
-        assert "instead" not in result.get("hint", "").lower() or "playwright" not in result.get("hint", "")
+        assert "instead" not in result.get("hint", "").lower() or "playwright" not in result.get(
+            "hint", ""
+        )
 
     def test_failed_call_with_hint(self) -> None:
         """playwriter call fails → error includes playwright fallback hint."""
