@@ -74,6 +74,7 @@
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
 | auto-learn-hook | TURN_COMPLETE 자동 학습 — 5 regex 디텍터, learned.md 직접 저장 | #623 | @mangowhoiscloud | 2026-04-01 |
+| mcp-tool-dedup | MCP 도구 이름 dedup 누락 — playwright+playwriter 중복 → API 400 수정 | #628 | @mangowhoiscloud | 2026-04-01 |
 
 ### Done (2026-03-31 — 세션 52)
 
