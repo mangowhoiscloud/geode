@@ -110,7 +110,7 @@ class GameIPDomain:
 
     def get_scoring_weights(self) -> dict[str, float]:
         cfg = _load_scoring_config()
-        return cfg.get(
+        weights: dict[str, float] = cfg.get(
             "weights",
             {
                 "exposure_lift": 0.25,
@@ -121,22 +121,23 @@ class GameIPDomain:
                 "developer": 0.05,
             },
         )
+        return weights
 
     def get_confidence_multiplier_params(self) -> tuple[float, float]:
         cfg = _load_scoring_config()
-        cm = cfg.get("confidence_multiplier", {})
+        cm: dict[str, float] = cfg.get("confidence_multiplier", {})
         return (cm.get("base_factor", 0.7), cm.get("scale_factor", 0.3))
 
     def get_tier_thresholds(self) -> list[tuple[float, str]]:
         cfg = _load_scoring_config()
-        tiers = cfg.get("tiers", [])
+        tiers: list[dict[str, Any]] = cfg.get("tiers", [])
         if tiers:
             return [(t["threshold"], t["label"]) for t in tiers]
         return [(80.0, "S"), (60.0, "A"), (40.0, "B")]
 
     def get_tier_fallback(self) -> str:
         cfg = _load_scoring_config()
-        return cfg.get("fallback_tier", "C")
+        return str(cfg.get("fallback_tier", "C"))
 
     # --- Classification ---
 

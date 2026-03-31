@@ -129,8 +129,8 @@ def build_hooks(
     run_id: str,
     log_dir: Path | str | None,
     stuck_timeout_s: float,
-) -> tuple[HookSystem, RunLog, StuckDetector]:
-    """Build HookSystem with RunLog and StuckDetector handlers."""
+) -> tuple[HookSystem, RunLog, StuckDetector, Any]:
+    """Build HookSystem with RunLog, StuckDetector, and SessionMetrics."""
     hooks: HookSystem = HookSystem()
 
     # Run log + hook handler
