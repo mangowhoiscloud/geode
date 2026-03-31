@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from core.orchestration.context_monitor import (
+    ABSOLUTE_TOKEN_CEILING,
     WARNING_THRESHOLD,
     ContextMetrics,
     adaptive_prune,
@@ -144,6 +145,41 @@ class TestCheckContext:
         metrics = check_context([{"role": "user", "content": huge_msg}], "glm-5")
         # 2M chars / 4 = 500K tokens vs 80K window → well above 100%
         assert metrics.usage_pct > 100.0
+
+    def test_ceiling_exceeded_on_large_model(self):
+        """200K+ tokens on a 1M model should set is_ceiling_exceeded."""
+        # 250K tokens → 1M chars
+        big_msg = "x" * 1_000_000
+        msgs = [{"role": "user", "content": big_msg}]
+        metrics = check_context(msgs, "claude-opus-4-6")
+        assert metrics.estimated_tokens > ABSOLUTE_TOKEN_CEILING
+        assert metrics.is_ceiling_exceeded
+        # But not warning/critical (250K/1M = 25%)
+        assert not metrics.is_warning
+        assert not metrics.is_critical
+
+    def test_ceiling_not_exceeded_small_context(self):
+        """Small messages on 1M model should not trigger ceiling."""
+        msgs = [{"role": "user", "content": "hello"}]
+        metrics = check_context(msgs, "claude-opus-4-6")
+        assert not metrics.is_ceiling_exceeded
+
+    def test_ceiling_not_triggered_for_200k_model(self):
+        """200K-window models are excluded — percentage thresholds handle them."""
+        # Even if tokens > 200K, the model's window IS 200K, so ceiling
+        # should not apply (percentage thresholds already fire).
+        big_msg = "x" * 1_000_000
+        msgs = [{"role": "user", "content": big_msg}]
+        metrics = check_context(msgs, "glm-5")
+        # context_window == 200K, NOT > 200K → ceiling should be False
+        assert not metrics.is_ceiling_exceeded
+        # But percentage thresholds should fire
+        assert metrics.is_warning or metrics.is_critical
+
+    def test_ceiling_field_exists(self):
+        """ContextMetrics includes is_ceiling_exceeded field."""
+        metrics = check_context([{"role": "user", "content": "hi"}], "claude-opus-4-6")
+        assert isinstance(metrics.is_ceiling_exceeded, bool)
 
 
 # ---------------------------------------------------------------------------

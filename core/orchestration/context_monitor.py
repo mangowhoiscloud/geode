@@ -20,6 +20,12 @@ log = logging.getLogger(__name__)
 WARNING_THRESHOLD = 80.0
 CRITICAL_THRESHOLD = 95.0
 
+# Absolute token ceiling — prevents rate limit pool separation on large-context models.
+# Anthropic (and others) assign requests >200K tokens to a separate, more restrictive
+# rate limit pool. This guard triggers compression before crossing that boundary,
+# even when the percentage-based thresholds (80%/95%) are far away (e.g. 200K/1M = 20%).
+ABSOLUTE_TOKEN_CEILING = 200_000
+
 # Approximate chars per token (conservative estimate)
 CHARS_PER_TOKEN = 4
 
@@ -34,6 +40,7 @@ class ContextMetrics:
     remaining_tokens: int
     is_warning: bool
     is_critical: bool
+    is_ceiling_exceeded: bool = False
 
 
 def estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
@@ -92,6 +99,12 @@ def check_context(
     usage_pct = estimated / context_window * 100
     remaining = max(context_window - estimated, 0)
 
+    # Ceiling exceeded: only relevant for large-context models where percentage
+    # thresholds are too distant (e.g. 200K/1M = 20%, but 80% threshold = 800K).
+    ceiling_exceeded = (
+        estimated > ABSOLUTE_TOKEN_CEILING and context_window > ABSOLUTE_TOKEN_CEILING
+    )
+
     return ContextMetrics(
         estimated_tokens=estimated,
         context_window=context_window,
@@ -99,6 +112,7 @@ def check_context(
         remaining_tokens=remaining,
         is_warning=usage_pct >= WARNING_THRESHOLD,
         is_critical=usage_pct >= CRITICAL_THRESHOLD,
+        is_ceiling_exceeded=ceiling_exceeded,
     )
 
 
