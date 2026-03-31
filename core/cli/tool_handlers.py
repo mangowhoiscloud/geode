@@ -765,12 +765,16 @@ def _build_system_handlers(
 
     def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
         model_hint = kwargs.get("model_hint", "")
+        # Only update settings — do NOT call loop.update_model() here.
+        # The AgenticLoop checks for model drift at the start of each round
+        # and applies the change safely between LLM calls (not mid-call).
         cmd_model(model_hint)
         return {
             "status": "ok",
-            "action": "model",
+            "action": "model_deferred",
             "current_model": settings.model,
             "ensemble": settings.ensemble_mode,
+            "note": "Model change applied. Will take effect on next round.",
         }
 
     def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:

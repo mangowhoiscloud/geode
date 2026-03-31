@@ -373,6 +373,27 @@ class AgenticLoop:
         new_count = len(self._tools)
         return max(0, new_count - old_count)
 
+    def _sync_model_from_settings(self) -> None:
+        """Check if settings.model diverged and apply the change safely.
+
+        Called at the top of each agentic round — between LLM calls, never
+        mid-call.  This replaces the old pattern of calling update_model()
+        from inside a tool handler, which swapped the adapter while the
+        current round was still processing tool results.
+        """
+        try:
+            from core.config import settings
+
+            if settings.model != self.model:
+                log.info(
+                    "Model drift detected: loop=%s settings=%s — syncing",
+                    self.model,
+                    settings.model,
+                )
+                self.update_model(settings.model)
+        except Exception:
+            log.debug("Model drift check failed", exc_info=True)
+
     def update_model(self, model: str, provider: str | None = None) -> None:
         """Update model and provider without reconstructing the loop.
 
@@ -540,6 +561,10 @@ class AgenticLoop:
 
             is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")
+
+            # Model drift check: settings may have changed via switch_model tool
+            # or /model command between rounds. Apply safely before next LLM call.
+            self._sync_model_from_settings()
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
             self._check_announced_results(messages)

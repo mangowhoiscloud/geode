@@ -203,6 +203,39 @@ class TestUpdateModelIntegration:
             loop.update_model("glm-5", "zhipuai")
         # No crash
 
+    def test_sync_model_from_settings_detects_drift(self):
+        """_sync_model_from_settings picks up settings.model change."""
+        ctx = ConversationContext()
+        loop = _make_loop(ctx, model="claude-opus-4-6")
+        assert loop.model == "claude-opus-4-6"
+
+        from core.config import settings
+
+        old = settings.model
+        try:
+            settings.model = "glm-5"
+            with patch("core.cli.ui.agentic_ui.update_session_model"):
+                loop._sync_model_from_settings()
+            assert loop.model == "glm-5"
+        finally:
+            settings.model = old
+
+    def test_sync_model_from_settings_noop_when_same(self):
+        """No update when settings.model matches loop.model."""
+        ctx = ConversationContext()
+        loop = _make_loop(ctx, model="claude-opus-4-6")
+
+        from core.config import settings
+
+        old = settings.model
+        try:
+            settings.model = "claude-opus-4-6"
+            with patch.object(loop, "update_model") as mock_update:
+                loop._sync_model_from_settings()
+                mock_update.assert_not_called()
+        finally:
+            settings.model = old
+
 
 # ---------------------------------------------------------------------------
 # usage_pct cap removed

@@ -14,7 +14,6 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "search_ips",
         "show_help",
         "check_status",
-        "switch_model",
         "memory_search",
         "manage_rule",
         "web_fetch",
@@ -47,6 +46,7 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "calendar_create_event",
         "calendar_sync_scheduler",
         "manage_context",
+        "switch_model",
     }
 )
 
