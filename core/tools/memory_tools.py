@@ -50,6 +50,28 @@ def set_org_memory(mem: MonoLakeOrganizationMemory | None) -> None:
     _org_memory_ctx.set(mem)
 
 
+# Hook system injection (same pattern as core/llm/router.py)
+_hooks_ctx: ContextVar[Any] = ContextVar("memory_tools_hooks", default=None)
+
+
+def set_memory_hooks(hooks: Any) -> None:
+    """Inject HookSystem so memory tool execute() methods can fire events."""
+    _hooks_ctx.set(hooks)
+
+
+def _fire_hook(event_name: str, data: dict[str, Any]) -> None:
+    """Fire a hook event if HookSystem is available. No-op otherwise."""
+    hooks = _hooks_ctx.get()
+    if hooks is None:
+        return
+    try:
+        from core.hooks import HookEvent
+
+        hooks.trigger(HookEvent(event_name), data)
+    except Exception:
+        log.debug("Hook fire failed for %s", event_name, exc_info=True)
+
+
 def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePort:
     """Get the session store to use, falling back to default."""
     if store is not None:
@@ -319,6 +341,8 @@ class MemorySaveTool:
                     insight = str(data.get("content", data))
                     proj.add_insight(insight)
 
+        _fire_hook("memory_saved", {"key": session_id, "persistent": persistent})
+
         return {
             "result": {
                 "session_id": session_id,
@@ -381,6 +405,8 @@ class RuleCreateTool:
             return {"result": {"created": False, "error": "Project memory not available"}}
 
         success = proj.create_rule(rule_name, paths, content)
+        if success:
+            _fire_hook("rule_created", {"name": rule_name, "paths": paths})
         return {
             "result": {
                 "created": success,
@@ -430,6 +456,8 @@ class RuleUpdateTool:
             return {"result": {"updated": False, "error": "Project memory not available"}}
 
         success = proj.update_rule(rule_name, content)
+        if success:
+            _fire_hook("rule_updated", {"name": rule_name})
         return {
             "result": {
                 "updated": success,
@@ -470,6 +498,8 @@ class RuleDeleteTool:
             return {"result": {"deleted": False, "error": "Project memory not available"}}
 
         success = proj.delete_rule(rule_name)
+        if success:
+            _fire_hook("rule_deleted", {"name": rule_name})
         return {
             "result": {
                 "deleted": success,

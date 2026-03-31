@@ -1714,6 +1714,19 @@ def serve(
                 _serve_session_lane.cleanup_idle()
             _time.sleep(1.0)
     finally:
+        # --- Phase 0: notify shutdown hook ---
+        try:
+            if _gw_services and _gw_services.hook_system:
+                from core.hooks import HookEvent
+
+                _active_count = _serve_session_lane.active_count if _serve_session_lane else 0
+                _gw_services.hook_system.trigger(
+                    HookEvent.SHUTDOWN_STARTED,
+                    {"active_sessions": _active_count},
+                )
+        except Exception:
+            log.debug("SHUTDOWN_STARTED hook failed", exc_info=True)
+
         # --- Phase 1: stop accepting new connections ---
         # Close the server socket so no new CLI clients connect during drain.
         # Active client handler threads continue running.
