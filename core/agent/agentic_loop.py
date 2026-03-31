@@ -74,16 +74,19 @@ def get_agentic_tools(
         mcp_tools: Optional MCP tool definitions to include.
     """
     tools = list(_BASE_TOOLS)
+    existing_names = {t["name"] for t in tools}
     if registry:
-        existing_names = {t["name"] for t in tools}
         for tool_def in registry.to_anthropic_tools():
             if tool_def["name"] not in existing_names:
+                existing_names.add(tool_def["name"])
                 tools.append(tool_def)
-    # Merge MCP tools into the unified list
+    # Merge MCP tools into the unified list (dedup across servers)
     if mcp_tools:
         existing_names = {t["name"] for t in tools}
         for mcp_tool in mcp_tools:
-            if mcp_tool.get("name") not in existing_names:
+            name = mcp_tool.get("name")
+            if name and name not in existing_names:
+                existing_names.add(name)
                 tools.append(mcp_tool)
     return tools
 
