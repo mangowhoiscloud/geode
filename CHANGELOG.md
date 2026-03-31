@@ -26,6 +26,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.45.0] — 2026-04-01
+
+### Added
+- **SessionMetrics** — Hook 기반 p50/p95 latency, error rate, tool success rate 실시간 집계. LLM_CALL_END 이벤트에서 per-model 퍼센타일 추적
+- **User preferences → 시스템 프롬프트 주입** — Tier 0.5 preferences.json을 `## User Preferences` 섹션으로 LLM context에 주입하여 개인화 강화
+- **Scoring weights 설정화** — 하드코딩 weights를 `scoring_weights.yaml`로 외부화. `.geode/scoring_weights.yaml` 프로젝트 override 지원
+
 ## [0.44.0] — 2026-04-01
 
 ### Changed
