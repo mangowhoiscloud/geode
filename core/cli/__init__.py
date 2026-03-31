@@ -1746,7 +1746,8 @@ def serve(
                 )
                 log.warning(
                     "Drain timeout: %d sessions still active after %ds",
-                    _remaining, _drain_timeout_s,
+                    _remaining,
+                    _drain_timeout_s,
                 )
             else:
                 console.print("  [dim]All sessions drained.[/dim]")
