@@ -982,16 +982,19 @@ class AgenticLoop:
                 strategy = self._resolve_overflow_strategy(metrics, settings)
                 if strategy.get("strategy") == "compact":
                     self._apply_overflow_strategy(strategy, messages, settings)
-                elif self._provider == "anthropic":
-                    log.info(
-                        "Context at %.0f%% — server-side compaction will handle cleanup",
-                        metrics.usage_pct,
-                    )
                 else:
-                    log.info(
-                        "Context at %.0f%% — below compaction threshold",
-                        metrics.usage_pct,
-                    )
+                    # All providers at 80%+: proactively summarize large tool results
+                    # to prevent overflow on next round (server compaction only works
+                    # if the request fits in the window)
+                    from core.orchestration.context_monitor import summarize_tool_results
+
+                    summarized = summarize_tool_results(messages, metrics.context_window)
+                    if summarized > 0:
+                        log.info(
+                            "Context at %.0f%%: summarized %d large tool results",
+                            metrics.usage_pct,
+                            summarized,
+                        )
         except Exception:
             log.debug("Context monitor check failed", exc_info=True)
 
