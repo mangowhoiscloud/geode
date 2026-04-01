@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-04-01 (세션 54 — cross-provider model switch fix)
+> 마지막 갱신: 2026-04-01 (세션 55 — HITL IPC approval 5-bug fix)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -62,6 +62,12 @@
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-04-01 — 세션 55)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| hitl-approval-fix | HITL IPC approval 5-bug fix — buf 미갱신, stale response, tool_name, safety_level, 이중 프롬프트 | #630 | @mangowhoiscloud | 2026-04-01 |
 
 ### Done (2026-04-01 — 세션 54)
 
