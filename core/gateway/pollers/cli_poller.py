@@ -98,8 +98,8 @@ class _StreamingWriter:
                 if not chunk:
                     return "n"
                 buf += chunk
-                if b"\n" in buf:
-                    line, _rest = buf.split(b"\n", 1)
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
                     msg = json.loads(line.decode("utf-8"))
                     if msg.get("type") == "approval_response":
                         return str(msg.get("decision", "n"))
@@ -350,6 +350,11 @@ class CLIPoller:
 
         if msg_type == "resume":
             return self._handle_resume(msg, loop, conversation)
+
+        # Stale approval_response from a timed-out request — silently drop
+        if msg_type == "approval_response":
+            log.debug("Dropping stale approval_response: %s", msg.get("decision"))
+            return {"type": "ack"}
 
         return {"type": "error", "message": f"Unknown message type: {msg_type}"}
 

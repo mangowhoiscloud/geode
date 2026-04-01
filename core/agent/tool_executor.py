@@ -143,7 +143,14 @@ class ToolExecutor:
         except Exception:
             log.debug("Hook fire failed for %s", event_name, exc_info=True)
 
-    def _prompt_with_always(self, label: str, detail: str, *, safety_level: str = "write") -> str:
+    def _prompt_with_always(
+        self,
+        label: str,
+        detail: str,
+        *,
+        safety_level: str = "write",
+        tool_name: str = "",
+    ) -> str:
         """Show a [Y/n/A] prompt and return 'y', 'n', or 'a'.
 
         Uses IPC approval relay callback if available (thin-client mode),
@@ -151,7 +158,7 @@ class ToolExecutor:
         """
         # IPC mode: relay approval to thin client via callback
         if self._approval_callback is not None:
-            return self._approval_callback(label, detail, safety_level)
+            return self._approval_callback(tool_name or label, detail, safety_level)
 
         # Direct terminal mode
         from core.cli import _restore_terminal
@@ -463,14 +470,15 @@ class ToolExecutor:
 
     def _confirm_mcp(self, server: str, tool_name: str) -> bool:
         """Prompt user for MCP tool confirmation with A=Always option."""
-        from core.cli import _restore_terminal
+        if self._approval_callback is None:
+            from core.cli import _restore_terminal
 
-        _restore_terminal()
-        console.print()
-        console.print("  [warning]MCP tool requires approval[/warning]")
-        console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
-        console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
-        console.print()
+            _restore_terminal()
+            console.print()
+            console.print("  [warning]MCP tool requires approval[/warning]")
+            console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
+            console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
+            console.print()
 
         self._fire_hook(
             "tool_approval_requested",
@@ -482,7 +490,12 @@ class ToolExecutor:
         )
 
         t0 = time.monotonic()
-        response = self._prompt_with_always("Allow?", f"{server}/{tool_name}")
+        response = self._prompt_with_always(
+            "Allow?",
+            f"{server}/{tool_name}",
+            safety_level="mcp",
+            tool_name=tool_name,
+        )
         latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
             self._always_approved_categories.add(f"mcp:{server}")
@@ -520,32 +533,33 @@ class ToolExecutor:
 
     def _confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         """Prompt user for write operation confirmation."""
-        from core.cli import _restore_terminal
+        if self._approval_callback is None:
+            from core.cli import _restore_terminal
 
-        _restore_terminal()
-        summary = ""
-        if tool_name == "memory_save":
-            summary = tool_input.get("content", tool_input.get("value", ""))[:80]
-        elif tool_name == "note_save":
-            summary = tool_input.get("content", "")[:80]
-        elif tool_name == "set_api_key":
-            summary = f"provider={tool_input.get('provider', '?')}"
-        elif tool_name == "manage_auth":
-            summary = f"action={tool_input.get('action', '?')}"
-        elif tool_name == "profile_update":
-            fields = [k for k in ("role", "expertise", "name", "team") if tool_input.get(k)]
-            summary = f"fields={','.join(fields)}" if fields else "profile update"
-        elif tool_name == "profile_preference":
-            summary = f"{tool_input.get('key', '?')}={tool_input.get('value', '?')}"
-        elif tool_name == "profile_learn":
-            summary = tool_input.get("pattern", "")[:80]
+            _restore_terminal()
+            summary = ""
+            if tool_name == "memory_save":
+                summary = tool_input.get("content", tool_input.get("value", ""))[:80]
+            elif tool_name == "note_save":
+                summary = tool_input.get("content", "")[:80]
+            elif tool_name == "set_api_key":
+                summary = f"provider={tool_input.get('provider', '?')}"
+            elif tool_name == "manage_auth":
+                summary = f"action={tool_input.get('action', '?')}"
+            elif tool_name == "profile_update":
+                fields = [k for k in ("role", "expertise", "name", "team") if tool_input.get(k)]
+                summary = f"fields={','.join(fields)}" if fields else "profile update"
+            elif tool_name == "profile_preference":
+                summary = f"{tool_input.get('key', '?')}={tool_input.get('value', '?')}"
+            elif tool_name == "profile_learn":
+                summary = tool_input.get("pattern", "")[:80]
 
-        console.print()
-        console.print("  [warning]Write operation requires approval[/warning]")
-        console.print(f"  [dim]Tool:[/dim]    [bold]{tool_name}[/bold]")
-        if summary:
-            console.print(f"  [dim]Summary:[/dim] {summary}")
-        console.print()
+            console.print()
+            console.print("  [warning]Write operation requires approval[/warning]")
+            console.print(f"  [dim]Tool:[/dim]    [bold]{tool_name}[/bold]")
+            if summary:
+                console.print(f"  [dim]Summary:[/dim] {summary}")
+            console.print()
 
         self._fire_hook(
             "tool_approval_requested",
@@ -557,7 +571,12 @@ class ToolExecutor:
         )
 
         t0 = time.monotonic()
-        response = self._prompt_with_always("Allow?", tool_name)
+        response = self._prompt_with_always(
+            "Allow?",
+            tool_name,
+            safety_level="write",
+            tool_name=tool_name,
+        )
         latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
             self._always_approved_categories.add("write")
@@ -595,20 +614,21 @@ class ToolExecutor:
 
     def _confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
         """Prompt user for cost confirmation on expensive tools with A=Always option."""
-        from core.cli import _restore_terminal
+        if self._approval_callback is None:
+            from core.cli import _restore_terminal
 
-        _restore_terminal()
-        console.print()
-        console.print("  [warning]$ Cost confirmation[/warning]")
-        console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
-        console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
-        # Show pipeline model info for analysis tools
-        if tool_name in ("analyze_ip", "compare_ips", "batch_analyze"):
-            from core.config import ANTHROPIC_PRIMARY, get_node_model
+            _restore_terminal()
+            console.print()
+            console.print("  [warning]$ Cost confirmation[/warning]")
+            console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
+            console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
+            # Show pipeline model info for analysis tools
+            if tool_name in ("analyze_ip", "compare_ips", "batch_analyze"):
+                from core.config import ANTHROPIC_PRIMARY, get_node_model
 
-            primary = get_node_model("analyst") or ANTHROPIC_PRIMARY
-            console.print(f"  [dim]Pipeline model:[/dim] {primary}")
-        console.print()
+                primary = get_node_model("analyst") or ANTHROPIC_PRIMARY
+                console.print(f"  [dim]Pipeline model:[/dim] {primary}")
+            console.print()
 
         self._fire_hook(
             "tool_approval_requested",
@@ -620,7 +640,12 @@ class ToolExecutor:
         )
 
         t0 = time.monotonic()
-        response = self._prompt_with_always("Proceed?", tool_name)
+        response = self._prompt_with_always(
+            "Proceed?",
+            tool_name,
+            safety_level="cost",
+            tool_name=tool_name,
+        )
         latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
             self._always_approved_categories.add("cost")
@@ -658,15 +683,18 @@ class ToolExecutor:
 
     def _request_approval(self, command: str, reason: str) -> bool:
         """Prompt user for bash command approval with A=Always option."""
-        from core.cli import _restore_terminal
+        # In IPC mode, the thin CLI renders its own approval prompt from
+        # the approval_request message — skip duplicate console output.
+        if self._approval_callback is None:
+            from core.cli import _restore_terminal
 
-        _restore_terminal()
-        console.print()
-        console.print("  [warning]Bash command requires approval[/warning]")
-        console.print(f"  [dim]Command:[/dim] [value]{command}[/value]")
-        if reason:
-            console.print(f"  [dim]Reason:[/dim]  {reason}")
-        console.print()
+            _restore_terminal()
+            console.print()
+            console.print("  [warning]Bash command requires approval[/warning]")
+            console.print(f"  [dim]Command:[/dim] [value]{command}[/value]")
+            if reason:
+                console.print(f"  [dim]Reason:[/dim]  {reason}")
+            console.print()
 
         self._fire_hook(
             "tool_approval_requested",
@@ -678,7 +706,12 @@ class ToolExecutor:
         )
 
         t0 = time.monotonic()
-        response = self._prompt_with_always("Allow?", command)
+        response = self._prompt_with_always(
+            "Allow?",
+            command,
+            safety_level="dangerous",
+            tool_name="run_bash",
+        )
         latency_ms = (time.monotonic() - t0) * 1000
         if response == "a":
             self._always_approved_categories.add("bash")

@@ -233,8 +233,15 @@ class IPCClient:
         detail = msg.get("detail", "")
         level = msg.get("safety_level", "write")
 
+        _LEVEL_LABELS = {
+            "write": "Write",
+            "dangerous": "Dangerous",
+            "mcp": "MCP",
+            "cost": "Cost",
+        }
+        label = _LEVEL_LABELS.get(level, level.title())
+
         c.print()
-        label = "Write" if level == "write" else "Dangerous"
         c.print(f"  [warning]{label} tool requires approval[/warning]")
         c.print(f"  [dim]Tool:[/dim] [bold]{tool}[/bold]")
         if detail:
