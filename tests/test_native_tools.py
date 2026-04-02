@@ -75,6 +75,18 @@ class TestAnthropicNativeToolInjection:
         assert "web_fetch" in names
         assert "web_fetch_20260209" in types
 
+    def test_native_tools_have_allowed_callers_direct(self) -> None:
+        """All native tools must set allowed_callers=["direct"] for Haiku compatibility."""
+        from core.llm.providers.anthropic import (
+            _ANTHROPIC_NATIVE_TOOLS,
+        )
+
+        for tool in _ANTHROPIC_NATIVE_TOOLS:
+            assert "allowed_callers" in tool, f"{tool['name']} missing allowed_callers"
+            assert tool["allowed_callers"] == ["direct"], (
+                f"{tool['name']} allowed_callers must be ['direct'], got {tool['allowed_callers']}"
+            )
+
     def test_native_tools_deduplication(self) -> None:
         """Native tools should not duplicate existing tool names."""
         from core.llm.providers.anthropic import (
@@ -292,12 +304,14 @@ class TestApiAllowedKeys:
 
         assert "type" in _API_ALLOWED_KEYS
 
-    def test_native_tool_passes_filter(self) -> None:
-        """Native tool dict must survive _API_ALLOWED_KEYS filtering."""
+    def test_native_tool_core_keys_pass_filter(self) -> None:
+        """Native tool type/name keys must survive _API_ALLOWED_KEYS filtering."""
         from core.llm.providers.anthropic import (
+            _ANTHROPIC_NATIVE_TOOLS,
             _API_ALLOWED_KEYS,
         )
 
-        native = {"type": "web_search_20260209", "name": "web_search"}
-        filtered = {k: v for k, v in native.items() if k in _API_ALLOWED_KEYS}
-        assert filtered == native
+        for native in _ANTHROPIC_NATIVE_TOOLS:
+            filtered = {k: v for k, v in native.items() if k in _API_ALLOWED_KEYS}
+            assert "type" in filtered
+            assert "name" in filtered

@@ -207,8 +207,8 @@ def retry_with_backoff(
 _API_ALLOWED_KEYS = frozenset({"name", "description", "input_schema", "cache_control", "type"})
 
 _ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
-    {"type": "web_search_20260209", "name": "web_search"},
-    {"type": "web_fetch_20260209", "name": "web_fetch"},
+    {"type": "web_search_20260209", "name": "web_search", "allowed_callers": ["direct"]},
+    {"type": "web_fetch_20260209", "name": "web_fetch", "allowed_callers": ["direct"]},
 ]
 
 
