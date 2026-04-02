@@ -751,8 +751,7 @@ def emit_llm_retry(delay_s: int, attempt: int, max_attempts: int) -> None:
         )
         return
     console.print(
-        f"  [warning]~ LLM retry in {delay_s}s"
-        f" (attempt {attempt}/{max_attempts})[/warning]"
+        f"  [warning]~ LLM retry in {delay_s}s (attempt {attempt}/{max_attempts})[/warning]"
     )
 
 
