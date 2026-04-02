@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Model switch breadcrumb** — `/model` 전환 시 대화에 전환 마커 주입하여 새 모델이 이전 모델의 응답을 현재 상태로 착각하지 않도록 방지 (Claude Code SDK `createModelSwitchBreadcrumbs` 패턴)
+
 ### Fixed
 - **Haiku model switch 3-bug fix** — (B3) `compact-2026-01-12` beta header를 Haiku에 전송하여 400 에러 → 모델별 조건부 주입, (B1) `/model` context guard dead code — `set_conversation_context()` caller 0개 → `arun()` 진입 시 wire, (B2) `check_context()` overhead 500 하드코딩 → 실측 10K 기반 `_DEFAULT_TOOLS_OVERHEAD` 적용
 - **Haiku native tool 400 error** — Anthropic server tools(`web_search`, `web_fetch`)에 `allowed_callers=["direct"]` 미설정으로 Haiku 4.5에서 "programmatic tool calling not supported" 400 에러 발생. 모든 Anthropic 모델 호환되도록 수정
