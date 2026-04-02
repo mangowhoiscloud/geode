@@ -734,17 +734,32 @@ def _sigint_handler(signum: int, frame: Any) -> None:
 def _build_prompt_session() -> Any:
     """Create a prompt_toolkit PromptSession with history + GEODE styling.
 
+    multiline=True so that pasted multi-line text stays in the buffer
+    instead of each newline triggering a separate submit. Enter submits,
+    Escape+Enter inserts a real newline.
+
     Includes a custom Backspace/Delete key binding that forces a full
     renderer redraw after deletion — fixes wide-char (Korean jamo) ghost
     artifacts where the display doesn't update even though the buffer is
     correctly modified.
     """
     from prompt_toolkit import PromptSession
+    from prompt_toolkit.filters import is_done
     from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.history import FileHistory
     from prompt_toolkit.key_binding import KeyBindings
 
     kb = KeyBindings()
+
+    @kb.add("enter", filter=~is_done)
+    def _enter(event: Any) -> None:
+        """Enter always submits (like single-line mode)."""
+        event.current_buffer.validate_and_handle()
+
+    @kb.add("escape", "enter", filter=~is_done)
+    def _newline(event: Any) -> None:
+        """Escape+Enter inserts a real newline for intentional multi-line."""
+        event.current_buffer.insert_text("\n")
 
     @kb.add("backspace")
     def _backspace(event: Any) -> None:
@@ -765,7 +780,7 @@ def _build_prompt_session() -> Any:
         history=FileHistory(str(history_path)),
         message=HTML("<b>&gt;</b> "),
         enable_history_search=True,
-        multiline=False,
+        multiline=True,
         key_bindings=kb,
     )
 
@@ -797,7 +812,11 @@ def _read_multiline_input(prompt: str) -> str:
             # Restore default SIGINT so prompt_toolkit can handle Ctrl-C internally.
             # Our custom handler interferes with prompt_toolkit's input loop.
             signal.signal(signal.SIGINT, _original_sigint)
-            text: str = str(session.prompt()).strip()
+            raw: str = str(session.prompt()).strip()
+            # Join pasted multi-line text into a single line.
+            # Intentional newlines (Esc+Enter) are preserved by the caller
+            # via "\n" detection in the slash command guard.
+            text = " ".join(raw.splitlines()) if "\n" in raw else raw
         except (KeyboardInterrupt, EOFError):
             raise
         except Exception:
