@@ -206,6 +206,19 @@ def retry_with_backoff(
 
 _API_ALLOWED_KEYS = frozenset({"name", "description", "input_schema", "cache_control", "type"})
 
+# Models that support server-side context management + compaction beta.
+# Haiku 4.5 (2025-10-01) predates compact-2026-01-12 and rejects the beta
+# header with a 400 whose message contains "context" — misclassified as
+# context_overflow.  Only 1M-context models are known to support it.
+_CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
+    {
+        "claude-opus-4-6",
+        "claude-opus-4-5",
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-5",
+    }
+)
+
 _ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
     {"type": "web_search_20260209", "name": "web_search", "allowed_callers": ["direct"]},
     {"type": "web_fetch_20260209", "name": "web_fetch", "allowed_callers": ["direct"]},
@@ -272,11 +285,31 @@ class ClaudeAgenticAdapter:
 
         failover_models = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
 
-        # Compaction trigger: 80% of model context window
-        ctx_window = MODEL_CONTEXT_WINDOW.get(model, 200_000)
-        compact_trigger = max(50_000, int(ctx_window * 0.8))
-
         async def _do_call(m: str) -> Any:
+            # Server-side context management only for models that support it.
+            # Haiku 4.5 rejects the compact beta → 400 misclassified as overflow.
+            extra_h: dict[str, str] = {}
+            extra_b: dict[str, Any] = {}
+            if m in _CONTEXT_MGMT_MODELS:
+                m_window = MODEL_CONTEXT_WINDOW.get(m, 200_000)
+                m_trigger = max(50_000, int(m_window * 0.8))
+                extra_h["anthropic-beta"] = "context-management-2025-06-27,compact-2026-01-12"
+                extra_b["context_management"] = {
+                    "edits": [
+                        {
+                            "type": "clear_tool_uses_20250919",
+                            "keep": {"type": "tool_uses", "value": 5},
+                        },
+                        {
+                            "type": "compact_20260112",
+                            "trigger": {
+                                "type": "input_tokens",
+                                "value": m_trigger,
+                            },
+                        },
+                    ]
+                }
+
             return await self._client.messages.create(  # type: ignore[union-attr]
                 model=m,
                 system=system,
@@ -285,26 +318,8 @@ class ClaudeAgenticAdapter:
                 tool_choice=tool_choice,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                extra_headers={
-                    "anthropic-beta": "context-management-2025-06-27,compact-2026-01-12",
-                },
-                extra_body={
-                    "context_management": {
-                        "edits": [
-                            {
-                                "type": "clear_tool_uses_20250919",
-                                "keep": {"type": "tool_uses", "value": 5},
-                            },
-                            {
-                                "type": "compact_20260112",
-                                "trigger": {
-                                    "type": "input_tokens",
-                                    "value": compact_trigger,
-                                },
-                            },
-                        ]
-                    }
-                },
+                extra_headers=extra_h if extra_h else None,
+                extra_body=extra_b if extra_b else None,
             )
 
         try:

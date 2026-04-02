@@ -251,6 +251,70 @@ class TestUsagePctNoCap:
 
 
 # ---------------------------------------------------------------------------
+# B3: Model-aware beta headers
+# ---------------------------------------------------------------------------
+
+
+class TestContextMgmtModels:
+    """_CONTEXT_MGMT_MODELS must gate beta header injection."""
+
+    def test_opus_in_context_mgmt(self):
+        from core.llm.providers.anthropic import _CONTEXT_MGMT_MODELS
+
+        assert "claude-opus-4-6" in _CONTEXT_MGMT_MODELS
+
+    def test_haiku_not_in_context_mgmt(self):
+        from core.llm.providers.anthropic import _CONTEXT_MGMT_MODELS
+
+        assert "claude-haiku-4-5-20251001" not in _CONTEXT_MGMT_MODELS
+
+    def test_sonnet_in_context_mgmt(self):
+        from core.llm.providers.anthropic import _CONTEXT_MGMT_MODELS
+
+        assert "claude-sonnet-4-6" in _CONTEXT_MGMT_MODELS
+
+
+# ---------------------------------------------------------------------------
+# B2: check_context overhead uses measured default
+# ---------------------------------------------------------------------------
+
+
+class TestCheckContextOverhead:
+    def test_default_overhead_is_10k(self):
+        from core.orchestration.context_monitor import _DEFAULT_TOOLS_OVERHEAD
+
+        assert _DEFAULT_TOOLS_OVERHEAD == 10_000
+
+    def test_small_conversation_includes_overhead(self):
+        msgs = [{"role": "user", "content": "hello"}]
+        metrics = check_context(msgs, "claude-haiku-4-5-20251001")
+        # Even a tiny conversation should estimate > 10K due to default overhead
+        assert metrics.estimated_tokens >= 10_000
+
+    def test_custom_tools_tokens_overrides_default(self):
+        msgs = [{"role": "user", "content": "hello"}]
+        m1 = check_context(msgs, "glm-5", tools_tokens=500)
+        m2 = check_context(msgs, "glm-5", tools_tokens=20_000)
+        assert m2.estimated_tokens > m1.estimated_tokens
+
+
+# ---------------------------------------------------------------------------
+# B1: set_conversation_context wired in arun
+# ---------------------------------------------------------------------------
+
+
+class TestConversationContextWired:
+    def test_set_conversation_context_called(self):
+        """arun must call set_conversation_context so /model guard works."""
+        import inspect
+
+        from core.agent.agentic_loop import AgenticLoop
+
+        source = inspect.getsource(AgenticLoop.arun)
+        assert "set_conversation_context" in source
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

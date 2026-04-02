@@ -29,6 +29,10 @@ ABSOLUTE_TOKEN_CEILING = 200_000
 # Approximate chars per token (conservative estimate)
 CHARS_PER_TOKEN = 4
 
+# Default overhead for system prompt + tool definitions (measured: ~10K tokens).
+# System prompt ~2.7K + 56 base tools ~7.3K = ~10K.
+_DEFAULT_TOOLS_OVERHEAD = 10_000
+
 
 @dataclass(frozen=True, slots=True)
 class ContextMetrics:
@@ -81,8 +85,13 @@ def check_context(
     model: str,
     *,
     system_prompt: str = "",
+    tools_tokens: int = 0,
 ) -> ContextMetrics:
     """Check context window health for the given conversation.
+
+    Args:
+        tools_tokens: Estimated tokens for tool definitions sent to the API.
+            Defaults to _DEFAULT_TOOLS_OVERHEAD (~10K) when 0.
 
     Returns a ContextMetrics snapshot with usage percentage and thresholds.
     """
@@ -90,11 +99,10 @@ def check_context(
 
     context_window = MODEL_CONTEXT_WINDOW.get(model, 200_000)
 
-    # Estimate tokens: system prompt + messages + response overhead (~500)
     system_tokens = len(system_prompt) // CHARS_PER_TOKEN if system_prompt else 0
     message_tokens = estimate_message_tokens(messages)
-    response_overhead = 500  # reserve for response + tool definitions
-    estimated = system_tokens + message_tokens + response_overhead
+    overhead = tools_tokens if tools_tokens > 0 else _DEFAULT_TOOLS_OVERHEAD
+    estimated = system_tokens + message_tokens + overhead
 
     usage_pct = estimated / context_window * 100
     remaining = max(context_window - estimated, 0)

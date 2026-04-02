@@ -10,15 +10,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Opus%204.6-1M-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Opus 4.6">
-  <img src="https://img.shields.io/badge/Sonnet%204.6-1M-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Sonnet 4.6">
-  <img src="https://img.shields.io/badge/Haiku%204.5-200K-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Haiku 4.5">
-  <img src="https://img.shields.io/badge/GPT--5.4-1M-412991?style=flat-square&logo=openai&logoColor=white" alt="GPT-5.4">
-  <img src="https://img.shields.io/badge/GPT--5.2-128K-412991?style=flat-square&logo=openai&logoColor=white" alt="GPT-5.2">
-  <img src="https://img.shields.io/badge/GPT--4.1-1M-412991?style=flat-square&logo=openai&logoColor=white" alt="GPT-4.1">
-  <img src="https://img.shields.io/badge/GLM--5-200K-1a73e8?style=flat-square" alt="GLM-5">
-  <img src="https://img.shields.io/badge/GLM--5--turbo-200K-1a73e8?style=flat-square" alt="GLM-5-turbo">
-  <img src="https://img.shields.io/badge/GLM--4.7--flash-free-1a73e8?style=flat-square" alt="GLM-4.7-flash">
+  <img src="https://img.shields.io/badge/Anthropic-Opus_4.6-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.6">
+  <img src="https://img.shields.io/badge/OpenAI-GPT--5.4-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.4">
+  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5-1a73e8?style=flat-square" alt="ZhipuAI GLM-5">
+  <img src="https://img.shields.io/badge/+6_fallback-models-555?style=flat-square" alt="+6 fallback models">
 </p>
 
 [한국어](README.ko.md)
