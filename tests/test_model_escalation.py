@@ -11,7 +11,7 @@ Feature 4: Cross-provider escalation
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.agent.agentic_loop import AgenticLoop
 from core.agent.conversation import ConversationContext
@@ -39,6 +39,7 @@ def _make_loop(
         model=model,
         provider=provider,
         max_rounds=10,
+        quiet=True,
     )
     return loop
 
@@ -186,8 +187,8 @@ class TestModelEscalation:
         assert result.text == "Hello from escalated model"
         assert result.termination_reason == "natural"
 
-    def test_arun_no_escalation_on_single_failure(self) -> None:
-        """arun() does NOT escalate after a single failure (below threshold)."""
+    def test_arun_retries_on_single_failure_then_succeeds(self) -> None:
+        """arun() retries with backoff on single failure (below threshold), no escalation."""
         import asyncio
 
         loop = _make_loop()
@@ -209,13 +210,14 @@ class TestModelEscalation:
             patch.object(loop, "_try_model_escalation") as mock_esc,
             patch.object(loop, "_build_system_prompt", return_value="system"),
             patch.object(loop, "_try_decompose", return_value=None),
+            patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             result = asyncio.run(loop.arun("test prompt"))
 
-        # Single failure = below threshold, no escalation
+        # Single failure → backoff retry → success on 2nd call
         mock_esc.assert_not_called()
-        # Should have returned error after 1st failure (didn't hit threshold)
-        assert result.termination_reason == "llm_error"
+        assert result.termination_reason == "natural"
+        assert call_count == 2
 
     def test_arun_resets_failure_counter_on_success(self) -> None:
         """Successful LLM response resets the consecutive failure counter."""

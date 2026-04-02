@@ -248,6 +248,7 @@ class AgenticLoop:
         # Feature 3: Model escalation on consecutive LLM failures
         self._consecutive_llm_failures: int = 0
         self._ESCALATION_THRESHOLD: int = 2
+        self._LLM_RETRY_CAP: int = 5  # max retries before giving up
 
         # Feature 5: Backpressure on consecutive tool failures
         self._total_consecutive_tool_errors: int = 0
@@ -412,7 +413,12 @@ class AgenticLoop:
             log.debug("Model drift check failed", exc_info=True)
         return False
 
-    def update_model(self, model: str, provider: str | None = None) -> None:
+    def update_model(
+        self,
+        model: str,
+        provider: str | None = None,
+        reason: str = "user_switch",
+    ) -> None:
         """Update model and provider without reconstructing the loop.
 
         Resolves a fresh adapter when the provider changes. Within the
@@ -437,7 +443,7 @@ class AgenticLoop:
         if old_model != model:
             from core.cli.ui.agentic_ui import emit_model_switched
 
-            emit_model_switched(old_model, model, "user_switch")
+            emit_model_switched(old_model, model, reason)
             if self._hooks:
                 from core.hooks import HookEvent
 
@@ -446,7 +452,7 @@ class AgenticLoop:
                     {
                         "from_model": old_model,
                         "to_model": model,
-                        "reason": "user_switch",
+                        "reason": reason,
                     },
                 )
 
@@ -707,8 +713,9 @@ class AgenticLoop:
                     _ipc_writer.send_event("thinking_end")
 
             if response is None:
-                # Emit classified error for UX (severity + actionable hint)
+                # Classify error for type-specific retry strategy
                 adapter_exc = getattr(self._adapter, "last_error", None)
+                _et = "unknown"
                 if adapter_exc is not None:
                     from core.llm.errors import classify_llm_error
 
@@ -726,6 +733,36 @@ class AgenticLoop:
                             )
                             log.info("Context overflow recovery succeeded — retrying LLM call")
                             continue  # retry with pruned context
+                        # Recovery failed — context is unrecoverably large
+                        self._notify_context_event(
+                            "exhausted",
+                            original_count=len(messages),
+                            new_count=len(messages),
+                        )
+                        self._sync_messages_to_context(messages)
+                        result = AgenticResult(
+                            text=_context_exhausted_message(user_input),
+                            tool_calls=self._tool_processor.tool_log,
+                            rounds=round_idx + 1,
+                            error="context_exhausted",
+                            termination_reason="context_exhausted",
+                        )
+                        return self._finalize_and_return(result, user_input, round_idx + 1)
+
+                    # Non-retryable errors → immediate exit (no retry budget waste)
+                    if _et in ("auth", "bad_request"):
+                        if not self._quiet:
+                            from core.cli.ui.agentic_ui import emit_llm_error
+
+                            emit_llm_error(_et, _sev, _hint, self.model, self._provider)
+                        detail = self._last_llm_error or str(adapter_exc)
+                        result = AgenticResult(
+                            text=f"LLM call failed ({detail}).",
+                            rounds=round_idx + 1,
+                            error="llm_call_failed",
+                            termination_reason="llm_error",
+                        )
+                        return self._finalize_and_return(result, user_input, round_idx + 1)
 
                     if not self._quiet:
                         from core.cli.ui.agentic_ui import emit_llm_error
@@ -739,30 +776,106 @@ class AgenticLoop:
                             attempt=self._consecutive_llm_failures + 1,
                         )
 
-                # Auto-checkpoint before escalation/failure so user can resume
+                    if self._hooks:
+                        self._hooks.trigger(
+                            HookEvent.LLM_CALL_FAILED,
+                            {
+                                "model": self.model,
+                                "provider": self._provider,
+                                "error_type": _et,
+                                "severity": _sev,
+                                "attempt": self._consecutive_llm_failures + 1,
+                            },
+                        )
+
+                # Auto-checkpoint before escalation/retry so user can resume
                 self._sync_messages_to_context(messages)
                 self._save_checkpoint(user_input, round_idx=round_idx)
 
-                # Feature 3/4: Model escalation on consecutive LLM failures
                 self._consecutive_llm_failures += 1
-                if self._consecutive_llm_failures >= self._ESCALATION_THRESHOLD:
+
+                # Rate limit → immediate model escalation (different model = different quota)
+                if _et == "rate_limit":
                     old_model = self.model
                     escalated = self._try_model_escalation()
                     if escalated:
-                        # Emit structured event for thin client
                         from core.cli.ui.agentic_ui import emit_model_escalation
 
-                        emit_model_escalation(
-                            old_model,
-                            self.model,
-                            self._consecutive_llm_failures,
+                        emit_model_escalation(old_model, self.model, self._consecutive_llm_failures)
+                        self._consecutive_llm_failures = 0
+                        messages[:] = self.context.messages  # re-sync adapted context
+                        continue
+
+                # Non-rate-limit errors: compact context + same model retry first,
+                # model switch only as last resort (downgrade loses quality).
+                if self._consecutive_llm_failures >= self._ESCALATION_THRESHOLD:
+                    recovered = self._aggressive_context_recovery(system_prompt, messages)
+                    if recovered:
+                        self._notify_context_event(
+                            "prune",
+                            original_count=len(messages) + recovered,
+                            new_count=len(messages),
                         )
                         log.info(
-                            "Model escalated after %d consecutive failures, retrying",
+                            "Context compacted after %d failures — retrying same model (%s)",
                             self._consecutive_llm_failures,
+                            self.model,
                         )
                         self._consecutive_llm_failures = 0
                         continue
+
+                    # Context compaction failed — model switch as last resort
+                    old_model = self.model
+                    escalated = self._try_model_escalation()
+                    if escalated:
+                        from core.cli.ui.agentic_ui import emit_model_escalation
+
+                        emit_model_escalation(old_model, self.model, self._consecutive_llm_failures)
+                        log.info(
+                            "Context compaction insufficient, model escalated: %s → %s",
+                            old_model,
+                            self.model,
+                        )
+                        self._consecutive_llm_failures = 0
+                        messages[:] = self.context.messages  # re-sync adapted context
+                        continue
+
+                # Below retry cap: backoff and retry (don't break the loop)
+                if self._consecutive_llm_failures < self._LLM_RETRY_CAP:
+                    import asyncio as _asyncio
+
+                    delay = min(2**self._consecutive_llm_failures, 30)
+                    log.info(
+                        "LLM call failed (%s) — retrying in %ds (attempt %d/%d)",
+                        _et,
+                        delay,
+                        self._consecutive_llm_failures,
+                        self._LLM_RETRY_CAP,
+                    )
+                    if not self._quiet:
+                        from core.cli.ui.agentic_ui import emit_llm_retry
+
+                        emit_llm_retry(
+                            delay,
+                            self._consecutive_llm_failures,
+                            self._LLM_RETRY_CAP,
+                        )
+                    if self._hooks:
+                        self._hooks.trigger(
+                            HookEvent.LLM_CALL_RETRY,
+                            {
+                                "model": self.model,
+                                "provider": self._provider,
+                                "error_type": _et,
+                                "delay_s": delay,
+                                "attempt": self._consecutive_llm_failures,
+                                "max_attempts": self._LLM_RETRY_CAP,
+                            },
+                        )
+                    await _asyncio.sleep(delay)
+                    continue  # retry without incrementing round_idx
+
+                # All retries exhausted — surface error
                 detail = self._last_llm_error or "unknown error"
                 text = (
                     f"LLM call failed ({detail}). "
@@ -1572,7 +1685,7 @@ class AgenticLoop:
                     next_model,
                     self._provider,
                 )
-                self.update_model(next_model, self._provider)
+                self.update_model(next_model, self._provider, reason="failure_escalation")
                 return True
 
         # Current provider's chain exhausted — try cross-provider (Feature 4)
@@ -1586,7 +1699,9 @@ class AgenticLoop:
                     fallback_model,
                     fallback_provider,
                 )
-                self.update_model(fallback_model, fallback_provider)
+                self.update_model(
+                    fallback_model, fallback_provider, reason="cross_provider_escalation"
+                )
                 return True
 
         log.warning("Model escalation failed: no more fallback models available")

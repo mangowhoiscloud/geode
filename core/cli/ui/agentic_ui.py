@@ -739,6 +739,22 @@ def emit_model_escalation(from_model: str, to_model: str, failures: int) -> None
     )
 
 
+def emit_llm_retry(delay_s: int, attempt: int, max_attempts: int) -> None:
+    """Emit llm_retry event when retrying after LLM failure with backoff."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "llm_retry",
+            delay_s=delay_s,
+            attempt=attempt,
+            max_attempts=max_attempts,
+        )
+        return
+    console.print(
+        f"  [warning]~ LLM retry in {delay_s}s (attempt {attempt}/{max_attempts})[/warning]"
+    )
+
+
 def emit_cost_budget_exceeded(budget: float, actual: float) -> None:
     """Emit cost_budget_exceeded event when session cost hits limit."""
     writer = getattr(_ipc_writer_local, "writer", None)
