@@ -157,7 +157,7 @@ class TestAgenticLoop:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Test that a text-only response returns immediately."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
 
         # Mock LLM returning text only (no tool_use)
         mock_response = MagicMock()
@@ -184,7 +184,7 @@ class TestAgenticLoop:
 
     def test_run_with_tool_use(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test tool_use → tool_result → text response flow."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
 
         # Round 1: LLM calls list_ips tool
         tool_response = MagicMock()
@@ -226,7 +226,7 @@ class TestAgenticLoop:
 
     def test_run_max_rounds(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test max rounds limit."""
-        loop = AgenticLoop(context, executor, max_rounds=2)
+        loop = AgenticLoop(context, executor, max_rounds=2, quiet=True)
 
         # Always return tool_use → never ends
         tool_response = MagicMock()
@@ -253,10 +253,17 @@ class TestAgenticLoop:
         assert result.termination_reason == "max_rounds"
 
     def test_run_llm_failure(self, context: ConversationContext, executor: ToolExecutor) -> None:
-        """Test graceful handling of LLM call failure."""
-        loop = AgenticLoop(context, executor)
+        """Test graceful handling of LLM call failure (exhausts retry cap)."""
+        from unittest.mock import AsyncMock
 
-        with patch.object(loop, "_call_llm", return_value=None):
+        loop = AgenticLoop(context, executor, quiet=True)
+
+        with (
+            patch.object(loop, "_call_llm", return_value=None),
+            patch.object(loop, "_aggressive_context_recovery", return_value=0),
+            patch.object(loop, "_try_model_escalation", return_value=False),
+            patch("asyncio.sleep", new=AsyncMock(return_value=None)),
+        ):
             result = loop.run("test")
 
         assert result.error == "llm_call_failed"
@@ -264,7 +271,7 @@ class TestAgenticLoop:
 
     def test_context_preserved(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test that conversation context is maintained across runs."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
 
         mock_response = MagicMock()
         mock_response.stop_reason = "end_turn"
@@ -293,7 +300,7 @@ class TestAgenticLoop:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """On the last round, tool_choice=none forces text output."""
-        loop = AgenticLoop(context, executor, max_rounds=3)
+        loop = AgenticLoop(context, executor, max_rounds=3, quiet=True)
 
         call_kwargs: list[dict[str, Any]] = []
 
@@ -415,7 +422,7 @@ class TestAgenticLoop:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Test _build_system_prompt returns non-empty string."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
         prompt = loop._build_system_prompt()
         assert isinstance(prompt, str)
         assert len(prompt) > 100
@@ -427,7 +434,7 @@ class TestAgenticLoop:
         from core.llm.client import get_usage_accumulator, reset_usage_accumulator
 
         reset_usage_accumulator()
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
 
         mock_response = MagicMock()
         mock_response.usage = MagicMock(input_tokens=500, output_tokens=200)
@@ -444,7 +451,7 @@ class TestAgenticLoop:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Test _track_usage with no usage data."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
         mock_response = MagicMock()
         mock_response.usage = None
         loop._track_usage(mock_response)  # should not raise
@@ -453,7 +460,7 @@ class TestAgenticLoop:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Test _track_usage swallows exceptions."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
         mock_response = MagicMock()
         mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
 
@@ -677,21 +684,21 @@ class TestAgenticLoopTracing:
         """Verify that run() method exists and is callable (tracing is a decorator)."""
         context = ConversationContext(max_turns=5)
         executor = ToolExecutor()
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
         assert callable(loop.run)
 
     def test_call_llm_has_traceable_attribute(self) -> None:
         """Verify that _call_llm() method exists and is callable."""
         context = ConversationContext(max_turns=5)
         executor = ToolExecutor()
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
         assert callable(loop._call_llm)
 
     def test_tracing_passthrough_without_langsmith(self) -> None:
         """Without LANGCHAIN_TRACING_V2/API_KEY, _maybe_traceable is a no-op."""
         context = ConversationContext(max_turns=5)
         executor = ToolExecutor()
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
 
         # run() should still work normally
         mock_response = MagicMock()
@@ -737,7 +744,7 @@ class TestAgenticLoopEdgeCases:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Test response with 2+ tool_use blocks processed in one round."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
 
         # Round 1: LLM calls 2 tools simultaneously
         tool_response = MagicMock()
@@ -782,7 +789,7 @@ class TestAgenticLoopEdgeCases:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Test _serialize_content with mixed text + tool_use blocks."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
 
         text_block = MagicMock()
         text_block.type = "text"
@@ -806,7 +813,7 @@ class TestAgenticLoopEdgeCases:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Test _extract_text with no text blocks (only tool_use blocks)."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
 
         tool_block = MagicMock()
         tool_block.type = "tool_use"
@@ -819,7 +826,7 @@ class TestAgenticLoopEdgeCases:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Test _extract_text joins multiple text blocks."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
 
         block1 = MagicMock()
         block1.type = "text"
@@ -836,7 +843,7 @@ class TestAgenticLoopEdgeCases:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Verify agentic adapter is created at construction time."""
-        loop = AgenticLoop(context, executor)
+        loop = AgenticLoop(context, executor, quiet=True)
         assert loop._adapter is not None
         assert loop._adapter.provider_name == "anthropic"
 
@@ -967,7 +974,7 @@ class TestAgenticLoopToolCallRendering:
         ctx = ConversationContext()
         handler = MagicMock(return_value={"status": "ok", "tier": "S", "score": 81.3})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
-        loop = AgenticLoop(ctx, executor)
+        loop = AgenticLoop(ctx, executor, quiet=True)
 
         # Build a response with tool_use
         tool_block = MagicMock()
@@ -992,7 +999,7 @@ class TestAgenticLoopToolCallRendering:
         ctx = ConversationContext()
         handler = MagicMock(return_value={"tier": "S", "score": 81.3})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
-        loop = AgenticLoop(ctx, executor)
+        loop = AgenticLoop(ctx, executor, quiet=True)
 
         tool_block = MagicMock()
         tool_block.type = "tool_use"
@@ -1050,7 +1057,7 @@ class TestMessagePruning:
     def _make_loop(self) -> AgenticLoop:
         ctx = ConversationContext()
         executor = ToolExecutor(action_handlers={}, auto_approve=True)
-        return AgenticLoop(ctx, executor)
+        return AgenticLoop(ctx, executor, quiet=True)
 
     def test_no_prune_under_threshold(self) -> None:
         """Messages <= 10 should not be pruned."""

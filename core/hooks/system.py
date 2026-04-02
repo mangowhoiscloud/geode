@@ -85,6 +85,8 @@ class HookEvent(Enum):
     # LLM call lifecycle (model-level latency/cost observability)
     LLM_CALL_START = "llm_call_start"
     LLM_CALL_END = "llm_call_end"
+    LLM_CALL_FAILED = "llm_call_failed"
+    LLM_CALL_RETRY = "llm_call_retry"
 
     # Tool approval HITL lifecycle
     TOOL_APPROVAL_REQUESTED = "tool_approval_requested"
