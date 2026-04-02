@@ -513,6 +513,11 @@ class AgenticLoop:
         self._tool_processor.reset()
         self._op_logger.reset()
 
+        # Wire conversation context so /model command guard can check size
+        from core.cli.commands import set_conversation_context
+
+        set_conversation_context(self.context)
+
         # Lazy MCP tool refresh: if tools were empty at init (MCP not yet connected),
         # try to load them now. This handles the startup timing gap.
         if self._mcp_manager is not None and len(self._tools) < TOOL_LAZY_LOAD_THRESHOLD:
