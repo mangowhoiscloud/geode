@@ -210,12 +210,14 @@ _API_ALLOWED_KEYS = frozenset({"name", "description", "input_schema", "cache_con
 # Haiku 4.5 (2025-10-01) predates compact-2026-01-12 and rejects the beta
 # header with a 400 whose message contains "context" — misclassified as
 # context_overflow.  Only 1M-context models are known to support it.
-_CONTEXT_MGMT_MODELS: frozenset[str] = frozenset({
-    "claude-opus-4-6",
-    "claude-opus-4-5",
-    "claude-sonnet-4-6",
-    "claude-sonnet-4-5",
-})
+_CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
+    {
+        "claude-opus-4-6",
+        "claude-opus-4-5",
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-5",
+    }
+)
 
 _ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
     {"type": "web_search_20260209", "name": "web_search", "allowed_callers": ["direct"]},
@@ -291,9 +293,7 @@ class ClaudeAgenticAdapter:
             if m in _CONTEXT_MGMT_MODELS:
                 m_window = MODEL_CONTEXT_WINDOW.get(m, 200_000)
                 m_trigger = max(50_000, int(m_window * 0.8))
-                extra_h["anthropic-beta"] = (
-                    "context-management-2025-06-27,compact-2026-01-12"
-                )
+                extra_h["anthropic-beta"] = "context-management-2025-06-27,compact-2026-01-12"
                 extra_b["context_management"] = {
                     "edits": [
                         {
