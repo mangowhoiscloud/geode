@@ -458,9 +458,7 @@ class AgenticLoop:
                     "You are now the new model. Do not reference the previous "
                     "model's responses as current state."
                 )
-                self.context.add_assistant_message(
-                    f"Understood. I am now {model}."
-                )
+                self.context.add_assistant_message(f"Understood. I am now {model}.")
 
         # Proactively adapt context for the new model's context window
         self._adapt_context_for_model(model)
