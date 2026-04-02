@@ -218,6 +218,9 @@ class IPCClient:
                 "pipeline_result",
                 "feedback_loop",
                 "node_skipped",
+                # Internal protocol acks — silently drop
+                "ack",
+                "exit_ack",
             ):
                 if on_event is not None:
                     on_event(response)
@@ -226,9 +229,8 @@ class IPCClient:
 
     def _handle_approval_request(self, msg: dict[str, Any]) -> str:
         """Display approval prompt to user and return decision."""
-        from rich.console import Console
+        from core.cli.ui.console import console as c
 
-        c = Console()
         tool = msg.get("tool_name", "?")
         detail = msg.get("detail", "")
         level = msg.get("safety_level", "write")
