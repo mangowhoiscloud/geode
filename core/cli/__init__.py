@@ -937,7 +937,7 @@ def _thin_interactive_loop(
                 if output:
                     import sys as _sys
 
-                    _sys.stdout.write(output)
+                    _sys.stdout.write(str(output))
                     _sys.stdout.flush()
                 if response.get("status") == "error":
                     console.print(f"  [error]{response.get('message', 'Command failed')}[/error]")
@@ -1020,6 +1020,10 @@ def _render_ipc_response(response: dict[str, Any], *, streamed: bool = False) ->
                 parts.append(f"{len(tool_calls)} tools")
             if parts:
                 console.print(f"  [dim]{' · '.join(parts)}[/dim]")
+        return
+
+    # Silently drop internal protocol acks
+    if rtype in ("ack", "exit_ack"):
         return
 
     # Fallback: unexpected response type
