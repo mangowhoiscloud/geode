@@ -144,12 +144,14 @@ def prune_oldest_messages(
 def summarize_tool_results(
     messages: list[dict[str, Any]],
     target_window: int,
-) -> int:
+) -> tuple[int, int, int]:
     """Replace large tool_result content with compact summaries.
 
-    Mutates messages in-place. Returns the number of results summarized.
+    Mutates messages in-place.
+    Returns (summarized_count, tokens_before, tokens_after).
     Only targets tool_result blocks exceeding 2% of the target context window.
     """
+    tokens_before = estimate_message_tokens(messages)
     threshold = target_window // 50  # 2% of context window (~20K for 1M)
     summarized = 0
 
@@ -170,9 +172,13 @@ def summarize_tool_results(
                 block["content"] = f"[summarized: {estimated:,} tokens truncated]"
                 summarized += 1
 
+    tokens_after = estimate_message_tokens(messages)
     if summarized:
-        log.info("Summarized %d large tool results (threshold=%d tokens)", summarized, threshold)
-    return summarized
+        log.info(
+            "Summarized %d tool results: %d → %d tokens (-%d)",
+            summarized, tokens_before, tokens_after, tokens_before - tokens_after,
+        )
+    return summarized, tokens_before, tokens_after
 
 
 def adaptive_prune(
@@ -213,10 +219,14 @@ def adaptive_prune(
 
     kept_middle.reverse()  # restore chronological order
     result = [first, *kept_middle, *recent]
+    tokens_before = estimate_message_tokens(messages)
+    tokens_after = estimate_message_tokens(result)
     log.info(
-        "Adaptive prune: %d → %d messages (budget=%d tokens)",
+        "Adaptive prune: %d → %d messages, %d → %d tokens (-%d)",
         len(messages),
         len(result),
-        budget,
+        tokens_before,
+        tokens_after,
+        tokens_before - tokens_after,
     )
     return result

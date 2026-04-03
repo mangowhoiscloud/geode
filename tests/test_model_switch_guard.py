@@ -70,7 +70,7 @@ class TestT1LargeToSmall:
         before_tokens = check_context(msgs, "glm-5").estimated_tokens
         assert before_tokens > 200_000  # exceeds GLM-5 200K window
 
-        count = summarize_tool_results(msgs, target_window=200_000)
+        count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=200_000)
         assert count > 0
 
         after_tokens = check_context(msgs, "glm-5").estimated_tokens

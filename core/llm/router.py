@@ -510,20 +510,23 @@ def _cross_provider_dispatch(  # noqa: UP047 — PEP695 syntax requires Python 3
                     providers.append((p, chain[0]))
 
     last_exc: Exception | None = None
+    t0 = time.perf_counter()
     for idx, (provider, model) in enumerate(providers):
         try:
             return dispatch_fn(provider, model)
         except Exception as exc:
             last_exc = exc
             if idx < len(providers) - 1:
+                elapsed_ms = (time.perf_counter() - t0) * 1000
                 next_p, next_m = providers[idx + 1]
                 log.warning(
-                    "Cross-provider fallback: %s(%s) -> %s(%s) [%s]",
+                    "Cross-provider fallback: %s(%s) -> %s(%s) [%s] after %.0fms",
                     provider,
                     model,
                     next_p,
                     next_m,
                     function_name,
+                    elapsed_ms,
                 )
                 _fire_hook(
                     "fallback_cross_provider",
@@ -534,6 +537,8 @@ def _cross_provider_dispatch(  # noqa: UP047 — PEP695 syntax requires Python 3
                         "to_model": next_m,
                         "function": function_name,
                         "error": str(exc),
+                        "elapsed_ms": round(elapsed_ms, 1),
+                        "attempt": idx,
                     },
                 )
                 continue
