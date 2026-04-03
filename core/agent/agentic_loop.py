@@ -1195,7 +1195,8 @@ class AgenticLoop:
                     from core.orchestration.context_monitor import summarize_tool_results
 
                     summarized, _tok_before, _tok_after = summarize_tool_results(
-                        messages, metrics.context_window,
+                        messages,
+                        metrics.context_window,
                     )
                     if summarized > 0:
                         log.info(
@@ -1225,7 +1226,8 @@ class AgenticLoop:
 
                 # Phase 1: summarize large tool results
                 summarized, _tok_before, _tok_after = summarize_tool_results(
-                    messages, ABSOLUTE_TOKEN_CEILING,
+                    messages,
+                    ABSOLUTE_TOKEN_CEILING,
                 )
                 post = check_context(messages, self.model, system_prompt=system)
 

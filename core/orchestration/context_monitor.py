@@ -176,7 +176,10 @@ def summarize_tool_results(
     if summarized:
         log.info(
             "Summarized %d tool results: %d → %d tokens (-%d)",
-            summarized, tokens_before, tokens_after, tokens_before - tokens_after,
+            summarized,
+            tokens_before,
+            tokens_after,
+            tokens_before - tokens_after,
         )
     return summarized, tokens_before, tokens_after
 
