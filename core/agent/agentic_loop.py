@@ -885,7 +885,7 @@ class AgenticLoop:
                     text=text,
                     rounds=round_idx + 1,
                     error="llm_call_failed",
-                    termination_reason="llm_error",
+                    termination_reason="retry_exhausted",
                 )
                 return self._finalize_and_return(result, user_input, round_idx + 1)
 
@@ -1194,7 +1194,10 @@ class AgenticLoop:
                     # if the request fits in the window)
                     from core.orchestration.context_monitor import summarize_tool_results
 
-                    summarized = summarize_tool_results(messages, metrics.context_window)
+                    summarized, _tok_before, _tok_after = summarize_tool_results(
+                        messages,
+                        metrics.context_window,
+                    )
                     if summarized > 0:
                         log.info(
                             "Context at %.0f%%: summarized %d large tool results",
@@ -1222,7 +1225,10 @@ class AgenticLoop:
                 )
 
                 # Phase 1: summarize large tool results
-                summarized = summarize_tool_results(messages, ABSOLUTE_TOKEN_CEILING)
+                summarized, _tok_before, _tok_after = summarize_tool_results(
+                    messages,
+                    ABSOLUTE_TOKEN_CEILING,
+                )
                 post = check_context(messages, self.model, system_prompt=system)
 
                 if post.is_ceiling_exceeded:
@@ -1317,7 +1323,7 @@ class AgenticLoop:
                 "context_window",
                 200_000,
             )
-            summarized = summarize_tool_results(messages, ctx_window)
+            summarized, _tok_before, _tok_after = summarize_tool_results(messages, ctx_window)
             if summarized > 0:
                 log.info("Aggressive recovery: summarized %d tool results", summarized)
 

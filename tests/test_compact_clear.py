@@ -51,7 +51,7 @@ def _build_conversation(n_pairs: int, tool_result_size: int = 100) -> list[dict[
 class TestSummarizeToolResults:
     def test_small_results_unchanged(self):
         msgs = _build_conversation(3, tool_result_size=50)
-        count = summarize_tool_results(msgs, target_window=100_000)
+        count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=100_000)
         assert count == 0
 
     def test_large_result_summarized(self):
@@ -60,8 +60,9 @@ class TestSummarizeToolResults:
             _make_tool_use_assistant("t1", "web_fetch"),
             _make_tool_result("t1", "x" * 10_000),
         ]
-        count = summarize_tool_results(msgs, target_window=10_000)
+        count, before, after = summarize_tool_results(msgs, target_window=10_000)
         assert count == 1
+        assert before > after
         result_block = msgs[2]["content"][0]
         assert "[summarized:" in result_block["content"]
         assert result_block["type"] == "tool_result"
@@ -74,7 +75,7 @@ class TestSummarizeToolResults:
             _make_tool_result("t1", "x" * 10_000),
         ]
         summarize_tool_results(msgs, target_window=10_000)
-        count = summarize_tool_results(msgs, target_window=10_000)
+        count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=10_000)
         assert count == 0
 
 

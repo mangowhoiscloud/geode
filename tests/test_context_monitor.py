@@ -220,7 +220,7 @@ class TestPruneOldestMessages:
 class TestSummarizeToolResults:
     def test_no_tool_results(self):
         msgs = [{"role": "user", "content": "hello"}]
-        count = summarize_tool_results(msgs, target_window=80_000)
+        count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=80_000)
         assert count == 0
 
     def test_small_tool_result_untouched(self):
@@ -236,7 +236,7 @@ class TestSummarizeToolResults:
                 ],
             }
         ]
-        count = summarize_tool_results(msgs, target_window=80_000)
+        count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=80_000)
         assert count == 0
         assert msgs[0]["content"][0]["content"] == "small result"
 
@@ -255,7 +255,7 @@ class TestSummarizeToolResults:
                 ],
             }
         ]
-        count = summarize_tool_results(msgs, target_window=80_000)
+        count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=80_000)
         assert count == 1
         assert "[summarized:" in msgs[0]["content"][0]["content"]
 
@@ -277,17 +277,17 @@ class TestSummarizeToolResults:
                 ],
             }
         ]
-        count = summarize_tool_results(msgs, target_window=80_000)
+        count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=80_000)
         assert count == 1
 
     def test_assistant_messages_skipped(self):
         msgs = [{"role": "assistant", "content": [{"type": "text", "text": "x" * 100_000}]}]
-        count = summarize_tool_results(msgs, target_window=80_000)
+        count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=80_000)
         assert count == 0
 
     def test_non_list_content_skipped(self):
         msgs = [{"role": "user", "content": "x" * 100_000}]
-        count = summarize_tool_results(msgs, target_window=80_000)
+        count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=80_000)
         assert count == 0
 
 
