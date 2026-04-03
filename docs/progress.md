@@ -69,6 +69,8 @@
 |---------|----------|----|------|--------|
 | readme-badge-compress | README LLM 모델 뱃지 9개→4개 압축 (primary + fallback summary) | #635 | @mangowhoiscloud | 2026-04-02 |
 | hitl-ipc-3bug | HITL IPC 3-bug fix — ack leak, Console theme, output TypeError | #640 | @mangowhoiscloud | 2026-04-03 |
+| paste-input-fix | 붙여넣기 입력 버그 — multiline buffer + Enter submit + line join | #641 | @mangowhoiscloud | 2026-04-03 |
+| obs-gaps | Observability gap 3건 보강 — compression metrics, retry_exhausted, fallback latency | #643 | @mangowhoiscloud | 2026-04-03 |
 
 ### Done (2026-04-01 — 세션 55)
 
@@ -76,7 +78,7 @@
 |---------|----------|----|------|--------|
 | hitl-approval-fix | HITL IPC approval 5-bug fix — buf 미갱신, stale response, tool_name, safety_level, 이중 프롬프트 | #630 | @mangowhoiscloud | 2026-04-01 |
 
-### Done (2026-04-01 — 세션 54)
+### Done (2026-04-01 — 세션 56)
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
