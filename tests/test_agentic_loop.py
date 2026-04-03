@@ -267,7 +267,7 @@ class TestAgenticLoop:
             result = loop.run("test")
 
         assert result.error == "llm_call_failed"
-        assert result.termination_reason == "llm_error"
+        assert result.termination_reason == "retry_exhausted"
 
     def test_context_preserved(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test that conversation context is maintained across runs."""
