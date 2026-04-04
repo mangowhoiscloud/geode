@@ -33,21 +33,31 @@ class CodexCliCredentials(TypedDict, total=False):
     account_id: str
 
 
-# -- Cache --
-_cache: dict[str, Any] = {"value": None, "read_at": 0.0}
+# -- Cache (with mtime fingerprint — OpenClaw sourceFingerprint pattern) --
+_cache: dict[str, Any] = {"value": None, "read_at": 0.0, "mtime": 0.0}
+
+
+def _get_file_mtime() -> float:
+    try:
+        return (Path.home() / _CODEX_AUTH_PATH).stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def _is_cache_valid() -> bool:
-    return (
-        _cache["value"] is not None
-        and (time.time() - _cache["read_at"]) < _CACHE_TTL_S
-    )
+    if _cache["value"] is None:
+        return False
+    if (time.time() - _cache["read_at"]) >= _CACHE_TTL_S:
+        return False
+    current_mtime = _get_file_mtime()
+    return not (current_mtime > 0 and current_mtime != _cache["mtime"])
 
 
 def invalidate_cache() -> None:
     """Force next read to bypass cache."""
     _cache["value"] = None
     _cache["read_at"] = 0.0
+    _cache["mtime"] = 0.0
 
 
 def _decode_jwt_expiry(token: str) -> float | None:
@@ -141,14 +151,18 @@ def read_codex_cli_credentials(
         return cached
 
     data = _read_from_file()
+    mtime = _get_file_mtime()
+
     if data is None:
         _cache["value"] = None
         _cache["read_at"] = time.time()
+        _cache["mtime"] = mtime
         return None
 
     parsed = _parse_codex_credentials(data)
     _cache["value"] = parsed
     _cache["read_at"] = time.time()
+    _cache["mtime"] = mtime
 
     if parsed:
         is_expired = time.time() > parsed["expires_at"]
