@@ -74,6 +74,25 @@ NON_RETRYABLE_ERRORS = (anthropic.AuthenticationError, anthropic.BadRequestError
 FALLBACK_MODELS = ANTHROPIC_FALLBACK_CHAIN
 
 
+def _resolve_anthropic_key() -> str:
+    """Resolve Anthropic API key from ProfileRotator (OAuth preferred) or settings.
+
+    Priority: OAuth profile (claude-code) → API key profile → settings fallback.
+    """
+    try:
+        from core.runtime_wiring.infra import get_profile_rotator
+
+        rotator = get_profile_rotator()
+        if rotator:
+            profile = rotator.resolve("anthropic")
+            if profile and profile.key:
+                rotator.mark_used(profile)
+                return profile.key
+    except Exception:
+        log.debug("ProfileRotator not available, falling back to settings")
+    return settings.anthropic_api_key
+
+
 def get_anthropic_client() -> anthropic.Anthropic:
     """Return a singleton sync Anthropic client with configured connection pool.
 
@@ -92,7 +111,7 @@ def get_anthropic_client() -> anthropic.Anthropic:
                 timeout=_build_httpx_timeout(),
             )
             _sync_client = anthropic.Anthropic(
-                api_key=settings.anthropic_api_key,
+                api_key=_resolve_anthropic_key(),
                 max_retries=0,  # app-level retry handles this
                 http_client=http_client,
             )
@@ -115,7 +134,7 @@ def get_async_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnt
         return _async_client
     with _async_client_lock:
         if _async_client is None:
-            key = api_key or settings.anthropic_api_key
+            key = api_key or _resolve_anthropic_key()
             http_client = httpx.AsyncClient(
                 limits=_build_httpx_limits(),
                 timeout=_build_httpx_timeout(),
