@@ -8,8 +8,8 @@ A general-purpose autonomous execution agent built on LangGraph. Autonomously pe
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 193
-- **Tests**: 3590+
+- **Modules**: 195
+- **Tests**: 3525+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -39,8 +39,8 @@ uv run geode analyze "Cowboy Bebop" --verbose
 
 ```
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
-HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(46 events)
-RUNTIME:  ToolRegistry(52), MCP Registry(API), Skills, Memory(4-Tier), Reports
+HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(48 events)
+RUNTIME:  ToolRegistry(56), MCP Registry(API), Skills, Memory(4-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback)
 ─────────────────────────────────────────────────────────────────
 ⊥ DOMAIN: DomainPort Protocol, GameIPDomain (cross-cutting, binds to Runtime + Harness via Port)
@@ -121,7 +121,7 @@ All paths: acquire_all(session_key, ["session", "global"]) → create_session(mo
 | Document | Path | Content |
 |----------|------|---------|
 | Architecture | `CLAUDE.md` § Architecture | 4-layer stack (Model→Runtime→Harness→Agent) |
-| Hook System | `docs/architecture/hook-system.md` | HookSystem 46 events |
+| Hook System | `docs/architecture/hook-system.md` | HookSystem 48 events |
 | CLAUDE.md | `CLAUDE.md` | Architecture overview + conventions (this file) |
 
 ## Project Structure
@@ -144,7 +144,7 @@ uv run mypy core/
 
 ### Expected Test Results
 
-3590+ tests pass. 3 IP fixtures produce tier spread:
+3525+ tests pass. 3 IP fixtures produce tier spread:
 - Berserk: **S** (81.2) — conversion_failure
 - Cowboy Bebop: **A** (68.4) — undermarketed
 - Ghost in the Shell: **B** (51.7) — discovery_failure
@@ -370,7 +370,7 @@ Code changes → repeat 3 quality gates. Fix on failure.
 ```bash
 uv run ruff check core/ tests/      # Lint: 0 errors
 uv run mypy core/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"   # Test: 3590+ pass
+uv run pytest tests/ -m "not live"   # Test: 3525+ pass
 ```
 
 #### 4. Verify (Implementation GAP Audit)
@@ -393,7 +393,7 @@ For each plan item, verify implementation exists in the diff:
 ```bash
 uv run ruff check core/ tests/                      # Lint: 0 errors
 uv run mypy core/                                    # Type: 0 errors
-uv run pytest tests/ -m "not live"                   # Test: 3590+ pass
+uv run pytest tests/ -m "not live"                   # Test: 3525+ pass
 uv run geode analyze "Cowboy Bebop" --dry-run        # E2E: A (68.4) unchanged
 ```
 
@@ -468,7 +468,7 @@ Update `docs/progress.md` only from main. Backlog → In Progress → Done.
 |------|---------|----------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -m "not live"` | 3590+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 3525+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 ## Custom Skills (Scaffold)
