@@ -37,6 +37,47 @@ MAX_INSIGHTS = 50
 _PATHS_RE = re.compile(r"paths:\s*\n((?:\s*-\s*.+\n)*)", re.MULTILINE)
 _PATH_ITEM_RE = re.compile(r'^\s*-\s*["\']?(.+?)["\']?\s*$', re.MULTILINE)
 
+# --- Insight content quality gate (Claude Code validation-pyramid pattern) ---
+MAX_INSIGHT_LENGTH = 500  # chars; longer content → journal, not insights
+MIN_INSIGHT_LENGTH = 10  # chars; reject pure whitespace / stubs
+
+_REJECT_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"tier=\?"),  # pipeline stub: missing tier
+    re.compile(r"score=0\.00\b"),  # pipeline stub: zero score
+    re.compile(r"tools=\[[\s,]*\]"),  # empty tool arrays in turn records
+]
+
+
+def _is_valid_insight(insight: str) -> bool:
+    """Content quality gate — reject known-bad patterns before disk write.
+
+    Returns True if the insight is acceptable, False if it should be rejected.
+    """
+    stripped = insight.strip()
+
+    if len(stripped) < MIN_INSIGHT_LENGTH:
+        log.debug("Insight rejected (too short, %d chars): %s", len(stripped), stripped[:50])
+        return False
+
+    if "\n" in stripped:
+        log.debug("Insight rejected (multi-line): %s", stripped[:80])
+        return False
+
+    if len(stripped) > MAX_INSIGHT_LENGTH:
+        log.debug("Insight rejected (too long, %d chars): %s", len(stripped), stripped[:80])
+        return False
+
+    if stripped.startswith("[unknown]"):
+        log.debug("Insight rejected (unknown IP): %s", stripped[:80])
+        return False
+
+    for pattern in _REJECT_PATTERNS:
+        if pattern.search(stripped):
+            log.debug("Insight rejected (pattern %s): %s", pattern.pattern, stripped[:80])
+            return False
+
+    return True
+
 
 def _extract_paths(frontmatter: str) -> list[str]:
     """Extract paths list from YAML frontmatter (simple parser, no pyyaml dep)."""
@@ -173,6 +214,9 @@ class ProjectMemory:
             log.warning("MEMORY.md does not exist — cannot add insight")
             return False
 
+        if not _is_valid_insight(insight):
+            return False
+
         try:
             content = self._memory_file.read_text(encoding="utf-8")
         except OSError:
@@ -258,6 +302,77 @@ class ProjectMemory:
         except OSError as e:
             log.warning("Failed to write MEMORY.md: %s", e)
             return False
+
+    def purge_bad_insights(self) -> int:
+        """Remove existing insight entries that fail the quality gate.
+
+        Scans both '## Recent Insights' and '## 최근 인사이트' sections.
+        Returns the number of entries removed.
+        """
+        if not self._memory_file.exists():
+            return 0
+
+        try:
+            content = self._memory_file.read_text(encoding="utf-8")
+        except OSError:
+            return 0
+
+        markers = ("## 최근 인사이트", "## Recent Insights")
+        total_removed = 0
+
+        for marker in markers:
+            if marker not in content:
+                continue
+
+            marker_idx = content.index(marker)
+            newline_idx = content.find("\n", marker_idx + len(marker))
+            if newline_idx == -1:
+                continue
+
+            before = content[: newline_idx + 1]
+            after = content[newline_idx + 1 :]
+
+            kept_lines: list[str] = []
+            remainder_lines: list[str] = []
+            removed = 0
+            in_insights = True
+            for line in after.split("\n"):
+                if in_insights and line.startswith("- "):
+                    colon_idx = line.find(": ", 2)
+                    insight_text = line[colon_idx + 2 :] if colon_idx > 0 else line[2:]
+                    if _is_valid_insight(insight_text):
+                        kept_lines.append(line)
+                    else:
+                        removed += 1
+                        log.info("Purged bad insight: %s", line[:100])
+                elif in_insights and line.strip() == "":
+                    kept_lines.append(line)
+                else:
+                    in_insights = False
+                    remainder_lines.append(line)
+
+            if removed == 0:
+                continue
+
+            while kept_lines and kept_lines[-1].strip() == "":
+                kept_lines.pop()
+
+            insight_block = "\n".join(kept_lines)
+            remainder = "\n".join(remainder_lines)
+            content = before + insight_block + "\n" + remainder
+            total_removed += removed
+
+        if total_removed == 0:
+            return 0
+
+        try:
+            atomic_write_text(self._memory_file, content)
+            log.info("Purged %d bad insights from MEMORY.md", total_removed)
+        except OSError as e:
+            log.warning("Failed to purge insights: %s", e)
+            return 0
+
+        return total_removed
 
     # ------------------------------------------------------------------
     # Rule CRUD (P0-B: agent-driven rule management)

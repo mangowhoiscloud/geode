@@ -204,7 +204,7 @@ def build_hooks(
             if not text or len(text) < 20:
                 return  # too short to be useful
             # Build concise insight from turn
-            tool_str = ", ".join(tools[:5]) if tools else "none"
+            tool_str = ", ".join(t for t in tools[:5] if t) or "none"
             insight = f"[turn] {user_input[:80]} → tools=[{tool_str}]"
             pm.add_insight(insight)
 
