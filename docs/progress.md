@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-04-05 (세션 57 — HITL race fix + grounding + verify workflow)
+> 마지막 갱신: 2026-04-05 (세션 57 — HITL fix, grounding, verify workflow, per-tool auto-approve, approval spinner)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -57,21 +57,26 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
+| approval-spinner | HITL 승인 프롬프트 spinner UI 추가 — bare prompt → animated indicator | @mangowhoiscloud | feature/approval-spinner-ui | 2026-04-05 | 설계 결함 분석 후속 |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
 
+### Done (2026-04-05 — 세션 57)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| hitl-race-fix | HITL 승인 spinner race + terminal restore + paste drain + grounding rules | #645→#646 | @mangowhoiscloud | 2026-04-05 |
+| verify-workflow | Scaffold Step 4 → Verify (Implementation GAP Audit) 4단계 포렌식 감사 | #645→#646 | @mangowhoiscloud | 2026-04-05 |
+| per-tool-autoapprove | Per-tool auto-approve (3x y) + denial tracking (3x n) | #647→#649 | @mangowhoiscloud | 2026-04-05 |
+
 ### Done (2026-04-03 — 세션 56)
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
-<<<<<<< HEAD
 | readme-badge-compress | README LLM 모델 뱃지 9→4 압축 (primary + fallback summary) | #635 | @mangowhoiscloud | 2026-04-02 |
-=======
-| readme-badge-compress | README LLM 모델 뱃지 9개→4개 압축 (primary + fallback summary) | #635 | @mangowhoiscloud | 2026-04-02 |
->>>>>>> origin/main
 | hitl-ipc-3bug | HITL IPC 3-bug fix — ack leak, Console theme, output TypeError | #640 | @mangowhoiscloud | 2026-04-03 |
 | paste-input-fix | 붙여넣기 입력 버그 — multiline buffer + Enter submit + line join | #641 | @mangowhoiscloud | 2026-04-03 |
 | obs-gaps | Observability gap 3건 보강 — compression metrics, retry_exhausted, fallback latency | #643 | @mangowhoiscloud | 2026-04-03 |
