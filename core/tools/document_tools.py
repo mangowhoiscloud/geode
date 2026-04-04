@@ -54,6 +54,10 @@ class ReadDocumentTool:
                 f"Access denied: path outside project directory ({_PROJECT_ROOT})",
                 error_type="permission",
                 recoverable=False,
+                hint=(
+                    "All file tools are sandboxed to the project directory. "
+                    "Use a relative path or omit the path parameter."
+                ),
                 context={"file_path": str(file_path)},
             )
 

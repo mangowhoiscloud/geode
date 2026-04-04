@@ -20,15 +20,35 @@ log = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def _check_sandbox(path: Path) -> str | None:
-    """Return error message if path is outside sandbox or is a symlink."""
+def _check_sandbox(path: Path) -> dict[str, Any] | None:
+    """Return tool_error dict if path is outside sandbox, None if OK.
+
+    Breadcrumb pattern: the hint field steers the LLM to self-correct
+    on the very first failure instead of retrying with another bad path.
+    """
+    from core.tools.base import tool_error
+
     if path.is_symlink():
-        return f"Symlinks not allowed: {path}"
+        return tool_error(
+            f"Symlinks not allowed: {path}",
+            error_type="permission",
+            recoverable=False,
+            hint="Resolve the symlink target and use the real path.",
+        )
     resolved = path.resolve()
     try:
         resolved.relative_to(_PROJECT_ROOT)
     except ValueError:
-        return f"Access denied: path outside project directory ({_PROJECT_ROOT})"
+        return tool_error(
+            f"Access denied: path outside project directory ({_PROJECT_ROOT})",
+            error_type="permission",
+            recoverable=False,
+            hint=(
+                "All file tools are sandboxed to the project directory. "
+                "Use a relative path (e.g. 'core/tools/') or omit the path "
+                "parameter to search from the project root."
+            ),
+        )
     return None
 
 
@@ -57,7 +77,10 @@ class GlobTool:
                 },
                 "path": {
                     "type": "string",
-                    "description": "Directory to search in (default: project root)",
+                    "description": (
+                        "Directory to search in (default: project root). "
+                        "Must be within the project directory."
+                    ),
                 },
             },
             "required": ["pattern"],
@@ -74,7 +97,7 @@ class GlobTool:
 
         err = _check_sandbox(search_dir)
         if err:
-            return tool_error(err, error_type="permission", recoverable=False)
+            return err
 
         if not search_dir.is_dir():
             return tool_error(
@@ -131,7 +154,10 @@ class GrepTool:
                 },
                 "path": {
                     "type": "string",
-                    "description": "File or directory to search (default: project root)",
+                    "description": (
+                        "File or directory to search (default: project root). "
+                        "Must be within the project directory."
+                    ),
                 },
                 "glob": {
                     "type": "string",
@@ -253,7 +279,10 @@ class EditFileTool:
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "Path to the file to edit",
+                    "description": (
+                        "Path to the file to edit. "
+                        "Must be within the project directory."
+                    ),
                 },
                 "old_string": {
                     "type": "string",
@@ -284,7 +313,7 @@ class EditFileTool:
 
         err = _check_sandbox(file_path)
         if err:
-            return tool_error(err, error_type="permission", recoverable=False)
+            return err
 
         if not file_path.exists():
             return tool_error(
@@ -357,7 +386,10 @@ class WriteFileTool:
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "Path to the file to create or overwrite",
+                    "description": (
+                        "Path to the file to create or overwrite. "
+                        "Must be within the project directory."
+                    ),
                 },
                 "content": {
                     "type": "string",
@@ -378,7 +410,7 @@ class WriteFileTool:
 
         err = _check_sandbox(file_path)
         if err:
-            return tool_error(err, error_type="permission", recoverable=False)
+            return err
 
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)

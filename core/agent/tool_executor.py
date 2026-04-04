@@ -848,12 +848,15 @@ class ToolCallProcessor:
 
         # Per-run mutable state — reset via reset()
         self._consecutive_failures: dict[str, int] = {}
+        # Breadcrumb: skip recovery chain for non-recoverable errors (e.g. permission)
+        self._last_error_recoverable: dict[str, bool] = {}
         self._tool_log: list[dict[str, Any]] = []
         self._clarification_count: int = 0
 
     def reset(self) -> None:
         """Reset per-run tracking state. Call at the start of each agentic run."""
         self._consecutive_failures.clear()
+        self._last_error_recoverable.clear()
         self._tool_log.clear()
         self._clarification_count = 0
 
@@ -947,7 +950,8 @@ class ToolCallProcessor:
         # Check consecutive failure count
         fail_count = self._consecutive_failures.get(tool_name, 0)
 
-        if fail_count >= self.MAX_CONSECUTIVE_FAILURES:
+        last_recoverable = self._last_error_recoverable.get(tool_name, True)
+        if fail_count >= self.MAX_CONSECUTIVE_FAILURES and last_recoverable:
             # Adaptive recovery: try recovery chain instead of auto-skip
             result = await self._attempt_recovery(tool_name, tool_input, fail_count)
             visible = self._op_logger.log_tool_call(tool_name, tool_input)
@@ -959,12 +963,14 @@ class ToolCallProcessor:
             # Execute via ToolExecutor (sync handlers wrapped in to_thread)
             result = await asyncio.to_thread(self._executor.execute, tool_name, tool_input)
 
-        # Track consecutive failures
+        # Track consecutive failures + recoverability breadcrumb
         if isinstance(result, dict) and result.get("error"):
             if not result.get("recovery_attempted"):
                 self._consecutive_failures[tool_name] = fail_count + 1
+                self._last_error_recoverable[tool_name] = result.get("recoverable", True)
         else:
             self._consecutive_failures[tool_name] = 0
+            self._last_error_recoverable.pop(tool_name, None)
 
         # Track clarification rounds to prevent infinite loops
         if isinstance(result, dict) and result.get("clarification_needed"):
