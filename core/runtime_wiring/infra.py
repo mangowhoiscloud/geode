@@ -265,6 +265,33 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     except Exception as exc:
         log.debug("Auth: Claude Code OAuth not available: %s", exc)
 
+    # Codex CLI OAuth — OpenAI managed credential
+    try:
+        from core.gateway.auth.codex_cli_oauth import (
+            read_codex_cli_credentials,
+        )
+
+        codex_creds = read_codex_cli_credentials()
+        if codex_creds:
+            profile_store.add(
+                AuthProfile(
+                    name="openai:codex-cli",
+                    provider="openai",
+                    credential_type=CredentialType.OAUTH,
+                    key=codex_creds["access_token"],
+                    refresh_token=codex_creds.get("refresh_token", ""),
+                    expires_at=codex_creds.get("expires_at", 0.0),
+                    managed_by="codex-cli",
+                    metadata=_build_oauth_metadata(codex_creds),
+                )
+            )
+            log.info(
+                "Auth: Codex CLI OAuth detected (account=%s)",
+                codex_creds.get("account_id", "unknown"),
+            )
+    except Exception as exc:
+        log.debug("Auth: Codex CLI OAuth not available: %s", exc)
+
     # API key profiles — fallback
     if settings.anthropic_api_key:
         profile_store.add(
