@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.memory.project import MAX_INSIGHTS, MAX_MEMORY_LINES, ProjectMemory
+from core.memory.project import (
+    MAX_INSIGHTS,
+    MAX_MEMORY_LINES,
+    ProjectMemory,
+    _is_valid_insight,
+)
 
 
 class TestProjectMemoryExists:
@@ -170,7 +175,7 @@ class TestAddInsight:
 
     def test_add_insight_no_file(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
-        assert mem.add_insight("test") is False
+        assert mem.add_insight("this insight has no backing file") is False
 
     def test_multiple_insights(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
@@ -212,8 +217,9 @@ class TestAddInsight:
         mem.ensure_structure()
 
         # Insert MAX_INSIGHTS + 1 entries (each with unique IP to avoid dedup)
+        # Scores start at 0.50 to avoid score=0.00 quality gate rejection
         for i in range(MAX_INSIGHTS + 1):
-            result = mem.add_insight(f"[IP_{i}] tier=B, score=0.{i:02d}")
+            result = mem.add_insight(f"[IP_{i}] tier=B, score=0.{50 + i}")
             assert result is True
 
         content = mem.memory_file.read_text(encoding="utf-8")
@@ -271,3 +277,120 @@ class TestGetContextForIP:
 
         ctx = mem.get_context_for_ip("cowboy")
         assert len(ctx["rules"]) >= 1
+
+
+# --- Insight quality gate tests ---
+
+
+class TestIsValidInsight:
+    """Direct unit tests for _is_valid_insight() validator."""
+
+    def test_valid_analysis(self):
+        assert _is_valid_insight("[Berserk] tier=S, score=0.85") is True
+
+    def test_valid_note(self):
+        assert _is_valid_insight("**preference**: dark mode enabled") is True
+
+    def test_valid_turn_with_tools(self):
+        assert _is_valid_insight("[turn] analyze IP → tools=[analyze_ip, web_search]") is True
+
+    def test_reject_empty(self):
+        assert _is_valid_insight("") is False
+
+    def test_reject_too_short(self):
+        assert _is_valid_insight("abc") is False
+
+    def test_reject_multiline(self):
+        assert _is_valid_insight("line one\nline two") is False
+
+    def test_reject_too_long(self):
+        assert _is_valid_insight("x" * 501) is False
+
+    def test_accept_max_length(self):
+        assert _is_valid_insight("x" * 500) is True
+
+    def test_reject_unknown_ip(self):
+        assert _is_valid_insight("[unknown] tier=S, score=0.85") is False
+
+    def test_reject_tier_question_mark(self):
+        assert _is_valid_insight("[Berserk] tier=?, score=0.85") is False
+
+    def test_reject_score_zero(self):
+        assert _is_valid_insight("[Berserk] tier=S, score=0.00") is False
+
+    def test_accept_nonzero_score(self):
+        assert _is_valid_insight("[Berserk] tier=S, score=0.01") is True
+
+    def test_reject_empty_tool_array(self):
+        assert _is_valid_insight("[turn] some input → tools=[, , , , ]") is False
+
+    def test_reject_empty_tool_array_spaces(self):
+        assert _is_valid_insight("[turn] input → tools=[  ,  ,  ]") is False
+
+    def test_reject_empty_tool_array_bare(self):
+        assert _is_valid_insight("[turn] input → tools=[]") is False
+
+
+class TestInsightQualityGateIntegration:
+    """Integration: add_insight() rejects garbage via quality gate."""
+
+    def test_reject_stub_tier(self, tmp_path: Path):
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+        assert mem.add_insight("[Berserk] tier=?, score=0.00") is False
+
+    def test_reject_unknown_ip(self, tmp_path: Path):
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+        assert mem.add_insight("[unknown] tier=S, score=0.85") is False
+
+    def test_reject_multiline_report(self, tmp_path: Path):
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+        report = "## Report\n- item 1\n- item 2\n- item 3"
+        assert mem.add_insight(report) is False
+
+    def test_accept_valid_insight(self, tmp_path: Path):
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+        assert mem.add_insight("[Berserk] tier=S, score=0.85, cause=conversion_failure") is True
+
+
+class TestPurgeBadInsights:
+    """Tests for purge_bad_insights() cleanup method."""
+
+    def test_purge_removes_bad_entries(self, tmp_path: Path):
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+        # Write bad entries directly to bypass the new gate
+        content = mem.memory_file.read_text(encoding="utf-8")
+        bad_entries = (
+            "- 2026-03-29: [Berserk] tier=?, score=0.00\n"
+            "- 2026-03-29: [unknown] tier=?, score=0.00\n"
+            "- 2026-03-29: [Berserk] tier=S, score=0.85\n"
+        )
+        content = content.replace(
+            "## Recent Insights\n", f"## 최근 인사이트\n{bad_entries}"
+        )
+        mem.memory_file.write_text(content, encoding="utf-8")
+
+        removed = mem.purge_bad_insights()
+        assert removed == 2
+
+        final = mem.memory_file.read_text(encoding="utf-8")
+        assert "tier=?" not in final
+        assert "[unknown]" not in final
+        assert "tier=S, score=0.85" in final
+
+    def test_purge_noop_when_clean(self, tmp_path: Path):
+        mem = ProjectMemory(tmp_path)
+        mem.ensure_structure()
+        # Add a valid insight (need the Korean marker for purge to find)
+        content = mem.memory_file.read_text(encoding="utf-8")
+        content += "\n## 최근 인사이트\n- 2026-03-29: [Berserk] tier=S, score=0.85\n"
+        mem.memory_file.write_text(content, encoding="utf-8")
+        assert mem.purge_bad_insights() == 0
+
+    def test_purge_no_file(self, tmp_path: Path):
+        mem = ProjectMemory(tmp_path)
+        assert mem.purge_bad_insights() == 0
