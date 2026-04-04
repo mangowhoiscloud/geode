@@ -995,7 +995,10 @@ class AgenticLoop:
                     "type": "text",
                     "text": (
                         "[system] Multiple tools are failing consecutively. "
-                        "Consider a different approach."
+                        "Consider a different approach. "
+                        "If you cannot verify the answer through tools, "
+                        "tell the user what failed and what remains unverified. "
+                        "Do NOT silently answer from training data."
                     ),
                 }
                 tool_results.append(backpressure_hint)

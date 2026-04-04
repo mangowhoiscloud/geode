@@ -256,6 +256,7 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | **Quality** | No committing with lint/type/test failures | Ratchet (P4) |
 | | No placeholders (XXXX) in metrics — measured values only | Truth guarantee |
 | | No excessive `# type: ignore` — fix type errors instead | Correctness |
+| | No bare `_` for unused variables — use `_prefix` naming (e.g. `_tok_before`) | Readability |
 | | No unauthorized live test (`-m live`) execution | Cost control (P3) |
 | **Docs** | No omitting CHANGELOG from code commits | Traceability |
 | | No leaving `[Unreleased]` on main | Release discipline |
@@ -306,7 +307,7 @@ Without this call: `get_domain()` → None → AgenticLoop crash.
 ### Workflow Steps
 
 ```
-0. Board + Worktree → 1. GAP Audit → 2. Plan + Socratic Gate → 3. Implement+Test → 4. E2E Verify → 5. Docs-Sync → 6. PR → 7. Rebuild → 8. Board
+0. Board + Worktree → 1. GAP Audit → 2. Plan + Socratic Gate → 3. Implement+Test → 4. Verify (Implementation GAP Audit) → 5. Docs-Sync → 6. PR → 7. Rebuild → 8. Board
 ```
 
 #### 0. Board + Worktree Alloc
@@ -372,17 +373,44 @@ uv run mypy core/                    # Type: 0 errors
 uv run pytest tests/ -m "not live"   # Test: 3590+ pass
 ```
 
-#### 4. E2E Verify
+#### 4. Verify (Implementation GAP Audit)
 
-See `geode-e2e` skill.
+> Purpose: Confirm the implementation is complete, correct, and free of deception. This is NOT a feature demo — it is a forensic audit of what was actually built vs what was planned.
+
+**4a. Completeness — Plan vs Diff cross-check**
+
+For each plan item, verify implementation exists in the diff:
+
+| Check | Method | FAIL condition |
+|-------|--------|---------------|
+| Omission | `grep`/`Explore` plan items against actual diff | Plan item has no corresponding code change |
+| Stub disguise | Inspect new functions for `pass`-only or `return None` bodies | Function exists but does nothing |
+| Partial implementation | Check all sub-items of plan item are implemented | Only 1 of 3 sub-items done, marked complete |
+| Original residue | Verify extracted code is removed from origin | Code exists in both old and new location |
+
+**4b. Correctness — Quality gates + E2E**
 
 ```bash
-uv run geode analyze "Cowboy Bebop" --dry-run  # Verify A (68.4) unchanged
+uv run ruff check core/ tests/                      # Lint: 0 errors
+uv run mypy core/                                    # Type: 0 errors
+uv run pytest tests/ -m "not live"                   # Test: 3590+ pass
+uv run geode analyze "Cowboy Bebop" --dry-run        # E2E: A (68.4) unchanged
 ```
 
-5-persona verification team review: see `verification-team` + `anti-deception-checklist` skills (for large-scale changes).
+**4c. Cleanliness — Dead code & regression audit**
 
-**5-Persona Verification Team:**
+| Check | Method | FAIL condition |
+|-------|--------|---------------|
+| Dead code | `grep` for functions/classes added but never called | Unused import, unreachable function |
+| Test deletion | `git diff --stat` — test file line count must not decrease | Tests removed to hide failures |
+| Coverage regression | Compare test count before/after | Test count dropped |
+| Lint bypass | Search for new `# noqa`, `# type: ignore` additions | Suppression added instead of fixing |
+| Secret exposure | Search for API keys, tokens, passwords in diff | Credentials in committed code |
+
+**4d. Verification team (large-scale changes only)**
+
+See `verification-team` + `anti-deception-checklist` skills.
+
 1. **Kent Beck** — Design quality, test coverage, dead code, simplicity (XP/TDD)
 2. **Andrej Karpathy** — Constraints, ratchets, context budget, time budgets (autoresearch)
 3. **Peter Steinberger** — Session isolation, Lane Queue, lifecycle, plugin architecture (OpenClaw)

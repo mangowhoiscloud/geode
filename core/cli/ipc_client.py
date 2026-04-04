@@ -157,12 +157,16 @@ class IPCClient:
         *,
         on_stream: Any = None,
         on_event: Any = None,
+        on_approval_start: Any = None,
+        on_approval_end: Any = None,
     ) -> dict[str, Any]:
         """Send a prompt and wait for the result.
 
         Callbacks:
             on_stream(data: str): raw console output (ANSI-styled text)
             on_event(event: dict): structured events (tool_start, tool_end)
+            on_approval_start(): called before HITL approval prompt (suspend spinners)
+            on_approval_end(): called after HITL approval prompt (resume spinners)
 
         Returns the final ``{"type": "result", ...}`` dict.
         """
@@ -181,7 +185,11 @@ class IPCClient:
                 continue
             # HITL approval relay — serve requests user confirmation
             if rtype == "approval_request":
+                if on_approval_start is not None:
+                    on_approval_start()
                 decision = self._handle_approval_request(response)
+                if on_approval_end is not None:
+                    on_approval_end()
                 self._send({"type": "approval_response", "decision": decision})
                 continue
             # Structured events — all non-stream, non-terminal types
@@ -227,9 +235,31 @@ class IPCClient:
                 continue
             return response
 
+    @staticmethod
+    def _restore_terminal() -> None:
+        """Restore terminal to cooked mode before console.input().
+
+        prompt_toolkit may leave the terminal in raw mode (no ICANON)
+        after session.prompt() returns. Without ICANON, input() cannot
+        receive line-buffered Enter keystrokes, causing it to block
+        indefinitely and trigger the 120s server-side timeout.
+        """
+        import sys
+        import termios
+
+        try:
+            fd = sys.stdin.fileno()
+            attrs = termios.tcgetattr(fd)
+            attrs[3] |= termios.ECHO | termios.ICANON
+            termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        except (ValueError, OSError, termios.error):
+            pass
+
     def _handle_approval_request(self, msg: dict[str, Any]) -> str:
         """Display approval prompt to user and return decision."""
         from core.cli.ui.console import console as c
+
+        self._restore_terminal()
 
         tool = msg.get("tool_name", "?")
         detail = msg.get("detail", "")

@@ -209,7 +209,8 @@ class ErrorRecoveryStrategy:
                 "error": (
                     f"Tool '{tool_name}' recovery exhausted after "
                     f"{len(attempts)} attempt(s). "
-                    "Please use a different approach."
+                    "Try a different tool, or tell the user what failed. "
+                    "Do NOT answer from training data without marking it as [Unverified]."
                 ),
                 "recovery_exhausted": True,
                 "strategies_tried": [a.strategy.value for a in attempts],
