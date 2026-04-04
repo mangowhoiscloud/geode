@@ -317,7 +317,15 @@
       "properties": {
         "sub_action": {
           "type": "string",
-          "enum": ["list", "create", "delete", "status", "enable", "disable", "run"],
+          "enum": [
+            "list",
+            "create",
+            "delete",
+            "status",
+            "enable",
+            "disable",
+            "run"
+          ],
           "description": "Action to perform."
         },
         "target_id": {
@@ -333,7 +341,9 @@
           "description": "What to do when fired — a natural language prompt. Example: 'Search AI papers and create digest'. REQUIRED for create."
         }
       },
-      "required": ["sub_action"]
+      "required": [
+        "sub_action"
+      ]
     }
   },
   {
@@ -450,7 +460,9 @@
         },
         "steps": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": {
+            "type": "string"
+          },
           "description": "List of plan steps (e.g. ['web search', 'data collection', 'analysis', 'report writing']). Auto-generated if omitted."
         },
         "ip_name": {
@@ -653,10 +665,12 @@
         },
         "path": {
           "type": "string",
-          "description": "Directory to search in (default: project root)"
+          "description": "Directory to search in (default: project root) Must be within the project directory — absolute paths outside the project are blocked."
         }
       },
-      "required": ["pattern"]
+      "required": [
+        "pattern"
+      ]
     }
   },
   {
@@ -673,7 +687,7 @@
         },
         "path": {
           "type": "string",
-          "description": "File or directory to search (default: project root)"
+          "description": "File or directory to search (default: project root) Must be within the project directory — absolute paths outside the project are blocked."
         },
         "glob": {
           "type": "string",
@@ -688,7 +702,9 @@
           "description": "Max files to return (default: 50)"
         }
       },
-      "required": ["pattern"]
+      "required": [
+        "pattern"
+      ]
     }
   },
   {
@@ -701,7 +717,7 @@
       "properties": {
         "file_path": {
           "type": "string",
-          "description": "Path to the file to edit"
+          "description": "Path to the file to edit Must be within the project directory."
         },
         "old_string": {
           "type": "string",
@@ -716,7 +732,11 @@
           "description": "Replace all occurrences (default: false)"
         }
       },
-      "required": ["file_path", "old_string", "new_string"]
+      "required": [
+        "file_path",
+        "old_string",
+        "new_string"
+      ]
     }
   },
   {
@@ -729,14 +749,17 @@
       "properties": {
         "file_path": {
           "type": "string",
-          "description": "Path to the file to create or overwrite"
+          "description": "Path to the file to create or overwrite Must be within the project directory."
         },
         "content": {
           "type": "string",
           "description": "Complete file content"
         }
       },
-      "required": ["file_path", "content"]
+      "required": [
+        "file_path",
+        "content"
+      ]
     }
   },
   {
@@ -1188,7 +1211,11 @@
       "properties": {
         "action": {
           "type": "string",
-          "enum": ["compact", "clear", "status"],
+          "enum": [
+            "compact",
+            "clear",
+            "status"
+          ],
           "description": "compact: compress conversation, clear: full reset, status: check current token usage"
         },
         "force": {
@@ -1196,7 +1223,9 @@
           "description": "If true, executes without confirmation (applies to clear). Default: false."
         }
       },
-      "required": ["action"]
+      "required": [
+        "action"
+      ]
     }
   },
   {
@@ -1220,7 +1249,9 @@
           "description": "Additional metadata (optional) — {priority, source, tool_name, tool_args}"
         }
       },
-      "required": ["subject"]
+      "required": [
+        "subject"
+      ]
     }
   },
   {
@@ -1237,7 +1268,11 @@
         },
         "status": {
           "type": "string",
-          "enum": ["in_progress", "completed", "failed"],
+          "enum": [
+            "in_progress",
+            "completed",
+            "failed"
+          ],
           "description": "New status (in_progress: start task, completed: done, failed: failed)"
         },
         "subject": {
@@ -1257,7 +1292,9 @@
           "description": "Metadata to merge (optional, use null values to delete keys)"
         }
       },
-      "required": ["task_id"]
+      "required": [
+        "task_id"
+      ]
     }
   },
   {
@@ -1273,7 +1310,9 @@
           "description": "Task ID to retrieve"
         }
       },
-      "required": ["task_id"]
+      "required": [
+        "task_id"
+      ]
     }
   },
   {
@@ -1286,7 +1325,13 @@
       "properties": {
         "status_filter": {
           "type": "string",
-          "enum": ["pending", "in_progress", "completed", "failed", "all"],
+          "enum": [
+            "pending",
+            "in_progress",
+            "completed",
+            "failed",
+            "all"
+          ],
           "description": "Status filter (default: all)"
         }
       },
@@ -1310,7 +1355,9 @@
           "description": "Cancellation reason (optional)"
         }
       },
-      "required": ["task_id"]
+      "required": [
+        "task_id"
+      ]
     }
   }
 ]
