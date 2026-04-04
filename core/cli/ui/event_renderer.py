@@ -574,6 +574,20 @@ class EventRenderer:
         self._out.write(f"  \033[32m\u2713 {name}\033[0m \u00d7{count} \u2192 {summary}{dur_str}\n")
         self._out.flush()
 
+    # -- HITL approval spinner coordination ------------------------------------
+
+    def suspend_for_approval(self) -> None:
+        """Suspend all spinners for HITL approval prompt.
+
+        Must be called before ``console.input()`` to prevent ANSI cursor-up
+        race between spinner daemon threads and the input line.
+        """
+        self._suppress_all_spinners()
+
+    def resume_from_approval(self) -> None:
+        """Resume activity spinner after HITL approval completes."""
+        self._activity_suppressed = False
+
     # -- Internal helpers -----------------------------------------------------
 
     _FRAMES = "\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f"

@@ -799,6 +799,28 @@ def _get_prompt_session() -> Any:
     return _prompt_session
 
 
+def _drain_stdin() -> None:
+    """Drain leftover bytes from stdin after a paste.
+
+    When bracketed paste is unavailable, pasted newlines trigger Enter
+    and only the first line is submitted. The remaining text stays in
+    stdin and gets auto-submitted on the next prompt() call.
+    This drains any such leftover to prevent double-submit.
+    """
+    import select
+
+    if not sys.stdin.isatty():
+        return
+    try:
+        import os as _os
+
+        fd = sys.stdin.fileno()
+        while select.select([fd], [], [], 0.0)[0]:
+            _os.read(fd, 4096)
+    except (ValueError, OSError):
+        pass
+
+
 def _read_multiline_input(prompt: str) -> str:
     """Read user input via prompt_toolkit (arrow keys, history).
 
@@ -817,6 +839,10 @@ def _read_multiline_input(prompt: str) -> str:
             # Intentional newlines (Esc+Enter) are preserved by the caller
             # via "\n" detection in the slash command guard.
             text = " ".join(raw.splitlines()) if "\n" in raw else raw
+            # Drain stdin to prevent leftover paste from auto-submitting
+            # on the next prompt. Only needed when bracketed paste is broken
+            # or the terminal doesn't support it.
+            _drain_stdin()
         except (KeyboardInterrupt, EOFError):
             raise
         except Exception:
@@ -981,11 +1007,19 @@ def _thin_interactive_loop(
                 _stream_started = True
                 _rr.on_event(event)
 
+            def _on_approval_start(*, _rr: Any = _r) -> None:
+                _rr.suspend_for_approval()
+
+            def _on_approval_end(*, _rr: Any = _r) -> None:
+                _rr.resume_from_approval()
+
             _renderer.start_activity()  # persistent spinner until result
             response = client.send_prompt(
                 user_input,
                 on_stream=_on_stream,
                 on_event=_on_event,
+                on_approval_start=_on_approval_start,
+                on_approval_end=_on_approval_end,
             )
             _renderer.stop()
             if response.get("type") == "error" and "Connection lost" in response.get("message", ""):

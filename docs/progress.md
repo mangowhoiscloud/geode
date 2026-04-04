@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-04-01 (세션 54 — cross-provider model switch fix)
+> 마지막 갱신: 2026-04-03 (세션 56 — observability gaps + HITL IPC + paste fix)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -62,6 +62,24 @@
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-04-03 — 세션 56)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| readme-badge-compress | README LLM 모델 뱃지 9→4 압축 (primary + fallback summary) | #635 | @mangowhoiscloud | 2026-04-02 |
+| hitl-ipc-3bug | HITL IPC 3-bug fix — ack leak, Console theme, output TypeError | #640 | @mangowhoiscloud | 2026-04-03 |
+| paste-input-fix | 붙여넣기 입력 버그 — multiline buffer + Enter submit + line join | #641 | @mangowhoiscloud | 2026-04-03 |
+| obs-gaps | Observability gap 3건 보강 — compression metrics, retry_exhausted, fallback latency | #643 | @mangowhoiscloud | 2026-04-03 |
+
+### Done (2026-04-01 — 세션 55)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| hitl-approval-fix | HITL IPC approval 5-bug fix — buf 미갱신, stale response, tool_name, safety_level, 이중 프롬프트 | #630 | @mangowhoiscloud | 2026-04-01 |
+| llm-resilience-v2 | LLM failure resilience — backoff retry, context-first recovery | #638 | @mangowhoiscloud | 2026-04-01 |
+| haiku-native-tools | Haiku 400 fix — allowed_callers=direct for native tools | #632 | @mangowhoiscloud | 2026-04-01 |
+| model-switch-guard | Model switch context guard — stale system_prompt prevention | #634 | @mangowhoiscloud | 2026-04-01 |
 
 ### Done (2026-04-01 — 세션 54)
 
