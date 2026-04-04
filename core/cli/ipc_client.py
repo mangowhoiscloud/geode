@@ -250,10 +250,13 @@ class IPCClient:
         try:
             fd = sys.stdin.fileno()
             attrs = termios.tcgetattr(fd)
+            had_icanon = bool(attrs[3] & termios.ICANON)
             attrs[3] |= termios.ECHO | termios.ICANON
             termios.tcsetattr(fd, termios.TCSANOW, attrs)
-        except (ValueError, OSError, termios.error):
-            pass
+            if not had_icanon:
+                log.info("HITL: terminal restored (ICANON was missing)")
+        except (ValueError, OSError, termios.error) as exc:
+            log.warning("HITL: _restore_terminal failed: %s", exc)
 
     def _handle_approval_request(self, msg: dict[str, Any]) -> str:
         """Display approval prompt to user with animated spinner."""
@@ -328,16 +331,33 @@ class IPCClient:
         c.print(f"    \033[2m{label} tool requires approval\033[0m")
         c.print()
 
+        t0 = time.monotonic()
         try:
             resp = c.input("  [header]Allow? [Y/n/A][/header] ").strip().lower()
         except (KeyboardInterrupt, EOFError):
             c.print()
+            log.info(
+                "HITL: approval interrupted tool=%s elapsed=%.1fs",
+                tool,
+                time.monotonic() - t0,
+            )
             return "n"
+
+        elapsed = time.monotonic() - t0
         if resp in ("a", "always"):
-            return "a"
-        if resp in ("", "y", "yes"):
-            return "y"
-        return "n"
+            decision = "a"
+        elif resp in ("", "y", "yes"):
+            decision = "y"
+        else:
+            decision = "n"
+        log.info(
+            "HITL: approval tool=%s input=%r decision=%s elapsed=%.1fs",
+            tool,
+            resp,
+            decision,
+            elapsed,
+        )
+        return decision
 
     def request_resume(
         self,
