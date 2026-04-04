@@ -158,17 +158,13 @@ class ToolExecutor:
         calls are auto-denied without prompting.
         """
         if decision == "y":
-            self._tool_approval_counts[tool_name] = (
-                self._tool_approval_counts.get(tool_name, 0) + 1
-            )
+            self._tool_approval_counts[tool_name] = self._tool_approval_counts.get(tool_name, 0) + 1
             self._tool_denial_counts.pop(tool_name, None)
             if self._tool_approval_counts[tool_name] >= 3:
                 self._always_approved_tools.add(tool_name)
                 log.info("Auto-approved tool '%s' after 3 consecutive approvals", tool_name)
         elif decision == "n":
-            self._tool_denial_counts[tool_name] = (
-                self._tool_denial_counts.get(tool_name, 0) + 1
-            )
+            self._tool_denial_counts[tool_name] = self._tool_denial_counts.get(tool_name, 0) + 1
             self._tool_approval_counts.pop(tool_name, None)
 
     def _check_auto_deny(self, tool_name: str) -> bool:
