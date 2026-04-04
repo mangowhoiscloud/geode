@@ -89,6 +89,10 @@ class _StreamingWriter:
                 "safety_level": safety_level,
             }
         )
+        log.debug("HITL: sent approval_request tool=%s level=%s", tool_name, safety_level)
+        import time as _time
+
+        _t0 = _time.monotonic()
         # Block until thin client sends approval_response
         try:
             self._client.settimeout(120.0)  # 2 min for user decision
@@ -96,14 +100,38 @@ class _StreamingWriter:
             while True:
                 chunk = self._client.recv(4096)
                 if not chunk:
+                    log.warning(
+                        "HITL: connection closed tool=%s elapsed=%.1fs",
+                        tool_name, _time.monotonic() - _t0,
+                    )
                     return "n"
                 buf += chunk
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
                     msg = json.loads(line.decode("utf-8"))
                     if msg.get("type") == "approval_response":
-                        return str(msg.get("decision", "n"))
-        except (TimeoutError, OSError, json.JSONDecodeError):
+                        decision = str(msg.get("decision", "n"))
+                        log.info(
+                            "HITL: approval_response tool=%s decision=%s elapsed=%.1fs",
+                            tool_name, decision, _time.monotonic() - _t0,
+                        )
+                        return decision
+                    else:
+                        log.debug(
+                            "HITL: ignoring non-approval msg type=%s",
+                            msg.get("type"),
+                        )
+        except TimeoutError:
+            log.warning(
+                "HITL: approval TIMEOUT tool=%s elapsed=%.1fs",
+                tool_name, _time.monotonic() - _t0,
+            )
+            return "n"
+        except (OSError, json.JSONDecodeError) as exc:
+            log.warning(
+                "HITL: approval error tool=%s elapsed=%.1fs exc=%s",
+                tool_name, _time.monotonic() - _t0, exc,
+            )
             return "n"
         finally:
             self._client.settimeout(None)
