@@ -45,6 +45,7 @@ class ApprovalTracker:
             "tool_name": data.get("tool_name", ""),
             "permission_level": data.get("permission_level", ""),
             "decision": data.get("decision", ""),
+            "response_type": data.get("response_type", ""),
             "latency_ms": data.get("latency_ms", 0),
             "session_key": data.get("session_key", ""),
         }
