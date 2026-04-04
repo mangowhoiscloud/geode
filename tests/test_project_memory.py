@@ -369,9 +369,7 @@ class TestPurgeBadInsights:
             "- 2026-03-29: [unknown] tier=?, score=0.00\n"
             "- 2026-03-29: [Berserk] tier=S, score=0.85\n"
         )
-        content = content.replace(
-            "## Recent Insights\n", f"## 최근 인사이트\n{bad_entries}"
-        )
+        content = content.replace("## Recent Insights\n", f"## 최근 인사이트\n{bad_entries}")
         mem.memory_file.write_text(content, encoding="utf-8")
 
         removed = mem.purge_bad_insights()
