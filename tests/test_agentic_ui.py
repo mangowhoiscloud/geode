@@ -316,16 +316,17 @@ class TestRenderStatusLine:
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_noop_without_meter(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        # Force no meter
+        # Force no meter by clearing thread-local
         import core.cli.ui.agentic_ui as mod
 
-        old = mod._session_meter
-        mod._session_meter = None
+        old = getattr(mod._meter_local, "meter", None)
+        mod._meter_local.__dict__.pop("meter", None)
         try:
             render_status_line()
             assert not mock_console.print.called
         finally:
-            mod._session_meter = old
+            if old is not None:
+                mod._meter_local.meter = old
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_status_line_shows_per_turn_delta(self, mock_console) -> None:  # type: ignore[no-untyped-def]
@@ -781,3 +782,94 @@ class TestRepeatCounter:
         r.on_event({"type": "tokens", "model": "claude-opus-4-6", "input": 1000, "output": 50})
         output = r._out.getvalue()
         assert "claude-opus-4-6" not in output  # tokens line suppressed
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Thread-local isolation tests
+# ──��──────────────────────────────────────────────────────────────────────
+
+
+class TestThreadLocalConsoleIsolation:
+    """Verify that console output and session meters are thread-local."""
+
+    def test_console_proxy_isolates_threads(self) -> None:
+        """Two threads with different thread-local consoles don't interfere."""
+        import threading
+        from io import StringIO
+
+        from core.cli.ui.console import console as proxy
+        from core.cli.ui.console import (
+            make_session_console,
+            reset_thread_console,
+            set_thread_console,
+        )
+
+        buf_a = StringIO()
+        buf_b = StringIO()
+        barrier = threading.Barrier(2)
+
+        def thread_a() -> None:
+            set_thread_console(make_session_console(buf_a))
+            barrier.wait()  # sync so both threads are active
+            proxy.print("THREAD_A_OUTPUT", highlight=False)
+            barrier.wait()  # sync before cleanup
+            reset_thread_console()
+
+        def thread_b() -> None:
+            set_thread_console(make_session_console(buf_b))
+            barrier.wait()
+            proxy.print("THREAD_B_OUTPUT", highlight=False)
+            barrier.wait()
+            reset_thread_console()
+
+        ta = threading.Thread(target=thread_a)
+        tb = threading.Thread(target=thread_b)
+        ta.start()
+        tb.start()
+        ta.join(timeout=5)
+        tb.join(timeout=5)
+
+        # Each buffer must contain ONLY its own thread's output
+        assert "THREAD_A_OUTPUT" in buf_a.getvalue()
+        assert "THREAD_B_OUTPUT" not in buf_a.getvalue()
+        assert "THREAD_B_OUTPUT" in buf_b.getvalue()
+        assert "THREAD_A_OUTPUT" not in buf_b.getvalue()
+
+    def test_session_meter_isolates_threads(self) -> None:
+        """Two threads get independent session meters."""
+        import threading
+
+        results: dict[str, str | None] = {}
+        barrier = threading.Barrier(2)
+
+        def thread_a() -> None:
+            init_session_meter(model="model-A")
+            barrier.wait()
+            m = get_session_meter()
+            results["a"] = m.model if m else None
+            barrier.wait()
+
+        def thread_b() -> None:
+            init_session_meter(model="model-B")
+            barrier.wait()
+            m = get_session_meter()
+            results["b"] = m.model if m else None
+            barrier.wait()
+
+        ta = threading.Thread(target=thread_a)
+        tb = threading.Thread(target=thread_b)
+        ta.start()
+        tb.start()
+        ta.join(timeout=5)
+        tb.join(timeout=5)
+
+        assert results["a"] == "model-A"
+        assert results["b"] == "model-B"
+
+    def test_default_console_fallback(self) -> None:
+        """Without set_thread_console(), proxy falls back to default."""
+        from core.cli.ui.console import _default_console
+        from core.cli.ui.console import console as proxy
+
+        # In main thread (no thread-local set), proxy._current() returns default
+        assert proxy._current() is _default_console

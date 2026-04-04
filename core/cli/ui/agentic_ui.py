@@ -101,29 +101,36 @@ class SessionMeter:
         return f"{m}m {sec}s"
 
 
-_session_meter: SessionMeter | None = None
+_meter_local = threading.local()
 
 
 def init_session_meter(model: str = "") -> SessionMeter:
-    """Initialize the session meter singleton."""
-    global _session_meter
+    """Initialize the session meter for the current thread.
+
+    Thread-safe: each IPC handler thread (and the main thread) gets its
+    own ``SessionMeter`` instance via ``threading.local``, preventing
+    cross-session contamination of model names, elapsed times, and
+    token counters.
+    """
     if not model:
         from core.config import ANTHROPIC_PRIMARY
 
         model = ANTHROPIC_PRIMARY
-    _session_meter = SessionMeter(model=model)
-    return _session_meter
+    meter = SessionMeter(model=model)
+    _meter_local.meter = meter
+    return meter
 
 
 def update_session_model(model: str) -> None:
-    """Update the session meter's model after /model switch."""
-    if _session_meter is not None:
-        _session_meter.model = model
+    """Update the current thread's session meter model after /model switch."""
+    meter = getattr(_meter_local, "meter", None)
+    if meter is not None:
+        meter.model = model
 
 
 def get_session_meter() -> SessionMeter | None:
-    """Return the current session meter (None if not initialized)."""
-    return _session_meter
+    """Return the current thread's session meter (None if not initialized)."""
+    return getattr(_meter_local, "meter", None)
 
 
 # ───────────────────────────────────────────────────────────────────────────

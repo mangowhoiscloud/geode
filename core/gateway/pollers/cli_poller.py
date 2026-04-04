@@ -291,6 +291,12 @@ class CLIPoller:
         # ContextVars do NOT propagate to threads — set them explicitly
         self._propagate_contextvars()
 
+        # Thread-local session meter — each IPC session tracks its own
+        # model, elapsed time, and token counts independently.
+        from core.cli.ui.agentic_ui import init_session_meter
+
+        init_session_meter()
+
         client.settimeout(None)  # blocking reads
         buf = b""
         conversation = ConversationContext()
@@ -394,16 +400,18 @@ class CLIPoller:
     ) -> dict[str, Any]:
         """Run a prompt with real-time console streaming to the client.
 
-        Redirects the global console to a ``_StreamingWriter`` so that
-        all agentic UI output (tool calls ▸, results ✓/✗, token usage ✢,
-        context events ⟳) is relayed to the thin client in real-time.
-
-        The loop runs with ``quiet=False`` — identical to the old REPL
-        experience.  After completion, the console is restored and a
-        final ``result`` message is sent.
+        Installs a **thread-local** Rich Console whose ``file`` is the
+        client's ``_StreamingWriter``.  All ``console.print(...)`` calls
+        within this thread are routed to the session's socket — never to
+        the shared default Console — preventing cross-session output
+        contamination when multiple thin-CLI clients connect concurrently.
         """
         from core.cli.ui.agentic_ui import _ipc_writer_local
-        from core.cli.ui.console import redirect_console
+        from core.cli.ui.console import (
+            make_session_console,
+            reset_thread_console,
+            set_thread_console,
+        )
 
         # Enable agentic UI for this run (same as old REPL)
         old_quiet = getattr(loop, "_quiet", True)
@@ -412,16 +420,13 @@ class CLIPoller:
         if old_op_quiet is not None:
             loop._op_logger._quiet = False
 
-        # Redirect console + spinner output to streaming writer
+        # Thread-local console: all console.print() in this thread → client socket
         writer = _StreamingWriter(client) if client else None
-        _redirect = redirect_console(writer) if writer else None
-        # Set IPC writer for OperationLogger structured events
         if writer:
+            set_thread_console(make_session_console(writer))
             _ipc_writer_local.writer = writer
 
         try:
-            if _redirect:
-                _redirect.__enter__()
             lane_queue = self._services.lane_queue
             if lane_queue is not None:
                 with lane_queue.acquire_all(f"cli:{session_id}", ["session", "global"]):
@@ -429,9 +434,8 @@ class CLIPoller:
             else:
                 result = loop.run(text)
         finally:
-            if _redirect:
-                _redirect.__exit__(None, None, None)
             if writer:
+                reset_thread_console()
                 _ipc_writer_local.writer = None
             loop._quiet = old_quiet
             if old_op_quiet is not None:
