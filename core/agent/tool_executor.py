@@ -130,6 +130,13 @@ class ToolExecutor:
         self._always_approved_tools: set[str] = set()
         # Categories: "bash", "write", "cost", "mcp:<server>"
         self._always_approved_categories: set[str] = set()
+        # Per-tool approval/denial counters — session-scoped pattern learning
+        # After 3 consecutive "y" for same tool → auto-add to _always_approved_tools
+        # After 3 consecutive "n" for same tool → auto-deny without prompting
+        self._tool_approval_counts: dict[str, int] = {}
+        self._tool_denial_counts: dict[str, int] = {}
+        _AUTO_APPROVE_THRESHOLD = 3
+        _AUTO_DENY_THRESHOLD = 3
 
     def _fire_hook(self, event_name: str, data: dict[str, Any]) -> None:
         """Fire a hook event if HookSystem is available. No-op otherwise."""
@@ -142,6 +149,27 @@ class ToolExecutor:
             self._hooks.trigger(event, data)
         except Exception:
             log.debug("Hook fire failed for %s", event_name, exc_info=True)
+
+    def _track_decision(self, tool_name: str, decision: str) -> None:
+        """Track per-tool approval/denial for session-scoped pattern learning.
+
+        After 3 consecutive approvals of the same tool, auto-add to
+        ``_always_approved_tools``. After 3 consecutive denials, subsequent
+        calls are auto-denied without prompting.
+        """
+        if decision == "y":
+            self._tool_approval_counts[tool_name] = self._tool_approval_counts.get(tool_name, 0) + 1
+            self._tool_denial_counts.pop(tool_name, None)
+            if self._tool_approval_counts[tool_name] >= 3:
+                self._always_approved_tools.add(tool_name)
+                log.info("Auto-approved tool '%s' after 3 consecutive approvals", tool_name)
+        elif decision == "n":
+            self._tool_denial_counts[tool_name] = self._tool_denial_counts.get(tool_name, 0) + 1
+            self._tool_approval_counts.pop(tool_name, None)
+
+    def _check_auto_deny(self, tool_name: str) -> bool:
+        """Return True if tool has been denied 3+ times this session."""
+        return self._tool_denial_counts.get(tool_name, 0) >= 3
 
     def _prompt_with_always(
         self,
@@ -194,7 +222,11 @@ class ToolExecutor:
 
         # Write tools: require approval (hitl_level 0 = autonomous skip)
         if tool_name in WRITE_TOOLS:
-            if self._hitl_level == 0 or "write" in self._always_approved_categories:
+            if (
+                self._hitl_level == 0
+                or "write" in self._always_approved_categories
+                or tool_name in self._always_approved_tools
+            ):
                 approved = True
             else:
                 self._fire_hook(
@@ -225,7 +257,11 @@ class ToolExecutor:
 
         # Expensive tools: cost confirmation
         if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
-            if self._hitl_level == 0 or "cost" in self._always_approved_categories:
+            if (
+                self._hitl_level == 0
+                or "cost" in self._always_approved_categories
+                or tool_name in self._always_approved_tools
+            ):
                 approved = True
             else:
                 cost = EXPENSIVE_TOOLS[tool_name]
@@ -417,8 +453,11 @@ class ToolExecutor:
             # HITL level 0/1: skip bash approval entirely
             if self._hitl_level <= 1:
                 pass  # auto-approve
-            # Session-level "Always" approval for bash category
-            elif "bash" in self._always_approved_categories:
+            # Session-level "Always" approval for bash or per-tool auto-approve
+            elif (
+                "bash" in self._always_approved_categories
+                or "run_bash" in self._always_approved_tools
+            ):
                 pass  # already approved for session
             else:
                 # HITL approval gate — not skipped for non-safe commands.
@@ -561,6 +600,19 @@ class ToolExecutor:
                 console.print(f"  [dim]Summary:[/dim] {summary}")
             console.print()
 
+        # Auto-deny if user has denied this tool 3+ times this session
+        if self._check_auto_deny(tool_name):
+            self._fire_hook(
+                "tool_approval_denied",
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "WRITE",
+                    "decision": "auto_denied",
+                    "latency_ms": 0.0,
+                },
+            )
+            return False
+
         self._fire_hook(
             "tool_approval_requested",
             {
@@ -578,6 +630,7 @@ class ToolExecutor:
             tool_name=tool_name,
         )
         latency_ms = (time.monotonic() - t0) * 1000
+        self._track_decision(tool_name, response)
         if response == "a":
             self._always_approved_categories.add("write")
             self._fire_hook(
@@ -587,6 +640,7 @@ class ToolExecutor:
                     "permission_level": "WRITE",
                     "decision": "approved",
                     "latency_ms": latency_ms,
+                    "response_type": "a",
                 },
             )
             return True
@@ -598,6 +652,7 @@ class ToolExecutor:
                     "permission_level": "WRITE",
                     "decision": "approved",
                     "latency_ms": latency_ms,
+                    "response_type": "y",
                 },
             )
             return True
@@ -639,6 +694,18 @@ class ToolExecutor:
             },
         )
 
+        if self._check_auto_deny(tool_name):
+            self._fire_hook(
+                "tool_approval_denied",
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "EXPENSIVE",
+                    "decision": "auto_denied",
+                    "latency_ms": 0.0,
+                },
+            )
+            return False
+
         t0 = time.monotonic()
         response = self._prompt_with_always(
             "Proceed?",
@@ -647,6 +714,7 @@ class ToolExecutor:
             tool_name=tool_name,
         )
         latency_ms = (time.monotonic() - t0) * 1000
+        self._track_decision(tool_name, response)
         if response == "a":
             self._always_approved_categories.add("cost")
             self._fire_hook(
@@ -656,6 +724,7 @@ class ToolExecutor:
                     "permission_level": "EXPENSIVE",
                     "decision": "approved",
                     "latency_ms": latency_ms,
+                    "response_type": "a",
                 },
             )
             return True
@@ -667,6 +736,7 @@ class ToolExecutor:
                     "permission_level": "EXPENSIVE",
                     "decision": "approved",
                     "latency_ms": latency_ms,
+                    "response_type": "y",
                 },
             )
             return True
@@ -705,6 +775,18 @@ class ToolExecutor:
             },
         )
 
+        if self._check_auto_deny("run_bash"):
+            self._fire_hook(
+                "tool_approval_denied",
+                {
+                    "tool_name": "run_bash",
+                    "permission_level": "DANGEROUS",
+                    "decision": "auto_denied",
+                    "latency_ms": 0.0,
+                },
+            )
+            return False
+
         t0 = time.monotonic()
         response = self._prompt_with_always(
             "Allow?",
@@ -713,6 +795,7 @@ class ToolExecutor:
             tool_name="run_bash",
         )
         latency_ms = (time.monotonic() - t0) * 1000
+        self._track_decision("run_bash", response)
         if response == "a":
             self._always_approved_categories.add("bash")
             self._fire_hook(
@@ -722,6 +805,7 @@ class ToolExecutor:
                     "permission_level": "DANGEROUS",
                     "decision": "approved",
                     "latency_ms": latency_ms,
+                    "response_type": "a",
                 },
             )
             return True
@@ -733,6 +817,7 @@ class ToolExecutor:
                     "permission_level": "DANGEROUS",
                     "decision": "approved",
                     "latency_ms": latency_ms,
+                    "response_type": "y",
                 },
             )
             return True
