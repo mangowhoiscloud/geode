@@ -189,7 +189,7 @@ class GrepTool:
 
         err = _check_sandbox(search_path)
         if err:
-            return tool_error(err, error_type="permission", recoverable=False)
+            return err
 
         try:
             regex = re.compile(pattern_str)
@@ -280,8 +280,7 @@ class EditFileTool:
                 "file_path": {
                     "type": "string",
                     "description": (
-                        "Path to the file to edit. "
-                        "Must be within the project directory."
+                        "Path to the file to edit. Must be within the project directory."
                     ),
                 },
                 "old_string": {
