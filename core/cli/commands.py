@@ -435,13 +435,22 @@ def cmd_model(args: str) -> None:
 
 
 def _auth_login_status() -> None:
-    """Show OAuth login status for all providers and guide user to login."""
+    """Show OAuth status + offer interactive login for missing providers."""
+    import shutil
+    import subprocess
+
     console.print()
     console.print("  [header]OAuth Login Status[/header]")
 
-    # -- Anthropic (Claude Code) --
+    # -- Check current status --
+    providers: list[dict[str, str | bool]] = []
+
+    # Anthropic
     claude_ok = False
     try:
+        from core.gateway.auth.claude_code_oauth import (
+            invalidate_cache as _cc_invalidate,
+        )
         from core.gateway.auth.claude_code_oauth import (
             read_claude_code_credentials,
         )
@@ -454,64 +463,116 @@ def _auth_login_status() -> None:
                 f"Claude Code OAuth ({sub.capitalize()})"
             )
             claude_ok = True
-        else:
-            console.print(
-                "  [error]\u2717[/error] Anthropic  "
-                "[muted]Claude Code not logged in[/muted]"
-            )
-    except Exception:
+    except Exception:  # noqa: S110
+        pass
+    if not claude_ok:
         console.print(
             "  [error]\u2717[/error] Anthropic  "
-            "[muted]Claude Code not available[/muted]"
+            "[muted]not logged in[/muted]"
         )
+    providers.append(
+        {"name": "Anthropic", "cli": "claude", "ok": claude_ok}
+    )
 
-    # -- OpenAI (Codex CLI) --
+    # OpenAI
     codex_ok = False
     try:
+        from core.gateway.auth.codex_cli_oauth import (
+            invalidate_cache as _cx_invalidate,
+        )
         from core.gateway.auth.codex_cli_oauth import (
             read_codex_cli_credentials,
         )
 
         codex_creds = read_codex_cli_credentials(force_refresh=True)
         if codex_creds:
-            acct = codex_creds.get("account_id", "unknown")
+            acct = codex_creds.get("account_id", "unknown")[:12]
             console.print(
                 f"  [success]\u2713[/success] OpenAI     "
-                f"Codex CLI OAuth (account: {acct[:12]}...)"
+                f"Codex CLI OAuth (account: {acct}...)"
             )
             codex_ok = True
-        else:
-            console.print(
-                "  [error]\u2717[/error] OpenAI     "
-                "[muted]Codex CLI not logged in[/muted]"
-            )
-    except Exception:
+    except Exception:  # noqa: S110
+        pass
+    if not codex_ok:
         console.print(
             "  [error]\u2717[/error] OpenAI     "
-            "[muted]Codex CLI not available[/muted]"
+            "[muted]not logged in[/muted]"
         )
+    providers.append(
+        {"name": "OpenAI", "cli": "codex", "ok": codex_ok}
+    )
 
-    # -- Login guidance --
-    if not claude_ok or not codex_ok:
-        console.print()
-        console.print("  [header]How to login[/header]")
-        if not claude_ok:
-            console.print(
-                "  [muted]Anthropic:[/muted]  "
-                "Run [bold]claude login[/bold] in terminal, "
-                "then restart GEODE"
-            )
-        if not codex_ok:
-            console.print(
-                "  [muted]OpenAI:   [/muted]  "
-                "Run [bold]codex login[/bold] in terminal, "
-                "then restart GEODE"
-            )
+    # -- Offer interactive login for missing providers --
+    missing = [p for p in providers if not p["ok"]]
+    if not missing:
         console.print()
         console.print(
-            "  [muted]OAuth profiles auto-detected on startup. "
-            "Restart GEODE after login.[/muted]"
+            "  [success]All providers authenticated via OAuth.[/success]"
         )
+        console.print()
+        return
+
+    console.print()
+    for p in missing:
+        cli_name = str(p["cli"])
+        cli_path = shutil.which(cli_name)
+        if not cli_path:
+            console.print(
+                f"  [muted]{p['name']}:[/muted]  "
+                f"[warning]{cli_name} CLI not installed[/warning]  "
+                f"[muted](install then run /auth login)[/muted]"
+            )
+            continue
+
+        console.print(
+            f"  [muted]{p['name']}:[/muted]  "
+            f"[bold]{cli_name} login[/bold] — "
+            f"opens browser for OAuth"
+        )
+        try:
+            resp = console.input(
+                f"  [header]Run {cli_name} login now? [Y/n][/header] "
+            ).strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            continue
+
+        if resp in ("n", "no"):
+            continue
+
+        console.print(
+            f"  [muted]Opening browser for {p['name']} login...[/muted]"
+        )
+        try:
+            result = subprocess.run(  # noqa: S603
+                [cli_path, "login"],
+                timeout=120,
+            )
+            if result.returncode == 0:
+                console.print(
+                    f"  [success]{p['name']} login successful![/success]"
+                )
+                # Re-read credentials immediately
+                if cli_name == "claude":
+                    _cc_invalidate()
+                    read_claude_code_credentials(force_refresh=True)
+                elif cli_name == "codex":
+                    _cx_invalidate()
+                    read_codex_cli_credentials(force_refresh=True)
+            else:
+                console.print(
+                    f"  [warning]{p['name']} login failed "
+                    f"(exit code {result.returncode})[/warning]"
+                )
+        except subprocess.TimeoutExpired:
+            console.print(
+                f"  [warning]{p['name']} login timed out (120s)[/warning]"
+            )
+        except OSError as exc:
+            console.print(
+                f"  [warning]{p['name']} login error: {exc}[/warning]"
+            )
 
     console.print()
 
