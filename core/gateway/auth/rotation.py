@@ -97,16 +97,19 @@ class ProfileRotator:
             elif p.is_expired:
                 status = "expired"
 
-            result.append(
-                {
-                    "name": p.name,
-                    "provider": p.provider,
-                    "type": p.credential_type.value,
-                    "display": p.masked_key,
-                    "status": status,
-                    "error_count": p.error_count,
-                }
-            )
+            entry: dict[str, Any] = {
+                "name": p.name,
+                "provider": p.provider,
+                "type": p.credential_type.value,
+                "display": p.masked_key,
+                "status": status,
+                "error_count": p.error_count,
+            }
+            if p.managed_by:
+                entry["managed_by"] = p.managed_by
+            if p.metadata:
+                entry["metadata"] = p.metadata
+            result.append(entry)
         return result
 
 

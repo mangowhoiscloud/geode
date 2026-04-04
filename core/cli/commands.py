@@ -464,12 +464,55 @@ def cmd_auth(args: str) -> None:
         for s in statuses:
             icon = "✓" if s["status"] == "active" else "●" if "cooldown" in s["status"] else "✗"
             style = "success" if icon == "✓" else "warning" if icon == "●" else "error"
+            # Build status suffix with subscription info for OAuth profiles
+            status_text = s["status"]
+            meta = s.get("metadata", {})
+            sub_type = meta.get("subscription_type", "")
+            if sub_type:
+                sub_label = sub_type.capitalize()
+                status_text = f"{status_text} · {sub_label}"
+            managed = s.get("managed_by", "")
+            if managed:
+                status_text = f"{status_text} · managed:{managed}"
             console.print(
                 f"  [{style}]{icon}[/{style}] {s['name']:<22} "
-                f"{s['type']:<10} {s['display']:<18} [{style}][{s['status']}][/{style}]"
+                f"{s['type']:<10} {s['display']:<18} "
+                f"[{style}]{status_text}[/{style}]"
             )
         console.print()
-        console.print("  [muted]Priority: oauth → token → api_key[/muted]")
+        console.print(
+            "  [muted]Priority: oauth > token > api_key[/muted]"
+        )
+        console.print()
+        return
+
+    if arg.startswith("login"):
+        # Check Claude Code OAuth status and guide user
+        try:
+            from core.gateway.auth.claude_code_oauth import (
+                read_claude_code_credentials,
+            )
+
+            creds = read_claude_code_credentials(force_refresh=True)
+            if creds:
+                sub = creds.get("subscription_type", "unknown")
+                console.print(
+                    f"  [success]Claude Code OAuth active[/success]"
+                    f"  ({sub.capitalize()} subscription)"
+                )
+            else:
+                console.print(
+                    "  [warning]Claude Code not logged in.[/warning]"
+                )
+                console.print(
+                    "  [muted]Run 'claude login' in your terminal,"
+                    " then restart GEODE.[/muted]"
+                )
+        except Exception:
+            console.print(
+                "  [muted]Claude Code OAuth not available."
+                " Use /key to set API keys directly.[/muted]"
+            )
         console.print()
         return
 
