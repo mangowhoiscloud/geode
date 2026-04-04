@@ -434,6 +434,88 @@ def cmd_model(args: str) -> None:
     _apply_model(selected)
 
 
+def _auth_login_status() -> None:
+    """Show OAuth login status for all providers and guide user to login."""
+    console.print()
+    console.print("  [header]OAuth Login Status[/header]")
+
+    # -- Anthropic (Claude Code) --
+    claude_ok = False
+    try:
+        from core.gateway.auth.claude_code_oauth import (
+            read_claude_code_credentials,
+        )
+
+        creds = read_claude_code_credentials(force_refresh=True)
+        if creds:
+            sub = creds.get("subscription_type", "unknown")
+            console.print(
+                f"  [success]\u2713[/success] Anthropic  "
+                f"Claude Code OAuth ({sub.capitalize()})"
+            )
+            claude_ok = True
+        else:
+            console.print(
+                "  [error]\u2717[/error] Anthropic  "
+                "[muted]Claude Code not logged in[/muted]"
+            )
+    except Exception:
+        console.print(
+            "  [error]\u2717[/error] Anthropic  "
+            "[muted]Claude Code not available[/muted]"
+        )
+
+    # -- OpenAI (Codex CLI) --
+    codex_ok = False
+    try:
+        from core.gateway.auth.codex_cli_oauth import (
+            read_codex_cli_credentials,
+        )
+
+        codex_creds = read_codex_cli_credentials(force_refresh=True)
+        if codex_creds:
+            acct = codex_creds.get("account_id", "unknown")
+            console.print(
+                f"  [success]\u2713[/success] OpenAI     "
+                f"Codex CLI OAuth (account: {acct[:12]}...)"
+            )
+            codex_ok = True
+        else:
+            console.print(
+                "  [error]\u2717[/error] OpenAI     "
+                "[muted]Codex CLI not logged in[/muted]"
+            )
+    except Exception:
+        console.print(
+            "  [error]\u2717[/error] OpenAI     "
+            "[muted]Codex CLI not available[/muted]"
+        )
+
+    # -- Login guidance --
+    if not claude_ok or not codex_ok:
+        console.print()
+        console.print("  [header]How to login[/header]")
+        if not claude_ok:
+            console.print(
+                "  [muted]Anthropic:[/muted]  "
+                "Run [bold]claude login[/bold] in terminal, "
+                "then restart GEODE"
+            )
+        if not codex_ok:
+            console.print(
+                "  [muted]OpenAI:   [/muted]  "
+                "Run [bold]codex login[/bold] in terminal, "
+                "then restart GEODE"
+            )
+        console.print()
+        console.print(
+            "  [muted]OAuth profiles auto-detected on startup. "
+            "Restart GEODE after login.[/muted]"
+        )
+
+    console.print()
+
+
 def cmd_auth(args: str) -> None:
     """Handle /auth command — manage auth profiles (OpenClaw Auth Profile UI pattern).
 
@@ -455,7 +537,10 @@ def cmd_auth(args: str) -> None:
         if not statuses:
             console.print()
             console.print("  [muted]No auth profiles configured.[/muted]")
-            console.print("  [muted]Use /auth add or /key <value> to add credentials.[/muted]")
+            console.print(
+                "  [muted]Use /auth login to check OAuth status,"
+                " or /key <value> for API keys.[/muted]"
+            )
             console.print()
             return
 
@@ -483,37 +568,20 @@ def cmd_auth(args: str) -> None:
         console.print(
             "  [muted]Priority: oauth > token > api_key[/muted]"
         )
+        # Hint if no OAuth profiles detected
+        has_oauth = any(
+            s["type"] == "oauth" for s in statuses
+        )
+        if not has_oauth:
+            console.print(
+                "  [muted]Tip: /auth login to set up OAuth"
+                " (saves API costs)[/muted]"
+            )
         console.print()
         return
 
     if arg.startswith("login"):
-        # Check Claude Code OAuth status and guide user
-        try:
-            from core.gateway.auth.claude_code_oauth import (
-                read_claude_code_credentials,
-            )
-
-            creds = read_claude_code_credentials(force_refresh=True)
-            if creds:
-                sub = creds.get("subscription_type", "unknown")
-                console.print(
-                    f"  [success]Claude Code OAuth active[/success]"
-                    f"  ({sub.capitalize()} subscription)"
-                )
-            else:
-                console.print(
-                    "  [warning]Claude Code not logged in.[/warning]"
-                )
-                console.print(
-                    "  [muted]Run 'claude login' in your terminal,"
-                    " then restart GEODE.[/muted]"
-                )
-        except Exception:
-            console.print(
-                "  [muted]Claude Code OAuth not available."
-                " Use /key to set API keys directly.[/muted]"
-            )
-        console.print()
+        _auth_login_status()
         return
 
     if arg.startswith("add"):
@@ -533,7 +601,9 @@ def cmd_auth(args: str) -> None:
         console.print()
         return
 
-    console.print("  [warning]Usage: /auth [add|remove <name>][/warning]")
+    console.print(
+        "  [warning]Usage: /auth [login|add|remove <name>][/warning]"
+    )
     console.print()
 
 
