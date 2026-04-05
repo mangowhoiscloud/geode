@@ -1417,7 +1417,7 @@ def _build_offload_handlers() -> dict[str, Any]:
     """Build recall_tool_result handler for retrieving offloaded tool results."""
 
     def handle_recall_tool_result(**kwargs: Any) -> dict[str, Any]:
-        from core.orchestration.tool_offload import get_offload_store  # type: ignore[import-untyped]
+        from core.orchestration.tool_offload import get_offload_store
 
         ref_id = kwargs.get("ref_id", "")
         if not ref_id:
