@@ -52,16 +52,8 @@ def _try_oauth_refresh(provider_label: str) -> bool:
         if not profile or not profile.managed_by:
             return False
 
-        if profile.managed_by == "claude-code":
-            from core.gateway.auth.claude_code_oauth import (
-                refresh_claude_code_token,
-            )
-            from core.llm.providers.anthropic import reset_clients
-
-            if refresh_claude_code_token(profile):
-                reset_clients()
-                return True
-        elif profile.managed_by == "codex-cli":
+        # claude-code OAuth disabled (Anthropic ToS violation)
+        if profile.managed_by == "codex-cli":
             from core.gateway.auth.codex_cli_oauth import (
                 refresh_codex_cli_token,
             )
