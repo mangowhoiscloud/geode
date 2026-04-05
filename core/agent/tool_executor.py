@@ -186,12 +186,11 @@ class ToolExecutor:
         """
         # IPC mode: relay approval to thin client via callback
         if self._approval_callback is not None:
-            decision = self._approval_callback(
-                tool_name or label, detail, safety_level
-            )
+            decision = self._approval_callback(tool_name or label, detail, safety_level)
             log.debug(
                 "HITL: IPC callback decision=%s tool=%s",
-                decision, tool_name or label,
+                decision,
+                tool_name or label,
             )
             return decision
 

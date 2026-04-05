@@ -102,7 +102,8 @@ class _StreamingWriter:
                 if not chunk:
                     log.warning(
                         "HITL: connection closed tool=%s elapsed=%.1fs",
-                        tool_name, _time.monotonic() - _t0,
+                        tool_name,
+                        _time.monotonic() - _t0,
                     )
                     return "n"
                 buf += chunk
@@ -113,7 +114,9 @@ class _StreamingWriter:
                         decision = str(msg.get("decision", "n"))
                         log.info(
                             "HITL: approval_response tool=%s decision=%s elapsed=%.1fs",
-                            tool_name, decision, _time.monotonic() - _t0,
+                            tool_name,
+                            decision,
+                            _time.monotonic() - _t0,
                         )
                         return decision
                     else:
@@ -124,13 +127,16 @@ class _StreamingWriter:
         except TimeoutError:
             log.warning(
                 "HITL: approval TIMEOUT tool=%s elapsed=%.1fs",
-                tool_name, _time.monotonic() - _t0,
+                tool_name,
+                _time.monotonic() - _t0,
             )
             return "n"
         except (OSError, json.JSONDecodeError) as exc:
             log.warning(
                 "HITL: approval error tool=%s elapsed=%.1fs exc=%s",
-                tool_name, _time.monotonic() - _t0, exc,
+                tool_name,
+                _time.monotonic() - _t0,
+                exc,
             )
             return "n"
         finally:

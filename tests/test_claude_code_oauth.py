@@ -92,9 +92,7 @@ class TestReadCredentials:
                 }
             }
         )
-        with patch(
-            "core.gateway.auth.claude_code_oauth.subprocess.run"
-        ) as mock_run:
+        with patch("core.gateway.auth.claude_code_oauth.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = fake_keychain
             with patch("core.gateway.auth.claude_code_oauth.sys") as mock_sys:
@@ -162,9 +160,7 @@ class TestReadCredentials:
             r1 = read_claude_code_credentials(force_refresh=True)
 
         # Second call — keychain not called again
-        with patch(
-            "core.gateway.auth.claude_code_oauth._read_from_keychain"
-        ) as mock_kc:
+        with patch("core.gateway.auth.claude_code_oauth._read_from_keychain") as mock_kc:
             r2 = read_claude_code_credentials()
 
         assert r1 == r2
