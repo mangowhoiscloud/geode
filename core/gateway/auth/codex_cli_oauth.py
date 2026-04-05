@@ -117,9 +117,7 @@ def _parse_codex_credentials(data: dict[str, Any]) -> CodexCliCredentials | None
             try:
                 from datetime import datetime
 
-                dt = datetime.fromisoformat(
-                    last_refresh.replace("Z", "+00:00")
-                )
+                dt = datetime.fromisoformat(last_refresh.replace("Z", "+00:00"))
                 expires = dt.timestamp() + 3600
             except (ValueError, TypeError):
                 expires = time.time() + 3600
@@ -140,7 +138,8 @@ def _parse_codex_credentials(data: dict[str, Any]) -> CodexCliCredentials | None
 
 
 def read_codex_cli_credentials(
-    *, force_refresh: bool = False,
+    *,
+    force_refresh: bool = False,
 ) -> CodexCliCredentials | None:
     """Read Codex CLI OAuth credentials (cached, TTL 15min).
 

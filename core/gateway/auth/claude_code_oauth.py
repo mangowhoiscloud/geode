@@ -163,7 +163,8 @@ def _parse_oauth(raw: dict[str, Any]) -> ClaudeCodeCredentials | None:
 
 
 def read_claude_code_credentials(
-    *, force_refresh: bool = False,
+    *,
+    force_refresh: bool = False,
 ) -> ClaudeCodeCredentials | None:
     """Read Claude Code OAuth credentials (cached, TTL 15min).
 
