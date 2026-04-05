@@ -186,12 +186,11 @@ class ToolExecutor:
         """
         # IPC mode: relay approval to thin client via callback
         if self._approval_callback is not None:
-            decision = self._approval_callback(
-                tool_name or label, detail, safety_level
-            )
+            decision = self._approval_callback(tool_name or label, detail, safety_level)
             log.debug(
                 "HITL: IPC callback decision=%s tool=%s",
-                decision, tool_name or label,
+                decision,
+                tool_name or label,
             )
             return decision
 
@@ -1006,7 +1005,7 @@ class ToolCallProcessor:
         )
 
     def _serialize_tool_result(self, result: Any, block_id: str) -> dict[str, Any]:
-        """Apply token guard and serialize result as JSON for LLM consumption."""
+        """Apply token guard, offload large results, and serialize for LLM."""
         # Token guard: truncate oversized results to prevent context explosion
         # For small-context models (e.g. GLM-5), apply model-aware limit
         if isinstance(result, dict):
@@ -1015,9 +1014,48 @@ class ToolCallProcessor:
 
         # Serialize result as JSON for LLM (not Python repr)
         try:
-            content = json.dumps(result, ensure_ascii=False, default=str)
+            serialized = json.dumps(result, ensure_ascii=False, default=str)
         except (TypeError, ValueError):
-            content = str(result)
+            serialized = str(result)
+
+        # P0: Offload large results to filesystem, inject compact summary
+        estimated_tokens = len(serialized) // 4
+        from core.orchestration.tool_offload import get_offload_store
+
+        offload_store = get_offload_store()
+        if (
+            offload_store
+            and offload_store.threshold > 0
+            and estimated_tokens > offload_store.threshold
+        ):
+            from core.orchestration.tool_offload import extract_result_summary
+
+            ref_id = offload_store.offload(block_id, result)
+            summary = extract_result_summary(result, max_chars=400)
+            content = json.dumps(
+                {
+                    "_offloaded": True,
+                    "_ref_id": ref_id,
+                    "_original_tokens": estimated_tokens,
+                    "summary": summary,
+                    "hint": "Use recall_tool_result(ref_id) to retrieve the full output.",
+                },
+                ensure_ascii=False,
+            )
+            # Fire hook for observability
+            if self._hooks:
+                from core.hooks import HookEvent
+
+                self._hooks.trigger(
+                    HookEvent.TOOL_RESULT_OFFLOADED,
+                    {
+                        "ref_id": ref_id,
+                        "original_tokens": estimated_tokens,
+                        "block_id": block_id,
+                    },
+                )
+        else:
+            content = serialized
 
         return {
             "type": "tool_result",

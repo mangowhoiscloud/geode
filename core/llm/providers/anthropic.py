@@ -243,6 +243,27 @@ _ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
     {"type": "web_fetch_20260209", "name": "web_fetch", "allowed_callers": ["direct"]},
 ]
 
+# Computer-use tool (injected when enabled via settings)
+_COMPUTER_USE_TOOL: dict[str, Any] = {
+    "type": "computer_20251124",
+    "name": "computer",
+    "display_width_px": 1280,
+    "display_height_px": 800,
+}
+
+
+def is_computer_use_enabled() -> bool:
+    """Check if computer-use is enabled (requires pyautogui + opt-in)."""
+    if not getattr(settings, "computer_use_enabled", False):
+        return False
+    try:
+        import pyautogui  # type: ignore[import-untyped]  # noqa: F401
+
+        return True
+    except ImportError:
+        log.debug("computer-use disabled: pyautogui not installed")
+        return False
+
 
 class ClaudeAgenticAdapter:
     """Anthropic agentic adapter (P1 Gateway pattern).
@@ -301,6 +322,10 @@ class ClaudeAgenticAdapter:
         for native in _ANTHROPIC_NATIVE_TOOLS:
             if native["name"] not in existing_names:
                 api_tools.append(native)
+
+        # Inject computer-use tool if enabled
+        if is_computer_use_enabled() and "computer" not in existing_names:
+            api_tools.append(_COMPUTER_USE_TOOL)
 
         failover_models = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
 

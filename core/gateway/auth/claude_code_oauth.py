@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
+import subprocess  # nosec B404
 import sys
 import time
 from pathlib import Path
@@ -84,8 +84,8 @@ def _read_from_keychain() -> dict[str, Any] | None:
     Equivalent to OpenClaw readClaudeCliKeychainCredentials().
     """
     try:
-        result = subprocess.run(  # noqa: S603 — fixed args, macOS Keychain only
-            [  # noqa: S607
+        result = subprocess.run(  # noqa: S603  # nosec B603,B607
+            [  # noqa: S607  # nosec B607
                 "security",
                 "find-generic-password",
                 "-s",
@@ -163,7 +163,8 @@ def _parse_oauth(raw: dict[str, Any]) -> ClaudeCodeCredentials | None:
 
 
 def read_claude_code_credentials(
-    *, force_refresh: bool = False,
+    *,
+    force_refresh: bool = False,
 ) -> ClaudeCodeCredentials | None:
     """Read Claude Code OAuth credentials (cached, TTL 15min).
 

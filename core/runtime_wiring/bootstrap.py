@@ -624,3 +624,40 @@ def build_readiness() -> Any:
     from core.cli.startup import check_readiness
 
     return check_readiness()
+
+
+def build_tool_offload(
+    *,
+    session_id: str,
+    hooks: HookSystem | None = None,
+) -> Any:
+    """Build P0 tool result offload store and wire cleanup on SESSION_END."""
+    if settings.tool_offload_threshold <= 0:
+        return None
+
+    from core.orchestration.tool_offload import ToolResultOffloadStore, set_offload_store
+
+    store = ToolResultOffloadStore(
+        session_id=session_id,
+        threshold=settings.tool_offload_threshold,
+        ttl_hours=settings.tool_offload_ttl_hours,
+    )
+    set_offload_store(store)
+
+    if hooks:
+
+        def _cleanup_offload(_event: Any, _data: Any) -> None:
+            store.cleanup_session()
+
+        hooks.register(
+            HookEvent.SESSION_END,
+            _cleanup_offload,
+            name="tool_offload_cleanup",
+            priority=95,
+        )
+    log.info(
+        "Tool offload enabled: threshold=%d tokens, ttl=%.1fh",
+        store.threshold,
+        settings.tool_offload_ttl_hours,
+    )
+    return store

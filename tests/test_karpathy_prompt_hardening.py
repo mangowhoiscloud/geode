@@ -356,7 +356,7 @@ class TestHookEventTypes:
 
     def test_hook_event_count(self):
         """Total hook events after H6 orphan pruning."""
-        assert len(HookEvent) == 48
+        assert len(HookEvent) == 49
 
 
 # ---------------------------------------------------------------------------

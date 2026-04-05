@@ -233,3 +233,54 @@ def adaptive_prune(
         tokens_before - tokens_after,
     )
     return result
+
+
+def mask_stale_observations(
+    messages: list[dict[str, Any]],
+    *,
+    keep_recent_rounds: int = 3,
+) -> int:
+    """Replace older tool_result content with compact placeholders.
+
+    Preserves ``type`` and ``tool_use_id`` for API compatibility.
+    Only masks tool_result blocks in user messages older than the most
+    recent *keep_recent_rounds* assistant->user round-trips.
+
+    Mutates messages in-place.  Returns count of masked blocks.
+
+    JetBrains Research (2025.12): observation masking achieves equivalent
+    solve rates to LLM summarization at 52% lower cost and 15% faster.
+    """
+    # Count assistant messages to determine round boundaries
+    assistant_indices: list[int] = [
+        i for i, m in enumerate(messages) if m.get("role") == "assistant"
+    ]
+    if len(assistant_indices) <= keep_recent_rounds:
+        return 0  # not enough rounds to mask anything
+
+    # The cutoff: messages before this index are "stale"
+    cutoff_idx = assistant_indices[-keep_recent_rounds]
+
+    masked = 0
+    for i, msg in enumerate(messages):
+        if i >= cutoff_idx:
+            break  # only process messages before cutoff
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                continue
+            inner = block.get("content", "")
+            # Skip already-masked or tiny results
+            if isinstance(inner, str) and (inner.startswith("[masked:") or len(inner) < 200):
+                continue
+            estimated = len(json.dumps(block, default=str)) // CHARS_PER_TOKEN
+            block["content"] = f"[masked: {estimated:,} tokens, use recall_tool_result if needed]"
+            masked += 1
+
+    if masked:
+        log.info("Masked %d stale tool observations (before round -%d)", masked, keep_recent_rounds)
+    return masked

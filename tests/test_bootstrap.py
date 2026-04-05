@@ -299,7 +299,7 @@ class TestApplyContext:
 class TestHookEventCount:
     def test_events_exist(self) -> None:
         """HookEvent has 40 events after H6 orphan pruning."""
-        assert len(HookEvent) == 48
+        assert len(HookEvent) == 49
 
     def test_node_bootstrap_event_value(self) -> None:
         assert HookEvent.NODE_BOOTSTRAP.value == "node_bootstrap"
