@@ -85,21 +85,36 @@ class WebFetchTool:
 
     @staticmethod
     def _html_to_text(html: str) -> str:
-        """Extract text from HTML, stripping tags."""
+        """Convert HTML to Markdown, preserving structure.
+
+        Uses markdownify for structure-preserving conversion (links,
+        headings, code blocks). Falls back to BeautifulSoup text
+        extraction if markdownify unavailable.
+        Claude Code pattern: Turndown HTML→MD before context injection.
+        """
         try:
             from bs4 import BeautifulSoup
 
             soup = BeautifulSoup(html, "html.parser")
-            # Remove script and style elements
             for tag in soup(["script", "style", "nav", "footer", "header"]):
                 tag.decompose()
-            return soup.get_text(separator="\n", strip=True)
+            cleaned = str(soup)
         except ImportError:
-            # Fallback: simple regex strip
-            import re
+            cleaned = html
 
-            text = re.sub(r"<[^>]+>", " ", html)
-            return re.sub(r"\s+", " ", text).strip()
+        try:
+            from markdownify import markdownify as md
+
+            return md(cleaned, heading_style="ATX", strip=["img"])
+        except ImportError:
+            # Fallback: plain text extraction
+            try:
+                return soup.get_text(separator="\n", strip=True)
+            except NameError:
+                import re
+
+                text = re.sub(r"<[^>]+>", " ", html)
+                return re.sub(r"\s+", " ", text).strip()
 
 
 class GeneralWebSearchTool:
