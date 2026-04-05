@@ -449,9 +449,6 @@ def _auth_login_status() -> None:
     claude_ok = False
     try:
         from core.gateway.auth.claude_code_oauth import (
-            invalidate_cache as _cc_invalidate,
-        )
-        from core.gateway.auth.claude_code_oauth import (
             read_claude_code_credentials,
         )
 
@@ -471,9 +468,6 @@ def _auth_login_status() -> None:
     # OpenAI
     codex_ok = False
     try:
-        from core.gateway.auth.codex_cli_oauth import (
-            invalidate_cache as _cx_invalidate,
-        )
         from core.gateway.auth.codex_cli_oauth import (
             read_codex_cli_credentials,
         )
@@ -537,13 +531,8 @@ def _auth_login_status() -> None:
             )
             if result.returncode == 0:
                 console.print(f"  [success]{p['name']} login successful![/success]")
-                # Re-read credentials immediately
-                if cli_name == "claude":
-                    _cc_invalidate()
-                    read_claude_code_credentials(force_refresh=True)
-                elif cli_name == "codex":
-                    _cx_invalidate()
-                    read_codex_cli_credentials(force_refresh=True)
+                # Re-read credentials + update ProfileStore
+                _sync_oauth_profile_after_login(cli_name)
             else:
                 console.print(
                     f"  [warning]{p['name']} login failed (exit code {result.returncode})[/warning]"
@@ -554,6 +543,67 @@ def _auth_login_status() -> None:
             console.print(f"  [warning]{p['name']} login error: {exc}[/warning]")
 
     console.print()
+
+
+def _sync_oauth_profile_after_login(cli_name: str) -> None:
+    """Re-read OAuth credentials and update ProfileStore after login."""
+    from core.gateway.auth.profiles import AuthProfile, CredentialType
+
+    store = _get_profile_store()
+
+    if cli_name == "claude":
+        from core.gateway.auth.claude_code_oauth import (
+            invalidate_cache,
+            read_claude_code_credentials,
+        )
+
+        invalidate_cache()
+        creds = read_claude_code_credentials(force_refresh=True)
+        if creds:
+            profile = AuthProfile(
+                name="anthropic:claude-code",
+                provider="anthropic",
+                credential_type=CredentialType.OAUTH,
+                key=creds["access_token"],
+                refresh_token=creds.get("refresh_token", ""),
+                expires_at=creds.get("expires_at", 0.0),
+                managed_by="claude-code",
+                metadata={
+                    **(
+                        {"subscription_type": creds["subscription_type"]}
+                        if "subscription_type" in creds
+                        else {}
+                    ),
+                    **(
+                        {"rate_limit_tier": creds["rate_limit_tier"]}
+                        if "rate_limit_tier" in creds
+                        else {}
+                    ),
+                },
+            )
+            store.add(profile)
+
+    elif cli_name == "codex":
+        from core.gateway.auth.codex_cli_oauth import (
+            invalidate_cache as codex_invalidate,
+        )
+        from core.gateway.auth.codex_cli_oauth import (
+            read_codex_cli_credentials,
+        )
+
+        codex_invalidate()
+        codex_creds = read_codex_cli_credentials(force_refresh=True)
+        if codex_creds:
+            profile = AuthProfile(
+                name="openai:codex-cli",
+                provider="openai",
+                credential_type=CredentialType.OAUTH,
+                key=codex_creds["access_token"],
+                refresh_token=codex_creds.get("refresh_token", ""),
+                expires_at=codex_creds.get("expires_at", 0.0),
+                managed_by="codex-cli",
+            )
+            store.add(profile)
 
 
 def cmd_auth(args: str) -> None:
