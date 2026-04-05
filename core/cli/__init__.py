@@ -785,6 +785,36 @@ def _build_prompt_session() -> Any:
     )
 
 
+_select_policy_applied = False
+
+
+def _force_select_event_loop() -> None:
+    """Force asyncio to use select() instead of kqueue on Python 3.14+.
+
+    Python 3.14's kqueue selector raises OSError on add_reader(fd) when
+    prompt_toolkit attaches stdin. select() doesn't have this issue.
+    Deprecated in 3.16 but functional through 3.15.
+    """
+    global _select_policy_applied
+    if _select_policy_applied:
+        return
+    _select_policy_applied = True
+
+    import asyncio
+    import selectors
+    import warnings
+
+    class _SelectLoopPolicy(asyncio.DefaultEventLoopPolicy):
+        def new_event_loop(self) -> asyncio.AbstractEventLoop:
+            selector = selectors.SelectSelector()
+            return asyncio.SelectorEventLoop(selector)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        asyncio.set_event_loop_policy(_SelectLoopPolicy())
+    log.debug("Forced SelectSelector event loop policy (Python 3.14+ kqueue workaround)")
+
+
 # Module-level lazy singleton
 _prompt_session: Any = None
 
@@ -794,13 +824,11 @@ def _get_prompt_session() -> Any:
     if _prompt_session is False:
         return None  # permanently disabled after runtime failure
     if _prompt_session is None:
-        # Python 3.14+ has kqueue incompatibility with prompt_toolkit's
-        # asyncio selector (OSError: Invalid argument on add_reader).
-        # Skip prompt_toolkit entirely to avoid terminal corruption.
+        # Python 3.14+ kqueue is incompatible with prompt_toolkit's
+        # asyncio add_reader (OSError: Invalid argument). Force select()
+        # based event loop so prompt_toolkit works (CJK input, history).
         if sys.version_info >= (3, 14):
-            log.info("prompt_toolkit skipped (Python %s — kqueue compat)", sys.version_info)
-            _prompt_session = False  # sentinel: disabled
-            return None
+            _force_select_event_loop()
         try:
             _prompt_session = _build_prompt_session()
         except Exception:
