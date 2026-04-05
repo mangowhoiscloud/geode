@@ -191,7 +191,7 @@ class GeneralWebSearchTool:
                         ),
                     }
                 ],
-                timeout=30.0,
+                timeout=60.0,
             )
             text_parts: list[str] = []
             source_urls: list[str] = []
@@ -216,16 +216,21 @@ class GeneralWebSearchTool:
             return None
 
     def _openai_search(self, query: str, max_results: int) -> dict[str, Any] | None:
-        """OpenAI native web search via Responses API."""
+        """OpenAI native web search via Responses API.
+
+        Uses settings.openai_api_key directly (not ProfileRotator) because
+        Codex CLI OAuth tokens lack web_search permission → 401.
+        """
         try:
+            import openai
+
             from core.config import OPENAI_PRIMARY, settings
-            from core.llm.providers.openai import _get_openai_client
 
             if not settings.openai_api_key:
                 return None
 
             today = date.today()
-            client = _get_openai_client()
+            client = openai.OpenAI(api_key=settings.openai_api_key)
             response = client.responses.create(
                 model=OPENAI_PRIMARY,
                 tools=[{"type": "web_search"}],
@@ -283,7 +288,7 @@ class GeneralWebSearchTool:
                         ),
                     }
                 ],
-                timeout=30.0,
+                timeout=60.0,
             )
             choice = response.choices[0] if response.choices else None
             if choice and choice.message.content:
