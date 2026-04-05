@@ -1204,6 +1204,8 @@ def _build_tool_handlers(
     handlers.update(_build_mcp_handler(mcp_manager))
     handlers.update(_build_context_handlers())
     handlers.update(_build_task_handlers())
+    handlers.update(_build_offload_handlers())
+    handlers.update(_build_computer_use_handler())
     return handlers
 
 
@@ -1404,3 +1406,54 @@ def _build_calendar_handlers() -> dict[str, Any]:
         "calendar_create_event": handle_calendar_create_event,
         "calendar_sync_scheduler": handle_calendar_sync_scheduler,
     }
+
+
+# ---------------------------------------------------------------------------
+# Tool offload handlers (P0 token optimization)
+# ---------------------------------------------------------------------------
+
+
+def _build_offload_handlers() -> dict[str, Any]:
+    """Build recall_tool_result handler for retrieving offloaded tool results."""
+
+    def handle_recall_tool_result(**kwargs: Any) -> dict[str, Any]:
+        from core.orchestration.tool_offload import get_offload_store
+
+        ref_id = kwargs.get("ref_id", "")
+        if not ref_id:
+            return {"error": "ref_id is required"}
+        store = get_offload_store()
+        if store is None:
+            return {"error": "Tool offloading is not enabled in this session"}
+        result: dict[str, Any] = store.recall(ref_id)
+        return result
+
+    return {
+        "recall_tool_result": handle_recall_tool_result,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Computer-use handler (desktop automation)
+# ---------------------------------------------------------------------------
+
+
+def _build_computer_use_handler() -> dict[str, Any]:
+    """Build computer-use handler (screenshot + mouse + keyboard).
+
+    Only active when GEODE_COMPUTER_USE_ENABLED=true and pyautogui installed.
+    """
+    from core.llm.providers.anthropic import is_computer_use_enabled
+
+    if not is_computer_use_enabled():
+        return {}
+
+    from core.tools.computer_use import ComputerUseHarness
+
+    harness = ComputerUseHarness()
+
+    def handle_computer(**kwargs: Any) -> dict[str, Any]:
+        action = kwargs.get("action", "screenshot")
+        return harness.execute(action, **kwargs)
+
+    return {"computer": handle_computer}

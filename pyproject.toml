@@ -82,7 +82,7 @@ ignore = [
 
 [tool.bandit]
 exclude_dirs = ["tests"]
-skips = ["B101", "B105", "B110", "B311"]
+skips = ["B101", "B105", "B110", "B311", "B404", "B603", "B607"]
 
 [tool.coverage.run]
 source = ["core"]

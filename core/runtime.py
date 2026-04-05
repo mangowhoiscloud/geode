@@ -264,6 +264,9 @@ class GeodeRuntime:
         skill_registry = bootstrap.build_skill_registry()
         readiness = bootstrap.build_readiness()
 
+        # P0: Tool result offloading
+        bootstrap.build_tool_offload(session_id=session_key, hooks=hooks)
+
         # Plugin wiring (MCP adapters + Gateway)
         adapter_wiring.build_plugins()
 

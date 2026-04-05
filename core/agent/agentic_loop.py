@@ -1187,14 +1187,23 @@ class AgenticLoop:
                     )
 
             elif metrics.is_warning:
-                # For non-Anthropic providers, 80% triggers client compaction
+                # Step 1: mask stale observations (cheapest — no LLM call)
+                from core.orchestration.context_monitor import mask_stale_observations
+
+                mask_keep = settings.observation_mask_keep_rounds
+                masked = mask_stale_observations(messages, keep_recent_rounds=mask_keep)
+                if masked > 0:
+                    log.info(
+                        "Context at %.0f%%: masked %d stale observations",
+                        metrics.usage_pct,
+                        masked,
+                    )
+
+                # Step 2: compact or summarize
                 strategy = self._resolve_overflow_strategy(metrics, settings)
                 if strategy.get("strategy") == "compact":
                     self._apply_overflow_strategy(strategy, messages, settings)
                 else:
-                    # All providers at 80%+: proactively summarize large tool results
-                    # to prevent overflow on next round (server compaction only works
-                    # if the request fits in the window)
                     from core.orchestration.context_monitor import summarize_tool_results
 
                     summarized, _tok_before, _tok_after = summarize_tool_results(

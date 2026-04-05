@@ -255,6 +255,14 @@ def build_shared_services(
             stuck_timeout_s=getattr(_settings, "stuck_timeout_s", 600.0),
         )
 
+    # P0: Tool result offloading
+    from core.runtime_wiring.bootstrap import build_tool_offload
+
+    build_tool_offload(
+        session_id=f"geode-{uuid.uuid4().hex[:8]}",
+        hooks=hook_system,
+    )
+
     # Build tool handlers — no agentic_ref (uses ContextVar instead)
     from core.cli.tool_handlers import _build_tool_handlers
 

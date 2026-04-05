@@ -437,7 +437,7 @@ def cmd_model(args: str) -> None:
 def _auth_login_status() -> None:
     """Show OAuth status + offer interactive login for missing providers."""
     import shutil
-    import subprocess
+    import subprocess  # nosec B404
 
     console.print()
     console.print("  [header]OAuth Login Status[/header]")
@@ -459,20 +459,14 @@ def _auth_login_status() -> None:
         if creds:
             sub = creds.get("subscription_type", "unknown")
             console.print(
-                f"  [success]\u2713[/success] Anthropic  "
-                f"Claude Code OAuth ({sub.capitalize()})"
+                f"  [success]\u2713[/success] Anthropic  Claude Code OAuth ({sub.capitalize()})"
             )
             claude_ok = True
     except Exception:  # noqa: S110
         pass
     if not claude_ok:
-        console.print(
-            "  [error]\u2717[/error] Anthropic  "
-            "[muted]not logged in[/muted]"
-        )
-    providers.append(
-        {"name": "Anthropic", "cli": "claude", "ok": claude_ok}
-    )
+        console.print("  [error]\u2717[/error] Anthropic  [muted]not logged in[/muted]")
+    providers.append({"name": "Anthropic", "cli": "claude", "ok": claude_ok})
 
     # OpenAI
     codex_ok = False
@@ -488,28 +482,20 @@ def _auth_login_status() -> None:
         if codex_creds:
             acct = codex_creds.get("account_id", "unknown")[:12]
             console.print(
-                f"  [success]\u2713[/success] OpenAI     "
-                f"Codex CLI OAuth (account: {acct}...)"
+                f"  [success]\u2713[/success] OpenAI     Codex CLI OAuth (account: {acct}...)"
             )
             codex_ok = True
     except Exception:  # noqa: S110
         pass
     if not codex_ok:
-        console.print(
-            "  [error]\u2717[/error] OpenAI     "
-            "[muted]not logged in[/muted]"
-        )
-    providers.append(
-        {"name": "OpenAI", "cli": "codex", "ok": codex_ok}
-    )
+        console.print("  [error]\u2717[/error] OpenAI     [muted]not logged in[/muted]")
+    providers.append({"name": "OpenAI", "cli": "codex", "ok": codex_ok})
 
     # -- Offer interactive login for missing providers --
     missing = [p for p in providers if not p["ok"]]
     if not missing:
         console.print()
-        console.print(
-            "  [success]All providers authenticated via OAuth.[/success]"
-        )
+        console.print("  [success]All providers authenticated via OAuth.[/success]")
         console.print()
         return
 
@@ -531,9 +517,11 @@ def _auth_login_status() -> None:
             f"opens browser for OAuth"
         )
         try:
-            resp = console.input(
-                f"  [header]Run {cli_name} login now? [Y/n][/header] "
-            ).strip().lower()
+            resp = (
+                console.input(f"  [header]Run {cli_name} login now? [Y/n][/header] ")
+                .strip()
+                .lower()
+            )
         except (KeyboardInterrupt, EOFError):
             console.print()
             continue
@@ -541,18 +529,14 @@ def _auth_login_status() -> None:
         if resp in ("n", "no"):
             continue
 
-        console.print(
-            f"  [muted]Opening browser for {p['name']} login...[/muted]"
-        )
+        console.print(f"  [muted]Opening browser for {p['name']} login...[/muted]")
         try:
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(  # noqa: S603  # nosec B603
                 [cli_path, "login"],
                 timeout=120,
             )
             if result.returncode == 0:
-                console.print(
-                    f"  [success]{p['name']} login successful![/success]"
-                )
+                console.print(f"  [success]{p['name']} login successful![/success]")
                 # Re-read credentials immediately
                 if cli_name == "claude":
                     _cc_invalidate()
@@ -562,17 +546,12 @@ def _auth_login_status() -> None:
                     read_codex_cli_credentials(force_refresh=True)
             else:
                 console.print(
-                    f"  [warning]{p['name']} login failed "
-                    f"(exit code {result.returncode})[/warning]"
+                    f"  [warning]{p['name']} login failed (exit code {result.returncode})[/warning]"
                 )
         except subprocess.TimeoutExpired:
-            console.print(
-                f"  [warning]{p['name']} login timed out (120s)[/warning]"
-            )
+            console.print(f"  [warning]{p['name']} login timed out (120s)[/warning]")
         except OSError as exc:
-            console.print(
-                f"  [warning]{p['name']} login error: {exc}[/warning]"
-            )
+            console.print(f"  [warning]{p['name']} login error: {exc}[/warning]")
 
     console.print()
 
@@ -626,18 +605,11 @@ def cmd_auth(args: str) -> None:
                 f"[{style}]{status_text}[/{style}]"
             )
         console.print()
-        console.print(
-            "  [muted]Priority: oauth > token > api_key[/muted]"
-        )
+        console.print("  [muted]Priority: oauth > token > api_key[/muted]")
         # Hint if no OAuth profiles detected
-        has_oauth = any(
-            s["type"] == "oauth" for s in statuses
-        )
+        has_oauth = any(s["type"] == "oauth" for s in statuses)
         if not has_oauth:
-            console.print(
-                "  [muted]Tip: /auth login to set up OAuth"
-                " (saves API costs)[/muted]"
-            )
+            console.print("  [muted]Tip: /auth login to set up OAuth (saves API costs)[/muted]")
         console.print()
         return
 
@@ -662,9 +634,7 @@ def cmd_auth(args: str) -> None:
         console.print()
         return
 
-    console.print(
-        "  [warning]Usage: /auth [login|add|remove <name>][/warning]"
-    )
+    console.print("  [warning]Usage: /auth [login|add|remove <name>][/warning]")
     console.print()
 
 

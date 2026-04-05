@@ -105,6 +105,9 @@ class HookEvent(Enum):
     # Config hot-reload
     CONFIG_RELOADED = "config_reloaded"
 
+    # Tool result offloading (P0 token optimization)
+    TOOL_RESULT_OFFLOADED = "tool_result_offloaded"
+
     # MCP server lifecycle
     MCP_SERVER_CONNECTED = "mcp_server_connected"
     MCP_SERVER_FAILED = "mcp_server_failed"
