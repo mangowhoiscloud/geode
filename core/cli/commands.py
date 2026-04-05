@@ -445,25 +445,12 @@ def _auth_login_status() -> None:
     # -- Check current status --
     providers: list[dict[str, str | bool]] = []
 
-    # Anthropic
-    claude_ok = False
-    try:
-        from core.gateway.auth.claude_code_oauth import (
-            read_claude_code_credentials,
-        )
-
-        creds = read_claude_code_credentials(force_refresh=True)
-        if creds:
-            sub = creds.get("subscription_type", "unknown")
-            console.print(
-                f"  [success]\u2713[/success] Anthropic  Claude Code OAuth ({sub.capitalize()})"
-            )
-            claude_ok = True
-    except Exception:  # noqa: S110
-        pass
-    if not claude_ok:
-        console.print("  [error]\u2717[/error] Anthropic  [muted]not logged in[/muted]")
-    providers.append({"name": "Anthropic", "cli": "claude", "ok": claude_ok})
+    # Anthropic — OAuth disabled (ToS violation since 2026-01-09)
+    console.print(
+        "  [muted]\u2014[/muted] Anthropic  "
+        "[muted]OAuth disabled (ToS — API key only)[/muted]"
+    )
+    providers.append({"name": "Anthropic", "cli": "claude", "ok": True})  # skip login prompt
 
     # OpenAI
     codex_ok = False
@@ -552,38 +539,10 @@ def _sync_oauth_profile_after_login(cli_name: str) -> None:
     store = _get_profile_store()
 
     if cli_name == "claude":
-        from core.gateway.auth.claude_code_oauth import (
-            invalidate_cache,
-            read_claude_code_credentials,
-        )
+        # Anthropic OAuth disabled — ToS prohibits third-party use
+        return
 
-        invalidate_cache()
-        creds = read_claude_code_credentials(force_refresh=True)
-        if creds:
-            profile = AuthProfile(
-                name="anthropic:claude-code",
-                provider="anthropic",
-                credential_type=CredentialType.OAUTH,
-                key=creds["access_token"],
-                refresh_token=creds.get("refresh_token", ""),
-                expires_at=creds.get("expires_at", 0.0),
-                managed_by="claude-code",
-                metadata={
-                    **(
-                        {"subscription_type": creds["subscription_type"]}
-                        if "subscription_type" in creds
-                        else {}
-                    ),
-                    **(
-                        {"rate_limit_tier": creds["rate_limit_tier"]}
-                        if "rate_limit_tier" in creds
-                        else {}
-                    ),
-                },
-            )
-            store.add(profile)
-
-    elif cli_name == "codex":
+    if cli_name == "codex":
         from core.gateway.auth.codex_cli_oauth import (
             invalidate_cache as codex_invalidate,
         )

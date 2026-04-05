@@ -238,32 +238,10 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
 
     profile_store = ProfileStore()
 
-    # Claude Code OAuth — highest priority (managed credential)
-    try:
-        from core.gateway.auth.claude_code_oauth import (
-            read_claude_code_credentials,
-        )
-
-        creds = read_claude_code_credentials()
-        if creds:
-            profile_store.add(
-                AuthProfile(
-                    name="anthropic:claude-code",
-                    provider="anthropic",
-                    credential_type=CredentialType.OAUTH,
-                    key=creds["access_token"],
-                    refresh_token=creds.get("refresh_token", ""),
-                    expires_at=creds.get("expires_at", 0.0),
-                    managed_by="claude-code",
-                    metadata=_build_oauth_metadata(creds),
-                )
-            )
-            log.info(
-                "Auth: Claude Code OAuth detected (subscription=%s)",
-                creds.get("subscription_type", "unknown"),
-            )
-    except Exception as exc:
-        log.debug("Auth: Claude Code OAuth not available: %s", exc)
+    # Claude Code OAuth — DISABLED (Anthropic ToS violation since 2026-01-09).
+    # Anthropic prohibits OAuth token usage outside Claude Code/claude.ai.
+    # Code preserved for reference; re-enable only if policy changes.
+    # See: https://www.theregister.com/2026/02/20/anthropic_clarifies_ban_third_party_claude_access
 
     # Codex CLI OAuth — OpenAI managed credential
     try:
