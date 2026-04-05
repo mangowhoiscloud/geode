@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Any, TypedDict
@@ -34,6 +35,7 @@ class CodexCliCredentials(TypedDict, total=False):
 
 
 # -- Cache (with mtime fingerprint — OpenClaw sourceFingerprint pattern) --
+_cache_lock = threading.Lock()
 _cache: dict[str, Any] = {"value": None, "read_at": 0.0, "mtime": 0.0}
 
 
@@ -45,6 +47,7 @@ def _get_file_mtime() -> float:
 
 
 def _is_cache_valid() -> bool:
+    # Called under _cache_lock
     if _cache["value"] is None:
         return False
     if (time.time() - _cache["read_at"]) >= _CACHE_TTL_S:
@@ -55,9 +58,10 @@ def _is_cache_valid() -> bool:
 
 def invalidate_cache() -> None:
     """Force next read to bypass cache."""
-    _cache["value"] = None
-    _cache["read_at"] = 0.0
-    _cache["mtime"] = 0.0
+    with _cache_lock:
+        _cache["value"] = None
+        _cache["read_at"] = 0.0
+        _cache["mtime"] = 0.0
 
 
 def _decode_jwt_expiry(token: str) -> float | None:
@@ -145,23 +149,20 @@ def read_codex_cli_credentials(
 
     Returns None if Codex CLI is not logged in.
     """
-    if not force_refresh and _is_cache_valid():
-        cached: CodexCliCredentials | None = _cache["value"]
-        return cached
+    with _cache_lock:
+        if not force_refresh and _is_cache_valid():
+            cached: CodexCliCredentials | None = _cache["value"]
+            return cached
 
+    # Read outside lock (file I/O)
     data = _read_from_file()
     mtime = _get_file_mtime()
+    parsed = _parse_codex_credentials(data) if data else None
 
-    if data is None:
-        _cache["value"] = None
+    with _cache_lock:
+        _cache["value"] = parsed
         _cache["read_at"] = time.time()
         _cache["mtime"] = mtime
-        return None
-
-    parsed = _parse_codex_credentials(data)
-    _cache["value"] = parsed
-    _cache["read_at"] = time.time()
-    _cache["mtime"] = mtime
 
     if parsed:
         is_expired = time.time() > parsed["expires_at"]
