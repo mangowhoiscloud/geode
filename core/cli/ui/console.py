@@ -119,6 +119,15 @@ class _ConsoleProxy:
     def __setattr__(self, name: str, value: Any) -> None:
         setattr(self._current(), name, value)
 
+    # Dunder methods are looked up on the type, not the instance, so
+    # __getattr__ doesn't intercept them. Rich's FileProxy calls
+    # `with console:` which requires explicit __enter__/__exit__.
+    def __enter__(self) -> Console:
+        return self._current().__enter__()
+
+    def __exit__(self, *args: Any) -> None:
+        self._current().__exit__(*args)
+
 
 console: Any = _ConsoleProxy(_default_console)
 
