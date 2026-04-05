@@ -97,6 +97,7 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | | No version mismatch across 4 locations | Single source of truth |
 | **PR** | No PR body without HEREDOC | Format consistency |
 | | No PR without a "Why" rationale | Decision record |
+| | No PR body without Summary/Why/Changes/Verification sections | Information completeness |
 | | No merging PRs that haven't passed CI guardrails | Ratchet (P4) |
 
 ### Refactoring Deception Prevention
@@ -229,6 +230,38 @@ See `geode-changelog` skill.
 #### 6. PR & Merge
 
 See `geode-gitflow` skill. feature → develop → main. HEREDOC PR. CI 5/5 required.
+
+**PR Body Template (MANDATORY):**
+
+```
+## Summary
+<1-3 bullet points: what changed and why>
+
+## Why
+<Problem statement — what broke, what was missing, what user reported>
+
+## Changes
+| File | Change |
+|------|--------|
+| `path/to/file.py` | description of change |
+
+## GAP Audit (if applicable)
+| Item | Status | Notes |
+|------|--------|-------|
+| ... | Implemented / Dropped / Already exists | ... |
+
+## Verification
+- [ ] ruff check clean
+- [ ] mypy clean
+- [ ] pytest pass (count)
+- [ ] E2E unchanged (if applicable)
+
+## Reference
+<Source: frontier codebase, PR, issue, serve log, etc.>
+```
+
+Minimum required sections: **Summary**, **Why**, **Changes**, **Verification**.
+develop → main PRs may use abbreviated form (Summary + Verification only).
 
 | Change | Cascading Updates |
 |--------|-------------------|
