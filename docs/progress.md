@@ -57,7 +57,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| mcp-token-guard | MCP tool result 토큰 가드 + HTML→MD + offload threshold 조정 | @mangowhoiscloud | feature/mcp-token-guard | 2026-04-06 | Claude Code 패턴 이식 (T1+T2) |
+| oauth-policy-align | Anthropic OAuth 제거 (ToS 위반) + OpenAI Codex OAuth 유지 | @mangowhoiscloud | fix/oauth-policy-align | 2026-04-06 | Anthropic 2026-04-04 정책 변경 대응 |
 
 ### In Review
 
