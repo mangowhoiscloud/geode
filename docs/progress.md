@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-04-05 (세션 57 — HITL fix, grounding, verify workflow, per-tool auto-approve, approval spinner)
+> 마지막 갱신: 2026-04-06 (세션 58 — OAuth token reuse, computer-use, context overflow, search pipeline)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -57,12 +57,25 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| approval-spinner | HITL 승인 프롬프트 spinner UI 추가 — bare prompt → animated indicator | @mangowhoiscloud | feature/approval-spinner-ui | 2026-04-05 | 설계 결함 분석 후속 |
+| mcp-token-guard | MCP tool result 토큰 가드 + HTML→MD + offload threshold 조정 | @mangowhoiscloud | feature/mcp-token-guard | 2026-04-06 | Claude Code 패턴 이식 (T1+T2) |
 
 ### In Review
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-04-06 — 세션 58)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| oauth-token-reuse | Claude Code + Codex CLI OAuth 토큰 재사용 (managedBy 패턴) | #654-#659 | @mangowhoiscloud | 2026-04-05 |
+| computer-use | Computer-use 하네스 + Anthropic/OpenAI 통합 | #654→#655 | @mangowhoiscloud | 2026-04-05 |
+| prompt-toolkit-fix | Python 3.14 prompt_toolkit kqueue crash + ConsoleProxy context manager | #656-#663 | @mangowhoiscloud | 2026-04-06 |
+| approval-spinner | HITL approval UI ANSI cleanup — Rich console 통일 | #666→#667 | @mangowhoiscloud | 2026-04-06 |
+| glm-overflow-detect | GLM "Prompt exceeds max length" context overflow 즉시 감지 | #668→#669 | @mangowhoiscloud | 2026-04-06 |
+| sandbox-breadcrumb | Sandbox 3-layer breadcrumb — tool description + hint + recovery skip | #648 | @mangowhoiscloud | 2026-04-05 |
+| insight-quality-gate | PROJECT.md garbage 방지 quality gate + purge | #645 | @mangowhoiscloud | 2026-04-05 |
+| metrics-sync | CLAUDE.md + README.md 메트릭 동기화 (195 modules, 3525+ tests, 48 hooks, 56 tools) | direct | @mangowhoiscloud | 2026-04-05 |
 
 ### Done (2026-04-05 — 세션 57)
 
