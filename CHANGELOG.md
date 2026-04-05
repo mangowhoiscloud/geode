@@ -28,13 +28,38 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.46.0] — 2026-04-06
+
 ### Added
-- **Model switch breadcrumb** — `/model` 전환 시 대화에 전환 마커 주입하여 새 모델이 이전 모델의 응답을 현재 상태로 착각하지 않도록 방지 (Claude Code SDK `createModelSwitchBreadcrumbs` 패턴)
+- **OpenAI Codex CLI OAuth 토큰 재사용** — `~/.codex/auth.json`에서 OAuth 토큰 자동 감지. ChatGPT 구독 범위 내 API 호출 (OpenAI 공식 허용). ProfileRotator OAUTH > API_KEY 우선순위
+- **Computer-use 하네스** — PyAutoGUI 기반 provider-agnostic desktop automation. Anthropic `computer_20251124` + OpenAI `computer_use_preview` 양쪽 지원. DANGEROUS HITL 승인 필수
+- **MCP tool result 토큰 가드** — `max_tool_result_tokens` 25000 기본값. Claude Code 패턴 이식 (`mcpValidation.ts` 25K)
+- **HTML→MD 변환** — `markdownify` 도입. web_fetch HTML을 구조 보존 Markdown으로 변환하여 토큰 효율 개선
+- **Sandbox breadcrumb 3-layer** — tool description 제약 명시 + _check_sandbox hint + non-recoverable recovery skip
+- **Insight quality gate** — `_is_valid_insight()` 7개 reject rule. PROJECT.md garbage 방지
+- **HITL 3-point diagnostic logging** — thin CLI/server/tool_executor 전체 approval 흐름 진단 로그
+- **PR body 필수 4섹션 템플릿** — Summary/Why/Changes/Verification (CANNOT rule)
+- **`/auth login` 인터랙티브 플로우** — subprocess로 `claude login`/`codex login` 직접 실행. OAuth 상태 표시
+
+### Changed
+- **Anthropic OAuth 비활성화** — Anthropic 2026-01-09 ToS 변경 대응. Claude Code OAuth 재사용은 정책 위반 → API key만 사용. 코드 보존 (정책 변경 시 재활성화 가능)
+- **CLAUDE.md → GEODE.md 분리** — scaffold(CLAUDE.md) vs runtime(GEODE.md) 관심사 분리
+- **tool_offload_threshold 5000→15000** — offload 빈도 정상화
+- **web search timeout 30→60s** — native tool 응답 대기 시간 확대
 
 ### Fixed
-- **Haiku model switch 3-bug fix** — (B3) `compact-2026-01-12` beta header를 Haiku에 전송하여 400 에러 → 모델별 조건부 주입, (B1) `/model` context guard dead code — `set_conversation_context()` caller 0개 → `arun()` 진입 시 wire, (B2) `check_context()` overhead 500 하드코딩 → 실측 10K 기반 `_DEFAULT_TOOLS_OVERHEAD` 적용
-- **Haiku native tool 400 error** — Anthropic server tools(`web_search`, `web_fetch`)에 `allowed_callers=["direct"]` 미설정으로 Haiku 4.5에서 "programmatic tool calling not supported" 400 에러 발생. 모든 Anthropic 모델 호환되도록 수정
-- **HITL IPC approval 5-bug fix** — (1) `request_approval()` buf 미갱신으로 non-approval 메시지 무한 재파싱 → 타임아웃, (2) stale `approval_response` "Unknown message type" 에러 → 무시 처리, (3) `_prompt_with_always()` label("Allow?")이 tool_name으로 전달 → 실제 도구명 전달, (4) bash safety_level "write" 기본값 → "dangerous" 전달, (5) IPC 이중 프롬프트 → callback 모드에서 서버측 console.print 억제
+- **Python 3.14 prompt_toolkit crash** — kqueue OSError. SelectSelector event loop policy 강제로 prompt_toolkit 복원 (한글 입력/history/backspace)
+- **_ConsoleProxy context manager** — Rich FileProxy의 `with console:` TypeError. `__enter__`/`__exit__` 명시적 위임
+- **HITL approval UI ANSI 깨짐** — spinner raw ANSI escape 제거 → Rich console.print 통일
+- **GLM context overflow 감지** — `"Prompt exceeds max length"` (code 1261) 패턴 추가. 즉시 context_overflow 분류 → aggressive recovery
+- **OAuth cache thread-safety** — `threading.Lock`으로 _cache dict 동시 접근 보호
+- **web search 401** — Codex OAuth 토큰이 web_search 권한 없음. `_openai_search`가 API key 직접 사용
+- **ProfileStore 미갱신** — `/auth login` 후 즉시 ProfileStore 반영
+- **CLAUDE.md + README.md 메트릭 동기화** — Modules 195, Tests 3525+, Hooks 48, Tools 56 통일
+- **Model switch breadcrumb** — `/model` 전환 시 대화에 전환 마커 주입
+- **Haiku model switch 3-bug fix** — beta header 조건부 주입 + context guard wire + overhead 실측
+- **Haiku native tool 400** — `allowed_callers=["direct"]` 미설정 수정
+- **HITL IPC approval 5-bug fix** — buf 미갱신, stale response, tool_name, safety_level, 이중 프롬프트
 
 ## [0.45.0] — 2026-04-01
 
