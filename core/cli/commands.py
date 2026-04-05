@@ -434,6 +434,149 @@ def cmd_model(args: str) -> None:
     _apply_model(selected)
 
 
+def _auth_login_status() -> None:
+    """Show OAuth status + offer interactive login for missing providers."""
+    import shutil
+    import subprocess
+
+    console.print()
+    console.print("  [header]OAuth Login Status[/header]")
+
+    # -- Check current status --
+    providers: list[dict[str, str | bool]] = []
+
+    # Anthropic
+    claude_ok = False
+    try:
+        from core.gateway.auth.claude_code_oauth import (
+            invalidate_cache as _cc_invalidate,
+        )
+        from core.gateway.auth.claude_code_oauth import (
+            read_claude_code_credentials,
+        )
+
+        creds = read_claude_code_credentials(force_refresh=True)
+        if creds:
+            sub = creds.get("subscription_type", "unknown")
+            console.print(
+                f"  [success]\u2713[/success] Anthropic  "
+                f"Claude Code OAuth ({sub.capitalize()})"
+            )
+            claude_ok = True
+    except Exception:  # noqa: S110
+        pass
+    if not claude_ok:
+        console.print(
+            "  [error]\u2717[/error] Anthropic  "
+            "[muted]not logged in[/muted]"
+        )
+    providers.append(
+        {"name": "Anthropic", "cli": "claude", "ok": claude_ok}
+    )
+
+    # OpenAI
+    codex_ok = False
+    try:
+        from core.gateway.auth.codex_cli_oauth import (
+            invalidate_cache as _cx_invalidate,
+        )
+        from core.gateway.auth.codex_cli_oauth import (
+            read_codex_cli_credentials,
+        )
+
+        codex_creds = read_codex_cli_credentials(force_refresh=True)
+        if codex_creds:
+            acct = codex_creds.get("account_id", "unknown")[:12]
+            console.print(
+                f"  [success]\u2713[/success] OpenAI     "
+                f"Codex CLI OAuth (account: {acct}...)"
+            )
+            codex_ok = True
+    except Exception:  # noqa: S110
+        pass
+    if not codex_ok:
+        console.print(
+            "  [error]\u2717[/error] OpenAI     "
+            "[muted]not logged in[/muted]"
+        )
+    providers.append(
+        {"name": "OpenAI", "cli": "codex", "ok": codex_ok}
+    )
+
+    # -- Offer interactive login for missing providers --
+    missing = [p for p in providers if not p["ok"]]
+    if not missing:
+        console.print()
+        console.print(
+            "  [success]All providers authenticated via OAuth.[/success]"
+        )
+        console.print()
+        return
+
+    console.print()
+    for p in missing:
+        cli_name = str(p["cli"])
+        cli_path = shutil.which(cli_name)
+        if not cli_path:
+            console.print(
+                f"  [muted]{p['name']}:[/muted]  "
+                f"[warning]{cli_name} CLI not installed[/warning]  "
+                f"[muted](install then run /auth login)[/muted]"
+            )
+            continue
+
+        console.print(
+            f"  [muted]{p['name']}:[/muted]  "
+            f"[bold]{cli_name} login[/bold] — "
+            f"opens browser for OAuth"
+        )
+        try:
+            resp = console.input(
+                f"  [header]Run {cli_name} login now? [Y/n][/header] "
+            ).strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            continue
+
+        if resp in ("n", "no"):
+            continue
+
+        console.print(
+            f"  [muted]Opening browser for {p['name']} login...[/muted]"
+        )
+        try:
+            result = subprocess.run(  # noqa: S603
+                [cli_path, "login"],
+                timeout=120,
+            )
+            if result.returncode == 0:
+                console.print(
+                    f"  [success]{p['name']} login successful![/success]"
+                )
+                # Re-read credentials immediately
+                if cli_name == "claude":
+                    _cc_invalidate()
+                    read_claude_code_credentials(force_refresh=True)
+                elif cli_name == "codex":
+                    _cx_invalidate()
+                    read_codex_cli_credentials(force_refresh=True)
+            else:
+                console.print(
+                    f"  [warning]{p['name']} login failed "
+                    f"(exit code {result.returncode})[/warning]"
+                )
+        except subprocess.TimeoutExpired:
+            console.print(
+                f"  [warning]{p['name']} login timed out (120s)[/warning]"
+            )
+        except OSError as exc:
+            console.print(
+                f"  [warning]{p['name']} login error: {exc}[/warning]"
+            )
+
+    console.print()
+
+
 def cmd_auth(args: str) -> None:
     """Handle /auth command — manage auth profiles (OpenClaw Auth Profile UI pattern).
 
@@ -455,7 +598,10 @@ def cmd_auth(args: str) -> None:
         if not statuses:
             console.print()
             console.print("  [muted]No auth profiles configured.[/muted]")
-            console.print("  [muted]Use /auth add or /key <value> to add credentials.[/muted]")
+            console.print(
+                "  [muted]Use /auth login to check OAuth status,"
+                " or /key <value> for API keys.[/muted]"
+            )
             console.print()
             return
 
@@ -464,13 +610,39 @@ def cmd_auth(args: str) -> None:
         for s in statuses:
             icon = "✓" if s["status"] == "active" else "●" if "cooldown" in s["status"] else "✗"
             style = "success" if icon == "✓" else "warning" if icon == "●" else "error"
+            # Build status suffix with subscription info for OAuth profiles
+            status_text = s["status"]
+            meta = s.get("metadata", {})
+            sub_type = meta.get("subscription_type", "")
+            if sub_type:
+                sub_label = sub_type.capitalize()
+                status_text = f"{status_text} · {sub_label}"
+            managed = s.get("managed_by", "")
+            if managed:
+                status_text = f"{status_text} · managed:{managed}"
             console.print(
                 f"  [{style}]{icon}[/{style}] {s['name']:<22} "
-                f"{s['type']:<10} {s['display']:<18} [{style}][{s['status']}][/{style}]"
+                f"{s['type']:<10} {s['display']:<18} "
+                f"[{style}]{status_text}[/{style}]"
             )
         console.print()
-        console.print("  [muted]Priority: oauth → token → api_key[/muted]")
+        console.print(
+            "  [muted]Priority: oauth > token > api_key[/muted]"
+        )
+        # Hint if no OAuth profiles detected
+        has_oauth = any(
+            s["type"] == "oauth" for s in statuses
+        )
+        if not has_oauth:
+            console.print(
+                "  [muted]Tip: /auth login to set up OAuth"
+                " (saves API costs)[/muted]"
+            )
         console.print()
+        return
+
+    if arg.startswith("login"):
+        _auth_login_status()
         return
 
     if arg.startswith("add"):
@@ -490,7 +662,9 @@ def cmd_auth(args: str) -> None:
         console.print()
         return
 
-    console.print("  [warning]Usage: /auth [add|remove <name>][/warning]")
+    console.print(
+        "  [warning]Usage: /auth [login|add|remove <name>][/warning]"
+    )
     console.print()
 
 

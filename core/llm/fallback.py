@@ -21,6 +21,60 @@ RETRY_BASE_DELAY = settings.llm_retry_base_delay
 RETRY_MAX_DELAY = settings.llm_retry_max_delay
 
 
+def _is_auth_error(exc: Exception) -> bool:
+    """Check if exception is an authentication/401 error from any provider."""
+    try:
+        import anthropic
+
+        if isinstance(exc, anthropic.AuthenticationError):
+            return True
+    except ImportError:
+        pass
+    # OpenAI AuthenticationError
+    exc_name = type(exc).__name__
+    return exc_name == "AuthenticationError" or "401" in str(exc)[:50]
+
+
+def _try_oauth_refresh(provider_label: str) -> bool:
+    """Attempt OAuth token refresh for managed profiles + reset clients.
+
+    Returns True if a token was refreshed and clients were reset.
+    """
+    try:
+        from core.runtime_wiring.infra import get_profile_rotator
+
+        rotator = get_profile_rotator()
+        if not rotator:
+            return False
+
+        provider = "anthropic" if "LLM" in provider_label else "openai"
+        profile = rotator.resolve(provider)
+        if not profile or not profile.managed_by:
+            return False
+
+        if profile.managed_by == "claude-code":
+            from core.gateway.auth.claude_code_oauth import (
+                refresh_claude_code_token,
+            )
+            from core.llm.providers.anthropic import reset_clients
+
+            if refresh_claude_code_token(profile):
+                reset_clients()
+                return True
+        elif profile.managed_by == "codex-cli":
+            from core.gateway.auth.codex_cli_oauth import (
+                refresh_codex_cli_token,
+            )
+            from core.llm.providers.openai import reset_openai_client
+
+            if refresh_codex_cli_token(profile):
+                reset_openai_client()
+                return True
+    except Exception as exc:
+        log.debug("OAuth refresh failed: %s", exc)
+    return False
+
+
 class CircuitBreaker:
     """Thread-safe circuit breaker for LLM API calls.
 
@@ -189,6 +243,15 @@ def retry_with_backoff_generic(
                             current_model,
                             error_msg,
                         )
+                # C1+C2: OAuth 401 auto-refresh — re-read token + reset client + 1 retry
+                if _is_auth_error(exc) and attempt == 0:
+                    refreshed = _try_oauth_refresh(provider_label)
+                    if refreshed:
+                        log.info(
+                            "OAuth token refreshed for %s, retrying",
+                            provider_label,
+                        )
+                        continue  # retry with refreshed token
                 raise
 
         if model_idx < len(models_to_try) - 1:

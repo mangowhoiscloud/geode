@@ -639,7 +639,7 @@
       "properties": {
         "file_path": {
           "type": "string",
-          "description": "Path to the file to read"
+          "description": "Path to the file to read. Must be within the project directory."
         },
         "max_lines": {
           "type": "integer",

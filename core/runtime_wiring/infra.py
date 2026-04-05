@@ -27,6 +27,14 @@ log = logging.getLogger(__name__)
 DEFAULT_GLOBAL_CONCURRENCY = 8
 DEFAULT_GATEWAY_CONCURRENCY = 4
 
+# Module-level accessor for ProfileRotator (set by build_auth, used by providers)
+_profile_rotator: ProfileRotator | None = None
+
+
+def get_profile_rotator() -> ProfileRotator | None:
+    """Return the ProfileRotator built by build_auth(), or None if not yet initialized."""
+    return _profile_rotator
+
 
 # ---------------------------------------------------------------------------
 # Default builders
@@ -209,11 +217,82 @@ def make_tool_executor(
 # ---------------------------------------------------------------------------
 
 
+def _build_oauth_metadata(creds: Any) -> dict[str, Any]:
+    """Extract subscription/rate-limit metadata from Claude Code credentials."""
+    meta: dict[str, Any] = {}
+    if "subscription_type" in creds:
+        meta["subscription_type"] = creds["subscription_type"]
+    if "rate_limit_tier" in creds:
+        meta["rate_limit_tier"] = creds["rate_limit_tier"]
+    return meta
+
+
 def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
-    """Build auth profile system with API key profiles."""
+    """Build auth profile system with API key + OAuth profiles.
+
+    Claude Code OAuth tokens are auto-detected from macOS Keychain or
+    ~/.claude/.credentials.json (OpenClaw managedBy pattern).
+    ProfileRotator selects OAUTH over API_KEY by type priority.
+    """
     from core.gateway.auth.profiles import AuthProfile, CredentialType
 
     profile_store = ProfileStore()
+
+    # Claude Code OAuth — highest priority (managed credential)
+    try:
+        from core.gateway.auth.claude_code_oauth import (
+            read_claude_code_credentials,
+        )
+
+        creds = read_claude_code_credentials()
+        if creds:
+            profile_store.add(
+                AuthProfile(
+                    name="anthropic:claude-code",
+                    provider="anthropic",
+                    credential_type=CredentialType.OAUTH,
+                    key=creds["access_token"],
+                    refresh_token=creds.get("refresh_token", ""),
+                    expires_at=creds.get("expires_at", 0.0),
+                    managed_by="claude-code",
+                    metadata=_build_oauth_metadata(creds),
+                )
+            )
+            log.info(
+                "Auth: Claude Code OAuth detected (subscription=%s)",
+                creds.get("subscription_type", "unknown"),
+            )
+    except Exception as exc:
+        log.debug("Auth: Claude Code OAuth not available: %s", exc)
+
+    # Codex CLI OAuth — OpenAI managed credential
+    try:
+        from core.gateway.auth.codex_cli_oauth import (
+            read_codex_cli_credentials,
+        )
+
+        codex_creds = read_codex_cli_credentials()
+        if codex_creds:
+            profile_store.add(
+                AuthProfile(
+                    name="openai:codex-cli",
+                    provider="openai",
+                    credential_type=CredentialType.OAUTH,
+                    key=codex_creds["access_token"],
+                    refresh_token=codex_creds.get("refresh_token", ""),
+                    expires_at=codex_creds.get("expires_at", 0.0),
+                    managed_by="codex-cli",
+                    metadata=_build_oauth_metadata(codex_creds),
+                )
+            )
+            log.info(
+                "Auth: Codex CLI OAuth detected (account=%s)",
+                codex_creds.get("account_id", "unknown"),
+            )
+    except Exception as exc:
+        log.debug("Auth: Codex CLI OAuth not available: %s", exc)
+
+    # API key profiles — fallback
     if settings.anthropic_api_key:
         profile_store.add(
             AuthProfile(
@@ -232,7 +311,9 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
                 key=settings.openai_api_key,
             )
         )
+    global _profile_rotator
     profile_rotator = ProfileRotator(profile_store)
+    _profile_rotator = profile_rotator
     cooldown_tracker = CooldownTracker()
 
     return profile_store, profile_rotator, cooldown_tracker

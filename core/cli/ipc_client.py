@@ -338,8 +338,7 @@ class IPCClient:
             c.print()
             log.info(
                 "HITL: approval interrupted tool=%s elapsed=%.1fs",
-                tool,
-                time.monotonic() - t0,
+                tool, time.monotonic() - t0,
             )
             return "n"
 
@@ -352,10 +351,7 @@ class IPCClient:
             decision = "n"
         log.info(
             "HITL: approval tool=%s input=%r decision=%s elapsed=%.1fs",
-            tool,
-            resp,
-            decision,
-            elapsed,
+            tool, resp, decision, elapsed,
         )
         return decision
 
