@@ -794,6 +794,13 @@ def _get_prompt_session() -> Any:
     if _prompt_session is False:
         return None  # permanently disabled after runtime failure
     if _prompt_session is None:
+        # Python 3.14+ has kqueue incompatibility with prompt_toolkit's
+        # asyncio selector (OSError: Invalid argument on add_reader).
+        # Skip prompt_toolkit entirely to avoid terminal corruption.
+        if sys.version_info >= (3, 14):
+            log.info("prompt_toolkit skipped (Python %s — kqueue compat)", sys.version_info)
+            _prompt_session = False  # sentinel: disabled
+            return None
         try:
             _prompt_session = _build_prompt_session()
         except Exception:
