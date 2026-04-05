@@ -20,6 +20,7 @@ import json
 import logging
 import subprocess  # nosec B404
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, TypedDict
@@ -43,6 +44,7 @@ class ClaudeCodeCredentials(TypedDict, total=False):
 
 
 # -- Cache (with mtime fingerprint — OpenClaw sourceFingerprint pattern) --
+_cache_lock = threading.Lock()
 _cache: dict[str, Any] = {
     "value": None,
     "read_at": 0.0,
@@ -59,20 +61,21 @@ def _get_file_mtime() -> float:
 
 
 def _is_cache_valid() -> bool:
+    # Called under _cache_lock
     if _cache["value"] is None:
         return False
     if (time.time() - _cache["read_at"]) >= _CACHE_TTL_S:
         return False
-    # Invalidate if file changed externally (e.g. Claude Code refreshed token)
     current_mtime = _get_file_mtime()
     return not (current_mtime > 0 and current_mtime != _cache["mtime"])
 
 
 def invalidate_cache() -> None:
     """Force next read to bypass cache."""
-    _cache["value"] = None
-    _cache["read_at"] = 0.0
-    _cache["mtime"] = 0.0
+    with _cache_lock:
+        _cache["value"] = None
+        _cache["read_at"] = 0.0
+        _cache["mtime"] = 0.0
 
 
 # -- Keychain Reader (macOS only) --
@@ -171,35 +174,30 @@ def read_claude_code_credentials(
     Priority: macOS Keychain → file fallback.
     Returns None if Claude Code is not logged in.
     """
-    if not force_refresh and _is_cache_valid():
-        cached: ClaudeCodeCredentials | None = _cache["value"]
-        return cached
+    with _cache_lock:
+        if not force_refresh and _is_cache_valid():
+            cached: ClaudeCodeCredentials | None = _cache["value"]
+            return cached
 
-    # Try Keychain first (macOS only)
+    # Read outside lock (I/O — Keychain/file)
     raw: dict[str, Any] | None = None
     if sys.platform == "darwin":
         raw = _read_from_keychain()
         if raw:
             log.debug("Claude Code credentials read from Keychain")
 
-    # File fallback
     if raw is None:
         raw = _read_from_file()
         if raw:
             log.debug("Claude Code credentials read from file")
 
     mtime = _get_file_mtime()
+    parsed = _parse_oauth(raw) if raw else None
 
-    if raw is None:
-        _cache["value"] = None
+    with _cache_lock:
+        _cache["value"] = parsed
         _cache["read_at"] = time.time()
         _cache["mtime"] = mtime
-        return None
-
-    parsed = _parse_oauth(raw)
-    _cache["value"] = parsed
-    _cache["read_at"] = time.time()
-    _cache["mtime"] = mtime
 
     if parsed:
         is_expired = time.time() > parsed["expires_at"]
