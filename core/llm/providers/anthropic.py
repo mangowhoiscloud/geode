@@ -257,7 +257,7 @@ def is_computer_use_enabled() -> bool:
     if not getattr(settings, "computer_use_enabled", False):
         return False
     try:
-        import pyautogui  # noqa: F401
+        import pyautogui  # type: ignore[import-untyped]  # noqa: F401
 
         return True
     except ImportError:

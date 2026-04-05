@@ -54,15 +54,14 @@ class ComputerUseHarness:
     def _ensure_pyautogui(self) -> Any:
         """Lazy import pyautogui (avoids import cost when not used)."""
         try:
-            import pyautogui
+            import pyautogui  # type: ignore[import-untyped]
 
             pyautogui.FAILSAFE = True  # move mouse to corner to abort
             pyautogui.PAUSE = 0.05  # 50ms between actions
             return pyautogui
         except ImportError as exc:
             raise RuntimeError(
-                "pyautogui is required for computer-use. "
-                "Install with: uv pip install pyautogui"
+                "pyautogui is required for computer-use. Install with: uv pip install pyautogui"
             ) from exc
 
     def _get_screen_size(self) -> tuple[int, int]:
@@ -94,7 +93,7 @@ class ComputerUseHarness:
     def screenshot(self) -> str:
         """Capture screen and return as base64 JPEG (scaled to target size)."""
         pag = self._ensure_pyautogui()
-        from PIL import Image
+        from PIL import Image  # type: ignore[import-not-found]
 
         img = pag.screenshot()
         self._screen_width, self._screen_height = img.size
@@ -226,7 +225,14 @@ class ComputerUseHarness:
         pag.drag(sx2 - sx1, sy2 - sy1, duration=0.5)
         log.info(
             "drag(%d,%d→%d,%d) → screen(%d,%d→%d,%d)",
-            start_x, start_y, end_x, end_y, sx1, sy1, sx2, sy2,
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            sx1,
+            sy1,
+            sx2,
+            sy2,
         )
         return self.screenshot()
 
@@ -252,9 +258,7 @@ class ComputerUseHarness:
                 params.get("button", "left"),
                 params.get("click_count", 1),
             ),
-            "double_click": lambda: self.double_click(
-                params.get("x", 0), params.get("y", 0)
-            ),
+            "double_click": lambda: self.double_click(params.get("x", 0), params.get("y", 0)),
             "type": lambda: self.type_text(params.get("text", "")),
             "key": lambda: self.key(params.get("keys", params.get("key", ""))),
             "keypress": lambda: self.key(params.get("keys", params.get("key", ""))),
@@ -273,18 +277,10 @@ class ComputerUseHarness:
             ),
             "wait": lambda: self.wait(params.get("ms", 1000)),
             # Anthropic aliases
-            "left_click": lambda: self.click(
-                params.get("x", 0), params.get("y", 0), "left"
-            ),
-            "right_click": lambda: self.click(
-                params.get("x", 0), params.get("y", 0), "right"
-            ),
-            "middle_click": lambda: self.click(
-                params.get("x", 0), params.get("y", 0), "middle"
-            ),
-            "triple_click": lambda: self.click(
-                params.get("x", 0), params.get("y", 0), "left", 3
-            ),
+            "left_click": lambda: self.click(params.get("x", 0), params.get("y", 0), "left"),
+            "right_click": lambda: self.click(params.get("x", 0), params.get("y", 0), "right"),
+            "middle_click": lambda: self.click(params.get("x", 0), params.get("y", 0), "middle"),
+            "triple_click": lambda: self.click(params.get("x", 0), params.get("y", 0), "left", 3),
             "cursor_position": lambda: self._get_cursor_position(),
         }
 

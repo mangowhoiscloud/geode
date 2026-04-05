@@ -437,7 +437,7 @@ def cmd_model(args: str) -> None:
 def _auth_login_status() -> None:
     """Show OAuth status + offer interactive login for missing providers."""
     import shutil
-    import subprocess
+    import subprocess  # nosec B404
 
     console.print()
     console.print("  [header]OAuth Login Status[/header]")
@@ -545,7 +545,7 @@ def _auth_login_status() -> None:
             f"  [muted]Opening browser for {p['name']} login...[/muted]"
         )
         try:
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(  # noqa: S603  # nosec B603
                 [cli_path, "login"],
                 timeout=120,
             )

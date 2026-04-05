@@ -384,6 +384,14 @@ _OPENAI_NATIVE_TOOLS: list[dict[str, Any]] = [
     {"type": "web_search"},
 ]
 
+# OpenAI computer-use tool (Responses API computer_use_preview)
+_OPENAI_COMPUTER_USE_TOOL: dict[str, Any] = {
+    "type": "computer_use_preview",
+    "display_width": 1280,
+    "display_height": 800,
+    "environment": "mac",
+}
+
 
 class OpenAIAgenticAdapter:
     """OpenAI agentic adapter via Responses API (P1 Gateway pattern).
@@ -484,6 +492,12 @@ class OpenAIAgenticAdapter:
             native_name = native.get("name") or native.get("type", "")
             if native_name not in existing_names:
                 oai_tools.append(native)
+
+        # Inject computer-use tool if enabled
+        from core.llm.providers.anthropic import is_computer_use_enabled
+
+        if is_computer_use_enabled():
+            oai_tools.append(_OPENAI_COMPUTER_USE_TOOL)
 
         # Convert messages to Responses API input format
         responses_input = _convert_messages_to_responses(system, messages)
