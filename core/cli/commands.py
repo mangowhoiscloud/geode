@@ -447,8 +447,7 @@ def _auth_login_status() -> None:
 
     # Anthropic — OAuth disabled (ToS violation since 2026-01-09)
     console.print(
-        "  [muted]\u2014[/muted] Anthropic  "
-        "[muted]OAuth disabled (ToS — API key only)[/muted]"
+        "  [muted]\u2014[/muted] Anthropic  [muted]OAuth disabled (ToS — API key only)[/muted]"
     )
     providers.append({"name": "Anthropic", "cli": "claude", "ok": True})  # skip login prompt
 
