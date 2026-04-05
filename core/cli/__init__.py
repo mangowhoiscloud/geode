@@ -791,11 +791,14 @@ _prompt_session: Any = None
 
 def _get_prompt_session() -> Any:
     global _prompt_session
+    if _prompt_session is False:
+        return None  # permanently disabled after runtime failure
     if _prompt_session is None:
         try:
             _prompt_session = _build_prompt_session()
         except Exception:
             log.warning("prompt_toolkit init failed, falling back to console.input", exc_info=True)
+            _prompt_session = False  # sentinel: disabled
     return _prompt_session
 
 
@@ -847,6 +850,10 @@ def _read_multiline_input(prompt: str) -> str:
             raise
         except Exception:
             log.warning("prompt_toolkit failed, falling back to console.input", exc_info=True)
+            # Invalidate session to avoid retrying prompt_toolkit on every input
+            global _prompt_session
+            _prompt_session = False  # sentinel: permanently disabled
+            _restore_terminal()
             text = str(console.input("> ")).strip()
         finally:
             # Re-install our handler for the non-input phase (spinner, tool execution)
