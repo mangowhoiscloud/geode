@@ -798,7 +798,7 @@ def _get_prompt_session() -> Any:
             _prompt_session = _build_prompt_session()
         except Exception:
             log.warning("prompt_toolkit init failed, falling back to console.input", exc_info=True)
-            _prompt_session = False  # type: ignore[assignment]
+            _prompt_session = False  # sentinel: disabled
     return _prompt_session
 
 
@@ -852,7 +852,7 @@ def _read_multiline_input(prompt: str) -> str:
             log.warning("prompt_toolkit failed, falling back to console.input", exc_info=True)
             # Invalidate session to avoid retrying prompt_toolkit on every input
             global _prompt_session
-            _prompt_session = False  # type: ignore[assignment]  # sentinel: disabled
+            _prompt_session = False  # sentinel: permanently disabled
             _restore_terminal()
             text = str(console.input("> ")).strip()
         finally:
