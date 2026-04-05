@@ -83,7 +83,7 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
         return _ERROR_CLASSIFICATION["server"]
     if isinstance(exc, LLMBadRequestError):
         msg = str(exc).lower()
-        if "token" in msg or "context" in msg:
+        if "token" in msg or "context" in msg or "prompt exceeds" in msg or "max length" in msg:
             return _ERROR_CLASSIFICATION["context_overflow"]
         return _ERROR_CLASSIFICATION["bad_request"]
     return _ERROR_CLASSIFICATION["unknown"]

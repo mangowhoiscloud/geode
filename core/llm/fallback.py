@@ -237,7 +237,10 @@ def retry_with_backoff_generic(
                         from core.llm.errors import BillingError
 
                         raise BillingError(billing_message) from exc
-                    if "token" in error_msg.lower() or "context" in error_msg.lower():
+                    if any(
+                        k in error_msg.lower()
+                        for k in ("token", "context", "prompt exceeds", "max length")
+                    ):
                         log.error(
                             "Context overflow detected (model=%s): %s",
                             current_model,
