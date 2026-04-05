@@ -31,6 +31,7 @@ SAFE_TOOLS: frozenset[str] = frozenset(
 DANGEROUS_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
+        "computer",  # computer-use: screen control
     }
 )
 

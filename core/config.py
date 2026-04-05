@@ -228,8 +228,16 @@ class Settings(BaseSettings):
     # Token Guard — tool result truncation threshold (0 = unlimited)
     max_tool_result_tokens: int = 0  # 0 = no limit; clear_tool_uses handles overflow
 
+    # Tool Result Offloading — store large results to filesystem (P0 token optimization)
+    tool_offload_threshold: int = 5000  # tokens; 0 = disabled
+    tool_offload_ttl_hours: float = 4.0  # TTL for offloaded results
+    observation_mask_keep_rounds: int = 3  # keep recent N rounds unmasked
+
     # Agentic Loop — time budget (Karpathy P3, OpenClaw Attempt Loop)
     agentic_loop_time_budget: float = 0.0  # 0 = no time limit; >0 = wall-clock seconds
+
+    # Computer Use — desktop automation (requires pyautogui)
+    computer_use_enabled: bool = False  # opt-in; set GEODE_COMPUTER_USE_ENABLED=true
 
     # Context Compaction — overflow prevention
     compact_keep_recent: int = 10  # messages to preserve during compaction/prune
