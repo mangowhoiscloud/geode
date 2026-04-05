@@ -71,6 +71,7 @@
 | hitl-race-fix | HITL 승인 spinner race + terminal restore + paste drain + grounding rules | #645→#646 | @mangowhoiscloud | 2026-04-05 |
 | verify-workflow | Scaffold Step 4 → Verify (Implementation GAP Audit) 4단계 포렌식 감사 | #645→#646 | @mangowhoiscloud | 2026-04-05 |
 | per-tool-autoapprove | Per-tool auto-approve (3x y) + denial tracking (3x n) | #647→#649 | @mangowhoiscloud | 2026-04-05 |
+| geode-md-split | CLAUDE.md → GEODE.md 분리 (scaffold vs runtime) + 7 file ruff format + bandit skip | #653→#655 | @mangowhoiscloud | 2026-04-05 |
 
 ### Done (2026-04-03 — 세션 56)
 
