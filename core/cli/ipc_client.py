@@ -259,11 +259,8 @@ class IPCClient:
             log.warning("HITL: _restore_terminal failed: %s", exc)
 
     def _handle_approval_request(self, msg: dict[str, Any]) -> str:
-        """Display approval prompt to user with animated spinner."""
-        import sys
-        import threading
+        """Display approval prompt to user."""
         import time
-        import unicodedata
 
         from core.cli.ui.console import console as c
 
@@ -273,62 +270,22 @@ class IPCClient:
         detail = msg.get("detail", "")
         level = msg.get("safety_level", "write")
 
-        _LEVEL_LABELS = {
-            "write": "Write",
-            "dangerous": "Dangerous",
-            "mcp": "MCP",
-            "cost": "Cost",
+        _LEVEL_STYLES = {
+            "write": "warning",
+            "dangerous": "error",
+            "mcp": "header",
+            "cost": "warning",
         }
-        label = _LEVEL_LABELS.get(level, level.title())
-        _LEVEL_COLORS = {
-            "write": "33",  # yellow
-            "dangerous": "31",  # red
-            "mcp": "36",  # cyan
-            "cost": "33",  # yellow
-        }
-        color = _LEVEL_COLORS.get(level, "33")
+        style = _LEVEL_STYLES.get(level, "warning")
+        label = level.capitalize()
 
-        # Truncate detail for display (CJK-aware)
-        def _trunc(text: str, width: int = 50) -> str:
-            w = 0
-            for i, ch in enumerate(text):
-                w += 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
-                if w > width - 3:
-                    return text[:i] + "..."
-            return text
-
-        detail_short = _trunc(detail.replace("\n", " ")) if detail else ""
-        args_display = f"({detail_short})" if detail_short else ""
-
-        # Animated spinner while waiting for input
-        _FRAMES = "\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f"
-        out = sys.stdout
-        spinning = True
-
-        def _spin() -> None:
-            while spinning:
-                frame = _FRAMES[int(time.monotonic() * 12) % len(_FRAMES)]
-                out.write(
-                    f"\r\033[2K  {frame} \033[{color}m{tool}\033[0m"
-                    f"{args_display}"
-                    f" \033[2m\u2014 {label} approval\033[0m"
-                )
-                out.flush()
-                time.sleep(0.08)
-
-        spinner_thread = threading.Thread(target=_spin, daemon=True)
-        spinner_thread.start()
-
-        # Brief pause so spinner is visible before prompt replaces it
-        time.sleep(0.3)
-        spinning = False
-        spinner_thread.join(timeout=0.3)
-
-        # Replace spinner line with static prompt
-        out.write("\r\033[2K")
-        out.flush()
-        c.print(f"  \033[{color}m\u25b8 {tool}\033[0m{args_display}")
-        c.print(f"    \033[2m{label} tool requires approval\033[0m")
+        c.print()
+        c.print(f"  [{style}]{label} tool requires approval[/{style}]")
+        c.print(f"  [bold]{tool}[/bold]")
+        if detail:
+            # Single-line truncated detail
+            short = detail.replace("\n", " ")[:80]
+            c.print(f"  [muted]{short}[/muted]")
         c.print()
 
         t0 = time.monotonic()
