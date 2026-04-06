@@ -4,14 +4,38 @@ Layer 5 tools for output generation:
 - GenerateReportTool: Generate analysis report (stub for ReportGenerator)
 - ExportJsonTool: Export analysis result as JSON file
 - SendNotificationTool: Stub notification sender
+
+All artifact-producing tools auto-save to Vault (.geode/vault/).
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
+
+
+def _save_to_vault(
+    filename: str,
+    content: str,
+    *,
+    category: str | None = None,
+) -> None:
+    """Best-effort save artifact to vault. Never raises."""
+    try:
+        from core.memory.vault import Vault
+
+        vault = Vault()
+        vault.ensure_structure()
+        path = vault.save(filename, content, category=category)
+        if path:
+            log.info("Vault: saved %s", path)
+    except Exception:
+        log.debug("Vault save failed (best-effort)", exc_info=True)
 
 
 class GenerateReportTool:
@@ -78,6 +102,13 @@ class GenerateReportTool:
             },
         }
 
+        # Auto-save to vault
+        _save_to_vault(
+            f"analysis-{ip_name.lower().replace(' ', '-')}.json",
+            json.dumps(report, indent=2, ensure_ascii=False, default=str),
+            category="research",
+        )
+
         return {"result": report}
 
 
@@ -128,10 +159,12 @@ class ExportJsonTool:
 
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(
-                json.dumps(data, indent=2, ensure_ascii=False, default=str),
-                encoding="utf-8",
-            )
+            content_str = json.dumps(data, indent=2, ensure_ascii=False, default=str)
+            output_path.write_text(content_str, encoding="utf-8")
+
+            # Auto-save to vault
+            _save_to_vault(filename, content_str)
+
             return {
                 "result": {
                     "exported": True,
