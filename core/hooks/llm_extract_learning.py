@@ -113,7 +113,8 @@ def _call_haiku(prompt: str, api_key: str) -> str | None:
         messages=[{"role": "user", "content": prompt}],
         timeout=10.0,
     )
-    return resp.content[0].text if resp.content else None
+    block = resp.content[0] if resp.content else None
+    return block.text if block and hasattr(block, "text") else None
 
 
 def _parse_extractions(text: str) -> list[tuple[str, str]]:
