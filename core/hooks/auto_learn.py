@@ -119,8 +119,8 @@ def _detect_correction(user_input: str) -> tuple[str, str] | None:
 
 _INPUT_DETECTORS: list[Callable[[str], tuple[str, str] | None]] = [
     _detect_language_pref,  # highest priority — short inputs like "한국어로 답변해줘"
-    _detect_correction,     # bidirectional: corrections first (stronger signal)
-    _detect_validation,     # bidirectional: then validations (quieter signal)
+    _detect_correction,  # bidirectional: corrections first (stronger signal)
+    _detect_validation,  # bidirectional: then validations (quieter signal)
     _detect_self_intro,
     _detect_explicit_pref,
     _detect_domain_interest,
@@ -208,9 +208,7 @@ def make_auto_learn_handler() -> tuple[str, Callable[..., None]]:
                 break
             # Append context so future recall includes "why"
             if assistant_text and category in ("validation", "correction"):
-                pattern_with_why = (
-                    f"{pattern_text} [context: {assistant_text[:100]}]"
-                )
+                pattern_with_why = f"{pattern_text} [context: {assistant_text[:100]}]"
             else:
                 pattern_with_why = pattern_text
             try:
