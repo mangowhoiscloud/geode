@@ -64,6 +64,21 @@ _RE_DOMAIN_INTEREST = re.compile(
     r"|focused\s+on|specializ\w+\s+in|관심\s*분야|연구\s*중)",
 )
 
+# Validation detector: user confirms a non-obvious approach
+# Claude Code pattern: "confirmations are quieter — watch for them"
+_RE_VALIDATION = re.compile(
+    r"(?i)\b(exactly|perfect|that'?s? (?:right|correct|it)|keep doing"
+    r"|good (?:call|approach|choice)|nice|잘했|맞아|좋아|그대로|딱 맞|괜찮)"
+    r"(?!.*\b(but|however|except|다만|근데)\b)",
+)
+
+# Correction detector: user corrects approach
+_RE_CORRECTION = re.compile(
+    r"(?i)\b(don'?t|stop doing|not like that|wrong|하지\s*마"
+    r"|그렇게\s*말고|아니야|잘못|틀렸)"
+    r"(?!.*\bjust\s+kidding\b)",
+)
+
 
 def _detect_self_intro(user_input: str) -> tuple[str, str] | None:
     if _RE_SELF_INTRO.search(user_input):
@@ -90,8 +105,22 @@ def _detect_domain_interest(user_input: str) -> tuple[str, str] | None:
     return None
 
 
+def _detect_validation(user_input: str) -> tuple[str, str] | None:
+    if _RE_VALIDATION.search(user_input):
+        return (f"Validated: {user_input[:120]}", "validation")
+    return None
+
+
+def _detect_correction(user_input: str) -> tuple[str, str] | None:
+    if _RE_CORRECTION.search(user_input):
+        return (f"Corrected: {user_input[:120]}", "correction")
+    return None
+
+
 _INPUT_DETECTORS: list[Callable[[str], tuple[str, str] | None]] = [
     _detect_language_pref,  # highest priority — short inputs like "한국어로 답변해줘"
+    _detect_correction,     # bidirectional: corrections first (stronger signal)
+    _detect_validation,     # bidirectional: then validations (quieter signal)
     _detect_self_intro,
     _detect_explicit_pref,
     _detect_domain_interest,
@@ -171,11 +200,21 @@ def make_auto_learn_handler() -> tuple[str, Callable[..., None]]:
         if now - last_learn_ts < _COOLDOWN_S:
             return
 
+        # P2: Include conversation context for "Why" reasoning
+        assistant_text: str = data.get("text", "")[:200]
+
         for pattern_text, category in patterns:
             if session_count >= _MAX_PER_SESSION:
                 break
+            # Append context so future recall includes "why"
+            if assistant_text and category in ("validation", "correction"):
+                pattern_with_why = (
+                    f"{pattern_text} [context: {assistant_text[:100]}]"
+                )
+            else:
+                pattern_with_why = pattern_text
             try:
-                saved = profile.add_learned_pattern(pattern_text, category)
+                saved = profile.add_learned_pattern(pattern_with_why, category)
                 if saved:
                     session_count += 1
                     last_learn_ts = now
