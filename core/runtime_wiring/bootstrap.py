@@ -231,6 +231,20 @@ def build_hooks(
 
     _register_plugin("turn_auto_learn", _reg_auto_learn)
 
+    # C3c: LLM-based learning extraction (Claude Code extractMemories pattern)
+    def _reg_llm_extract() -> None:
+        from core.hooks.llm_extract_learning import make_llm_extract_handler
+
+        name, handler = make_llm_extract_handler()
+        hooks.register(
+            HookEvent.TURN_COMPLETE,
+            handler,
+            name=name,
+            priority=82,  # lower priority than auto_learn (84)
+        )
+
+    _register_plugin("turn_llm_extract", _reg_llm_extract)
+
     # C4: Session lifecycle hooks (OpenClaw agent:bootstrap pattern)
     def _reg_session_lifecycle() -> None:
         def _on_session_start(event: HookEvent, data: dict[str, Any]) -> None:
