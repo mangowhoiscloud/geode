@@ -57,7 +57,7 @@
 
 | task_id | 작업 내용 | 담당 | 브랜치 | 시작일 | 비고 |
 |---------|----------|------|--------|--------|------|
-| oauth-policy-align | Anthropic OAuth 제거 (ToS 위반) + OpenAI Codex OAuth 유지 | @mangowhoiscloud | fix/oauth-policy-align | 2026-04-06 | Anthropic 2026-04-04 정책 변경 대응 |
+| auto-learn-v2 | 양방향 학습 — 검증 감지 + Why 기록 + LLM subagent 추출 | @mangowhoiscloud | feature/auto-learn-v2 | 2026-04-06 | Claude Code extractMemories 패턴 이식 |
 
 ### In Review
 
@@ -68,6 +68,13 @@
 
 | task_id | 작업 내용 | PR | 담당 | 완료일 |
 |---------|----------|----|------|--------|
+| oauth-policy-align | Anthropic OAuth 비활성화 (ToS) + web search 401 수정 | #675-#676 | @mangowhoiscloud | 2026-04-06 |
+| vault-write-path | Vault 쓰기 경로 수정 — generate_report/export_json 자동 저장 | #679-#680 | @mangowhoiscloud | 2026-04-06 |
+| learning-g3-fix | G3 learning context — LEARNING.md → UserProfile 단일 소스 | #681 | @mangowhoiscloud | 2026-04-06 |
+| web-search-401 | Codex OAuth web_search 401 수정 + timeout 30→60s | #673-#674 | @mangowhoiscloud | 2026-04-06 |
+| mcp-token-guard | MCP 25K 토큰 가드 + HTML→MD + offload threshold | #670-#671 | @mangowhoiscloud | 2026-04-06 |
+| pr-body-template | PR body 필수 4섹션 템플릿 (CANNOT rule) | #672 | @mangowhoiscloud | 2026-04-06 |
+| v0.46.0 | Release v0.46.0 | #677-#678 | @mangowhoiscloud | 2026-04-06 |
 | oauth-token-reuse | Claude Code + Codex CLI OAuth 토큰 재사용 (managedBy 패턴) | #654-#659 | @mangowhoiscloud | 2026-04-05 |
 | computer-use | Computer-use 하네스 + Anthropic/OpenAI 통합 | #654→#655 | @mangowhoiscloud | 2026-04-05 |
 | prompt-toolkit-fix | Python 3.14 prompt_toolkit kqueue crash + ConsoleProxy context manager | #656-#663 | @mangowhoiscloud | 2026-04-06 |

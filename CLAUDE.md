@@ -100,6 +100,15 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | | No PR body without Summary/Why/Changes/Verification sections | Information completeness |
 | | No merging PRs that haven't passed CI guardrails | Ratchet (P4) |
 
+### Wiring Verification (Anti-Disconnection)
+
+| Item | Rule |
+|------|------|
+| **Read-Write parity** | Every read path (context injection) must have a corresponding write path (data producer). Verify both ends before marking complete. |
+| **Hook registration** | Every hook handler must be registered in bootstrap.py. Handler exists ≠ handler fires. |
+| **ContextVar injection** | Every `get_*()` accessor must have a corresponding `set_*()` call in bootstrap. Unset ContextVar → None → silent skip. |
+| **Singleton lifecycle** | Singleton created at startup may use stale data. Verify refresh/invalidation path exists for mutable state (OAuth tokens, config). |
+
 ### Refactoring Deception Prevention
 
 | Item | Rule |
