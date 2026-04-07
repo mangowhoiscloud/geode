@@ -21,6 +21,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from core.agent.worker import WorkerRequest
@@ -232,6 +233,8 @@ class SubAgentManager:
         # Sandbox hardening: tool scope restriction
         denied_tools: set[str] | None = None,
         time_budget_s: float = 0.0,
+        # Sandbox: additional working directories for sub-agent scope
+        working_dirs: list[str] | None = None,
     ) -> None:
         self._runner = runner
         self._task_handler = task_handler
@@ -250,6 +253,8 @@ class SubAgentManager:
         self._max_depth = max_depth
         # Sandbox hardening: filter denied tools from action_handlers
         self._denied_tools: set[str] = denied_tools or set()
+        # Sandbox: additional working directories for sub-agent
+        self._working_dirs = working_dirs or []
         # Announce mechanism (OpenClaw Spawn+Announce pattern)
         self._announce_enabled = bool(parent_session_key)
 
@@ -293,6 +298,17 @@ class SubAgentManager:
         if not tasks:
             log.info("All tasks coalesced — nothing to execute")
             return []
+
+        # Expand sandbox for sub-agent working directories
+        added_dirs: list[Path] = []
+        if self._working_dirs:
+            from core.tools.sandbox import add_working_directory
+
+            for dir_str in self._working_dirs:
+                dir_path = Path(dir_str)
+                if dir_path.is_dir():
+                    add_working_directory(dir_path)
+                    added_dirs.append(dir_path)
 
         graph = self._build_task_graph(tasks)
 
@@ -429,6 +445,13 @@ class SubAgentManager:
                     error_message=sub_result.error,
                 )
                 self._announce_result(self._parent_session_key, agent_result)
+
+        # Clean up expanded sandbox directories
+        if added_dirs:
+            from core.tools.sandbox import remove_working_directory
+
+            for dir_path in added_dirs:
+                remove_working_directory(dir_path)
 
         succeeded = sum(1 for r in results if r.success)
         log.info(

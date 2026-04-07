@@ -28,6 +28,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Sandbox validation module (Claude Code parity)** — `core/tools/sandbox.py` 중앙 모듈 신설. 14/15 GAP 해소:
+  - Shell expansion blocking ($VAR, ${VAR}, $(cmd), %VAR%, ~user) — TOCTOU prevention
+  - Dangerous file/directory blocking (.gitconfig, .bashrc, .git/, .claude/) — write only
+  - Symlink chain resolution with intermediate validation + lru_cache memoize
+  - macOS path normalization (/private/var ↔ /var, /private/tmp ↔ /tmp bilateral)
+  - Glob pattern blocking in write operations
+  - Session-scoped additional working directories API (add/remove)
+  - ReadDocumentTool offset/limit + file size guard (256KB pre-read, 25K token post-read)
+  - Sandbox settings externalization (config.toml [sandbox] section)
+  - Configurable limits for glob/grep results
+  - Sub-agent working directory isolation
+
 ## [0.47.1] — 2026-04-07
 
 ### Added

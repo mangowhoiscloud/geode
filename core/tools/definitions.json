@@ -639,11 +639,19 @@
       "properties": {
         "file_path": {
           "type": "string",
-          "description": "Path to the file to read. Must be within the project directory."
+          "description": "Path to the file to read. Symlinks allowed if they resolve within the project directory."
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Line number to start reading from, 1-indexed (default: 1)"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of lines to read. Omit for full file (subject to 256KB size limit)."
         },
         "max_lines": {
           "type": "integer",
-          "description": "Maximum lines to read (default: 200)"
+          "description": "Deprecated — use 'limit' instead. Maximum lines to read."
         }
       },
       "required": [

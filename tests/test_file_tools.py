@@ -2,16 +2,27 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import core.paths as paths_mod
 import pytest
+from core.tools import sandbox
 from core.tools.file_tools import EditFileTool, GlobTool, GrepTool, WriteFileTool
 
 
 @pytest.fixture(autouse=True)
 def _sandbox_to_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Redirect sandbox root to tmp_path for all tests."""
-    monkeypatch.setattr("core.tools.file_tools.get_project_root", lambda: tmp_path)
+
+    def _root() -> Path:
+        return tmp_path
+
+    monkeypatch.setattr(paths_mod, "get_project_root", _root)
+    monkeypatch.setattr("core.tools.sandbox.get_project_root", _root)
+    monkeypatch.setattr("core.tools.file_tools.get_project_root", _root)
+    sandbox._additional_dirs.clear()
+    sandbox._resolve_symlink_cached.cache_clear()
 
 
 class TestGlobTool:
@@ -33,15 +44,29 @@ class TestGlobTool:
         result = tool.execute(pattern="*.xyz", path=str(tmp_path))
         assert result["result"]["total_matches"] == 0
 
-    def test_rejects_symlink_dir(self, tmp_path: Path):
+    def test_allows_symlink_dir_inside(self, tmp_path: Path):
         real = tmp_path / "real"
         real.mkdir()
+        (real / "file.txt").write_text("x")
         link = tmp_path / "link"
         link.symlink_to(real)
 
         tool = GlobTool()
         result = tool.execute(pattern="*", path=str(link))
-        assert "error" in result
+        assert "result" in result
+
+    def test_rejects_symlink_dir_outside(self, tmp_path: Path):
+        external = tmp_path.parent / f"sandbox_glob_{os.getpid()}"
+        external.mkdir(exist_ok=True)
+        try:
+            link = tmp_path / "escape"
+            link.symlink_to(external)
+
+            tool = GlobTool()
+            result = tool.execute(pattern="*", path=str(link))
+            assert "error" in result
+        finally:
+            external.rmdir()
 
 
 class TestGrepTool:
@@ -118,7 +143,7 @@ class TestEditFileTool:
         assert result["result"]["replacements"] == 2
         assert f.read_text() == "ccc bbb ccc"
 
-    def test_rejects_symlink(self, tmp_path: Path):
+    def test_allows_symlink_inside(self, tmp_path: Path):
         real = tmp_path / "real.txt"
         real.write_text("content")
         link = tmp_path / "link.txt"
@@ -126,7 +151,37 @@ class TestEditFileTool:
 
         tool = EditFileTool()
         result = tool.execute(file_path=str(link), old_string="content", new_string="new")
+        assert "result" in result
+        assert real.read_text() == "new"
+
+    def test_rejects_symlink_outside(self, tmp_path: Path):
+        external = tmp_path.parent / f"sandbox_edit_{os.getpid()}.txt"
+        external.write_text("external")
+        try:
+            link = tmp_path / "escape.txt"
+            link.symlink_to(external)
+
+            tool = EditFileTool()
+            result = tool.execute(file_path=str(link), old_string="external", new_string="hacked")
+            assert "error" in result
+            assert external.read_text() == "external"
+        finally:
+            external.unlink(missing_ok=True)
+
+    def test_rejects_dangerous_file_write(self, tmp_path: Path):
+        f = tmp_path / ".gitconfig"
+        f.write_text("[user]\nname = test")
+
+        tool = EditFileTool()
+        result = tool.execute(file_path=str(f), old_string="test", new_string="hacked")
         assert "error" in result
+        assert "dangerous" in result["error"].lower()
+
+    def test_rejects_shell_expansion(self):
+        tool = EditFileTool()
+        result = tool.execute(file_path="$HOME/.bashrc", old_string="x", new_string="y")
+        assert "error" in result
+        assert "shell expansion" in result["error"].lower()
 
 
 class TestWriteFileTool:
@@ -155,13 +210,33 @@ class TestWriteFileTool:
         assert result["result"]["created"]
         assert f.read_text() == "new content"
 
-    def test_rejects_symlink(self, tmp_path: Path):
+    def test_allows_symlink_inside(self, tmp_path: Path):
         real = tmp_path / "real.txt"
         real.write_text("original")
         link = tmp_path / "link.txt"
         link.symlink_to(real)
 
         tool = WriteFileTool()
-        result = tool.execute(file_path=str(link), content="hacked")
+        result = tool.execute(file_path=str(link), content="updated")
+        assert "result" in result
+        assert real.read_text() == "updated"
+
+    def test_rejects_symlink_outside(self, tmp_path: Path):
+        external = tmp_path.parent / f"sandbox_write_{os.getpid()}.txt"
+        external.write_text("original")
+        try:
+            link = tmp_path / "escape.txt"
+            link.symlink_to(external)
+
+            tool = WriteFileTool()
+            result = tool.execute(file_path=str(link), content="hacked")
+            assert "error" in result
+            assert external.read_text() == "original"
+        finally:
+            external.unlink(missing_ok=True)
+
+    def test_rejects_glob_in_write_path(self, tmp_path: Path):
+        tool = WriteFileTool()
+        result = tool.execute(file_path="src/*.py", content="x")
         assert "error" in result
-        assert real.read_text() == "original"  # unchanged
+        assert "glob" in result["error"].lower()

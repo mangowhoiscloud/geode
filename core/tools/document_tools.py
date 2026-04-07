@@ -2,17 +2,22 @@
 
 Provides:
 - ReadDocumentTool: Read a local file (markdown, text, JSON)
+  with offset/limit support and file size guards.
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
-from core.paths import get_project_root
+from core.tools.sandbox import validate_path
 
 log = logging.getLogger(__name__)
+
+# File size guard defaults (Claude Code parity)
+_MAX_FILE_SIZE_BYTES = 262_144  # 256 KB — pre-read check
+_MAX_READ_TOKENS = 25_000  # post-read token estimate check
+_CHARS_PER_TOKEN = 4  # rough estimate for token counting
 
 
 class ReadDocumentTool:
@@ -28,37 +33,17 @@ class ReadDocumentTool:
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         file_path_str: str = kwargs["file_path"]
-        max_lines: int = kwargs.get("max_lines", 200)
 
-        raw_path = Path(file_path_str)
+        # offset/limit with max_lines backward compat
+        offset: int = kwargs.get("offset", 1)
+        limit: int | None = kwargs.get("limit") or kwargs.get("max_lines")
 
         from core.tools.base import tool_error
 
-        # Security: reject symlinks before resolve (prevents traversal)
-        if raw_path.is_symlink():
-            return tool_error(
-                f"Symlinks not allowed: {file_path_str}",
-                error_type="permission",
-                recoverable=False,
-                context={"file_path": file_path_str},
-            )
-
-        file_path = raw_path.resolve()
-
-        # Security: ensure path is within project directory
-        try:
-            file_path.relative_to(get_project_root())
-        except ValueError:
-            return tool_error(
-                f"Access denied: path outside project directory ({get_project_root()})",
-                error_type="permission",
-                recoverable=False,
-                hint=(
-                    "All file tools are sandboxed to the project directory. "
-                    "Use a relative path or omit the path parameter."
-                ),
-                context={"file_path": str(file_path)},
-            )
+        result = validate_path(file_path_str, write=False)
+        if isinstance(result, dict):
+            return result
+        file_path = result
 
         if not file_path.exists():
             return tool_error(
@@ -76,21 +61,67 @@ class ReadDocumentTool:
                 context={"file_path": str(file_path)},
             )
 
+        # Pre-read file size guard: only when no explicit limit (full-file read)
+        from core.config import settings
+
+        max_file_size = settings.sandbox_max_file_size_bytes
+        max_read_tokens = settings.sandbox_max_read_tokens
+
+        if limit is None:
+            try:
+                size = file_path.stat().st_size
+            except OSError:
+                size = 0
+            if size > max_file_size:
+                return tool_error(
+                    f"File too large: {size:,} bytes (limit {max_file_size:,})",
+                    error_type="validation",
+                    recoverable=True,
+                    hint=(
+                        "Use offset and limit to read a range.  "
+                        "Example: offset=1, limit=200 for the first 200 lines."
+                    ),
+                    context={
+                        "file_path": str(file_path),
+                        "file_size": size,
+                        "max_size": max_file_size,
+                    },
+                )
+
         try:
-            lines = file_path.read_text(encoding="utf-8").splitlines()
-            truncated = len(lines) > max_lines
-            content = "\n".join(lines[:max_lines])
-            return {
-                "result": {
-                    "file_path": str(file_path),
-                    "content": content,
-                    "total_lines": len(lines),
-                    "truncated": truncated,
-                }
-            }
+            all_lines = file_path.read_text(encoding="utf-8").splitlines()
         except Exception as exc:
             return tool_error(
                 f"Failed to read {file_path}: {exc}",
                 error_type="internal",
                 context={"file_path": str(file_path)},
             )
+
+        total_lines = len(all_lines)
+
+        # Apply offset (1-indexed) and limit
+        start_idx = max(0, offset - 1)
+        end_idx = start_idx + limit if limit is not None else total_lines
+
+        selected = all_lines[start_idx:end_idx]
+        content = "\n".join(selected)
+
+        # Post-read token guard: estimate tokens and truncate if needed
+        truncated = end_idx < total_lines
+        estimated_tokens = len(content) // _CHARS_PER_TOKEN
+        if estimated_tokens > max_read_tokens:
+            # Truncate to approximate token limit
+            max_chars = max_read_tokens * _CHARS_PER_TOKEN
+            content = content[:max_chars]
+            truncated = True
+
+        return {
+            "result": {
+                "file_path": str(file_path),
+                "content": content,
+                "total_lines": total_lines,
+                "start_line": start_idx + 1,
+                "num_lines": len(selected),
+                "truncated": truncated,
+            }
+        }
