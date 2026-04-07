@@ -15,9 +15,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-log = logging.getLogger(__name__)
+from core.paths import get_project_root
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+log = logging.getLogger(__name__)
 
 
 def _check_sandbox(path: Path) -> dict[str, Any] | None:
@@ -37,10 +37,10 @@ def _check_sandbox(path: Path) -> dict[str, Any] | None:
         )
     resolved = path.resolve()
     try:
-        resolved.relative_to(_PROJECT_ROOT)
+        resolved.relative_to(get_project_root())
     except ValueError:
         return tool_error(
-            f"Access denied: path outside project directory ({_PROJECT_ROOT})",
+            f"Access denied: path outside project directory ({get_project_root()})",
             error_type="permission",
             recoverable=False,
             hint=(
@@ -93,7 +93,7 @@ class GlobTool:
         search_dir = Path(kwargs.get("path", "."))
 
         if not search_dir.is_absolute():
-            search_dir = _PROJECT_ROOT / search_dir
+            search_dir = get_project_root() / search_dir
 
         err = _check_sandbox(search_dir)
         if err:
@@ -110,7 +110,7 @@ class GlobTool:
         for path in search_dir.rglob(pattern) if "**" in pattern else search_dir.glob(pattern):
             if path.is_file() and not path.is_symlink():
                 try:
-                    rel = path.relative_to(_PROJECT_ROOT)
+                    rel = path.relative_to(get_project_root())
                     mtime = path.stat().st_mtime
                     matches.append((mtime, str(rel)))
                 except (ValueError, OSError):
@@ -185,7 +185,7 @@ class GrepTool:
         max_results: int = min(kwargs.get("max_results", 50), 100)
 
         if not search_path.is_absolute():
-            search_path = _PROJECT_ROOT / search_path
+            search_path = get_project_root() / search_path
 
         err = _check_sandbox(search_path)
         if err:
@@ -239,7 +239,7 @@ class GrepTool:
 
             if matches_in_file:
                 try:
-                    rel = str(fpath.relative_to(_PROJECT_ROOT))
+                    rel = str(fpath.relative_to(get_project_root()))
                 except ValueError:
                     continue
                 entry: dict[str, Any] = {"file": rel, "match_count": len(matches_in_file)}
@@ -308,7 +308,7 @@ class EditFileTool:
         replace_all: bool = kwargs.get("replace_all", False)
 
         if not file_path.is_absolute():
-            file_path = _PROJECT_ROOT / file_path
+            file_path = get_project_root() / file_path
 
         err = _check_sandbox(file_path)
         if err:
@@ -405,7 +405,7 @@ class WriteFileTool:
         content: str = kwargs["content"]
 
         if not file_path.is_absolute():
-            file_path = _PROJECT_ROOT / file_path
+            file_path = get_project_root() / file_path
 
         err = _check_sandbox(file_path)
         if err:

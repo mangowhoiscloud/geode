@@ -48,6 +48,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Legacy `fcntl.flock` replaced with `SchedulerLock` (O_EXCL + PID probe)
 - `action_queue: queue.Queue` deprecated in favor of `on_job_fired: Callable`
 
+### Fixed
+- **Sandbox project root CWD 기반으로 전환** — `_PROJECT_ROOT = Path(__file__).parent³` 하드코딩 → `get_project_root()` (CWD 캡처). 외부 워크스페이스에서 `geode` 실행 시 파일 도구가 "path outside project directory" 오류 발생하던 버그 수정. Claude Code `originalCwd` 패턴 이식
+
 ## [0.46.0] — 2026-04-06
 
 ### Added

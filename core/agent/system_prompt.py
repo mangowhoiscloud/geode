@@ -17,15 +17,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from pathlib import Path
 
 from core.cli.ip_names import get_ip_name_map
 from core.llm.prompts import ROUTER_SYSTEM
+from core.paths import get_project_root
 
 log = logging.getLogger(__name__)
-
-# Project root resolved from __file__ (CWD-independent)
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Max lines per memory hierarchy section to control context budget
 _MAX_SECTION_LINES = 20
@@ -293,7 +290,7 @@ def _build_geode_memory_context() -> str:
     placeholder sections). Capped at ``_MAX_SECTION_LINES`` lines.
     """
     try:
-        memory_path = _PROJECT_ROOT / ".geode" / "MEMORY.md"
+        memory_path = get_project_root() / ".geode" / "MEMORY.md"
         if not memory_path.exists():
             return ""
 
@@ -321,62 +318,24 @@ def _build_geode_memory_context() -> str:
 
 
 def _build_learning_context() -> str:
-    """G3: Load .geode/LEARNING.md agent learning records.
+    """G3: Load learned patterns from UserProfile.
 
-    Extracts only Patterns, Corrections, and Domain Knowledge sections
-    that have actual content (not just placeholder text).
+    Sources: ~/.geode/user_profile/learned.md (auto_learn hook output).
+    LEARNING.md is deprecated — UserProfile is the single source of truth.
     Capped at ``_MAX_SECTION_LINES`` lines.
     """
     try:
-        learning_path = _PROJECT_ROOT / ".geode" / "LEARNING.md"
-        if not learning_path.exists():
+        from core.tools.profile_tools import get_user_profile
+
+        profile = get_user_profile()
+        if profile is None:
             return ""
 
-        content = learning_path.read_text(encoding="utf-8")
-
-        # Extract sections with real content (not placeholders)
-        target_sections = {"## Patterns", "## Corrections", "## Domain Knowledge"}
-        extracted_lines: list[str] = []
-        current_in_target = False
-
-        for line in content.split("\n"):
-            stripped = line.strip()
-
-            if stripped.startswith("## "):
-                current_in_target = stripped in target_sections
-                if current_in_target:
-                    extracted_lines.append(stripped)
-                continue
-
-            if current_in_target and stripped:
-                # Skip placeholder lines
-                if stripped.startswith("(") and stripped.endswith(")"):
-                    continue
-                extracted_lines.append(stripped)
-
-        # Remove section headers that ended up with no content
-        cleaned: list[str] = []
-        i = 0
-        while i < len(extracted_lines):
-            line = extracted_lines[i]
-            if line.startswith("## "):
-                # Check if next non-header line exists
-                has_body = False
-                for j in range(i + 1, len(extracted_lines)):
-                    if extracted_lines[j].startswith("## "):
-                        break
-                    has_body = True
-                    break
-                if has_body:
-                    cleaned.append(line)
-            else:
-                cleaned.append(line)
-            i += 1
-
-        if not cleaned:
+        patterns = profile.get_learned_patterns()
+        if not patterns:
             return ""
 
-        capped = cleaned[:_MAX_SECTION_LINES]
+        capped = patterns[:_MAX_SECTION_LINES]
         return "## Agent Learning\n" + "\n".join(capped)
     except Exception:
         log.debug("Failed to build learning context (G3)", exc_info=True)
