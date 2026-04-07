@@ -7,43 +7,12 @@ with legal/rights databases; demo uses hardcoded fixture data.
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
-
 from core.llm.router import maybe_traceable
-
-
-class RightsStatus(StrEnum):
-    """IP rights clearance status."""
-
-    CLEAR = "clear"
-    NEGOTIABLE = "negotiable"
-    RESTRICTED = "restricted"
-    EXPIRED = "expired"
-    UNKNOWN = "unknown"
-
-
-class LicenseInfo(BaseModel):
-    """License details for an IP holder."""
-
-    holder: str
-    status: RightsStatus
-    expiry_year: int | None = None
-    territories: list[str] = Field(default_factory=list)
-    exclusivity: bool = False
-
-
-class RightsRiskResult(BaseModel):
-    """Result of IP rights/license risk assessment."""
-
-    status: RightsStatus
-    risk_score: int = Field(ge=0, le=100)
-    license_info: LicenseInfo
-    concerns: list[str] = Field(default_factory=list)
-    recommendation: str = ""
-
+from core.state import LicenseInfo as LicenseInfo
+from core.state import RightsRiskResult as RightsRiskResult
+from core.state import RightsStatus as RightsStatus
 
 # ---------------------------------------------------------------------------
 # Hardcoded fixture data for demo IPs

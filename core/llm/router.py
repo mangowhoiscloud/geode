@@ -1352,7 +1352,7 @@ def get_secondary_llm_parsed() -> LLMParsedCallable | None:
 # AgenticLLMPort — Protocol interface for agentic loop LLM adapters
 # ---------------------------------------------------------------------------
 
-from core.cli.agentic_response import AgenticResponse  # noqa: E402
+from core.llm.agentic_response import AgenticResponse  # noqa: E402
 
 
 @runtime_checkable

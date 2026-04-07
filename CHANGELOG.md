@@ -28,6 +28,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Architecture
+- **Layer violation fix (3 cross-layer dependency violations resolved)**:
+  - `agentic_response.py` moved from `core/cli/` (L5) → `core/llm/` (L2) — eliminates L2→L5 import in LLM providers/router. `core/cli/agentic_response.py` retained as backward-compatible re-export
+  - `MODEL_PRICING` dead re-export removed from `core/config.py` — eliminates L1→L2 import (no callers used `core.config.MODEL_PRICING`)
+  - `RightsRiskResult`, `RightsStatus`, `LicenseInfo` moved from `core/verification/` (L3) → `core/state.py` (L1) — eliminates L1→L3 import. `rights_risk.py` re-exports from `core.state`
+
 ### Added
 - **Sandbox validation module (Claude Code parity)** — `core/tools/sandbox.py` 중앙 모듈 신설. 14/15 GAP 해소:
   - Shell expansion blocking ($VAR, ${VAR}, $(cmd), %VAR%, ~user) — TOCTOU prevention
