@@ -106,7 +106,7 @@ def normalize_macos_path(path_str: str) -> str:
     symmetric comparison.  Follows Claude Code filesystem.ts pathInWorkingPath().
     """
     result = _PRIVATE_VAR_RE.sub("/var/", path_str)
-    result = _PRIVATE_TMP_RE.sub(lambda m: f"/tmp{m.group(1)}", result)  # noqa: S108
+    result = _PRIVATE_TMP_RE.sub(lambda m: f"/tmp{m.group(1)}", result)  # noqa: S108  # nosec B108 — intentional macOS normalization
     return result
 
 

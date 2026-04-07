@@ -13,6 +13,7 @@ from core.tools.document_tools import ReadDocumentTool
 @pytest.fixture(autouse=True)
 def _sandbox_to_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Redirect sandbox root to tmp_path for all tests."""
+
     def _root() -> Path:
         return tmp_path
 
@@ -90,7 +91,9 @@ class TestOffsetLimit:
 
 
 class TestFileSizeGuard:
-    def test_rejects_large_file_without_limit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_rejects_large_file_without_limit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         from core.config import settings
 
         monkeypatch.setattr(settings, "sandbox_max_file_size_bytes", 100)

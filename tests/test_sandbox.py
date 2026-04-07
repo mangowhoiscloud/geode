@@ -13,6 +13,7 @@ from core.tools import sandbox
 @pytest.fixture(autouse=True)
 def _sandbox_to_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Redirect sandbox root to tmp_path for all tests."""
+
     def _root() -> Path:
         return tmp_path
 
