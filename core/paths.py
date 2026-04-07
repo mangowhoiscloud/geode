@@ -15,6 +15,7 @@ Project ID encoding follows Claude Code's convention:
 
 from __future__ import annotations
 
+import logging as _logging
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -188,3 +189,95 @@ def _resolve_with_fallback(new_path: Path, old_path: Path) -> Path:
         return old_path
     # Neither has data — use new path (will be created on first write)
     return new_path
+
+
+# ---------------------------------------------------------------------------
+# Lazy directory creation — Claude Code pattern (mkdir recursive on-demand)
+# ---------------------------------------------------------------------------
+
+_paths_log = _logging.getLogger(__name__)
+
+
+def ensure_directories() -> None:
+    """Create all required directories if missing.
+
+    Called once at bootstrap. Follows Claude Code's lazy creation pattern:
+    ``mkdir(parents=True, exist_ok=True)`` — no error if already present,
+    creates full tree if absent.
+
+    Two tiers:
+    - Global (``~/.geode/``): runs, vault, models, usage, projects
+    - Project (``.geode/``): memory, rules, skills, reports, scheduler_logs
+    """
+    created: list[str] = []
+
+    # --- Global tier ---
+    global_dirs = [
+        GEODE_HOME,
+        GLOBAL_RUNS_DIR,
+        GLOBAL_VAULT_DIR,
+        GLOBAL_MODELS_DIR,
+        GLOBAL_USAGE_DIR,
+        GLOBAL_MCP_DIR,
+        GLOBAL_SCHEDULER_DIR,
+        GLOBAL_PROJECTS_DIR,
+        GLOBAL_IDENTITY_DIR,
+        GLOBAL_USER_PROFILE_DIR,
+    ]
+    for d in global_dirs:
+        if not d.exists():
+            d.mkdir(parents=True, exist_ok=True)
+            created.append(str(d))
+
+    # --- Project-scoped user data (under ~/.geode/projects/{id}/) ---
+    project_data = get_project_data_dir()
+    project_user_dirs = [
+        project_data,
+        project_data / "journal",
+        project_data / "sessions",
+        project_data / "snapshots",
+        project_data / "result_cache",
+    ]
+    for d in project_user_dirs:
+        if not d.exists():
+            d.mkdir(parents=True, exist_ok=True)
+            created.append(str(d))
+
+    # --- Project tier (.geode/) ---
+    project_dirs = [
+        PROJECT_GEODE_DIR,
+        PROJECT_MEMORY_DIR,
+        PROJECT_RULES_DIR,
+        PROJECT_SKILLS_DIR,
+        PROJECT_REPORTS_DIR,
+        PROJECT_SCHEDULER_LOG_DIR,
+    ]
+    for d in project_dirs:
+        if not d.exists():
+            d.mkdir(parents=True, exist_ok=True)
+            created.append(str(d))
+
+    # --- .gitignore entry for .geode/ ---
+    _ensure_geode_gitignore()
+
+    if created:
+        _paths_log.info("Created %d directories: %s", len(created), ", ".join(created))
+
+
+def _ensure_geode_gitignore() -> None:
+    """Add .geode/ to .gitignore if not already present."""
+    gitignore = Path(".gitignore")
+    entry = ".geode/"
+    try:
+        if gitignore.exists():
+            content = gitignore.read_text(encoding="utf-8")
+            if entry in content:
+                return
+            if not content.endswith("\n"):
+                content += "\n"
+        else:
+            content = ""
+        content += f"\n# GEODE\n{entry}\n"
+        gitignore.write_text(content, encoding="utf-8")
+    except OSError:
+        pass  # read-only filesystem, CI, etc.
