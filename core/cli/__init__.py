@@ -1671,13 +1671,17 @@ def serve(
     _sched_queue: _queue_mod.Queue[tuple[str, str, bool]] = _queue_mod.Queue()
     _sched_svc = None
     try:
-        from core.automation.scheduler import SchedulerService
+        from core.automation.scheduler import create_scheduler
 
-        _sched_svc = SchedulerService(
-            action_queue=_sched_queue,
+        _sched_svc = create_scheduler(
+            on_job_fired=lambda jid, act, iso: _sched_queue.put((jid, act, iso)),
             hooks=_gw_services.hook_system,
+            enable_jitter=True,
         )
         _sched_svc.load()
+        _recovered = _sched_svc.recover_missed_tasks()
+        if _recovered:
+            console.print(f"  [info]Recovered {len(_recovered)} missed scheduled jobs[/info]")
         _sched_svc.start()
         _scheduler_service_ctx.set(_sched_svc)
         _n_jobs = _sched_svc.job_count

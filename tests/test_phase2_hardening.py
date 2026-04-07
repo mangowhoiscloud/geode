@@ -23,12 +23,12 @@ import pytest
 class TestC3FileLock:
     """Verify inter-process file lock on scheduler save/load."""
 
-    def test_save_creates_lock_file(self, tmp_path: Path) -> None:
-        """save() should create a .lock file alongside jobs.json."""
+    def test_save_atomic_write(self, tmp_path: Path) -> None:
+        """save() should atomically write job store using O_EXCL lock."""
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
-        svc = SchedulerService(store_path=store)
+        svc = SchedulerService(store_path=store, enable_jitter=False)
         svc.add_job(
             ScheduledJob(
                 job_id="c3-1",
@@ -40,14 +40,15 @@ class TestC3FileLock:
         svc.save()
 
         assert store.exists()
-        assert store.with_suffix(".json.lock").exists()
+        # Lock file is transient (O_EXCL + release), so not persisted after save
+        assert not (tmp_path / "scheduled_tasks.lock").exists()
 
     def test_load_with_lock(self, tmp_path: Path) -> None:
         """load() should work correctly with file locking."""
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
-        svc1 = SchedulerService(store_path=store)
+        svc1 = SchedulerService(store_path=store, enable_jitter=False)
         svc1.add_job(
             ScheduledJob(
                 job_id="c3-2",
@@ -58,7 +59,7 @@ class TestC3FileLock:
         )
         svc1.save()
 
-        svc2 = SchedulerService(store_path=store)
+        svc2 = SchedulerService(store_path=store, enable_jitter=False)
         svc2.load()
         assert svc2.job_count == 1
         assert svc2.get_job("c3-2") is not None
@@ -68,7 +69,7 @@ class TestC3FileLock:
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
-        svc = SchedulerService(store_path=store)
+        svc = SchedulerService(store_path=store, enable_jitter=False)
         job = ScheduledJob(
             job_id="c3-3",
             name="Running test",
@@ -79,7 +80,7 @@ class TestC3FileLock:
         svc.add_job(job)
         svc.save()
 
-        svc2 = SchedulerService(store_path=store)
+        svc2 = SchedulerService(store_path=store, enable_jitter=False)
         svc2.load()
         loaded = svc2.get_job("c3-3")
         assert loaded is not None
@@ -262,7 +263,7 @@ class TestM3StuckJobDetection:
     def test_detect_stuck_marks_status(self) -> None:
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
-        svc = SchedulerService()
+        svc = SchedulerService(enable_jitter=False)
         job = ScheduledJob(
             job_id="stuck-1",
             name="Stuck Job",
@@ -283,7 +284,7 @@ class TestM3StuckJobDetection:
     def test_not_stuck_below_threshold(self) -> None:
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
-        svc = SchedulerService()
+        svc = SchedulerService(enable_jitter=False)
         now = time.time() * 1000
         job = ScheduledJob(
             job_id="ok-1",
@@ -301,7 +302,7 @@ class TestM3StuckJobDetection:
     def test_no_running_jobs_returns_empty(self) -> None:
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
-        svc = SchedulerService()
+        svc = SchedulerService(enable_jitter=False)
         job = ScheduledJob(
             job_id="idle-1",
             name="Idle Job",
@@ -318,7 +319,7 @@ class TestM3StuckJobDetection:
         """_execute_job should set and clear running_since_ms."""
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
-        svc = SchedulerService()
+        svc = SchedulerService(enable_jitter=False)
         job = ScheduledJob(
             job_id="track-1",
             name="Track Job",
@@ -335,7 +336,7 @@ class TestM3StuckJobDetection:
     def test_stuck_timeout_configurable(self) -> None:
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
-        svc = SchedulerService()
+        svc = SchedulerService(enable_jitter=False)
         svc.STUCK_TIMEOUT_MS = 5000  # 5 seconds
 
         now = time.time() * 1000

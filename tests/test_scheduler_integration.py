@@ -27,6 +27,7 @@ def svc(tmp_path: Path) -> SchedulerService:
     return SchedulerService(
         store_path=tmp_path / "jobs.json",
         log_dir=tmp_path / "logs",
+        enable_jitter=False,
     )
 
 
@@ -107,6 +108,7 @@ class TestNLToSchedulerIntegration:
         svc2 = SchedulerService(
             store_path=tmp_path / "jobs.json",
             log_dir=tmp_path / "logs",
+            enable_jitter=False,
         )
         svc2.load()
         job = svc2.get_job(result.job.job_id)

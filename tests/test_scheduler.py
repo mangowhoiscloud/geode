@@ -38,7 +38,7 @@ def tmp_log_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def svc(tmp_store: Path, tmp_log_dir: Path) -> SchedulerService:
-    return SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir)
+    return SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, enable_jitter=False)
 
 
 def _now_ms() -> float:
