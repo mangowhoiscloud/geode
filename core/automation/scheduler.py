@@ -515,6 +515,7 @@ class SchedulerService:
             # Backward-compat: wrap queue.put as callback
             def _queue_adapter(jid: str, act: str, iso: bool) -> None:
                 action_queue.put((jid, act, iso))
+
             _fired_cb = _queue_adapter
         self._on_job_fired: OnJobFired | None = _fired_cb
 
@@ -638,7 +639,9 @@ class SchedulerService:
             # Apply jitter
             if self._enable_jitter:
                 return _jittered_next_run(
-                    base, interval, job.job_id,
+                    base,
+                    interval,
+                    job.job_id,
                     max_jitter_ms=self._max_jitter_ms,
                 )
             return base
@@ -649,7 +652,9 @@ class SchedulerService:
             if self._enable_jitter:
                 # Jitter based on 60s interval for CRON
                 return _jittered_next_run(
-                    base, 60_000, job.job_id,
+                    base,
+                    60_000,
+                    job.job_id,
                     max_jitter_ms=self._max_jitter_ms,
                 )
             return base
@@ -874,11 +879,7 @@ class SchedulerService:
         path = Path(self._store_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         # Filter: only persist durable jobs
-        data = {
-            jid: _job_to_dict(j)
-            for jid, j in self._jobs.items()
-            if j.durable
-        }
+        data = {jid: _job_to_dict(j) for jid, j in self._jobs.items() if j.durable}
         payload = json.dumps(data, ensure_ascii=False, indent=2)
         lock = SchedulerLock(path.parent / "scheduled_tasks.lock")
         with lock:
@@ -922,9 +923,7 @@ class SchedulerService:
             return
 
         # Preserve non-durable (session-only) jobs
-        session_jobs = {
-            jid: j for jid, j in self._jobs.items() if not j.durable
-        }
+        session_jobs = {jid: j for jid, j in self._jobs.items() if not j.durable}
 
         loaded = 0
         zombies = 0
@@ -1038,7 +1037,8 @@ class SchedulerService:
         if current_mtime != self._last_store_mtime:
             log.debug(
                 "Store file changed (mtime %.0f -> %.0f), reloading",
-                self._last_store_mtime, current_mtime,
+                self._last_store_mtime,
+                current_mtime,
             )
             self.load()
             return True
@@ -1069,21 +1069,13 @@ class SchedulerService:
 
                 if kind == ScheduleKind.AT:
                     at = job.schedule.at_ms
-                    if (
-                        job.last_run_at_ms is None
-                        and at < now
-                        and (now - at) <= grace_ms
-                    ):
+                    if job.last_run_at_ms is None and at < now and (now - at) <= grace_ms:
                         missed.append(job)
 
                 elif kind == ScheduleKind.EVERY:
                     nxt = job.next_run_at_ms
                     interval = job.schedule.every_ms
-                    if (
-                        nxt is not None
-                        and interval > 0
-                        and (now - nxt) > 2 * interval
-                    ):
+                    if nxt is not None and interval > 0 and (now - nxt) > 2 * interval:
                         missed.append(job)
 
         return missed

@@ -198,22 +198,26 @@ class TestDurableFlag:
         svc = _make_svc(tmp_path)
 
         # Add durable job
-        svc.add_job(ScheduledJob(
-            job_id="durable-1",
-            name="persist",
-            schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
-            action="persist me",
-            durable=True,
-        ))
+        svc.add_job(
+            ScheduledJob(
+                job_id="durable-1",
+                name="persist",
+                schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
+                action="persist me",
+                durable=True,
+            )
+        )
 
         # Add non-durable (session-only) job
-        svc.add_job(ScheduledJob(
-            job_id="session-1",
-            name="ephemeral",
-            schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
-            action="session only",
-            durable=False,
-        ))
+        svc.add_job(
+            ScheduledJob(
+                job_id="session-1",
+                name="ephemeral",
+                schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
+                action="session only",
+                durable=False,
+            )
+        )
 
         assert svc.job_count == 2
         svc.save()
@@ -230,23 +234,27 @@ class TestDurableFlag:
         svc = _make_svc(tmp_path)
 
         # Add durable job and save
-        svc.add_job(ScheduledJob(
-            job_id="d1",
-            name="d",
-            schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
-            action="d",
-            durable=True,
-        ))
+        svc.add_job(
+            ScheduledJob(
+                job_id="d1",
+                name="d",
+                schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
+                action="d",
+                durable=True,
+            )
+        )
         svc.save()
 
         # Add non-durable job after save
-        svc.add_job(ScheduledJob(
-            job_id="s1",
-            name="s",
-            schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
-            action="s",
-            durable=False,
-        ))
+        svc.add_job(
+            ScheduledJob(
+                job_id="s1",
+                name="s",
+                schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
+                action="s",
+                durable=False,
+            )
+        )
 
         assert svc.job_count == 2
 
@@ -265,21 +273,31 @@ class TestMtimeReload:
         svc = _make_svc(tmp_path)
 
         # Save initial state
-        svc.add_job(ScheduledJob(
-            job_id="init",
-            name="initial",
-            schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
-            action="init",
-        ))
+        svc.add_job(
+            ScheduledJob(
+                job_id="init",
+                name="initial",
+                schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
+                action="init",
+            )
+        )
         svc.save()
 
         # Externally modify the store (simulate another process)
         import json
+
         data = json.loads(store.read_text())
         data["ext-1"] = {
             "job_id": "ext-1",
             "name": "external",
-            "schedule": {"kind": "every", "at_ms": 0, "every_ms": 60000, "anchor_ms": 0, "cron_expr": "", "timezone": ""},
+            "schedule": {
+                "kind": "every",
+                "at_ms": 0,
+                "every_ms": 60000,
+                "anchor_ms": 0,
+                "cron_expr": "",
+                "timezone": "",
+            },
             "enabled": True,
             "delete_after_run": False,
             "durable": True,
@@ -296,6 +314,7 @@ class TestMtimeReload:
         }
         # Write with slightly different mtime
         import time
+
         time.sleep(0.01)
         store.write_text(json.dumps(data, indent=2))
 
@@ -307,12 +326,14 @@ class TestMtimeReload:
     def test_no_reload_when_unchanged(self, tmp_path: Path) -> None:
         """No reload when store file hasn't changed."""
         svc = _make_svc(tmp_path)
-        svc.add_job(ScheduledJob(
-            job_id="stable",
-            name="stable",
-            schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
-            action="stable",
-        ))
+        svc.add_job(
+            ScheduledJob(
+                job_id="stable",
+                name="stable",
+                schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60_000),
+                action="stable",
+            )
+        )
         svc.save()
 
         reloaded = svc._reload_if_changed()

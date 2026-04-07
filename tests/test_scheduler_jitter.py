@@ -58,7 +58,9 @@ class TestJitteredNextRun:
         interval = 600_000.0  # 10 min
         max_jitter = 5_000.0  # 5 sec cap
         result = _jittered_next_run(
-            base, interval, "test-job",
+            base,
+            interval,
+            "test-job",
             max_jitter_ms=max_jitter,
         )
         assert result <= base + max_jitter
@@ -68,7 +70,9 @@ class TestJitteredNextRun:
         base = 1_000_000.0
         interval = 60_000.0
         result = _jittered_next_run(
-            base, interval, "test-job",
+            base,
+            interval,
+            "test-job",
             jitter_fraction=0.1,
             max_jitter_ms=900_000.0,
         )

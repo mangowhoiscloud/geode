@@ -426,7 +426,7 @@ wheels = [
 
 [[package]]
 name = "geode"
-version = "0.45.0"
+version = "0.47.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -435,6 +435,7 @@ dependencies = [
     { name = "langgraph" },
     { name = "langgraph-checkpoint" },
     { name = "langgraph-checkpoint-sqlite" },
+    { name = "markdownify" },
     { name = "numpy" },
     { name = "openai" },
     { name = "openai-agents" },
@@ -471,6 +472,7 @@ requires-dist = [
     { name = "langgraph", specifier = ">=1.1.0" },
     { name = "langgraph-checkpoint", specifier = ">=4.0.1" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.0" },
+    { name = "markdownify", specifier = ">=0.14.1" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "numpy", specifier = ">=2.2.0" },
     { name = "openai", specifier = ">=2.26.0" },
@@ -873,6 +875,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5b/f5/4ec618ed16cc4f8fb3b701563655a69816155e79e24a17b651541804721d/markdown_it_py-4.0.0.tar.gz", hash = "sha256:cb0a2b4aa34f932c007117b194e945bd74e0ec24133ceb5bac59009cda1cb9f3", size = 73070, upload-time = "2025-08-11T12:57:52.854Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/94/54/e7d793b573f298e1c9013b8c4dade17d481164aa517d1d7148619c2cedbf/markdown_it_py-4.0.0-py3-none-any.whl", hash = "sha256:87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147", size = 87321, upload-time = "2025-08-11T12:57:51.923Z" },
+]
+
+[[package]]
+name = "markdownify"
+version = "1.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3f/bc/c8c8eea5335341306b0fa7e1cb33c5e1c8d24ef70ddd684da65f41c49c92/markdownify-1.2.2.tar.gz", hash = "sha256:b274f1b5943180b031b699b199cbaeb1e2ac938b75851849a31fd0c3d6603d09", size = 18816, upload-time = "2025-11-16T19:21:18.565Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/ce/f1e3e9d959db134cedf06825fae8d5b294bd368aacdd0831a3975b7c4d55/markdownify-1.2.2-py3-none-any.whl", hash = "sha256:3f02d3cc52714084d6e589f70397b6fc9f2f3a8531481bf35e8cc39f975e186a", size = 15724, upload-time = "2025-11-16T19:21:17.622Z" },
 ]
 
 [[package]]
@@ -1645,6 +1660,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d8/80/f0f10b4045628645a841d3d98b584a8699005ee03a211fc7c45f6c6f0e99/simple_term_menu-1.6.6.tar.gz", hash = "sha256:9813d36f5749d62d200a5599b1ec88469c71378312adc084c00c00bfbb383893", size = 35493, upload-time = "2024-12-02T16:31:50.639Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9c/09/21d993e394c1fe5c44cd90453d88ed44932da8dfca006e424c072d77d29b/simple_term_menu-1.6.6-py3-none-any.whl", hash = "sha256:c2a869efa7a9f7e4a9c25858b42ca6974034951c137d5e281f5339b06ed8c9c2", size = 27600, upload-time = "2024-12-02T16:31:48.934Z" },
+]
+
+[[package]]
+name = "six"
+version = "1.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
 ]
 
 [[package]]

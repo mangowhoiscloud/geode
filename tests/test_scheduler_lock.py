@@ -53,10 +53,14 @@ class TestSchedulerLock:
         lock_path = tmp_path / "stale.lock"
 
         # Create a lock file with a non-existent PID
-        lock_path.write_text(json.dumps({
-            "pid": 99999999,  # Very unlikely to exist
-            "acquired_at": 0.0,  # Very old
-        }))
+        lock_path.write_text(
+            json.dumps(
+                {
+                    "pid": 99999999,  # Very unlikely to exist
+                    "acquired_at": 0.0,  # Very old
+                }
+            )
+        )
 
         lock = SchedulerLock(lock_path)
         assert lock.acquire(timeout_s=2.0)
