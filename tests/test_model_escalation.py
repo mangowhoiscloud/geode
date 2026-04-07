@@ -148,6 +148,28 @@ class TestModelEscalation:
         assert loop.model == OPENAI_PRIMARY
         assert loop._provider == "openai"
 
+    def test_cross_provider_emits_fallback_hook(self) -> None:
+        """Cross-provider escalation fires FALLBACK_CROSS_PROVIDER hook."""
+        from core.hooks import HookEvent
+
+        last_anthropic = ANTHROPIC_FALLBACK_CHAIN[-1]
+        loop = _make_loop(model=last_anthropic, provider="anthropic")
+        hooks = MagicMock()
+        loop._hooks = hooks
+
+        result = loop._try_model_escalation()
+        assert result is True
+
+        hooks.trigger.assert_any_call(
+            HookEvent.FALLBACK_CROSS_PROVIDER,
+            {
+                "from_model": last_anthropic,
+                "to_model": OPENAI_PRIMARY,
+                "from_provider": "anthropic",
+                "to_provider": "openai",
+            },
+        )
+
     def test_arun_escalation_on_consecutive_failures(self) -> None:
         """arun() auto-escalates when failures reach threshold and retries."""
         import asyncio
