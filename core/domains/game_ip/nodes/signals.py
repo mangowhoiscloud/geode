@@ -38,6 +38,11 @@ def set_signal_adapter(adapter: SignalEnrichmentPort | None) -> None:
     _signal_adapter_ctx.set(adapter)
 
 
+def get_signal_adapter() -> SignalEnrichmentPort | None:
+    """Retrieve the currently injected signal adapter."""
+    return _signal_adapter_ctx.get()
+
+
 def _fetch_web_signals(ip_name: str) -> dict[str, Any]:
     """Last-resort: web search for signal data on unknown IPs.
 
@@ -95,7 +100,7 @@ def signals_node(state: GeodeState) -> dict[str, Any]:
         live_signals: dict[str, Any] = {}
 
         # 1. Try injected MCP adapter first (CompositeSignalAdapter in production)
-        adapter = _signal_adapter_ctx.get()
+        adapter = get_signal_adapter()
         if adapter is not None and adapter.is_available():
             try:
                 live_signals = adapter.fetch_signals(ip_name)

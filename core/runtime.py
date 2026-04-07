@@ -223,26 +223,98 @@ class GeodeRuntime:
     ) -> GeodeRuntime:
         """Factory method — create a fully wired runtime for an IP analysis.
 
-        Delegates to sub-modules in core.runtime_wiring:
-        - bootstrap: hooks, session, memory, config_watcher, task_graph, prompt
-        - infra: policies, tools, LLM, auth, lanes
-        - automation: L4.5 9 components + hook wiring
-        - adapters: MCP signal/notification/calendar/gateway
+        Staged initialization (Claude Code entrypoints/init.ts pattern):
+        1. _build_core: domain, sessions, hooks, config, auth, LLM, lanes
+        2. _build_tools: MCP, skills, readiness, plugins, tool offload
+        3. _build_memory: project/org memory, context assembler, automation
+        4. Assembly: pack configs, create instance, attach optional components
         """
-        from core.runtime_wiring import adapters as adapter_wiring
-        from core.runtime_wiring import automation as automation_wiring
         from core.runtime_wiring import bootstrap, infra
 
-        # Domain adapter — wire before anything that reads domain config
+        # Stage 0: Domain + session identity
         domain = load_domain_adapter(domain_name)
         set_domain(domain)
-
-        # Session key + run ID
         session_key = build_session_key(ip_name, phase)
         run_id = uuid.uuid4().hex[:12]
 
-        # Core sub-systems
-        hooks, run_log, stuck_detector, session_metrics = bootstrap.build_hooks(
+        # Stage 1: Core sub-systems
+        core = cls._build_core(
+            bootstrap,
+            infra,
+            session_key=session_key,
+            run_id=run_id,
+            log_dir=log_dir,
+            session_ttl=session_ttl,
+            stuck_timeout_s=stuck_timeout_s,
+        )
+
+        # Stage 2: Tools, MCP, Skills
+        tools = cls._build_tools(bootstrap, core["hooks"], session_key=session_key)
+
+        # Stage 3: Memory + Automation
+        memory, automation = cls._build_memory_and_automation(
+            bootstrap,
+            core["hooks"],
+            core["session_store"],
+            session_key=session_key,
+            ip_name=ip_name,
+        )
+
+        log.info(
+            "GeodeRuntime created: ip=%s, key=%s, tools=%d, lanes=%s",
+            ip_name,
+            session_key,
+            len(core["tool_registry"]),
+            core["lane_queue"].list_lanes(),
+        )
+
+        # Stage 4: Assembly
+        core_config = RuntimeCoreConfig(
+            hooks=core["hooks"],
+            session_store=core["session_store"],
+            policy_chain=core["policy_chain"],
+            tool_registry=core["tool_registry"],
+            run_log=core["run_log"],
+            llm_adapter=core["llm_adapter"],
+            config_watcher=core["config_watcher"],
+            stuck_detector=core["stuck_detector"],
+            lane_queue=core["lane_queue"],
+            project_memory=memory["project_memory"],
+            session_key=session_key,
+            ip_name=ip_name,
+            secondary_adapter=core["secondary_adapter"],
+            profile_store=core["profile_store"],
+            profile_rotator=core["profile_rotator"],
+            cooldown_tracker=core["cooldown_tracker"],
+            mcp_manager=tools["mcp_manager"],
+            skill_registry=tools["skill_registry"],
+            readiness=tools["readiness"],
+        )
+        automation_config = RuntimeAutomationConfig(**automation)
+        memory_config = RuntimeMemoryConfig(
+            organization_memory=memory["organization_memory"],
+            context_assembler=memory["context_assembler"],
+            prompt_assembler=memory["prompt_assembler"],
+        )
+        instance = cls(core_config, automation_config, memory_config)
+        instance.run_id = run_id
+        instance.task_graph = memory["task_graph"]
+        instance._task_bridge = memory["task_bridge"]
+        return instance
+
+    @staticmethod
+    def _build_core(
+        bootstrap: Any,
+        infra: Any,
+        *,
+        session_key: str,
+        run_id: str,
+        log_dir: Path | str | None,
+        session_ttl: float,
+        stuck_timeout_s: float,
+    ) -> dict[str, Any]:
+        """Stage 1: Build core infrastructure (hooks, auth, LLM, lanes)."""
+        hooks, run_log, stuck_detector, _session_metrics = bootstrap.build_hooks(
             session_key=session_key,
             run_id=run_id,
             log_dir=log_dir,
@@ -252,31 +324,71 @@ class GeodeRuntime:
         policy_chain = infra.build_default_policies()
         tool_registry = infra.build_default_registry()
         profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
-        llm_adapter, secondary_adapter = infra.build_llm_adapters(tool_registry, policy_chain)
+        llm_adapter, secondary_adapter = infra.build_llm_adapters(
+            tool_registry,
+            policy_chain,
+        )
         config_watcher = bootstrap.build_config_watcher(hooks=hooks)
         lane_queue = infra.build_default_lanes()
+        return {
+            "hooks": hooks,
+            "run_log": run_log,
+            "stuck_detector": stuck_detector,
+            "session_store": session_store,
+            "policy_chain": policy_chain,
+            "tool_registry": tool_registry,
+            "profile_store": profile_store,
+            "profile_rotator": profile_rotator,
+            "cooldown_tracker": cooldown_tracker,
+            "llm_adapter": llm_adapter,
+            "secondary_adapter": secondary_adapter,
+            "config_watcher": config_watcher,
+            "lane_queue": lane_queue,
+        }
 
-        # Unified bootstrap: MCP, Skills, Readiness
+    @staticmethod
+    def _build_tools(
+        bootstrap: Any,
+        hooks: Any,
+        *,
+        session_key: str,
+    ) -> dict[str, Any]:
+        """Stage 2: Build MCP, skills, readiness, plugins, tool offload."""
+        from core.runtime_wiring import adapters as adapter_wiring
+
         mcp_manager = bootstrap.build_mcp_manager()
         from core.mcp.manager import set_mcp_hooks
 
         set_mcp_hooks(hooks)
         skill_registry = bootstrap.build_skill_registry()
         readiness = bootstrap.build_readiness()
-
-        # P0: Tool result offloading
         bootstrap.build_tool_offload(session_id=session_key, hooks=hooks)
-
-        # Plugin wiring (MCP adapters + Gateway)
         adapter_wiring.build_plugins()
+        return {
+            "mcp_manager": mcp_manager,
+            "skill_registry": skill_registry,
+            "readiness": readiness,
+        }
 
-        # Memory + Automation
+    @staticmethod
+    def _build_memory_and_automation(
+        bootstrap: Any,
+        hooks: Any,
+        session_store: Any,
+        *,
+        session_key: str,
+        ip_name: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Stage 3: Build memory, automation, and optional components."""
+        from core.runtime_wiring import automation as automation_wiring
+
         (
             project_memory,
             organization_memory,
             context_assembler,
-            user_profile,
+            _user_profile,
         ) = bootstrap.build_memory(session_store=session_store, hooks=hooks)
+
         automation = automation_wiring.build_automation(
             hooks=hooks,
             session_key=session_key,
@@ -284,54 +396,25 @@ class GeodeRuntime:
             project_memory=project_memory,
         )
 
-        # Optional components
         try:
             prompt_assembler = bootstrap.build_prompt_assembler(hooks=hooks)
         except ImportError:
-            log.debug("ADR-007 prompt_assembler/skill_registry not yet available — skipping")
+            log.debug("ADR-007 prompt_assembler not yet available — skipping")
             prompt_assembler = None
-        task_graph, task_bridge = bootstrap.build_task_graph(hooks=hooks, ip_name=ip_name)
-
-        log.info(
-            "GeodeRuntime created: ip=%s, key=%s, tools=%d, lanes=%s",
-            ip_name,
-            session_key,
-            len(tool_registry),
-            lane_queue.list_lanes(),
-        )
-
-        core_config = RuntimeCoreConfig(
+        task_graph, task_bridge = bootstrap.build_task_graph(
             hooks=hooks,
-            session_store=session_store,
-            policy_chain=policy_chain,
-            tool_registry=tool_registry,
-            run_log=run_log,
-            llm_adapter=llm_adapter,
-            config_watcher=config_watcher,
-            stuck_detector=stuck_detector,
-            lane_queue=lane_queue,
-            project_memory=project_memory,
-            session_key=session_key,
             ip_name=ip_name,
-            secondary_adapter=secondary_adapter,
-            profile_store=profile_store,
-            profile_rotator=profile_rotator,
-            cooldown_tracker=cooldown_tracker,
-            mcp_manager=mcp_manager,
-            skill_registry=skill_registry,
-            readiness=readiness,
         )
-        automation_config = RuntimeAutomationConfig(**automation)
-        memory_config = RuntimeMemoryConfig(
-            organization_memory=organization_memory,
-            context_assembler=context_assembler,
-            prompt_assembler=prompt_assembler,
-        )
-        instance = cls(core_config, automation_config, memory_config)
-        instance.run_id = run_id
-        instance.task_graph = task_graph
-        instance._task_bridge = task_bridge
-        return instance
+
+        memory = {
+            "project_memory": project_memory,
+            "organization_memory": organization_memory,
+            "context_assembler": context_assembler,
+            "prompt_assembler": prompt_assembler,
+            "task_graph": task_graph,
+            "task_bridge": task_bridge,
+        }
+        return memory, automation
 
     # ------------------------------------------------------------------
     # Properties

@@ -36,6 +36,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Recurring age-out** — 30일 지난 recurring job 자동 삭제 + `permanent` flag 면제. stale job 누적 방지
 - **Sub-agent scheduler routing** — `ScheduledJob.agent_id` 필드 + `OnJobFired` 4-arg callback. sub-agent별 job 소유 및 fire 라우팅
 
+### Architecture
+- **AgenticLoop SRP decomposition** — context window management extracted to `context_manager.py` (410 lines), convergence detection to `convergence.py` (114 lines). agentic_loop.py 1818 → 1405 lines (-23%)
+- **CLI __init__.py module extraction** — memory_handler, scheduler_drain, terminal extracted to dedicated modules. cli/__init__.py 1892 → 1641 lines (-13%)
+- **Runtime.create() staged builders** — monolithic 122-line factory split into 4 staged private methods (_build_core, _build_tools, _build_memory_and_automation)
+- **Hook layer violation fix** — auto_learn.py L6→L5 dependency eliminated via profile_provider DI injection at bootstrap
+
+### Fixed
+- **FALLBACK_CROSS_PROVIDER hook never emitted** — cross-provider model escalation now fires the dedicated observability hook with provider-level context
+- **signal_adapter ContextVar encapsulation** — added `get_signal_adapter()` public getter, replaced private `_signal_adapter_ctx.get()` access
+
 ## [0.47.0] — 2026-04-07
 
 ### Added
