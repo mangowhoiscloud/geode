@@ -762,17 +762,23 @@ def invoke_with_timeout(
         Final state dict. On timeout, raises PipelineTimeoutError.
     """
     import concurrent.futures
+    import contextvars
 
     if timeout_s == 0.0:
         timeout_s = settings.pipeline_timeout_s
     if timeout_s <= 0:
         return graph.invoke(state, config=config)
 
+    # Snapshot ContextVars so the worker thread inherits memory/profile/domain
+    # adapters set during bootstrap. Python contextvars do not auto-propagate
+    # across threads — without this, graph nodes see None for all injected state.
+    ctx = contextvars.copy_context()
+
     def _run() -> Any:
         return graph.invoke(state, config=config)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_run)
+        future = pool.submit(ctx.run, _run)
         try:
             return future.result(timeout=timeout_s)
         except concurrent.futures.TimeoutError:

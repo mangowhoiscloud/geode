@@ -106,7 +106,7 @@ class TestCrossProviderDispatch:
             calls.append((p, m))
             return "ok"
 
-        with patch("core.llm.router.settings") as mock_settings:
+        with patch("core.llm.provider_dispatch.settings") as mock_settings:
             mock_settings.llm_cross_provider_failover = False
             result = _cross_provider_dispatch("anthropic", "claude-opus-4-6", _dispatch, "test")
 
@@ -127,9 +127,9 @@ class TestCrossProviderDispatch:
             return "fallback_ok"
 
         with (
-            patch("core.llm.router.settings") as mock_settings,
-            patch("core.llm.router._get_fallback_chain") as mock_chain,
-            patch("core.llm.router._fire_hook"),
+            patch("core.llm.provider_dispatch.settings") as mock_settings,
+            patch("core.llm.provider_dispatch._get_fallback_chain") as mock_chain,
+            patch("core.llm.provider_dispatch._fire_hook"),
         ):
             mock_settings.llm_cross_provider_failover = True
             mock_settings.llm_cross_provider_order = ["anthropic", "openai", "glm"]
@@ -150,9 +150,9 @@ class TestCrossProviderDispatch:
             raise RuntimeError(f"{p} down")
 
         with (
-            patch("core.llm.router.settings") as mock_settings,
-            patch("core.llm.router._get_fallback_chain", return_value=["m1"]),
-            patch("core.llm.router._fire_hook"),
+            patch("core.llm.provider_dispatch.settings") as mock_settings,
+            patch("core.llm.provider_dispatch._get_fallback_chain", return_value=["m1"]),
+            patch("core.llm.provider_dispatch._fire_hook"),
             pytest.raises(RuntimeError, match="glm down"),
         ):
             mock_settings.llm_cross_provider_failover = True

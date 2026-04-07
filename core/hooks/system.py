@@ -178,6 +178,9 @@ class HookSystem:
         with self._lock:
             if event not in self._hooks:
                 self._hooks[event] = []
+            # Dedup: replace existing handler with same name (prevents
+            # double-registration from explicit + filesystem discovery)
+            self._hooks[event] = [h for h in self._hooks[event] if h.name != hook_name]
             self._hooks[event].append(entry)
             # Keep sorted by priority (stable sort)
             self._hooks[event].sort(key=lambda h: h.priority)
