@@ -667,26 +667,25 @@ class TestSynthesizerBoundaryLogging:
 class TestAgenticLoopPruning:
     """Karpathy P10 — message pruning for context budget."""
 
-    def test_no_pruning_under_threshold(self):
-        from core.agent.agentic_loop import AgenticLoop
+    def _make_ctx_mgr(self):
+        from core.agent.context_manager import ContextWindowManager
 
-        loop = AgenticLoop.__new__(AgenticLoop)
+        return ContextWindowManager(hooks=None, quiet=True)
+
+    def test_no_pruning_under_threshold(self):
+        mgr = self._make_ctx_mgr()
         messages: list[dict[str, Any]] = [{"role": "user", "content": f"msg{i}"} for i in range(8)]
-        loop._maybe_prune_messages(messages)
+        mgr.maybe_prune_messages(messages)
         assert len(messages) == 8  # No change
 
     def test_pruning_at_threshold(self):
-        from core.agent.agentic_loop import AgenticLoop
-
-        loop = AgenticLoop.__new__(AgenticLoop)
+        mgr = self._make_ctx_mgr()
         messages: list[dict[str, Any]] = [{"role": "user", "content": f"msg{i}"} for i in range(30)]
-        loop._maybe_prune_messages(messages)
+        mgr.maybe_prune_messages(messages)
         assert len(messages) == 30  # Exactly 30 = no prune
 
     def test_pruning_above_threshold(self):
-        from core.agent.agentic_loop import AgenticLoop
-
-        loop = AgenticLoop.__new__(AgenticLoop)
+        mgr = self._make_ctx_mgr()
         # Build alternating user/assistant (32 msgs = 16 rounds)
         messages: list[dict[str, Any]] = [{"role": "user", "content": "first message"}]
         for i in range(1, 32):
@@ -694,7 +693,7 @@ class TestAgenticLoopPruning:
             messages.append({"role": role, "content": f"msg{i}"})
         assert len(messages) == 32
 
-        loop._maybe_prune_messages(messages)
+        mgr.maybe_prune_messages(messages)
 
         # first(user) + bridge(assistant) + recent(user-start) = 7
         assert messages[0]["content"] == "first message"
@@ -708,9 +707,7 @@ class TestAgenticLoopPruning:
             )
 
     def test_pruning_preserves_recent_and_alternation(self):
-        from core.agent.agentic_loop import AgenticLoop
-
-        loop = AgenticLoop.__new__(AgenticLoop)
+        mgr = self._make_ctx_mgr()
         # Build proper alternating conversation (13 msgs: 6 turns + current user)
         messages: list[dict[str, Any]] = [{"role": "user", "content": "original"}]
         for i in range(1, 11):
@@ -724,7 +721,7 @@ class TestAgenticLoopPruning:
         )
         assert len(messages) == 13
 
-        loop._maybe_prune_messages(messages)
+        mgr.maybe_prune_messages(messages)
 
         contents = [m["content"] for m in messages]
         assert "original" in contents

@@ -46,7 +46,7 @@ class TestBackpressure:
 
     def test_backpressure_fields_initialized(self) -> None:
         loop = _make_loop()
-        assert loop._total_consecutive_tool_errors == 0
+        assert loop._convergence.total_consecutive_tool_errors == 0
 
     def test_update_tool_error_tracking_counts_errors(self) -> None:
         """All-error round increments consecutive counter."""
@@ -63,12 +63,12 @@ class TestBackpressure:
             {"tool": "test_tool", "input": {}, "result": {"error": "Not found"}}
         )
         loop._update_tool_error_tracking(tool_results)
-        assert loop._total_consecutive_tool_errors == 1
+        assert loop._convergence.total_consecutive_tool_errors == 1
 
     def test_update_tool_error_tracking_resets_on_success(self) -> None:
         """Any success in a round resets the counter."""
         loop = _make_loop()
-        loop._total_consecutive_tool_errors = 5
+        loop._convergence.total_consecutive_tool_errors = 5
         tool_results = [
             {
                 "type": "tool_result",
@@ -77,12 +77,12 @@ class TestBackpressure:
             },
         ]
         loop._update_tool_error_tracking(tool_results)
-        assert loop._total_consecutive_tool_errors == 0
+        assert loop._convergence.total_consecutive_tool_errors == 0
 
     def test_update_tool_error_tracking_mixed_resets(self) -> None:
         """Mixed success+error in same round resets counter (success wins)."""
         loop = _make_loop()
-        loop._total_consecutive_tool_errors = 3
+        loop._convergence.total_consecutive_tool_errors = 3
         tool_results = [
             {
                 "type": "tool_result",
@@ -99,7 +99,7 @@ class TestBackpressure:
             {"tool": "test_tool", "input": {}, "result": {"error": "fail"}}
         )
         loop._update_tool_error_tracking(tool_results)
-        assert loop._total_consecutive_tool_errors == 0
+        assert loop._convergence.total_consecutive_tool_errors == 0
 
     def test_consecutive_errors_accumulate(self) -> None:
         """Multiple all-error rounds accumulate the counter."""
@@ -116,7 +116,7 @@ class TestBackpressure:
                 {"tool": "test_tool", "input": {}, "result": {"error": "timeout"}}
             )
             loop._update_tool_error_tracking(tool_results)
-        assert loop._total_consecutive_tool_errors == 4
+        assert loop._convergence.total_consecutive_tool_errors == 4
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ class TestConvergenceDetection:
 
     def test_recent_errors_initialized_empty(self) -> None:
         loop = _make_loop()
-        assert loop._recent_errors == []
+        assert loop._convergence.recent_errors == []
 
     def test_check_convergence_no_errors(self) -> None:
         """No errors → no convergence."""
@@ -139,23 +139,23 @@ class TestConvergenceDetection:
     def test_check_convergence_few_errors(self) -> None:
         """Fewer than 3 errors → no convergence."""
         loop = _make_loop()
-        loop._recent_errors = ["tool_a:timeout", "tool_a:timeout"]
+        loop._convergence.recent_errors = ["tool_a:timeout", "tool_a:timeout"]
         assert loop._check_convergence_break() is False
 
     def test_check_convergence_3_identical_escalates(self) -> None:
         """3 identical errors → model escalation, errors cleared, no break."""
         loop = _make_loop()
-        loop._recent_errors = ["tool_a:timeout", "tool_a:timeout", "tool_a:timeout"]
+        loop._convergence.recent_errors = ["tool_a:timeout", "tool_a:timeout", "tool_a:timeout"]
         with patch.object(loop, "_try_model_escalation", return_value=True):
             assert loop._check_convergence_break() is False
-        assert loop._convergence_escalated is True
-        assert loop._recent_errors == []  # Cleared after escalation
+        assert loop._convergence.convergence_escalated is True
+        assert loop._convergence.recent_errors == []  # Cleared after escalation
 
     def test_check_convergence_4_identical_breaks_after_escalation(self) -> None:
         """4 identical errors after escalation already tried → force break."""
         loop = _make_loop()
-        loop._convergence_escalated = True  # Already escalated
-        loop._recent_errors = [
+        loop._convergence.convergence_escalated = True  # Already escalated
+        loop._convergence.recent_errors = [
             "tool_a:timeout",
             "tool_a:timeout",
             "tool_a:timeout",
@@ -166,8 +166,8 @@ class TestConvergenceDetection:
     def test_check_convergence_5_identical_breaks_after_escalation(self) -> None:
         """5+ identical errors after escalation already tried → force break."""
         loop = _make_loop()
-        loop._convergence_escalated = True  # Already escalated
-        loop._recent_errors = [
+        loop._convergence.convergence_escalated = True  # Already escalated
+        loop._convergence.recent_errors = [
             "tool_a:timeout",
             "tool_a:timeout",
             "tool_a:timeout",
@@ -179,7 +179,7 @@ class TestConvergenceDetection:
     def test_check_convergence_mixed_errors_no_break(self) -> None:
         """Different errors → no convergence."""
         loop = _make_loop()
-        loop._recent_errors = [
+        loop._convergence.recent_errors = [
             "tool_a:timeout",
             "tool_b:not_found",
             "tool_a:timeout",
@@ -190,7 +190,7 @@ class TestConvergenceDetection:
     def test_check_convergence_4_with_different_prefix_no_break(self) -> None:
         """4 errors where last 4 aren't all identical → no break."""
         loop = _make_loop()
-        loop._recent_errors = [
+        loop._convergence.recent_errors = [
             "tool_a:timeout",
             "tool_b:error",
             "tool_a:timeout",
@@ -213,7 +213,7 @@ class TestConvergenceDetection:
                 {"tool": f"tool_{i}", "input": {}, "result": {"error": f"error_{i}"}}
             )
             loop._update_tool_error_tracking(tool_results)
-        assert len(loop._recent_errors) <= 6
+        assert len(loop._convergence.recent_errors) <= 6
 
     def test_error_key_format(self) -> None:
         """Error keys follow 'tool_name:error_message' format."""
@@ -229,10 +229,13 @@ class TestConvergenceDetection:
             },
         ]
         loop._update_tool_error_tracking(tool_results)
-        assert len(loop._recent_errors) == 1
+        assert len(loop._convergence.recent_errors) == 1
         # Should contain tool name and error
-        assert "run_bash" in loop._recent_errors[0] or "unknown" in loop._recent_errors[0]
-        assert "command not found" in loop._recent_errors[0]
+        assert (
+            "run_bash" in loop._convergence.recent_errors[0]
+            or "unknown" in loop._convergence.recent_errors[0]
+        )
+        assert "command not found" in loop._convergence.recent_errors[0]
 
     def test_arun_convergence_terminates_loop(self) -> None:
         """arun() terminates with convergence_detected when stuck."""
@@ -242,7 +245,7 @@ class TestConvergenceDetection:
         call_count = 0
 
         # Pre-populate with 3 identical errors (one more triggers break)
-        loop._recent_errors = [
+        loop._convergence.recent_errors = [
             "test_tool:always fails",
             "test_tool:always fails",
             "test_tool:always fails",
