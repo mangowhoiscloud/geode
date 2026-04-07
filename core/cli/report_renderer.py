@@ -16,6 +16,7 @@ from typing import Any
 from core.cli.ui.console import console
 from core.cli.ui.status import GeodeStatus
 from core.config import settings
+from core.paths import get_project_root
 from core.skills.reports import ReportFormat, ReportGenerator, ReportTemplate
 
 log = logging.getLogger(__name__)
@@ -26,9 +27,6 @@ log = logging.getLogger(__name__)
 
 _FORMAT_KEYWORDS = {"html", "json", "md", "markdown"}
 _TEMPLATE_KEYWORDS = {"summary", "detailed", "executive"}
-
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_REPORT_DIR = _PROJECT_ROOT / ".geode" / "reports"
 
 # Skills relevant for report quality enhancement
 _REPORT_SKILL_NAMES = ["geode-scoring", "geode-analysis", "geode-verification"]
@@ -243,8 +241,9 @@ def _generate_report(
     if output:
         save_path = Path(output)
     else:
-        _REPORT_DIR.mkdir(parents=True, exist_ok=True)
-        save_path = _REPORT_DIR / f"{safe_name}-{template}.{ext}"
+        report_dir = get_project_root() / ".geode" / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        save_path = report_dir / f"{safe_name}-{template}.{ext}"
 
     save_path.parent.mkdir(parents=True, exist_ok=True)
     save_path.write_text(content, encoding="utf-8")

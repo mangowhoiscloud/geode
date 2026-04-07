@@ -60,6 +60,23 @@ PROJECT_MEMORY_INDEX = PROJECT_GEODE_DIR / "MEMORY.md"
 
 
 # ---------------------------------------------------------------------------
+# Project root — CWD at startup (Claude Code's originalCwd pattern)
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def get_project_root() -> Path:
+    """Return the resolved CWD captured at first call.
+
+    Follows Claude Code's ``originalCwd`` pattern: the sandbox boundary is
+    the directory where the CLI was invoked, **not** the package installation
+    path.  ``lru_cache`` ensures the value is frozen after the first call,
+    which happens during CLI startup.
+    """
+    return Path.cwd().resolve()
+
+
+# ---------------------------------------------------------------------------
 # Project ID — Claude Code-style path encoding
 # ---------------------------------------------------------------------------
 
