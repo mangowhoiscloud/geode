@@ -44,8 +44,8 @@ log = logging.getLogger(__name__)
 # Type aliases
 # ---------------------------------------------------------------------------
 
-OnJobFired = Callable[[str, str, bool], None]
-"""Callback: (job_id, action, isolated) -> None."""
+OnJobFired = Callable[[str, str, bool, str], None]
+"""Callback: (job_id, action, isolated, agent_id) -> None."""
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -63,6 +63,9 @@ MISSED_TASK_GRACE_MS: float = 3_600_000.0
 # Jitter defaults
 DEFAULT_MAX_JITTER_MS: float = 900_000.0  # 15 minutes cap
 DEFAULT_JITTER_FRACTION: float = 0.1  # 10% of interval
+
+# Recurring age-out: 30 days (claude-code pattern)
+RECURRING_MAX_AGE_MS: float = 30 * 24 * 60 * 60 * 1000.0
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +116,8 @@ class ScheduledJob:
     enabled: bool = True
     delete_after_run: bool = False  # For AT type: auto-delete after success
     durable: bool = True  # False = session-only (not persisted to disk)
+    permanent: bool = False  # Exempt from recurring age-out
+    agent_id: str = ""  # Sub-agent owner (empty = main session)
     callback: Any = None  # Callable[[dict], None]
     action: str = ""  # Prompt text to enqueue when fired (no callback)
     isolated: bool = True  # Run in isolated session (agentTurn) vs main session (systemEvent)
@@ -148,6 +153,8 @@ def _job_to_dict(job: ScheduledJob) -> dict[str, Any]:
         "enabled": job.enabled,
         "delete_after_run": job.delete_after_run,
         "durable": job.durable,
+        "permanent": job.permanent,
+        "agent_id": job.agent_id,
         "action": job.action,
         "isolated": job.isolated,
         "active_hours": (asdict(job.active_hours) if job.active_hours is not None else None),
@@ -182,6 +189,8 @@ def _job_from_dict(data: dict[str, Any]) -> ScheduledJob:
         enabled=data.get("enabled", True),
         delete_after_run=data.get("delete_after_run", False),
         durable=data.get("durable", True),
+        permanent=data.get("permanent", False),
+        agent_id=data.get("agent_id", ""),
         callback=None,  # Callbacks are not serialised
         action=data.get("action", ""),
         isolated=data.get("isolated", True),
@@ -288,16 +297,25 @@ class JobRunLog:
 class SchedulerLock:
     """Cross-platform file-based lock using O_EXCL atomic creation.
 
-    Lock file contains ``{"pid": N, "acquired_at": T}`` for liveness probing.
-    Non-owners probe every ``STALE_TIMEOUT_S`` seconds; if the owning PID is
-    dead, the lock is reclaimed.
+    Lock file contains ``{"pid": N, "acquired_at": T, "session_id": S}``
+    for liveness probing and idempotent re-acquire on session restart.
     """
 
     STALE_TIMEOUT_S: float = 5.0
 
-    def __init__(self, lock_path: Path) -> None:
+    def __init__(self, lock_path: Path, session_id: str = "") -> None:
         self._lock_path = lock_path
+        self._session_id = session_id or f"pid-{os.getpid()}"
         self._acquired = False
+
+    def _lock_content(self) -> str:
+        return json.dumps(
+            {
+                "pid": os.getpid(),
+                "acquired_at": time.time(),
+                "session_id": self._session_id,
+            }
+        )
 
     def acquire(self, timeout_s: float = 10.0) -> bool:
         """Try to acquire the lock, probing for stale owners."""
@@ -310,18 +328,20 @@ class SchedulerLock:
                     0o644,
                 )
                 try:
-                    content = json.dumps(
-                        {"pid": os.getpid(), "acquired_at": time.time()},
-                    )
-                    os.write(fd, content.encode())
+                    os.write(fd, self._lock_content().encode())
                 finally:
                     os.close(fd)
                 self._acquired = True
                 return True
             except FileExistsError:
-                # Lock file exists — check if owner is alive
-                if self._try_reclaim():
-                    continue  # Reclaimed stale lock, retry acquire
+                # Lock file exists — check if owner is alive or same session
+                reclaim_result = self._try_reclaim()
+                if reclaim_result == "idempotent":
+                    # Same session re-acquired — lock file updated in place
+                    self._acquired = True
+                    return True
+                if reclaim_result == "reclaimed":
+                    continue  # Stale lock removed, retry O_EXCL
                 time.sleep(0.2)
         return False
 
@@ -332,32 +352,47 @@ class SchedulerLock:
                 self._lock_path.unlink(missing_ok=True)
             self._acquired = False
 
-    def _try_reclaim(self) -> bool:
-        """Check if the current lock owner is dead and reclaim if so."""
+    def _try_reclaim(self) -> str:
+        """Check if the current lock owner is dead and reclaim if so.
+
+        Returns:
+            "idempotent" — same session re-acquired (lock file updated in place)
+            "reclaimed"  — stale lock removed (caller should retry O_EXCL)
+            ""           — lock is held by another live session
+        """
         try:
             with open(self._lock_path, encoding="utf-8") as f:
                 data = json.load(f)
             pid = data.get("pid", -1)
             acquired_at = data.get("acquired_at", 0.0)
+            owner_session = data.get("session_id", "")
             age = time.time() - acquired_at
+
+            # Idempotent: same session, new PID (restart/resume)
+            if owner_session and owner_session == self._session_id:
+                try:
+                    self._lock_path.write_text(self._lock_content())
+                    return "idempotent"
+                except OSError:
+                    return ""
 
             if not _is_pid_alive(pid) or age > 600:
                 # Owner dead or lock very old — reclaim
                 try:
                     self._lock_path.unlink()
-                    return True
+                    return "reclaimed"
                 except FileNotFoundError:
-                    return True
+                    return "reclaimed"
                 except OSError:
-                    return False
+                    return ""
         except (json.JSONDecodeError, OSError):
             # Corrupt lock file — remove and retry
             try:
                 self._lock_path.unlink()
-                return True
+                return "reclaimed"
             except OSError:
-                return False
-        return False
+                return ""
+        return ""
 
     def __enter__(self) -> SchedulerLock:
         if not self.acquire():
@@ -484,6 +519,8 @@ class SchedulerService:
     (atomic JSON) and per-job JSONL run logs.
     """
 
+    MAX_JOBS: int = 50  # Maximum number of scheduled jobs (claude-code pattern)
+
     def __init__(
         self,
         trigger_manager: TriggerManager | None = None,
@@ -492,6 +529,7 @@ class SchedulerService:
         log_dir: Path | None = None,
         on_job_fired: OnJobFired | None = None,
         *,
+        session_id: str = "",
         enable_jitter: bool = True,
         max_jitter_ms: float = DEFAULT_MAX_JITTER_MS,
         # Backward-compat: accept action_queue and wrap as callback
@@ -501,6 +539,7 @@ class SchedulerService:
         self._hooks = hooks
         self._store_path = store_path if store_path is not None else DEFAULT_STORE_PATH
         self._store_path_explicit = store_path is not None
+        self._session_id = session_id or f"pid-{os.getpid()}"
         self._run_log = JobRunLog(log_dir=log_dir)
         self._jobs: dict[str, ScheduledJob] = {}
         self._lock = threading.Lock()
@@ -512,8 +551,8 @@ class SchedulerService:
         if on_job_fired is not None:
             _fired_cb = on_job_fired
         elif action_queue is not None:
-            # Backward-compat: wrap queue.put as callback
-            def _queue_adapter(jid: str, act: str, iso: bool) -> None:
+            # Backward-compat: wrap queue.put as callback (ignore agent_id)
+            def _queue_adapter(jid: str, act: str, iso: bool, _aid: str = "") -> None:
                 action_queue.put((jid, act, iso))
 
             _fired_cb = _queue_adapter
@@ -545,6 +584,10 @@ class SchedulerService:
                 "Empty-action jobs fire as no-ops and waste resources."
             )
         with self._lock:
+            if len(self._jobs) >= self.MAX_JOBS:
+                raise ValueError(
+                    f"Too many scheduled jobs (max {self.MAX_JOBS}). Remove one first."
+                )
             if job.job_id in self._jobs:
                 raise ValueError(f"Job '{job.job_id}' already exists")
             # Dedup: reject if an enabled job with same schedule+action exists
@@ -754,8 +797,27 @@ class SchedulerService:
             if not job.enabled:
                 continue
 
-            due = False
             kind = job.schedule.kind
+
+            # Age-out: recurring, non-permanent, older than RECURRING_MAX_AGE_MS
+            if (
+                kind in (ScheduleKind.EVERY, ScheduleKind.CRON)
+                and not job.permanent
+                and job.created_at_ms > 0
+                and (now - job.created_at_ms) > RECURRING_MAX_AGE_MS
+            ):
+                result = self._execute_job(job, now_ms=now)
+                result["aged_out"] = True
+                to_delete.append(job.job_id)
+                results.append(result)
+                log.info(
+                    "Job '%s' aged out (%.0f days)",
+                    job.job_id,
+                    (now - job.created_at_ms) / 86_400_000,
+                )
+                continue
+
+            due = False
 
             if kind in (ScheduleKind.AT, ScheduleKind.EVERY):
                 due = job.next_run_at_ms is not None and now >= job.next_run_at_ms
@@ -810,11 +872,12 @@ class SchedulerService:
             if job.callback is not None:
                 job.callback({"job_id": job.job_id, "name": job.name, **job.metadata})
             elif job.action and self._on_job_fired is not None:
-                self._on_job_fired(job.job_id, job.action, job.isolated)
+                self._on_job_fired(job.job_id, job.action, job.isolated, job.agent_id)
                 log.debug(
-                    "Job '%s' fired action (isolated=%s): %s",
+                    "Job '%s' fired action (isolated=%s, agent=%s): %s",
                     job.job_id,
                     job.isolated,
+                    job.agent_id or "main",
                     job.action[:60],
                 )
         except Exception as exc:
@@ -881,7 +944,7 @@ class SchedulerService:
         # Filter: only persist durable jobs
         data = {jid: _job_to_dict(j) for jid, j in self._jobs.items() if j.durable}
         payload = json.dumps(data, ensure_ascii=False, indent=2)
-        lock = SchedulerLock(path.parent / "scheduled_tasks.lock")
+        lock = SchedulerLock(path.parent / "scheduled_tasks.lock", session_id=self._session_id)
         with lock:
             tmp_path = path.with_suffix(".json.tmp")
             with open(tmp_path, "w", encoding="utf-8") as f:
@@ -1123,6 +1186,7 @@ def create_scheduler(
     on_job_fired: OnJobFired | None = None,
     trigger_manager: TriggerManager | None = None,
     hooks: HookSystem | None = None,
+    session_id: str = "",
     enable_jitter: bool = True,
     max_jitter_ms: float = DEFAULT_MAX_JITTER_MS,
 ) -> SchedulerService:
@@ -1138,6 +1202,7 @@ def create_scheduler(
         store_path=store_path,
         log_dir=log_dir,
         on_job_fired=on_job_fired,
+        session_id=session_id,
         enable_jitter=enable_jitter,
         max_jitter_ms=max_jitter_ms,
     )

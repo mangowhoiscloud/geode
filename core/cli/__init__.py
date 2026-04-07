@@ -1417,13 +1417,13 @@ def serve(
 
     from core.orchestration.isolated_execution import IsolatedRunner
 
-    _sched_queue: _queue_mod.Queue[tuple[str, str, bool]] = _queue_mod.Queue()
+    _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str]] = _queue_mod.Queue()
     _sched_svc = None
     try:
         from core.automation.scheduler import create_scheduler
 
         _sched_svc = create_scheduler(
-            on_job_fired=lambda jid, act, iso: _sched_queue.put((jid, act, iso)),
+            on_job_fired=lambda jid, act, iso, aid: _sched_queue.put((jid, act, iso, aid)),
             hooks=_gw_services.hook_system,
             enable_jitter=True,
         )
