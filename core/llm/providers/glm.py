@@ -171,6 +171,6 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
         if used_model and used_model != model:
             log.warning("Model failover: %s -> %s", model, used_model)
 
-        from core.cli.agentic_response import normalize_openai
+        from core.llm.agentic_response import normalize_openai
 
         return normalize_openai(response)

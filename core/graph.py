@@ -716,8 +716,9 @@ def compile_graph(
         ("core.state", "GuardrailResult"),
         ("core.state", "BiasBusterResult"),
         ("core.state", "CalibrationResult"),
-        ("core.verification.rights_risk", "RightsStatus"),
-        ("core.verification.rights_risk", "RightsRiskResult"),
+        ("core.state", "RightsStatus"),
+        ("core.state", "RightsRiskResult"),
+        ("core.state", "LicenseInfo"),
     ]
     _serde = JsonPlusSerializer(
         allowed_json_modules=_allowed_modules,
