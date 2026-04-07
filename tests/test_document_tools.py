@@ -91,9 +91,9 @@ class TestOffsetLimit:
 
 class TestFileSizeGuard:
     def test_rejects_large_file_without_limit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-        from core.tools import document_tools
+        from core.config import settings
 
-        monkeypatch.setattr(document_tools, "_MAX_FILE_SIZE_BYTES", 100)
+        monkeypatch.setattr(settings, "sandbox_max_file_size_bytes", 100)
 
         f = tmp_path / "large.txt"
         f.write_text("x" * 200)
@@ -105,9 +105,9 @@ class TestFileSizeGuard:
         assert result["recoverable"] is True
 
     def test_allows_large_file_with_limit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-        from core.tools import document_tools
+        from core.config import settings
 
-        monkeypatch.setattr(document_tools, "_MAX_FILE_SIZE_BYTES", 100)
+        monkeypatch.setattr(settings, "sandbox_max_file_size_bytes", 100)
 
         f = tmp_path / "large.txt"
         f.write_text("\n".join(f"line{i}" for i in range(1000)))
@@ -120,10 +120,10 @@ class TestFileSizeGuard:
 
 class TestTokenGuard:
     def test_truncates_on_token_overflow(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-        from core.tools import document_tools
+        from core.config import settings
 
-        monkeypatch.setattr(document_tools, "_MAX_READ_TOKENS", 10)  # very low
-        monkeypatch.setattr(document_tools, "_MAX_FILE_SIZE_BYTES", 10_000_000)
+        monkeypatch.setattr(settings, "sandbox_max_read_tokens", 10)  # very low
+        monkeypatch.setattr(settings, "sandbox_max_file_size_bytes", 10_000_000)
 
         f = tmp_path / "verbose.txt"
         f.write_text("x" * 500)

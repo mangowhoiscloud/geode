@@ -44,6 +44,11 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "pipeline.confidence_threshold": "confidence_threshold",
     "pipeline.max_iterations": "max_iterations",
     "agentic.time_budget": "agentic_loop_time_budget",
+    "sandbox.max_file_size_bytes": "sandbox_max_file_size_bytes",
+    "sandbox.max_read_tokens": "sandbox_max_read_tokens",
+    "sandbox.max_glob_results": "sandbox_max_glob_results",
+    "sandbox.max_grep_results": "sandbox_max_grep_results",
+    "sandbox.max_grep_line_chars": "sandbox_max_grep_line_chars",
 }
 
 DEFAULT_CONFIG_TOML = """\
@@ -261,6 +266,13 @@ class Settings(BaseSettings):
 
     # Calendar — external calendar sync
     calendar_sync_on_trigger: bool = False  # auto-sync on TRIGGER_FIRED
+
+    # Sandbox — file tool path validation (Claude Code parity)
+    sandbox_max_file_size_bytes: int = 262_144  # 256KB pre-read guard
+    sandbox_max_read_tokens: int = 25_000  # post-read token estimate guard
+    sandbox_max_glob_results: int = 100  # GlobTool max results
+    sandbox_max_grep_results: int = 50  # GrepTool max files
+    sandbox_max_grep_line_chars: int = 200  # GrepTool match line truncation
 
     # HITL Level — Human-in-the-loop control
     # 0 = autonomous (skip all prompts), 1 = write-only (prompt only for writes),

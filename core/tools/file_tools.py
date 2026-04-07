@@ -86,15 +86,18 @@ class GlobTool:
             except (ValueError, OSError):
                 continue
 
+        from core.config import settings
+
+        max_glob = settings.sandbox_max_glob_results
         matches.sort(reverse=True)  # newest first
-        files = [f for _, f in matches[:100]]
+        files = [f for _, f in matches[:max_glob]]
 
         return {
             "result": {
                 "pattern": pattern,
                 "total_matches": len(matches),
                 "files": files,
-                "truncated": len(matches) > 100,
+                "truncated": len(matches) > max_glob,
             }
         }
 
@@ -152,7 +155,10 @@ class GrepTool:
         path_str: str = kwargs.get("path", ".")
         file_glob: str = kwargs.get("glob", "")
         include_content: bool = kwargs.get("include_content", False)
-        max_results: int = min(kwargs.get("max_results", 50), 100)
+        from core.config import settings
+
+        default_max = settings.sandbox_max_grep_results
+        max_results: int = min(kwargs.get("max_results", default_max), default_max * 2)
 
         result = validate_path(path_str, write=False)
         if isinstance(result, dict):
@@ -202,7 +208,8 @@ class GrepTool:
             for i, line in enumerate(text.splitlines(), 1):
                 if regex.search(line):
                     if include_content:
-                        matches_in_file.append({"line": i, "text": line.rstrip()[:200]})
+                        max_chars = settings.sandbox_max_grep_line_chars
+                        matches_in_file.append({"line": i, "text": line.rstrip()[:max_chars]})
                     else:
                         matches_in_file.append({"line": i})
 

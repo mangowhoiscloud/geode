@@ -62,14 +62,19 @@ class ReadDocumentTool:
             )
 
         # Pre-read file size guard: only when no explicit limit (full-file read)
+        from core.config import settings
+
+        max_file_size = settings.sandbox_max_file_size_bytes
+        max_read_tokens = settings.sandbox_max_read_tokens
+
         if limit is None:
             try:
                 size = file_path.stat().st_size
             except OSError:
                 size = 0
-            if size > _MAX_FILE_SIZE_BYTES:
+            if size > max_file_size:
                 return tool_error(
-                    f"File too large: {size:,} bytes (limit {_MAX_FILE_SIZE_BYTES:,})",
+                    f"File too large: {size:,} bytes (limit {max_file_size:,})",
                     error_type="validation",
                     recoverable=True,
                     hint=(
@@ -79,7 +84,7 @@ class ReadDocumentTool:
                     context={
                         "file_path": str(file_path),
                         "file_size": size,
-                        "max_size": _MAX_FILE_SIZE_BYTES,
+                        "max_size": max_file_size,
                     },
                 )
 
@@ -104,9 +109,9 @@ class ReadDocumentTool:
         # Post-read token guard: estimate tokens and truncate if needed
         truncated = end_idx < total_lines
         estimated_tokens = len(content) // _CHARS_PER_TOKEN
-        if estimated_tokens > _MAX_READ_TOKENS:
+        if estimated_tokens > max_read_tokens:
             # Truncate to approximate token limit
-            max_chars = _MAX_READ_TOKENS * _CHARS_PER_TOKEN
+            max_chars = max_read_tokens * _CHARS_PER_TOKEN
             content = content[:max_chars]
             truncated = True
 
