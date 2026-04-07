@@ -11,14 +11,12 @@ from __future__ import annotations
 import logging
 import signal
 import sys
-import termios
 from pathlib import Path
 from typing import Any
 
 import typer
 
 from core import __version__
-from core.agent.conversation import ConversationContext
 from core.cli.commands import (
     cmd_apply,
     cmd_auth,
@@ -112,111 +110,22 @@ def _drain_scheduler_queue(
     on_skip: Any | None = None,
     on_main_run: Any | None = None,
 ) -> int:
-    """Drain pending scheduled jobs from the action queue.
+    """Drain pending scheduled jobs. Delegates to scheduler_drain module."""
+    from core.cli.scheduler_drain import drain_scheduler_queue
 
-    Shared by both REPL and serve modes.  In serve mode ``force_isolated``
-    is True because there is no interactive main session to inject into.
-
-    Uses SessionLane (per-key serial) + Global Lane (capacity) for
-    concurrency control through the unified LaneQueue.
-
-    Returns the number of jobs drained.
-    """
-    import queue as _q
-
-    from core.orchestration.isolated_execution import IsolationConfig
-
-    count = 0
-    try:
-        while True:
-            job_id, fired_action, isolated = action_queue.get_nowait()
-            if not fired_action:
-                continue
-            count += 1
-            prompt = f"[scheduled-job:{job_id}] {fired_action}"
-
-            if isolated or force_isolated:
-                lane_key = f"sched:{job_id}"
-
-                # Dual acquire: session (per-key serial) + global (capacity)
-                if not session_lane.try_acquire(lane_key):
-                    log.warning("Session key busy, skipping job %s", job_id)
-                    if on_skip:
-                        on_skip(job_id)
-                    continue
-
-                if not global_lane.try_acquire(lane_key):
-                    session_lane.manual_release(lane_key)
-                    log.warning("Global lane full, skipping job %s", job_id)
-                    if on_skip:
-                        on_skip(job_id)
-                    continue
-
-                _lanes_acquired = True
-                try:
-                    _iso_conv = ConversationContext()
-                    from core.gateway.shared_services import SessionMode
-
-                    _, _iso_loop = services.create_session(
-                        SessionMode.SCHEDULER,
-                        conversation=_iso_conv,
-                        propagate_context=True,
-                    )
-                    _cap_loop = _iso_loop
-                    _cap_prompt = prompt
-                    _cap_jid = job_id
-                    _cap_sess = session_lane
-                    _cap_glob = global_lane
-                    _cap_key = lane_key
-                    _cap_cb = on_complete
-
-                    def _run_isolated(
-                        *,
-                        _loop: Any = _cap_loop,
-                        _p: str = _cap_prompt,
-                        _jid: str = _cap_jid,
-                        _sess: Any = _cap_sess,
-                        _glob: Any = _cap_glob,
-                        _key: str = _cap_key,
-                        _cb: Any = _cap_cb,
-                    ) -> str:
-                        try:
-                            r = _loop.run(_p)
-                            if _cb:
-                                _cb(r, job_id=_jid)
-                            return r.text if r and r.text else ""
-                        finally:
-                            _glob.manual_release(_key)
-                            _sess.manual_release(_key)
-
-                    runner.run_async(
-                        _run_isolated,
-                        config=IsolationConfig(
-                            prefix=f"scheduled:{job_id}",
-                            post_to_main=False,
-                            timeout_s=300.0,
-                        ),
-                    )
-                    _lanes_acquired = False  # ownership transferred to _run_isolated
-                    if on_dispatch:
-                        on_dispatch(job_id)
-                except Exception:
-                    if _lanes_acquired:
-                        global_lane.manual_release(lane_key)
-                        session_lane.manual_release(lane_key)
-                    log.warning("Scheduler job %s dispatch failed", job_id, exc_info=True)
-            else:
-                # Non-isolated: inject into main session (REPL only)
-                if main_loop is not None:
-                    if on_main_run:
-                        on_main_run(job_id)
-                    try:
-                        main_loop.run(prompt)
-                    except Exception:
-                        log.warning("Scheduler job %s main-loop failed", job_id, exc_info=True)
-    except _q.Empty:
-        pass
-    return count
+    return drain_scheduler_queue(
+        action_queue=action_queue,
+        services=services,
+        runner=runner,
+        session_lane=session_lane,
+        global_lane=global_lane,
+        force_isolated=force_isolated,
+        main_loop=main_loop,
+        on_complete=on_complete,
+        on_dispatch=on_dispatch,
+        on_skip=on_skip,
+        on_main_run=on_main_run,
+    )
 
 
 app = typer.Typer(
@@ -277,21 +186,10 @@ def _render_readiness_compact(report: ReadinessReport) -> None:
 
 
 def _suppress_noisy_warnings() -> None:
-    """Suppress known noisy warnings from dependencies."""
-    import warnings
+    """Suppress known noisy warnings. Delegates to terminal module."""
+    from core.cli.terminal import suppress_noisy_warnings
 
-    # Pydantic V1 deprecation from langchain_core on Python 3.14+
-    warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality")
-    # LangGraph msgpack deserialization warning (warnings.warn path)
-    warnings.filterwarnings("ignore", message="Deserializing unregistered type")
-
-    # LangGraph checkpoint deserialization also logs via logging.warning —
-    # suppress those at the logging level.
-    for noisy_logger in (
-        "langgraph.checkpoint.serde.jsonplus",
-        "langgraph.checkpoint.serde.base",
-    ):
-        logging.getLogger(noisy_logger).setLevel(logging.ERROR)
+    suppress_noisy_warnings()
 
 
 def _welcome_screen() -> None:
@@ -572,151 +470,17 @@ def _show_commentary(
 
 
 def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None:
-    """Handle memory-related actions (P0-A + P1-B).
+    """Handle memory-related actions (P0-A + P1-B). Delegates to memory_handler module."""
+    from core.cli.memory_handler import handle_memory_action
 
-    Accepts either an object with an `args` dict attribute, or a plain dict.
-    """
-    args = intent if isinstance(intent, dict) else intent.args
-
-    # Determine sub-action from tool routing
-    rule_action = args.get("rule_action")
-    query = args.get("query")
-    key = args.get("key")
-    content = args.get("content")
-
-    if rule_action:
-        # manage_rule tool
-        from core.memory.project import ProjectMemory
-
-        mem = ProjectMemory()
-        if rule_action == "list":
-            rules = mem.list_rules()
-            console.print()
-            console.print("  [header]Active Analysis Rules[/header]")
-            if not rules:
-                console.print("  [muted]No rules found.[/muted]")
-            for r in rules:
-                paths_str = ", ".join(r.get("paths", []))
-                console.print(f"  - [value]{r['name']}[/value] ({paths_str})")
-                if r.get("preview"):
-                    console.print(f"    [muted]{r['preview'][:80]}...[/muted]")
-            console.print()
-        elif rule_action == "create":
-            name = args.get("name", "")
-            paths = args.get("paths", [])
-            rule_content = content or ""
-            if not name:
-                console.print("  [warning]Rule name is required.[/warning]")
-                return
-            ok = mem.create_rule(name, paths, rule_content)
-            if ok:
-                console.print(f"  [success]Rule '{name}' created.[/success]")
-                from core.hooks import HookEvent
-
-                _fire_hook(HookEvent.RULE_CREATED, {"name": name, "paths": paths})
-            else:
-                console.print(
-                    f"  [warning]Failed to create rule '{name}' (may already exist).[/warning]"
-                )
-            console.print()
-        elif rule_action == "update":
-            name = args.get("name", "")
-            rule_content = content or ""
-            if not name:
-                console.print("  [warning]Rule name is required.[/warning]")
-                return
-            ok = mem.update_rule(name, rule_content)
-            if ok:
-                console.print(f"  [success]Rule '{name}' updated.[/success]")
-                from core.hooks import HookEvent
-
-                _fire_hook(HookEvent.RULE_UPDATED, {"name": name})
-            else:
-                console.print(f"  [warning]Failed to update rule '{name}'.[/warning]")
-            console.print()
-        elif rule_action == "delete":
-            name = args.get("name", "")
-            if not name:
-                console.print("  [warning]Rule name is required.[/warning]")
-                return
-            ok = mem.delete_rule(name)
-            if ok:
-                console.print(f"  [success]Rule '{name}' deleted.[/success]")
-                from core.hooks import HookEvent
-
-                _fire_hook(HookEvent.RULE_DELETED, {"name": name})
-            else:
-                console.print(f"  [warning]Rule '{name}' not found.[/warning]")
-            console.print()
-
-    elif query:
-        # memory_search tool
-        from core.tools.memory_tools import MemorySearchTool
-
-        search_tool = MemorySearchTool()
-        tier = args.get("tier", "all")
-        search_result = search_tool.execute(query=query, tier=tier)
-        matches = search_result.get("result", {}).get("matches", [])
-        console.print()
-        console.print(f"  [header]Memory Search: '{query}'[/header]")
-        if not matches:
-            console.print("  [muted]No matches found.[/muted]")
-        for m in matches:
-            tier_label = m.get("tier", "?")
-            source = m.get("source", m.get("session_id", ""))
-            console.print(f"  - [{tier_label}] {source}")
-            if "matching_lines" in m:
-                for line in m["matching_lines"][:3]:
-                    console.print(f"    [muted]{line}[/muted]")
-            if "preview" in m:
-                console.print(f"    [muted]{m['preview'][:80]}...[/muted]")
-        console.print()
-
-    elif key and content:
-        # memory_save tool
-        from core.tools.memory_tools import MemorySaveTool
-
-        save_tool = MemorySaveTool()
-        save_result = save_tool.execute(
-            session_id=key,
-            data={"content": content},
-            persistent=True,
-        )
-        saved = save_result.get("result", {}).get("saved", False)
-        if saved:
-            console.print(f"  [success]Saved to memory: '{key}'[/success]")
-            from core.hooks import HookEvent
-
-            _fire_hook(HookEvent.MEMORY_SAVED, {"key": key})
-        else:
-            console.print("  [warning]Failed to save to memory.[/warning]")
-        console.print()
-
-    else:
-        console.print()
-        console.print("  [muted]Memory command not recognized. Try:[/muted]")
-        console.print("  [muted]  '이전 분석 결과 검색해' — search memory[/muted]")
-        console.print("  [muted]  '규칙 목록 보여줘' — list rules[/muted]")
-        console.print("  [muted]  '이 결과 기억해' — save to memory[/muted]")
-        console.print()
+    handle_memory_action(intent, user_text, is_offline, fire_hook=_fire_hook)
 
 
 def _restore_terminal() -> None:
-    """Restore terminal to sane cooked mode.
+    """Restore terminal to sane cooked mode. Delegates to terminal module."""
+    from core.cli.terminal import restore_terminal
 
-    Rich Status/Live can leave the terminal in raw mode (echo off, no
-    line-editing) if interrupted or if an exception escapes their context
-    manager.  This ensures the terminal is usable before reading input.
-    """
-    try:
-        fd = sys.stdin.fileno()
-        attrs = termios.tcgetattr(fd)
-        # Ensure ECHO and ICANON (cooked mode) are enabled
-        attrs[3] |= termios.ECHO | termios.ICANON
-        termios.tcsetattr(fd, termios.TCSANOW, attrs)
-    except (ValueError, OSError, termios.error):
-        # Non-TTY or stdin not available — nothing to restore
-        pass
+    restore_terminal()
 
 
 _original_sigint = signal.getsignal(signal.SIGINT)
@@ -838,25 +602,10 @@ def _get_prompt_session() -> Any:
 
 
 def _drain_stdin() -> None:
-    """Drain leftover bytes from stdin after a paste.
+    """Drain leftover bytes from stdin. Delegates to terminal module."""
+    from core.cli.terminal import drain_stdin
 
-    When bracketed paste is unavailable, pasted newlines trigger Enter
-    and only the first line is submitted. The remaining text stays in
-    stdin and gets auto-submitted on the next prompt() call.
-    This drains any such leftover to prevent double-submit.
-    """
-    import select
-
-    if not sys.stdin.isatty():
-        return
-    try:
-        import os as _os
-
-        fd = sys.stdin.fileno()
-        while select.select([fd], [], [], 0.0)[0]:
-            _os.read(fd, 4096)
-    except (ValueError, OSError):
-        pass
+    drain_stdin()
 
 
 def _read_multiline_input(prompt: str) -> str:

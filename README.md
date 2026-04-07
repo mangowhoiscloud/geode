@@ -176,7 +176,7 @@ There are two control layers.
 
 ```
 geode/
-├── core/                          # 195 modules, 4-Layer Stack
+├── core/                          # 204 modules, 4-Layer Stack
 │   ├── agent/                     # Agent: AgenticLoop, ToolCallProcessor, SubAgentManager
 │   ├── cli/                       # Agent: Commands, UI
 │   ├── llm/                       # Model: Claude/OpenAI/GLM Adapters, Router, Prompts
@@ -359,7 +359,7 @@ See the [Workflow](docs/workflow.md) document for full details.
 |------|---------|--------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 3525+ pass |
+| Test | `uv run pytest tests/ -q` | 3700+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 </details>
