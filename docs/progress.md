@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-04-07 (세션 59 cont. — scheduler phase 2)
+> 마지막 갱신: 2026-04-08 (세션 60 cont. — structural defects phase 2)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -63,6 +63,12 @@
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-04-08 — 세션 60 cont.)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| structural-defects-p2 | 구조적 결함 Phase 2 — ContextVar race fix (CRITICAL), hook dedup, LLM router 분해 (-31%) | #696→#697 | @mangowhoiscloud | 2026-04-08 |
 
 ### Done (2026-04-07 — 세션 59 cont.)
 
