@@ -12,8 +12,8 @@ A general-purpose autonomous execution agent built on LangGraph. Autonomously pe
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 195
-- **Tests**: 3525+
+- **Modules**: 204
+- **Tests**: 3700+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -65,7 +65,7 @@ uv run mypy core/
 
 ### Expected Test Results
 
-3525+ tests pass. 3 IP fixtures produce tier spread:
+3700+ tests pass. 3 IP fixtures produce tier spread:
 - Berserk: **S** (81.2) — conversion_failure
 - Cowboy Bebop: **A** (68.4) — undermarketed
 - Ghost in the Shell: **B** (51.7) — discovery_failure
@@ -187,7 +187,7 @@ Code changes → repeat 3 quality gates. Fix on failure.
 ```bash
 uv run ruff check core/ tests/      # Lint: 0 errors
 uv run mypy core/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"   # Test: 3525+ pass
+uv run pytest tests/ -m "not live"   # Test: 3700+ pass
 ```
 
 #### 4. Verify (Implementation GAP Audit)
@@ -208,7 +208,7 @@ uv run pytest tests/ -m "not live"   # Test: 3525+ pass
 ```bash
 uv run ruff check core/ tests/                      # Lint: 0 errors
 uv run mypy core/                                    # Type: 0 errors
-uv run pytest tests/ -m "not live"                   # Test: 3525+ pass
+uv run pytest tests/ -m "not live"                   # Test: 3700+ pass
 uv run geode analyze "Cowboy Bebop" --dry-run        # E2E: A (68.4) unchanged
 ```
 
@@ -305,7 +305,7 @@ Update `docs/progress.md` only from main. Backlog → In Progress → Done.
 |------|---------|----------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -m "not live"` | 3525+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 3700+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 ## Custom Skills (Scaffold)

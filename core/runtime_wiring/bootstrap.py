@@ -220,8 +220,9 @@ def build_hooks(
     # C3b: Auto-learn user patterns on turn complete (Tier 0.5 cross-session memory)
     def _reg_auto_learn() -> None:
         from core.hooks.auto_learn import make_auto_learn_handler
+        from core.tools.profile_tools import get_user_profile
 
-        name, handler = make_auto_learn_handler()
+        name, handler = make_auto_learn_handler(profile_provider=get_user_profile)
         hooks.register(
             HookEvent.TURN_COMPLETE,
             handler,
