@@ -259,9 +259,7 @@ class AgenticLoop:
         from core.agent.convergence import ConvergenceDetector
 
         # Late-binding lambda so test patches on _try_model_escalation propagate
-        self._convergence = ConvergenceDetector(
-            escalation_fn=lambda: self._try_model_escalation()
-        )
+        self._convergence = ConvergenceDetector(escalation_fn=lambda: self._try_model_escalation())
 
         # Feature 8: Diversity forcing — prevent same tool 5x consecutively
         self._consecutive_tool_tracker: list[str] = []
@@ -1398,9 +1396,7 @@ class AgenticLoop:
 
     def _update_tool_error_tracking(self, tool_results: list[dict[str, Any]]) -> None:
         """Update tool error tracking. Delegates to ConvergenceDetector."""
-        self._convergence.update_tool_error_tracking(
-            tool_results, self._tool_processor.tool_log
-        )
+        self._convergence.update_tool_error_tracking(tool_results, self._tool_processor.tool_log)
 
     def _check_convergence_break(self) -> bool:
         """Check for stuck loop. Delegates to ConvergenceDetector."""

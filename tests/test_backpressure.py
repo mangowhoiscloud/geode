@@ -231,7 +231,10 @@ class TestConvergenceDetection:
         loop._update_tool_error_tracking(tool_results)
         assert len(loop._convergence.recent_errors) == 1
         # Should contain tool name and error
-        assert "run_bash" in loop._convergence.recent_errors[0] or "unknown" in loop._convergence.recent_errors[0]
+        assert (
+            "run_bash" in loop._convergence.recent_errors[0]
+            or "unknown" in loop._convergence.recent_errors[0]
+        )
         assert "command not found" in loop._convergence.recent_errors[0]
 
     def test_arun_convergence_terminates_loop(self) -> None:
