@@ -14,8 +14,8 @@ from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel
 
-from core.cli.agentic_response import AgenticResponse
 from core.config import ANTHROPIC_PRIMARY, OPENAI_PRIMARY, settings
+from core.llm.agentic_response import AgenticResponse
 
 log = logging.getLogger(__name__)
 

@@ -383,10 +383,6 @@ def _resolve_provider(model: str) -> str:
     return "openai"
 
 
-# Pricing — canonical source: core.llm.token_tracker.MODEL_PRICING
-# Re-exported here for backward compatibility.
-from core.llm.token_tracker import MODEL_PRICING as MODEL_PRICING  # noqa: E402
-
 # ---------------------------------------------------------------------------
 # Model Policy — allowlist / denylist governance (.geode/model-policy.toml)
 # ---------------------------------------------------------------------------

@@ -298,7 +298,7 @@ class ClaudeAgenticAdapter:
         max_tokens: int,
         temperature: float,
     ) -> Any | None:
-        from core.cli.agentic_response import normalize_anthropic
+        from core.llm.agentic_response import normalize_anthropic
         from core.llm.errors import LLMBadRequestError, UserCancelledError
         from core.llm.router import call_with_failover
 

@@ -29,6 +29,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Architecture
+- **Layer violation fix (3 cross-layer dependency violations resolved)**:
+  - `agentic_response.py` moved from `core/cli/` (L5) → `core/llm/` (L2) — eliminates L2→L5 import in LLM providers/router. `core/cli/agentic_response.py` retained as backward-compatible re-export
+  - `MODEL_PRICING` dead re-export removed from `core/config.py` — eliminates L1→L2 import (no callers used `core.config.MODEL_PRICING`)
+  - `RightsRiskResult`, `RightsStatus`, `LicenseInfo` moved from `core/verification/` (L3) → `core/state.py` (L1) — eliminates L1→L3 import. `rights_risk.py` re-exports from `core.state`
 - **ContextVar thread propagation fix** — `invoke_with_timeout()` ThreadPoolExecutor에 `contextvars.copy_context()` 추가. graph node에서 memory/profile/domain adapter가 None이 되던 CRITICAL race condition 수정
 - **Hook deduplication** — `HookSystem.register()` name 기반 중복 방지. explicit + filesystem discovery 이중 등록 해소
 - **LLM router decomposition** — `adapters.py` (355줄, Protocol 7개 + ClaudeAdapter + resolve_agentic_adapter) + `provider_dispatch.py` (269줄, retry/circuit breaker/cross-provider) 추출. router.py 1530→1062줄 (-31%)

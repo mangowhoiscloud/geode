@@ -29,7 +29,6 @@ from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
 )
-from core.cli.agentic_response import AgenticResponse
 from core.cli.ui.agentic_ui import OperationLogger
 from core.cli.ui.status import TextSpinner
 from core.config import (
@@ -37,6 +36,7 @@ from core.config import (
     _resolve_provider,
 )
 from core.hooks import HookEvent, HookSystem
+from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.llm.router import (
