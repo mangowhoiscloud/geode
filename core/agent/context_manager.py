@@ -1,7 +1,7 @@
 """Context window management — extracted from AgenticLoop for SRP.
 
-Handles context overflow detection, message pruning, compaction,
-aggressive recovery, and strategy resolution.
+Handles context overflow detection, message pruning, compaction, aggressive
+recovery, and strategy resolution.  Claude Code equivalent: query/tokenBudget.ts.
 """
 
 from __future__ import annotations
