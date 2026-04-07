@@ -26,12 +26,10 @@ from typing import Any
 from dotenv import dotenv_values
 
 from core.mcp.stdio_client import StdioMCPClient
+from core.paths import get_project_root
 
 log = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_CONFIG_PATH = _PROJECT_ROOT / ".claude" / "mcp_servers.json"
-_DOTENV_PATH = _PROJECT_ROOT / ".env"
 _GLOBAL_DOTENV_PATH = Path.home() / ".geode" / ".env"
 
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
@@ -115,7 +113,7 @@ class MCPServerManager:
     """
 
     def __init__(self, config_path: Path | None = None) -> None:
-        self._config_path = config_path or _CONFIG_PATH
+        self._config_path = config_path or (get_project_root() / ".claude" / "mcp_servers.json")
         self._servers: dict[str, dict[str, Any]] = {}
         self._clients: dict[str, StdioMCPClient] = {}
         self._dotenv_cache: dict[str, str | None] = {}
@@ -299,7 +297,7 @@ class MCPServerManager:
         # Layer 1 & 2: Global then project config.toml [mcp.servers]
         config_toml_paths = [
             GLOBAL_CONFIG_TOML,
-            _PROJECT_ROOT / ".geode" / "config.toml",
+            get_project_root() / ".geode" / "config.toml",
         ]
         for config_toml in config_toml_paths:
             if not config_toml.exists():
@@ -365,8 +363,9 @@ class MCPServerManager:
         if not self._dotenv_cache:
             if _GLOBAL_DOTENV_PATH.exists():
                 self._dotenv_cache.update(dotenv_values(str(_GLOBAL_DOTENV_PATH)))
-            if _DOTENV_PATH.exists():
-                for k, v in dotenv_values(str(_DOTENV_PATH)).items():
+            project_dotenv = get_project_root() / ".env"
+            if project_dotenv.exists():
+                for k, v in dotenv_values(str(project_dotenv)).items():
                     if v:  # skip empty/None — must not clobber global keys
                         self._dotenv_cache[k] = v
 

@@ -5,14 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.tools import file_tools
 from core.tools.file_tools import EditFileTool, GlobTool, GrepTool, WriteFileTool
 
 
 @pytest.fixture(autouse=True)
 def _sandbox_to_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Redirect sandbox root to tmp_path for all tests."""
-    monkeypatch.setattr(file_tools, "_PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("core.tools.file_tools.get_project_root", lambda: tmp_path)
 
 
 class TestGlobTool:
