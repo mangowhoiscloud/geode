@@ -239,9 +239,12 @@ class GeodeRuntime:
 
         # Stage 1: Core sub-systems
         core = cls._build_core(
-            bootstrap, infra,
-            session_key=session_key, run_id=run_id,
-            log_dir=log_dir, session_ttl=session_ttl,
+            bootstrap,
+            infra,
+            session_key=session_key,
+            run_id=run_id,
+            log_dir=log_dir,
+            session_ttl=session_ttl,
             stuck_timeout_s=stuck_timeout_s,
         )
 
@@ -250,14 +253,19 @@ class GeodeRuntime:
 
         # Stage 3: Memory + Automation
         memory, automation = cls._build_memory_and_automation(
-            bootstrap, core["hooks"], core["session_store"],
-            session_key=session_key, ip_name=ip_name,
+            bootstrap,
+            core["hooks"],
+            core["session_store"],
+            session_key=session_key,
+            ip_name=ip_name,
         )
 
         log.info(
             "GeodeRuntime created: ip=%s, key=%s, tools=%d, lanes=%s",
-            ip_name, session_key,
-            len(core["tool_registry"]), core["lane_queue"].list_lanes(),
+            ip_name,
+            session_key,
+            len(core["tool_registry"]),
+            core["lane_queue"].list_lanes(),
         )
 
         # Stage 4: Assembly
@@ -307,20 +315,24 @@ class GeodeRuntime:
     ) -> dict[str, Any]:
         """Stage 1: Build core infrastructure (hooks, auth, LLM, lanes)."""
         hooks, run_log, stuck_detector, _session_metrics = bootstrap.build_hooks(
-            session_key=session_key, run_id=run_id,
-            log_dir=log_dir, stuck_timeout_s=stuck_timeout_s,
+            session_key=session_key,
+            run_id=run_id,
+            log_dir=log_dir,
+            stuck_timeout_s=stuck_timeout_s,
         )
         session_store = bootstrap.build_session_store(session_ttl=session_ttl)
         policy_chain = infra.build_default_policies()
         tool_registry = infra.build_default_registry()
         profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
         llm_adapter, secondary_adapter = infra.build_llm_adapters(
-            tool_registry, policy_chain,
+            tool_registry,
+            policy_chain,
         )
         config_watcher = bootstrap.build_config_watcher(hooks=hooks)
         lane_queue = infra.build_default_lanes()
         return {
-            "hooks": hooks, "run_log": run_log,
+            "hooks": hooks,
+            "run_log": run_log,
             "stuck_detector": stuck_detector,
             "session_store": session_store,
             "policy_chain": policy_chain,
@@ -371,13 +383,17 @@ class GeodeRuntime:
         from core.runtime_wiring import automation as automation_wiring
 
         (
-            project_memory, organization_memory,
-            context_assembler, _user_profile,
+            project_memory,
+            organization_memory,
+            context_assembler,
+            _user_profile,
         ) = bootstrap.build_memory(session_store=session_store, hooks=hooks)
 
         automation = automation_wiring.build_automation(
-            hooks=hooks, session_key=session_key,
-            ip_name=ip_name, project_memory=project_memory,
+            hooks=hooks,
+            session_key=session_key,
+            ip_name=ip_name,
+            project_memory=project_memory,
         )
 
         try:
@@ -386,7 +402,8 @@ class GeodeRuntime:
             log.debug("ADR-007 prompt_assembler not yet available — skipping")
             prompt_assembler = None
         task_graph, task_bridge = bootstrap.build_task_graph(
-            hooks=hooks, ip_name=ip_name,
+            hooks=hooks,
+            ip_name=ip_name,
         )
 
         memory = {
