@@ -5,7 +5,7 @@ without requiring run_bash. Safety-gated by the Tool Protocol:
 - Glob, Grep: SAFE (read-only, auto-approved)
 - Edit, Write: WRITE (requires HITL approval)
 
-All paths are sandboxed to PROJECT_ROOT.
+All paths are validated through ``core.tools.sandbox.validate_path()``.
 """
 
 from __future__ import annotations
@@ -16,40 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import get_project_root
+from core.tools.sandbox import validate_path
 
 log = logging.getLogger(__name__)
-
-
-def _check_sandbox(path: Path) -> dict[str, Any] | None:
-    """Return tool_error dict if path is outside sandbox, None if OK.
-
-    Breadcrumb pattern: the hint field steers the LLM to self-correct
-    on the very first failure instead of retrying with another bad path.
-    """
-    from core.tools.base import tool_error
-
-    if path.is_symlink():
-        return tool_error(
-            f"Symlinks not allowed: {path}",
-            error_type="permission",
-            recoverable=False,
-            hint="Resolve the symlink target and use the real path.",
-        )
-    resolved = path.resolve()
-    try:
-        resolved.relative_to(get_project_root())
-    except ValueError:
-        return tool_error(
-            f"Access denied: path outside project directory ({get_project_root()})",
-            error_type="permission",
-            recoverable=False,
-            hint=(
-                "All file tools are sandboxed to the project directory. "
-                "Use a relative path (e.g. 'core/tools/') or omit the path "
-                "parameter to search from the project root."
-            ),
-        )
-    return None
 
 
 class GlobTool:
@@ -79,7 +48,7 @@ class GlobTool:
                     "type": "string",
                     "description": (
                         "Directory to search in (default: project root). "
-                        "Must be within the project directory."
+                        "Symlinks allowed if they resolve within the project directory."
                     ),
                 },
             },
@@ -90,14 +59,12 @@ class GlobTool:
         from core.tools.base import tool_error
 
         pattern: str = kwargs["pattern"]
-        search_dir = Path(kwargs.get("path", "."))
+        path_str: str = kwargs.get("path", ".")
 
-        if not search_dir.is_absolute():
-            search_dir = get_project_root() / search_dir
-
-        err = _check_sandbox(search_dir)
-        if err:
-            return err
+        result = validate_path(path_str, write=False)
+        if isinstance(result, dict):
+            return result
+        search_dir = result
 
         if not search_dir.is_dir():
             return tool_error(
@@ -106,15 +73,18 @@ class GlobTool:
                 hint="Provide a valid directory path.",
             )
 
+        project_root = get_project_root()
         matches: list[tuple[float, str]] = []
         for path in search_dir.rglob(pattern) if "**" in pattern else search_dir.glob(pattern):
-            if path.is_file() and not path.is_symlink():
-                try:
-                    rel = path.relative_to(get_project_root())
-                    mtime = path.stat().st_mtime
-                    matches.append((mtime, str(rel)))
-                except (ValueError, OSError):
-                    continue
+            if not path.is_file():
+                continue
+            try:
+                resolved = path.resolve()
+                rel = resolved.relative_to(project_root)
+                mtime = path.stat().st_mtime
+                matches.append((mtime, str(rel)))
+            except (ValueError, OSError):
+                continue
 
         matches.sort(reverse=True)  # newest first
         files = [f for _, f in matches[:100]]
@@ -156,7 +126,7 @@ class GrepTool:
                     "type": "string",
                     "description": (
                         "File or directory to search (default: project root). "
-                        "Must be within the project directory."
+                        "Symlinks allowed if they resolve within the project directory."
                     ),
                 },
                 "glob": {
@@ -179,17 +149,15 @@ class GrepTool:
         from core.tools.base import tool_error
 
         pattern_str: str = kwargs["pattern"]
-        search_path = Path(kwargs.get("path", "."))
+        path_str: str = kwargs.get("path", ".")
         file_glob: str = kwargs.get("glob", "")
         include_content: bool = kwargs.get("include_content", False)
         max_results: int = min(kwargs.get("max_results", 50), 100)
 
-        if not search_path.is_absolute():
-            search_path = get_project_root() / search_path
-
-        err = _check_sandbox(search_path)
-        if err:
-            return err
+        result = validate_path(path_str, write=False)
+        if isinstance(result, dict):
+            return result
+        search_path = result
 
         try:
             regex = re.compile(pattern_str)
@@ -215,9 +183,10 @@ class GrepTool:
             )
 
         _SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", ".mypy_cache"}
+        project_root = get_project_root()
 
         for fpath in files_to_search:
-            if not fpath.is_file() or fpath.is_symlink():
+            if not fpath.is_file():
                 continue
             if any(part in _SKIP_DIRS for part in fpath.parts):
                 continue
@@ -239,7 +208,7 @@ class GrepTool:
 
             if matches_in_file:
                 try:
-                    rel = str(fpath.relative_to(get_project_root()))
+                    rel = str(fpath.resolve().relative_to(project_root))
                 except ValueError:
                     continue
                 entry: dict[str, Any] = {"file": rel, "match_count": len(matches_in_file)}
@@ -280,7 +249,8 @@ class EditFileTool:
                 "file_path": {
                     "type": "string",
                     "description": (
-                        "Path to the file to edit. Must be within the project directory."
+                        "Path to the file to edit. "
+                        "Symlinks allowed if they resolve within the project directory."
                     ),
                 },
                 "old_string": {
@@ -302,17 +272,15 @@ class EditFileTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         from core.tools.base import tool_error
 
-        file_path = Path(kwargs["file_path"])
+        path_str: str = kwargs["file_path"]
         old_string: str = kwargs["old_string"]
         new_string: str = kwargs["new_string"]
         replace_all: bool = kwargs.get("replace_all", False)
 
-        if not file_path.is_absolute():
-            file_path = get_project_root() / file_path
-
-        err = _check_sandbox(file_path)
-        if err:
-            return err
+        result = validate_path(path_str, write=True)
+        if isinstance(result, dict):
+            return result
+        file_path = result
 
         if not file_path.exists():
             return tool_error(
@@ -387,7 +355,7 @@ class WriteFileTool:
                     "type": "string",
                     "description": (
                         "Path to the file to create or overwrite. "
-                        "Must be within the project directory."
+                        "Symlinks allowed if they resolve within the project directory."
                     ),
                 },
                 "content": {
@@ -401,15 +369,13 @@ class WriteFileTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         from core.tools.base import tool_error
 
-        file_path = Path(kwargs["file_path"])
+        path_str: str = kwargs["file_path"]
         content: str = kwargs["content"]
 
-        if not file_path.is_absolute():
-            file_path = get_project_root() / file_path
-
-        err = _check_sandbox(file_path)
-        if err:
-            return err
+        result = validate_path(path_str, write=True)
+        if isinstance(result, dict):
+            return result
+        file_path = result
 
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)

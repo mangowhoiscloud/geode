@@ -7,10 +7,9 @@ Provides:
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
-from core.paths import get_project_root
+from core.tools.sandbox import validate_path
 
 log = logging.getLogger(__name__)
 
@@ -30,35 +29,12 @@ class ReadDocumentTool:
         file_path_str: str = kwargs["file_path"]
         max_lines: int = kwargs.get("max_lines", 200)
 
-        raw_path = Path(file_path_str)
-
         from core.tools.base import tool_error
 
-        # Security: reject symlinks before resolve (prevents traversal)
-        if raw_path.is_symlink():
-            return tool_error(
-                f"Symlinks not allowed: {file_path_str}",
-                error_type="permission",
-                recoverable=False,
-                context={"file_path": file_path_str},
-            )
-
-        file_path = raw_path.resolve()
-
-        # Security: ensure path is within project directory
-        try:
-            file_path.relative_to(get_project_root())
-        except ValueError:
-            return tool_error(
-                f"Access denied: path outside project directory ({get_project_root()})",
-                error_type="permission",
-                recoverable=False,
-                hint=(
-                    "All file tools are sandboxed to the project directory. "
-                    "Use a relative path or omit the path parameter."
-                ),
-                context={"file_path": str(file_path)},
-            )
+        result = validate_path(file_path_str, write=False)
+        if isinstance(result, dict):
+            return result
+        file_path = result
 
         if not file_path.exists():
             return tool_error(
