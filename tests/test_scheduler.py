@@ -861,3 +861,150 @@ class TestActionQueue:
         svc.run_now("main1")
         _, _, is_isolated = q.get_nowait()
         assert is_isolated is False
+
+
+# ===========================================================================
+# MAX_JOBS limit
+# ===========================================================================
+
+
+class TestMaxJobs:
+    def test_max_jobs_enforced(self, tmp_store: Path, tmp_log_dir: Path) -> None:
+        """add_job() should reject when MAX_JOBS is reached."""
+        svc = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, enable_jitter=False)
+        svc.MAX_JOBS = 3  # Lower for test speed
+
+        for i in range(3):
+            svc.add_job(_make_job(job_id=f"job-{i}", action=f"action-{i}"))
+
+        import pytest
+
+        with pytest.raises(ValueError, match="Too many scheduled jobs"):
+            svc.add_job(_make_job(job_id="job-overflow", action="overflow"))
+
+    def test_max_jobs_allows_after_removal(self, tmp_store: Path, tmp_log_dir: Path) -> None:
+        """After removing a job, add_job() should succeed again."""
+        svc = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, enable_jitter=False)
+        svc.MAX_JOBS = 2
+
+        svc.add_job(_make_job(job_id="a", action="a"))
+        svc.add_job(_make_job(job_id="b", action="b"))
+        svc.remove_job("a")
+        svc.add_job(_make_job(job_id="c", action="c"))  # Should succeed
+        assert svc.job_count == 2
+
+
+# ===========================================================================
+# Recurring age-out
+# ===========================================================================
+
+
+class TestAgeOut:
+    def test_aged_recurring_deleted(self, svc: SchedulerService) -> None:
+        """Recurring jobs older than RECURRING_MAX_AGE_MS should fire once then delete."""
+        from core.automation.scheduler import RECURRING_MAX_AGE_MS
+
+        now = time.time() * 1000
+        old_created = now - RECURRING_MAX_AGE_MS - 1_000  # Beyond age limit
+
+        job = _make_job(
+            job_id="aged-1",
+            kind=ScheduleKind.EVERY,
+            every_ms=60_000,
+            callback=lambda _d: None,
+        )
+        job.created_at_ms = old_created
+        svc.add_job(job)
+
+        results = svc.check_due_jobs(now_ms=now)
+        assert len(results) == 1
+        assert results[0].get("aged_out") is True
+        assert svc.get_job("aged-1") is None  # Deleted
+
+    def test_permanent_exempt_from_ageout(self, svc: SchedulerService) -> None:
+        """Permanent jobs should never be aged out."""
+        from core.automation.scheduler import RECURRING_MAX_AGE_MS
+
+        now = time.time() * 1000
+        old_created = now - RECURRING_MAX_AGE_MS - 1_000
+
+        job = _make_job(
+            job_id="perm-1",
+            kind=ScheduleKind.EVERY,
+            every_ms=60_000,
+            callback=lambda _d: None,
+        )
+        job.created_at_ms = old_created
+        job.permanent = True
+        svc.add_job(job)
+
+        results = svc.check_due_jobs(now_ms=now)
+        # Should not be aged out (permanent)
+        assert all(r.get("aged_out") is not True for r in results)
+        assert svc.get_job("perm-1") is not None
+
+    def test_at_job_not_aged(self, svc: SchedulerService) -> None:
+        """AT jobs should not be subject to age-out."""
+        from core.automation.scheduler import RECURRING_MAX_AGE_MS
+
+        now = time.time() * 1000
+        old_created = now - RECURRING_MAX_AGE_MS - 1_000
+        at_ms = now + 60_000  # Future
+
+        job = _make_job(job_id="at-old", kind=ScheduleKind.AT, at_ms=at_ms)
+        job.created_at_ms = old_created
+        svc.add_job(job)
+
+        results = svc.check_due_jobs(now_ms=now)
+        assert all(r.get("aged_out") is not True for r in results)
+        assert svc.get_job("at-old") is not None
+
+
+# ===========================================================================
+# agent_id routing
+# ===========================================================================
+
+
+class TestAgentId:
+    def test_agent_id_in_serialization(self, tmp_store: Path, tmp_log_dir: Path) -> None:
+        """agent_id should survive save/load roundtrip."""
+        svc1 = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, enable_jitter=False)
+        job = _make_job(job_id="agent-job")
+        job.agent_id = "research-agent"
+        svc1.add_job(job)
+        svc1.save()
+
+        svc2 = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir, enable_jitter=False)
+        svc2.load()
+        loaded = svc2.get_job("agent-job")
+        assert loaded is not None
+        assert loaded.agent_id == "research-agent"
+
+    def test_agent_id_passed_to_callback(self, tmp_store: Path, tmp_log_dir: Path) -> None:
+        """on_job_fired should receive agent_id as 4th argument."""
+        fired: list[tuple[str, str, bool, str]] = []
+        svc = SchedulerService(
+            store_path=tmp_store,
+            log_dir=tmp_log_dir,
+            on_job_fired=lambda jid, act, iso, aid: fired.append((jid, act, iso, aid)),
+            enable_jitter=False,
+        )
+        job = ScheduledJob(
+            job_id="agt-fire",
+            name="test",
+            schedule=Schedule(kind=ScheduleKind.AT, at_ms=1.0),
+            action="do stuff",
+            agent_id="my-agent",
+        )
+        svc.add_job(job)
+        svc.run_now("agt-fire")
+        assert len(fired) == 1
+        assert fired[0] == ("agt-fire", "do stuff", True, "my-agent")
+
+    def test_empty_agent_id_default(self, svc: SchedulerService) -> None:
+        """Default agent_id should be empty string."""
+        job = _make_job(job_id="no-agent")
+        svc.add_job(job)
+        loaded = svc.get_job("no-agent")
+        assert loaded is not None
+        assert loaded.agent_id == ""
