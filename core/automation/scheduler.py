@@ -1,31 +1,39 @@
 """Advanced Scheduler — 3-type scheduling + active hours.
 
-Inspired by OpenClaw's Cron Service. Supports:
+Inspired by OpenClaw's Cron Service + Claude Code's distributed scheduler.
+Supports:
 - AT: one-shot absolute timestamp jobs
 - EVERY: fixed-interval with anchor-based drift prevention
 - CRON: standard cron expressions (via existing CronParser)
 - Active Hours: timezone-aware quiet-hours window with midnight wrap-around
 - Per-job JSONL run log with auto-pruning
 - Atomic JSON store (tmp + rename pattern)
+- O_EXCL lock file + PID liveness probe (claude-code pattern)
+- Deterministic per-job jitter (thundering herd prevention)
+- Session-only tasks (durable flag)
+- Missed task recovery
+- mtime-based file watch reload (1s check interval)
 
 Architecture-v6 SS4.5: Automation Layer -- Advanced Scheduler (P4).
 """
 
 from __future__ import annotations
 
-import fcntl
+import contextlib
+import hashlib
 import json
 import logging
 import os
-import queue
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.automation.triggers import CronParser, TriggerManager
+from core.paths import PROJECT_SCHEDULER_FILE, PROJECT_SCHEDULER_LOG_DIR
 
 if TYPE_CHECKING:
     from core.hooks import HookSystem
@@ -33,11 +41,28 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Type aliases
+# ---------------------------------------------------------------------------
+
+OnJobFired = Callable[[str, str, bool], None]
+"""Callback: (job_id, action, isolated) -> None."""
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_STORE_PATH = Path.home() / ".geode" / "scheduler" / "jobs.json"
-DEFAULT_LOG_DIR = Path.home() / ".geode" / "scheduler" / "logs"
+DEFAULT_STORE_PATH = PROJECT_SCHEDULER_FILE
+DEFAULT_LOG_DIR = PROJECT_SCHEDULER_LOG_DIR
+
+# Backward-compat: old global store path for migration detection
+_LEGACY_STORE_PATH = Path.home() / ".geode" / "scheduler" / "jobs.json"
+
+# Missed task recovery: 1 hour grace window
+MISSED_TASK_GRACE_MS: float = 3_600_000.0
+
+# Jitter defaults
+DEFAULT_MAX_JITTER_MS: float = 900_000.0  # 15 minutes cap
+DEFAULT_JITTER_FRACTION: float = 0.1  # 10% of interval
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +112,7 @@ class ScheduledJob:
     schedule: Schedule
     enabled: bool = True
     delete_after_run: bool = False  # For AT type: auto-delete after success
+    durable: bool = True  # False = session-only (not persisted to disk)
     callback: Any = None  # Callable[[dict], None]
     action: str = ""  # Prompt text to enqueue when fired (no callback)
     isolated: bool = True  # Run in isolated session (agentTurn) vs main session (systemEvent)
@@ -121,6 +147,7 @@ def _job_to_dict(job: ScheduledJob) -> dict[str, Any]:
         },
         "enabled": job.enabled,
         "delete_after_run": job.delete_after_run,
+        "durable": job.durable,
         "action": job.action,
         "isolated": job.isolated,
         "active_hours": (asdict(job.active_hours) if job.active_hours is not None else None),
@@ -154,6 +181,7 @@ def _job_from_dict(data: dict[str, Any]) -> ScheduledJob:
         schedule=schedule,
         enabled=data.get("enabled", True),
         delete_after_run=data.get("delete_after_run", False),
+        durable=data.get("durable", True),
         callback=None,  # Callbacks are not serialised
         action=data.get("action", ""),
         isolated=data.get("isolated", True),
@@ -253,6 +281,143 @@ class JobRunLog:
 
 
 # ---------------------------------------------------------------------------
+# O_EXCL Lock — PID liveness probe (claude-code pattern)
+# ---------------------------------------------------------------------------
+
+
+class SchedulerLock:
+    """Cross-platform file-based lock using O_EXCL atomic creation.
+
+    Lock file contains ``{"pid": N, "acquired_at": T}`` for liveness probing.
+    Non-owners probe every ``STALE_TIMEOUT_S`` seconds; if the owning PID is
+    dead, the lock is reclaimed.
+    """
+
+    STALE_TIMEOUT_S: float = 5.0
+
+    def __init__(self, lock_path: Path) -> None:
+        self._lock_path = lock_path
+        self._acquired = False
+
+    def acquire(self, timeout_s: float = 10.0) -> bool:
+        """Try to acquire the lock, probing for stale owners."""
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                fd = os.open(
+                    str(self._lock_path),
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o644,
+                )
+                try:
+                    content = json.dumps(
+                        {"pid": os.getpid(), "acquired_at": time.time()},
+                    )
+                    os.write(fd, content.encode())
+                finally:
+                    os.close(fd)
+                self._acquired = True
+                return True
+            except FileExistsError:
+                # Lock file exists — check if owner is alive
+                if self._try_reclaim():
+                    continue  # Reclaimed stale lock, retry acquire
+                time.sleep(0.2)
+        return False
+
+    def release(self) -> None:
+        """Release the lock by removing the lock file."""
+        if self._acquired:
+            with contextlib.suppress(OSError):
+                self._lock_path.unlink(missing_ok=True)
+            self._acquired = False
+
+    def _try_reclaim(self) -> bool:
+        """Check if the current lock owner is dead and reclaim if so."""
+        try:
+            with open(self._lock_path, encoding="utf-8") as f:
+                data = json.load(f)
+            pid = data.get("pid", -1)
+            acquired_at = data.get("acquired_at", 0.0)
+            age = time.time() - acquired_at
+
+            if not _is_pid_alive(pid) or age > 600:
+                # Owner dead or lock very old — reclaim
+                try:
+                    self._lock_path.unlink()
+                    return True
+                except FileNotFoundError:
+                    return True
+                except OSError:
+                    return False
+        except (json.JSONDecodeError, OSError):
+            # Corrupt lock file — remove and retry
+            try:
+                self._lock_path.unlink()
+                return True
+            except OSError:
+                return False
+        return False
+
+    def __enter__(self) -> SchedulerLock:
+        if not self.acquire():
+            raise TimeoutError(f"Could not acquire scheduler lock: {self._lock_path}")
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        self.release()
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is alive."""
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # Process exists but we can't signal it
+
+
+# ---------------------------------------------------------------------------
+# Jitter — deterministic per-job hash (claude-code pattern)
+# ---------------------------------------------------------------------------
+
+
+def _compute_jitter_frac(job_id: str) -> float:
+    """Compute a deterministic jitter fraction [0, 1) from job_id.
+
+    Uses SHA-256 to produce a stable, uniformly distributed value.
+    Same job_id always produces the same jitter across restarts.
+    """
+    h = hashlib.sha256(job_id.encode()).digest()
+    # Use first 4 bytes as uint32 → normalize to [0, 1)
+    val = int.from_bytes(h[:4], "big")
+    return val / (2**32)
+
+
+def _jittered_next_run(
+    next_ms: float,
+    interval_ms: float,
+    job_id: str,
+    *,
+    max_jitter_ms: float = DEFAULT_MAX_JITTER_MS,
+    jitter_fraction: float = DEFAULT_JITTER_FRACTION,
+) -> float:
+    """Apply deterministic forward jitter to a recurring job's next-run time.
+
+    Jitter = min(frac * interval * jitter_fraction, max_jitter_ms).
+    This spreads jobs with the same cron across a window instead of all
+    firing at :00.
+    """
+    frac = _compute_jitter_frac(job_id)
+    jitter = min(frac * interval_ms * jitter_fraction, max_jitter_ms)
+    return next_ms + jitter
+
+
+# ---------------------------------------------------------------------------
 # Active-hours helpers
 # ---------------------------------------------------------------------------
 
@@ -325,17 +490,44 @@ class SchedulerService:
         hooks: HookSystem | None = None,
         store_path: Path | None = None,
         log_dir: Path | None = None,
-        action_queue: queue.Queue[tuple[str, str, bool]] | None = None,
+        on_job_fired: OnJobFired | None = None,
+        *,
+        enable_jitter: bool = True,
+        max_jitter_ms: float = DEFAULT_MAX_JITTER_MS,
+        # Backward-compat: accept action_queue and wrap as callback
+        action_queue: Any = None,
     ) -> None:
         self._trigger_manager = trigger_manager
         self._hooks = hooks
         self._store_path = store_path if store_path is not None else DEFAULT_STORE_PATH
+        self._store_path_explicit = store_path is not None
         self._run_log = JobRunLog(log_dir=log_dir)
         self._jobs: dict[str, ScheduledJob] = {}
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
-        self._action_queue = action_queue
+
+        # Callback protocol (replaces action_queue)
+        _fired_cb: OnJobFired | None = None
+        if on_job_fired is not None:
+            _fired_cb = on_job_fired
+        elif action_queue is not None:
+            # Backward-compat: wrap queue.put as callback
+            def _queue_adapter(jid: str, act: str, iso: bool) -> None:
+                action_queue.put((jid, act, iso))
+
+            _fired_cb = _queue_adapter
+        self._on_job_fired: OnJobFired | None = _fired_cb
+
+        # Jitter settings
+        self._enable_jitter = enable_jitter
+        self._max_jitter_ms = max_jitter_ms
+
+        # mtime-based file watch for external changes
+        self._last_store_mtime: float = 0.0
+
+        # CRON dedup: prevent same cron job from firing twice in same minute
+        self._last_fired_minute: dict[str, int] = {}
 
     # -- CRUD ---------------------------------------------------------------
 
@@ -415,14 +607,19 @@ class SchedulerService:
     ) -> float | None:
         """Compute the next run timestamp (ms) for a job.
 
-        For AT:   returns ``at_ms`` if still in the future, else None.
+        For AT:   returns ``at_ms`` if still in the future, else None (no jitter).
         For EVERY: uses anchor-based alignment to prevent drift on restart.
         For CRON:  returns the next minute boundary (checked by tick loop).
+
+        Recurring jobs (EVERY/CRON) get deterministic jitter applied when
+        ``enable_jitter`` is True, spreading fire times to prevent
+        thundering herd.
         """
         now = now_ms if now_ms is not None else time.time() * 1000
         kind = job.schedule.kind
 
         if kind == ScheduleKind.AT:
+            # AT jobs fire at exact time — no jitter
             return job.schedule.at_ms if job.schedule.at_ms > now else None
         elif kind == ScheduleKind.EVERY:
             interval = job.schedule.every_ms
@@ -435,23 +632,56 @@ class SchedulerService:
             elapsed = now - anchor
             if elapsed < 0:
                 # Anchor is in the future -- first run at anchor
-                return anchor
-            periods = int(elapsed / interval)
-            return anchor + (periods + 1) * interval
+                base = anchor
+            else:
+                periods = int(elapsed / interval)
+                base = anchor + (periods + 1) * interval
+            # Apply jitter
+            if self._enable_jitter:
+                return _jittered_next_run(
+                    base,
+                    interval,
+                    job.job_id,
+                    max_jitter_ms=self._max_jitter_ms,
+                )
+            return base
         else:
             # CRON: evaluated every tick; return next minute boundary.
             remainder = now % 60_000
-            return now + (60_000 - remainder) if remainder > 0 else now + 60_000
+            base = now + (60_000 - remainder) if remainder > 0 else now + 60_000
+            if self._enable_jitter:
+                # Jitter based on 60s interval for CRON
+                return _jittered_next_run(
+                    base,
+                    60_000,
+                    job.job_id,
+                    max_jitter_ms=self._max_jitter_ms,
+                )
+            return base
 
     def _is_cron_due(self, job: ScheduledJob, now_ms: float) -> bool:
-        """Check whether a CRON job matches the current minute."""
+        """Check whether a CRON job matches the current minute.
+
+        Includes dedup guard: prevents the same job from firing twice in
+        the same minute (important at 1s check interval).
+        """
+        # Dedup: compute current minute timestamp
+        current_minute = int(now_ms / 60_000)
+        last_minute = self._last_fired_minute.get(job.job_id, -1)
+        if current_minute == last_minute:
+            return False
+
         tz = job.schedule.timezone
         dt_tuple = _cron_tuple_for_tz(tz)
         try:
-            return CronParser.matches(job.schedule.cron_expr, dt_tuple)
+            matches = CronParser.matches(job.schedule.cron_expr, dt_tuple)
         except ValueError as exc:
             log.warning("Invalid cron for job '%s': %s", job.job_id, exc)
             return False
+
+        if matches:
+            self._last_fired_minute[job.job_id] = current_minute
+        return matches
 
     # -- Active Hours -------------------------------------------------------
 
@@ -579,10 +809,10 @@ class SchedulerService:
         try:
             if job.callback is not None:
                 job.callback({"job_id": job.job_id, "name": job.name, **job.metadata})
-            elif job.action and self._action_queue is not None:
-                self._action_queue.put((job.job_id, job.action, job.isolated))
+            elif job.action and self._on_job_fired is not None:
+                self._on_job_fired(job.job_id, job.action, job.isolated)
                 log.debug(
-                    "Job '%s' enqueued action (isolated=%s): %s",
+                    "Job '%s' fired action (isolated=%s): %s",
                     job.job_id,
                     job.isolated,
                     job.action[:60],
@@ -641,45 +871,60 @@ class SchedulerService:
     # -- Persistence --------------------------------------------------------
 
     def save(self) -> None:
-        """Atomically persist the job store to disk (tmp + rename).
+        """Atomically persist the durable job store to disk (tmp + rename).
 
-        Uses ``fcntl.flock(LOCK_EX)`` to prevent inter-process race when
-        REPL and serve both access the same ``jobs.json``.
+        Uses O_EXCL lock file with PID liveness probe for cross-process
+        coordination. Non-durable (session-only) jobs are excluded.
         """
         path = Path(self._store_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        data = {jid: _job_to_dict(j) for jid, j in self._jobs.items()}
+        # Filter: only persist durable jobs
+        data = {jid: _job_to_dict(j) for jid, j in self._jobs.items() if j.durable}
         payload = json.dumps(data, ensure_ascii=False, indent=2)
-        lock_path = path.with_suffix(".json.lock")
-        with open(lock_path, "w") as lf:
-            fcntl.flock(lf, fcntl.LOCK_EX)
-            try:
-                tmp_path = path.with_suffix(".json.tmp")
-                with open(tmp_path, "w", encoding="utf-8") as f:
-                    f.write(payload)
-                os.replace(str(tmp_path), str(path))
-            finally:
-                fcntl.flock(lf, fcntl.LOCK_UN)
-        log.debug("Scheduler state saved to %s (%d jobs)", path, len(data))
+        lock = SchedulerLock(path.parent / "scheduled_tasks.lock")
+        with lock:
+            tmp_path = path.with_suffix(".json.tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(payload)
+            os.replace(str(tmp_path), str(path))
+        # Update mtime tracking
+        with contextlib.suppress(OSError):
+            self._last_store_mtime = os.path.getmtime(path)
+        log.debug("Scheduler state saved to %s (%d durable jobs)", path, len(data))
 
     def load(self) -> None:
         """Load job store from disk.
 
-        Uses ``fcntl.flock(LOCK_SH)`` to coordinate with concurrent saves.
+        Reads atomically (os.replace guarantees consistent writes).
+        Preserves in-memory non-durable jobs across reloads.
+        Falls back to legacy global store if project-local doesn't exist.
         """
         path = Path(self._store_path)
+
+        # Backward-compat: fall back to legacy global store
+        # Only when using default store path (not explicitly provided)
+        if not path.exists() and not self._store_path_explicit and _LEGACY_STORE_PATH.exists():
+            log.info(
+                "Migrating from legacy store %s -> %s",
+                _LEGACY_STORE_PATH,
+                path,
+            )
+            path = _LEGACY_STORE_PATH
+
         if not path.exists():
             log.debug("No scheduler store at %s", path)
             return
-        lock_path = path.with_suffix(".json.lock")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(lock_path, "w") as lf:
-            fcntl.flock(lf, fcntl.LOCK_SH)
-            try:
-                with open(path, encoding="utf-8") as f:
-                    data: dict[str, Any] = json.load(f)
-            finally:
-                fcntl.flock(lf, fcntl.LOCK_UN)
+
+        try:
+            with open(path, encoding="utf-8") as f:
+                data: dict[str, Any] = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            log.warning("Failed to read scheduler store %s: %s", path, exc)
+            return
+
+        # Preserve non-durable (session-only) jobs
+        session_jobs = {jid: j for jid, j in self._jobs.items() if not j.durable}
+
         loaded = 0
         zombies = 0
         for _jid, jdata in data.items():
@@ -693,14 +938,23 @@ class SchedulerService:
                 loaded += 1
             except Exception as exc:
                 log.warning("Skipping malformed job entry: %s", exc)
+
+        # Re-add session-only jobs
+        self._jobs.update(session_jobs)
+
         if zombies:
             log.warning("Skipped %d zombie jobs (empty action) on load", zombies)
+
+        # Track file mtime for change detection
+        with contextlib.suppress(OSError):
+            self._last_store_mtime = os.path.getmtime(path)
+
         log.info("Loaded %d jobs from %s", loaded, path)
 
     # -- Background runner --------------------------------------------------
 
-    def start(self, interval_s: float = 60.0) -> None:
-        """Start the background scheduler loop."""
+    def start(self, interval_s: float = 1.0) -> None:
+        """Start the background scheduler loop (default: 1s check interval)."""
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop_event.clear()
@@ -711,7 +965,7 @@ class SchedulerService:
             name="advanced-scheduler",
         )
         self._thread.start()
-        log.info("SchedulerService started (interval=%.0fs)", interval_s)
+        log.info("SchedulerService started (interval=%.1fs)", interval_s)
 
     def stop(self) -> None:
         """Stop the background scheduler loop."""
@@ -767,12 +1021,123 @@ class SchedulerService:
             )
         return stuck
 
+    def _reload_if_changed(self) -> bool:
+        """Reload job store if the file was modified externally.
+
+        Uses mtime comparison instead of file watchers (no external dependency).
+        Returns True if a reload occurred.
+        """
+        path = Path(self._store_path)
+        if not path.exists():
+            return False
+        try:
+            current_mtime = os.path.getmtime(path)
+        except OSError:
+            return False
+        if current_mtime != self._last_store_mtime:
+            log.debug(
+                "Store file changed (mtime %.0f -> %.0f), reloading",
+                self._last_store_mtime,
+                current_mtime,
+            )
+            self.load()
+            return True
+        return False
+
+    # -- Missed task recovery -----------------------------------------------
+
+    def find_missed_tasks(
+        self,
+        now_ms: float | None = None,
+        grace_ms: float = MISSED_TASK_GRACE_MS,
+    ) -> list[ScheduledJob]:
+        """Find one-shot/interval jobs that missed their execution window.
+
+        AT jobs:   missed if ``at_ms < now < at_ms + grace_ms`` and never ran.
+        EVERY jobs: missed if ``next_run_at_ms`` is more than 2 intervals past.
+        CRON jobs: skipped (they naturally fire on the next matching minute).
+        """
+        now = now_ms if now_ms is not None else time.time() * 1000
+        missed: list[ScheduledJob] = []
+
+        with self._lock:
+            for job in self._jobs.values():
+                if not job.enabled:
+                    continue
+
+                kind = job.schedule.kind
+
+                if kind == ScheduleKind.AT:
+                    at = job.schedule.at_ms
+                    if job.last_run_at_ms is None and at < now and (now - at) <= grace_ms:
+                        missed.append(job)
+
+                elif kind == ScheduleKind.EVERY:
+                    nxt = job.next_run_at_ms
+                    interval = job.schedule.every_ms
+                    if nxt is not None and interval > 0 and (now - nxt) > 2 * interval:
+                        missed.append(job)
+
+        return missed
+
+    def recover_missed_tasks(
+        self,
+        now_ms: float | None = None,
+    ) -> list[dict[str, Any]]:
+        """Execute missed tasks and return their results."""
+        missed = self.find_missed_tasks(now_ms=now_ms)
+        if not missed:
+            return []
+
+        now = now_ms if now_ms is not None else time.time() * 1000
+        results: list[dict[str, Any]] = []
+        for job in missed:
+            log.info("Recovering missed job '%s' (%s)", job.job_id, job.schedule.kind.value)
+            result = self._execute_job(job, now_ms=now)
+            result["recovered"] = True
+            results.append(result)
+
+        return results
+
     def _loop(self, interval_s: float) -> None:
-        """Background tick loop."""
+        """Background tick loop (default 1s for responsive scheduling)."""
         while not self._stop_event.is_set():
             try:
+                self._reload_if_changed()
                 self.check_due_jobs()
                 self.detect_stuck_jobs()
             except Exception as exc:
                 log.warning("Scheduler tick error: %s", exc)
             self._stop_event.wait(interval_s)
+
+
+# ---------------------------------------------------------------------------
+# Factory function — claude-code-style library instantiation
+# ---------------------------------------------------------------------------
+
+
+def create_scheduler(
+    *,
+    store_path: Path | None = None,
+    log_dir: Path | None = None,
+    on_job_fired: OnJobFired | None = None,
+    trigger_manager: TriggerManager | None = None,
+    hooks: HookSystem | None = None,
+    enable_jitter: bool = True,
+    max_jitter_ms: float = DEFAULT_MAX_JITTER_MS,
+) -> SchedulerService:
+    """Create a SchedulerService with project-local defaults.
+
+    This factory function makes the scheduler usable as a library component
+    that any context (serve, REPL, SDK, daemon) can instantiate with
+    appropriate configuration.
+    """
+    return SchedulerService(
+        trigger_manager=trigger_manager,
+        hooks=hooks,
+        store_path=store_path,
+        log_dir=log_dir,
+        on_job_fired=on_job_fired,
+        enable_jitter=enable_jitter,
+        max_jitter_ms=max_jitter_ms,
+    )
