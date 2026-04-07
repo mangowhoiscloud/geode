@@ -28,6 +28,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.47.0] — 2026-04-07
+
+### Added
+- **Scheduler GAP-close (claude-code alignment)** — 8 architectural gaps closed:
+  - Project-local storage (`.geode/scheduled_tasks.json`) — per-project isolation
+  - O_EXCL lock + PID liveness probe — cross-platform multi-session coordination
+  - `on_job_fired` callback protocol — decoupled from `queue.Queue`
+  - Session-only tasks (`durable=False`) — in-memory ephemeral scheduling
+  - Deterministic per-job jitter (SHA-256 hash) — thundering herd prevention
+  - 1s check interval + mtime file watch — responsive scheduling with external change detection
+  - Missed task recovery — AT/EVERY jobs recovered on startup with grace window
+  - `create_scheduler()` factory — library-style instantiation for any context
+- **3 new test modules** — `test_scheduler_lock.py`, `test_scheduler_jitter.py`, `test_scheduler_missed.py` (36 tests)
+
+### Changed
+- Scheduler default check interval 60s → 1s
+- `SchedulerService` default `enable_jitter=True`
+- Legacy `fcntl.flock` replaced with `SchedulerLock` (O_EXCL + PID probe)
+- `action_queue: queue.Queue` deprecated in favor of `on_job_fired: Callable`
+
 ### Fixed
 - **Sandbox project root CWD 기반으로 전환** — `_PROJECT_ROOT = Path(__file__).parent³` 하드코딩 → `get_project_root()` (CWD 캡처). 외부 워크스페이스에서 `geode` 실행 시 파일 도구가 "path outside project directory" 오류 발생하던 버그 수정. Claude Code `originalCwd` 패턴 이식
 

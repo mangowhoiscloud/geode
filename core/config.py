@@ -178,8 +178,10 @@ class Settings(BaseSettings):
     trigger_scheduler_interval_s: float = 60.0
 
     # L4.5 Automation — Advanced Scheduler
-    scheduler_interval_s: float = 60.0
+    scheduler_interval_s: float = 1.0  # 1s check interval (claude-code pattern)
     scheduler_auto_start: bool = True
+    scheduler_jitter_enabled: bool = True  # Deterministic per-job jitter
+    scheduler_max_jitter_ms: float = 900_000.0  # 15 min cap
 
     # L2 Memory — Session
     session_ttl_hours: float = 4.0

@@ -78,11 +78,13 @@ def build_automation(
     trigger_manager.start_scheduler()
 
     # Advanced scheduler service (3-type: AT/EVERY/CRON + active hours)
-    from core.automation.scheduler import SchedulerService
+    from core.automation.scheduler import create_scheduler
 
-    scheduler_service = SchedulerService(
+    scheduler_service = create_scheduler(
         trigger_manager=trigger_manager,
         hooks=hooks,
+        enable_jitter=settings.scheduler_jitter_enabled,
+        max_jitter_ms=settings.scheduler_max_jitter_ms,
     )
     scheduler_service.load()
 

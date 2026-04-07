@@ -310,7 +310,7 @@ class TestSchedulerServiceLifecycle:
         """job_count should reflect number of registered jobs."""
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
-        svc = SchedulerService()
+        svc = SchedulerService(enable_jitter=False)
         assert svc.job_count == 0
 
         job = ScheduledJob(
@@ -327,7 +327,7 @@ class TestSchedulerServiceLifecycle:
         from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
-        svc = SchedulerService(store_path=store)
+        svc = SchedulerService(store_path=store, enable_jitter=False)
 
         job = ScheduledJob(
             job_id="persist-1",
@@ -338,7 +338,7 @@ class TestSchedulerServiceLifecycle:
         svc.add_job(job)
         svc.save()
 
-        svc2 = SchedulerService(store_path=store)
+        svc2 = SchedulerService(store_path=store, enable_jitter=False)
         svc2.load()
         assert svc2.job_count == 1
 
@@ -346,7 +346,7 @@ class TestSchedulerServiceLifecycle:
         """start()/stop() should manage the background thread."""
         from core.automation.scheduler import SchedulerService
 
-        svc = SchedulerService()
+        svc = SchedulerService(enable_jitter=False)
         assert not svc.is_running
 
         svc.start(interval_s=999)  # long interval to avoid tick during test
@@ -360,7 +360,7 @@ class TestSchedulerServiceLifecycle:
         from core.automation.scheduler import SchedulerService
 
         store = tmp_path / "jobs.json"
-        svc = SchedulerService(store_path=store)
+        svc = SchedulerService(store_path=store, enable_jitter=False)
         svc.start(interval_s=999)
 
         # Simulate serve shutdown
