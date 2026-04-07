@@ -28,6 +28,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Architecture
+- **ContextVar thread propagation fix** — `invoke_with_timeout()` ThreadPoolExecutor에 `contextvars.copy_context()` 추가. graph node에서 memory/profile/domain adapter가 None이 되던 CRITICAL race condition 수정
+- **Hook deduplication** — `HookSystem.register()` name 기반 중복 방지. explicit + filesystem discovery 이중 등록 해소
+- **LLM router decomposition** — `adapters.py` (355줄, Protocol 7개 + ClaudeAdapter + resolve_agentic_adapter) + `provider_dispatch.py` (269줄, retry/circuit breaker/cross-provider) 추출. router.py 1530→1062줄 (-31%)
+
 ### Added
 - **Sandbox validation module (Claude Code parity)** — `core/tools/sandbox.py` 중앙 모듈 신설. 14/15 GAP 해소:
   - Shell expansion blocking ($VAR, ${VAR}, $(cmd), %VAR%, ~user) — TOCTOU prevention
