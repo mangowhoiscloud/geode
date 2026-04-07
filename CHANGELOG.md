@@ -28,6 +28,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.47.1] — 2026-04-07
+
+### Added
+- **Max jobs 50 제한** — `add_job()` 상한 체크. 무한 job 생성 방지 (claude-code MAX_JOBS 패턴)
+- **Lock session identity** — `SchedulerLock`에 `session_id` 추가. serve restart 시 같은 세션이면 즉시 lock 재취득 (idempotent re-acquire)
+- **Recurring age-out** — 30일 지난 recurring job 자동 삭제 + `permanent` flag 면제. stale job 누적 방지
+- **Sub-agent scheduler routing** — `ScheduledJob.agent_id` 필드 + `OnJobFired` 4-arg callback. sub-agent별 job 소유 및 fire 라우팅
+
 ## [0.47.0] — 2026-04-07
 
 ### Added

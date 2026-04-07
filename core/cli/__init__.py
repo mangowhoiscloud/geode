@@ -129,7 +129,13 @@ def _drain_scheduler_queue(
     count = 0
     try:
         while True:
-            job_id, fired_action, isolated = action_queue.get_nowait()
+            _item = action_queue.get_nowait()
+            # Support both 3-tuple (legacy) and 4-tuple (with agent_id)
+            if len(_item) == 4:
+                job_id, fired_action, isolated, _agent_id = _item
+            else:
+                job_id, fired_action, isolated = _item
+                _agent_id = ""
             if not fired_action:
                 continue
             count += 1
@@ -1668,13 +1674,13 @@ def serve(
 
     from core.orchestration.isolated_execution import IsolatedRunner
 
-    _sched_queue: _queue_mod.Queue[tuple[str, str, bool]] = _queue_mod.Queue()
+    _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str]] = _queue_mod.Queue()
     _sched_svc = None
     try:
         from core.automation.scheduler import create_scheduler
 
         _sched_svc = create_scheduler(
-            on_job_fired=lambda jid, act, iso: _sched_queue.put((jid, act, iso)),
+            on_job_fired=lambda jid, act, iso, aid: _sched_queue.put((jid, act, iso, aid)),
             hooks=_gw_services.hook_system,
             enable_jitter=True,
         )

@@ -158,11 +158,11 @@ class TestRecoverMissedTasks:
 
     def test_recover_executes_and_marks(self, tmp_path: Path) -> None:
         """Recovered tasks should be executed with 'recovered' flag."""
-        fired: list[tuple[str, str, bool]] = []
+        fired: list[tuple[str, str, bool, str]] = []
         svc = SchedulerService(
             store_path=tmp_path / "jobs.json",
             log_dir=tmp_path / "logs",
-            on_job_fired=lambda jid, act, iso: fired.append((jid, act, iso)),
+            on_job_fired=lambda jid, act, iso, aid="": fired.append((jid, act, iso, aid)),
             enable_jitter=False,
         )
         now = time.time() * 1000
@@ -181,7 +181,7 @@ class TestRecoverMissedTasks:
         assert results[0]["recovered"] is True
         assert results[0]["status"] == "ok"
         assert len(fired) == 1
-        assert fired[0] == ("recover-1", "recover me", True)
+        assert fired[0] == ("recover-1", "recover me", True, "")
 
     def test_recover_empty_when_none_missed(self, tmp_path: Path) -> None:
         """No missed tasks should return empty list."""
