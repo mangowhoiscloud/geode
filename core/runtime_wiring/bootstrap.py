@@ -435,6 +435,10 @@ def build_memory(
     hooks: Any = None,
 ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler, FileBasedUserProfile]:
     """Build L2 memory components: project, org, context assembler, user profile."""
+    from core.paths import ensure_directories
+
+    ensure_directories()
+
     project_memory = ProjectMemory()
 
     org_dir = settings.organization_fixture_dir
@@ -446,7 +450,7 @@ def build_memory(
     project_profile_dir = Path(".geode") / "user_profile"
     user_profile = FileBasedUserProfile(
         global_dir=global_profile_dir,
-        project_dir=project_profile_dir if project_profile_dir.parent.exists() else None,
+        project_dir=project_profile_dir,
     )
 
     # C2: Project Journal — append-only execution history

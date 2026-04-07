@@ -28,6 +28,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Lazy directory creation** — `ensure_directories()` in `core/paths.py` creates all `~/.geode/` and `.geode/` directories at bootstrap. Follows Claude Code's lazy `mkdir(recursive)` pattern. Fresh `uv run geode` on clean install now works without manual setup
+- `.gitignore` auto-entry for `.geode/` on first run
+
 ### Architecture
 - **Layer violation fix (3 cross-layer dependency violations resolved)**:
   - `agentic_response.py` moved from `core/cli/` (L5) → `core/llm/` (L2) — eliminates L2→L5 import in LLM providers/router. `core/cli/agentic_response.py` retained as backward-compatible re-export
