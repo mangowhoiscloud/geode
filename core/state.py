@@ -41,6 +41,7 @@ class RightsRiskResult(BaseModel):
     concerns: list[str] = Field(default_factory=list)
     recommendation: str = ""
 
+
 _ITERATION_HISTORY_MAX = 10
 
 

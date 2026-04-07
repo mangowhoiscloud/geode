@@ -383,7 +383,6 @@ def _resolve_provider(model: str) -> str:
     return "openai"
 
 
-
 # ---------------------------------------------------------------------------
 # Model Policy — allowlist / denylist governance (.geode/model-policy.toml)
 # ---------------------------------------------------------------------------
