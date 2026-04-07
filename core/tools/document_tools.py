@@ -10,10 +10,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-log = logging.getLogger(__name__)
+from core.paths import get_project_root
 
-# Security: restrict file access to project directory
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+log = logging.getLogger(__name__)
 
 
 class ReadDocumentTool:
@@ -48,10 +47,10 @@ class ReadDocumentTool:
 
         # Security: ensure path is within project directory
         try:
-            file_path.relative_to(_PROJECT_ROOT)
+            file_path.relative_to(get_project_root())
         except ValueError:
             return tool_error(
-                f"Access denied: path outside project directory ({_PROJECT_ROOT})",
+                f"Access denied: path outside project directory ({get_project_root()})",
                 error_type="permission",
                 recoverable=False,
                 hint=(

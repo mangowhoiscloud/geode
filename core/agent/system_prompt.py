@@ -17,15 +17,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from pathlib import Path
 
 from core.cli.ip_names import get_ip_name_map
 from core.llm.prompts import ROUTER_SYSTEM
+from core.paths import get_project_root
 
 log = logging.getLogger(__name__)
-
-# Project root resolved from __file__ (CWD-independent)
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Max lines per memory hierarchy section to control context budget
 _MAX_SECTION_LINES = 20
@@ -293,7 +290,7 @@ def _build_geode_memory_context() -> str:
     placeholder sections). Capped at ``_MAX_SECTION_LINES`` lines.
     """
     try:
-        memory_path = _PROJECT_ROOT / ".geode" / "MEMORY.md"
+        memory_path = get_project_root() / ".geode" / "MEMORY.md"
         if not memory_path.exists():
             return ""
 
