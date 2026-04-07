@@ -176,7 +176,7 @@ There are two control layers.
 
 ```
 geode/
-├── core/                          # 204 modules, 4-Layer Stack
+├── core/                          # 205 modules, 4-Layer Stack
 │   ├── agent/                     # Agent: AgenticLoop, ToolCallProcessor, SubAgentManager
 │   ├── cli/                       # Agent: Commands, UI
 │   ├── llm/                       # Model: Claude/OpenAI/GLM Adapters, Router, Prompts
