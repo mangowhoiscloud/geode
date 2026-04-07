@@ -44,7 +44,13 @@ def drain_scheduler_queue(
     count = 0
     try:
         while True:
-            job_id, fired_action, isolated = action_queue.get_nowait()
+            _item = action_queue.get_nowait()
+            # Support both 3-tuple (legacy) and 4-tuple (with agent_id)
+            if len(_item) == 4:
+                job_id, fired_action, isolated, _agent_id = _item
+            else:
+                job_id, fired_action, isolated = _item
+                _agent_id = ""
             if not fired_action:
                 continue
             count += 1

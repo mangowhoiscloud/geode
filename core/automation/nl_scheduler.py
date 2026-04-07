@@ -333,6 +333,7 @@ class NLScheduleParser:
             schedule=schedule,
             enabled=True,
             delete_after_run=(kind == ScheduleKind.AT),
+            agent_id=agent_id,
             action="",  # caller sets action (schedule expression != task to execute)
             active_hours=active_hours,
             created_at_ms=now_ms,
