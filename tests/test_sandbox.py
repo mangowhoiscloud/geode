@@ -20,7 +20,6 @@ def _sandbox_to_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(paths_mod, "get_project_root", _root)
     monkeypatch.setattr("core.tools.sandbox.get_project_root", _root)
     sandbox._additional_dirs.clear()
-    sandbox._resolve_symlink_cached.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -276,3 +275,111 @@ class TestValidatePath:
         sandbox.add_working_directory(extra)
         result = sandbox.validate_path(str(target), write=False)
         assert isinstance(result, Path)
+
+
+# ---------------------------------------------------------------------------
+# OSError defense (sandbox hardening v0.47.2)
+# ---------------------------------------------------------------------------
+
+
+class TestOSErrorDefense:
+    """add/remove_working_directory should not crash on OSError."""
+
+    def test_add_working_dir_oserror(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """OSError during path.resolve() should be caught, not crash."""
+        import core.paths as paths_mod
+
+        monkeypatch.setattr(paths_mod, "get_project_root", lambda: Path("/tmp"))  # noqa: S108
+        monkeypatch.setattr("core.tools.sandbox.get_project_root", lambda: Path("/tmp"))  # noqa: S108
+        sandbox._additional_dirs.clear()
+
+        bad_path = Path("/nonexistent/mount/point/dir")
+        # Patch resolve to raise
+        original_resolve = Path.resolve
+
+        def _raising_resolve(self: Path, *_a: object, **_kw: object) -> Path:
+            if str(self) == str(bad_path):
+                raise OSError("mount point unavailable")
+            return original_resolve(self)
+
+        monkeypatch.setattr(Path, "resolve", _raising_resolve)
+        sandbox.add_working_directory(bad_path)  # Should NOT raise
+        assert len(sandbox._additional_dirs) == 0  # Not added
+
+    def test_remove_working_dir_oserror(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """OSError during remove_working_directory should be caught."""
+        sandbox._additional_dirs.clear()
+        bad_path = Path("/nonexistent/mount/gone")
+        original_resolve = Path.resolve
+
+        def _raising_resolve(self: Path, *_a: object, **_kw: object) -> Path:
+            if str(self) == str(bad_path):
+                raise OSError("mount gone")
+            return original_resolve(self)
+
+        monkeypatch.setattr(Path, "resolve", _raising_resolve)
+        sandbox.remove_working_directory(bad_path)  # Should NOT raise
+
+
+# ---------------------------------------------------------------------------
+# macOS /private/var normalization edge case
+# ---------------------------------------------------------------------------
+
+
+class TestPrivateVarEdge:
+    """Regex should match /private/var without trailing slash."""
+
+    def test_private_var_no_trailing_slash(self) -> None:
+        assert sandbox.normalize_macos_path("/private/var") == "/var"
+
+    def test_private_var_with_trailing_slash(self) -> None:
+        assert sandbox.normalize_macos_path("/private/var/") == "/var/"
+
+    def test_private_var_subpath(self) -> None:
+        assert sandbox.normalize_macos_path("/private/var/folders/xyz") == "/var/folders/xyz"
+
+
+# ---------------------------------------------------------------------------
+# Thread safety (_additional_dirs)
+# ---------------------------------------------------------------------------
+
+
+class TestThreadSafety:
+    """Concurrent add/remove should not corrupt _additional_dirs."""
+
+    def test_concurrent_add_remove(self, tmp_path: Path) -> None:
+        import threading
+
+        sandbox._additional_dirs.clear()
+        errors: list[Exception] = []
+
+        def _add_dirs(start: int) -> None:
+            try:
+                for i in range(start, start + 20):
+                    d = tmp_path / f"dir_{i}"
+                    d.mkdir(exist_ok=True)
+                    sandbox.add_working_directory(d)
+            except Exception as e:
+                errors.append(e)
+
+        def _remove_dirs(start: int) -> None:
+            try:
+                for i in range(start, start + 10):
+                    d = tmp_path / f"dir_{i}"
+                    sandbox.remove_working_directory(d)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=_add_dirs, args=(0,)),
+            threading.Thread(target=_add_dirs, args=(20,)),
+            threading.Thread(target=_remove_dirs, args=(0,)),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5.0)
+
+        assert not errors, f"Thread errors: {errors}"
+        # Should not crash — actual count may vary due to timing
+        sandbox._additional_dirs.clear()
