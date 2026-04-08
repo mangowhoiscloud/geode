@@ -1,7 +1,7 @@
 # GEODE Progress Board
 
 > 멀티 에이전트 공유 칸반 보드. 모든 세션/에이전트가 이 파일을 읽고 갱신한다.
-> 마지막 갱신: 2026-04-08 (세션 60 cont. — structural defects phase 2)
+> 마지막 갱신: 2026-04-08 (세션 59 cont. — sandbox hardening)
 > **규칙**: progress.md는 main에서만 수정. feature/develop 수정 금지.
 
 ---
@@ -63,6 +63,12 @@
 
 | task_id | 작업 내용 | PR | 담당 | CI | 비고 |
 |---------|----------|-----|------|-----|------|
+
+### Done (2026-04-08 — 세션 59 cont.)
+
+| task_id | 작업 내용 | PR | 담당 | 완료일 |
+|---------|----------|----|------|--------|
+| sandbox-hardening | Sandbox hardening — OSError defense, regex fix, thread safety, LRU cache 제거 | #702→#703 | @mangowhoiscloud | 2026-04-08 |
 
 ### Done (2026-04-08 — 세션 60 cont.)
 
