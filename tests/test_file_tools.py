@@ -22,7 +22,6 @@ def _sandbox_to_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("core.tools.sandbox.get_project_root", _root)
     monkeypatch.setattr("core.tools.file_tools.get_project_root", _root)
     sandbox._additional_dirs.clear()
-    sandbox._resolve_symlink_cached.cache_clear()
 
 
 class TestGlobTool:
