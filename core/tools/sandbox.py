@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
-from functools import lru_cache
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +63,7 @@ _TILDE_VARIANT = re.compile(r"^~[^/\\]")  # ~user, ~+, ~-, ~N (only ~ and ~/ all
 _GLOB_CHARS = re.compile(r"[*?\[\]{}]")
 
 # macOS /private normalization
-_PRIVATE_VAR_RE = re.compile(r"^/private/var/")
+_PRIVATE_VAR_RE = re.compile(r"^/private/var(/|$)")
 _PRIVATE_TMP_RE = re.compile(r"^/private/tmp(/|$)")
 
 # ---------------------------------------------------------------------------
@@ -71,27 +71,39 @@ _PRIVATE_TMP_RE = re.compile(r"^/private/tmp(/|$)")
 # ---------------------------------------------------------------------------
 
 _additional_dirs: list[Path] = []
+_additional_dirs_lock = threading.Lock()
 
 
 def add_working_directory(path: Path) -> None:
     """Add a session-scoped working directory to the sandbox allowlist."""
-    resolved = path.resolve()
-    if resolved not in _additional_dirs:
-        _additional_dirs.append(resolved)
-        log.info("Sandbox: added working directory %s", resolved)
+    try:
+        resolved = path.resolve()
+    except OSError:
+        log.warning("Sandbox: cannot resolve %s, skipping", path)
+        return
+    with _additional_dirs_lock:
+        if resolved not in _additional_dirs:
+            _additional_dirs.append(resolved)
+            log.info("Sandbox: added working directory %s", resolved)
 
 
 def remove_working_directory(path: Path) -> None:
     """Remove a session-scoped working directory from the sandbox allowlist."""
-    resolved = path.resolve()
-    if resolved in _additional_dirs:
-        _additional_dirs.remove(resolved)
-        log.info("Sandbox: removed working directory %s", resolved)
+    try:
+        resolved = path.resolve()
+    except OSError:
+        log.warning("Sandbox: cannot resolve %s, skipping", path)
+        return
+    with _additional_dirs_lock:
+        if resolved in _additional_dirs:
+            _additional_dirs.remove(resolved)
+            log.info("Sandbox: removed working directory %s", resolved)
 
 
 def get_all_working_directories() -> list[Path]:
     """Return all allowed working directories (project root + additional)."""
-    return [get_project_root(), *_additional_dirs]
+    with _additional_dirs_lock:
+        return [get_project_root(), *_additional_dirs]
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +117,7 @@ def normalize_macos_path(path_str: str) -> str:
     Applied bilaterally (to both input paths and working directories) to ensure
     symmetric comparison.  Follows Claude Code filesystem.ts pathInWorkingPath().
     """
-    result = _PRIVATE_VAR_RE.sub("/var/", path_str)
+    result = _PRIVATE_VAR_RE.sub(lambda m: f"/var{m.group(1)}", path_str)
     result = _PRIVATE_TMP_RE.sub(lambda m: f"/tmp{m.group(1)}", result)  # noqa: S108  # nosec B108 — intentional macOS normalization
     return result
 
@@ -195,11 +207,11 @@ def check_glob_in_write(path_str: str) -> dict[str, Any] | None:
     return None
 
 
-@lru_cache(maxsize=1024)
 def _resolve_symlink_cached(path_str: str) -> tuple[str, str | None]:
     """Resolve a symlink path and return (resolved_str, error_msg_or_none).
 
-    Cached to avoid repeated filesystem calls for the same path.
+    Not cached — symlink targets can change within a session, and the
+    per-call cost is negligible (tool calls are already I/O-bound).
     """
     path = Path(path_str)
     if not path.exists() and not path.is_symlink():

@@ -28,6 +28,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **Sandbox hardening** — 4 crash/safety fixes:
+  - `path.resolve()` OSError defense in `add/remove_working_directory()`
+  - macOS `/private/var` regex: `r"^/private/var/"` → `r"^/private/var(/|$)"` — trailing slash no longer required
+  - `_additional_dirs` thread safety with `threading.Lock` — concurrent sub-agent safety
+  - Symlink LRU cache removed — prevents stale resolution in long-running sessions
+
 ### Added
 - **Lazy directory creation** — `ensure_directories()` in `core/paths.py` creates all `~/.geode/` and `.geode/` directories at bootstrap. Follows Claude Code's lazy `mkdir(recursive)` pattern. Fresh `uv run geode` on clean install now works without manual setup
 - `.gitignore` auto-entry for `.geode/` on first run
