@@ -82,7 +82,7 @@ class TestRuntimeHooksRunLog:
         for event in HookEvent:
             runtime.hooks.trigger(event, {"node": "test"})
 
-        entries = runtime.run_log.read(limit=50)
+        entries = runtime.run_log.read(limit=100)
         # All direct events + cascading hooks (e.g. SNAPSHOT_CAPTURED from drift→auto-snapshot)
         assert len(entries) >= len(HookEvent)
 

@@ -243,6 +243,9 @@ class Settings(BaseSettings):
     # Agentic Loop — time budget (Karpathy P3, OpenClaw Attempt Loop)
     agentic_loop_time_budget: float = 0.0  # 0 = no time limit; >0 = wall-clock seconds
 
+    # Cost guard — session-level cost limit (0 = no limit)
+    cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%
+
     # Computer Use — desktop automation (requires pyautogui)
     computer_use_enabled: bool = False  # opt-in; set GEODE_COMPUTER_USE_ENABLED=true
 

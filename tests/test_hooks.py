@@ -1,11 +1,13 @@
 """Tests for L4 HookSystem."""
 
-from core.hooks import HookEvent, HookResult, HookSystem
+import time
+
+from core.hooks import HookEvent, HookResult, HookSystem, InterceptResult
 
 
 class TestHookEvent:
     def test_all_events_exist(self):
-        assert len(HookEvent) == 49
+        assert len(HookEvent) == 55
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_START.value == "pipeline_start"
@@ -26,6 +28,15 @@ class TestHookEvent:
         assert HookEvent.CONFIG_RELOADED.value == "config_reloaded"
         assert HookEvent.MCP_SERVER_CONNECTED.value == "mcp_server_connected"
         assert HookEvent.MCP_SERVER_FAILED.value == "mcp_server_failed"
+
+    def test_production_p0_events(self):
+        """P0 production hooks: interceptor + cost enforcement + audit."""
+        assert HookEvent.USER_INPUT_RECEIVED.value == "user_input_received"
+        assert HookEvent.TOOL_EXEC_START.value == "tool_exec_start"
+        assert HookEvent.TOOL_EXEC_END.value == "tool_exec_end"
+        assert HookEvent.COST_WARNING.value == "cost_warning"
+        assert HookEvent.COST_LIMIT_EXCEEDED.value == "cost_limit_exceeded"
+        assert HookEvent.EXECUTION_CANCELLED.value == "execution_cancelled"
 
 
 class TestAuditLoggers:
@@ -54,6 +65,31 @@ class TestAuditLoggers:
         assert "llm_start" in all_hooks.get("llm_call_start", [])
         assert "shutdown" in all_hooks.get("shutdown_started", [])
         assert "mcp_fail" in all_hooks.get("mcp_server_failed", [])
+
+    def test_p0_audit_loggers_registered(self):
+        """P0 production audit loggers are registered."""
+        from unittest.mock import patch
+
+        with (
+            patch("core.runtime_wiring.bootstrap.RunLog"),
+            patch("core.runtime_wiring.bootstrap.StuckDetector"),
+        ):
+            from core.runtime_wiring.bootstrap import build_hooks
+
+            hooks, _, _, _ = build_hooks(
+                session_key="test",
+                run_id="test-run",
+                log_dir=None,
+                stuck_timeout_s=60,
+            )
+
+        all_hooks = hooks.list_hooks()
+        assert "user_input" in all_hooks.get("user_input_received", [])
+        assert "tool_start" in all_hooks.get("tool_exec_start", [])
+        assert "tool_end" in all_hooks.get("tool_exec_end", [])
+        assert "cost_warn" in all_hooks.get("cost_warning", [])
+        assert "cost_exceeded" in all_hooks.get("cost_limit_exceeded", [])
+        assert "exec_cancel" in all_hooks.get("execution_cancelled", [])
 
 
 class TestMemoryToolHooks:
@@ -99,6 +135,19 @@ class TestHookResult:
         )
         assert r.success is False
         assert r.error == "something broke"
+
+
+class TestInterceptResult:
+    def test_default_not_blocked(self):
+        r = InterceptResult()
+        assert r.blocked is False
+        assert r.reason == ""
+        assert r.data == {}
+
+    def test_blocked_with_reason(self):
+        r = InterceptResult(blocked=True, reason="input rejected")
+        assert r.blocked is True
+        assert r.reason == "input rejected"
 
 
 class TestHookSystem:
@@ -229,3 +278,156 @@ class TestHookSystem:
         hooks.register(HookEvent.PIPELINE_START, handler)
         hooks.trigger(HookEvent.PIPELINE_START)  # No data arg
         assert received == [{}]
+
+
+class TestInterceptor:
+    """Tests for trigger_interceptor() — block/modify semantics."""
+
+    def test_interceptor_pass_through(self):
+        """Handler returns None → not blocked."""
+        hooks = HookSystem()
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, lambda e, d: None, name="noop")
+
+        result = hooks.trigger_interceptor(
+            HookEvent.USER_INPUT_RECEIVED, {"user_input": "hello"}
+        )
+        assert result.blocked is False
+        assert result.data["user_input"] == "hello"
+
+    def test_interceptor_block(self):
+        """Handler returns {"block": True} → blocked with reason."""
+        hooks = HookSystem()
+
+        def blocker(_event, _data):
+            return {"block": True, "reason": "profanity detected"}
+
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, blocker, name="filter")
+
+        result = hooks.trigger_interceptor(
+            HookEvent.USER_INPUT_RECEIVED, {"user_input": "bad words"}
+        )
+        assert result.blocked is True
+        assert result.reason == "profanity detected"
+
+    def test_interceptor_block_stops_chain(self):
+        """Once a handler blocks, subsequent handlers do not run."""
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        def blocker(_event, _data):
+            calls.append("blocker")
+            return {"block": True, "reason": "blocked"}
+
+        def after_blocker(_event, _data):
+            calls.append("after")
+
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, blocker, name="b", priority=10)
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, after_blocker, name="a", priority=20)
+
+        result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {})
+        assert result.blocked is True
+        assert calls == ["blocker"]
+
+    def test_interceptor_modify(self):
+        """Handler returns {"modify": {...}} → data updated."""
+        hooks = HookSystem()
+
+        def modifier(_event, _data):
+            return {"modify": {"sanitized": True, "user_input": "cleaned"}}
+
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, modifier, name="sanitizer")
+
+        result = hooks.trigger_interceptor(
+            HookEvent.USER_INPUT_RECEIVED, {"user_input": "raw"}
+        )
+        assert result.blocked is False
+        assert result.data["sanitized"] is True
+        assert result.data["user_input"] == "cleaned"
+
+    def test_interceptor_chained_modifications(self):
+        """Multiple handlers can chain modifications."""
+        hooks = HookSystem()
+
+        def add_flag(_event, _data):
+            return {"modify": {"flag_a": True}}
+
+        def add_another_flag(_event, _data):
+            return {"modify": {"flag_b": True}}
+
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, add_flag, name="a", priority=10)
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, add_another_flag, name="b", priority=20)
+
+        result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {"base": 1})
+        assert result.data["base"] == 1
+        assert result.data["flag_a"] is True
+        assert result.data["flag_b"] is True
+
+    def test_interceptor_error_continues_chain(self):
+        """Handler exception is non-blocking — chain continues."""
+        hooks = HookSystem()
+
+        def failing(_event, _data):
+            raise ValueError("oops")
+
+        def good(_event, _data):
+            return {"modify": {"ok": True}}
+
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, failing, name="bad", priority=10)
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, good, name="good", priority=20)
+
+        result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {})
+        assert result.blocked is False
+        assert result.data["ok"] is True
+
+    def test_interceptor_no_handlers(self):
+        """No handlers registered → pass through."""
+        hooks = HookSystem()
+        result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {"x": 1})
+        assert result.blocked is False
+        assert result.data == {"x": 1}
+
+    def test_interceptor_defensive_copy(self):
+        """Input data dict is not mutated."""
+        hooks = HookSystem()
+
+        def modifier(_event, _data):
+            return {"modify": {"added": True}}
+
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, modifier, name="m")
+
+        original = {"key": "val"}
+        result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, original)
+        assert "added" in result.data
+        assert "added" not in original  # original unchanged
+
+
+class TestHookTimeout:
+    """Tests for per-hook timeout via _call_handler."""
+
+    def test_timeout_skips_slow_handler(self):
+        """Slow handler is skipped when timeout_s is set."""
+        hooks = HookSystem()
+
+        def slow_handler(_event, _data):
+            time.sleep(5)
+            return {"modify": {"slow": True}}
+
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, slow_handler, name="slow")
+
+        result = hooks.trigger_interceptor(
+            HookEvent.USER_INPUT_RECEIVED, {"x": 1}, timeout_s=0.1
+        )
+        assert result.blocked is False
+        assert "slow" not in result.data  # handler was skipped
+
+    def test_no_timeout_runs_normally(self):
+        """Without timeout, handler runs to completion."""
+        hooks = HookSystem()
+
+        def fast_handler(_event, _data):
+            return {"modify": {"fast": True}}
+
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, fast_handler, name="fast")
+
+        result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {})
+        assert result.data["fast"] is True

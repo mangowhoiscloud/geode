@@ -6,6 +6,6 @@ without depending on core.orchestration:
     from core.hooks import HookSystem, HookEvent
 """
 
-from core.hooks.system import HookEvent, HookResult, HookSystem
+from core.hooks.system import HookEvent, HookResult, HookSystem, InterceptResult
 
-__all__ = ["HookEvent", "HookResult", "HookSystem"]
+__all__ = ["HookEvent", "HookResult", "HookSystem", "InterceptResult"]
