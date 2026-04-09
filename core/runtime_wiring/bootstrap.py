@@ -399,6 +399,23 @@ def build_hooks(
         (_E.SHUTDOWN_STARTED, "shutdown", "Shutdown: %s active sessions", ["active_sessions"]),
         (_E.CONFIG_RELOADED, "config_reload", "Config reloaded: %s", ["config_path"]),
         (_E.MCP_SERVER_FAILED, "mcp_fail", "MCP server failed: %s — %s", ["server_name", "error"]),
+        # P0 production hooks
+        (_E.USER_INPUT_RECEIVED, "user_input", "User input received: session=%s", ["session_id"]),
+        (_E.TOOL_EXEC_START, "tool_start", "Tool exec start: %s", ["tool_name"]),
+        (_E.TOOL_EXEC_END, "tool_end", "Tool exec end: %s (%.0fms)", ["tool_name", "duration_ms"]),
+        (
+            _E.COST_WARNING,
+            "cost_warn",
+            "Cost warning: $%.4f / $%.2f",
+            ["total_cost_usd", "limit_usd"],
+        ),
+        (
+            _E.COST_LIMIT_EXCEEDED,
+            "cost_exceeded",
+            "Cost EXCEEDED: $%.4f / $%.2f",
+            ["total_cost_usd", "limit_usd"],
+        ),
+        (_E.EXECUTION_CANCELLED, "exec_cancel", "Execution cancelled: %s", ["session_id"]),
     ]
 
     def _reg_audit_loggers() -> None:

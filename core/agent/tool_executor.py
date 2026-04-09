@@ -1090,8 +1090,24 @@ class ToolCallProcessor:
             # Progressive log: show tool call before execution
             visible = self._op_logger.log_tool_call(tool_name, tool_input)
 
+            # Hook: TOOL_EXEC_START
+            self._fire_hook("tool_exec_start", {"tool_name": tool_name, "tool_input": tool_input})
+
             # Execute via ToolExecutor (sync handlers wrapped in to_thread)
+            _t0 = time.monotonic()
             result = await asyncio.to_thread(self._executor.execute, tool_name, tool_input)
+            _elapsed_ms = (time.monotonic() - _t0) * 1000
+
+            # Hook: TOOL_EXEC_END
+            self._fire_hook(
+                "tool_exec_end",
+                {
+                    "tool_name": tool_name,
+                    "tool_input": tool_input,
+                    "duration_ms": _elapsed_ms,
+                    "has_error": isinstance(result, dict) and bool(result.get("error")),
+                },
+            )
 
         # Track consecutive failures + recoverability breadcrumb
         if isinstance(result, dict) and result.get("error"):

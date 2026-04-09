@@ -3,10 +3,16 @@
 Cross-cutting infrastructure accessible by all layers.
 Allows registering callbacks for pipeline events (pre/post node execution,
 errors, sub-agent lifecycle, etc.).
+
+Supports three trigger modes:
+- trigger()              — fire-and-forget observer (L1 Observe)
+- trigger_with_result()  — capture handler return values (L3 Decide)
+- trigger_interceptor()  — block/modify execution (Interceptor pattern)
 """
 
 from __future__ import annotations
 
+import concurrent.futures
 import dataclasses
 import logging
 import threading
@@ -19,7 +25,7 @@ log = logging.getLogger(__name__)
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events (40 events)."""
+    """Pipeline lifecycle events."""
 
     # Pipeline level
     PIPELINE_START = "pipeline_start"
@@ -112,6 +118,14 @@ class HookEvent(Enum):
     MCP_SERVER_CONNECTED = "mcp_server_connected"
     MCP_SERVER_FAILED = "mcp_server_failed"
 
+    # Production hooks (P0) — interceptor + cost enforcement + audit
+    USER_INPUT_RECEIVED = "user_input_received"
+    TOOL_EXEC_START = "tool_exec_start"
+    TOOL_EXEC_END = "tool_exec_end"
+    COST_WARNING = "cost_warning"
+    COST_LIMIT_EXCEEDED = "cost_limit_exceeded"
+    EXECUTION_CANCELLED = "execution_cancelled"
+
 
 @dataclass
 class HookResult:
@@ -126,6 +140,20 @@ class HookResult:
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, omitting None-valued fields."""
         return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
+
+
+@dataclass
+class InterceptResult:
+    """Result from an interceptor hook chain.
+
+    Interceptor hooks can block execution or modify the event data.
+    Handlers return ``{"block": True, "reason": "..."}`` to stop the chain,
+    or ``{"modify": {"key": "val"}}`` to merge updates into the data dict.
+    """
+
+    blocked: bool = False
+    reason: str = ""
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 # Type alias for hook handlers.
@@ -258,6 +286,78 @@ class HookSystem:
                 )
 
         return results
+
+    def trigger_interceptor(
+        self, event: HookEvent, data: dict[str, Any] | None = None, *, timeout_s: float = 0
+    ) -> InterceptResult:
+        """Trigger hooks as an interceptor chain (block/modify semantics).
+
+        Runs handlers sequentially in priority order. Each handler may return:
+        - ``{"block": True, "reason": "..."}`` → stop chain, return blocked
+        - ``{"modify": {"key": "val"}}`` → merge into data, continue chain
+        - ``None`` or ``{}`` → continue chain unchanged
+
+        Args:
+            event: The hook event to trigger.
+            data: Mutable event data dict passed to all handlers.
+            timeout_s: Per-handler timeout in seconds (0 = no timeout).
+
+        Returns:
+            InterceptResult with blocked status, reason, and final data.
+        """
+        data = dict(data) if data else {}  # defensive copy
+        with self._lock:
+            hooks = list(self._hooks.get(event, []))
+
+        for hook in hooks:
+            try:
+                ret = self._call_handler(hook, event, data, timeout_s=timeout_s)
+                if isinstance(ret, dict):
+                    if ret.get("block"):
+                        return InterceptResult(
+                            blocked=True,
+                            reason=ret.get("reason", f"Blocked by {hook.name}"),
+                            data=data,
+                        )
+                    modifications = ret.get("modify")
+                    if isinstance(modifications, dict):
+                        data.update(modifications)
+            except Exception as exc:
+                log.warning("Interceptor '%s' failed on %s: %s", hook.name, event.value, exc)
+                # Interceptor errors are non-blocking — continue chain
+
+        return InterceptResult(blocked=False, data=data)
+
+    # -- Internal helpers ------------------------------------------------------
+
+    @staticmethod
+    def _call_handler(
+        hook: _RegisteredHook,
+        event: HookEvent,
+        data: dict[str, Any],
+        *,
+        timeout_s: float = 0,
+    ) -> dict[str, Any] | None:
+        """Call a hook handler with optional timeout.
+
+        When timeout_s > 0, the handler runs in a thread pool with a deadline.
+        On timeout, logs a warning and returns None (non-blocking skip).
+        """
+        if timeout_s <= 0:
+            return hook.handler(event, data)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(hook.handler, event, data)
+            try:
+                return future.result(timeout=timeout_s)
+            except concurrent.futures.TimeoutError:
+                log.warning(
+                    "Hook '%s' timed out on %s (%.1fs limit)",
+                    hook.name,
+                    event.value,
+                    timeout_s,
+                )
+                return None
 
     def list_hooks(self, event: HookEvent | None = None) -> dict[str, list[str]]:
         """List registered hook names, optionally filtered by event."""

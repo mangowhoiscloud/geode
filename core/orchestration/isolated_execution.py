@@ -211,6 +211,11 @@ class IsolatedRunner:
 
         if cancelled:
             log.info("Cancel requested for session %s", session_id)
+            if self._hooks:
+                self._hooks.trigger(
+                    HookEvent.EXECUTION_CANCELLED,
+                    {"session_id": session_id},
+                )
         return cancelled
 
     @property
