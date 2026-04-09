@@ -559,6 +559,17 @@ class AgenticLoop:
                 termination_reason="billing_error",
             )
 
+        # Hook: USER_INPUT_RECEIVED (interceptor — can block input)
+        if self._hooks:
+            intercept = self._hooks.trigger_interceptor(
+                HookEvent.USER_INPUT_RECEIVED,
+                {"user_input": user_input, "session_id": self._session_id},
+            )
+            if intercept.blocked:
+                return AgenticResult(
+                    text=intercept.reason, rounds=0, termination_reason="input_blocked"
+                )
+
         # Add user message to conversation context
         self.context.add_user_message(user_input)
 
@@ -1313,7 +1324,8 @@ class AgenticLoop:
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
-            usage = get_tracker().record(self.model, in_tok, out_tok)
+            tracker = get_tracker()
+            usage = tracker.record(self.model, in_tok, out_tok)
             if not self._quiet:
                 render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
             log.info(
@@ -1323,6 +1335,25 @@ class AgenticLoop:
                 out_tok,
                 usage.cost_usd,
             )
+
+            # Hook: COST_WARNING / COST_LIMIT_EXCEEDED
+            if self._hooks:
+                from core.config import settings
+
+                cost_limit = getattr(settings, "cost_limit_usd", 0.0)
+                if cost_limit > 0:
+                    total_cost = tracker.accumulator.total_cost_usd
+                    pct = total_cost / cost_limit
+                    if pct >= 1.0:
+                        self._hooks.trigger(
+                            HookEvent.COST_LIMIT_EXCEEDED,
+                            {"total_cost_usd": total_cost, "limit_usd": cost_limit},
+                        )
+                    elif pct >= 0.8:
+                        self._hooks.trigger(
+                            HookEvent.COST_WARNING,
+                            {"total_cost_usd": total_cost, "limit_usd": cost_limit, "pct": pct},
+                        )
         except Exception:
             log.debug("Failed to track usage", exc_info=True)
 
