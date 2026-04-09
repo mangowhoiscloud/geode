@@ -288,9 +288,7 @@ class TestInterceptor:
         hooks = HookSystem()
         hooks.register(HookEvent.USER_INPUT_RECEIVED, lambda e, d: None, name="noop")
 
-        result = hooks.trigger_interceptor(
-            HookEvent.USER_INPUT_RECEIVED, {"user_input": "hello"}
-        )
+        result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {"user_input": "hello"})
         assert result.blocked is False
         assert result.data["user_input"] == "hello"
 
@@ -337,9 +335,7 @@ class TestInterceptor:
 
         hooks.register(HookEvent.USER_INPUT_RECEIVED, modifier, name="sanitizer")
 
-        result = hooks.trigger_interceptor(
-            HookEvent.USER_INPUT_RECEIVED, {"user_input": "raw"}
-        )
+        result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {"user_input": "raw"})
         assert result.blocked is False
         assert result.data["sanitized"] is True
         assert result.data["user_input"] == "cleaned"
@@ -414,9 +410,7 @@ class TestHookTimeout:
 
         hooks.register(HookEvent.USER_INPUT_RECEIVED, slow_handler, name="slow")
 
-        result = hooks.trigger_interceptor(
-            HookEvent.USER_INPUT_RECEIVED, {"x": 1}, timeout_s=0.1
-        )
+        result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {"x": 1}, timeout_s=0.1)
         assert result.blocked is False
         assert "slow" not in result.data  # handler was skipped
 
