@@ -63,7 +63,12 @@ class SlackPoller(BasePoller):
             self._poll_channel(channel_id)
 
     def _poll_channel(self, channel_id: str) -> None:
-        """Poll a single Slack channel for new messages."""
+        """Poll a single Slack channel for new messages.
+
+        Deferred-ts pattern: timestamp is updated AFTER each message is
+        successfully processed. If processing fails mid-batch, unprocessed
+        messages will be re-fetched on the next poll cycle.
+        """
         import json as _json
 
         try:
@@ -103,29 +108,29 @@ class SlackPoller(BasePoller):
                 )
                 return
 
-            # Process only new messages (newer than oldest)
-            # Update ts BEFORE processing to prevent duplicate reads
-            # (processing takes 5-30s, next poll is 3s)
-            all_ts = [m.get("ts", "0") for m in messages if m.get("ts", "0") > oldest]
-            if all_ts:
-                self._last_ts[channel_id] = max(all_ts)
+            # Collect new messages, sorted by timestamp (oldest first)
+            new_messages = sorted(
+                [m for m in messages if m.get("ts", "0") > oldest],
+                key=lambda m: m.get("ts", "0"),
+            )
+            if not new_messages:
+                return
 
-            new_max_ts = self._last_ts[channel_id]
-            for msg in messages:
+            # Process each message; advance ts only AFTER successful processing.
+            # On failure, break — unprocessed messages re-fetched next cycle.
+            for msg in new_messages:
                 ts = msg.get("ts", "")
-                if not ts or ts <= oldest:
+                if not ts:
                     continue
+
                 # Skip bot messages (own messages + other bots)
                 if msg.get("subtype") == "bot_message" or "bot_id" in msg:
-                    if ts > new_max_ts:
-                        new_max_ts = ts
+                    self._last_ts[channel_id] = ts
                     continue
-
-                if ts > new_max_ts:
-                    new_max_ts = ts
 
                 content = msg.get("text", "").strip()
                 if not content:
+                    self._last_ts[channel_id] = ts
                     continue
 
                 log.info("Slack message from %s: %s", msg.get("user", "?"), content[:80])
@@ -140,19 +145,24 @@ class SlackPoller(BasePoller):
                     thread_id=msg.get("thread_ts", ""),
                 )
 
-                # 리액션은 @멘션 메시지에만 (일반 메시지는 리액션 없이 처리)
                 is_mention = "<@" in content
                 if is_mention:
                     self._add_reaction(channel_id, ts, "eyes")
-                response = self._manager.route_message(inbound)
-                log.info("Processor returned: %s", (response or "")[:80])
-                if is_mention:
-                    self._add_reaction(channel_id, ts, "white_check_mark")
 
-                if response:
-                    self._send_response(channel_id, response, thread_ts=inbound.thread_id or ts)
+                try:
+                    response = self._manager.route_message(inbound)
+                    log.info("Processor returned: %s", (response or "")[:80])
+                    if is_mention:
+                        self._add_reaction(channel_id, ts, "white_check_mark")
 
-            self._last_ts[channel_id] = new_max_ts
+                    if response:
+                        self._send_response(channel_id, response, thread_ts=inbound.thread_id or ts)
+                except Exception:
+                    log.warning("Failed to process message ts=%s, will retry next poll", ts)
+                    break
+
+                # Advance ts only after successful processing
+                self._last_ts[channel_id] = ts
 
         except Exception:
             log.warning("Slack poll error for %s", channel_id, exc_info=True)
