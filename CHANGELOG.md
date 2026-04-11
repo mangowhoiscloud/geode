@@ -26,7 +26,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.48.0] — 2026-04-11
+
+### Added
+- **Hook interceptor pattern** — `trigger_interceptor()` method with block/modify chain semantics. Hooks can now block execution (`{"block": True}`) or modify event data (`{"modify": {...}}`), transitioning from pure observer to observer + interceptor. Per-hook timeout via `ThreadPoolExecutor`
+- **6 new HookEvents (49 → 55)**: `USER_INPUT_RECEIVED` (interceptor-capable), `TOOL_EXEC_START/END` (tool execution observability), `COST_WARNING/LIMIT_EXCEEDED` (cost guard at 80%/100%), `EXECUTION_CANCELLED` (cancel audit trail)
+- **Session cost guard** — `cost_limit_usd` config field. Fires `COST_WARNING` at 80% and `COST_LIMIT_EXCEEDED` at 100% of budget
 
 ### Fixed
 - **Sandbox hardening** — 4 crash/safety fixes:

@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.47.1
+- **Version**: 0.48.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 205
-- **Tests**: 3749+
+- **Modules**: 215
+- **Tests**: 3939+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -42,7 +42,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 | Document | Path | Content |
 |----------|------|---------|
 | Agent Identity | `GEODE.md` | Runtime architecture, domain rules, LLM models, conventions |
-| Hook System | `docs/architecture/hook-system.md` | HookSystem 48 events |
+| Hook System | `docs/architecture/hook-system.md` | HookSystem 55 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
 ## Project Structure
