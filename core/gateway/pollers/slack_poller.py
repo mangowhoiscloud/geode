@@ -156,13 +156,9 @@ class SlackPoller(BasePoller):
                         self._add_reaction(channel_id, ts, "white_check_mark")
 
                     if response:
-                        self._send_response(
-                            channel_id, response, thread_ts=inbound.thread_id or ts
-                        )
+                        self._send_response(channel_id, response, thread_ts=inbound.thread_id or ts)
                 except Exception:
-                    log.warning(
-                        "Failed to process message ts=%s, will retry next poll", ts
-                    )
+                    log.warning("Failed to process message ts=%s, will retry next poll", ts)
                     break
 
                 # Advance ts only after successful processing
