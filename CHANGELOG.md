@@ -26,6 +26,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **`geode doctor slack`** — Slack Gateway 7-point diagnostic (env, token, scopes, bindings, serve, MCP, socket). CLI + natural language tool (#57)
+- **Slack App Manifest URL** — `get_manifest_url()` 원클릭 앱 생성 URL
+
 ## [0.48.0] — 2026-04-11
 
 ### Added
