@@ -809,12 +809,19 @@ def _build_system_handlers(
             "profiles": profiles,
         }
 
+    def handle_doctor_slack(**_kwargs: Any) -> dict[str, Any]:
+        from core.cli.doctor import format_doctor_report, run_doctor_slack
+
+        report = run_doctor_slack()
+        return {"text": format_doctor_report(report), "raw": report}
+
     return {
         "show_help": handle_show_help,
         "check_status": handle_check_status,
         "switch_model": handle_switch_model,
         "set_api_key": handle_set_api_key,
         "manage_auth": handle_manage_auth,
+        "doctor_slack": handle_doctor_slack,
     }
 
 
