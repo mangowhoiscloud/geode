@@ -976,6 +976,20 @@ def version() -> None:
     console.print(f"GEODE v{__version__}")
 
 
+@app.command()
+def doctor(
+    target: str = typer.Argument("slack", help="Diagnostic target (slack)"),
+) -> None:
+    """Run diagnostic checks on gateway integrations."""
+    if target == "slack":
+        from core.cli.doctor import format_doctor_report, run_doctor_slack
+
+        report = run_doctor_slack()
+        console.print(format_doctor_report(report))
+    else:
+        console.print(f"Unknown target: {target}. Available: slack")
+
+
 @app.command(name="list")
 def list_ips() -> None:
     """List available IP fixtures."""
