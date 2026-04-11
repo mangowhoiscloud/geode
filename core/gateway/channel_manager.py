@@ -186,15 +186,17 @@ class ChannelManager:
     def _is_mentioned(message: InboundMessage) -> bool:
         """Check if GEODE is mentioned in the message.
 
-        Detects:
-        - Slack user mention format: ``<@U...>`` (bot's actual user ID)
+        Detects all Slack mention formats:
+        - ``<@U...>`` — user mention (human or bot user)
+        - ``<@B...>`` — legacy bot mention
+        - ``<@A...>`` — app mention (Slack apps installed in workspace)
         - Display name variants: ``@geode``, ``geode``, ``@GEODE``
         """
         import re
 
         content = message.content
-        # Slack encodes @mentions as <@USER_ID> or <@BOT_ID>
-        if re.search(r"<@[UB][A-Z0-9]+>", content):
+        # Slack encodes @mentions as <@USER_ID>, <@BOT_ID>, or <@APP_ID>
+        if re.search(r"<@[UBA][A-Z0-9]+>", content):
             return True
         content_lower = content.lower()
         return any(mention in content_lower for mention in ("@geode", "geode"))
@@ -204,8 +206,8 @@ class ChannelManager:
         """Remove mention tags so the LLM receives clean user intent."""
         import re
 
-        # Remove Slack-style <@USER_ID> and <@BOT_ID> mentions
-        cleaned = re.sub(r"<@[UB][A-Z0-9]+>\s*", "", content)
+        # Remove Slack-style <@USER_ID>, <@BOT_ID>, and <@APP_ID> mentions
+        cleaned = re.sub(r"<@[UBA][A-Z0-9]+>\s*", "", content)
         # Remove @geode / @GEODE prefix
         cleaned = re.sub(r"@geode\s*", "", cleaned, flags=re.IGNORECASE)
         return cleaned.strip()
