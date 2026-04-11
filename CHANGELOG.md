@@ -28,6 +28,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **Slack poller message loss on processing failure** — ts was updated BEFORE processing, so if LLM call failed mid-batch, remaining messages were permanently skipped. Now uses deferred-ts pattern: advance only AFTER successful processing, break on failure for retry next cycle
+- **Slack app mention not detected** — `<@A...>` (app mention format) was not matched by `_is_mentioned()` regex, causing `require_mention=true` channels to silently ignore app mentions. Added `A` to the `[UBA]` character class in both `_is_mentioned` and `_strip_mentions`
+
 ### Added
 - **Lazy directory creation** — `ensure_directories()` in `core/paths.py` creates all `~/.geode/` and `.geode/` directories at bootstrap. Follows Claude Code's lazy `mkdir(recursive)` pattern. Fresh `uv run geode` on clean install now works without manual setup
 - `.gitignore` auto-entry for `.geode/` on first run
