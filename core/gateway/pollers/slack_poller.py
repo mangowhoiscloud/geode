@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import TYPE_CHECKING, Any
 
 from core.gateway.models import InboundMessage
@@ -24,6 +25,8 @@ class SlackPoller(BasePoller):
     Sends responses back via NotificationPort.
     """
 
+    DEDUP_TTL_S = 300  # 5 minutes — matches Kiki's event dedup window
+
     def __init__(
         self,
         channel_manager: ChannelManager,
@@ -36,6 +39,7 @@ class SlackPoller(BasePoller):
         self._mcp = mcp_manager
         self._notification = notification
         self._last_ts: dict[str, str] = {}  # channel_id → last message ts
+        self._seen_events: dict[str, float] = {}  # "channel:ts" → seen_at (dedup)
 
     @property
     def channel_name(self) -> str:
@@ -51,6 +55,9 @@ class SlackPoller(BasePoller):
         health = self._mcp.check_health()
         if not health.get("slack", False):
             return
+
+        # Evict expired dedup entries
+        self._evict_stale_dedup()
 
         # Get channels to monitor from bindings
         bindings = self._manager.list_bindings()
@@ -123,6 +130,13 @@ class SlackPoller(BasePoller):
                 if not ts:
                     continue
 
+                # Dedup: skip already-processed messages (prevents re-processing
+                # on crash/restart within TTL window)
+                dedup_key = f"{channel_id}:{ts}"
+                if dedup_key in self._seen_events:
+                    self._last_ts[channel_id] = ts
+                    continue
+
                 # Skip bot messages (own messages + other bots)
                 if msg.get("subtype") == "bot_message" or "bot_id" in msg:
                     self._last_ts[channel_id] = ts
@@ -145,7 +159,7 @@ class SlackPoller(BasePoller):
                     thread_id=msg.get("thread_ts", ""),
                 )
 
-                is_mention = "<@" in content
+                is_mention = self._manager._is_mentioned(inbound)
                 if is_mention:
                     self._add_reaction(channel_id, ts, "eyes")
 
@@ -159,13 +173,24 @@ class SlackPoller(BasePoller):
                         self._send_response(channel_id, response, thread_ts=inbound.thread_id or ts)
                 except Exception:
                     log.warning("Failed to process message ts=%s, will retry next poll", ts)
+                    # Error reaction: X emoji for visible failure feedback
+                    if is_mention:
+                        self._add_reaction(channel_id, ts, "x")
                     break
 
-                # Advance ts only after successful processing
+                # Advance ts + mark as seen (dedup) only after success
                 self._last_ts[channel_id] = ts
+                self._seen_events[dedup_key] = time.monotonic()
 
         except Exception:
             log.warning("Slack poll error for %s", channel_id, exc_info=True)
+
+    def _evict_stale_dedup(self) -> None:
+        """Remove dedup entries older than TTL."""
+        now = time.monotonic()
+        stale = [k for k, v in self._seen_events.items() if now - v > self.DEDUP_TTL_S]
+        for k in stale:
+            del self._seen_events[k]
 
     def _add_reaction(self, channel_id: str, message_ts: str, emoji: str) -> None:
         """Add a reaction emoji to a message (best-effort, non-blocking)."""

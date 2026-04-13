@@ -147,6 +147,32 @@ def _load_poller_class(dotted_path: str) -> type:
     return cls
 
 
+def _resolve_slack_bot_user_id() -> str:
+    """Resolve GEODE's Slack bot user ID via auth.test API (best-effort)."""
+    import os
+
+    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    if not token:
+        return ""
+    try:
+        import httpx
+
+        resp = httpx.get(
+            "https://slack.com/api/auth.test",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5.0,
+        )
+        data = resp.json()
+        if data.get("ok"):
+            uid: str = data.get("user_id", "")
+            if uid:
+                log.info("Resolved Slack bot user ID: %s", uid)
+            return uid
+    except Exception as exc:
+        log.debug("Failed to resolve Slack bot user ID: %s", exc)
+    return ""
+
+
 def build_gateway() -> None:
     """Build and inject Gateway with config-driven channel pollers.
 
@@ -173,7 +199,15 @@ def build_gateway() -> None:
         log.warning("Plugin gateway_lane_queue: %s", exc)
         lane_queue = None
 
-    manager = ChannelManager(lane_queue=lane_queue)
+    # Resolve GEODE's Slack bot user ID for accurate mention detection.
+    # Prefers SLACK_BOT_USER_ID env var; falls back to auth.test API call.
+    import os
+
+    bot_user_id = os.environ.get("SLACK_BOT_USER_ID", "")
+    if not bot_user_id and os.environ.get("SLACK_BOT_TOKEN"):
+        bot_user_id = _resolve_slack_bot_user_id()
+
+    manager = ChannelManager(lane_queue=lane_queue, bot_user_id=bot_user_id)
     notification = get_notification()
     poll_interval = settings.gateway_poll_interval_s
 
