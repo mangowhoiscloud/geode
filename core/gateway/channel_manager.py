@@ -45,13 +45,14 @@ class ChannelManager:
     3. No match → message ignored
     """
 
-    def __init__(self, *, lane_queue: Any = None) -> None:
+    def __init__(self, *, lane_queue: Any = None, bot_user_id: str = "") -> None:
         self._bindings: list[ChannelBinding] = []
         self._pollers: list[BasePoller] = []
         self._processor: MessageProcessor | None = None
         self._lane_queue = lane_queue  # LaneQueue for concurrency control
         self._lock = threading.Lock()
         self._stats: dict[str, int] = {"received": 0, "processed": 0, "ignored": 0}
+        self._bot_user_id = bot_user_id  # Slack bot user ID for mention matching
         # Gateway-level defaults (overridden by config.toml [gateway])
         self.gateway_time_budget_s: float = 120.0  # default 2 min per message
         self.gateway_max_turns: int = 20
@@ -182,32 +183,34 @@ class ChannelManager:
 
         return None
 
-    @staticmethod
-    def _is_mentioned(message: InboundMessage) -> bool:
+    def _is_mentioned(self, message: InboundMessage) -> bool:
         """Check if GEODE is mentioned in the message.
 
-        Detects all Slack mention formats:
-        - ``<@U...>`` — user mention (human or bot user)
-        - ``<@B...>`` — legacy bot mention
-        - ``<@A...>`` — app mention (Slack apps installed in workspace)
-        - Display name variants: ``@geode``, ``geode``, ``@GEODE``
+        Matches only GEODE's own bot user ID (from auth.test ``user_id``)
+        or display name variants. Does NOT match arbitrary ``<@U...>``
+        mentions — those are mentions of other users.
         """
-        import re
-
         content = message.content
-        # Slack encodes @mentions as <@USER_ID>, <@BOT_ID>, or <@APP_ID>
-        if re.search(r"<@[UBA][A-Z0-9]+>", content):
+        # Match GEODE's specific bot user ID (e.g. <@U0ABCDEF123>)
+        if self._bot_user_id and f"<@{self._bot_user_id}>" in content:
             return True
         content_lower = content.lower()
         return any(mention in content_lower for mention in ("@geode", "geode"))
 
-    @staticmethod
-    def _strip_mentions(content: str) -> str:
-        """Remove mention tags so the LLM receives clean user intent."""
+    def _strip_mentions(self, content: str) -> str:
+        """Remove GEODE's own mention tags so the LLM receives clean user intent.
+
+        Only strips GEODE's bot user ID mention and display name variants.
+        Preserves mentions of other users (e.g. ``<@U_OTHER>``).
+        """
         import re
 
-        # Remove Slack-style <@USER_ID>, <@BOT_ID>, and <@APP_ID> mentions
-        cleaned = re.sub(r"<@[UBA][A-Z0-9]+>\s*", "", content)
+        # Remove GEODE's specific bot mention (e.g. <@U0ABCDEF123>)
+        if self._bot_user_id:
+            cleaned = content.replace(f"<@{self._bot_user_id}>", "").strip()
+        else:
+            # Fallback: remove all Slack mentions (legacy behavior)
+            cleaned = re.sub(r"<@[UBA][A-Z0-9]+>\s*", "", content)
         # Remove @geode / @GEODE prefix
         cleaned = re.sub(r"@geode\s*", "", cleaned, flags=re.IGNORECASE)
         return cleaned.strip()
@@ -271,13 +274,21 @@ class ChannelManager:
         for rule in rules:
             if not isinstance(rule, dict) or "channel" not in rule:
                 continue
+            channel_id = rule.get("channel_id", "").strip()
+            if not channel_id:
+                log.warning(
+                    "Skipping binding: channel=%s has no channel_id — "
+                    "empty channel_id would create unsafe catch-all",
+                    rule.get("channel"),
+                )
+                continue
             # Support both time_budget_s and legacy max_rounds
             tb = rule.get("time_budget_s")
             if tb is None and "max_rounds" in rule:
                 tb = float(int(rule["max_rounds"]) * 10)
             binding = ChannelBinding(
                 channel=rule["channel"],
-                channel_id=rule.get("channel_id", ""),
+                channel_id=channel_id,
                 auto_respond=rule.get("auto_respond", True),
                 require_mention=rule.get("require_mention", False),
                 allowed_tools=rule.get("allowed_tools", []),

@@ -438,7 +438,7 @@ class TestBindingConfigReload:
                 "bindings": {
                     "rules": [
                         {"channel": "slack", "channel_id": "C123", "auto_respond": True},
-                        {"channel": "discord", "require_mention": True},
+                        {"channel": "discord", "channel_id": "D456", "require_mention": True},
                     ]
                 }
             }
@@ -456,14 +456,14 @@ class TestBindingConfigReload:
 
     def test_reload_replaces_bindings(self):
         manager = ChannelManager()
-        manager.add_binding(ChannelBinding(channel="telegram"))
+        manager.add_binding(ChannelBinding(channel="telegram", channel_id="T999"))
         assert len(manager.list_bindings()) == 1
 
         config = {
             "gateway": {
                 "bindings": {
                     "rules": [
-                        {"channel": "slack"},
+                        {"channel": "slack", "channel_id": "C789"},
                     ]
                 }
             }
@@ -472,6 +472,23 @@ class TestBindingConfigReload:
         bindings = manager.list_bindings()
         assert len(bindings) == 1
         assert bindings[0]["channel"] == "slack"
+
+    def test_empty_channel_id_skipped(self):
+        """Bindings without channel_id are rejected (prevents catch-all)."""
+        config = {
+            "gateway": {
+                "bindings": {
+                    "rules": [
+                        {"channel": "slack"},  # no channel_id
+                        {"channel": "slack", "channel_id": ""},  # empty channel_id
+                        {"channel": "slack", "channel_id": "C123"},  # valid
+                    ]
+                }
+            }
+        }
+        manager = ChannelManager()
+        loaded = manager.load_bindings_from_config(config)
+        assert loaded == 1  # only the valid one
 
 
 class TestMultiTurnMetadata:
