@@ -68,7 +68,7 @@ class TestChannelManager:
     def test_route_message_with_binding(self):
         manager = ChannelManager()
         manager.set_processor(lambda content, meta: f"Response to: {content}")
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C12345"))
 
         msg = InboundMessage(
             channel="slack",
@@ -96,19 +96,16 @@ class TestChannelManager:
         response = manager.route_message(msg)
         assert response is None
 
-    def test_specific_binding_wins(self):
-        """Most-specific binding (channel + channel_id) should win."""
+    def test_unbound_channel_ignored(self):
+        """Messages from channels without a binding are ignored."""
         manager = ChannelManager()
         manager.set_processor(lambda content, meta: "processed")
 
-        # Add generic binding
-        manager.add_binding(ChannelBinding(channel="slack"))
-        # Add specific binding
-        manager.add_binding(
-            ChannelBinding(channel="slack", channel_id="C12345", time_budget_s=60.0)
-        )
+        # Only bind C12345
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C12345"))
 
-        msg = InboundMessage(
+        # Message from bound channel → processed
+        msg_bound = InboundMessage(
             channel="slack",
             channel_id="C12345",
             sender_id="U1",
@@ -116,13 +113,23 @@ class TestChannelManager:
             content="hello",
             timestamp=time.time(),
         )
-        response = manager.route_message(msg)
-        assert response == "processed"
+        assert manager.route_message(msg_bound) == "processed"
+
+        # Message from unbound channel → ignored (no catch-all)
+        msg_unbound = InboundMessage(
+            channel="slack",
+            channel_id="C99999",
+            sender_id="U1",
+            sender_name="Alice",
+            content="hello",
+            timestamp=time.time(),
+        )
+        assert manager.route_message(msg_unbound) is None
 
     def test_require_mention_filter(self):
         manager = ChannelManager()
         manager.set_processor(lambda content, meta: "processed")
-        manager.add_binding(ChannelBinding(channel="discord", require_mention=True))
+        manager.add_binding(ChannelBinding(channel="discord", channel_id="D1", require_mention=True))
 
         # Without mention — should be ignored
         msg = InboundMessage(
@@ -141,13 +148,13 @@ class TestChannelManager:
 
     def test_remove_binding(self):
         manager = ChannelManager()
-        manager.add_binding(ChannelBinding(channel="slack"))
-        assert manager.remove_binding("slack")
-        assert not manager.remove_binding("slack")  # Already removed
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
+        assert manager.remove_binding("slack", "C1")
+        assert not manager.remove_binding("slack", "C1")  # Already removed
 
     def test_no_processor(self):
         manager = ChannelManager()
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
             channel="slack",
@@ -162,7 +169,7 @@ class TestChannelManager:
     def test_stats(self):
         manager = ChannelManager()
         manager.set_processor(lambda content, meta: "ok")
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
             channel="slack",
@@ -189,7 +196,7 @@ class TestChannelManager:
     def test_processor_exception(self):
         manager = ChannelManager()
         manager.set_processor(lambda content, meta: 1 / 0)
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
             channel="slack",
@@ -354,6 +361,7 @@ class TestAllowedToolsEnforcement:
         manager.add_binding(
             ChannelBinding(
                 channel="slack",
+                channel_id="C1",
                 allowed_tools=["list_ips", "search_ips"],
             )
         )
@@ -375,7 +383,7 @@ class TestAllowedToolsEnforcement:
         received_content = []
         manager = ChannelManager()
         manager.set_processor(lambda c, m: (received_content.append(c), "ok")[1])
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
             channel="slack",
@@ -401,7 +409,7 @@ class TestLaneQueueIntegration:
 
         manager = ChannelManager(lane_queue=lq)
         manager.set_processor(lambda c, m: f"processed: {c}")
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
             channel="slack",
@@ -418,7 +426,7 @@ class TestLaneQueueIntegration:
         """Messages should still work without lane queue."""
         manager = ChannelManager(lane_queue=None)
         manager.set_processor(lambda c, m: "ok")
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
             channel="slack",
@@ -499,7 +507,7 @@ class TestMultiTurnMetadata:
         captured: list[dict] = []
         manager = ChannelManager()
         manager.set_processor(lambda c, m: (captured.append(m), "ok")[1])
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C123"))
 
         msg = InboundMessage(
             channel="slack",
@@ -526,7 +534,7 @@ class TestMultiTurnMetadata:
         captured: list[dict] = []
         manager = ChannelManager()
         manager.set_processor(lambda c, m: (captured.append(m), "ok")[1])
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C123"))
 
         msg = InboundMessage(
             channel="slack",
@@ -547,7 +555,7 @@ class TestMultiTurnMetadata:
         keys: list[str] = []
         manager = ChannelManager()
         manager.set_processor(lambda c, m: (keys.append(m["session_key"]), "ok")[1])
-        manager.add_binding(ChannelBinding(channel="slack"))
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C123"))
 
         for thread_id in ["111.000", "222.000"]:
             msg = InboundMessage(

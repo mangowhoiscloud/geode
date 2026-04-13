@@ -39,10 +39,8 @@ class ChannelManager:
 
     Implements GatewayPort. Manages pollers and bindings.
 
-    Bindings are matched most-specific first:
-    1. Exact match (channel + channel_id)
-    2. Channel-wide match (channel only, channel_id="")
-    3. No match → message ignored
+    Binding match: exact (channel + channel_id) only.
+    Messages from unbound channels are ignored.
     """
 
     def __init__(self, *, lane_queue: Any = None, bot_user_id: str = "") -> None:
@@ -165,9 +163,13 @@ class ChannelManager:
             return f"Error processing message: {exc}"
 
     def _match_binding(self, message: InboundMessage) -> ChannelBinding | None:
-        """Find the most specific matching binding for a message."""
+        """Find the matching binding for a message.
+
+        Only exact match (channel + channel_id) is supported.
+        Catch-all bindings (empty channel_id) are ignored to prevent
+        unintended responses in unbound channels.
+        """
         with self._lock:
-            # First pass: exact match (channel + channel_id)
             for binding in self._bindings:
                 if (
                     binding.channel == message.channel
@@ -175,12 +177,6 @@ class ChannelManager:
                     and binding.channel_id == message.channel_id
                 ):
                     return binding
-
-            # Second pass: channel-wide match
-            for binding in self._bindings:
-                if binding.channel == message.channel and not binding.channel_id:
-                    return binding
-
         return None
 
     def _is_mentioned(self, message: InboundMessage) -> bool:
