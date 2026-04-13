@@ -83,12 +83,14 @@ class TestBashSpinner:
         assert "echo hello" in label
 
     @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.approval.console")
     @patch("core.agent.tool_executor.console")
     def test_bash_no_spinner_when_denied(
-        self, mock_console: MagicMock, mock_spinner: MagicMock
+        self, mock_console: MagicMock, mock_approval_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
         """When user denies non-safe bash command, no spinner is shown."""
         mock_console.input.return_value = "n"
+        mock_approval_console.input.return_value = "n"
 
         result = ToolExecutor().execute(
             "run_bash", {"command": "npm install foo", "reason": "test"}
@@ -107,12 +109,14 @@ class TestMcpSpinner:
     """Test spinner activation during MCP tool execution."""
 
     @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.approval.console")
     @patch("core.agent.tool_executor.console")
     def test_mcp_spinner_after_approval(
-        self, mock_console: MagicMock, mock_spinner: MagicMock
+        self, mock_console: MagicMock, mock_approval_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
         """After MCP approval, spinner wraps call_tool execution."""
         mock_console.input.return_value = "y"
+        mock_approval_console.input.return_value = "y"
         mock_spinner.return_value.__enter__ = MagicMock(return_value=None)
         mock_spinner.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -129,12 +133,14 @@ class TestMcpSpinner:
         assert "mcp_tool_x" in label
 
     @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.approval.console")
     @patch("core.agent.tool_executor.console")
     def test_mcp_no_spinner_when_denied(
-        self, mock_console: MagicMock, mock_spinner: MagicMock
+        self, mock_console: MagicMock, mock_approval_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
         """When user denies MCP tool, no spinner is shown."""
         mock_console.input.return_value = "n"
+        mock_approval_console.input.return_value = "n"
 
         mcp = MagicMock()
         mcp.find_server_for_tool.return_value = "my-server"
@@ -170,12 +176,14 @@ class TestWriteToolSpinner:
     """Test spinner activation during write tool execution."""
 
     @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.approval.console")
     @patch("core.agent.tool_executor.console")
     def test_write_spinner_after_approval(
-        self, mock_console: MagicMock, mock_spinner: MagicMock
+        self, mock_console: MagicMock, mock_approval_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
         """After write approval, spinner wraps handler execution."""
         mock_console.input.return_value = "y"
+        mock_approval_console.input.return_value = "y"
         mock_spinner.return_value.__enter__ = MagicMock(return_value=None)
         mock_spinner.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -188,12 +196,14 @@ class TestWriteToolSpinner:
         assert "memory_save" in label
 
     @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.approval.console")
     @patch("core.agent.tool_executor.console")
     def test_write_no_spinner_when_denied(
-        self, mock_console: MagicMock, mock_spinner: MagicMock
+        self, mock_console: MagicMock, mock_approval_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
         """When user denies write operation, no spinner is shown."""
         mock_console.input.return_value = "n"
+        mock_approval_console.input.return_value = "n"
 
         handler = MagicMock(return_value={"saved": True})
         executor = ToolExecutor(action_handlers={"memory_save": handler})
@@ -213,12 +223,14 @@ class TestExpensiveToolSpinner:
     """Test spinner activation during expensive tool execution."""
 
     @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.approval.console")
     @patch("core.agent.tool_executor.console")
     def test_expensive_spinner_after_approval(
-        self, mock_console: MagicMock, mock_spinner: MagicMock
+        self, mock_console: MagicMock, mock_approval_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
         """After cost approval, spinner wraps handler execution."""
         mock_console.input.return_value = "y"
+        mock_approval_console.input.return_value = "y"
         mock_spinner.return_value.__enter__ = MagicMock(return_value=None)
         mock_spinner.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -231,12 +243,14 @@ class TestExpensiveToolSpinner:
         assert "analyze_ip" in label
 
     @patch("core.agent.tool_executor._tool_spinner")
+    @patch("core.agent.approval.console")
     @patch("core.agent.tool_executor.console")
     def test_expensive_no_spinner_when_denied(
-        self, mock_console: MagicMock, mock_spinner: MagicMock
+        self, mock_console: MagicMock, mock_approval_console: MagicMock, mock_spinner: MagicMock
     ) -> None:
         """When user denies cost, no spinner is shown."""
         mock_console.input.return_value = "n"
+        mock_approval_console.input.return_value = "n"
 
         handler = MagicMock(return_value={"tier": "S"})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler})

@@ -24,6 +24,9 @@ if TYPE_CHECKING:
     from core.cli.ui.agentic_ui import OperationLogger
     from core.hooks import HookSystem
 
+from core.agent.approval import (
+    _write_denial_with_fallback as _write_denial_with_fallback,
+)
 from core.agent.safety_constants import AUTO_APPROVED_MCP_SERVERS as AUTO_APPROVED_MCP_SERVERS
 from core.agent.safety_constants import DANGEROUS_TOOLS as DANGEROUS_TOOLS
 from core.agent.safety_constants import EXPENSIVE_TOOLS as EXPENSIVE_TOOLS
@@ -63,32 +66,6 @@ def _tool_spinner(label: str) -> Iterator[None]:
         status.stop()
 
 
-# Write fallback suggestions per tool — helps LLM recover from denial
-_WRITE_FALLBACK_HINTS: dict[str, str] = {
-    "memory_save": "Try memory_search to read existing data instead.",
-    "note_save": "Try reading existing notes or suggest the content to the user.",
-    "set_api_key": "Show the user the /key command to set it themselves.",
-    "manage_auth": "Show the user the /auth command to manage auth profiles.",
-    "profile_update": "Show current profile with profile_get instead.",
-    "profile_preference": "Show current preferences with profile_get instead.",
-    "profile_learn": "Show current learning patterns with profile_get instead.",
-    "calendar_create_event": "Try calendar_list_events to show existing events.",
-    "calendar_sync_scheduler": "Show the user /schedule command to manage manually.",
-}
-
-
-def _write_denial_with_fallback(tool_name: str) -> dict[str, Any]:
-    """Return a denial result with a fallback suggestion for the LLM."""
-    hint = _WRITE_FALLBACK_HINTS.get(tool_name, "")
-    fallback_msg = (
-        f"User denied write operation for '{tool_name}'. "
-        "Do NOT retry this tool without explicit user request."
-    )
-    if hint:
-        fallback_msg += f" Suggestion: {hint}"
-    return {"error": fallback_msg, "denied": True, "fallback_hint": hint}
-
-
 class ToolExecutor:
     """Routes tool calls to handlers with HITL safety checks.
 
@@ -115,28 +92,19 @@ class ToolExecutor:
         self._auto_approve = auto_approve  # for testing only
         self._sub_agent_manager = sub_agent_manager
         self._mcp_manager = mcp_manager
-        # HITL level: 0=autonomous, 1=write-only, 2=all prompts
         self._hitl_level = hitl_level
         self._hooks: HookSystem | None = hooks
-        # IPC approval relay: callback(tool_name, detail, safety_level) → 'y'/'n'/'a'
         self._approval_callback = approval_callback
-        # Per-server MCP approval cache — approve once per server per session
-        # Thread-safe: ToolExecutor is per-AgenticLoop, but sub-agents may share.
-        import threading
 
-        self._approval_lock = threading.Lock()
-        self._mcp_approved_servers: set[str] = set()
-        # Session-level "Always" approval sets (Feature: A=Always)
-        self._always_approved_tools: set[str] = set()
-        # Categories: "bash", "write", "cost", "mcp:<server>"
-        self._always_approved_categories: set[str] = set()
-        # Per-tool approval/denial counters — session-scoped pattern learning
-        # After 3 consecutive "y" for same tool → auto-add to _always_approved_tools
-        # After 3 consecutive "n" for same tool → auto-deny without prompting
-        self._tool_approval_counts: dict[str, int] = {}
-        self._tool_denial_counts: dict[str, int] = {}
-        _AUTO_APPROVE_THRESHOLD = 3
-        _AUTO_DENY_THRESHOLD = 3
+        # HITL approval workflow (extracted — SRP)
+        from core.agent.approval import ApprovalWorkflow
+
+        self._approval = ApprovalWorkflow(
+            auto_approve=auto_approve,
+            hitl_level=hitl_level,
+            hooks=hooks,
+            approval_callback=approval_callback,
+        )
 
     def _fire_hook(self, event_name: str, data: dict[str, Any]) -> None:
         """Fire a hook event if HookSystem is available. No-op otherwise."""
@@ -151,25 +119,12 @@ class ToolExecutor:
             log.debug("Hook fire failed for %s", event_name, exc_info=True)
 
     def _track_decision(self, tool_name: str, decision: str) -> None:
-        """Track per-tool approval/denial for session-scoped pattern learning.
-
-        After 3 consecutive approvals of the same tool, auto-add to
-        ``_always_approved_tools``. After 3 consecutive denials, subsequent
-        calls are auto-denied without prompting.
-        """
-        if decision == "y":
-            self._tool_approval_counts[tool_name] = self._tool_approval_counts.get(tool_name, 0) + 1
-            self._tool_denial_counts.pop(tool_name, None)
-            if self._tool_approval_counts[tool_name] >= 3:
-                self._always_approved_tools.add(tool_name)
-                log.info("Auto-approved tool '%s' after 3 consecutive approvals", tool_name)
-        elif decision == "n":
-            self._tool_denial_counts[tool_name] = self._tool_denial_counts.get(tool_name, 0) + 1
-            self._tool_approval_counts.pop(tool_name, None)
+        """Delegates to ApprovalWorkflow."""
+        self._approval.track_decision(tool_name, decision)
 
     def _check_auto_deny(self, tool_name: str) -> bool:
-        """Return True if tool has been denied 3+ times this session."""
-        return self._tool_denial_counts.get(tool_name, 0) >= 3
+        """Delegates to ApprovalWorkflow."""
+        return self._approval.check_auto_deny(tool_name)
 
     def _prompt_with_always(
         self,
@@ -179,35 +134,10 @@ class ToolExecutor:
         safety_level: str = "write",
         tool_name: str = "",
     ) -> str:
-        """Show a [Y/n/A] prompt and return 'y', 'n', or 'a'.
-
-        Uses IPC approval relay callback if available (thin-client mode),
-        otherwise falls back to console.input() (direct terminal).
-        """
-        # IPC mode: relay approval to thin client via callback
-        if self._approval_callback is not None:
-            decision = self._approval_callback(tool_name or label, detail, safety_level)
-            log.debug(
-                "HITL: IPC callback decision=%s tool=%s",
-                decision,
-                tool_name or label,
-            )
-            return decision
-
-        # Direct terminal mode
-        from core.cli import _restore_terminal
-
-        _restore_terminal()
-        try:
-            response = console.input(f"  [header]{label} [Y/n/A][/header] ").strip().lower()
-        except (KeyboardInterrupt, EOFError):
-            console.print()
-            return "n"
-        if response in ("a", "always"):
-            return "a"
-        if response in ("", "y", "yes"):
-            return "y"
-        return "n"
+        """Delegates to ApprovalWorkflow."""
+        return self._approval.prompt_with_always(
+            label, detail, safety_level=safety_level, tool_name=tool_name
+        )
 
     def register(self, tool_name: str, handler: Callable[..., dict[str, Any]]) -> None:
         """Register a tool handler."""
@@ -218,20 +148,23 @@ class ToolExecutor:
     ) -> tuple[dict[str, Any] | None, bool]:
         """Check HITL gates. Returns (rejection_result, approved_via_hitl).
 
-        If the first element is not None, the tool was rejected — return it immediately.
+        Delegates to ApprovalWorkflow but routes through self._confirm_*
+        methods so that test patches on ToolExecutor instances still work.
         """
-        # Dangerous tools: always require HITL
         if tool_name in DANGEROUS_TOOLS:
             return self._execute_dangerous(tool_name, tool_input), False
 
         approved = False
 
-        # Write tools: require approval (hitl_level 0 = autonomous skip)
+        # Write tools
         if tool_name in WRITE_TOOLS:
+            if self._approval._hitl_level == 0 or self._approval.is_bash_auto_approved(""):
+                # Simplified: check if write is auto-approved
+                pass
             if (
-                self._hitl_level == 0
-                or "write" in self._always_approved_categories
-                or tool_name in self._always_approved_tools
+                self._approval._hitl_level == 0
+                or "write" in self._approval._always_approved_categories
+                or tool_name in self._approval._always_approved_tools
             ):
                 approved = True
             else:
@@ -256,17 +189,17 @@ class ToolExecutor:
                     {
                         "tool_name": tool_name,
                         "safety_level": "write",
-                        "always": "write" in self._always_approved_categories,
+                        "always": "write" in self._approval._always_approved_categories,
                     },
                 )
                 approved = True
 
-        # Expensive tools: cost confirmation
+        # Expensive tools
         if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
             if (
-                self._hitl_level == 0
-                or "cost" in self._always_approved_categories
-                or tool_name in self._always_approved_tools
+                self._approval._hitl_level == 0
+                or "cost" in self._approval._always_approved_categories
+                or tool_name in self._approval._always_approved_tools
             ):
                 approved = True
             else:
@@ -292,12 +225,38 @@ class ToolExecutor:
                     {
                         "tool_name": tool_name,
                         "safety_level": "cost",
-                        "always": "cost" in self._always_approved_categories,
+                        "always": "cost" in self._approval._always_approved_categories,
                     },
                 )
                 approved = True
 
         return None, approved
+
+    # Delegation methods — route to ApprovalWorkflow, patchable by tests
+    def _confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
+        return self._approval.confirm_write(tool_name, tool_input)
+
+    def _confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
+        return self._approval.confirm_cost(tool_name, estimated_cost)
+
+    def _confirm_mcp(self, server: str, tool_name: str) -> bool:
+        return self._approval.confirm_mcp(server, tool_name)
+
+    def _request_approval(self, command: str, reason: str) -> bool:
+        return self._approval.request_bash_approval(command, reason)
+
+    # Proxy properties for backward compat (tests access these directly)
+    @property
+    def _always_approved_categories(self) -> set[str]:
+        return self._approval._always_approved_categories
+
+    @property
+    def _always_approved_tools(self) -> set[str]:
+        return self._approval._always_approved_tools
+
+    @property
+    def _mcp_approved_servers(self) -> set[str]:
+        return self._approval._mcp_approved_servers
 
     def execute(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
         """Execute a tool call, applying HITL gate if needed."""
@@ -444,32 +403,11 @@ class ToolExecutor:
         if blocked:
             return self._bash.to_tool_result(blocked)
 
-        # Safe read-only commands skip HITL approval for reduced friction.
-        # Dangerous patterns are already blocked above (validate).
-        # Commands with redirects (>, >>), pipes (|), or chaining (;, &&)
-        # are NOT safe even if they start with a safe prefix.
-        cmd_stripped = command.strip()
-        _UNSAFE_CHARS = frozenset(">|;")
-        has_unsafe_chars = any(c in command for c in _UNSAFE_CHARS)
-        is_safe_cmd = not has_unsafe_chars and any(
-            cmd_stripped.startswith(p) for p in SAFE_BASH_PREFIXES
-        )
-
-        if not is_safe_cmd:
-            # HITL level 0/1: skip bash approval entirely
-            if self._hitl_level <= 1:
-                pass  # auto-approve
-            # Session-level "Always" approval for bash or per-tool auto-approve
-            elif (
-                "bash" in self._always_approved_categories
-                or "run_bash" in self._always_approved_tools
-            ):
-                pass  # already approved for session
-            else:
-                # HITL approval gate — not skipped for non-safe commands.
-                approved = self._request_approval(command, reason)
-                if not approved:
-                    return {"error": "User denied execution", "denied": True}
+        # Approval gate: safe commands auto-pass, others go through HITL
+        if not self._approval.is_bash_auto_approved(command):
+            approved = self._request_approval(command, reason)
+            if not approved:
+                return {"error": "User denied execution", "denied": True}
 
         with _tool_spinner(f"Running: {command}"):
             result = self._bash.execute(command)
@@ -486,20 +424,10 @@ class ToolExecutor:
         log.info("MCP tool: %s → %s (args=%s)", tool_name, server, list(tool_input.keys()))
 
         # MCP tools are external — confirm once per server per session.
-        # Read-only servers in AUTO_APPROVED_MCP_SERVERS skip first-call approval.
-        # After first approval, subsequent calls to the same server auto-execute.
-        # hitl_level 0/1: auto-approve all MCP tools
-        if server in AUTO_APPROVED_MCP_SERVERS:
-            self._mcp_approved_servers.add(server)
-        mcp_category = f"mcp:{server}"
-        if mcp_category in self._always_approved_categories:
-            self._mcp_approved_servers.add(server)
-        if self._hitl_level <= 1:
-            self._mcp_approved_servers.add(server)
-        if not self._auto_approve and server not in self._mcp_approved_servers:
+        if not self._auto_approve and not self._approval.is_mcp_approved(server):
             if not self._confirm_mcp(server, tool_name):
                 return {"error": "User denied MCP tool execution", "denied": True}
-            self._mcp_approved_servers.add(server)
+            self._approval.mark_mcp_approved(server)
 
         assert self._mcp_manager is not None  # guaranteed by caller
         with _tool_spinner(f"Calling {server}/{tool_name}..."):
@@ -512,331 +440,6 @@ class ToolExecutor:
             if key in result and isinstance(result[key], str):
                 result[key] = redact_secrets(result[key])
         return result
-
-    def _confirm_mcp(self, server: str, tool_name: str) -> bool:
-        """Prompt user for MCP tool confirmation with A=Always option."""
-        if self._approval_callback is None:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
-            console.print()
-            console.print("  [warning]MCP tool requires approval[/warning]")
-            console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
-            console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
-            console.print()
-
-        self._fire_hook(
-            "tool_approval_requested",
-            {
-                "tool_name": tool_name,
-                "safety_level": "MCP",
-                "args_preview": f"server={server}",
-            },
-        )
-
-        t0 = time.monotonic()
-        response = self._prompt_with_always(
-            "Allow?",
-            f"{server}/{tool_name}",
-            safety_level="mcp",
-            tool_name=tool_name,
-        )
-        latency_ms = (time.monotonic() - t0) * 1000
-        if response == "a":
-            self._always_approved_categories.add(f"mcp:{server}")
-            self._fire_hook(
-                "tool_approval_granted",
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "MCP",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                },
-            )
-            return True
-        if response == "y":
-            self._fire_hook(
-                "tool_approval_granted",
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "MCP",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                },
-            )
-            return True
-        self._fire_hook(
-            "tool_approval_denied",
-            {
-                "tool_name": tool_name,
-                "permission_level": "MCP",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
-        return False
-
-    def _confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
-        """Prompt user for write operation confirmation."""
-        if self._approval_callback is None:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
-            summary = ""
-            if tool_name == "memory_save":
-                summary = tool_input.get("content", tool_input.get("value", ""))[:80]
-            elif tool_name == "note_save":
-                summary = tool_input.get("content", "")[:80]
-            elif tool_name == "set_api_key":
-                summary = f"provider={tool_input.get('provider', '?')}"
-            elif tool_name == "manage_auth":
-                summary = f"action={tool_input.get('action', '?')}"
-            elif tool_name == "profile_update":
-                fields = [k for k in ("role", "expertise", "name", "team") if tool_input.get(k)]
-                summary = f"fields={','.join(fields)}" if fields else "profile update"
-            elif tool_name == "profile_preference":
-                summary = f"{tool_input.get('key', '?')}={tool_input.get('value', '?')}"
-            elif tool_name == "profile_learn":
-                summary = tool_input.get("pattern", "")[:80]
-
-            console.print()
-            console.print("  [warning]Write operation requires approval[/warning]")
-            console.print(f"  [dim]Tool:[/dim]    [bold]{tool_name}[/bold]")
-            if summary:
-                console.print(f"  [dim]Summary:[/dim] {summary}")
-            console.print()
-
-        # Auto-deny if user has denied this tool 3+ times this session
-        if self._check_auto_deny(tool_name):
-            self._fire_hook(
-                "tool_approval_denied",
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "WRITE",
-                    "decision": "auto_denied",
-                    "latency_ms": 0.0,
-                },
-            )
-            return False
-
-        self._fire_hook(
-            "tool_approval_requested",
-            {
-                "tool_name": tool_name,
-                "safety_level": "WRITE",
-                "args_preview": str(tool_input)[:200],
-            },
-        )
-
-        t0 = time.monotonic()
-        response = self._prompt_with_always(
-            "Allow?",
-            tool_name,
-            safety_level="write",
-            tool_name=tool_name,
-        )
-        latency_ms = (time.monotonic() - t0) * 1000
-        self._track_decision(tool_name, response)
-        if response == "a":
-            self._always_approved_categories.add("write")
-            self._fire_hook(
-                "tool_approval_granted",
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "WRITE",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": "a",
-                },
-            )
-            return True
-        if response == "y":
-            self._fire_hook(
-                "tool_approval_granted",
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "WRITE",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": "y",
-                },
-            )
-            return True
-        self._fire_hook(
-            "tool_approval_denied",
-            {
-                "tool_name": tool_name,
-                "permission_level": "WRITE",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
-        return False
-
-    def _confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
-        """Prompt user for cost confirmation on expensive tools with A=Always option."""
-        if self._approval_callback is None:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
-            console.print()
-            console.print("  [warning]$ Cost confirmation[/warning]")
-            console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
-            console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
-            # Show pipeline model info for analysis tools
-            if tool_name in ("analyze_ip", "compare_ips", "batch_analyze"):
-                from core.config import ANTHROPIC_PRIMARY, get_node_model
-
-                primary = get_node_model("analyst") or ANTHROPIC_PRIMARY
-                console.print(f"  [dim]Pipeline model:[/dim] {primary}")
-            console.print()
-
-        self._fire_hook(
-            "tool_approval_requested",
-            {
-                "tool_name": tool_name,
-                "safety_level": "EXPENSIVE",
-                "args_preview": f"estimated_cost=${estimated_cost:.2f}",
-            },
-        )
-
-        if self._check_auto_deny(tool_name):
-            self._fire_hook(
-                "tool_approval_denied",
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "EXPENSIVE",
-                    "decision": "auto_denied",
-                    "latency_ms": 0.0,
-                },
-            )
-            return False
-
-        t0 = time.monotonic()
-        response = self._prompt_with_always(
-            "Proceed?",
-            tool_name,
-            safety_level="cost",
-            tool_name=tool_name,
-        )
-        latency_ms = (time.monotonic() - t0) * 1000
-        self._track_decision(tool_name, response)
-        if response == "a":
-            self._always_approved_categories.add("cost")
-            self._fire_hook(
-                "tool_approval_granted",
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "EXPENSIVE",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": "a",
-                },
-            )
-            return True
-        if response == "y":
-            self._fire_hook(
-                "tool_approval_granted",
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "EXPENSIVE",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": "y",
-                },
-            )
-            return True
-        self._fire_hook(
-            "tool_approval_denied",
-            {
-                "tool_name": tool_name,
-                "permission_level": "EXPENSIVE",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
-        return False
-
-    def _request_approval(self, command: str, reason: str) -> bool:
-        """Prompt user for bash command approval with A=Always option."""
-        # In IPC mode, the thin CLI renders its own approval prompt from
-        # the approval_request message — skip duplicate console output.
-        if self._approval_callback is None:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
-            console.print()
-            console.print("  [warning]Bash command requires approval[/warning]")
-            console.print(f"  [dim]Command:[/dim] [value]{command}[/value]")
-            if reason:
-                console.print(f"  [dim]Reason:[/dim]  {reason}")
-            console.print()
-
-        self._fire_hook(
-            "tool_approval_requested",
-            {
-                "tool_name": "run_bash",
-                "safety_level": "DANGEROUS",
-                "args_preview": str(command)[:200],
-            },
-        )
-
-        if self._check_auto_deny("run_bash"):
-            self._fire_hook(
-                "tool_approval_denied",
-                {
-                    "tool_name": "run_bash",
-                    "permission_level": "DANGEROUS",
-                    "decision": "auto_denied",
-                    "latency_ms": 0.0,
-                },
-            )
-            return False
-
-        t0 = time.monotonic()
-        response = self._prompt_with_always(
-            "Allow?",
-            command,
-            safety_level="dangerous",
-            tool_name="run_bash",
-        )
-        latency_ms = (time.monotonic() - t0) * 1000
-        self._track_decision("run_bash", response)
-        if response == "a":
-            self._always_approved_categories.add("bash")
-            self._fire_hook(
-                "tool_approval_granted",
-                {
-                    "tool_name": "run_bash",
-                    "permission_level": "DANGEROUS",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": "a",
-                },
-            )
-            return True
-        if response == "y":
-            self._fire_hook(
-                "tool_approval_granted",
-                {
-                    "tool_name": "run_bash",
-                    "permission_level": "DANGEROUS",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": "y",
-                },
-            )
-            return True
-        self._fire_hook(
-            "tool_approval_denied",
-            {
-                "tool_name": "run_bash",
-                "permission_level": "DANGEROUS",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
-        return False
 
     @property
     def registered_tools(self) -> list[str]:
@@ -1250,44 +853,8 @@ class ToolCallProcessor:
             return self._make_error_result(block, exc)
 
     async def _batch_cost_approval(self, blocks: list[Any]) -> bool:
-        """Show a single cost confirmation prompt for all EXPENSIVE tools.
-
-        Returns True if user approves, False if denied.
-        """
-        items: list[tuple[str, dict[str, Any], float]] = []
-        for block in blocks:
-            cost = EXPENSIVE_TOOLS.get(block.name, 0.0)
-            items.append((block.name, block.input, cost))
-
-        total_cost = sum(c for _, _, c in items)
-
-        def _prompt() -> bool:
-            try:
-                from core.cli import _restore_terminal
-
-                _restore_terminal()
-            except Exception:
-                log.debug("_restore_terminal() unavailable in batch approval")
-
-            console.print()
-            console.print("  [warning]$ Cost confirmation[/warning]")
-            count = len(items)
-            plural = "s" if count > 1 else ""
-            verb = "s" if count == 1 else ""
-            console.print(f"  {count} tool{plural} require{verb} approval:")
-            for name, inp, cost in items:
-                args_preview = ", ".join(f"{k}={v!r}" for k, v in inp.items())
-                console.print(f"    [dim]--[/dim] {name}({args_preview}) -- ~${cost:.2f}")
-            console.print(f"  [dim]Total estimated cost:[/dim] ~${total_cost:.2f}")
-            console.print()
-            try:
-                response = console.input("  [header]Proceed? [Y/n][/header] ").strip().lower()
-            except (KeyboardInterrupt, EOFError):
-                console.print()
-                return False
-            return response in ("", "y", "yes")
-
-        return await asyncio.to_thread(_prompt)
+        """Delegates to ApprovalWorkflow."""
+        return await self._executor._approval.batch_cost_approval(blocks)
 
     async def _attempt_recovery(
         self,

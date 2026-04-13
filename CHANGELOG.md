@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Architecture
+- **Approval workflow extraction** — HITL approval logic extracted from `tool_executor.py` (1390줄) to `agent/approval.py` (577줄). ApprovalWorkflow class: pattern learning, prompt, safety gates, MCP/write/cost/bash confirmation. tool_executor.py 1390→862줄 (-38%)
+
 ### Added
 - **`geode doctor slack`** — Slack Gateway 7-point diagnostic (env, token, scopes, bindings, serve, MCP, socket). CLI + natural language tool (#57)
 - **Slack App Manifest URL** — `get_manifest_url()` 원클릭 앱 생성 URL
