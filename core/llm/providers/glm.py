@@ -110,6 +110,7 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
         tool_choice: dict[str, str] | str,
         max_tokens: int,
         temperature: float,
+        thinking_budget: int = 0,
     ) -> Any | None:
         """GLM agentic call with native web_search injection."""
         client = self._ensure_client(model)

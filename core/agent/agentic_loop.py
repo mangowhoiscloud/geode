@@ -155,6 +155,7 @@ class AgenticResult:
     # | "llm_error" | "context_exhausted" | "cost_budget_exceeded"
     termination_reason: str = "unknown"
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
+    reasoning_metrics: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, omitting None-valued fields."""
@@ -180,6 +181,7 @@ class AgenticLoop:
         *,
         max_rounds: int = DEFAULT_MAX_ROUNDS,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        thinking_budget: int = 0,  # 0 = disabled; >0 = Extended Thinking tokens
         time_budget_s: float = 0.0,  # 0 = no time limit (OpenClaw pattern)
         cost_budget: float = 0.0,  # 0 = no cost limit (Karpathy P3)
         model: str | None = None,
@@ -200,7 +202,12 @@ class AgenticLoop:
         self._quiet = quiet  # suppress spinner (sub-agent, headless)
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
+        self._thinking_budget = thinking_budget
         self._time_budget_s = time_budget_s
+        # Adaptive compute: track consecutive text-only rounds for overthinking detection
+        self._consecutive_text_only_rounds = 0
+        self._total_thinking_tokens = 0
+        self._total_empty_rounds = 0
         self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
         self.model = model or ANTHROPIC_PRIMARY
@@ -349,6 +356,11 @@ class AgenticLoop:
             self.max_rounds,
             len(result.tool_calls),
         )
+
+        # Reasoning metrics (DTR-inspired observability)
+        metrics = self._build_reasoning_metrics(result)
+        result.reasoning_metrics = metrics.to_dict()
+
         self._record_transcript_end(result)
         self._save_checkpoint(user_input, round_idx=round_idx)
         if self._hooks:
@@ -374,7 +386,40 @@ class AgenticLoop:
                     "termination_reason": result.termination_reason,
                 },
             )
+            self._hooks.trigger(
+                HookEvent.REASONING_METRICS,
+                result.reasoning_metrics,
+            )
         return result
+
+    def _build_reasoning_metrics(self, result: AgenticResult) -> Any:
+        """Collect reasoning efficiency metrics for this turn."""
+        from core.agent.reasoning_metrics import ReasoningMetrics
+
+        try:
+            from core.llm.token_tracker import get_tracker
+
+            tracker = get_tracker()
+            acc = tracker.accumulator
+            thinking_tok = int(acc.total_thinking_tokens)
+            output_tok = int(acc.total_output_tokens)
+            cost = float(acc.total_cost_usd)
+        except Exception:
+            thinking_tok = 0
+            output_tok = 0
+            cost = 0.0
+
+        metrics = ReasoningMetrics(
+            total_rounds=result.rounds,
+            thinking_tokens=self._total_thinking_tokens + thinking_tok,
+            output_tokens=output_tok,
+            tool_calls_total=len(result.tool_calls),
+            empty_rounds=self._total_empty_rounds,
+            cost_usd=cost,
+            overthinking_detected=self._consecutive_text_only_rounds >= 2,
+        )
+        metrics.compute_derived()
+        return metrics
 
     def refresh_tools(self) -> int:
         """Reload MCP tools into the tool list without reconstructing the loop.
@@ -957,6 +1002,23 @@ class AgenticLoop:
                 except Exception:
                     log.debug("Cost budget check failed", exc_info=True)
 
+            # Adaptive compute: overthinking detection (DTR insight)
+            # Consecutive rounds with long text but no tool calls = overthinking signal
+            if response.stop_reason != "tool_use":
+                out_tok = getattr(response.usage, "output_tokens", 0) if response.usage else 0
+                if out_tok > 2000:
+                    self._consecutive_text_only_rounds += 1
+                else:
+                    self._consecutive_text_only_rounds = 0
+                if self._consecutive_text_only_rounds >= 2:
+                    self._total_empty_rounds += self._consecutive_text_only_rounds
+                    log.warning(
+                        "Overthinking detected: %d consecutive text-only rounds (>2000 tok each)",
+                        self._consecutive_text_only_rounds,
+                    )
+            else:
+                self._consecutive_text_only_rounds = 0
+
             if response.stop_reason != "tool_use":
                 # end_turn or max_tokens → extract text, done
                 self._op_logger.finalize()
@@ -1275,14 +1337,27 @@ class AgenticLoop:
             force_text = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
+        # Adaptive compute allocation (DTR insight: match budget to round purpose)
+        adaptive_max_tokens = self.max_tokens
+        adaptive_thinking = self._thinking_budget
+        if force_text:
+            # Wrap-up: minimal budget — summarize, don't reason
+            adaptive_max_tokens = min(self.max_tokens, 4096)
+            adaptive_thinking = 0
+        elif self._consecutive_text_only_rounds >= 2:
+            # Overthinking: reduce budget to curb verbose non-actionable output
+            adaptive_max_tokens = min(self.max_tokens, 16384)
+            adaptive_thinking = min(adaptive_thinking, adaptive_thinking // 2)
+
         response = await self._adapter.agentic_call(
             model=self.model,
             system=system,
             messages=messages,
             tools=self._tools,
             tool_choice=tool_choice,
-            max_tokens=self.max_tokens,
+            max_tokens=adaptive_max_tokens,
             temperature=0.0,
+            thinking_budget=adaptive_thinking,
         )
 
         if response is None:
@@ -1329,15 +1404,19 @@ class AgenticLoop:
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens
+            think_tok = getattr(response.usage, "thinking_tokens", 0) or 0
             tracker = get_tracker()
-            usage = tracker.record(self.model, in_tok, out_tok)
+            usage = tracker.record(
+                self.model, in_tok, out_tok, thinking_tokens=think_tok,
+            )
             if not self._quiet:
                 render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
             log.info(
-                "LLM call: model=%s in=%d out=%d cost=$%.4f",
+                "LLM call: model=%s in=%d out=%d think=%d cost=$%.4f",
                 self.model,
                 in_tok,
                 out_tok,
+                think_tok,
                 usage.cost_usd,
             )
 

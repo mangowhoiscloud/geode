@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -42,6 +42,10 @@ class SubGoal(BaseModel):
     tool_args: dict[str, Any] = Field(default_factory=dict, description="Arguments for the tool")
     depends_on: list[str] = Field(
         default_factory=list, description="IDs of sub-goals that must complete first"
+    )
+    difficulty: Literal["low", "medium", "high"] = Field(
+        default="medium",
+        description="Complexity: low=lookup, medium=analysis, high=reasoning",
     )
 
 

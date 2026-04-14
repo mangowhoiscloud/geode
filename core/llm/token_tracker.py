@@ -38,15 +38,19 @@ class LLMUsage:
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
+    thinking_tokens: int = 0
     cost_usd: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "model": self.model,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "cost_usd": self.cost_usd,
         }
+        if self.thinking_tokens:
+            d["thinking_tokens"] = self.thinking_tokens
+        return d
 
 
 @dataclass
@@ -64,6 +68,10 @@ class LLMUsageAccumulator:
         return sum(c.output_tokens for c in self.calls)
 
     @property
+    def total_thinking_tokens(self) -> int:
+        return sum(c.thinking_tokens for c in self.calls)
+
+    @property
     def total_cost_usd(self) -> float:
         return sum(c.cost_usd for c in self.calls)
 
@@ -71,12 +79,16 @@ class LLMUsageAccumulator:
         self.calls.append(usage)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "call_count": len(self.calls),
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
             "total_cost_usd": self.total_cost_usd,
         }
+        thinking = self.total_thinking_tokens
+        if thinking:
+            d["total_thinking_tokens"] = thinking
+        return d
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -89,23 +101,31 @@ class ModelPrice:
     """Per-token pricing for a single model.
 
     Anthropic: cache_write = input × 1.25, cache_read = input × 0.1
+               thinking = output price (Extended Thinking billed as output)
     OpenAI:    cache_read = provider-specific fixed price (no write cost)
+               thinking = output price (reasoning tokens billed as output)
     """
 
     input: float
     output: float
     cache_write: float = 0.0
     cache_read: float = 0.0
+    thinking: float = 0.0
 
 
 def _ant(input_mtok: float, output_mtok: float) -> ModelPrice:
-    """Anthropic pricing with standard 5-min cache multipliers (1.25× / 0.1×)."""
+    """Anthropic pricing with standard 5-min cache multipliers (1.25× / 0.1×).
+
+    Extended Thinking tokens are billed at the same rate as output tokens.
+    """
     inp = input_mtok / 1_000_000
+    out = output_mtok / 1_000_000
     return ModelPrice(
         input=inp,
-        output=output_mtok / 1_000_000,
+        output=out,
         cache_write=inp * 1.25,
         cache_read=inp * 0.1,
+        thinking=out,
     )
 
 
@@ -113,12 +133,18 @@ def _oai(
     input_mtok: float,
     output_mtok: float,
     cached_mtok: float = 0.0,
+    reasoning: bool = False,
 ) -> ModelPrice:
-    """OpenAI pricing with optional cached-input price."""
+    """OpenAI pricing with optional cached-input price.
+
+    Reasoning models (o3, o4-mini): reasoning tokens billed as output tokens.
+    """
+    out = output_mtok / 1_000_000
     return ModelPrice(
         input=input_mtok / 1_000_000,
-        output=output_mtok / 1_000_000,
+        output=out,
         cache_read=cached_mtok / 1_000_000 if cached_mtok else 0.0,
+        thinking=out if reasoning else 0.0,
     )
 
 
@@ -150,8 +176,8 @@ MODEL_PRICING: dict[str, ModelPrice] = {
     "gpt-4.1-nano": _oai(0.20,  0.80, cached_mtok=0.05),
 
     # ── OpenAI Reasoning (verified 2026-03-19) ─────────────────────────
-    "o3":       _oai(2.00,  8.00),
-    "o4-mini":  _oai(1.10,  4.40, cached_mtok=0.275),
+    "o3":       _oai(2.00,  8.00, reasoning=True),
+    "o4-mini":  _oai(1.10,  4.40, cached_mtok=0.275, reasoning=True),
 
     # ── ZhipuAI GLM (verified 2026-03-19) ──────────────────────────────
     # Source: https://open.bigmodel.cn/pricing + https://docs.z.ai
@@ -236,6 +262,7 @@ class TokenTracker:
         *,
         cache_creation_tokens: int = 0,
         cache_read_tokens: int = 0,
+        thinking_tokens: int = 0,
     ) -> LLMUsage:
         """Record one LLM call: cost → accumulator → optional LangSmith."""
         cost = self.calculate_cost(
@@ -244,11 +271,13 @@ class TokenTracker:
             output_tokens,
             cache_creation_tokens=cache_creation_tokens,
             cache_read_tokens=cache_read_tokens,
+            thinking_tokens=thinking_tokens,
         )
         usage = LLMUsage(
             model=model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            thinking_tokens=thinking_tokens,
             cost_usd=cost,
         )
         self._accumulator.record(usage)
@@ -264,6 +293,7 @@ class TokenTracker:
         *,
         cache_creation_tokens: int = 0,
         cache_read_tokens: int = 0,
+        thinking_tokens: int = 0,
     ) -> float:
         """Calculate cost in USD for a single LLM call."""
         price = self._pricing.get(model)
@@ -275,6 +305,8 @@ class TokenTracker:
             cost += cache_creation_tokens * price.cache_write
         if cache_read_tokens:
             cost += cache_read_tokens * price.cache_read
+        if thinking_tokens and price.thinking:
+            cost += thinking_tokens * price.thinking
         return cost
 
     def reset(self) -> None:
