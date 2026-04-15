@@ -466,6 +466,7 @@ class OpenAIAgenticAdapter:
         max_tokens: int,
         temperature: float,
         thinking_budget: int = 0,
+        effort: str = "high",
     ) -> Any | None:
         from core.llm.errors import UserCancelledError
         from core.llm.router import call_with_failover
@@ -516,14 +517,11 @@ class OpenAIAgenticAdapter:
                 "max_output_tokens": max_tokens,
                 "temperature": temperature,
             }
-            # Map thinking_budget to reasoning effort for reasoning models
-            if thinking_budget > 0 and m in _REASONING_MODELS:
-                if thinking_budget <= 4096:
-                    create_kwargs["reasoning"] = {"effort": "low"}
-                elif thinking_budget <= 16384:
-                    create_kwargs["reasoning"] = {"effort": "medium"}
-                else:
-                    create_kwargs["reasoning"] = {"effort": "high"}
+            # Map effort to OpenAI reasoning effort for reasoning models
+            _EFFORT_MAP = {"low": "low", "medium": "medium", "high": "high", "max": "high"}
+            if m in _REASONING_MODELS:
+                oai_effort = _EFFORT_MAP.get(effort, "medium")
+                create_kwargs["reasoning"] = {"effort": oai_effort}
             return await asyncio.to_thread(client.responses.create, **create_kwargs)
 
         try:

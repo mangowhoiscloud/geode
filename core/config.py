@@ -45,6 +45,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "pipeline.max_iterations": "max_iterations",
     "agentic.time_budget": "agentic_loop_time_budget",
     "agentic.thinking_budget": "agentic_thinking_budget",
+    "agentic.effort": "agentic_effort",
     "sandbox.max_file_size_bytes": "sandbox_max_file_size_bytes",
     "sandbox.max_read_tokens": "sandbox_max_read_tokens",
     "sandbox.max_glob_results": "sandbox_max_glob_results",
@@ -245,7 +246,11 @@ class Settings(BaseSettings):
     agentic_loop_time_budget: float = 0.0  # 0 = no time limit; >0 = wall-clock seconds
 
     # Agentic Loop — thinking budget (DTR: Extended Thinking / reasoning tokens)
-    agentic_thinking_budget: int = 0  # 0 = disabled; >0 = thinking token budget per call
+    agentic_thinking_budget: int = 0  # 0 = disabled; >0 = thinking token budget per call (legacy)
+
+    # Agentic Loop — effort level (replaces thinking_budget for Opus 4.6+ / Sonnet 4.6+)
+    # Maps to Anthropic output_config.effort + OpenAI reasoning.effort
+    agentic_effort: str = "high"  # "low" | "medium" | "high" | "max"
 
     # Cost guard — session-level cost limit (0 = no limit)
     cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%

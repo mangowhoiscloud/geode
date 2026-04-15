@@ -298,6 +298,7 @@ class ClaudeAgenticAdapter:
         max_tokens: int,
         temperature: float,
         thinking_budget: int = 0,
+        effort: str = "high",
     ) -> Any | None:
         from core.llm.agentic_response import normalize_anthropic
         from core.llm.errors import LLMBadRequestError, UserCancelledError
@@ -355,18 +356,26 @@ class ClaudeAgenticAdapter:
                     ]
                 }
 
-            # Extended Thinking: budget_tokens > 0 enables thinking mode
+            # Thinking mode: adaptive (4.6+) or legacy budget (older models)
+            _ADAPTIVE_MODELS = {"claude-opus-4-6", "claude-sonnet-4-6"}
             call_temperature = temperature
             call_max_tokens = max_tokens
             thinking_param: dict[str, Any] | None = None
-            if thinking_budget > 0:
+            output_config: dict[str, str] | None = None
+
+            if m in _ADAPTIVE_MODELS:
+                # Adaptive thinking (recommended for 4.6+): effort controls depth
+                thinking_param = {"type": "adaptive"}
+                output_config = {"effort": effort}
+                # Anthropic API requires temperature=1 with thinking
+                call_temperature = 1.0
+            elif thinking_budget > 0:
+                # Legacy: manual budget_tokens for older models
                 thinking_param = {
                     "type": "enabled",
                     "budget_tokens": thinking_budget,
                 }
-                # Anthropic API requires temperature=1 with Extended Thinking
                 call_temperature = 1.0
-                # max_tokens must accommodate both thinking + output
                 call_max_tokens = max(max_tokens, thinking_budget + max_tokens)
 
             create_kwargs: dict[str, Any] = {
@@ -380,6 +389,8 @@ class ClaudeAgenticAdapter:
             }
             if thinking_param is not None:
                 create_kwargs["thinking"] = thinking_param
+            if output_config is not None:
+                create_kwargs["output_config"] = output_config
             if extra_h:
                 create_kwargs["extra_headers"] = extra_h
             if extra_b:
