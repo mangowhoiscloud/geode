@@ -189,6 +189,7 @@ class AgenticLLMPort(Protocol):
         max_tokens: int,
         temperature: float,
         thinking_budget: int = 0,
+        effort: str = "high",
     ) -> AgenticResponse | None: ...
 
     def reset_client(self) -> None: ...
