@@ -179,10 +179,12 @@ MODEL_PRICING: dict[str, ModelPrice] = {
     "o3":       _oai(2.00,  8.00, reasoning=True),
     "o4-mini":  _oai(1.10,  4.40, cached_mtok=0.275, reasoning=True),
 
-    # ── ZhipuAI GLM (verified 2026-03-19) ──────────────────────────────
+    # ── ZhipuAI GLM (verified 2026-04-15) ──────────────────────────────
     # Source: https://open.bigmodel.cn/pricing + https://docs.z.ai
+    "glm-5.1":         _oai(0.95,  3.15),
     "glm-5":           _oai(0.72,  2.30),
-    "glm-5-turbo":     _oai(0.96,  3.20),
+    "glm-5-turbo":     _oai(1.20,  4.00),
+    "glm-5v-turbo":    _oai(1.20,  4.00),
     "glm-4.7":         _oai(0.40,  1.75),
     "glm-4.7-flash":   _oai(0.00,  0.00),  # free tier
 }
@@ -215,8 +217,10 @@ MODEL_CONTEXT_WINDOW: dict[str, int] = {
     "gpt-4.1-nano":             1_047_576,
     "o3":                         200_000,
     "o4-mini":                    200_000,
+    "glm-5.1":                    202_752,
     "glm-5":                      200_000,
-    "glm-5-turbo":                200_000,
+    "glm-5-turbo":                202_752,
+    "glm-5v-turbo":               202_752,
     "glm-4.7":                    200_000,
     "glm-4.7-flash":              200_000,
 }
