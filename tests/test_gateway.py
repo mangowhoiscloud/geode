@@ -329,9 +329,7 @@ class TestGatewaySessionKey:
     def test_build_gateway_session_key_with_thread_id(self):
         from core.memory.session_key import build_gateway_session_key
 
-        key = build_gateway_session_key(
-            "slack", "C12345", "U67890", thread_id="1234567890.123456"
-        )
+        key = build_gateway_session_key("slack", "C12345", "U67890", thread_id="1234567890.123456")
         assert "1234567890_123456" in key
         # Without thread_id should be shorter
         key_no_thread = build_gateway_session_key("slack", "C12345", "U67890")
@@ -439,16 +437,8 @@ class TestBindingConfigReload:
             "gateway": {
                 "bindings": {
                     "rules": [
-                        {
-                            "channel": "slack",
-                            "channel_id": "C123",
-                            "auto_respond": True,
-                        },
-                        {
-                            "channel": "discord",
-                            "channel_id": "D456",
-                            "require_mention": True,
-                        },
+                        {"channel": "slack", "channel_id": "C123", "auto_respond": True},
+                        {"channel": "discord", "channel_id": "D456", "require_mention": True},
                     ]
                 }
             }
