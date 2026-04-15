@@ -18,21 +18,18 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import tomllib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core.skills._frontmatter import _FRONTMATTER_RE
 from core.utils.atomic_io import atomic_write_text
 
 log = logging.getLogger(__name__)
 
 # Maximum learned patterns before oldest-drop rotation
 MAX_LEARNED_PATTERNS = 100
-
-# YAML frontmatter regex (same as project.py)
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 _DEFAULT_CAREER_TOML = """\
 # Career Identity — GEODE reads this to personalize agent behavior.
@@ -411,7 +408,7 @@ Write your bio, background, or any context you want GEODE to remember here.
                 # Extract body (after frontmatter)
                 fm_match = _FRONTMATTER_RE.match(raw)
                 if fm_match:
-                    result["bio"] = raw[fm_match.end() :].strip()
+                    result["bio"] = (fm_match.group(2) or "").strip()
                 else:
                     result["bio"] = raw.strip()
             except OSError:

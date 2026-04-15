@@ -15,10 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import json
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
@@ -44,15 +42,15 @@ from core.llm.router import (
     maybe_traceable,
     resolve_agentic_adapter,
 )
+from core.tools.base import load_all_tool_definitions
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
 
-# Load base tool definitions from centralized JSON
-_TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
-_BASE_TOOLS: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
+# Load base tool definitions from centralized JSON (SOT: core/tools/base.py)
+_BASE_TOOLS: list[dict[str, Any]] = load_all_tool_definitions()
 
 # Backward-compatible alias
 AGENTIC_TOOLS: list[dict[str, Any]] = _BASE_TOOLS

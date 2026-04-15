@@ -11,13 +11,14 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.skills._frontmatter import _FRONTMATTER_RE
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Frontmatter parser (no PyYAML dependency)
 # ---------------------------------------------------------------------------
 
-_FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n(.*)", re.DOTALL)
 _KV_RE = re.compile(r"^(\w[\w-]*)\s*:\s*(.+)$", re.MULTILINE)
 
 

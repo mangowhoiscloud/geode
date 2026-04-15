@@ -12,12 +12,10 @@ to preserve the existing HITL safety gates.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -25,8 +23,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# Load tool definitions for category/cost_tier lookup
-_TOOLS_JSON_PATH = Path(__file__).resolve().parent.parent / "tools" / "definitions.json"
+# Tool definitions loaded from centralized SOT (core/tools/base.py)
 
 # Tools that must NEVER be auto-recovered (safety gate preservation)
 _EXCLUDED_TOOLS: frozenset[str] = frozenset(
@@ -91,10 +88,12 @@ class RecoveryResult:
 
 
 def _load_tool_definitions() -> list[dict[str, Any]]:
-    """Load tool definitions from centralized JSON."""
+    """Load tool definitions from centralized JSON (SOT: core/tools/base.py)."""
     try:
-        return json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
-    except (OSError, json.JSONDecodeError):
+        from core.tools.base import load_all_tool_definitions
+
+        return load_all_tool_definitions()
+    except Exception:
         log.warning("Failed to load tool definitions for error recovery")
         return []
 
