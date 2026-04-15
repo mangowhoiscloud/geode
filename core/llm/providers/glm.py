@@ -1,8 +1,9 @@
 """ZhipuAI GLM provider — OpenAI-compatible API with custom base_url.
 
-Separate provider for GLM models (glm-5, glm-5-turbo, glm-4.7-flash).
-Uses OpenAI SDK but managed as an independent provider with its own
-client lifecycle, circuit breaker, and failover chain.
+Separate provider for GLM models (glm-5.1, glm-5, glm-5-turbo,
+glm-5v-turbo, glm-4.7-flash).  Uses OpenAI SDK but managed as an
+independent provider with its own client lifecycle, circuit breaker,
+and failover chain.
 """
 
 from __future__ import annotations
@@ -84,7 +85,7 @@ _GLM_NATIVE_WEB_SEARCH: dict[str, Any] = {
 
 
 class GlmAgenticAdapter(OpenAIAgenticAdapter):
-    """ZhipuAI GLM adapter (glm-5, glm-5-turbo, glm-4.7-flash).
+    """ZhipuAI GLM adapter (glm-5.1, glm-5, glm-5-turbo, glm-5v-turbo, glm-4.7-flash).
 
     Injects GLM native web_search tool alongside function tools.
     """

@@ -359,8 +359,8 @@ OPENAI_PRIMARY = "gpt-5.4"
 OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.4", "gpt-5.2", "gpt-4.1"]
 
 # ZhipuAI (GLM) models — OpenAI-compatible API, separate provider
-GLM_PRIMARY = "glm-5"
-GLM_FALLBACK_CHAIN: list[str] = ["glm-5", "glm-5-turbo", "glm-4.7-flash"]
+GLM_PRIMARY = "glm-5.1"
+GLM_FALLBACK_CHAIN: list[str] = ["glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"]
 GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
 
 
