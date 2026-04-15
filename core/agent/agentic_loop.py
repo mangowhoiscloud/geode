@@ -179,7 +179,8 @@ class AgenticLoop:
         *,
         max_rounds: int = DEFAULT_MAX_ROUNDS,
         max_tokens: int = DEFAULT_MAX_TOKENS,
-        thinking_budget: int = 0,  # 0 = disabled; >0 = Extended Thinking tokens
+        thinking_budget: int = 0,  # 0 = disabled; >0 = Extended Thinking tokens (legacy)
+        effort: str = "high",  # "low" | "medium" | "high" | "max" (adaptive thinking)
         time_budget_s: float = 0.0,  # 0 = no time limit (OpenClaw pattern)
         cost_budget: float = 0.0,  # 0 = no cost limit (Karpathy P3)
         model: str | None = None,
@@ -201,6 +202,7 @@ class AgenticLoop:
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self._thinking_budget = thinking_budget
+        self._effort = effort
         self._time_budget_s = time_budget_s
         # Adaptive compute: track consecutive text-only rounds for overthinking detection
         self._consecutive_text_only_rounds = 0
@@ -1336,16 +1338,29 @@ class AgenticLoop:
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
         # Adaptive compute allocation (DTR insight: match budget to round purpose)
+        # Context-proportional caps derived from model's context window
+        from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+
+        ctx_window = MODEL_CONTEXT_WINDOW.get(self.model, 200_000)
+        _EFFORT_LEVELS = ["low", "medium", "high", "max"]
+
         adaptive_max_tokens = self.max_tokens
         adaptive_thinking = self._thinking_budget
+        adaptive_effort = self._effort
         if force_text:
             # Wrap-up: minimal budget — summarize, don't reason
-            adaptive_max_tokens = min(self.max_tokens, 4096)
+            # Context-proportional: 0.5% of window, floor 4096
+            adaptive_max_tokens = max(4096, min(self.max_tokens, ctx_window // 200))
             adaptive_thinking = 0
+            adaptive_effort = "low"
         elif self._consecutive_text_only_rounds >= 2:
-            # Overthinking: reduce budget to curb verbose non-actionable output
-            adaptive_max_tokens = min(self.max_tokens, 16384)
+            # Overthinking: reduce budget — curb verbose non-actionable output
+            # Context-proportional: 2% of window, floor 8192
+            adaptive_max_tokens = max(8192, min(self.max_tokens, ctx_window // 50))
             adaptive_thinking = min(adaptive_thinking, adaptive_thinking // 2)
+            # Downgrade effort by one level
+            idx = _EFFORT_LEVELS.index(adaptive_effort) if adaptive_effort in _EFFORT_LEVELS else 2
+            adaptive_effort = _EFFORT_LEVELS[max(0, idx - 1)]
 
         response = await self._adapter.agentic_call(
             model=self.model,
@@ -1356,6 +1371,7 @@ class AgenticLoop:
             max_tokens=adaptive_max_tokens,
             temperature=0.0,
             thinking_budget=adaptive_thinking,
+            effort=adaptive_effort,
         )
 
         if response is None:

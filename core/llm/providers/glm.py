@@ -111,6 +111,7 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
         max_tokens: int,
         temperature: float,
         thinking_budget: int = 0,
+        effort: str = "high",
     ) -> Any | None:
         """GLM agentic call with native web_search injection."""
         client = self._ensure_client(model)
