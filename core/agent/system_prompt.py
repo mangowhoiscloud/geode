@@ -94,6 +94,39 @@ def build_system_prompt(model: str = "") -> str:
     return base
 
 
+def format_current_date() -> str:
+    """Return the current date as ``YYYY-MM-DD (Weekday)`` string.
+
+    Shared helper used by both the system prompt and system injection
+    to avoid duplicate ``datetime.now()`` formatting.
+    """
+    return datetime.now().strftime("%Y-%m-%d (%A)")
+
+
+def get_active_rule_names(limit: int = 5) -> list[str]:
+    """Return active analysis rule names from ProjectMemory.
+
+    Shared helper used by both the system prompt (G4 detailed view)
+    and system injection (lightweight summary).  Returns empty list
+    on any failure (graceful degradation).
+    """
+    try:
+        from core.memory.project import ProjectMemory
+
+        mem = ProjectMemory()
+        if not mem.exists():
+            return []
+
+        rules = mem.list_rules()
+        if not rules:
+            return []
+
+        return [r["name"] for r in rules[:limit]]
+    except Exception:
+        log.debug("Failed to get active rule names", exc_info=True)
+        return []
+
+
 def _build_date_context() -> str:
     """Build current date string for system prompt injection.
 
@@ -101,9 +134,10 @@ def _build_date_context() -> str:
     searching for recent information.
     """
     now = datetime.now()
+    date_str = format_current_date()
     return (
         f"## Current Date\n"
-        f"Today is {now.strftime('%Y-%m-%d (%A)')}. "
+        f"Today is {date_str}. "
         f"The current year is {now.year}. "
         f"When searching for recent or latest information, use {now.year} as the base year."
     )
@@ -346,6 +380,8 @@ def _build_project_memory_context() -> str:
     """G4: Build runtime project memory (insights + rules) from ProjectMemory.
 
     This is the original _build_memory_context logic, now isolated as G4.
+    Note: G4 needs full rule details (name + paths), so it calls
+    ``mem.list_rules()`` directly rather than ``get_active_rule_names()``.
     """
     try:
         from core.memory.project import ProjectMemory
@@ -364,7 +400,7 @@ def _build_project_memory_context() -> str:
             if lines:
                 parts.append("Recent insights:\n" + "\n".join(lines[:5]))
 
-        # Active rules summary
+        # Active rules summary (detailed — name + paths)
         rules = mem.list_rules()
         if rules:
             rule_summaries = [
