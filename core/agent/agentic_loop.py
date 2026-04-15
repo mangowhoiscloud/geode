@@ -1407,7 +1407,10 @@ class AgenticLoop:
             think_tok = getattr(response.usage, "thinking_tokens", 0) or 0
             tracker = get_tracker()
             usage = tracker.record(
-                self.model, in_tok, out_tok, thinking_tokens=think_tok,
+                self.model,
+                in_tok,
+                out_tok,
+                thinking_tokens=think_tok,
             )
             if not self._quiet:
                 render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
