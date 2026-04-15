@@ -297,6 +297,7 @@ class ClaudeAgenticAdapter:
         tool_choice: dict[str, str] | str,
         max_tokens: int,
         temperature: float,
+        thinking_budget: int = 0,
     ) -> Any | None:
         from core.llm.agentic_response import normalize_anthropic
         from core.llm.errors import LLMBadRequestError, UserCancelledError
@@ -354,17 +355,37 @@ class ClaudeAgenticAdapter:
                     ]
                 }
 
-            return await self._client.messages.create(  # type: ignore[union-attr]
-                model=m,
-                system=system,
-                messages=messages,
-                tools=api_tools,
-                tool_choice=tool_choice,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                extra_headers=extra_h if extra_h else None,
-                extra_body=extra_b if extra_b else None,
-            )
+            # Extended Thinking: budget_tokens > 0 enables thinking mode
+            call_temperature = temperature
+            call_max_tokens = max_tokens
+            thinking_param: dict[str, Any] | None = None
+            if thinking_budget > 0:
+                thinking_param = {
+                    "type": "enabled",
+                    "budget_tokens": thinking_budget,
+                }
+                # Anthropic API requires temperature=1 with Extended Thinking
+                call_temperature = 1.0
+                # max_tokens must accommodate both thinking + output
+                call_max_tokens = max(max_tokens, thinking_budget + max_tokens)
+
+            create_kwargs: dict[str, Any] = {
+                "model": m,
+                "system": system,
+                "messages": messages,
+                "tools": api_tools,
+                "tool_choice": tool_choice,
+                "max_tokens": call_max_tokens,
+                "temperature": call_temperature,
+            }
+            if thinking_param is not None:
+                create_kwargs["thinking"] = thinking_param
+            if extra_h:
+                create_kwargs["extra_headers"] = extra_h
+            if extra_b:
+                create_kwargs["extra_body"] = extra_b
+
+            return await self._client.messages.create(**create_kwargs)  # type: ignore[union-attr]
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)

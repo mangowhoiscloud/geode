@@ -507,6 +507,14 @@ class SubAgentManager:
         domain = get_domain_or_none()
         denied = list(self._denied_tools | {"delegate_task"})
 
+        # Adaptive thinking budget based on task difficulty hint
+        task_thinking = settings.agentic_thinking_budget
+        difficulty = getattr(task, "difficulty", "medium")
+        if difficulty == "low":
+            task_thinking = 0
+        elif difficulty == "high":
+            task_thinking = max(task_thinking, 8192)
+
         return WorkerRequest(
             task_id=task.task_id,
             task_type=task.task_type,
@@ -517,6 +525,7 @@ class SubAgentManager:
             provider=_resolve_provider(settings.model),
             timeout_s=self._timeout_s,
             time_budget_s=self._time_budget_s,
+            thinking_budget=task_thinking,
             domain=domain.name if domain else "",
         )
 
