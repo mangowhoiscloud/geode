@@ -177,9 +177,18 @@ def classify_tool_exception(exc: Exception, tool_name: str = "") -> dict[str, An
 _TOOLS_JSON_PATH = Path(__file__).resolve().parent / "definitions.json"
 
 
+def load_all_tool_definitions() -> list[dict[str, Any]]:
+    """Load all tool definitions from definitions.json (single source of truth).
+
+    Other modules should import this instead of independently reading
+    the JSON file to avoid path duplication.
+    """
+    return json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+
+
 def load_tool_definition(name: str) -> dict[str, Any]:
     """Load a single tool definition by name from definitions.json."""
-    all_tools: list[dict[str, Any]] = json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))
+    all_tools = load_all_tool_definitions()
     for t in all_tools:
         if t["name"] == name:
             return t
