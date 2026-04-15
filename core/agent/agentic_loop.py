@@ -1255,6 +1255,11 @@ class AgenticLoop:
         Returns a normalized ``AgenticResponse`` or None on failure.
         Raises ``UserCancelledError`` on Ctrl+C (caught by ``arun()``).
         """
+        # Sandwich injection: prepend system reminder to messages (Claude Code pattern)
+        from core.agent.system_injection import prepend_system_reminder
+
+        prepend_system_reminder(messages, model=self.model, round_idx=round_idx)
+
         # Context overflow detection (Karpathy P6 Context Budget)
         self._check_context_overflow(system, messages)
 
