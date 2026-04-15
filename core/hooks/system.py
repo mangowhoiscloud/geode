@@ -126,6 +126,9 @@ class HookEvent(Enum):
     COST_LIMIT_EXCEEDED = "cost_limit_exceeded"
     EXECUTION_CANCELLED = "execution_cancelled"
 
+    # Reasoning metrics (DTR-inspired observability)
+    REASONING_METRICS = "reasoning_metrics"
+
 
 @dataclass
 class HookResult:

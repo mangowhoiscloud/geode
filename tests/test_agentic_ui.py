@@ -300,19 +300,26 @@ class TestRenderStatusLine:
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_renders_with_session_meter(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        init_session_meter(model="claude-opus-4-6")
-        # Record some usage so tracker has data
-        from core.llm.token_tracker import get_tracker
+        import core.cli.ui.agentic_ui as _ui_mod
+        from core.llm.token_tracker import get_tracker, reset_tracker
 
-        tracker = get_tracker()
-        tracker.record("claude-opus-4-6", 1200, 350)
+        # Isolate: clear stale _turn_snapshot from other tests
+        old_snap = _ui_mod._turn_snapshot
+        _ui_mod._turn_snapshot = None
+        reset_tracker()
+        try:
+            init_session_meter(model="claude-opus-4-6")
+            tracker = get_tracker()
+            tracker.record("claude-opus-4-6", 1200, 350)
 
-        render_status_line()
-        printed = str(mock_console.print.call_args)
-        assert "✢" in printed
-        assert "Worked for" in printed
-        assert "claude-opus-4-6" in printed
-        assert "context" in printed
+            render_status_line()
+            printed = str(mock_console.print.call_args)
+            assert "✢" in printed
+            assert "Worked for" in printed
+            assert "claude-opus-4-6" in printed
+            assert "context" in printed
+        finally:
+            _ui_mod._turn_snapshot = old_snap
 
     @patch("core.cli.ui.agentic_ui.console")
     def test_noop_without_meter(self, mock_console) -> None:  # type: ignore[no-untyped-def]

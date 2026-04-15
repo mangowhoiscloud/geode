@@ -465,6 +465,7 @@ class OpenAIAgenticAdapter:
         tool_choice: dict[str, str] | str,
         max_tokens: int,
         temperature: float,
+        thinking_budget: int = 0,
     ) -> Any | None:
         from core.llm.errors import UserCancelledError
         from core.llm.router import call_with_failover
@@ -503,16 +504,27 @@ class OpenAIAgenticAdapter:
         responses_input = _convert_messages_to_responses(system, messages)
         failover_models = [model] + [m for m in self.fallback_chain if m != model]
 
+        # OpenAI reasoning models that support reasoning effort
+        _REASONING_MODELS = {"o3", "o4-mini", "o3-mini"}
+
         async def _do_call(m: str) -> Any:
-            return await asyncio.to_thread(
-                client.responses.create,
-                model=m,
-                input=responses_input,
-                tools=oai_tools if oai_tools else None,
-                tool_choice=tc_val if oai_tools else None,
-                max_output_tokens=max_tokens,
-                temperature=temperature,
-            )
+            create_kwargs: dict[str, Any] = {
+                "model": m,
+                "input": responses_input,
+                "tools": oai_tools if oai_tools else None,
+                "tool_choice": tc_val if oai_tools else None,
+                "max_output_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            # Map thinking_budget to reasoning effort for reasoning models
+            if thinking_budget > 0 and m in _REASONING_MODELS:
+                if thinking_budget <= 4096:
+                    create_kwargs["reasoning"] = {"effort": "low"}
+                elif thinking_budget <= 16384:
+                    create_kwargs["reasoning"] = {"effort": "medium"}
+                else:
+                    create_kwargs["reasoning"] = {"effort": "high"}
+            return await asyncio.to_thread(client.responses.create, **create_kwargs)
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)

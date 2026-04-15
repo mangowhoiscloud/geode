@@ -39,6 +39,7 @@ class ResponseUsage:
 
     input_tokens: int = 0
     output_tokens: int = 0
+    thinking_tokens: int = 0
 
 
 @dataclass
@@ -72,9 +73,14 @@ def normalize_anthropic(response: Any) -> AgenticResponse:
 
     usage = ResponseUsage()
     if response.usage:
+        # Anthropic Extended Thinking: thinking tokens tracked separately
+        thinking_tok = 0
+        if hasattr(response.usage, "thinking_tokens"):
+            thinking_tok = response.usage.thinking_tokens or 0
         usage = ResponseUsage(
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
+            thinking_tokens=thinking_tok,
         )
 
     return AgenticResponse(
@@ -120,9 +126,15 @@ def normalize_openai(response: Any) -> AgenticResponse:
 
     usage = ResponseUsage()
     if response.usage:
+        # OpenAI reasoning models: reasoning_tokens in completion_tokens_details
+        thinking_tok = 0
+        details = getattr(response.usage, "completion_tokens_details", None)
+        if details is not None:
+            thinking_tok = getattr(details, "reasoning_tokens", 0) or 0
         usage = ResponseUsage(
             input_tokens=response.usage.prompt_tokens or 0,
             output_tokens=response.usage.completion_tokens or 0,
+            thinking_tokens=thinking_tok,
         )
 
     return AgenticResponse(
@@ -176,9 +188,15 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
 
     usage = ResponseUsage()
     if hasattr(response, "usage") and response.usage is not None:
+        # OpenAI Responses API: reasoning_tokens in output_tokens_details
+        thinking_tok = 0
+        details = getattr(response.usage, "output_tokens_details", None)
+        if details is not None:
+            thinking_tok = getattr(details, "reasoning_tokens", 0) or 0
         usage = ResponseUsage(
             input_tokens=getattr(response.usage, "input_tokens", 0) or 0,
             output_tokens=getattr(response.usage, "output_tokens", 0) or 0,
+            thinking_tokens=thinking_tok,
         )
 
     return AgenticResponse(

@@ -44,6 +44,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "pipeline.confidence_threshold": "confidence_threshold",
     "pipeline.max_iterations": "max_iterations",
     "agentic.time_budget": "agentic_loop_time_budget",
+    "agentic.thinking_budget": "agentic_thinking_budget",
     "sandbox.max_file_size_bytes": "sandbox_max_file_size_bytes",
     "sandbox.max_read_tokens": "sandbox_max_read_tokens",
     "sandbox.max_glob_results": "sandbox_max_glob_results",
@@ -242,6 +243,9 @@ class Settings(BaseSettings):
 
     # Agentic Loop — time budget (Karpathy P3, OpenClaw Attempt Loop)
     agentic_loop_time_budget: float = 0.0  # 0 = no time limit; >0 = wall-clock seconds
+
+    # Agentic Loop — thinking budget (DTR: Extended Thinking / reasoning tokens)
+    agentic_thinking_budget: int = 0  # 0 = disabled; >0 = thinking token budget per call
 
     # Cost guard — session-level cost limit (0 = no limit)
     cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%

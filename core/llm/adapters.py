@@ -188,6 +188,7 @@ class AgenticLLMPort(Protocol):
         tool_choice: dict[str, str] | str,
         max_tokens: int,
         temperature: float,
+        thinking_budget: int = 0,
     ) -> AgenticResponse | None: ...
 
     def reset_client(self) -> None: ...
