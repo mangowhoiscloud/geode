@@ -53,13 +53,15 @@ class TestBuildSystemReminder:
         assert len(result) <= _MAX_REMINDER_CHARS + 10  # +10 for "..." and tag
         assert result.endswith("...")
 
-    @patch("core.agent.system_injection._get_active_rules_summary", return_value="rule_a, rule_b")
+    @patch(
+        "core.agent.system_prompt.get_active_rule_names", return_value=["rule_a", "rule_b"]
+    )
     def test_active_rules_included(self, _mock: object) -> None:
         """Active rules summary injected when available."""
         result = build_system_reminder()
         assert "Active rules: rule_a, rule_b" in result
 
-    @patch("core.agent.system_injection._get_active_rules_summary", return_value="")
+    @patch("core.agent.system_prompt.get_active_rule_names", return_value=[])
     def test_no_rules_graceful(self, _mock: object) -> None:
         """No crash when no active rules."""
         result = build_system_reminder()

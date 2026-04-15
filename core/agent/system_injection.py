@@ -17,7 +17,6 @@ stored ConversationContext), so it is ephemeral and regenerated each round.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -47,18 +46,21 @@ def build_system_reminder(
     """
     parts: list[str] = []
 
-    # 1. Date context (always useful — prevents stale year in searches)
-    now = datetime.now()
-    parts.append(f"Current date: {now.strftime('%Y-%m-%d (%A)')}")
+    # 1. Date context (shared helper — prevents stale year in searches)
+    from core.agent.system_prompt import format_current_date
+
+    parts.append(f"Current date: {format_current_date()}")
 
     # 2. Round awareness
     if round_idx > 0:
         parts.append(f"Current round: {round_idx + 1}")
 
-    # 3. Active analysis rules (lightweight — names only)
-    rules_summary = _get_active_rules_summary()
-    if rules_summary:
-        parts.append(f"Active rules: {rules_summary}")
+    # 3. Active analysis rules (shared helper — names only)
+    from core.agent.system_prompt import get_active_rule_names
+
+    rule_names = get_active_rule_names()
+    if rule_names:
+        parts.append(f"Active rules: {', '.join(rule_names)}")
 
     # 4. Extra context from caller
     if extra_context:
@@ -135,26 +137,3 @@ def _is_system_reminder(message: dict[str, Any]) -> bool:
     if isinstance(content, str):
         return content.startswith(f"[{_REMINDER_TAG}]")
     return False
-
-
-def _get_active_rules_summary() -> str:
-    """Get a one-line summary of active analysis rules from ProjectMemory.
-
-    Returns empty string on any failure (graceful degradation).
-    """
-    try:
-        from core.memory.project import ProjectMemory
-
-        mem = ProjectMemory()
-        if not mem.exists():
-            return ""
-
-        rules = mem.list_rules()
-        if not rules:
-            return ""
-
-        names = [r["name"] for r in rules[:5]]
-        return ", ".join(names)
-    except Exception:
-        log.debug("Failed to get active rules for system reminder", exc_info=True)
-        return ""
