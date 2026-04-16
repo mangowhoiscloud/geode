@@ -366,9 +366,33 @@ class ClaudeAgenticAdapter:
                 call_temperature = 1.0
                 call_max_tokens = max(max_tokens, thinking_budget + max_tokens)
 
+            # Prompt caching split: static content before boundary gets
+            # cache_control for reuse across turns; dynamic content after
+            # boundary is ephemeral.  (Claude Code STATIC/DYNAMIC pattern)
+            from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+
+            if PROMPT_CACHE_BOUNDARY in system:
+                static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
+                sys_blocks: list[dict[str, Any]] = [
+                    {
+                        "type": "text",
+                        "text": static_part.rstrip(),
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {"type": "text", "text": dynamic_part.lstrip()},
+                ]
+            else:
+                sys_blocks = [
+                    {
+                        "type": "text",
+                        "text": system,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+
             create_kwargs: dict[str, Any] = {
                 "model": m,
-                "system": system,
+                "system": sys_blocks,
                 "messages": messages,
                 "tools": api_tools,
                 "tool_choice": tool_choice,
