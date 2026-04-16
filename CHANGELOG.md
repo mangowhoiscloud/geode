@@ -29,11 +29,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Architecture
-- **Approval workflow extraction** — HITL approval logic extracted from `tool_executor.py` (1390줄) to `agent/approval.py` (577줄). ApprovalWorkflow class: pattern learning, prompt, safety gates, MCP/write/cost/bash confirmation. tool_executor.py 1390→862줄 (-38%)
+- **Approval workflow extraction** — HITL approval logic extracted from `tool_executor.py` to `agent/approval.py`. SRP improvement (#750)
+- **Hook interceptor/feedback pattern** — TOOL_EXEC hooks upgraded to interceptor pattern with aggressive recovery wiring (#751)
+- **Adapter base classes** — `BaseNotificationAdapter` (Slack/Discord/Telegram), `BaseCalendarAdapter` (Google/Apple), `BasePoller` infra consolidation. ~200줄 중복 제거 (#731)
+- **OAuth credential cache** — `CredentialCache` class extracts shared TTL+mtime cache pattern from 2 OAuth readers (#731)
+- **Provider key resolution** — `resolve_provider_key()` centralizes ProfileRotator lookup (#731)
+- **Scoring constants** — `scoring_constants.py` single source of truth for tier thresholds, weights, confidence multiplier (#731)
 
 ### Added
 - **`geode doctor slack`** — Slack Gateway 7-point diagnostic (env, token, scopes, bindings, serve, MCP, socket). CLI + natural language tool (#57)
 - **Slack App Manifest URL** — `get_manifest_url()` 원클릭 앱 생성 URL
+- **OSS compliance files** — NOTICE, CONTRIBUTING.md (DCO), CODE_OF_CONDUCT.md, SECURITY.md, Issue/PR templates, .env.example (#744)
+- **OSS templates** — `docs/progress.md` kanban, `docs/plans/TEMPLATE.md`, `docs/workflow.md`, `.geode/skills/TEMPLATE.md` (#746)
+
+### Fixed
+- **GLM auth infinite retry** — `classify_llm_error()` now handles OpenAI SDK exceptions (was Anthropic-only). Auth errors trigger immediate cross-provider escalation instead of cycling within same provider (#740)
+- **Model escalation ↔ settings sync** — `_persist_escalated_model()` prevents `_sync_model_from_settings()` from reverting escalation (#740)
+- **BashTool cwd** — defaults to `get_project_root()` (user's workspace) instead of GEODE install path (#748)
+- **LLM client resource leaks** — `try/finally` + `close()` for OpenAI/Anthropic clients in `llm_extract_learning.py` (#731)
+- **CI flaky test** — `test_select_by_number` now sets initial model explicitly (#740)
+
+### Removed
+- **Internal docs** — `docs/progress.md` (kanban data), `docs/plans/` (32 planning docs), `docs/workflow.md` (internal scaffold), `docs/reports/` (5 completion reports) — replaced with public templates (#744)
+- **Personal skills** — job-hunter, expense-tracker, youtube-planner, daily-briefing, weekly-retro, slack-digest (#744)
+
+### Infrastructure
+- **.gitignore guardrails** — blocks personal skills, memory, scaffold harness, temporary artifacts from being committed (#746)
 
 ## [0.48.0] — 2026-04-11
 
