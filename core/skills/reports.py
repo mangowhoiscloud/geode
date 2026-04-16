@@ -421,9 +421,7 @@ def _format_scoring_breakdown_html(
             f"<td>{weighted:.1f}</td></tr>\n"
         )
     multiplier = (
-        CONFIDENCE_BASE_FACTOR + CONFIDENCE_SCALE_FACTOR * confidence / 100
-        if confidence
-        else 1.0
+        CONFIDENCE_BASE_FACTOR + CONFIDENCE_SCALE_FACTOR * confidence / 100 if confidence else 1.0
     )
     final = weighted_sum * multiplier
     return f"""<div class="section">
@@ -462,9 +460,7 @@ def _format_scoring_breakdown_md(
         label = key.upper() if key in ("psm", "dev") else key.capitalize()
         lines.append(f"| {label} | {val:.1f} | {weight:.0%} | {weighted:.1f} |")
     multiplier = (
-        CONFIDENCE_BASE_FACTOR + CONFIDENCE_SCALE_FACTOR * confidence / 100
-        if confidence
-        else 1.0
+        CONFIDENCE_BASE_FACTOR + CONFIDENCE_SCALE_FACTOR * confidence / 100 if confidence else 1.0
     )
     final = weighted_sum * multiplier
     lines.append("")

@@ -105,9 +105,7 @@ class BaseCalendarAdapter:
             self._server_name, "create_event", args
         )
         if "error" in result:
-            raise RuntimeError(
-                f"{self._source.title()} create_event failed: {result['error']}"
-            )
+            raise RuntimeError(f"{self._source.title()} create_event failed: {result['error']}")
         return CalendarEvent(
             event_id=self._extract_event_id(result),
             title=title,

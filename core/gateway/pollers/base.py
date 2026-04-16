@@ -75,8 +75,7 @@ class BasePoller(ABC):
         return [
             b
             for b in bindings
-            if b["channel"] == self.channel_name
-            and b.get("channel_id", "") not in ("", "*")
+            if b["channel"] == self.channel_name and b.get("channel_id", "") not in ("", "*")
         ]
 
     # --- Lifecycle ---

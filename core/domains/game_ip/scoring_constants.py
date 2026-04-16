@@ -68,4 +68,3 @@ def score_ansi_color(score: float) -> str:
     if score >= TIER_A_THRESHOLD:
         return "33"
     return "31"
-
