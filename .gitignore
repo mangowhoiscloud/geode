@@ -38,4 +38,31 @@ geode_checkpoints.db
 !.geode/memory/
 !.geode/config.toml.example
 !.geode/skills/
+
+# Personal skills — never commit (use .geode/skills/TEMPLATE.md as guide)
+.geode/skills/job-hunter/
+.geode/skills/expense-tracker/
+.geode/skills/youtube-planner/
+.geode/skills/daily-briefing/
+.geode/skills/weekly-retro/
+.geode/skills/slack-digest/
+
+# Personal memory — never commit
+.geode/memory/PROJECT.md
+
+# Scaffold harness — local-only
+.claude/commands/
+.claude/hooks/
+.claude/skills/
+.claude/workflow-state.json
+.claude/worktrees/
+.claude/MEMORY.md
+
+# Temporary artifacts
+tmp/
+reports/
+*.png
+*.html
+!docs/**/*.html
+
 # CI trigger
