@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from core.agent.error_recovery import ErrorRecoveryStrategy
     from core.agent.sub_agent import SubAgentManager
     from core.cli.ui.agentic_ui import OperationLogger
-    from core.hooks import HookSystem
+    from core.hooks import HookResult, HookSystem, InterceptResult
 
 from core.agent.approval import (
     _write_denial_with_fallback as _write_denial_with_fallback,
@@ -693,24 +693,51 @@ class ToolCallProcessor:
             # Progressive log: show tool call before execution
             visible = self._op_logger.log_tool_call(tool_name, tool_input)
 
-            # Hook: TOOL_EXEC_START
-            self._fire_hook("tool_exec_start", {"tool_name": tool_name, "tool_input": tool_input})
+            # Hook: TOOL_EXEC_START (interceptor — can block or modify input)
+            intercept = self._fire_interceptor(
+                "tool_exec_start", {"tool_name": tool_name, "tool_input": tool_input}
+            )
+            if intercept is not None and intercept.blocked:
+                log.info("Tool %s blocked by TOOL_EXEC_START hook: %s", tool_name, intercept.reason)
+                result = {"error": intercept.reason, "blocked_by_hook": True}
+                self._op_logger.log_tool_result(tool_name, result, visible=visible)
+                self._record_tool_activity(tool_name, tool_input, result, visible)
+                return self._serialize_tool_result(result, block.id)
+
+            # Apply input modifications from interceptor hook
+            if intercept is not None:
+                modified_input = intercept.data.get("tool_input")
+                if isinstance(modified_input, dict):
+                    tool_input = modified_input
 
             # Execute via ToolExecutor (sync handlers wrapped in to_thread)
             _t0 = time.monotonic()
             result = await asyncio.to_thread(self._executor.execute, tool_name, tool_input)
             _elapsed_ms = (time.monotonic() - _t0) * 1000
 
-            # Hook: TOOL_EXEC_END
-            self._fire_hook(
+            # Hook: TOOL_EXEC_END (feedback — can modify result)
+            post_results = self._fire_with_result(
                 "tool_exec_end",
                 {
                     "tool_name": tool_name,
                     "tool_input": tool_input,
                     "duration_ms": _elapsed_ms,
                     "has_error": isinstance(result, dict) and bool(result.get("error")),
+                    "result": result,
                 },
             )
+            # Apply result modifications from PostToolUse-style handlers
+            for hr in post_results:
+                if hr.success and isinstance(hr.data, dict):
+                    updated = hr.data.get("updated_result")
+                    if isinstance(updated, dict):
+                        result = updated
+                    extra_ctx = hr.data.get("additional_context")
+                    if extra_ctx and isinstance(result, dict):
+                        prev = result.get("additional_context", "")
+                        result["additional_context"] = (
+                            f"{prev}\n{extra_ctx}" if prev else extra_ctx
+                        )
 
         # Track consecutive failures + recoverability breadcrumb
         if isinstance(result, dict) and result.get("error"):
@@ -927,6 +954,42 @@ class ToolCallProcessor:
             self._hooks.trigger(event, data)
         except Exception:
             log.debug("Hook trigger failed for %s", event_name, exc_info=True)
+
+    def _fire_interceptor(
+        self, event_name: str, data: dict[str, Any]
+    ) -> InterceptResult | None:
+        """Emit a hook event as interceptor (block/modify semantics).
+
+        Returns InterceptResult if hooks are configured, None otherwise.
+        """
+        if self._hooks is None:
+            return None
+        try:
+            from core.hooks import HookEvent as _HookEvent
+
+            event = _HookEvent(event_name)
+            return self._hooks.trigger_interceptor(event, data)
+        except Exception:
+            log.debug("Interceptor trigger failed for %s", event_name, exc_info=True)
+            return None
+
+    def _fire_with_result(
+        self, event_name: str, data: dict[str, Any]
+    ) -> list[HookResult]:
+        """Emit a hook event capturing handler return values.
+
+        Returns list of HookResult with handler-returned data.
+        """
+        if self._hooks is None:
+            return []
+        try:
+            from core.hooks import HookEvent as _HookEvent
+
+            event = _HookEvent(event_name)
+            return self._hooks.trigger_with_result(event, data)
+        except Exception:
+            log.debug("Hook trigger_with_result failed for %s", event_name, exc_info=True)
+            return []
 
     @staticmethod
     def _make_denial_result(block: Any, reason: str) -> dict[str, Any]:

@@ -1190,7 +1190,9 @@ class AgenticLoop:
 
     def _aggressive_context_recovery(self, system: str, messages: list[dict[str, Any]]) -> int:
         """Last-resort context recovery. Delegates to ContextWindowManager."""
-        return self._ctx_mgr.aggressive_context_recovery(system, messages, self.model)
+        return self._ctx_mgr.aggressive_context_recovery(
+            system, messages, self.model, self._provider
+        )
 
     @staticmethod
     def _repair_messages(messages: list[dict[str, Any]]) -> None:
