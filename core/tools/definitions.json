@@ -140,7 +140,7 @@
   },
   {
     "name": "check_status",
-    "description": "Checks the GEODE system status and MCP server list. Use when the user asks about system status, MCP server list/connection status, health check, model info, or configuration.",
+    "description": "Checks the GEODE system status, MCP server connections, and available tools. Use when the user asks about system status, MCP server list/connection status, health check, model info, or configuration. Also useful to verify which MCP tools (playwright, steam, etc.) are currently available.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -368,7 +368,7 @@
   },
   {
     "name": "run_bash",
-    "description": "Execute a shell command on the user's local machine. REQUIRES user approval before execution. Use for: file operations, system checks, data processing. DO NOT use for: destructive operations, privilege escalation.",
+    "description": "Execute a shell command on the user's local machine. REQUIRES user approval before execution. Use for: system checks, package installs, process management, git operations. PREFER dedicated tools over bash: file search → glob_files, content search → grep_files, read files → read_document, edit files → edit_file, open URLs → playwright MCP (browser_navigate). DO NOT use for: destructive operations, privilege escalation, or finding/launching browsers (use playwright MCP instead).",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -391,7 +391,7 @@
   },
   {
     "name": "delegate_task",
-    "description": "Delegates a task to a sub-agent for parallel execution. Use when the user wants to analyze multiple IPs simultaneously or requests parallel tasks.",
+    "description": "Delegates a task to a sub-agent for parallel execution. Use when: (1) analyzing multiple IPs simultaneously, (2) running independent subtasks in parallel, (3) long-running tasks that shouldn't block the main conversation. Each sub-agent gets its own context and tool access. For sequential single tasks, execute directly instead.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -503,7 +503,7 @@
   },
   {
     "name": "youtube_search",
-    "description": "Searches YouTube for IP-related videos and engagement metrics. Use to check an IP's YouTube popularity.",
+    "description": "Searches YouTube for IP-related videos and engagement metrics (text results, not a browser). Use to check an IP's YouTube popularity. To visually browse YouTube, use playwright MCP (browser_navigate) instead.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -547,7 +547,7 @@
   },
   {
     "name": "steam_info",
-    "description": "Retrieves IP-related game information and reviews from the Steam store. Use to check an IP's Steam data.",
+    "description": "Retrieves IP-related game information and reviews from the Steam store (text data). Use to check an IP's Steam data. For richer Steam queries, the steam MCP server may also be available.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -587,7 +587,7 @@
   },
   {
     "name": "web_fetch",
-    "description": "Fetches text content from a URL. Use when the user provides a URL or requests web page content.",
+    "description": "Fetches text content from a URL (returns plain text, NOT a visual browser). Use when the user provides a URL and wants to read its content. To visually open a URL in a browser, use playwright MCP (browser_navigate) instead. To search the web, use general_web_search instead.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -609,7 +609,7 @@
   },
   {
     "name": "general_web_search",
-    "description": "Searches the web for up-to-date information. Uses a 3-provider native web search fallback chain (Anthropic -> OpenAI -> GLM) for reliable results. Prefer this tool when the user asks about current information, news, or trends.",
+    "description": "Searches the web for up-to-date information. Uses a 3-provider native web search fallback chain (Anthropic -> OpenAI -> GLM) for reliable results. Prefer this tool when the user asks about current information, news, or trends. This is a text search — for browsing a specific site visually, use playwright MCP (browser_navigate) instead.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {
@@ -631,7 +631,7 @@
   },
   {
     "name": "read_document",
-    "description": "Reads a local file (markdown, text, JSON). Use when the user wants to view file contents.",
+    "description": "Reads a local file (markdown, text, JSON). Use when the user wants to view local file contents. For remote URLs, use web_fetch instead. For file discovery, use glob_files first.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -661,7 +661,7 @@
   },
   {
     "name": "glob_files",
-    "description": "Find files by glob pattern (e.g. '**/*.py', 'core/**/*.json'). Results sorted by modification time. Use instead of run_bash for file discovery.",
+    "description": "Find files by glob pattern (e.g. '**/*.py', 'core/**/*.json'). Results sorted by modification time. ALWAYS prefer this over run_bash for file discovery (ls, find). To search file contents, use grep_files instead.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -683,7 +683,7 @@
   },
   {
     "name": "grep_files",
-    "description": "Search file contents using regex patterns. Returns matching files and optionally matching lines. Use instead of run_bash for content search.",
+    "description": "Search file contents using regex patterns. Returns matching files and optionally matching lines. ALWAYS prefer this over run_bash for content search (grep, rg, awk). To find files by name, use glob_files instead.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -717,7 +717,7 @@
   },
   {
     "name": "edit_file",
-    "description": "Edit a file by exact string replacement. Provide old_string and new_string. Use instead of run_bash for file modifications. Requires HITL approval.",
+    "description": "Edit a file by exact string replacement. Provide old_string and new_string. ALWAYS prefer this over run_bash (sed, awk) for file modifications. For creating new files from scratch, use write_file instead. Requires HITL approval.",
     "category": "external",
     "cost_tier": "free",
     "input_schema": {
@@ -749,7 +749,7 @@
   },
   {
     "name": "write_file",
-    "description": "Create a new file or overwrite an existing file. Parent directories created automatically. Use edit_file for partial changes. Requires HITL approval.",
+    "description": "Create a new file or overwrite an existing file. Parent directories created automatically. For partial edits to existing files, use edit_file instead (safer, sends only the diff). Requires HITL approval.",
     "category": "external",
     "cost_tier": "free",
     "input_schema": {
