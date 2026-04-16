@@ -290,17 +290,7 @@ while CI fails:
 
 **3-Checkpoint**: (1) alloc (Backlog --> In Progress) --> (2) merge (PR --> Done, CI 5/5 required) --> (3) verify (cross-check previous state at next session start)
 
-[Development Workflow (Scaffold) -->](docs/workflow.md)
-
-### Kanban (`docs/progress.md`)
-
-```
-Backlog --> In Progress --> In Review --> Done
-```
-
-main-only edits. 3-Checkpoint required. TaskCreate <-> Kanban task_id 1:1 mapping.
-
-[Kanban rules -->](docs/workflow.md#kanban-board-docsprogress.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow details.
 
 ---
 
@@ -351,7 +341,7 @@ Key components:
 
 CANNOT (guardrails) comes before CAN (freedom). 7-step workflow + quality gates.
 
-See the [Workflow](docs/workflow.md) document for full details.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full workflow details.
 
 **Quality Gates:**
 

@@ -154,7 +154,7 @@ class TestMacOSNormalization:
         assert sandbox.normalize_macos_path("/private/tmp") == "/tmp"  # noqa: S108
 
     def test_preserves_normal_path(self):
-        assert sandbox.normalize_macos_path("/Users/mango/file.txt") == "/Users/mango/file.txt"
+        assert sandbox.normalize_macos_path("/Users/dev/file.txt") == "/Users/dev/file.txt"
 
     def test_preserves_var_without_private(self):
         assert sandbox.normalize_macos_path("/var/folders/x") == "/var/folders/x"
