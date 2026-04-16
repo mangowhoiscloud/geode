@@ -191,6 +191,8 @@ class TestCmdModel:
 
         old = settings.model
         try:
+            # Ensure starting model differs from target so _apply_model doesn't early-return
+            settings.model = MODEL_PROFILES[0].id
             cmd_model("2")
             assert settings.model == MODEL_PROFILES[1].id
             content = (tmp_path / ".env").read_text()

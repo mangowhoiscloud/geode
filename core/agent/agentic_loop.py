@@ -809,8 +809,37 @@ class AgenticLoop:
                         )
                         return self._finalize_and_return(result, user_input, round_idx + 1)
 
+                    # Auth errors → try cross-provider escalation before giving up.
+                    # Expired keys affect all models in the same provider chain,
+                    # so skip intra-provider fallback and go straight to cross-provider.
+                    if _et == "auth":
+                        if not self._quiet:
+                            from core.cli.ui.agentic_ui import emit_llm_error
+
+                            emit_llm_error(_et, _sev, _hint, self.model, self._provider)
+                        old_model = self.model
+                        escalated = self._try_cross_provider_escalation()
+                        if escalated:
+                            from core.cli.ui.agentic_ui import emit_model_escalation
+
+                            emit_model_escalation(
+                                old_model, self.model, self._consecutive_llm_failures
+                            )
+                            self._consecutive_llm_failures = 0
+                            messages[:] = self.context.messages
+                            continue
+                        # No cross-provider fallback available — exit
+                        detail = self._last_llm_error or str(adapter_exc)
+                        result = AgenticResult(
+                            text=f"LLM call failed ({detail}).",
+                            rounds=round_idx + 1,
+                            error="llm_call_failed",
+                            termination_reason="llm_error",
+                        )
+                        return self._finalize_and_return(result, user_input, round_idx + 1)
+
                     # Non-retryable errors → immediate exit (no retry budget waste)
-                    if _et in ("auth", "bad_request"):
+                    if _et == "bad_request":
                         if not self._quiet:
                             from core.cli.ui.agentic_ui import emit_llm_error
 
@@ -1468,6 +1497,9 @@ class AgenticLoop:
         First tries the next model in the current adapter's fallback chain.
         If exhausted, tries cross-provider escalation via CROSS_PROVIDER_FALLBACK.
         Returns True if escalation succeeded, False if at end of all chains.
+
+        Also syncs ``settings.model`` so that ``_sync_model_from_settings()``
+        does not revert the escalation on the next round.
         """
         current = self.model
         chain = self._adapter.fallback_chain
@@ -1484,6 +1516,7 @@ class AgenticLoop:
                     self._provider,
                 )
                 self.update_model(next_model, self._provider, reason="failure_escalation")
+                self._persist_escalated_model(next_model)
                 return True
 
         # Current provider's chain exhausted — try cross-provider (Feature 4)
@@ -1501,6 +1534,7 @@ class AgenticLoop:
                 self.update_model(
                     fallback_model, fallback_provider, reason="cross_provider_escalation"
                 )
+                self._persist_escalated_model(fallback_model)
                 # Emit dedicated cross-provider hook for observability
                 # (MODEL_SWITCHED is also fired by update_model, but this
                 # event carries provider-level context for audit loggers)
@@ -1519,6 +1553,51 @@ class AgenticLoop:
                 return True
 
         log.warning("Model escalation failed: no more fallback models available")
+        return False
+
+    @staticmethod
+    def _persist_escalated_model(model: str) -> None:
+        """Sync escalated model to settings so _sync_model_from_settings() won't revert."""
+        try:
+            from core.config import settings
+
+            settings.model = model
+        except Exception:
+            log.debug("Failed to persist escalated model to settings", exc_info=True)
+
+    def _try_cross_provider_escalation(self) -> bool:
+        """Skip intra-provider chain and go directly to cross-provider fallback.
+
+        Used for auth errors where all models in the same provider share
+        the same expired key — cycling within the chain is pointless.
+        """
+        from_provider = self._provider
+        current = self.model
+        fallbacks = CROSS_PROVIDER_FALLBACK.get(from_provider, [])
+        for fallback_provider, fallback_model in fallbacks:
+            if fallback_model != current:
+                log.warning(
+                    "Auth-triggered cross-provider escalation: %s(%s) -> %s(%s)",
+                    current,
+                    from_provider,
+                    fallback_model,
+                    fallback_provider,
+                )
+                self.update_model(fallback_model, fallback_provider, reason="auth_cross_provider")
+                self._persist_escalated_model(fallback_model)
+                if self._hooks:
+                    from core.hooks import HookEvent
+
+                    self._hooks.trigger(
+                        HookEvent.FALLBACK_CROSS_PROVIDER,
+                        {
+                            "from_model": current,
+                            "to_model": fallback_model,
+                            "from_provider": from_provider,
+                            "to_provider": fallback_provider,
+                        },
+                    )
+                return True
         return False
 
     # ---------------------------------------------------------------------------
