@@ -84,7 +84,7 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | | No direct push to main/develop — PR → CI → merge | Ratchet (P4) |
 | | No deleting other sessions' worktrees (`.owner` mismatch) | Ownership protection |
 | | No `git checkout` switching within a worktree | Isolation maintenance |
-| | No modifying `docs/progress.md` from feature/develop | Single source of truth on main |
+| | No modifying tracking documents from feature/develop | Single source of truth on main |
 | | No branch creation when remote is out of sync | Conflict prevention |
 | **Planning** | No starting implementation without Socratic Gate (except bugs/docs) | Prevent over-engineering |
 | **Quality** | No committing with lint/type/test failures | Ratchet (P4) |
@@ -140,7 +140,7 @@ Anything not in CANNOT is freely permitted. Specifically:
 
 ```bash
 # 1) Record Backlog → In Progress on Progress Board (from main)
-# Add/move work items in docs/progress.md
+# Add/move work items in project tracking
 
 # 2) Allocate Worktree
 git fetch origin
@@ -156,7 +156,7 @@ Record on Progress Board then allocate Worktree. On completion: `git push` → `
 > Before implementing, verify "is this actually needed?" through code inspection. Never rebuild what already exists.
 
 **Process**:
-1. List TO-BE items from plan documents (`docs/plans/`)
+1. List TO-BE items from plan documents or issues
 2. For each item, use `grep`/`Explore` to **verify whether it already exists in code**
 3. Classify into 3 categories:
 
@@ -297,7 +297,7 @@ geode serve &          # Restart in background
 
 #### 8. Progress Board
 
-Update `docs/progress.md` only from main. Backlog → In Progress → Done.
+Update project tracking from main. Backlog → In Progress → Done.
 
 ### Quality Gates
 

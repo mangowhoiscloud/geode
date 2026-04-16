@@ -202,12 +202,12 @@ class TestDetectApiKey:
 
     def test_email_not_detected(self):
         """Email addresses must not be misdetected as GLM keys."""
-        assert detect_api_key("ryoo0504@gmail.com") is None
+        assert detect_api_key("user@example.org") is None
         assert detect_api_key("user@example.com") is None
 
     def test_email_with_trailing_text_not_detected(self):
         """Email with Korean suffix must not be misdetected."""
-        assert detect_api_key("ryoo0504@gmail.com이야.") is None
+        assert detect_api_key("user@example.org이야.") is None
 
 
 class TestEnvSetupWizard:
