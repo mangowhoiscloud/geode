@@ -1341,7 +1341,7 @@ def _get_cost_budget() -> float:
             with open(config_path, "rb") as f:
                 data = tomllib.load(f)
             return float(data.get("cost", {}).get("monthly_budget", 0))
-        except Exception:
+        except (OSError, ValueError, KeyError):
             return 0.0
     return 0.0
 
@@ -1610,8 +1610,9 @@ def cmd_context(args: str) -> None:
             console.print(f"  [label]T0 SOUL:[/label] {preview}")
         else:
             console.print("  [label]T0 SOUL:[/label] [muted]not found[/muted]")
-    except Exception:
-        console.print("  [label]T0 SOUL:[/label] [muted]unavailable[/muted]")
+    except Exception as exc:
+        err = type(exc).__name__
+        console.print(f"  [label]T0 SOUL:[/label] [muted]unavailable ({err})[/muted]")
 
     # Tier 0.5: User Profile
     try:
@@ -1623,8 +1624,9 @@ def cmd_context(args: str) -> None:
         career_summary = profile.get_career_summary()
         if career_summary:
             console.print(f"  [label]T0.5 Career:[/label] {career_summary}")
-    except Exception:
-        console.print("  [label]T0.5 Profile:[/label] [muted]unavailable[/muted]")
+    except Exception as exc:
+        err = type(exc).__name__
+        console.print(f"  [label]T0.5 Profile:[/label] [muted]unavailable ({err})[/muted]")
 
     # Tier 1: Project Memory
     try:
@@ -1636,8 +1638,9 @@ def cmd_context(args: str) -> None:
             console.print(f"  [label]T1 Project:[/label] {len(rules)} rules")
         else:
             console.print("  [label]T1 Project:[/label] [muted]not initialized[/muted]")
-    except Exception:
-        console.print("  [label]T1 Project:[/label] [muted]unavailable[/muted]")
+    except Exception as exc:
+        err = type(exc).__name__
+        console.print(f"  [label]T1 Project:[/label] [muted]unavailable ({err})[/muted]")
 
     # Vault
     try:
@@ -1646,8 +1649,9 @@ def cmd_context(args: str) -> None:
         vault = Vault()
         vs = vault.get_context_summary()
         console.print(f"  [label]V0 Vault:[/label] {vs or '[muted]empty[/muted]'}")
-    except Exception:
-        console.print("  [label]V0 Vault:[/label] [muted]unavailable[/muted]")
+    except Exception as exc:
+        err = type(exc).__name__
+        console.print(f"  [label]V0 Vault:[/label] [muted]unavailable ({err})[/muted]")
 
     console.print()
     console.print("  [muted]Subcommands: /context career | /context profile[/muted]")

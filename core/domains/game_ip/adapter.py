@@ -109,24 +109,24 @@ class GameIPDomain:
     # --- Scoring ---
 
     def get_scoring_weights(self) -> dict[str, float]:
+        from core.domains.game_ip.scoring_constants import DEFAULT_WEIGHTS
+
         cfg = _load_scoring_config()
-        weights: dict[str, float] = cfg.get(
-            "weights",
-            {
-                "exposure_lift": 0.25,
-                "quality": 0.20,
-                "recovery": 0.18,
-                "growth": 0.12,
-                "momentum": 0.20,
-                "developer": 0.05,
-            },
-        )
+        weights: dict[str, float] = cfg.get("weights", DEFAULT_WEIGHTS)
         return weights
 
     def get_confidence_multiplier_params(self) -> tuple[float, float]:
+        from core.domains.game_ip.scoring_constants import (
+            CONFIDENCE_BASE_FACTOR,
+            CONFIDENCE_SCALE_FACTOR,
+        )
+
         cfg = _load_scoring_config()
         cm: dict[str, float] = cfg.get("confidence_multiplier", {})
-        return (cm.get("base_factor", 0.7), cm.get("scale_factor", 0.3))
+        return (
+            cm.get("base_factor", CONFIDENCE_BASE_FACTOR),
+            cm.get("scale_factor", CONFIDENCE_SCALE_FACTOR),
+        )
 
     def get_tier_thresholds(self) -> list[tuple[float, str]]:
         cfg = _load_scoring_config()

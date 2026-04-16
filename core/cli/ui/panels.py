@@ -136,7 +136,9 @@ def evaluator_panel(evaluations: dict[str, EvaluatorResult]) -> None:
     for key, ev in sorted(evaluations.items()):
         label = labels.get(key, key.replace("_", " ").title())
         score = ev.composite_score
-        score_style = "bold green" if score >= 80 else "yellow" if score >= 60 else "red"
+        from core.domains.game_ip.scoring_constants import score_style as _score_style
+
+        score_style = _score_style(score)
         rationale = ev.rationale.split(".")[0] + "." if ev.rationale else ""
         table.add_row(
             label,
@@ -154,16 +156,9 @@ def score_panel(
     confidence: float = 0.0,
 ) -> None:
     from core.cli.ui.agentic_ui import emit_pipeline_score
+    from core.domains.game_ip.scoring_constants import classify_tier
 
-    tier = (
-        "S"
-        if final_score >= 80
-        else "A"
-        if final_score >= 60
-        else "B"
-        if final_score >= 40
-        else "C"
-    )
+    tier = classify_tier(final_score)
 
     if _is_ipc():
         emit_pipeline_score(final_score, subscores, confidence, tier, psm=psm)

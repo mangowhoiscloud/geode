@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +20,8 @@ if TYPE_CHECKING:
 class TelegramPoller(BasePoller):
     """Poll Telegram for new messages via MCP server (getUpdates)."""
 
+    _env_config_var = "TELEGRAM_BOT_TOKEN"
+
     def __init__(
         self,
         channel_manager: ChannelManager,
@@ -29,24 +30,20 @@ class TelegramPoller(BasePoller):
         notification: NotificationPort | None = None,
         poll_interval_s: float = 2.0,
     ) -> None:
-        super().__init__(channel_manager, poll_interval_s=poll_interval_s)
-        self._mcp = mcp_manager
-        self._notification = notification
+        super().__init__(
+            channel_manager,
+            mcp_manager=mcp_manager,
+            notification=notification,
+            poll_interval_s=poll_interval_s,
+        )
         self._last_update_id: int = 0
 
     @property
     def channel_name(self) -> str:
         return "telegram"
 
-    def is_configured(self) -> bool:
-        return bool(os.environ.get("TELEGRAM_BOT_TOKEN"))
-
     def _poll_once(self) -> None:
-        if self._mcp is None:
-            return
-
-        health = self._mcp.check_health()
-        if not health.get("telegram", False):
+        if not self._check_mcp_health():
             return
 
         try:
@@ -54,7 +51,7 @@ class TelegramPoller(BasePoller):
             if self._last_update_id:
                 args["offset"] = self._last_update_id + 1
 
-            result = self._mcp.call_tool("telegram", "get_updates", args)
+            result = self._mcp.call_tool("telegram", "get_updates", args)  # type: ignore[union-attr]
             if "error" in result:
                 return
 

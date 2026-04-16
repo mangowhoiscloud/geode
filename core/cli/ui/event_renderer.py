@@ -441,7 +441,9 @@ class EventRenderer:
                 label = labels.get(key, key.replace("_", " ").title())
                 score = float(val.get("score", 0)) if isinstance(val, dict) else 0
                 rationale = str(val.get("rationale", ""))[:50] if isinstance(val, dict) else ""
-                color = "32" if score >= 80 else "33" if score >= 60 else "31"
+                from core.domains.game_ip.scoring_constants import score_ansi_color
+
+                color = score_ansi_color(score)
                 self._out.write(
                     f"    {label:<18} \033[{color}m{score:.0f}/100\033[0m  {rationale}\n"
                 )
