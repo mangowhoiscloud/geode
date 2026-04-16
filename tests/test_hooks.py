@@ -2,6 +2,7 @@
 
 import time
 
+from core.agent.context_manager import ContextWindowManager
 from core.hooks import HookEvent, HookResult, HookSystem, InterceptResult
 
 
@@ -395,6 +396,175 @@ class TestInterceptor:
         result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, original)
         assert "added" in result.data
         assert "added" not in original  # original unchanged
+
+
+class TestToolExecInterceptor:
+    """Tests for TOOL_EXEC_START interceptor and TOOL_EXEC_END feedback patterns."""
+
+    def test_tool_exec_start_block(self):
+        """TOOL_EXEC_START interceptor can block tool execution."""
+        hooks = HookSystem()
+
+        def blocker(_event, data):
+            if data.get("tool_name") == "dangerous_tool":
+                return {"block": True, "reason": "tool blocked by policy"}
+            return None
+
+        hooks.register(HookEvent.TOOL_EXEC_START, blocker, name="policy_gate")
+
+        result = hooks.trigger_interceptor(
+            HookEvent.TOOL_EXEC_START,
+            {"tool_name": "dangerous_tool", "tool_input": {"cmd": "rm -rf /"}},
+        )
+        assert result.blocked is True
+        assert result.reason == "tool blocked by policy"
+
+    def test_tool_exec_start_modify_input(self):
+        """TOOL_EXEC_START interceptor can modify tool_input."""
+        hooks = HookSystem()
+
+        def sanitizer(_event, data):
+            return {"modify": {"tool_input": {"sanitized": True}}}
+
+        hooks.register(HookEvent.TOOL_EXEC_START, sanitizer, name="input_sanitizer")
+
+        result = hooks.trigger_interceptor(
+            HookEvent.TOOL_EXEC_START,
+            {"tool_name": "search", "tool_input": {"query": "raw"}},
+        )
+        assert result.blocked is False
+        assert result.data["tool_input"] == {"sanitized": True}
+
+    def test_tool_exec_start_passthrough(self):
+        """TOOL_EXEC_START with no-op handler passes through."""
+        hooks = HookSystem()
+        hooks.register(HookEvent.TOOL_EXEC_START, lambda e, d: None, name="observer")
+
+        result = hooks.trigger_interceptor(
+            HookEvent.TOOL_EXEC_START,
+            {"tool_name": "safe_tool", "tool_input": {}},
+        )
+        assert result.blocked is False
+        assert result.data["tool_name"] == "safe_tool"
+
+    def test_tool_exec_end_modify_result(self):
+        """TOOL_EXEC_END trigger_with_result can return updated_result."""
+        hooks = HookSystem()
+
+        def result_modifier(_event, data):
+            if data.get("tool_name") == "fetch":
+                return {"updated_result": {"data": "transformed"}}
+            return None
+
+        hooks.register(HookEvent.TOOL_EXEC_END, result_modifier, name="transformer")
+
+        results = hooks.trigger_with_result(
+            HookEvent.TOOL_EXEC_END,
+            {
+                "tool_name": "fetch",
+                "tool_input": {},
+                "duration_ms": 100,
+                "has_error": False,
+                "result": {"data": "raw"},
+            },
+        )
+        assert len(results) == 1
+        assert results[0].success is True
+        assert results[0].data["updated_result"] == {"data": "transformed"}
+
+    def test_tool_exec_end_additional_context(self):
+        """TOOL_EXEC_END handler can inject additional_context."""
+        hooks = HookSystem()
+
+        def ctx_injector(_event, _data):
+            return {"additional_context": "Extra info from hook"}
+
+        hooks.register(HookEvent.TOOL_EXEC_END, ctx_injector, name="ctx_inject")
+
+        results = hooks.trigger_with_result(
+            HookEvent.TOOL_EXEC_END,
+            {"tool_name": "search", "tool_input": {}, "duration_ms": 50, "has_error": False},
+        )
+        assert results[0].data["additional_context"] == "Extra info from hook"
+
+    def test_tool_exec_end_no_modification(self):
+        """TOOL_EXEC_END observe-only handler returns empty data."""
+        hooks = HookSystem()
+        hooks.register(HookEvent.TOOL_EXEC_END, lambda e, d: None, name="observer")
+
+        results = hooks.trigger_with_result(
+            HookEvent.TOOL_EXEC_END,
+            {"tool_name": "t", "tool_input": {}, "duration_ms": 1, "has_error": False},
+        )
+        assert len(results) == 1
+        assert results[0].success is True
+        assert results[0].data == {}
+
+
+class TestAggressiveRecoveryHook:
+    """aggressive_context_recovery delegates to CONTEXT_OVERFLOW_ACTION hook."""
+
+    def test_aggressive_recovery_uses_hook(self):
+        """aggressive_context_recovery fires CONTEXT_OVERFLOW_ACTION via _resolve_overflow_strategy."""
+        from unittest.mock import MagicMock, patch
+
+        from core.orchestration.context_monitor import ContextMetrics
+
+        hook_calls: list[dict] = []
+
+        hooks = HookSystem()
+
+        def strategy_handler(_event, data):
+            hook_calls.append(data)
+            return {"strategy": "prune", "keep_recent": 5}
+
+        hooks.register(HookEvent.CONTEXT_OVERFLOW_ACTION, strategy_handler, name="test_handler")
+
+        mgr = ContextWindowManager(hooks=hooks, quiet=True)
+
+        critical = ContextMetrics(
+            estimated_tokens=180_000,
+            context_window=200_000,
+            usage_pct=98.0,
+            remaining_tokens=20_000,
+            is_warning=True,
+            is_critical=True,
+        )
+        resolved = ContextMetrics(
+            estimated_tokens=60_000,
+            context_window=200_000,
+            usage_pct=30.0,
+            remaining_tokens=140_000,
+            is_warning=False,
+            is_critical=False,
+        )
+
+        mock_settings = MagicMock()
+        mock_settings.compact_keep_recent = 10
+
+        with (
+            patch(
+                "core.orchestration.context_monitor.check_context",
+                side_effect=[critical, critical, resolved],
+            ),
+            patch(
+                "core.orchestration.context_monitor.summarize_tool_results",
+                return_value=(0, 0, 0),
+            ),
+            patch("core.config.settings", mock_settings),
+            patch(
+                "core.orchestration.context_monitor.prune_oldest_messages",
+                side_effect=lambda m, **kw: m[:3],
+            ),
+        ):
+            mgr.aggressive_context_recovery(
+                "system", [{"role": "user", "content": "hi"}] * 20, "gpt-4o", "openai"
+            )
+
+        # Verify hook was called
+        assert len(hook_calls) == 1
+        assert hook_calls[0]["provider"] == "openai"
+        assert hook_calls[0]["model"] == "gpt-4o"
 
 
 class TestHookTimeout:
