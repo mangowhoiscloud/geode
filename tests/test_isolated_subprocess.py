@@ -55,13 +55,13 @@ class TestSubprocessMode:
         sid = runner.run_async(req, config=cfg)
         assert sid == "async-001"
 
-        # Wait for result
-        for _ in range(100):
+        # Wait for result (extended for slow CI runners)
+        for _ in range(300):
             result = runner.get_result(sid)
             if result is not None:
                 break
             time.sleep(0.1)
-        assert result is not None
+        assert result is not None, "Async subprocess did not complete within 30s"
         assert result.session_id == "async-001"
 
     def test_subprocess_cancel_kills_process(self) -> None:
