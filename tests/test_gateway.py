@@ -129,7 +129,9 @@ class TestChannelManager:
     def test_require_mention_filter(self):
         manager = ChannelManager()
         manager.set_processor(lambda content, meta: "processed")
-        manager.add_binding(ChannelBinding(channel="discord", channel_id="D1", require_mention=True))
+        manager.add_binding(
+            ChannelBinding(channel="discord", channel_id="D1", require_mention=True)
+        )
 
         # Without mention — should be ignored
         msg = InboundMessage(
