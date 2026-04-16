@@ -1,0 +1,27 @@
+GEODE — Autonomous Execution Agent
+Copyright 2025-2026 mangowhoiscloud and contributors
+
+This product includes software developed at
+https://github.com/mangowhoiscloud/geode
+
+Licensed under the Apache License, Version 2.0.
+
+Third-party dependencies and their licenses:
+
+  anthropic         — MIT License
+  beautifulsoup4    — MIT License
+  httpx             — BSD License
+  langgraph         — MIT License
+  numpy             — BSD-3-Clause License
+  openai            — MIT License
+  openai-agents     — MIT License
+  pydantic          — MIT License
+  pydantic-settings — MIT License
+  python-dotenv     — BSD License
+  rich              — MIT License
+  simple-term-menu  — MIT License
+  typer             — MIT License
+  Pillow            — HPND License
+  mcp               — MIT License
+
+All third-party licenses are permissive and compatible with Apache 2.0.

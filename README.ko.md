@@ -282,17 +282,7 @@ while CI fails:
 
 **3-Checkpoint**: (1) alloc (Backlog→In Progress) → (2) merge (PR→Done, CI 5/5 필수) → (3) verify (다음 세션 시작 시 이전 상태 교차 검증)
 
-[Development Workflow (Scaffold) →](docs/workflow.md)
-
-### Kanban (`docs/progress.md`)
-
-```
-Backlog → In Progress → In Review → Done
-```
-
-main-only 수정. 3-Checkpoint 필수. TaskCreate ↔ 칸반 task_id 1:1 매핑.
-
-[Kanban rules →](docs/workflow.md#kanban-board-docsprogress.md)
+개발 워크플로우 상세는 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
 
 ---
 
@@ -343,7 +333,7 @@ graph TD
 
 CANNOT(가드레일)이 CAN(자유도)보다 먼저 온다. 7단계 워크플로우 + 품질 게이트.
 
-모든 상세 내용은 [Workflow](docs/workflow.md) 문서를 참고하세요.
+모든 상세 내용은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
 
 **Quality Gates:**
 
