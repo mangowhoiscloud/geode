@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +20,8 @@ if TYPE_CHECKING:
 class DiscordPoller(BasePoller):
     """Poll Discord for new messages via MCP server."""
 
+    _env_config_var = "DISCORD_BOT_TOKEN"
+
     def __init__(
         self,
         channel_manager: ChannelManager,
@@ -29,34 +30,24 @@ class DiscordPoller(BasePoller):
         notification: NotificationPort | None = None,
         poll_interval_s: float = 3.0,
     ) -> None:
-        super().__init__(channel_manager, poll_interval_s=poll_interval_s)
-        self._mcp = mcp_manager
-        self._notification = notification
+        super().__init__(
+            channel_manager,
+            mcp_manager=mcp_manager,
+            notification=notification,
+            poll_interval_s=poll_interval_s,
+        )
         self._last_id: dict[str, str] = {}  # channel_id → last message id
 
     @property
     def channel_name(self) -> str:
         return "discord"
 
-    def is_configured(self) -> bool:
-        return bool(os.environ.get("DISCORD_BOT_TOKEN"))
-
     def _poll_once(self) -> None:
-        if self._mcp is None:
+        if not self._check_mcp_health():
             return
 
-        health = self._mcp.check_health()
-        if not health.get("discord", False):
-            return
-
-        bindings = self._manager.list_bindings()
-        discord_bindings = [b for b in bindings if b["channel"] == "discord"]
-
-        for binding in discord_bindings:
-            channel_id = binding.get("channel_id", "")
-            if not channel_id or channel_id == "*":
-                continue
-            self._poll_channel(channel_id)
+        for binding in self._get_channel_bindings():
+            self._poll_channel(binding["channel_id"])
 
     def _poll_channel(self, channel_id: str) -> None:
         """Poll a single Discord channel for new messages."""

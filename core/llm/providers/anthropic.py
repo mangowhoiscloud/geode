@@ -75,22 +75,10 @@ FALLBACK_MODELS = ANTHROPIC_FALLBACK_CHAIN
 
 
 def _resolve_anthropic_key() -> str:
-    """Resolve Anthropic API key from ProfileRotator (OAuth preferred) or settings.
+    """Resolve Anthropic API key from ProfileRotator (OAuth preferred) or settings."""
+    from core.llm.credentials import resolve_provider_key
 
-    Priority: OAuth profile (claude-code) → API key profile → settings fallback.
-    """
-    try:
-        from core.runtime_wiring.infra import get_profile_rotator
-
-        rotator = get_profile_rotator()
-        if rotator:
-            profile = rotator.resolve("anthropic")
-            if profile and profile.key:
-                rotator.mark_used(profile)
-                return profile.key
-    except Exception:
-        log.debug("ProfileRotator not available, falling back to settings")
-    return settings.anthropic_api_key
+    return resolve_provider_key("anthropic", settings.anthropic_api_key)
 
 
 def get_anthropic_client() -> anthropic.Anthropic:

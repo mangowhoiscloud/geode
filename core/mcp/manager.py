@@ -217,6 +217,7 @@ class MCPServerManager:
                 log.debug("MCP signal handlers skipped (not main thread)")
                 return
         except Exception:
+            log.debug("MCP signal handler thread check failed", exc_info=True)
             return
 
         def _signal_shutdown(signum: int, frame: Any) -> None:

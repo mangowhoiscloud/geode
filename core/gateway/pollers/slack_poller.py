@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +25,7 @@ class SlackPoller(BasePoller):
     """
 
     DEDUP_TTL_S = 300  # 5 minutes — matches Kiki's event dedup window
+    _env_config_var = "SLACK_BOT_TOKEN"
 
     def __init__(
         self,
@@ -35,9 +35,12 @@ class SlackPoller(BasePoller):
         notification: NotificationPort | None = None,
         poll_interval_s: float = 3.0,
     ) -> None:
-        super().__init__(channel_manager, poll_interval_s=poll_interval_s)
-        self._mcp = mcp_manager
-        self._notification = notification
+        super().__init__(
+            channel_manager,
+            mcp_manager=mcp_manager,
+            notification=notification,
+            poll_interval_s=poll_interval_s,
+        )
         self._last_ts: dict[str, str] = {}  # channel_id → last message ts
         self._seen_events: dict[str, float] = {}  # "channel:ts" → seen_at (dedup)
 
@@ -45,29 +48,15 @@ class SlackPoller(BasePoller):
     def channel_name(self) -> str:
         return "slack"
 
-    def is_configured(self) -> bool:
-        return bool(os.environ.get("SLACK_BOT_TOKEN"))
-
     def _poll_once(self) -> None:
-        if self._mcp is None:
-            return
-
-        health = self._mcp.check_health()
-        if not health.get("slack", False):
+        if not self._check_mcp_health():
             return
 
         # Evict expired dedup entries
         self._evict_stale_dedup()
 
-        # Get channels to monitor from bindings
-        bindings = self._manager.list_bindings()
-        slack_bindings = [b for b in bindings if b["channel"] == "slack"]
-
-        for binding in slack_bindings:
-            channel_id = binding.get("channel_id", "")
-            if not channel_id or channel_id == "*":
-                continue
-            self._poll_channel(channel_id)
+        for binding in self._get_channel_bindings():
+            self._poll_channel(binding["channel_id"])
 
     def _poll_channel(self, channel_id: str) -> None:
         """Poll a single Slack channel for new messages.
@@ -171,8 +160,8 @@ class SlackPoller(BasePoller):
 
                     if response:
                         self._send_response(channel_id, response, thread_ts=inbound.thread_id or ts)
-                except Exception:
-                    log.warning("Failed to process message ts=%s, will retry next poll", ts)
+                except Exception as exc:
+                    log.warning("Failed to process message ts=%s: %s", ts, exc)
                     # Error reaction: X emoji for visible failure feedback
                     if is_mention:
                         self._add_reaction(channel_id, ts, "x")
