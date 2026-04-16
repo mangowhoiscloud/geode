@@ -39,6 +39,28 @@ LLMInternalServerError = anthropic.InternalServerError
 
 
 # ---------------------------------------------------------------------------
+# OpenAI SDK error types — used by GLM and OpenAI providers.
+# Lazy-loaded to avoid hard dependency when openai is not installed.
+# ---------------------------------------------------------------------------
+def _get_openai_error_types() -> tuple[type, ...]:
+    """Return OpenAI SDK exception classes (empty tuple if not installed)."""
+    try:
+        import openai
+
+        return (
+            openai.AuthenticationError,
+            openai.RateLimitError,
+            openai.APITimeoutError,
+            openai.APIConnectionError,
+            openai.BadRequestError,
+            openai.InternalServerError,
+            openai.APIStatusError,
+        )
+    except ImportError:
+        return ()
+
+
+# ---------------------------------------------------------------------------
 # Error classification for UX — severity + actionable hints
 # ---------------------------------------------------------------------------
 
@@ -64,11 +86,15 @@ _ERROR_CLASSIFICATION: dict[str, tuple[str, str, str]] = {
 def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
     """Classify an LLM exception into (error_type, severity, hint).
 
+    Handles both Anthropic SDK and OpenAI SDK (used by GLM/OpenAI providers)
+    exception types.
+
     Returns a tuple of:
       - error_type: machine-readable category
       - severity: "info" | "warning" | "error" | "critical"
       - hint: user-facing actionable message
     """
+    # --- Anthropic SDK errors ---
     if isinstance(exc, BillingError):
         return _ERROR_CLASSIFICATION["billing"]
     if isinstance(exc, LLMRateLimitError):
@@ -86,4 +112,35 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
         if "token" in msg or "context" in msg or "prompt exceeds" in msg or "max length" in msg:
             return _ERROR_CLASSIFICATION["context_overflow"]
         return _ERROR_CLASSIFICATION["bad_request"]
+
+    # --- OpenAI SDK errors (GLM and OpenAI providers) ---
+    result = _classify_openai_error(exc)
+    if result is not None:
+        return result
+
     return _ERROR_CLASSIFICATION["unknown"]
+
+
+def _classify_openai_error(exc: Exception) -> tuple[str, str, str] | None:
+    """Classify OpenAI SDK exceptions. Returns None if not an OpenAI error."""
+    try:
+        import openai
+    except ImportError:
+        return None
+
+    if isinstance(exc, openai.AuthenticationError):
+        return _ERROR_CLASSIFICATION["auth"]
+    if isinstance(exc, openai.RateLimitError):
+        return _ERROR_CLASSIFICATION["rate_limit"]
+    if isinstance(exc, openai.APITimeoutError):
+        return _ERROR_CLASSIFICATION["timeout"]
+    if isinstance(exc, openai.APIConnectionError):
+        return _ERROR_CLASSIFICATION["connection"]
+    if isinstance(exc, openai.InternalServerError):
+        return _ERROR_CLASSIFICATION["server"]
+    if isinstance(exc, openai.BadRequestError):
+        msg = str(exc).lower()
+        if "token" in msg or "context" in msg or "prompt exceeds" in msg or "max length" in msg:
+            return _ERROR_CLASSIFICATION["context_overflow"]
+        return _ERROR_CLASSIFICATION["bad_request"]
+    return None
