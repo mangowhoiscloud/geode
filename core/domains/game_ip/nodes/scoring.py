@@ -337,15 +337,14 @@ def _calc_final_score(
         weights = domain.get_scoring_weights()
         base_m, scale_m = domain.get_confidence_multiplier_params()
     else:
-        weights = {
-            "exposure_lift": 0.25,
-            "quality": 0.20,
-            "recovery": 0.18,
-            "growth": 0.12,
-            "momentum": 0.20,
-            "developer": 0.05,
-        }
-        base_m, scale_m = 0.7, 0.3
+        from core.domains.game_ip.scoring_constants import (
+            CONFIDENCE_BASE_FACTOR,
+            CONFIDENCE_SCALE_FACTOR,
+            DEFAULT_WEIGHTS,
+        )
+
+        weights = dict(DEFAULT_WEIGHTS)
+        base_m, scale_m = CONFIDENCE_BASE_FACTOR, CONFIDENCE_SCALE_FACTOR
 
     # Validate weights sum to ~1.0; normalize if off
     weight_sum = sum(weights.values())
@@ -413,14 +412,12 @@ def _determine_tier(score: float) -> str:
                 return tier_name
         return domain.get_tier_fallback()
     # Fallback: hardcoded game IP thresholds
-    if score >= 80:
-        return "S"
-    elif score >= 60:
-        return "A"
-    elif score >= 40:
-        return "B"
-    else:
-        return "C"
+    from core.domains.game_ip.scoring_constants import TIER_FALLBACK, TIER_THRESHOLDS
+
+    for threshold, tier_name in TIER_THRESHOLDS:
+        if score >= threshold:
+            return tier_name
+    return TIER_FALLBACK
 
 
 # ---------------------------------------------------------------------------

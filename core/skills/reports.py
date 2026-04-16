@@ -14,6 +14,12 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
+from core.domains.game_ip.scoring_constants import (
+    CONFIDENCE_BASE_FACTOR,
+    CONFIDENCE_SCALE_FACTOR,
+    REPORT_WEIGHTS,
+)
+
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
@@ -392,14 +398,7 @@ def _format_psm_md(psm: dict[str, Any]) -> str:
 # Scoring weight breakdown formatters
 # ---------------------------------------------------------------------------
 
-_SCORING_WEIGHTS = [
-    ("psm", 0.25),
-    ("quality", 0.20),
-    ("recovery", 0.18),
-    ("growth", 0.12),
-    ("momentum", 0.20),
-    ("dev", 0.05),
-]
+_SCORING_WEIGHTS = REPORT_WEIGHTS
 
 
 def _format_scoring_breakdown_html(
@@ -421,7 +420,11 @@ def _format_scoring_breakdown_html(
             f"<td>{weight:.0%}</td>"
             f"<td>{weighted:.1f}</td></tr>\n"
         )
-    multiplier = 0.7 + 0.3 * confidence / 100 if confidence else 1.0
+    multiplier = (
+        CONFIDENCE_BASE_FACTOR + CONFIDENCE_SCALE_FACTOR * confidence / 100
+        if confidence
+        else 1.0
+    )
     final = weighted_sum * multiplier
     return f"""<div class="section">
     <h2><span class="icon">&#x1F9EE;</span> Scoring Breakdown</h2>
@@ -458,7 +461,11 @@ def _format_scoring_breakdown_md(
         weighted_sum += weighted
         label = key.upper() if key in ("psm", "dev") else key.capitalize()
         lines.append(f"| {label} | {val:.1f} | {weight:.0%} | {weighted:.1f} |")
-    multiplier = 0.7 + 0.3 * confidence / 100 if confidence else 1.0
+    multiplier = (
+        CONFIDENCE_BASE_FACTOR + CONFIDENCE_SCALE_FACTOR * confidence / 100
+        if confidence
+        else 1.0
+    )
     final = weighted_sum * multiplier
     lines.append("")
     lines.append(

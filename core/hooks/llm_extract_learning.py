@@ -92,29 +92,37 @@ def _call_glm_flash(prompt: str, api_key: str) -> str | None:
         api_key=api_key,
         base_url="https://open.bigmodel.cn/api/paas/v4/",
     )
-    resp = client.chat.completions.create(
-        model="glm-4.7-flash",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=300,
-        temperature=0.0,
-        timeout=10.0,
-    )
-    return resp.choices[0].message.content if resp.choices else None
+    try:
+        resp = client.chat.completions.create(
+            model="glm-4.7-flash",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.0,
+            timeout=10.0,
+        )
+        return resp.choices[0].message.content if resp.choices else None
+    finally:
+        client.close()
 
 
 def _call_haiku(prompt: str, api_key: str) -> str | None:
     """Call Claude Haiku (budget tier)."""
     import anthropic
 
+    from core.config import ANTHROPIC_BUDGET
+
     client = anthropic.Anthropic(api_key=api_key)
-    resp = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=300,
-        messages=[{"role": "user", "content": prompt}],
-        timeout=10.0,
-    )
-    block = resp.content[0] if resp.content else None
-    return block.text if block and hasattr(block, "text") else None
+    try:
+        resp = client.messages.create(
+            model=ANTHROPIC_BUDGET,
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=10.0,
+        )
+        block = resp.content[0] if resp.content else None
+        return block.text if block and hasattr(block, "text") else None
+    finally:
+        client.close()
 
 
 def _parse_extractions(text: str) -> list[tuple[str, str]]:

@@ -47,18 +47,9 @@ _openai_circuit_breaker = CircuitBreaker()
 
 def _resolve_openai_key() -> str:
     """Resolve OpenAI API key from ProfileRotator (OAuth preferred) or settings."""
-    try:
-        from core.runtime_wiring.infra import get_profile_rotator
+    from core.llm.credentials import resolve_provider_key
 
-        rotator = get_profile_rotator()
-        if rotator:
-            profile = rotator.resolve("openai")
-            if profile and profile.key:
-                rotator.mark_used(profile)
-                return profile.key
-    except Exception:
-        log.debug("ProfileRotator not available for OpenAI, using settings")
-    return settings.openai_api_key
+    return resolve_provider_key("openai", settings.openai_api_key)
 
 
 def _get_openai_client() -> Any:

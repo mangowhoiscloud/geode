@@ -6,73 +6,44 @@ Implements CalendarPort for Google Calendar.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from datetime import UTC, datetime
+from typing import Any
 
+from core.mcp.base_calendar import BaseCalendarAdapter
 from core.mcp.calendar_port import CalendarEvent
 
 log = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from core.mcp.manager import MCPServerManager
 
-
-class GoogleCalendarAdapter:
+class GoogleCalendarAdapter(BaseCalendarAdapter):
     """Calendar operations via Google Calendar MCP server."""
 
-    def __init__(
-        self,
-        *,
-        manager: MCPServerManager | None = None,
-        server_name: str = "google-calendar",
-    ) -> None:
-        self._manager = manager
-        self._server_name = server_name
+    _source = "google"
+    _default_server = "google-calendar"
+    _delete_id_key = "eventId"
+    _default_calendar = "primary"
 
-    def list_events(
-        self,
-        *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        calendar_name: str | None = None,
-        max_results: int = 20,
-    ) -> list[CalendarEvent]:
-        if not self.is_available():
-            return []
-        now = datetime.now(UTC)
-        time_min = (start or now).isoformat()
-        time_max = (end or now + timedelta(days=7)).isoformat()
-        try:
-            args: dict[str, Any] = {
-                "timeMin": time_min,
-                "timeMax": time_max,
-                "maxResults": max_results,
-            }
-            if calendar_name:
-                args["calendarId"] = calendar_name
-            result = self._manager.call_tool(  # type: ignore[union-attr]
-                self._server_name, "list_events", args
-            )
-            if "error" in result:
-                log.warning("Google Calendar list_events error: %s", result["error"])
-                return []
-            return self._parse_events(result.get("items", result.get("events", [])))
-        except Exception as exc:
-            log.warning("Google Calendar list_events failed: %s", exc)
-            return []
+    def _build_list_args(
+        self, time_min: str, time_max: str, max_results: int, calendar_name: str | None
+    ) -> dict[str, Any]:
+        args: dict[str, Any] = {
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "maxResults": max_results,
+        }
+        if calendar_name:
+            args["calendarId"] = calendar_name
+        return args
 
-    def create_event(
+    def _build_create_args(
         self,
         title: str,
         start: datetime,
         end: datetime,
-        *,
-        description: str = "",
-        location: str = "",
-        calendar_name: str | None = None,
-    ) -> CalendarEvent:
-        if not self.is_available():
-            raise RuntimeError("Google Calendar MCP server not available")
+        description: str,
+        location: str,
+        calendar_name: str | None,
+    ) -> dict[str, Any]:
         args: dict[str, Any] = {
             "summary": title,
             "start": {"dateTime": start.isoformat()},
@@ -84,54 +55,19 @@ class GoogleCalendarAdapter:
             args["location"] = location
         if calendar_name:
             args["calendarId"] = calendar_name
+        return args
 
-        result = self._manager.call_tool(  # type: ignore[union-attr]
-            self._server_name, "create_event", args
-        )
-        if "error" in result:
-            raise RuntimeError(f"Google Calendar create_event failed: {result['error']}")
+    def _extract_event_items(self, result: dict[str, Any]) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = result.get("items", result.get("events", []))
+        return items
 
-        return CalendarEvent(
-            event_id=result.get("id", ""),
-            title=title,
-            start=start,
-            end=end,
-            description=description,
-            location=location,
-            source="google",
-            calendar_name=calendar_name or "primary",
-            is_geode=title.startswith("[GEODE]"),
-        )
+    def _extract_event_id(self, result: dict[str, Any]) -> str:
+        eid: str = result.get("id", "")
+        return eid
 
-    def delete_event(self, event_id: str) -> bool:
-        if not self.is_available():
-            return False
-        try:
-            result = self._manager.call_tool(  # type: ignore[union-attr]
-                self._server_name, "delete_event", {"eventId": event_id}
-            )
-            return "error" not in result
-        except Exception as exc:
-            log.warning("Google Calendar delete_event failed: %s", exc)
-            return False
-
-    def is_available(self) -> bool:
-        if self._manager is None:
-            return False
-        health = self._manager.check_health()
-        return health.get(self._server_name, False)
-
-    def list_calendars(self) -> list[str]:
-        if not self.is_available():
-            return []
-        try:
-            result = self._manager.call_tool(  # type: ignore[union-attr]
-                self._server_name, "list_calendars", {}
-            )
-            items = result.get("items", result.get("calendars", []))
-            return [c.get("summary", c.get("id", "")) for c in items]
-        except Exception:
-            return []
+    def _extract_calendar_names(self, result: dict[str, Any]) -> list[str]:
+        items = result.get("items", result.get("calendars", []))
+        return [c.get("summary", c.get("id", "")) for c in items]
 
     def _parse_events(self, items: list[dict[str, Any]]) -> list[CalendarEvent]:
         events: list[CalendarEvent] = []

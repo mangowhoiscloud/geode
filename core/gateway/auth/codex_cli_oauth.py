@@ -14,15 +14,17 @@ from __future__ import annotations
 
 import json
 import logging
-import threading
 import time
 from pathlib import Path
 from typing import Any, TypedDict
 
+from core.gateway.auth.credential_cache import CredentialCache, refresh_managed_token
+
 log = logging.getLogger(__name__)
 
 _CODEX_AUTH_PATH = ".codex/auth.json"
-_CACHE_TTL_S = 900  # 15 min
+
+_cache = CredentialCache(_CODEX_AUTH_PATH)
 
 
 class CodexCliCredentials(TypedDict, total=False):
@@ -34,34 +36,9 @@ class CodexCliCredentials(TypedDict, total=False):
     account_id: str
 
 
-# -- Cache (with mtime fingerprint — OpenClaw sourceFingerprint pattern) --
-_cache_lock = threading.Lock()
-_cache: dict[str, Any] = {"value": None, "read_at": 0.0, "mtime": 0.0}
-
-
-def _get_file_mtime() -> float:
-    try:
-        return (Path.home() / _CODEX_AUTH_PATH).stat().st_mtime
-    except OSError:
-        return 0.0
-
-
-def _is_cache_valid() -> bool:
-    # Called under _cache_lock
-    if _cache["value"] is None:
-        return False
-    if (time.time() - _cache["read_at"]) >= _CACHE_TTL_S:
-        return False
-    current_mtime = _get_file_mtime()
-    return not (current_mtime > 0 and current_mtime != _cache["mtime"])
-
-
 def invalidate_cache() -> None:
     """Force next read to bypass cache."""
-    with _cache_lock:
-        _cache["value"] = None
-        _cache["read_at"] = 0.0
-        _cache["mtime"] = 0.0
+    _cache.invalidate()
 
 
 def _decode_jwt_expiry(token: str) -> float | None:
@@ -149,20 +126,16 @@ def read_codex_cli_credentials(
 
     Returns None if Codex CLI is not logged in.
     """
-    with _cache_lock:
-        if not force_refresh and _is_cache_valid():
-            cached: CodexCliCredentials | None = _cache["value"]
-            return cached
+    hit, cached = _cache.get_if_valid(force_refresh=force_refresh)
+    if hit:
+        result_cached: CodexCliCredentials | None = cached
+        return result_cached
 
     # Read outside lock (file I/O)
     data = _read_from_file()
-    mtime = _get_file_mtime()
+    mtime = _cache.get_file_mtime()
     parsed = _parse_codex_credentials(data) if data else None
-
-    with _cache_lock:
-        _cache["value"] = parsed
-        _cache["read_at"] = time.time()
-        _cache["mtime"] = mtime
+    _cache.update(parsed, mtime)
 
     if parsed:
         is_expired = time.time() > parsed["expires_at"]
@@ -175,21 +148,5 @@ def read_codex_cli_credentials(
 
 
 def refresh_codex_cli_token(profile: Any) -> bool:
-    """Re-read token from Codex CLI's storage (managed refresh).
-
-    Returns True if the token was updated, False otherwise.
-    """
-    creds = read_codex_cli_credentials(force_refresh=True)
-    if not creds:
-        log.warning("Codex CLI credentials unavailable for refresh")
-        return False
-
-    new_token = creds["access_token"]
-    if new_token != profile.key:
-        profile.key = new_token
-        profile.expires_at = creds.get("expires_at", 0.0)
-        log.info("Codex CLI OAuth token refreshed (managed)")
-        return True
-
-    log.debug("Codex CLI token unchanged after re-read")
-    return False
+    """Re-read token from Codex CLI's storage (managed refresh)."""
+    return refresh_managed_token("Codex CLI", read_codex_cli_credentials, profile)
