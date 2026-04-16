@@ -78,6 +78,10 @@ class BashTool:
     """Execute shell commands with safety checks and HITL approval."""
 
     def __init__(self, *, working_dir: str | None = None) -> None:
+        if working_dir is None:
+            from core.paths import get_project_root
+
+            working_dir = str(get_project_root())
         self._working_dir = working_dir
 
     def validate(self, command: str) -> BashResult | None:
