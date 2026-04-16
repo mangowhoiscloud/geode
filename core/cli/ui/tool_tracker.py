@@ -49,7 +49,10 @@ _FRAMES = [
 
 
 class ToolCallTracker:
-    """Renders tool call lines with spinners, updating in-place on completion."""
+    """Renders tool call lines with spinners, updating in-place on completion.
+
+    Output is suppressed when stdout is not a TTY (e.g., pytest, CI, pipes).
+    """
 
     def __init__(self) -> None:
         self._tools: list[dict[str, str | bool | float]] = []
@@ -57,6 +60,7 @@ class ToolCallTracker:
         self._spinner_thread: threading.Thread | None = None
         self._running = False
         self._line_count = 0  # how many lines we've printed
+        self._tty = sys.stdout.isatty()  # suppress ANSI output in non-TTY contexts
 
     def on_tool_start(self, event: dict[str, object]) -> None:
         """Handle a tool_start event from serve."""
@@ -133,7 +137,7 @@ class ToolCallTracker:
             self._spinner_thread.join(timeout=0.3)
             self._spinner_thread = None
         with self._lock:
-            if self._line_count > 0:
+            if self._line_count > 0 and self._tty:
                 out = sys.stdout
                 for _ in range(self._line_count):
                     out.write("\033[A\033[2K")
@@ -148,12 +152,11 @@ class ToolCallTracker:
             time.sleep(0.08)
 
     def _redraw(self) -> None:
-        """Clear all tool lines and reprint them (ANSI cursor-up)."""
-        out = sys.stdout
-        # Move cursor up to overwrite previous render
-        if self._line_count > 0:
-            out.write(f"\033[{self._line_count}A")
+        """Clear all tool lines and reprint them (ANSI cursor-up).
 
+        Internal state (_line_count) is always updated so tests can verify
+        tracker behaviour.  ANSI stdout writes are suppressed in non-TTY.
+        """
         frame = _FRAMES[int(time.monotonic() * 12) % len(_FRAMES)]
         lines: list[str] = []
         for t in self._tools:
@@ -168,13 +171,20 @@ class ToolCallTracker:
                     lines.append(f"\033[2K  \033[32m\u2713 {name}\033[0m → {summary}{dur}")
             else:
                 args = str(t["args"]).replace("\n", " ")
-                # Truncate by display width — CJK chars occupy 2 columns
                 args = _truncate_display(args, 50)
                 lines.append(f"\033[2K  {frame} \033[35m{name}\033[0m({args})")
 
+        # Always update line count (tests inspect this)
+        self._line_count = len(lines)
+
+        # Only write ANSI output to real terminals
+        if not self._tty:
+            return
+        out = sys.stdout
+        if self._line_count > 0:
+            out.write(f"\033[{self._line_count}A")
         output = "\n".join(lines)
         if lines:
             output += "\n"
         out.write(output)
         out.flush()
-        self._line_count = len(lines)
