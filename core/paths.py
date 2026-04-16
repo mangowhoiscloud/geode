@@ -10,7 +10,7 @@ Two-tier directory structure following Claude Code's ~/.claude pattern:
     Project config (gateway bindings), memory, rules, skills, reports, cache.
 
 Project ID encoding follows Claude Code's convention:
-  /Users/mango/workspace/geode  ->  -Users-mango-workspace-geode
+  /home/user/workspace/geode  ->  -home-user-workspace-geode
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def encode_project_id(workspace_path: str | Path | None = None) -> str:
     """Encode a workspace path into a project ID.
 
     Follows Claude Code's convention: replace ``/`` with ``-``.
-    Example: ``/Users/mango/workspace/geode`` -> ``-Users-mango-workspace-geode``
+    Example: ``/home/user/workspace/geode`` -> ``-home-user-workspace-geode``
 
     Args:
         workspace_path: Absolute workspace path. Defaults to ``cwd()``.
