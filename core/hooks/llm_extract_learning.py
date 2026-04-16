@@ -4,7 +4,9 @@ Runs on TURN_COMPLETE (low priority, after auto_learn regex detectors).
 Sends recent conversation context to a budget model (Haiku/GLM-flash)
 to extract learning items that regex detectors would miss.
 
-Fires at most once per 5 turns to control cost.
+Cursor-based incremental extraction: only processes messages since the
+last extraction, skipping already-seen content.  Mutual exclusion skips
+extraction if the main agent already wrote to memory this turn.
 """
 
 from __future__ import annotations
@@ -18,9 +20,9 @@ from core.hooks.system import HookEvent
 
 log = logging.getLogger(__name__)
 
-_TURN_INTERVAL = 5  # extract every N turns
+_TURN_INTERVAL = 1  # extract every N turns (cursor-based, so safe at 1)
 _MAX_CONTEXT_CHARS = 3000  # recent conversation to send to LLM
-_MAX_PER_SESSION = 5  # LLM extractions per session
+_MAX_PER_SESSION = 10  # LLM extractions per session (raised from 5)
 
 _EXTRACT_PROMPT = """\
 You are a learning extraction agent. Analyze the recent conversation
@@ -88,9 +90,11 @@ def _call_glm_flash(prompt: str, api_key: str) -> str | None:
     """Call GLM-4.7-flash (free tier)."""
     import openai
 
+    from core.config import GLM_BASE_URL
+
     client = openai.OpenAI(
         api_key=api_key,
-        base_url="https://open.bigmodel.cn/api/paas/v4/",
+        base_url=GLM_BASE_URL,
     )
     try:
         resp = client.chat.completions.create(
@@ -150,10 +154,15 @@ def _parse_extractions(text: str) -> list[tuple[str, str]]:
 
 
 def make_llm_extract_handler() -> tuple[str, Callable[..., None]]:
-    """Create TURN_COMPLETE handler for LLM-based learning extraction."""
+    """Create TURN_COMPLETE handler for LLM-based learning extraction.
+
+    Claude Code extractMemories pattern: cursor-based incremental extraction
+    with mutual exclusion (skip if main agent wrote to memory this turn).
+    """
     turn_count = 0
     session_extractions = 0
     last_extract_ts = 0.0
+    _seen_inputs: set[int] = set()  # hash of already-extracted user inputs
 
     def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
         nonlocal turn_count, session_extractions, last_extract_ts
@@ -167,9 +176,24 @@ def make_llm_extract_handler() -> tuple[str, Callable[..., None]]:
         if session_extractions >= _MAX_PER_SESSION:
             return
 
-        # 60s cooldown
+        # 30s cooldown (reduced from 60s for cursor-based extraction)
         now = time.monotonic()
-        if now - last_extract_ts < 60.0:
+        if now - last_extract_ts < 30.0:
+            return
+
+        # Mutual exclusion: skip if main agent already wrote to memory this turn
+        # (Claude Code pattern — avoid duplicate extraction)
+        tool_calls = data.get("tool_calls", [])
+        _MEMORY_TOOLS = {"memory_save", "note_save", "profile_learn", "manage_rule"}
+        if _MEMORY_TOOLS & set(tool_calls):
+            log.debug("LLM extract: skipping — main agent wrote to memory")
+            return
+
+        # Cursor-based: skip if we already extracted from this user input
+        user_input = data.get("user_input", "")
+        input_hash = hash(user_input)
+        if input_hash in _seen_inputs:
+            log.debug("LLM extract: skipping — already extracted from this input")
             return
 
         from core.tools.profile_tools import get_user_profile
@@ -186,6 +210,9 @@ def make_llm_extract_handler() -> tuple[str, Callable[..., None]]:
         llm_output = _call_budget_llm(prompt)
         if not llm_output:
             return
+
+        # Mark as seen regardless of extraction result
+        _seen_inputs.add(input_hash)
 
         extractions = _parse_extractions(llm_output)
         for pattern_text, category in extractions:
