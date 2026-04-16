@@ -29,6 +29,11 @@ _MAX_SECTION_LINES = 20
 
 _SYSTEM_PROMPT_TEMPLATE = ROUTER_SYSTEM
 
+# Prompt caching boundary marker (Claude Code pattern).
+# Content BEFORE this marker is stable across turns → cache hit.
+# Content AFTER changes per turn (memory, date, model card) → no cache.
+PROMPT_CACHE_BOUNDARY = "__GEODE_PROMPT_CACHE_BOUNDARY__"
+
 # Well-known IPs to include as examples (recognizable across languages)
 _NOTABLE_IPS = {
     "berserk",
@@ -51,7 +56,12 @@ _NOTABLE_IPS = {
 
 
 def build_system_prompt(model: str = "") -> str:
-    """Build system prompt with model card, IP examples, and memory context."""
+    """Build system prompt with model card, IP examples, and memory context.
+
+    Inserts PROMPT_CACHE_BOUNDARY between static (template + identity) and
+    dynamic (date, model card, memory, user context) sections.  Anthropic
+    adapter splits at this boundary to maximize prompt cache hits.
+    """
     from core.domains.game_ip.fixtures import FIXTURE_MAP, load_fixture
 
     name_map = get_ip_name_map()
@@ -67,31 +77,45 @@ def build_system_prompt(model: str = "") -> str:
             except Exception:
                 examples.append(fk.title())
 
-    base = _SYSTEM_PROMPT_TEMPLATE.format(
+    # ── STATIC section (stable across turns → cache hit) ──
+    static = _SYSTEM_PROMPT_TEMPLATE.format(
         ip_count=ip_count,
         ip_examples=", ".join(sorted(examples)),
     )
 
-    # Model card: inject current model info so LLM can answer model questions directly
+    # G1: Agent identity (from GEODE.md — stable per session)
+    identity_ctx = _build_identity_context()
+    if identity_ctx:
+        static += "\n\n" + identity_ctx
+
+    # ── DYNAMIC section (changes per turn → no cache) ──
+    dynamic_parts: list[str] = []
+
     if model:
         model_card = _build_model_card(model)
         if model_card:
-            base += "\n\n" + model_card
+            dynamic_parts.append(model_card)
 
-    # Inject current date so LLM uses the correct year for searches
-    base += "\n\n" + _build_date_context()
+    dynamic_parts.append(_build_date_context())
 
-    # P1-C: Inject memory context (recent insights + active rules)
-    memory_ctx = _build_memory_context()
-    if memory_ctx:
-        base += "\n\n" + memory_ctx
+    # G2-G4: Memory hierarchy (may change between turns)
+    g2 = _build_geode_memory_context()
+    if g2:
+        dynamic_parts.append(g2)
+    g3 = _build_learning_context()
+    if g3:
+        dynamic_parts.append(g3)
+    g4 = _build_project_memory_context()
+    if g4:
+        dynamic_parts.append(g4)
 
-    # User context: profile + career identity
     user_ctx = _build_user_context()
     if user_ctx:
-        base += "\n\n" + user_ctx
+        dynamic_parts.append(user_ctx)
 
-    return base
+    dynamic = "\n\n".join(dynamic_parts)
+
+    return static + "\n\n" + PROMPT_CACHE_BOUNDARY + "\n\n" + dynamic
 
 
 def format_current_date() -> str:
@@ -242,21 +266,13 @@ def _build_user_context() -> str:
 def _build_memory_context() -> str:
     """Build memory context string from the 4-tier memory hierarchy.
 
-    Injects G1-G4 into the system prompt:
-      G1: GEODE.md identity (Core Principles + CANNOT + Defaults)
-      G2: .geode/MEMORY.md project meta-index
-      G3: .geode/LEARNING.md agent learning records
-      G4: .geode/memory/PROJECT.md runtime insights + rules (existing)
+    G1 (identity) is now injected in the STATIC section of build_system_prompt()
+    for prompt cache optimization.  This function assembles G2-G4 only.
 
     Each section is capped at ``_MAX_SECTION_LINES`` lines.
     Missing files are silently skipped (graceful degradation).
     """
     parts: list[str] = []
-
-    # --- G1: Agent Identity (GEODE.md) ---
-    identity_ctx = _build_identity_context()
-    if identity_ctx:
-        parts.append(identity_ctx)
 
     # --- G2: Project Memory Index (.geode/MEMORY.md) ---
     geode_memory_ctx = _build_geode_memory_context()
