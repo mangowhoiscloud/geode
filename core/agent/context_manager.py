@@ -252,9 +252,16 @@ class ContextWindowManager:
                 )
 
     def aggressive_context_recovery(
-        self, system: str, messages: list[dict[str, Any]], model: str
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        model: str,
+        provider: str = "anthropic",
     ) -> int:
         """Last-resort context recovery: aggressive prune + tool result summarization.
+
+        Delegates strategy selection to CONTEXT_OVERFLOW_ACTION hook (same path
+        as normal overflow) with aggressive keep_recent override.
 
         Returns number of messages freed, or 0 if recovery failed.
         """
@@ -262,7 +269,6 @@ class ContextWindowManager:
             from core.config import settings
             from core.orchestration.context_monitor import (
                 check_context,
-                prune_oldest_messages,
                 summarize_tool_results,
             )
 
@@ -283,18 +289,18 @@ class ContextWindowManager:
             if not post.is_critical:
                 return original_count - len(messages) + summarized
 
-            # Phase 2: prune with halved keep_recent
+            # Phase 2: delegate to CONTEXT_OVERFLOW_ACTION hook for strategy
+            strategy = self._resolve_overflow_strategy(post, settings, model, provider)
+
+            # Override keep_recent aggressively (halved, min 3)
             aggressive_keep = max(3, settings.compact_keep_recent // 2)
-            pruned = prune_oldest_messages(messages, keep_recent=aggressive_keep)
-            if len(pruned) < len(messages):
-                messages.clear()
-                messages.extend(pruned)
-                log.info(
-                    "Aggressive prune: %d → %d messages (keep_recent=%d)",
-                    original_count,
-                    len(pruned),
-                    aggressive_keep,
-                )
+            strategy["keep_recent"] = aggressive_keep
+
+            # Force prune if hook returned "none" — aggressive recovery must act
+            if strategy.get("strategy") == "none":
+                strategy["strategy"] = "prune"
+
+            self._apply_overflow_strategy(strategy, messages, settings, model, provider)
 
             # Final check
             post2 = check_context(messages, model, system_prompt=system)
