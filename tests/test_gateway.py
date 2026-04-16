@@ -445,8 +445,16 @@ class TestBindingConfigReload:
             "gateway": {
                 "bindings": {
                     "rules": [
-                        {"channel": "slack", "channel_id": "C123", "auto_respond": True},
-                        {"channel": "discord", "channel_id": "D456", "require_mention": True},
+                        {
+                            "channel": "slack",
+                            "channel_id": "C123",
+                            "auto_respond": True,
+                        },
+                        {
+                            "channel": "discord",
+                            "channel_id": "D456",
+                            "require_mention": True,
+                        },
                     ]
                 }
             }
