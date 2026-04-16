@@ -735,9 +735,7 @@ class ToolCallProcessor:
                     extra_ctx = hr.data.get("additional_context")
                     if extra_ctx and isinstance(result, dict):
                         prev = result.get("additional_context", "")
-                        result["additional_context"] = (
-                            f"{prev}\n{extra_ctx}" if prev else extra_ctx
-                        )
+                        result["additional_context"] = f"{prev}\n{extra_ctx}" if prev else extra_ctx
 
         # Track consecutive failures + recoverability breadcrumb
         if isinstance(result, dict) and result.get("error"):
@@ -955,9 +953,7 @@ class ToolCallProcessor:
         except Exception:
             log.debug("Hook trigger failed for %s", event_name, exc_info=True)
 
-    def _fire_interceptor(
-        self, event_name: str, data: dict[str, Any]
-    ) -> InterceptResult | None:
+    def _fire_interceptor(self, event_name: str, data: dict[str, Any]) -> InterceptResult | None:
         """Emit a hook event as interceptor (block/modify semantics).
 
         Returns InterceptResult if hooks are configured, None otherwise.
@@ -973,9 +969,7 @@ class ToolCallProcessor:
             log.debug("Interceptor trigger failed for %s", event_name, exc_info=True)
             return None
 
-    def _fire_with_result(
-        self, event_name: str, data: dict[str, Any]
-    ) -> list[HookResult]:
+    def _fire_with_result(self, event_name: str, data: dict[str, Any]) -> list[HookResult]:
         """Emit a hook event capturing handler return values.
 
         Returns list of HookResult with handler-returned data.
