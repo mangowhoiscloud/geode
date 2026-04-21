@@ -86,6 +86,7 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | | No `git checkout` switching within a worktree | Isolation maintenance |
 | | No modifying tracking documents from feature/develop | Single source of truth on main |
 | | No branch creation when remote is out of sync | Conflict prevention |
+| | No claiming "branch needs sync" from commit count alone — verify content with `git diff A B --stat` first | Graph asymmetry ≠ content asymmetry (gitflow merge commits) |
 | **Planning** | No starting implementation without Socratic Gate (except bugs/docs) | Prevent over-engineering |
 | **Quality** | No committing with lint/type/test failures | Ratchet (P4) |
 | | No placeholders (XXXX) in metrics — measured values only | Truth guarantee |
