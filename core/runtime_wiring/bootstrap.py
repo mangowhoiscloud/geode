@@ -428,6 +428,25 @@ def build_hooks(
             ["total_cost_usd", "limit_usd"],
         ),
         (_E.EXECUTION_CANCELLED, "exec_cancel", "Execution cancelled: %s", ["session_id"]),
+        # Asymmetry fixes — events that had triggers but no audit logger
+        (_E.LLM_CALL_FAILED, "llm_failed", "LLM call FAILED: %s — %s", ["model", "error_type"]),
+        (_E.LLM_CALL_RETRY, "llm_retry", "LLM call retry: %s (attempt %s)", ["model", "attempt"]),
+        (
+            _E.TOOL_RECOVERY_SUCCEEDED,
+            "recovery_ok",
+            "Tool recovery OK: %s",
+            ["tool_name"],
+        ),
+        (_E.MCP_SERVER_CONNECTED, "mcp_ok", "MCP server connected: %s", ["server_name"]),
+        (_E.TOOL_RESULT_OFFLOADED, "tool_offload", "Tool result offloaded: %s", ["tool_name"]),
+        (_E.TOOL_APPROVAL_REQUESTED, "approval_req", "Tool approval requested: %s", ["tool_name"]),
+        (_E.MEMORY_SAVED, "memory_saved", "Memory saved: %s", ["key"]),
+        (
+            _E.REASONING_METRICS,
+            "reasoning_metrics",
+            "Reasoning: %s rounds, %s tools",
+            ["rounds", "tool_call_count"],
+        ),
     ]
 
     def _reg_audit_loggers() -> None:
