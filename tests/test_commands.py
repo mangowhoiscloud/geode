@@ -244,11 +244,12 @@ class TestCmdModel:
 
     def test_same_model_noop(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from core.config import settings
+        from core.config import ANTHROPIC_PRIMARY, settings
 
-        old = settings.model
-        cmd_model(old)
-        assert settings.model == old
+        # Use explicit model to avoid cross-test settings.model contamination
+        monkeypatch.setattr(settings, "model", ANTHROPIC_PRIMARY)
+        cmd_model(ANTHROPIC_PRIMARY)
+        assert settings.model == ANTHROPIC_PRIMARY
 
 
 class TestApplyModel:
@@ -265,10 +266,11 @@ class TestApplyModel:
 
     def test_apply_same_model(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        from core.config import settings
+        from core.config import ANTHROPIC_PRIMARY, settings
 
-        # Should not write .env when model unchanged
-        _apply_model(next(p for p in MODEL_PROFILES if p.id == settings.model))
+        # Use explicit model to avoid cross-test contamination
+        monkeypatch.setattr(settings, "model", ANTHROPIC_PRIMARY)
+        _apply_model(next(p for p in MODEL_PROFILES if p.id == ANTHROPIC_PRIMARY))
 
     def test_apply_model_defers_hot_swap(self, tmp_path: Path, monkeypatch):
         """_apply_model() updates settings only — loop sync is deferred to round boundary."""
