@@ -2,17 +2,30 @@
 
 OpenClaw pattern: select best available profile by
 type priority (oauth > token > api_key), then LRU within same type.
+
+Managed token lifecycle:
+- Proactive refresh: re-read from external storage if expiry within 120s
+- 401 auto-refresh: re-read on auth failure before applying cooldown
+- Hermes ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 120
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
 from core.gateway.auth.profiles import AuthProfile, ProfileStore
 
 log = logging.getLogger(__name__)
+
+# Hermes pattern: refresh 2 min before expiry
+_REFRESH_SKEW_S = 120.0
+
+# Type alias for managed token refresh functions.
+# Signature: (profile) -> bool (True if token was updated)
+ManagedRefreshFn = Callable[[AuthProfile], bool]
 
 
 class ProfileRotator:
@@ -22,13 +35,31 @@ class ProfileRotator:
     1. Filter: available only (not disabled, not expired, not cooling down)
     2. Sort by type priority (oauth > token > api_key)
     3. Within same type: LRU (least recently used first)
+
+    Managed token support:
+    - Register refresh functions per managed_by label
+    - Proactive refresh on resolve() if expiry within 120s
+    - Auto-refresh on mark_failure() before applying cooldown
     """
 
     def __init__(self, store: ProfileStore) -> None:
         self._store = store
+        self._refreshers: dict[str, ManagedRefreshFn] = {}
+
+    def register_refresher(self, managed_by: str, fn: ManagedRefreshFn) -> None:
+        """Register a refresh function for managed profiles.
+
+        Args:
+            managed_by: Label matching AuthProfile.managed_by (e.g. "codex-cli").
+            fn: Callable(profile) -> bool. Re-reads token from external storage.
+        """
+        self._refreshers[managed_by] = fn
 
     def resolve(self, provider: str) -> AuthProfile | None:
         """Resolve the best available profile for a provider.
+
+        If the selected profile is managed and expires within 120s,
+        proactively re-reads from external storage before returning.
 
         Returns None if no profiles are available.
         """
@@ -40,6 +71,12 @@ class ProfileRotator:
         # Sort: type priority first, then LRU
         available.sort(key=lambda p: p.sort_key())
         selected = available[0]
+
+        # Proactive refresh: re-read if managed + expiring within skew
+        if selected.managed_by and selected.expires_at > 0:
+            remaining = selected.expires_at - time.time()
+            if remaining < _REFRESH_SKEW_S:
+                self._try_managed_refresh(selected, reason="proactive")
 
         log.debug(
             "Resolved profile=%s (type=%s) for provider=%s from %d candidates",
@@ -59,8 +96,30 @@ class ProfileRotator:
         profile.error_count = 0
         profile.cooldown_until = 0.0
 
-    def mark_failure(self, profile: AuthProfile) -> None:
-        """Mark a failed API call — increment errors, apply cooldown."""
+    def mark_failure(self, profile: AuthProfile, *, is_auth_error: bool = False) -> None:
+        """Mark a failed API call — increment errors, apply cooldown.
+
+        For managed profiles with auth errors (401/403), attempts to re-read
+        the token from external storage before applying cooldown. If the token
+        changed, resets error count (Hermes 401 auto-refresh pattern).
+
+        Args:
+            profile: The profile that failed.
+            is_auth_error: True if the error was an authentication failure (401/403).
+        """
+        # 401 auto-refresh for managed profiles
+        if is_auth_error and profile.managed_by:
+            refreshed = self._try_managed_refresh(profile, reason="401")
+            if refreshed:
+                # Token updated — reset errors, skip cooldown
+                profile.error_count = 0
+                profile.cooldown_until = 0.0
+                log.info(
+                    "Profile %s: 401 auto-refresh succeeded, errors reset",
+                    profile.name,
+                )
+                return
+
         profile.error_count += 1
         cooldown_ms = calculate_cooldown_ms(profile.error_count)
         profile.cooldown_until = time.time() + cooldown_ms / 1000.0
@@ -70,6 +129,32 @@ class ProfileRotator:
             profile.error_count,
             cooldown_ms,
         )
+
+    def _try_managed_refresh(self, profile: AuthProfile, *, reason: str) -> bool:
+        """Attempt to refresh a managed profile's token from external storage.
+
+        Returns True if the token was actually updated.
+        """
+        refresher = self._refreshers.get(profile.managed_by)
+        if refresher is None:
+            log.debug(
+                "No refresher for managed_by=%s (profile=%s)",
+                profile.managed_by,
+                profile.name,
+            )
+            return False
+        try:
+            updated = refresher(profile)
+            if updated:
+                log.info(
+                    "Managed refresh (%s): %s token updated",
+                    reason,
+                    profile.name,
+                )
+            return updated
+        except Exception:
+            log.debug("Managed refresh failed for %s", profile.name, exc_info=True)
+            return False
 
     def disable(self, profile: AuthProfile, reason: str) -> None:
         """Disable a profile (e.g. quota exceeded, billing issue)."""
