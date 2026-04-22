@@ -8,11 +8,20 @@
 ```yaml
 name: skill-name
 description: One-line description of what this skill does
+visibility: public          # public | private | unlisted
 triggers:
   - keyword1
   - keyword2
   - keyword3
 ```
+
+### Visibility Levels
+
+| Level | Storage | Git | `geode skill list` |
+|-------|---------|-----|---------------------|
+| `public` | `.geode/skills/` | committed | visible |
+| `unlisted` | `.geode/skills/` | committed | hidden |
+| `private` | `~/.geode/skills/` | never committed | visible (local) |
 
 ## Purpose
 

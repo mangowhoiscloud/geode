@@ -52,6 +52,7 @@ class SkillDefinition(BaseModel):
     source: str = ""
     risk: str = "safe"
     # --- Skill 2.0 fields (Agent Skills spec extensions) ---
+    visibility: str = "public"  # public | private | unlisted
     user_invocable: bool = True  # False = background knowledge, hidden from /skills
     context_fork: bool = False  # True = run in isolated subagent
     argument_hint: str = ""  # autocomplete hint, e.g. "[issue-number]"
