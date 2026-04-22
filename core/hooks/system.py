@@ -15,6 +15,7 @@ from __future__ import annotations
 import concurrent.futures
 import dataclasses
 import logging
+import re
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -122,6 +123,8 @@ class HookEvent(Enum):
     USER_INPUT_RECEIVED = "user_input_received"
     TOOL_EXEC_START = "tool_exec_start"
     TOOL_EXEC_END = "tool_exec_end"
+    TOOL_EXEC_FAILED = "tool_exec_failed"
+    TOOL_RESULT_TRANSFORM = "tool_result_transform"
     COST_WARNING = "cost_warning"
     COST_LIMIT_EXCEEDED = "cost_limit_exceeded"
     EXECUTION_CANCELLED = "execution_cancelled"
@@ -173,6 +176,7 @@ class _RegisteredHook:
     handler: HookHandler
     name: str
     priority: int  # Lower = higher priority (runs first)
+    matcher: str  # Regex pattern for tool_name filtering ("" = match all)
 
 
 class HookSystem:
@@ -190,6 +194,9 @@ class HookSystem:
         results = hooks.trigger(HookEvent.PIPELINE_START, {"ip_name": "Berserk"})
     """
 
+    # Events that support matcher-based tool_name filtering.
+    _TOOL_EVENTS: frozenset[HookEvent] = frozenset()  # populated after class
+
     def __init__(self) -> None:
         self._hooks: dict[HookEvent, list[_RegisteredHook]] = {}
         self._lock = threading.Lock()
@@ -201,10 +208,22 @@ class HookSystem:
         *,
         name: str | None = None,
         priority: int = 100,
+        matcher: str = "",
     ) -> None:
-        """Register a hook handler for an event."""
+        """Register a hook handler for an event.
+
+        Args:
+            event: The hook event to listen for.
+            handler: Callback function.
+            name: Unique handler name (defaults to ``handler.__name__``).
+            priority: Lower runs first (default 100).
+            matcher: Regex pattern matched against ``data["tool_name"]``.
+                Empty string (default) matches all tools.
+                Only evaluated for ``TOOL_EXEC_*`` and ``TOOL_RESULT_TRANSFORM``
+                events; ignored for other events.
+        """
         hook_name = name or handler.__name__
-        entry = _RegisteredHook(handler=handler, name=hook_name, priority=priority)
+        entry = _RegisteredHook(handler=handler, name=hook_name, priority=priority, matcher=matcher)
 
         with self._lock:
             if event not in self._hooks:
@@ -233,6 +252,7 @@ class HookSystem:
         results: list[HookResult] = []
         with self._lock:
             hooks = list(self._hooks.get(event, []))
+        hooks = self._filter_by_matcher(hooks, event, data)
 
         for hook in hooks:
             try:
@@ -264,6 +284,7 @@ class HookSystem:
         results: list[HookResult] = []
         with self._lock:
             hooks = list(self._hooks.get(event, []))
+        hooks = self._filter_by_matcher(hooks, event, data)
 
         for hook in hooks:
             try:
@@ -311,6 +332,7 @@ class HookSystem:
         data = dict(data) if data else {}  # defensive copy
         with self._lock:
             hooks = list(self._hooks.get(event, []))
+        hooks = self._filter_by_matcher(hooks, event, data)
 
         for hook in hooks:
             try:
@@ -332,6 +354,35 @@ class HookSystem:
         return InterceptResult(blocked=False, data=data)
 
     # -- Internal helpers ------------------------------------------------------
+
+    @staticmethod
+    def _filter_by_matcher(
+        hooks: list[_RegisteredHook],
+        event: HookEvent,
+        data: dict[str, Any],
+    ) -> list[_RegisteredHook]:
+        """Filter hooks by matcher pattern for tool-scoped events.
+
+        For non-tool events or hooks without a matcher, all hooks pass through.
+        Matcher is a regex tested against ``data["tool_name"]``.
+        """
+        if event not in HookSystem._TOOL_EVENTS:
+            return hooks
+        tool_name = data.get("tool_name", "")
+        if not tool_name:
+            return hooks
+        result: list[_RegisteredHook] = []
+        for hook in hooks:
+            if not hook.matcher:
+                result.append(hook)
+                continue
+            try:
+                if re.search(hook.matcher, tool_name):
+                    result.append(hook)
+            except re.error:
+                log.warning("Invalid matcher regex '%s' in hook '%s'", hook.matcher, hook.name)
+                result.append(hook)  # fail-open: invalid regex matches all
+        return result
 
     @staticmethod
     def _call_handler(
@@ -377,3 +428,14 @@ class HookSystem:
                 self._hooks.pop(event, None)
             else:
                 self._hooks.clear()
+
+
+# Populate _TOOL_EVENTS after HookEvent members are available.
+HookSystem._TOOL_EVENTS = frozenset(
+    {
+        HookEvent.TOOL_EXEC_START,
+        HookEvent.TOOL_EXEC_END,
+        HookEvent.TOOL_EXEC_FAILED,
+        HookEvent.TOOL_RESULT_TRANSFORM,
+    }
+)
