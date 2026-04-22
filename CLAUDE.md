@@ -42,7 +42,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 | Document | Path | Content |
 |----------|------|---------|
 | Agent Identity | `GEODE.md` | Runtime architecture, domain rules, LLM models, conventions |
-| Hook System | `docs/architecture/hook-system.md` | HookSystem 55 events |
+| Hook System | `docs/architecture/hook-system.md` | HookSystem 58 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
 ## Project Structure
