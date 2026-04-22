@@ -67,6 +67,38 @@ def _try_oauth_refresh(provider_label: str) -> bool:
     return False
 
 
+def _resolve_rotator_provider(provider_label: str) -> str:
+    """Map provider_label (e.g. 'LLM', 'OpenAI', 'GLM') to rotator provider name."""
+    label = provider_label.lower()
+    if label in ("llm", "anthropic"):
+        return "anthropic"
+    if label in ("openai",):
+        return "openai"
+    if label in ("glm", "zhipuai"):
+        return "glm"
+    return label
+
+
+def _notify_success(provider: str) -> None:
+    """Notify ProfileRotator of LLM call success (non-blocking)."""
+    try:
+        from core.llm.credentials import notify_llm_success
+
+        notify_llm_success(provider)
+    except Exception:
+        log.debug("Profile notify_success failed for %s", provider, exc_info=True)
+
+
+def _notify_failure(provider: str, exc: Exception) -> None:
+    """Notify ProfileRotator of LLM call failure (non-blocking)."""
+    try:
+        from core.llm.credentials import notify_llm_failure
+
+        notify_llm_failure(provider, exc)
+    except Exception:
+        log.debug("Profile notify_failure failed for %s", provider, exc_info=True)
+
+
 class CircuitBreaker:
     """Thread-safe circuit breaker for LLM API calls.
 
@@ -190,11 +222,15 @@ def retry_with_backoff_generic(
     last_error: Exception | None = None
     t0_retry = time.monotonic()
 
+    # Resolve provider name for rotator notification (strip "LLM"/"OpenAI" labels)
+    _provider_for_rotator = _resolve_rotator_provider(provider_label)
+
     for model_idx, current_model in enumerate(models_to_try):
         for attempt in range(max_retries):
             try:
                 result = fn(model=current_model)
                 circuit_breaker.record_success()
+                _notify_success(_provider_for_rotator)
                 return result
             except retryable_errors as exc:
                 last_error = exc
@@ -260,5 +296,6 @@ def retry_with_backoff_generic(
     if last_error is None:
         raise RuntimeError("All retries exhausted with no error recorded")
     circuit_breaker.record_failure()
+    _notify_failure(_provider_for_rotator, last_error)
     log.error("All %s models and retries exhausted. Last error: %s", provider_label, last_error)
     raise last_error
