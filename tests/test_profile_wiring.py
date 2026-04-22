@@ -190,7 +190,9 @@ class TestFallbackIntegration:
             "core.llm.fallback._notify_failure",
             side_effect=lambda p, e: calls.append(f"fail:{p}"),
         ):
-            try:
+            import contextlib
+
+            with contextlib.suppress(ConnectionError):
                 retry_with_backoff_generic(
                     failing_fn,
                     model="test-model",
@@ -202,8 +204,6 @@ class TestFallbackIntegration:
                     retry_base_delay=0.0,
                     retry_max_delay=0.0,
                 )
-            except ConnectionError:
-                pass
 
         assert calls == ["fail:anthropic"]  # "LLM" maps to "anthropic"
 
