@@ -289,10 +289,27 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
                 key=settings.openai_api_key,
             )
         )
+    if settings.zai_api_key:
+        profile_store.add(
+            AuthProfile(
+                name="glm:default",
+                provider="glm",
+                credential_type=CredentialType.API_KEY,
+                key=settings.zai_api_key,
+            )
+        )
     global _profile_rotator
     profile_rotator = ProfileRotator(profile_store)
     _profile_rotator = profile_rotator
     cooldown_tracker = CooldownTracker()
+
+    # Register managed token refreshers
+    try:
+        from core.gateway.auth.codex_cli_oauth import refresh_codex_cli_token
+
+        profile_rotator.register_refresher("codex-cli", refresh_codex_cli_token)
+    except Exception:
+        log.debug("Codex CLI refresher registration skipped")
 
     return profile_store, profile_rotator, cooldown_tracker
 
