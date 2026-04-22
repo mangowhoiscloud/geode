@@ -40,12 +40,19 @@ geode_checkpoints.db
 !.geode/skills/
 
 # Personal skills — never commit (use .geode/skills/TEMPLATE.md as guide)
+# These belong in ~/.geode/skills/ (personal tier), not .geode/skills/ (project tier)
 .geode/skills/job-hunter/
 .geode/skills/expense-tracker/
 .geode/skills/youtube-planner/
 .geode/skills/daily-briefing/
 .geode/skills/weekly-retro/
 .geode/skills/slack-digest/
+.geode/skills/anthropic-philosophy/
+.geode/skills/coverletter-patterns/
+.geode/skills/eco2-context/
+.geode/skills/engineer-profile/
+.geode/skills/resume-tailoring/
+.geode/skills/resume-writer/
 
 # Personal memory — never commit
 .geode/memory/PROJECT.md
