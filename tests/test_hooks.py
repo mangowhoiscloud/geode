@@ -8,7 +8,7 @@ from core.hooks import HookEvent, HookResult, HookSystem, InterceptResult
 
 class TestHookEvent:
     def test_all_events_exist(self):
-        assert len(HookEvent) == 56
+        assert len(HookEvent) == 58  # +2: TOOL_EXEC_FAILED, TOOL_RESULT_TRANSFORM
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_START.value == "pipeline_start"
@@ -35,6 +35,8 @@ class TestHookEvent:
         assert HookEvent.USER_INPUT_RECEIVED.value == "user_input_received"
         assert HookEvent.TOOL_EXEC_START.value == "tool_exec_start"
         assert HookEvent.TOOL_EXEC_END.value == "tool_exec_end"
+        assert HookEvent.TOOL_EXEC_FAILED.value == "tool_exec_failed"
+        assert HookEvent.TOOL_RESULT_TRANSFORM.value == "tool_result_transform"
         assert HookEvent.COST_WARNING.value == "cost_warning"
         assert HookEvent.COST_LIMIT_EXCEEDED.value == "cost_limit_exceeded"
         assert HookEvent.EXECUTION_CANCELLED.value == "execution_cancelled"
@@ -595,3 +597,286 @@ class TestHookTimeout:
 
         result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {})
         assert result.data["fast"] is True
+
+
+class TestMatcher:
+    """Tests for matcher-based tool_name filtering on TOOL_EXEC_* events."""
+
+    def test_matcher_filters_tool_name(self):
+        """Handler with matcher only fires for matching tool_name."""
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_START,
+            lambda e, d: calls.append("bash"),
+            name="bash_only",
+            matcher="run_bash",
+        )
+
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "run_bash"})
+        assert calls == ["bash"]
+
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "web_search"})
+        assert calls == ["bash"]  # not fired again
+
+    def test_matcher_regex_pattern(self):
+        """Matcher supports regex patterns (pipe alternation)."""
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_START,
+            lambda e, d: calls.append(d["tool_name"]),
+            name="dangerous",
+            matcher="run_bash|terminal|computer_use",
+        )
+
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "run_bash"})
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "terminal"})
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "web_search"})
+        assert calls == ["run_bash", "terminal"]
+
+    def test_empty_matcher_matches_all(self):
+        """Empty matcher (default) fires for all tools."""
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_START,
+            lambda e, d: calls.append(d["tool_name"]),
+            name="all_tools",
+        )
+
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "any_tool"})
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "other_tool"})
+        assert calls == ["any_tool", "other_tool"]
+
+    def test_matcher_ignored_for_non_tool_events(self):
+        """Matcher is ignored for non-tool events (e.g., PIPELINE_START)."""
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        hooks.register(
+            HookEvent.PIPELINE_START,
+            lambda e, d: calls.append("fired"),
+            name="with_matcher",
+            matcher="run_bash",
+        )
+
+        hooks.trigger(HookEvent.PIPELINE_START, {"tool_name": "something_else"})
+        assert calls == ["fired"]  # matcher not applied
+
+    def test_matcher_on_interceptor(self):
+        """Matcher works with trigger_interceptor()."""
+        hooks = HookSystem()
+
+        def bash_blocker(_event, _data):
+            return {"block": True, "reason": "bash blocked"}
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_START,
+            bash_blocker,
+            name="bash_gate",
+            matcher="run_bash",
+        )
+
+        result_bash = hooks.trigger_interceptor(
+            HookEvent.TOOL_EXEC_START, {"tool_name": "run_bash"}
+        )
+        assert result_bash.blocked is True
+
+        result_safe = hooks.trigger_interceptor(
+            HookEvent.TOOL_EXEC_START, {"tool_name": "web_search"}
+        )
+        assert result_safe.blocked is False
+
+    def test_matcher_on_trigger_with_result(self):
+        """Matcher works with trigger_with_result()."""
+        hooks = HookSystem()
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_END,
+            lambda e, d: {"updated_result": {"enriched": True}},
+            name="enrich_search",
+            matcher="web_search",
+        )
+
+        results_match = hooks.trigger_with_result(
+            HookEvent.TOOL_EXEC_END, {"tool_name": "web_search", "result": {}}
+        )
+        assert len(results_match) == 1
+        assert results_match[0].data["updated_result"] == {"enriched": True}
+
+        results_no_match = hooks.trigger_with_result(
+            HookEvent.TOOL_EXEC_END, {"tool_name": "read_file", "result": {}}
+        )
+        assert len(results_no_match) == 0
+
+    def test_matcher_on_tool_result_transform(self):
+        """Matcher works on TOOL_RESULT_TRANSFORM event."""
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        hooks.register(
+            HookEvent.TOOL_RESULT_TRANSFORM,
+            lambda e, d: calls.append(d["tool_name"]),
+            name="json_transform",
+            matcher="export_json",
+        )
+
+        hooks.trigger(HookEvent.TOOL_RESULT_TRANSFORM, {"tool_name": "export_json"})
+        hooks.trigger(HookEvent.TOOL_RESULT_TRANSFORM, {"tool_name": "other"})
+        assert calls == ["export_json"]
+
+    def test_matcher_on_tool_exec_failed(self):
+        """Matcher works on TOOL_EXEC_FAILED event."""
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_FAILED,
+            lambda e, d: calls.append(d["tool_name"]),
+            name="bash_fail_watcher",
+            matcher="run_bash",
+        )
+
+        hooks.trigger(HookEvent.TOOL_EXEC_FAILED, {"tool_name": "run_bash", "error": "timeout"})
+        hooks.trigger(HookEvent.TOOL_EXEC_FAILED, {"tool_name": "web_search", "error": "404"})
+        assert calls == ["run_bash"]
+
+    def test_invalid_regex_fails_open(self):
+        """Invalid regex matcher fails open (matches all)."""
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_START,
+            lambda e, d: calls.append("fired"),
+            name="bad_regex",
+            matcher="[invalid",
+        )
+
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "any_tool"})
+        assert calls == ["fired"]
+
+    def test_mixed_matcher_and_no_matcher(self):
+        """Handlers with and without matchers coexist correctly."""
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_START,
+            lambda e, d: calls.append("all"),
+            name="global",
+            priority=10,
+        )
+        hooks.register(
+            HookEvent.TOOL_EXEC_START,
+            lambda e, d: calls.append("bash"),
+            name="bash_only",
+            priority=20,
+            matcher="run_bash",
+        )
+
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "run_bash"})
+        assert calls == ["all", "bash"]
+
+        calls.clear()
+        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "web_search"})
+        assert calls == ["all"]
+
+
+class TestToolExecFailedEvent:
+    """Tests for new TOOL_EXEC_FAILED event."""
+
+    def test_tool_exec_failed_event_value(self):
+        assert HookEvent.TOOL_EXEC_FAILED.value == "tool_exec_failed"
+
+    def test_tool_exec_failed_fires_on_error(self):
+        hooks = HookSystem()
+        calls: list[dict] = []
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_FAILED,
+            lambda e, d: calls.append(d),
+            name="fail_watcher",
+        )
+
+        hooks.trigger(
+            HookEvent.TOOL_EXEC_FAILED,
+            {
+                "tool_name": "run_bash",
+                "error": "command not found",
+                "error_type": "execution_error",
+                "recoverable": True,
+            },
+        )
+        assert len(calls) == 1
+        assert calls[0]["tool_name"] == "run_bash"
+        assert calls[0]["error_type"] == "execution_error"
+
+
+class TestToolResultTransformEvent:
+    """Tests for new TOOL_RESULT_TRANSFORM event."""
+
+    def test_tool_result_transform_event_value(self):
+        assert HookEvent.TOOL_RESULT_TRANSFORM.value == "tool_result_transform"
+
+    def test_transform_returns_transformed_result(self):
+        hooks = HookSystem()
+
+        def transformer(_event, data):
+            result = data.get("result", {})
+            if isinstance(result, dict):
+                return {"transformed_result": {**result, "transformed": True}}
+            return None
+
+        hooks.register(HookEvent.TOOL_RESULT_TRANSFORM, transformer, name="add_flag")
+
+        results = hooks.trigger_with_result(
+            HookEvent.TOOL_RESULT_TRANSFORM,
+            {"tool_name": "fetch", "result": {"data": "raw"}, "has_error": False},
+        )
+        assert len(results) == 1
+        assert results[0].data["transformed_result"]["transformed"] is True
+        assert results[0].data["transformed_result"]["data"] == "raw"
+
+    def test_transform_skips_on_none_return(self):
+        hooks = HookSystem()
+        hooks.register(
+            HookEvent.TOOL_RESULT_TRANSFORM,
+            lambda e, d: None,
+            name="noop",
+        )
+
+        results = hooks.trigger_with_result(
+            HookEvent.TOOL_RESULT_TRANSFORM,
+            {"tool_name": "fetch", "result": {"data": "raw"}},
+        )
+        assert len(results) == 1
+        assert results[0].data == {}
+
+
+class TestNewAuditLoggers:
+    """Verify new events have audit loggers registered."""
+
+    def test_tool_failed_and_transform_audit_loggers(self):
+        from unittest.mock import patch
+
+        with (
+            patch("core.runtime_wiring.bootstrap.RunLog"),
+            patch("core.runtime_wiring.bootstrap.StuckDetector"),
+        ):
+            from core.runtime_wiring.bootstrap import build_hooks
+
+            hooks, _, _, _ = build_hooks(
+                session_key="test",
+                run_id="test-run",
+                log_dir=None,
+                stuck_timeout_s=60,
+            )
+
+        all_hooks = hooks.list_hooks()
+        assert "tool_failed" in all_hooks.get("tool_exec_failed", [])
+        assert "tool_transform" in all_hooks.get("tool_result_transform", [])
