@@ -164,7 +164,9 @@ class TestFallbackIntegration:
         cb = CircuitBreaker()
         calls: list[str] = []
 
-        with patch("core.llm.fallback._notify_success", side_effect=lambda p: calls.append(f"ok:{p}")):
+        with patch(
+            "core.llm.fallback._notify_success", side_effect=lambda p: calls.append(f"ok:{p}")
+        ):
             result = retry_with_backoff_generic(
                 lambda model: "response",
                 model="test-model",
