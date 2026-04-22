@@ -135,6 +135,11 @@ app = typer.Typer(
     invoke_without_command=True,
 )
 
+# Subcommand groups
+from core.cli.cmd_skill import app as skill_app  # noqa: E402
+
+app.add_typer(skill_app, name="skill")
+
 # ---------------------------------------------------------------------------
 # Interactive welcome screen
 # ---------------------------------------------------------------------------

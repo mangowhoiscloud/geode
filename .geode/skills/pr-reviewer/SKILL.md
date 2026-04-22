@@ -1,5 +1,6 @@
 ---
 name: pr-reviewer
+visibility: public
 description: Automated Git PR review — diff analysis + quality checks. Triggers: 'review', 'PR 리뷰', '코드 리뷰', 'diff', '풀리퀘스트 검토'.
 tools: run_bash, memory_save
 risk: safe
