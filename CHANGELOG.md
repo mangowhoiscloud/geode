@@ -37,6 +37,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Scoring constants** — `scoring_constants.py` single source of truth for tier thresholds, weights, confidence multiplier (#731)
 
 ### Added
+- **Tool hook matcher** — `register(matcher="run_bash|terminal")` regex 패턴으로 핸들러가 특정 도구에만 반응. 3가지 트리거 모드 모두 지원 (#759)
+- **`TOOL_EXEC_FAILED` event** — 도구 실행 실패 시에만 발화하는 전용 observer hook. error, error_type, recoverable 포함 (#759)
+- **`TOOL_RESULT_TRANSFORM` event** — TOOL_EXEC_END 관측과 분리된 결과 변환 전용 feedback hook. Hermes `transform_tool_result` 패턴 (#759)
+- **GLM-5.1 model** — Z.AI GLM-5.1 (SWE-Bench Pro 1위, MIT) 추가 및 GLM_PRIMARY 승격. GLM-5V-Turbo, GLM-5-Turbo 가격 갱신 (#729)
 - **`geode doctor slack`** — Slack Gateway 7-point diagnostic (env, token, scopes, bindings, serve, MCP, socket). CLI + natural language tool (#57)
 - **Slack App Manifest URL** — `get_manifest_url()` 원클릭 앱 생성 URL
 - **OSS compliance files** — NOTICE, CONTRIBUTING.md (DCO), CODE_OF_CONDUCT.md, SECURITY.md, Issue/PR templates, .env.example (#744)
