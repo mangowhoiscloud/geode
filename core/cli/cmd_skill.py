@@ -51,9 +51,7 @@ def _discover_skills() -> list[dict[str, str]]:
 
 @app.command(name="list")
 def skill_list(
-    all_: Annotated[
-        bool, typer.Option("--all", "-a", help="Include unlisted skills")
-    ] = False,
+    all_: Annotated[bool, typer.Option("--all", "-a", help="Include unlisted skills")] = False,
 ) -> None:
     """List available skills with visibility and tier."""
     skills = _discover_skills()
