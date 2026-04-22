@@ -404,6 +404,18 @@ def build_hooks(
         (_E.TOOL_EXEC_START, "tool_start", "Tool exec start: %s", ["tool_name"]),
         (_E.TOOL_EXEC_END, "tool_end", "Tool exec end: %s (%.0fms)", ["tool_name", "duration_ms"]),
         (
+            _E.TOOL_EXEC_FAILED,
+            "tool_failed",
+            "Tool exec FAILED: %s — %s (%s)",
+            ["tool_name", "error", "error_type"],
+        ),
+        (
+            _E.TOOL_RESULT_TRANSFORM,
+            "tool_transform",
+            "Tool result transform: %s",
+            ["tool_name"],
+        ),
+        (
             _E.COST_WARNING,
             "cost_warn",
             "Cost warning: $%.4f / $%.2f",

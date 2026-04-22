@@ -278,7 +278,7 @@ class TestHookEventCount:
     def test_total_event_count(self) -> None:
         from core.hooks import HookEvent
 
-        assert len(HookEvent) == 56
+        assert len(HookEvent) == 58
 
 
 # ---------------------------------------------------------------------------

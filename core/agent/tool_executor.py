@@ -715,17 +715,16 @@ class ToolCallProcessor:
             result = await asyncio.to_thread(self._executor.execute, tool_name, tool_input)
             _elapsed_ms = (time.monotonic() - _t0) * 1000
 
-            # Hook: TOOL_EXEC_END (feedback — can modify result)
-            post_results = self._fire_with_result(
-                "tool_exec_end",
-                {
-                    "tool_name": tool_name,
-                    "tool_input": tool_input,
-                    "duration_ms": _elapsed_ms,
-                    "has_error": isinstance(result, dict) and bool(result.get("error")),
-                    "result": result,
-                },
-            )
+            # Hook: TOOL_EXEC_END (feedback — fires for all completions)
+            _has_error = isinstance(result, dict) and bool(result.get("error"))
+            _post_data = {
+                "tool_name": tool_name,
+                "tool_input": tool_input,
+                "duration_ms": _elapsed_ms,
+                "has_error": _has_error,
+                "result": result,
+            }
+            post_results = self._fire_with_result("tool_exec_end", _post_data)
             # Apply result modifications from PostToolUse-style handlers
             for hr in post_results:
                 if hr.success and isinstance(hr.data, dict):
@@ -736,6 +735,40 @@ class ToolCallProcessor:
                     if extra_ctx and isinstance(result, dict):
                         prev = result.get("additional_context", "")
                         result["additional_context"] = f"{prev}\n{extra_ctx}" if prev else extra_ctx
+
+            # Hook: TOOL_EXEC_FAILED (observer — fires only on error)
+            if _has_error:
+                self._fire_hook(
+                    "tool_exec_failed",
+                    {
+                        "tool_name": tool_name,
+                        "tool_input": tool_input,
+                        "duration_ms": _elapsed_ms,
+                        "error": result.get("error") if isinstance(result, dict) else str(result),
+                        "error_type": result.get("error_type", "unknown")
+                        if isinstance(result, dict)
+                        else "unknown",
+                        "recoverable": result.get("recoverable", True)
+                        if isinstance(result, dict)
+                        else False,
+                    },
+                )
+
+            # Hook: TOOL_RESULT_TRANSFORM (feedback — result rewriting, post-observation)
+            transform_results = self._fire_with_result(
+                "tool_result_transform",
+                {
+                    "tool_name": tool_name,
+                    "tool_input": tool_input,
+                    "result": result,
+                    "has_error": _has_error,
+                },
+            )
+            for hr in transform_results:
+                if hr.success and isinstance(hr.data, dict):
+                    transformed = hr.data.get("transformed_result")
+                    if isinstance(transformed, dict):
+                        result = transformed
 
         # Track consecutive failures + recoverability breadcrumb
         if isinstance(result, dict) and result.get("error"):
