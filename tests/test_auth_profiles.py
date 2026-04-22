@@ -411,3 +411,285 @@ class TestCooldownTracker:
         tracker.record_failure("key1")
         assert tracker.get_remaining_ms("key1") > 0
         assert tracker.get_remaining_ms("nonexistent") == 0
+
+
+# ---------------------------------------------------------------------------
+# Proactive Refresh + 401 Auto-Refresh
+# ---------------------------------------------------------------------------
+
+
+class TestProactiveRefresh:
+    """Managed token refresh on resolve() when expiry is near."""
+
+    def test_proactive_refresh_called_when_expiring(self):
+        """resolve() calls refresher if managed profile expires within 120s."""
+        store = ProfileStore()
+        store.add(
+            AuthProfile(
+                name="openai:codex",
+                provider="openai",
+                credential_type=CredentialType.OAUTH,
+                key="old-token",
+                expires_at=time.time() + 30,  # 30s left (< 120s skew)
+                managed_by="codex-cli",
+            )
+        )
+        rotator = ProfileRotator(store)
+        refresh_calls: list[str] = []
+
+        def mock_refresh(profile: AuthProfile) -> bool:
+            refresh_calls.append(profile.name)
+            profile.key = "new-token"
+            return True
+
+        rotator.register_refresher("codex-cli", mock_refresh)
+        result = rotator.resolve("openai")
+
+        assert result is not None
+        assert result.key == "new-token"
+        assert refresh_calls == ["openai:codex"]
+
+    def test_no_refresh_when_not_expiring(self):
+        """resolve() skips refresh if token has plenty of time left."""
+        store = ProfileStore()
+        store.add(
+            AuthProfile(
+                name="openai:codex",
+                provider="openai",
+                credential_type=CredentialType.OAUTH,
+                key="valid-token",
+                expires_at=time.time() + 3600,  # 1h left
+                managed_by="codex-cli",
+            )
+        )
+        rotator = ProfileRotator(store)
+        refresh_calls: list[str] = []
+
+        rotator.register_refresher("codex-cli", lambda p: refresh_calls.append(p.name) or False)
+        result = rotator.resolve("openai")
+
+        assert result is not None
+        assert result.key == "valid-token"
+        assert refresh_calls == []
+
+    def test_no_refresh_for_unmanaged_profile(self):
+        """resolve() skips refresh for non-managed profiles."""
+        store = ProfileStore()
+        store.add(
+            AuthProfile(
+                name="openai:default",
+                provider="openai",
+                credential_type=CredentialType.API_KEY,
+                key="sk-test",
+            )
+        )
+        rotator = ProfileRotator(store)
+        rotator.register_refresher("codex-cli", lambda p: True)
+        result = rotator.resolve("openai")
+        assert result is not None
+        assert result.key == "sk-test"
+
+    def test_refresh_failure_does_not_crash(self):
+        """Refresher exception is caught, profile still returned."""
+        store = ProfileStore()
+        store.add(
+            AuthProfile(
+                name="openai:codex",
+                provider="openai",
+                credential_type=CredentialType.OAUTH,
+                key="old-token",
+                expires_at=time.time() + 30,
+                managed_by="codex-cli",
+            )
+        )
+        rotator = ProfileRotator(store)
+
+        def failing_refresh(_profile: AuthProfile) -> bool:
+            raise OSError("disk error")
+
+        rotator.register_refresher("codex-cli", failing_refresh)
+        result = rotator.resolve("openai")
+        assert result is not None
+        assert result.key == "old-token"  # unchanged
+
+
+class TestAutoRefreshOn401:
+    """401 auto-refresh: re-read managed token on auth failure."""
+
+    def test_401_triggers_managed_refresh(self):
+        """mark_failure(is_auth_error=True) refreshes managed token."""
+        store = ProfileStore()
+        profile = AuthProfile(
+            name="openai:codex",
+            provider="openai",
+            credential_type=CredentialType.OAUTH,
+            key="expired-token",
+            managed_by="codex-cli",
+        )
+        store.add(profile)
+        rotator = ProfileRotator(store)
+
+        def mock_refresh(p: AuthProfile) -> bool:
+            p.key = "fresh-token"
+            return True
+
+        rotator.register_refresher("codex-cli", mock_refresh)
+        rotator.mark_failure(profile, is_auth_error=True)
+
+        assert profile.key == "fresh-token"
+        assert profile.error_count == 0  # reset after refresh
+        assert profile.cooldown_until == 0.0
+
+    def test_401_no_refresh_applies_cooldown(self):
+        """mark_failure(is_auth_error=True) with failed refresh applies cooldown."""
+        store = ProfileStore()
+        profile = AuthProfile(
+            name="openai:codex",
+            provider="openai",
+            credential_type=CredentialType.OAUTH,
+            key="expired-token",
+            managed_by="codex-cli",
+        )
+        store.add(profile)
+        rotator = ProfileRotator(store)
+        rotator.register_refresher("codex-cli", lambda _p: False)  # not updated
+        rotator.mark_failure(profile, is_auth_error=True)
+
+        assert profile.error_count == 1
+        assert profile.cooldown_until > time.time()
+
+    def test_non_auth_error_skips_refresh(self):
+        """mark_failure(is_auth_error=False) does not attempt refresh."""
+        store = ProfileStore()
+        profile = AuthProfile(
+            name="openai:codex",
+            provider="openai",
+            credential_type=CredentialType.OAUTH,
+            key="token",
+            managed_by="codex-cli",
+        )
+        store.add(profile)
+        rotator = ProfileRotator(store)
+        refresh_calls: list[str] = []
+        rotator.register_refresher("codex-cli", lambda p: refresh_calls.append(p.name) or False)
+        rotator.mark_failure(profile, is_auth_error=False)
+
+        assert refresh_calls == []  # no refresh attempted
+        assert profile.error_count == 1
+
+    def test_unmanaged_profile_401_applies_cooldown(self):
+        """Unmanaged profile on 401 just applies cooldown."""
+        store = ProfileStore()
+        profile = AuthProfile(
+            name="openai:default",
+            provider="openai",
+            credential_type=CredentialType.API_KEY,
+            key="sk-test",
+        )
+        store.add(profile)
+        rotator = ProfileRotator(store)
+        rotator.mark_failure(profile, is_auth_error=True)
+
+        assert profile.error_count == 1
+        assert profile.cooldown_until > time.time()
+
+
+# ---------------------------------------------------------------------------
+# Credential Scrubbing
+# ---------------------------------------------------------------------------
+
+
+class TestCredentialScrubbing:
+    """Tests for core.gateway.auth.scrub module."""
+
+    def test_scrub_openai_key(self):
+        from core.gateway.auth.scrub import scrub_credentials
+
+        msg = "Authentication failed: sk-proj-abcdef1234567890XYZ"
+        result = scrub_credentials(msg)
+        assert "sk-proj" not in result
+        assert "[REDACTED]" in result
+
+    def test_scrub_github_pat(self):
+        from core.gateway.auth.scrub import scrub_credentials
+
+        msg = "Rate limit exceeded for ghp_1234567890abcdefABCDEF"
+        result = scrub_credentials(msg)
+        assert "ghp_" not in result
+
+    def test_scrub_bearer_token(self):
+        from core.gateway.auth.scrub import scrub_credentials
+
+        msg = "Invalid header: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.abc123"
+        result = scrub_credentials(msg)
+        assert "eyJhbGci" not in result
+
+    def test_scrub_slack_token(self):
+        from core.gateway.auth.scrub import scrub_credentials
+
+        msg = "Slack error: xoxb-1234-5678-abcdefghij/klmnop"
+        result = scrub_credentials(msg)
+        assert "xoxb-" not in result
+
+    def test_scrub_query_params(self):
+        from core.gateway.auth.scrub import scrub_credentials
+
+        msg = "Request to https://api.example.com?api_key=abcdef1234567890&foo=bar"
+        result = scrub_credentials(msg)
+        assert "abcdef1234" not in result
+        assert "foo=bar" in result
+
+    def test_no_scrub_clean_text(self):
+        from core.gateway.auth.scrub import scrub_credentials
+
+        msg = "Connection timed out after 30 seconds"
+        assert scrub_credentials(msg) == msg
+
+    def test_scrub_multiple_patterns(self):
+        from core.gateway.auth.scrub import scrub_credentials
+
+        msg = "Failed with sk-test-abc1234567890xyz and Bearer tok_longvalue1234"
+        result = scrub_credentials(msg)
+        assert "sk-test" not in result
+        assert "tok_longvalue" not in result
+
+
+# ---------------------------------------------------------------------------
+# ZAI Profile in build_auth
+# ---------------------------------------------------------------------------
+
+
+class TestBuildAuthZAI:
+    """Verify build_auth registers ZAI profile when api key is set."""
+
+    def test_zai_profile_registered(self):
+        from unittest.mock import patch
+
+        with patch("core.runtime_wiring.infra.settings") as mock_settings:
+            mock_settings.anthropic_api_key = ""
+            mock_settings.openai_api_key = ""
+            mock_settings.zai_api_key = "test-zai-key"
+
+            from core.runtime_wiring.infra import build_auth
+
+            store, _rotator, _cooldown = build_auth()
+
+        profile = store.get("glm:default")
+        assert profile is not None
+        assert profile.provider == "glm"
+        assert profile.key == "test-zai-key"
+        assert profile.credential_type == CredentialType.API_KEY
+
+    def test_zai_profile_not_registered_when_empty(self):
+        from unittest.mock import patch
+
+        with patch("core.runtime_wiring.infra.settings") as mock_settings:
+            mock_settings.anthropic_api_key = ""
+            mock_settings.openai_api_key = ""
+            mock_settings.zai_api_key = ""
+
+            from core.runtime_wiring.infra import build_auth
+
+            store, _rotator, _cooldown = build_auth()
+
+        assert store.get("glm:default") is None
