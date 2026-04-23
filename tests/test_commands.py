@@ -259,7 +259,7 @@ class TestApplyModel:
 
         old = settings.model
         try:
-            _apply_model(MODEL_PROFILES[3])  # GPT-5.4
+            _apply_model(next(p for p in MODEL_PROFILES if p.id == OPENAI_PRIMARY))  # GPT-5.4
             assert settings.model == OPENAI_PRIMARY
         finally:
             settings.model = old
@@ -289,7 +289,7 @@ class TestApplyModel:
 
         old = settings.model
         try:
-            target = MODEL_PROFILES[3]  # GPT-5.4
+            target = next(p for p in MODEL_PROFILES if p.id == OPENAI_PRIMARY)  # GPT-5.4
             _apply_model(target)
             # _apply_model no longer calls loop.update_model() directly —
             # AgenticLoop._sync_model_from_settings() handles it at round start.
@@ -309,7 +309,7 @@ class TestApplyModel:
 
         old = settings.model
         try:
-            _apply_model(MODEL_PROFILES[3])
+            _apply_model(next(p for p in MODEL_PROFILES if p.id == OPENAI_PRIMARY))
             assert settings.model == OPENAI_PRIMARY
         finally:
             settings.model = old
