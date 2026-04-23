@@ -26,6 +26,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Anthropic sampling parameters on adaptive-thinking models** — `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6` rejected requests with `temperature` set ("temperature is deprecated for this model" → 400 BadRequest). Sampling parameters are now omitted on adaptive-thinking models per Anthropic's Opus 4.7 breaking change. `claude-opus-4-7` also registered for the context-management + compaction beta. Fixes the `/model` hot-swap to Opus 4.7. Source: https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7
+
 ## [0.49.0] — 2026-04-23
 
 ### Architecture
