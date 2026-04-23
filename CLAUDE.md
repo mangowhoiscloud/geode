@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.49.0
+- **Version**: 0.49.1
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -147,6 +147,8 @@ Anything not in CANNOT is freely permitted. Specifically:
 git fetch origin
 # Verify main/develop sync (pull if out of sync)
 git worktree add .claude/worktrees/<task-name> -b feature/<branch-name> develop
+# Note: the target path IS the worktree checkout root; `.owner` is gitignored
+# (see /.owner in .gitignore) so the convention does not pollute feature branches.
 echo "session=$(date -Iseconds) task_id=<task-name>" > .claude/worktrees/<task-name>/.owner
 ```
 
