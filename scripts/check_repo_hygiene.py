@@ -32,8 +32,10 @@ def is_excluded_for_symlink_scan(rel: Path) -> bool:
     return False
 
 
+# Called once per symlink check so each finder stays independently testable;
+# the repo is small enough that the duplicate walk is a non-concern.
 def _iter_symlinks(root: Path) -> list[Path]:
-    """Yield every symlink under `root`, pruning excluded subtrees."""
+    """Return every symlink under `root`, pruning excluded subtrees."""
     found: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         current = Path(dirpath)
