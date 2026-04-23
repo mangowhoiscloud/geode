@@ -109,6 +109,19 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "bad_request_error": _openai_bad_request,
         "circuit_breaker": lambda: _glm_cb,
     },
+    "codex": {
+        "get_client": lambda: __import__(
+            "core.llm.providers.codex", fromlist=["_get_codex_client"]
+        )._get_codex_client(),
+        "fallback_chain": lambda: list(
+            __import__("core.config", fromlist=["CODEX_FALLBACK_CHAIN"]).CODEX_FALLBACK_CHAIN
+        ),
+        "retryable_errors": _openai_retryable,
+        "bad_request_error": _openai_bad_request,
+        "circuit_breaker": lambda: __import__(
+            "core.llm.providers.codex", fromlist=["get_circuit_breaker"]
+        ).get_circuit_breaker(),
+    },
 }
 
 
