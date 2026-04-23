@@ -358,6 +358,11 @@ ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, "claude-opus-4-6", ANT
 OPENAI_PRIMARY = "gpt-5.4"
 OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.4", "gpt-5.2", "gpt-4.1"]
 
+# OpenAI Codex — Plus quota via chatgpt.com/backend-api/codex (Responses API)
+CODEX_PRIMARY = "gpt-5.4-mini"
+CODEX_FALLBACK_CHAIN: list[str] = ["gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex"]
+CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
+
 # ZhipuAI (GLM) models — OpenAI-compatible API, separate provider
 GLM_PRIMARY = "glm-5.1"
 GLM_FALLBACK_CHAIN: list[str] = ["glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"]
@@ -382,6 +387,8 @@ def _resolve_provider(model: str) -> str:
         return "anthropic"
     if model.startswith("glm-"):
         return "glm"
+    if model.endswith("-codex") or model.endswith("-codex-max") or model.endswith("-codex-mini"):
+        return "codex"
     if model.startswith(("gpt-", "o3-", "o4-")):
         return "openai"
     if model.startswith("gemini-"):

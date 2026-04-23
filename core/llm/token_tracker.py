@@ -188,6 +188,14 @@ MODEL_PRICING: dict[str, ModelPrice] = {
     "glm-5v-turbo":    _oai(1.20,  4.00),
     "glm-4.7":         _oai(0.40,  1.75),
     "glm-4.7-flash":   _oai(0.00,  0.00),  # free tier
+
+    # ── OpenAI Codex (Plus quota — no API billing) ─────────────────────
+    # Uses chatgpt.com/backend-api/codex, billed against Plus subscription
+    "gpt-5.4-mini":    _oai(0.00,  0.00),  # Plus quota
+    "gpt-5.3-codex":   _oai(0.00,  0.00),  # Plus quota
+    "gpt-5.2-codex":   _oai(0.00,  0.00),  # Plus quota
+    "gpt-5.1-codex-max":  _oai(0.00,  0.00),
+    "gpt-5.1-codex-mini": _oai(0.00,  0.00),
 }
 # fmt: on
 
@@ -225,6 +233,11 @@ MODEL_CONTEXT_WINDOW: dict[str, int] = {
     "glm-5v-turbo":               202_752,
     "glm-4.7":                    200_000,
     "glm-4.7-flash":              200_000,
+    "gpt-5.4-mini":             1_047_576,
+    "gpt-5.3-codex":              200_000,
+    "gpt-5.2-codex":              200_000,
+    "gpt-5.1-codex-max":          200_000,
+    "gpt-5.1-codex-mini":         200_000,
 }
 # fmt: on
 
