@@ -219,10 +219,24 @@ _API_ALLOWED_KEYS = frozenset({"name", "description", "input_schema", "cache_con
 # context_overflow.  Only 1M-context models are known to support it.
 _CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
     {
+        "claude-opus-4-7",
         "claude-opus-4-6",
         "claude-opus-4-5",
         "claude-sonnet-4-6",
         "claude-sonnet-4-5",
+    }
+)
+
+# Adaptive thinking models (Opus 4.6+).  Sampling parameters
+# (temperature/top_p/top_k) are rejected with 400 starting from Opus 4.7
+# (https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7
+# #sampling-parameters-removed) and are also rejected by Opus 4.6 when
+# adaptive thinking is on.  Omit them entirely on these models.
+_ADAPTIVE_MODELS: frozenset[str] = frozenset(
+    {
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6",
     }
 )
 
@@ -345,18 +359,17 @@ class ClaudeAgenticAdapter:
                 }
 
             # Thinking mode: adaptive (4.6+) or legacy budget (older models)
-            _ADAPTIVE_MODELS = {"claude-opus-4-6", "claude-sonnet-4-6"}
-            call_temperature = temperature
+            call_temperature: float | None = temperature
             call_max_tokens = max_tokens
             thinking_param: dict[str, Any] | None = None
             output_config: dict[str, str] | None = None
 
             if m in _ADAPTIVE_MODELS:
-                # Adaptive thinking (recommended for 4.6+): effort controls depth
+                # Adaptive thinking (Opus 4.6+ and Sonnet 4.6): effort controls depth.
+                # Sampling parameters (temperature/top_p/top_k) are rejected — omit.
                 thinking_param = {"type": "adaptive"}
                 output_config = {"effort": effort}
-                # Anthropic API requires temperature=1 with thinking
-                call_temperature = 1.0
+                call_temperature = None
             elif thinking_budget > 0:
                 # Legacy: manual budget_tokens for older models
                 thinking_param = {
@@ -397,8 +410,9 @@ class ClaudeAgenticAdapter:
                 "tools": api_tools,
                 "tool_choice": tool_choice,
                 "max_tokens": call_max_tokens,
-                "temperature": call_temperature,
             }
+            if call_temperature is not None:
+                create_kwargs["temperature"] = call_temperature
             if thinking_param is not None:
                 create_kwargs["thinking"] = thinking_param
             if output_config is not None:
