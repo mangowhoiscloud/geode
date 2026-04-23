@@ -77,8 +77,7 @@ def test_adaptive_models_omit_sampling_params(model: str) -> None:
     """Opus 4.6+ / Sonnet 4.6 reject temperature; it must not be sent."""
     kwargs = _run_agentic_call(model)
     assert "temperature" not in kwargs, (
-        f"{model} must not receive `temperature` (rejected with 400). "
-        f"Got: {sorted(kwargs)}"
+        f"{model} must not receive `temperature` (rejected with 400). Got: {sorted(kwargs)}"
     )
     assert kwargs.get("thinking") == {"type": "adaptive"}
 
