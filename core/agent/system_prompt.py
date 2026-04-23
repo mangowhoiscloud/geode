@@ -231,6 +231,9 @@ def _build_user_context() -> str:
       ~/.geode/user_profile/preferences.json — language, output format
       ~/.geode/user_profile/learned.md   — learned patterns
       ~/.geode/identity/career.toml      — career summary
+
+    IMPORTANT: This is the USER's profile, not GEODE's identity.
+    GEODE's identity comes from GEODE.md (G1 layer).
     """
     try:
         from core.memory.user_profile import FileBasedUserProfile
@@ -257,7 +260,17 @@ def _build_user_context() -> str:
         if not parts:
             return ""
 
-        return "## User Context\n" + "\n".join(parts)
+        header = (
+            "## User Context (NOT your identity)\n"
+            "The following describes the USER who is talking to you.\n"
+            "This is NOT your self-description. Your identity is GEODE "
+            "(defined in GEODE.md). When asked to introduce yourself, "
+            "describe GEODE's capabilities — never present the user's "
+            "profile as your own.\n"
+            "Use this context to tailor responses to the user's expertise "
+            "and preferences."
+        )
+        return header + "\n" + "\n".join(parts)
     except Exception:
         log.debug("Failed to build user context", exc_info=True)
         return ""
@@ -386,7 +399,12 @@ def _build_learning_context() -> str:
             return ""
 
         capped = patterns[:_MAX_SECTION_LINES]
-        return "## Agent Learning\n" + "\n".join(capped)
+        return (
+            "## Agent Learning (user preferences, NOT your identity)\n"
+            "These are patterns learned from the user's behavior. "
+            "Apply them to tailor responses, but never adopt them as your own traits.\n"
+            + "\n".join(capped)
+        )
     except Exception:
         log.debug("Failed to build learning context (G3)", exc_info=True)
         return ""
