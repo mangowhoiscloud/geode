@@ -40,6 +40,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Tool hook matcher** — `register(matcher="run_bash|terminal")` regex 패턴으로 핸들러가 특정 도구에만 반응. 3가지 트리거 모드 모두 지원 (#759)
 - **`TOOL_EXEC_FAILED` event** — 도구 실행 실패 시에만 발화하는 전용 observer hook. error, error_type, recoverable 포함 (#759)
 - **`TOOL_RESULT_TRANSFORM` event** — TOOL_EXEC_END 관측과 분리된 결과 변환 전용 feedback hook. Hermes `transform_tool_result` 패턴 (#759)
+- **Claude Opus 4.7** — ANTHROPIC_PRIMARY 승격. 1M context, $5/$25, 고해상도 비전, task budgets. Fallback: opus-4-7→opus-4-6→sonnet-4-6 (#771)
+- **Codex OAuth pipeline** — proactive refresh (120s 전), 401 auto-refresh, credential scrubbing (`scrub.py`), ZAI profile 등록 (#763)
+- **ProfileRotator wiring** — `mark_success()`/`mark_failure()` LLM 호출 체인에 와이어링. 8개 audit logger 비대칭 해소 (#765)
+- **`geode skill` CLI** — `list`/`create`/`show`/`remove` + 3-tier visibility (`public`/`private`/`unlisted`) (#767)
 - **GLM-5.1 model** — Z.AI GLM-5.1 (SWE-Bench Pro 1위, MIT) 추가 및 GLM_PRIMARY 승격. GLM-5V-Turbo, GLM-5-Turbo 가격 갱신 (#729)
 - **`geode doctor slack`** — Slack Gateway 7-point diagnostic (env, token, scopes, bindings, serve, MCP, socket). CLI + natural language tool (#57)
 - **Slack App Manifest URL** — `get_manifest_url()` 원클릭 앱 생성 URL
