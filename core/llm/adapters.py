@@ -204,14 +204,15 @@ _ADAPTER_MAP: dict[str, str] = {
     "anthropic": "core.llm.providers.anthropic:ClaudeAgenticAdapter",
     "openai": "core.llm.providers.openai:OpenAIAgenticAdapter",
     "glm": "core.llm.providers.glm:GlmAgenticAdapter",
+    "codex": "core.llm.providers.codex:CodexAgenticAdapter",
 }
 
 # Cross-provider fallback: when a provider's chain is exhausted, try these.
-# GLM -> OpenAI -> Anthropic (Bug #6 fix: add Anthropic path for GLM)
 CROSS_PROVIDER_FALLBACK: dict[str, list[tuple[str, str]]] = {
     "anthropic": [("openai", OPENAI_PRIMARY)],
     "openai": [("anthropic", ANTHROPIC_PRIMARY)],
     "glm": [("openai", OPENAI_PRIMARY), ("anthropic", ANTHROPIC_PRIMARY)],
+    "codex": [("openai", OPENAI_PRIMARY), ("anthropic", ANTHROPIC_PRIMARY)],
 }
 
 
