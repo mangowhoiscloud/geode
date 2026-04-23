@@ -53,7 +53,19 @@ chmod 600 ~/.geode/.env
 
 키 발급: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (무료 티어 가능)
 
-> **Codex CLI 사용자**: `codex auth login`을 실행했다면, GEODE가 `~/.codex/auth.json`에서 OAuth 토큰을 자동 감지합니다. OpenAI 모델용 `.env` 설정 불필요 — proactive refresh와 401 자동 재시도 내장.
+> **OpenAI 모델 (GPT-5.4) 사용하려면?** 두 가지 방법:
+>
+> **옵션 A — Codex CLI OAuth (권장)**
+> ```bash
+> brew install codex          # 또는: npm install -g @openai/codex
+> codex auth login            # 브라우저에서 Google/OpenAI OAuth 인증
+> ```
+> 로그인 후 GEODE가 `~/.codex/auth.json`에서 OAuth 토큰을 자동 감지합니다. `.env` 불필요 — 만료 120초 전 자동 갱신 + 401 자동 재시도 내장.
+>
+> **옵션 B — API 키 직접 등록**
+> ```bash
+> echo 'OPENAI_API_KEY=sk-proj-여기에-키-입력' >> ~/.geode/.env
+> ```
 
 > API 키가 없어도 **dry-run 모드**로 동작합니다 — 파이프라인 전체가 fixture 데이터로 실행됩니다.
 
