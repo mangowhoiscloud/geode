@@ -18,7 +18,7 @@
 
 [한국어](README.ko.md)
 
-# GEODE v0.48.0 — Long-running Autonomous Execution Harness
+# GEODE v0.49.0 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous execution agent. Performs research, analysis, automation, and scheduling from a single natural-language command.
 
@@ -52,6 +52,8 @@ chmod 600 ~/.geode/.env
 ```
 
 Get your key at [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (free tier available).
+
+> **Codex CLI users**: If you've run `codex auth login`, GEODE auto-detects your OAuth token from `~/.codex/auth.json`. No `.env` needed for OpenAI models — proactive refresh and 401 auto-retry are built in.
 
 > No API key? GEODE still works in **dry-run mode** — all pipeline features run with fixture data, no LLM calls.
 
@@ -152,7 +154,7 @@ geode version    # now works from any directory
 | **`while(tool_use)` Loop** | Core primitive for all autonomous behavior. Sub-agents, plan execution, and batch analysis are all AgenticLoop instances |
 | **56 Tools + MCP** | 56 native tools + 44 MCP catalog servers auto-installed. Bash execution (41 auto-approved, 9 blocked) |
 | **Sub-Agent** | Full inheritance of parent capabilities, Lane("global") gating, depth guard, Token Guard |
-| **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain |
+| **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain. Codex OAuth auto-detect, proactive token refresh, 401 auto-retry |
 | **4-Tier Memory** | SOUL --> User Profile --> Organization --> Project --> Session |
 | **`.geode/` Context** | Project-local persistent store — journal, vault, rules, cache |
 | **Domain Plugin** | Swap pipelines via `DomainPort` Protocol — Game IP analysis included by default |
@@ -160,7 +162,7 @@ geode version    # now works from any directory
 | **15 Runtime Skills** | `.geode/skills/` + `~/.geode/skills/` — 3-tier visibility (`public`/`private`/`unlisted`). Manage via `geode skill list/create/show/remove` |
 | **58 Runtime Hooks** | Pipeline/node/tool/LLM/session lifecycle events — matcher-based filtering, interceptor/feedback/observer modes |
 | **5-Layer Verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM (Krippendorff alpha >= 0.67) + Confidence Gate + Rights Risk |
-| **Safety** | 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), 9 blocked bash patterns, PolicyChain |
+| **Safety** | 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), 9 blocked bash patterns, PolicyChain, credential scrubbing (sk-\*/ghp\_\*/Bearer auto-redact) |
 
 ---
 
@@ -201,7 +203,7 @@ geode/
 └── pyproject.toml                 # uv package config
 ```
 
-[Hook System -->](docs/architecture/hook-system.md)
+[Hook System -->](docs/architecture/hook-system.md) | [Wiring Audit Matrix -->](docs/architecture/wiring-audit-matrix.md)
 
 ### `.geode/` -- Agent Context Lifecycle
 
@@ -332,6 +334,7 @@ Key components:
 - **Tool Hierarchy**: Built-in(56) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
 - **Sub-Agent**: Full parent capability inheritance, Lane("global") gating, depth guard, Token Guard.
 - **Memory**: SOUL --> User Profile --> Organization --> Project --> Session. ContextAssembler 280-char compression.
+- **Auth**: ProfileRotator (OAuth > Token > API_KEY), Codex CLI auto-detect, proactive refresh (120s), 401 auto-retry, credential scrubbing.
 - **Domain Plugin**: Swap pipelines via `DomainPort` Protocol. Game IP included by default (LangGraph 9-node).
 
 </details>
@@ -349,7 +352,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full workflow details.
 |------|---------|--------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 3700+ pass |
+| Test | `uv run pytest tests/ -q` | 3900+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 </details>
