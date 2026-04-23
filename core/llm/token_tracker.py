@@ -150,8 +150,9 @@ def _oai(
 
 # fmt: off
 MODEL_PRICING: dict[str, ModelPrice] = {
-    # ── Anthropic (verified 2026-03-19) ────────────────────────────────
+    # ── Anthropic (verified 2026-04-23) ────────────────────────────────
     # Source: https://platform.claude.com/docs/en/docs/about-claude/pricing
+    "claude-opus-4-7":            _ant(5.00,  25.00),
     "claude-opus-4-6":            _ant(5.00,  25.00),
     "claude-opus-4-5":            _ant(5.00,  25.00),
     "claude-opus-4-1":            _ant(15.00, 75.00),
@@ -198,6 +199,7 @@ MODEL_PRICING: dict[str, ModelPrice] = {
 
 # fmt: off
 MODEL_CONTEXT_WINDOW: dict[str, int] = {
+    "claude-opus-4-7":          1_000_000,
     "claude-opus-4-6":          1_000_000,
     "claude-opus-4-5":            200_000,
     "claude-opus-4-1":            200_000,

@@ -19,7 +19,6 @@ from core.agent.tool_executor import ToolExecutor
 from core.config import (
     ANTHROPIC_FALLBACK_CHAIN,
     ANTHROPIC_PRIMARY,
-    ANTHROPIC_SECONDARY,
     GLM_FALLBACK_CHAIN,
     OPENAI_FALLBACK_CHAIN,
     OPENAI_PRIMARY,
@@ -58,13 +57,14 @@ class TestModelEscalation:
         assert loop._ESCALATION_THRESHOLD == 2
 
     def test_try_model_escalation_anthropic_chain(self) -> None:
-        """Escalate from primary to secondary within Anthropic chain."""
+        """Escalate from primary to next in fallback chain."""
         loop = _make_loop(model=ANTHROPIC_PRIMARY, provider="anthropic")
         assert loop.model == ANTHROPIC_PRIMARY
 
         result = loop._try_model_escalation()
         assert result is True
-        assert loop.model == ANTHROPIC_SECONDARY
+        # Fallback chain: opus-4-7 → opus-4-6 → sonnet-4-6
+        assert loop.model == "claude-opus-4-6"
         assert loop._provider == "anthropic"
 
     def test_try_model_escalation_openai_chain(self) -> None:
