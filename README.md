@@ -53,7 +53,19 @@ chmod 600 ~/.geode/.env
 
 Get your key at [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (free tier available).
 
-> **Codex CLI users**: If you've run `codex auth login`, GEODE auto-detects your OAuth token from `~/.codex/auth.json`. No `.env` needed for OpenAI models — proactive refresh and 401 auto-retry are built in.
+> **Want to use OpenAI models (GPT-5.4)?** Two options:
+>
+> **Option A — Codex CLI OAuth (recommended)**
+> ```bash
+> brew install codex          # or: npm install -g @openai/codex
+> codex auth login            # opens browser for Google/OpenAI OAuth
+> ```
+> After login, GEODE auto-detects your OAuth token from `~/.codex/auth.json`. No `.env` needed — proactive refresh (120s before expiry) and 401 auto-retry are built in.
+>
+> **Option B — API key**
+> ```bash
+> echo 'OPENAI_API_KEY=sk-proj-your-key-here' >> ~/.geode/.env
+> ```
 
 > No API key? GEODE still works in **dry-run mode** — all pipeline features run with fixture data, no LLM calls.
 
