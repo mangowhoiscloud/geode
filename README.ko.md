@@ -10,20 +10,20 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Anthropic-Opus_4.6-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.6">
+  <img src="https://img.shields.io/badge/Anthropic-Opus_4.7-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.7">
   <img src="https://img.shields.io/badge/OpenAI-GPT--5.4-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.4">
-  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5-1a73e8?style=flat-square" alt="ZhipuAI GLM-5">
-  <img src="https://img.shields.io/badge/+6_fallback-models-555?style=flat-square" alt="+6 fallback models">
+  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5">
+  <img src="https://img.shields.io/badge/+10_fallback-models-555?style=flat-square" alt="+10 fallback models">
 </p>
 
 [English](README.md)
 
-# GEODE v0.45.0 — Long-running Autonomous Execution Harness
+# GEODE v0.49.0 — Long-running Autonomous Execution Harness
 
 범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
 
 **생산**: Claude Code Scaffold(CLAUDE.md + 개발 Skills + CI Hooks)가 GEODE를 만듭니다.
-**실행**: GEODE(`while(tool_use)` 루프)가 54 도구 + 44 MCP 중에서 자율 선택하고, 46개 런타임 Hook이 라이프사이클을 제어하고, 5-Layer Verification이 출력을 검증합니다.
+**실행**: GEODE(`while(tool_use)` 루프)가 56 도구 + 44 MCP 중에서 자율 선택하고, 58개 런타임 Hook이 라이프사이클을 제어하고, 5-Layer Verification이 출력을 검증합니다.
 
 ## Quick Start
 
@@ -52,6 +52,8 @@ chmod 600 ~/.geode/.env
 ```
 
 키 발급: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (무료 티어 가능)
+
+> **Codex CLI 사용자**: `codex auth login`을 실행했다면, GEODE가 `~/.codex/auth.json`에서 OAuth 토큰을 자동 감지합니다. OpenAI 모델용 `.env` 설정 불필요 — proactive refresh와 401 자동 재시도 내장.
 
 > API 키가 없어도 **dry-run 모드**로 동작합니다 — 파이프라인 전체가 fixture 데이터로 실행됩니다.
 
@@ -86,7 +88,7 @@ $ uv run geode "뭘 할 수 있어?"
   리서치, 분석, 자동화, 스케줄링을 도와드립니다.
   /help로 전체 명령어를 확인하세요.
 
-  ✢ Worked for 3s · claude-opus-4-6 · ↓1.2k ↑200 · $0.0065
+  ✢ Worked for 3s · claude-opus-4-7 · ↓1.2k ↑200 · $0.0065
 ```
 
 ### 선택 — 전역 설치
@@ -104,7 +106,7 @@ geode version    # 어디서든 실행 가능
 
 ```
 ❯ 나와 어울리는 채용 공고 찾아줘
-● AgenticLoop  ✢ glm-5 · ↓8.2k ↑185 · $0.006
+● AgenticLoop  ✢ glm-5.1 · ↓8.2k ↑185 · $0.006
   3건의 채용 공고를 찾았습니다.
   • ML Engineer — LangGraph 경험 우대
   • Agent Platform Lead — Python, 자율 실행
@@ -114,7 +116,7 @@ geode version    # 어디서든 실행 가능
 
 ```
 ❯ arXiv에서 RAG 관련 최신 논문 찾아서 요약해줘
-● AgenticLoop  ✢ claude-opus-4-6 · ↓12.4k ↑890 · $0.084
+● AgenticLoop  ✢ claude-opus-4-7 · ↓12.4k ↑890 · $0.084
   5편의 논문을 찾아 요약했습니다.
   1. GraphRAG: Knowledge Graph + Retrieval (2026-03)
   2. Adaptive Chunking for Long-Context RAG (2026-02)
@@ -150,17 +152,17 @@ geode version    # 어디서든 실행 가능
 | 기능 | 설명 |
 |------|------|
 | **`while(tool_use)` Loop** | 모든 자율 행동의 핵심 프리미티브. 서브에이전트, 계획 실행, 배치 분석 전부 AgenticLoop 인스턴스 |
-| **52 Tools + MCP** | 네이티브 52개 도구 + MCP 카탈로그 44종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
+| **56 Tools + MCP** | 네이티브 56개 도구 + MCP 카탈로그 44종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
 | **Sub-Agent** | 부모 역량 전체 상속, Lane("global") gating, depth guard, Token Guard |
-| **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain |
+| **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain. Codex OAuth 자동 감지, proactive token refresh, 401 자동 재시도 |
 | **4-Tier Memory** | SOUL → User Profile → Organization → Project → Session |
 | **`.geode/` Context** | 프로젝트-로컬 영속 저장소 — journal, vault, rules, cache |
 | **Domain Plugin** | `DomainPort` Protocol로 파이프라인 교체 — Game IP 분석 기본 탑재 |
 | **Scaffold (생산)** | Claude Code + CLAUDE.md(428줄) + 개발 Skills + CI Hooks — GEODE를 만드는 제어 구조 |
-| **20 Runtime Skills** | `.geode/skills/` — 도메인별 지식을 프롬프트로 주입. 파이프라인, 스코어링, 검증, 아키텍처 패턴 등 |
-| **46 Runtime Hooks** | 파이프라인/노드/검증/메모리/서브에이전트 라이프사이클 이벤트 — GEODE 런타임 제어 |
+| **15 Runtime Skills** | `.geode/skills/` + `~/.geode/skills/` — 3-tier visibility (`public`/`private`/`unlisted`). `geode skill list/create/show/remove`로 관리 |
+| **58 Runtime Hooks** | 파이프라인/노드/도구/LLM/세션 라이프사이클 이벤트 — matcher 기반 필터링, interceptor/feedback/observer 모드 |
 | **5-Layer Verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM(Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
-| **Safety** | 4-tier HITL(SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, PolicyChain |
+| **Safety** | 4-tier HITL(SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, PolicyChain, credential scrubbing (sk-\*/ghp\_\*/Bearer 자동 제거) |
 
 ---
 
@@ -170,27 +172,27 @@ geode version    # 어디서든 실행 가능
 
 **Scaffold (생산 체계)**: Claude Code + CLAUDE.md + 개발 Skills + CI Hooks. GEODE의 코드를 생산하고 품질을 보장하는 외부 하네스.
 
-**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 54 도구 + 20 런타임 Skills + 46 런타임 Hooks + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
+**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 56 도구 + 15 런타임 Skills + 58 런타임 Hooks + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
 
 ### Project Structure
 
 ```
 geode/
-├── core/                          # 190 modules, 4-Layer Stack
+├── core/                          # 226 modules, 4-Layer Stack
 │   ├── agent/                     # Agent: AgenticLoop, ToolCallProcessor, SubAgentManager
 │   ├── cli/                       # Agent: Commands, UI
 │   ├── llm/                       # Model: Claude/OpenAI/GLM Adapters, Router, Prompts
 │   ├── memory/                    # Runtime: 4-Tier Memory, Context Assembly, User Profile
-│   ├── hooks/                     # HookSystem(40) — cross-cutting lifecycle events
+│   ├── hooks/                     # HookSystem(58) — cross-cutting lifecycle events
 │   ├── orchestration/             # Harness: TaskGraph, PlanMode, SessionLane, LaneQueue(global:8)
-│   ├── tools/                     # Runtime: 54 Tool Definitions + Handlers
+│   ├── tools/                     # Runtime: 56 Tool Definitions + Handlers
 │   ├── skills/                    # Runtime: Skill Templates
 │   ├── mcp/                       # Runtime: MCP Catalog(44) + Manager
 │   ├── domains/game_ip/           # Domain: Game IP Domain Plugin (7 pipeline nodes)
 │   ├── gateway/                   # Agent: Slack Gateway (geode serve)
 │   ├── runtime_wiring/            # Runtime bootstrap modules (5-module split)
 │   └── verification/              # Guardrails, BiasBuster, Cross-LLM
-├── tests/                         # 3,422+ tests
+├── tests/                         # 3,995+ tests
 ├── docs/                          # Architecture, Workflow, Plans
 │   ├── architecture/              # Hook system, orchestration decisions
 │   ├── workflow.md                # CANNOT/CAN, GitFlow, Kanban
@@ -201,7 +203,7 @@ geode/
 └── pyproject.toml                 # uv package config
 ```
 
-[Hook System →](docs/architecture/hook-system.md)
+[Hook System →](docs/architecture/hook-system.md) | [Wiring Audit Matrix →](docs/architecture/wiring-audit-matrix.md)
 
 ### `.geode/` -- Agent Context Lifecycle
 
@@ -226,7 +228,7 @@ graph LR
 ```mermaid
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
-    HA --> RT["Runtime<br/>Tools(52), MCP(44)<br/>Memory, Skills"]
+    HA --> RT["Runtime<br/>Tools(56), MCP(44)<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
     AG -.-> DP["⊥ Domain<br/>DomainPort Protocol"]
@@ -243,8 +245,8 @@ graph LR
 | Layer | 핵심 | 진입점 |
 |-------|------|--------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
-| **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(40) | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | ToolRegistry(52), MCP Catalog(44), Skills, Memory(4-Tier) | `core/tools/`, `core/memory/` |
+| **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
+| **Runtime** | ToolRegistry(56), MCP Catalog(44), Skills, Memory(4-Tier) | `core/tools/`, `core/memory/` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback) | `core/llm/` |
 | | | |
 | **⊥ Domain** | DomainPort Protocol, GameIPDomain (cross-cutting, binds to Runtime + Harness via Port) | `core/domains/` |
@@ -265,7 +267,7 @@ PR은 CI 5개 Job이 모두 통과해야 머지됩니다. 실패 시 Claude Code
 사람이 개입하지 않아도 pytest, mypy, ruff, import-order, test-count 게이트를 반복적으로 통과할 때까지 루프합니다.
 
 테스트 수는 단조증가만 허용됩니다(Ratchet). 기존 테스트를 삭제하면 CI가 거부합니다.
-이 구조 덕분에 436 PR을 24 세션에 걸쳐 머지하면서 회귀를 한 건도 발생시키지 않았습니다.
+이 구조 덕분에 777+ PR을 머지하면서 회귀를 한 건도 발생시키지 않았습니다.
 
 ```
 while CI fails:
@@ -274,7 +276,7 @@ while CI fails:
 
 | Job | 역할 | 실패 시 |
 |-----|------|---------|
-| `pytest` | 3,422 테스트 전체 실행 | 실패 테스트 자동 수정 후 재시도 |
+| `pytest` | 3,995 테스트 전체 실행 | 실패 테스트 자동 수정 후 재시도 |
 | `mypy` | 타입 체크 strict 모드 | 타입 힌트 추가 후 재시도 |
 | `ruff` | 린트 + 포매팅 | auto-fix 적용 후 재시도 |
 | `import-order` | 임포트 정렬 검증 | isort 적용 후 재시도 |
@@ -320,10 +322,11 @@ graph TD
 주요 구성:
 - **Thin-Only**: `geode` = thin CLI. serve 필수 (자동 시작). 모든 실행은 IPC → serve 경유.
 - **SessionLane**: per-session-key `Semaphore(1)`. 같은 key 직렬, 다른 key 병렬. `max_sessions=256`.
-- **Agentic Loop**: Claude Opus 4.6 기반 `while(tool_use)` 루프. 1M context.
-- **Tool Hierarchy**: Built-in(52) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
+- **Agentic Loop**: Claude Opus 4.7 기반 `while(tool_use)` 루프. 1M context.
+- **Tool Hierarchy**: Built-in(56) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
 - **Sub-Agent**: 부모 역량 전체 상속, Lane("global") gating, depth guard, Token Guard.
 - **Memory**: SOUL → User Profile → Organization → Project → Session. ContextAssembler 280자 압축.
+- **Auth**: ProfileRotator (OAuth > Token > API_KEY), Codex CLI 자동 감지, proactive refresh (120s), 401 자동 재시도, credential scrubbing.
 - **Domain Plugin**: `DomainPort` Protocol로 파이프라인 교체. Game IP 기본 탑재 (LangGraph 9-node).
 
 </details>
@@ -341,7 +344,7 @@ CANNOT(가드레일)이 CAN(자유도)보다 먼저 온다. 7단계 워크플로
 |------|---------|--------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 3422+ pass |
+| Test | `uv run pytest tests/ -q` | 3900+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 </details>

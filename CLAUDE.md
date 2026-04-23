@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.48.0
+- **Version**: 0.49.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 215
-- **Tests**: 3939+
+- **Modules**: 226
+- **Tests**: 3995+
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -188,7 +188,7 @@ Code changes → repeat 3 quality gates. Fix on failure.
 ```bash
 uv run ruff check core/ tests/      # Lint: 0 errors
 uv run mypy core/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"   # Test: 3700+ pass
+uv run pytest tests/ -m "not live"   # Test: 3900+ pass
 ```
 
 #### 4. Verify (Implementation GAP Audit)
@@ -209,7 +209,7 @@ uv run pytest tests/ -m "not live"   # Test: 3700+ pass
 ```bash
 uv run ruff check core/ tests/                      # Lint: 0 errors
 uv run mypy core/                                    # Type: 0 errors
-uv run pytest tests/ -m "not live"                   # Test: 3700+ pass
+uv run pytest tests/ -m "not live"                   # Test: 3900+ pass
 uv run geode analyze "Cowboy Bebop" --dry-run        # E2E: A (68.4) unchanged
 ```
 
@@ -306,7 +306,7 @@ Update project tracking from main. Backlog → In Progress → Done.
 |------|---------|----------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -m "not live"` | 3700+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 3900+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 ## Custom Skills (Scaffold)

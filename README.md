@@ -10,20 +10,20 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Anthropic-Opus_4.6-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.6">
+  <img src="https://img.shields.io/badge/Anthropic-Opus_4.7-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.7">
   <img src="https://img.shields.io/badge/OpenAI-GPT--5.4-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.4">
-  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5-1a73e8?style=flat-square" alt="ZhipuAI GLM-5">
-  <img src="https://img.shields.io/badge/+6_fallback-models-555?style=flat-square" alt="+6 fallback models">
+  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5">
+  <img src="https://img.shields.io/badge/+10_fallback-models-555?style=flat-square" alt="+6 fallback models">
 </p>
 
 [한국어](README.ko.md)
 
-# GEODE v0.48.0 — Long-running Autonomous Execution Harness
+# GEODE v0.49.0 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous execution agent. Performs research, analysis, automation, and scheduling from a single natural-language command.
 
 **Production**: Claude Code Scaffold (CLAUDE.md + development Skills + CI Hooks) builds GEODE.
-**Execution**: GEODE (a `while(tool_use)` loop) autonomously selects from 56 tools + 44 MCP servers. 48 runtime Hooks control the lifecycle, and 5-Layer Verification validates all output.
+**Execution**: GEODE (a `while(tool_use)` loop) autonomously selects from 56 tools + 44 MCP servers. 58 runtime Hooks control the lifecycle, and 5-Layer Verification validates all output.
 
 ## Quick Start
 
@@ -52,6 +52,8 @@ chmod 600 ~/.geode/.env
 ```
 
 Get your key at [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (free tier available).
+
+> **Codex CLI users**: If you've run `codex auth login`, GEODE auto-detects your OAuth token from `~/.codex/auth.json`. No `.env` needed for OpenAI models — proactive refresh and 401 auto-retry are built in.
 
 > No API key? GEODE still works in **dry-run mode** — all pipeline features run with fixture data, no LLM calls.
 
@@ -86,7 +88,7 @@ $ uv run geode "what can you do?"
   I can help with research, analysis, automation, and scheduling.
   Use /help to see all available commands.
 
-  ✢ Worked for 3s · claude-opus-4-6 · ↓1.2k ↑200 · $0.0065
+  ✢ Worked for 3s · claude-opus-4-7 · ↓1.2k ↑200 · $0.0065
 ```
 
 ### Optional — Install globally
@@ -104,7 +106,7 @@ geode version    # now works from any directory
 
 ```
 > Find job postings that match my profile
-  AgenticLoop  glm-5 · in:8.2k out:185 · $0.006
+  AgenticLoop  glm-5.1 · in:8.2k out:185 · $0.006
   Found 3 matching job postings.
   - ML Engineer — LangGraph experience preferred
   - Agent Platform Lead — Python, autonomous execution
@@ -114,7 +116,7 @@ geode version    # now works from any directory
 
 ```
 > Find and summarize the latest RAG papers on arXiv
-  AgenticLoop  claude-opus-4-6 · in:12.4k out:890 · $0.084
+  AgenticLoop  claude-opus-4-7 · in:12.4k out:890 · $0.084
   Summarized 5 papers.
   1. GraphRAG: Knowledge Graph + Retrieval (2026-03)
   2. Adaptive Chunking for Long-Context RAG (2026-02)
@@ -152,15 +154,15 @@ geode version    # now works from any directory
 | **`while(tool_use)` Loop** | Core primitive for all autonomous behavior. Sub-agents, plan execution, and batch analysis are all AgenticLoop instances |
 | **56 Tools + MCP** | 56 native tools + 44 MCP catalog servers auto-installed. Bash execution (41 auto-approved, 9 blocked) |
 | **Sub-Agent** | Full inheritance of parent capabilities, Lane("global") gating, depth guard, Token Guard |
-| **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain |
+| **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain. Codex OAuth auto-detect, proactive token refresh, 401 auto-retry |
 | **4-Tier Memory** | SOUL --> User Profile --> Organization --> Project --> Session |
 | **`.geode/` Context** | Project-local persistent store — journal, vault, rules, cache |
 | **Domain Plugin** | Swap pipelines via `DomainPort` Protocol — Game IP analysis included by default |
 | **Scaffold (Production)** | Claude Code + CLAUDE.md + development Skills + CI Hooks — the control structure that builds GEODE |
-| **20 Runtime Skills** | `.geode/skills/` — inject domain-specific knowledge as prompts. Pipeline, scoring, verification, architecture patterns, etc. |
-| **46 Runtime Hooks** | Pipeline/node/verification/memory/sub-agent lifecycle events — GEODE runtime control |
+| **15 Runtime Skills** | `.geode/skills/` + `~/.geode/skills/` — 3-tier visibility (`public`/`private`/`unlisted`). Manage via `geode skill list/create/show/remove` |
+| **58 Runtime Hooks** | Pipeline/node/tool/LLM/session lifecycle events — matcher-based filtering, interceptor/feedback/observer modes |
 | **5-Layer Verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM (Krippendorff alpha >= 0.67) + Confidence Gate + Rights Risk |
-| **Safety** | 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), 9 blocked bash patterns, PolicyChain |
+| **Safety** | 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), 9 blocked bash patterns, PolicyChain, credential scrubbing (sk-\*/ghp\_\*/Bearer auto-redact) |
 
 ---
 
@@ -170,18 +172,18 @@ There are two control layers.
 
 **Scaffold (production system)**: Claude Code + CLAUDE.md + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality.
 
-**GEODE Runtime (agent)**: `while(tool_use)` loop + 56 tools + 20 runtime Skills + 48 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
+**GEODE Runtime (agent)**: `while(tool_use)` loop + 56 tools + 15 runtime Skills + 58 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
 
 ### Project Structure
 
 ```
 geode/
-├── core/                          # 205 modules, 4-Layer Stack
+├── core/                          # 226 modules, 4-Layer Stack
 │   ├── agent/                     # Agent: AgenticLoop, ToolCallProcessor, SubAgentManager
 │   ├── cli/                       # Agent: Commands, UI
 │   ├── llm/                       # Model: Claude/OpenAI/GLM Adapters, Router, Prompts
 │   ├── memory/                    # Runtime: 4-Tier Memory, Context Assembly, User Profile
-│   ├── hooks/                     # HookSystem(48) — cross-cutting lifecycle events
+│   ├── hooks/                     # HookSystem(58) — cross-cutting lifecycle events
 │   ├── orchestration/             # Harness: TaskGraph, PlanMode, SessionLane, LaneQueue(global:8)
 │   ├── tools/                     # Runtime: 56 Tool Definitions + Handlers
 │   ├── skills/                    # Runtime: Skill Templates
@@ -190,7 +192,7 @@ geode/
 │   ├── gateway/                   # Agent: Slack Gateway (geode serve)
 │   ├── runtime_wiring/            # Runtime bootstrap modules (5-module split)
 │   └── verification/              # Guardrails, BiasBuster, Cross-LLM
-├── tests/                         # 3,525+ tests
+├── tests/                         # 3,995+ tests
 ├── docs/                          # Architecture, Workflow, Plans
 │   ├── architecture/              # Hook system, orchestration decisions
 │   ├── workflow.md                # CANNOT/CAN, GitFlow, Kanban
@@ -201,7 +203,7 @@ geode/
 └── pyproject.toml                 # uv package config
 ```
 
-[Hook System -->](docs/architecture/hook-system.md)
+[Hook System -->](docs/architecture/hook-system.md) | [Wiring Audit Matrix -->](docs/architecture/wiring-audit-matrix.md)
 
 ### `.geode/` -- Agent Context Lifecycle
 
@@ -221,7 +223,7 @@ Tier 3    Session         In-memory — conversation, tool results, plans
 ├── memory/             # T2: Project Memory (LRU rotate)
 ├── rules/              # Auto-generated domain rules
 ├── vault/              # Permanent artifacts (reports, research)
-├── skills/             # 20 runtime skill prompt injections
+├── skills/             # 15 runtime skills (3-tier visibility)
 └── result_cache/       # Pipeline LRU (SHA-256, 24h TTL)
 ```
 
@@ -251,7 +253,7 @@ graph LR
 | Layer | Core | Entry Points |
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
-| **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(48) | `core/orchestration/`, `core/hooks/` |
+| **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
 | **Runtime** | ToolRegistry(56), MCP Catalog(44), Skills, Memory(4-Tier) | `core/tools/`, `core/memory/` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback) | `core/llm/` |
 | | | |
@@ -273,7 +275,7 @@ All PRs must pass 5 CI jobs before merging. On failure, Claude Code automaticall
 Without human intervention, it loops until pytest, mypy, ruff, import-order, and test-count gates all pass.
 
 Test count is monotonically increasing only (Ratchet). Deleting existing tests causes CI rejection.
-This structure has allowed 634+ PRs to be merged with zero regressions.
+This structure has allowed 774+ PRs to be merged with zero regressions.
 
 ```
 while CI fails:
@@ -282,7 +284,7 @@ while CI fails:
 
 | Job | Role | On Failure |
 |-----|------|------------|
-| `pytest` | Run all 3,525+ tests | Auto-fix failing tests and retry |
+| `pytest` | Run all 3,995+ tests | Auto-fix failing tests and retry |
 | `mypy` | Strict mode type checking | Add type hints and retry |
 | `ruff` | Lint + formatting | Apply auto-fix and retry |
 | `import-order` | Import sorting verification | Apply isort and retry |
@@ -328,10 +330,11 @@ graph TD
 Key components:
 - **Thin-Only**: `geode` = thin CLI. serve mandatory (auto-start). All execution routes through IPC --> serve.
 - **SessionLane**: per-session-key `Semaphore(1)`. Same key serializes, different keys run in parallel. `max_sessions=256`.
-- **Agentic Loop**: Claude Opus 4.6 powered `while(tool_use)` loop. 1M context.
+- **Agentic Loop**: Claude Opus 4.7 powered `while(tool_use)` loop. 1M context.
 - **Tool Hierarchy**: Built-in(56) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
 - **Sub-Agent**: Full parent capability inheritance, Lane("global") gating, depth guard, Token Guard.
 - **Memory**: SOUL --> User Profile --> Organization --> Project --> Session. ContextAssembler 280-char compression.
+- **Auth**: ProfileRotator (OAuth > Token > API_KEY), Codex CLI auto-detect, proactive refresh (120s), 401 auto-retry, credential scrubbing.
 - **Domain Plugin**: Swap pipelines via `DomainPort` Protocol. Game IP included by default (LangGraph 9-node).
 
 </details>
@@ -349,7 +352,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full workflow details.
 |------|---------|--------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 3700+ pass |
+| Test | `uv run pytest tests/ -q` | 3900+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 
 </details>
