@@ -26,7 +26,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.49.0] — 2026-04-23
 
 ### Architecture
 - **Approval workflow extraction** — HITL approval logic extracted from `tool_executor.py` to `agent/approval.py`. SRP improvement (#750)
