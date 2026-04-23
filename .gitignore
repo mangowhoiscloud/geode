@@ -65,6 +65,9 @@ geode_checkpoints.db
 .claude/worktrees/
 .claude/MEMORY.md
 
+# Worktree ownership metadata (CLAUDE.md §0 convention writes to worktree checkout root)
+/.owner
+
 # Temporary artifacts
 tmp/
 reports/

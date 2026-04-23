@@ -147,6 +147,8 @@ Anything not in CANNOT is freely permitted. Specifically:
 git fetch origin
 # Verify main/develop sync (pull if out of sync)
 git worktree add .claude/worktrees/<task-name> -b feature/<branch-name> develop
+# Note: the target path IS the worktree checkout root; `.owner` is gitignored
+# (see /.owner in .gitignore) so the convention does not pollute feature branches.
 echo "session=$(date -Iseconds) task_id=<task-name>" > .claude/worktrees/<task-name>/.owner
 ```
 
