@@ -349,10 +349,10 @@ settings = _get_settings()
 # ---------------------------------------------------------------------------
 
 # Anthropic models
-ANTHROPIC_PRIMARY = "claude-opus-4-6"
+ANTHROPIC_PRIMARY = "claude-opus-4-7"
 ANTHROPIC_SECONDARY = "claude-sonnet-4-6"
 ANTHROPIC_BUDGET = "claude-haiku-4-5-20251001"
-ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY]
+ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, "claude-opus-4-6", ANTHROPIC_SECONDARY]
 
 # OpenAI models
 OPENAI_PRIMARY = "gpt-5.4"
