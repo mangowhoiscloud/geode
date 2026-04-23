@@ -19,7 +19,6 @@ from core.agent.tool_executor import ToolExecutor
 from core.config import (
     ANTHROPIC_FALLBACK_CHAIN,
     ANTHROPIC_PRIMARY,
-    ANTHROPIC_SECONDARY,
     GLM_FALLBACK_CHAIN,
     OPENAI_FALLBACK_CHAIN,
     OPENAI_PRIMARY,
