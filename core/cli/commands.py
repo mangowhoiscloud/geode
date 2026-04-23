@@ -45,11 +45,12 @@ class ModelProfile:
 
 
 MODEL_PROFILES: list[ModelProfile] = [
-    ModelProfile(ANTHROPIC_PRIMARY, "Anthropic", "Opus 4.6", "$$$"),
+    ModelProfile(ANTHROPIC_PRIMARY, "Anthropic", "Opus 4.7", "$$$"),
+    ModelProfile("claude-opus-4-6", "Anthropic", "Opus 4.6", "$$$"),
     ModelProfile(ANTHROPIC_SECONDARY, "Anthropic", "Sonnet 4.6", "$$"),
     ModelProfile(ANTHROPIC_BUDGET, "Anthropic", "Haiku 4.5", "$"),
     ModelProfile(OPENAI_PRIMARY, "OpenAI", "GPT-5.4", "$$"),
-    ModelProfile(GLM_PRIMARY, "ZhipuAI", "GLM-5", "$"),
+    ModelProfile(GLM_PRIMARY, "ZhipuAI", "GLM-5.1", "$"),
     ModelProfile("glm-5-turbo", "ZhipuAI", "GLM-5 Turbo", "$"),
     ModelProfile("glm-4.7-flash", "ZhipuAI", "GLM-4.7 Flash", "$"),
 ]
