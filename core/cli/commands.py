@@ -117,6 +117,7 @@ COMMAND_MAP: dict[str, str] = {
     "/apply": "apply",
     "/compact": "compact",
     "/clear": "clear",
+    "/login": "login",
     "/tasks": "tasks",
     "/task": "tasks",
     "/t": "tasks",
@@ -135,6 +136,7 @@ def show_help() -> None:
     console.print("  [label]/key[/label] <value>        — Set API key (auto-detect provider)")
     console.print("  [label]/key openai[/label] <value> — Set OpenAI API key")
     console.print("  [label]/key glm[/label] <value>    — Set ZhipuAI API key")
+    console.print("  [label]/login[/label] <provider>   — OAuth login (openai, status)")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
     console.print("  [label]/auth[/label]               — Manage auth profiles")
     console.print("  [label]/generate[/label] [count]   — Generate synthetic demo data")
@@ -1830,6 +1832,68 @@ def cmd_tasks(args: str) -> None:
         f"  ▶ {running} active  ○ {pending} pending  ✓ {done} done[/muted]"
     )
     console.print()
+
+
+def cmd_login(args: str) -> None:
+    """Handle /login command — OAuth login for LLM providers.
+
+    /login openai    → OpenAI Codex device code OAuth flow
+    /login status    → Show all auth credentials status
+    /login           → Show usage help
+    """
+    arg = args.strip().lower()
+
+    if not arg:
+        console.print("\n  [label]/login[/label] — OAuth login for LLM providers\n")
+        console.print("  [label]/login openai[/label]   — OpenAI Codex OAuth (Plus quota)")
+        console.print("  [label]/login status[/label]   — Show auth credentials status\n")
+        return
+
+    if arg == "status":
+        from core.gateway.auth.oauth_login import get_auth_status
+
+        statuses = get_auth_status()
+        if not statuses:
+            console.print("\n  No OAuth credentials found.\n")
+            console.print("  Run [label]/login openai[/label] to authenticate.\n")
+            return
+
+        console.print("\n  [label]Auth Credentials[/label]\n")
+        for s in statuses:
+            status_color = "green" if s["status"] == "active" else "red"
+            console.print(
+                f"  [{status_color}]{s['status']:8s}[/{status_color}] "
+                f"{s['provider']:20s} "
+                f"{s['email'] or '-':25s} "
+                f"{s['expires_in']:10s} "
+                f"[muted]({s['source']})[/muted]"
+            )
+        console.print()
+        return
+
+    if arg == "openai":
+        console.print()
+        try:
+            from core.gateway.auth.oauth_login import login_openai
+
+            creds = login_openai()
+            if creds:
+                # Invalidate cached Codex client so next call picks up new token
+                import contextlib
+
+                with contextlib.suppress(Exception):
+                    from core.llm.providers.codex import reset_codex_client
+
+                    reset_codex_client()
+        except Exception as exc:
+            console.print(f"  [red]Login failed: {exc}[/red]\n")
+        return
+
+    # Unknown provider — prompt user to specify
+    known = ["openai"]
+    console.print(f"\n  Unknown provider: [label]{arg}[/label]")
+    console.print(f"  Available: {', '.join(known)}")
+    console.print("  Which provider did you mean? Run [label]/login <provider>[/label]\n")
 
 
 def resolve_action(cmd: str) -> str | None:
