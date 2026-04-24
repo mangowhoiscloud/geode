@@ -216,6 +216,11 @@ class IPCClient:
                 "tool_diversity_forced",
                 "model_switched",
                 "checkpoint_saved",
+                # LLM lifecycle events
+                "llm_retry",
+                "llm_error",
+                "retry_wait",
+                "budget_warning",
                 # Pipeline milestone events
                 "pipeline_header",
                 "pipeline_gather",
