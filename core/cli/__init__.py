@@ -25,6 +25,7 @@ from core.cli.commands import (
     cmd_generate,
     cmd_key,
     cmd_list,
+    cmd_login,
     cmd_mcp,
     cmd_model,
     cmd_schedule,
@@ -325,6 +326,8 @@ def _handle_command(
             render_readiness(new_readiness)
     elif action == "model":
         cmd_model(args)
+    elif action == "login":
+        cmd_login(args)
     elif action == "auth":
         cmd_auth(args)
     elif action == "generate":
