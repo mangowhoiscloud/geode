@@ -874,12 +874,23 @@ def _render_ipc_response(response: dict[str, Any], *, streamed: bool = False) ->
                 console.print(f"  [dim]{' · '.join(parts)}[/dim]")
         return
 
-    # Silently drop internal protocol acks
-    if rtype in ("ack", "exit_ack"):
+    # Silently drop internal protocol acks and lifecycle events
+    if rtype in (
+        "ack",
+        "exit_ack",
+        "llm_retry",
+        "llm_error",
+        "retry_wait",
+        "budget_warning",
+        "model_switched",
+        "model_escalation",
+    ):
         return
 
-    # Fallback: unexpected response type
-    console.print(f"\n  [dim]{response}[/dim]\n")
+    # Fallback: unexpected response type — log instead of printing raw dict
+    import logging
+
+    logging.getLogger(__name__).debug("Unhandled IPC response type: %s", rtype)
 
 
 # ---------------------------------------------------------------------------
