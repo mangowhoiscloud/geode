@@ -287,6 +287,26 @@ def _check_provider_key(selected: ModelProfile) -> None:
         "OpenAI": (settings.openai_api_key, "OPENAI_API_KEY"),
         "ZhipuAI": (settings.zai_api_key, "ZAI_API_KEY"),
     }
+
+    # Codex (Plus) requires OAuth — check token availability
+    if "Codex" in selected.provider:
+        try:
+            from core.gateway.auth.codex_cli_oauth import read_codex_cli_credentials
+            from core.gateway.auth.oauth_login import read_geode_openai_credentials
+
+            geode_creds = read_geode_openai_credentials()
+            codex_creds = read_codex_cli_credentials()
+            if not geode_creds and not codex_creds:
+                console.print(
+                    "  [warning]Warning: No Codex OAuth token found. "
+                    "Run /login openai to authenticate.[/warning]"
+                )
+        except Exception:
+            console.print(
+                "  [warning]Warning: Codex OAuth not configured. Run /login openai first.[/warning]"
+            )
+        return
+
     entry = provider_key_map.get(selected.provider)
     if entry is None:
         return
