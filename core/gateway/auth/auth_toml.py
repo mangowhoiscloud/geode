@@ -167,9 +167,7 @@ def save_auth_toml(
 
     payload: dict[str, Any] = {
         "plans": [_plan_to_dict(p) for p in registry.list_all()],
-        "profiles": [
-            _profile_to_dict(p) for p in store.list_all() if not p.managed_by
-        ],
+        "profiles": [_profile_to_dict(p) for p in store.list_all() if not p.managed_by],
         "routing": registry.all_routing(),
     }
 
@@ -207,9 +205,7 @@ def _toml_value(value: Any) -> str:
         return "[" + ", ".join(_toml_value(v) for v in value) + "]"
     if isinstance(value, dict):
         return (
-            "{ "
-            + ", ".join(f"{_toml_key(k)} = {_toml_value(v)}" for k, v in value.items())
-            + " }"
+            "{ " + ", ".join(f"{_toml_key(k)} = {_toml_value(v)}" for k, v in value.items()) + " }"
         )
     raise TypeError(f"Unsupported TOML value type: {type(value)!r}")
 

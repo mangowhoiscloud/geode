@@ -60,11 +60,7 @@ ERROR_HINTS: dict[AuthErrorCode, _HintFactory] = {
     ),
     AuthErrorCode.QUOTA_EXHAUSTED: lambda plan, provider: (
         f"{plan.display_name if plan else 'Plan'} quota exhausted in the current window. "
-        + (
-            f"Upgrade or switch tier: {plan.upgrade_url}. "
-            if plan and plan.upgrade_url
-            else ""
-        )
+        + (f"Upgrade or switch tier: {plan.upgrade_url}. " if plan and plan.upgrade_url else "")
         + "Use /login use <other-plan> to fail over."
     ),
     AuthErrorCode.SUBSCRIPTION_EXPIRED: lambda plan, provider: (

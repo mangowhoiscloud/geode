@@ -72,9 +72,7 @@ class TestRoundtrip:
         assert registry2.get("glm-coding-lite") is not None
         assert registry2.get_routing("glm-5.1") == ["glm-coding-lite"]
         store2 = ensure_profile_store()
-        prof = next(
-            (p for p in store2.list_all() if p.name == "glm-coding-lite:user"), None
-        )
+        prof = next((p for p in store2.list_all() if p.name == "glm-coding-lite:user"), None)
         assert prof is not None
         assert prof.key == "zai-test-key"
         path.unlink()

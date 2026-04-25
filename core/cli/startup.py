@@ -215,7 +215,7 @@ def key_registration_gate() -> str | None:
         if user_input.lower().startswith("/login"):
             from core.cli.commands import cmd_login
 
-            cmd_login(user_input[len("/login"):].strip())
+            cmd_login(user_input[len("/login") :].strip())
             if _has_any_llm_key():
                 return "configured"
             continue

@@ -191,9 +191,7 @@ def cmd_key(args: str) -> bool:
 
     # /key (no args) → defer to the unified /login dashboard
     if not parts:
-        console.print(
-            "\n  [muted]/key now redirects to the unified /login dashboard.[/muted]"
-        )
+        console.print("\n  [muted]/key now redirects to the unified /login dashboard.[/muted]")
         cmd_login("")
         return False
 
@@ -2020,11 +2018,7 @@ def _login_show_status() -> None:
                     import time as _t
 
                     rem = int(p.expires_at - _t.time())
-                    expiry = (
-                        f" · expires {rem // 60}m"
-                        if rem > 0
-                        else " · [error]expired[/error]"
-                    )
+                    expiry = f" · expires {rem // 60}m" if rem > 0 else " · [error]expired[/error]"
                 console.print(
                     f"  [muted]•[/muted] {p.name:<28} "
                     f"[muted]{badge:<7}[/muted] {p.masked_key} "
@@ -2135,9 +2129,7 @@ def _login_add_interactive(_args: str) -> None:
             console.print("  [warning]No key provided.[/warning]\n")
             return
         registry.add(plan)
-        registry.set_routing(
-            "glm-5.1", [plan.id, *registry.get_routing("glm-5.1")]
-        )
+        registry.set_routing("glm-5.1", [plan.id, *registry.get_routing("glm-5.1")])
         for m in ("glm-5", "glm-5-turbo", "glm-4.7-flash"):
             registry.set_routing(m, [plan.id, *registry.get_routing(m)])
         store.add(
@@ -2180,9 +2172,7 @@ def _login_add_interactive(_args: str) -> None:
             return
         provider = providers[pidx][0]
         try:
-            key = console.input(
-                f"  [label]{providers[pidx][1]} API key:[/label] "
-            ).strip()
+            key = console.input(f"  [label]{providers[pidx][1]} API key:[/label] ").strip()
         except (KeyboardInterrupt, EOFError):
             console.print("\n  [muted]Cancelled[/muted]\n")
             return
@@ -2287,8 +2277,7 @@ def _login_set_key(rest: str) -> None:
     plan = registry.get(plan_id)
     if plan is None:
         console.print(
-            f"  [warning]Unknown plan: {plan_id}[/warning]  "
-            "[muted](use /login add first)[/muted]\n"
+            f"  [warning]Unknown plan: {plan_id}[/warning]  [muted](use /login add first)[/muted]\n"
         )
         return
     store = ensure_profile_store()
@@ -2371,9 +2360,7 @@ def _login_remove(rest: str) -> None:
 def _login_route(rest: str) -> None:
     parts = rest.split()
     if len(parts) < 2:
-        console.print(
-            "  [warning]Usage: /login route <model> <plan-id> [<plan-id>...][/warning]\n"
-        )
+        console.print("  [warning]Usage: /login route <model> <plan-id> [<plan-id>...][/warning]\n")
         return
     model, plan_ids = parts[0], parts[1:]
     from core.gateway.auth.plan_registry import get_plan_registry
@@ -2385,11 +2372,7 @@ def _login_route(rest: str) -> None:
         return
     registry.set_routing(model, plan_ids)
     _persist_auth_state()
-    console.print(
-        f"  [success]Routing[/success] {model} → "
-        + " → ".join(plan_ids)
-        + "\n"
-    )
+    console.print(f"  [success]Routing[/success] {model} → " + " → ".join(plan_ids) + "\n")
 
 
 def _login_quota() -> None:
@@ -2413,9 +2396,7 @@ def _login_quota() -> None:
             f"· resets in {reset_label}"
             + (
                 "  [muted](weights: "
-                + ", ".join(
-                    f"{m}×{int(w)}" for m, w in plan.quota.model_weights.items()
-                )
+                + ", ".join(f"{m}×{int(w)}" for m, w in plan.quota.model_weights.items())
                 + ")[/muted]"
                 if plan.quota.model_weights
                 else ""
