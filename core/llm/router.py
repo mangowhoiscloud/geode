@@ -787,7 +787,7 @@ def call_llm_with_tools(
                             tool_output: dict[str, Any] = tool_executor(tool_name, **tool_input)
                         except Exception as exc:
                             log.warning("Tool '%s' execution failed: %s", tool_name, exc)
-                            from core.gateway.auth.scrub import scrub_credentials
+                            from core.auth.scrub import scrub_credentials
 
                             tool_output = {"error": scrub_credentials(str(exc))}
                         elapsed_ms_tool = (time.time() - t0_tool) * 1000

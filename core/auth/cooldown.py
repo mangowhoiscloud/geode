@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-from core.gateway.auth.rotation import calculate_cooldown_ms
+from core.auth.rotation import calculate_cooldown_ms
 
 
 @dataclass

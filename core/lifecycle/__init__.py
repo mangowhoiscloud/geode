@@ -7,6 +7,6 @@ Modules:
     adapters   — MCP signal/notification/calendar/gateway
 """
 
-from core.runtime_wiring.bootstrap import get_plugin_status
+from core.lifecycle.bootstrap import get_plugin_status
 
 __all__ = ["get_plugin_status"]

@@ -26,17 +26,17 @@ DAEMON_DIRS = [
     "core/automation",
     "core/gateway",  # phase 4에서 server/, channels/ 로 분해 후 제거
     "core/hooks",
+    "core/lifecycle",  # phase 1 — runtime_wiring/ rename 결과
     "core/llm",
     "core/mcp",
     "core/memory",
     "core/orchestration",
-    "core/runtime_wiring",  # phase 1에서 lifecycle/ 로 rename 후 제거
     "core/skills",
     "core/tools",
     "core/verification",
 ]
 # Phase 4 이후 추가될 예정:
-#   "core/server", "core/channels", "core/scheduler", "core/lifecycle"
+#   "core/server", "core/channels", "core/scheduler"
 # Phase 5 이후:
 #   "core/config"
 

@@ -12,12 +12,12 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from core.gateway.auth.plans import Plan, PlanUsage, default_plan_for_payg
-from core.gateway.auth.profiles import AuthProfile
+from core.auth.plans import Plan, PlanUsage, default_plan_for_payg
+from core.auth.profiles import AuthProfile
 
 if TYPE_CHECKING:
-    from core.gateway.auth.profiles import ProfileStore
-    from core.gateway.auth.rotation import ProfileRotator
+    from core.auth.profiles import ProfileStore
+    from core.auth.rotation import ProfileRotator
 
 
 @dataclass
@@ -133,7 +133,7 @@ def resolve_routing(model: str) -> RoutingTarget | None:
     Returns None when no usable credential exists.
     """
     from core.config import _resolve_provider
-    from core.runtime_wiring.infra import get_profile_rotator, get_profile_store
+    from core.lifecycle.container import get_profile_rotator, get_profile_store
 
     registry = get_plan_registry()
     store = get_profile_store()

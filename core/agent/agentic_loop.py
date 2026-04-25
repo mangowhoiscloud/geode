@@ -1615,8 +1615,8 @@ class AgenticLoop:
         failed' line.
         """
         try:
-            from core.gateway.auth.credential_breadcrumb import format as fmt_breadcrumb
-            from core.gateway.auth.rotation import get_last_eligibility_verdicts
+            from core.auth.credential_breadcrumb import format as fmt_breadcrumb
+            from core.auth.rotation import get_last_eligibility_verdicts
 
             verdicts = get_last_eligibility_verdicts(self._provider)
             note = fmt_breadcrumb(

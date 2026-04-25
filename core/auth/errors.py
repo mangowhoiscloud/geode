@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from enum import Enum
 
-from core.gateway.auth.plans import Plan
+from core.auth.plans import Plan
 
 
 class AuthErrorCode(Enum):

@@ -819,8 +819,8 @@ def _build_system_handlers(
         cmd_login(login_input)
 
         try:
-            from core.gateway.auth.plan_registry import get_plan_registry
-            from core.runtime_wiring.infra import ensure_profile_store
+            from core.auth.plan_registry import get_plan_registry
+            from core.lifecycle.container import ensure_profile_store
 
             store = ensure_profile_store()
             registry = get_plan_registry()

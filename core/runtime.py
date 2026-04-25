@@ -13,7 +13,7 @@ Centralizes creation and lifecycle of all infrastructure singletons:
   OutcomeTracker, SnapshotManager, TriggerManager, FeedbackLoop
 - L2 Memory: OrganizationMemory, HybridSessionStore, ContextAssembler
 
-Implementation details are decomposed into `core.runtime_wiring`:
+Implementation details are decomposed into `core.lifecycle`:
     bootstrap  — hooks, memory, session, config_watcher, task, prompt, plugin_registry
     infra      — policies, tools, LLM, auth, lanes
     automation — L4.5 9 components + hook wiring
@@ -33,6 +33,9 @@ if TYPE_CHECKING:
 
     from core.llm.prompt_assembler import PromptAssembler
 
+from core.auth.cooldown import CooldownTracker
+from core.auth.profiles import ProfileStore
+from core.auth.rotation import ProfileRotator
 from core.automation.correlation import CorrelationAnalyzer
 from core.automation.drift import CUSUMDetector
 from core.automation.expert_panel import ExpertPanel
@@ -44,10 +47,19 @@ from core.automation.triggers import TriggerManager
 from core.config import settings
 from core.domains.loader import load_domain_adapter
 from core.domains.port import set_domain
-from core.gateway.auth.cooldown import CooldownTracker
-from core.gateway.auth.profiles import ProfileStore
-from core.gateway.auth.rotation import ProfileRotator
 from core.hooks import HookSystem
+from core.lifecycle.bootstrap import (  # noqa: F401  — backward compat
+    _make_run_log_handler,
+    get_plugin_status,
+)
+from core.lifecycle.container import build_default_lanes as _build_default_lanes  # noqa: F401
+from core.lifecycle.container import (
+    build_default_policies as _build_default_policies,  # noqa: F401
+)
+from core.lifecycle.container import (
+    build_default_registry as _build_default_registry,  # noqa: F401
+)
+from core.lifecycle.container import make_tool_executor as _make_tool_executor  # noqa: F401
 from core.llm.router import LLMClientPort
 from core.memory.context import ContextAssembler
 from core.memory.organization import MonoLakeOrganizationMemory
@@ -60,18 +72,6 @@ from core.orchestration.run_log import RunLog
 from core.orchestration.stuck_detection import StuckDetector
 from core.orchestration.task_bridge import TaskGraphHookBridge
 from core.orchestration.task_system import TaskGraph
-from core.runtime_wiring.bootstrap import (  # noqa: F401  — backward compat
-    _make_run_log_handler,
-    get_plugin_status,
-)
-from core.runtime_wiring.infra import build_default_lanes as _build_default_lanes  # noqa: F401
-from core.runtime_wiring.infra import (
-    build_default_policies as _build_default_policies,  # noqa: F401
-)
-from core.runtime_wiring.infra import (
-    build_default_registry as _build_default_registry,  # noqa: F401
-)
-from core.runtime_wiring.infra import make_tool_executor as _make_tool_executor  # noqa: F401
 from core.tools.policy import NodeScopePolicy, PolicyChain
 from core.tools.registry import ToolRegistry
 
@@ -229,7 +229,8 @@ class GeodeRuntime:
         3. _build_memory: project/org memory, context assembler, automation
         4. Assembly: pack configs, create instance, attach optional components
         """
-        from core.runtime_wiring import bootstrap, infra
+        from core.lifecycle import bootstrap
+        from core.lifecycle import container as infra
 
         # Stage 0: Domain + session identity
         domain = load_domain_adapter(domain_name)
@@ -354,7 +355,7 @@ class GeodeRuntime:
         session_key: str,
     ) -> dict[str, Any]:
         """Stage 2: Build MCP, skills, readiness, plugins, tool offload."""
-        from core.runtime_wiring import adapters as adapter_wiring
+        from core.lifecycle import adapters as adapter_wiring
 
         mcp_manager = bootstrap.build_mcp_manager()
         from core.mcp.manager import set_mcp_hooks
@@ -380,7 +381,7 @@ class GeodeRuntime:
         ip_name: str,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Stage 3: Build memory, automation, and optional components."""
-        from core.runtime_wiring import automation as automation_wiring
+        from core.lifecycle import automation as automation_wiring
 
         (
             project_memory,
@@ -513,7 +514,7 @@ class GeodeRuntime:
 
     def reset_task_graph(self) -> None:
         """Reset task graph for REPL reuse (re-creates graph + bridge)."""
-        from core.runtime_wiring.bootstrap import build_task_graph
+        from core.lifecycle.bootstrap import build_task_graph
 
         if self._task_bridge is not None:
             self._task_bridge.unregister()

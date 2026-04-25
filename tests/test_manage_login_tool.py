@@ -87,8 +87,8 @@ class TestRouting:
         monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
 
         # Pre-register a plan via the registry so set-key has a target
-        from core.gateway.auth.plan_registry import get_plan_registry
-        from core.gateway.auth.plans import GLM_CODING_TIERS
+        from core.auth.plan_registry import get_plan_registry
+        from core.auth.plans import GLM_CODING_TIERS
 
         registry = get_plan_registry()
         registry.add(GLM_CODING_TIERS["lite"])

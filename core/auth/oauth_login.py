@@ -68,11 +68,11 @@ def _migrate_legacy_auth_json_if_present() -> dict[str, Any]:
 def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
     """Write Codex device-code creds into ``~/.geode/auth.toml`` SOT."""
     try:
-        from core.gateway.auth.auth_toml import save_auth_toml
-        from core.gateway.auth.plan_registry import get_plan_registry
-        from core.gateway.auth.plans import Plan, PlanKind
-        from core.gateway.auth.profiles import AuthProfile, CredentialType
-        from core.runtime_wiring.infra import ensure_profile_store
+        from core.auth.auth_toml import save_auth_toml
+        from core.auth.plan_registry import get_plan_registry
+        from core.auth.plans import Plan, PlanKind
+        from core.auth.profiles import AuthProfile, CredentialType
+        from core.lifecycle.container import ensure_profile_store
     except Exception:  # pragma: no cover — import-time defensive
         log.debug("auth.toml persistence skipped — Plan modules unavailable")
         return
@@ -149,8 +149,8 @@ def _load_auth_store() -> dict[str, Any]:
     # Re-build a json-shaped view from the auth.toml SOT for legacy callers
     # like get_auth_status().
     try:
-        from core.gateway.auth.plan_registry import get_plan_registry
-        from core.runtime_wiring.infra import ensure_profile_store
+        from core.auth.plan_registry import get_plan_registry
+        from core.lifecycle.container import ensure_profile_store
     except Exception:  # pragma: no cover
         return {"version": 1, "providers": {}}
 
@@ -369,7 +369,7 @@ def get_auth_status() -> list[dict[str, Any]]:
 
     # Also check external CLI tokens
     try:
-        from core.gateway.auth.codex_cli_oauth import read_codex_cli_credentials
+        from core.auth.codex_cli_oauth import read_codex_cli_credentials
 
         codex_creds = read_codex_cli_credentials()
         if codex_creds:

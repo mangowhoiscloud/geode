@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from core.gateway.auth.errors import (
+from core.auth.errors import (
     AuthError,
     AuthErrorCode,
     format_auth_error,
 )
-from core.gateway.auth.plans import GLM_CODING_TIERS, default_plan_for_payg
+from core.auth.plans import GLM_CODING_TIERS, default_plan_for_payg
 
 
 class TestErrorHints:

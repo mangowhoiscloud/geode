@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from core.gateway.auth.profiles import EligibilityResult, ProfileRejectReason
+from core.auth.profiles import EligibilityResult, ProfileRejectReason
 
 # Hint sentence per reason — what the LLM should say or do next.
 _NEXT_ACTION: dict[ProfileRejectReason, str] = {

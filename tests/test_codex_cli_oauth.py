@@ -7,7 +7,7 @@ import time
 from unittest.mock import patch
 
 import pytest
-from core.gateway.auth.codex_cli_oauth import (
+from core.auth.codex_cli_oauth import (
     CodexCliCredentials,
     _decode_jwt_expiry,
     _parse_codex_credentials,
@@ -99,7 +99,7 @@ class TestReadCodexCredentials:
             "last_refresh": "2026-04-01T12:00:00Z",
         }
         with patch(
-            "core.gateway.auth.codex_cli_oauth._read_from_file",
+            "core.auth.codex_cli_oauth._read_from_file",
             return_value=fake_data,
         ):
             result = read_codex_cli_credentials(force_refresh=True)
@@ -109,7 +109,7 @@ class TestReadCodexCredentials:
 
     def test_no_file(self):
         with patch(
-            "core.gateway.auth.codex_cli_oauth._read_from_file",
+            "core.auth.codex_cli_oauth._read_from_file",
             return_value=None,
         ):
             result = read_codex_cli_credentials(force_refresh=True)
@@ -124,13 +124,13 @@ class TestReadCodexCredentials:
             "last_refresh": "2026-04-01T12:00:00Z",
         }
         with patch(
-            "core.gateway.auth.codex_cli_oauth._read_from_file",
+            "core.auth.codex_cli_oauth._read_from_file",
             return_value=fake_data,
         ):
             r1 = read_codex_cli_credentials(force_refresh=True)
 
         with patch(
-            "core.gateway.auth.codex_cli_oauth._read_from_file",
+            "core.auth.codex_cli_oauth._read_from_file",
         ) as mock_read:
             r2 = read_codex_cli_credentials()
 
@@ -140,7 +140,7 @@ class TestReadCodexCredentials:
 
 class TestRefreshCodexToken:
     def test_refresh_updates(self):
-        from core.gateway.auth.profiles import AuthProfile, CredentialType
+        from core.auth.profiles import AuthProfile, CredentialType
 
         profile = AuthProfile(
             name="openai:codex-cli",
@@ -155,7 +155,7 @@ class TestRefreshCodexToken:
             "expires_at": time.time() + 3600,
         }
         with patch(
-            "core.gateway.auth.codex_cli_oauth.read_codex_cli_credentials",
+            "core.auth.codex_cli_oauth.read_codex_cli_credentials",
             return_value=new_creds,
         ):
             updated = refresh_codex_cli_token(profile)
@@ -164,7 +164,7 @@ class TestRefreshCodexToken:
         assert profile.key == "new-token"
 
     def test_refresh_no_change(self):
-        from core.gateway.auth.profiles import AuthProfile, CredentialType
+        from core.auth.profiles import AuthProfile, CredentialType
 
         profile = AuthProfile(
             name="openai:codex-cli",
@@ -179,7 +179,7 @@ class TestRefreshCodexToken:
             "expires_at": time.time() + 3600,
         }
         with patch(
-            "core.gateway.auth.codex_cli_oauth.read_codex_cli_credentials",
+            "core.auth.codex_cli_oauth.read_codex_cli_credentials",
             return_value=creds,
         ):
             assert refresh_codex_cli_token(profile) is False

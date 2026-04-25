@@ -159,14 +159,14 @@ class TestM1ConfigDrivenPollers:
     """Verify config-driven poller registration."""
 
     def test_poller_registry_has_three_defaults(self) -> None:
-        from core.runtime_wiring.adapters import _DEFAULT_POLLERS, _POLLER_REGISTRY
+        from core.lifecycle.adapters import _DEFAULT_POLLERS, _POLLER_REGISTRY
 
         assert set(_DEFAULT_POLLERS) == {"slack", "discord", "telegram"}
         for name in _DEFAULT_POLLERS:
             assert name in _POLLER_REGISTRY
 
     def test_load_poller_class_resolves(self) -> None:
-        from core.runtime_wiring.adapters import _load_poller_class
+        from core.lifecycle.adapters import _load_poller_class
 
         cls = _load_poller_class("core.gateway.pollers.slack_poller:SlackPoller")
         from core.gateway.pollers.slack_poller import SlackPoller
@@ -174,7 +174,7 @@ class TestM1ConfigDrivenPollers:
         assert cls is SlackPoller
 
     def test_load_poller_class_invalid_raises(self) -> None:
-        from core.runtime_wiring.adapters import _load_poller_class
+        from core.lifecycle.adapters import _load_poller_class
 
         with pytest.raises(ModuleNotFoundError):
             _load_poller_class("nonexistent.module:Cls")

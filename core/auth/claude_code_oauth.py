@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 from typing import Any, TypedDict
 
-from core.gateway.auth.credential_cache import CredentialCache, refresh_managed_token
+from core.auth.credential_cache import CredentialCache, refresh_managed_token
 
 log = logging.getLogger(__name__)
 

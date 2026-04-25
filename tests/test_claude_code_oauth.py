@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from core.gateway.auth.claude_code_oauth import (
+from core.auth.claude_code_oauth import (
     ClaudeCodeCredentials,
     _parse_oauth,
     invalidate_cache,
@@ -92,10 +92,10 @@ class TestReadCredentials:
                 }
             }
         )
-        with patch("core.gateway.auth.claude_code_oauth.subprocess.run") as mock_run:
+        with patch("core.auth.claude_code_oauth.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = fake_keychain
-            with patch("core.gateway.auth.claude_code_oauth.sys") as mock_sys:
+            with patch("core.auth.claude_code_oauth.sys") as mock_sys:
                 mock_sys.platform = "darwin"
                 result = read_claude_code_credentials(force_refresh=True)
 
@@ -111,13 +111,13 @@ class TestReadCredentials:
             }
         }
         with (
-            patch("core.gateway.auth.claude_code_oauth.sys") as mock_sys,
+            patch("core.auth.claude_code_oauth.sys") as mock_sys,
             patch(
-                "core.gateway.auth.claude_code_oauth._read_from_keychain",
+                "core.auth.claude_code_oauth._read_from_keychain",
                 return_value=None,
             ),
             patch(
-                "core.gateway.auth.claude_code_oauth._read_from_file",
+                "core.auth.claude_code_oauth._read_from_file",
                 return_value=cred_data["claudeAiOauth"],
             ),
         ):
@@ -129,13 +129,13 @@ class TestReadCredentials:
 
     def test_no_credentials(self):
         with (
-            patch("core.gateway.auth.claude_code_oauth.sys") as mock_sys,
+            patch("core.auth.claude_code_oauth.sys") as mock_sys,
             patch(
-                "core.gateway.auth.claude_code_oauth._read_from_keychain",
+                "core.auth.claude_code_oauth._read_from_keychain",
                 return_value=None,
             ),
             patch(
-                "core.gateway.auth.claude_code_oauth._read_from_file",
+                "core.auth.claude_code_oauth._read_from_file",
                 return_value=None,
             ),
         ):
@@ -150,9 +150,9 @@ class TestReadCredentials:
             "expiresAt": int((time.time() + 3600) * 1000),
         }
         with (
-            patch("core.gateway.auth.claude_code_oauth.sys") as mock_sys,
+            patch("core.auth.claude_code_oauth.sys") as mock_sys,
             patch(
-                "core.gateway.auth.claude_code_oauth._read_from_keychain",
+                "core.auth.claude_code_oauth._read_from_keychain",
                 return_value=fake_oauth,
             ),
         ):
@@ -160,7 +160,7 @@ class TestReadCredentials:
             r1 = read_claude_code_credentials(force_refresh=True)
 
         # Second call — keychain not called again
-        with patch("core.gateway.auth.claude_code_oauth._read_from_keychain") as mock_kc:
+        with patch("core.auth.claude_code_oauth._read_from_keychain") as mock_kc:
             r2 = read_claude_code_credentials()
 
         assert r1 == r2
@@ -172,7 +172,7 @@ class TestReadCredentials:
 
 class TestRefreshToken:
     def test_refresh_updates_profile(self):
-        from core.gateway.auth.profiles import AuthProfile, CredentialType
+        from core.auth.profiles import AuthProfile, CredentialType
 
         profile = AuthProfile(
             name="anthropic:claude-code",
@@ -187,7 +187,7 @@ class TestRefreshToken:
             "expires_at": time.time() + 3600,
         }
         with patch(
-            "core.gateway.auth.claude_code_oauth.read_claude_code_credentials",
+            "core.auth.claude_code_oauth.read_claude_code_credentials",
             return_value=new_creds,
         ):
             updated = refresh_claude_code_token(profile)
@@ -196,7 +196,7 @@ class TestRefreshToken:
         assert profile.key == "new-token"
 
     def test_refresh_no_change(self):
-        from core.gateway.auth.profiles import AuthProfile, CredentialType
+        from core.auth.profiles import AuthProfile, CredentialType
 
         profile = AuthProfile(
             name="anthropic:claude-code",
@@ -210,7 +210,7 @@ class TestRefreshToken:
             "expires_at": time.time() + 3600,
         }
         with patch(
-            "core.gateway.auth.claude_code_oauth.read_claude_code_credentials",
+            "core.auth.claude_code_oauth.read_claude_code_credentials",
             return_value=creds,
         ):
             updated = refresh_claude_code_token(profile)
@@ -218,7 +218,7 @@ class TestRefreshToken:
         assert updated is False
 
     def test_refresh_no_credentials(self):
-        from core.gateway.auth.profiles import AuthProfile, CredentialType
+        from core.auth.profiles import AuthProfile, CredentialType
 
         profile = AuthProfile(
             name="anthropic:claude-code",
@@ -228,7 +228,7 @@ class TestRefreshToken:
             managed_by="claude-code",
         )
         with patch(
-            "core.gateway.auth.claude_code_oauth.read_claude_code_credentials",
+            "core.auth.claude_code_oauth.read_claude_code_credentials",
             return_value=None,
         ):
             updated = refresh_claude_code_token(profile)

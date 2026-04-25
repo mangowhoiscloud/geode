@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from core.gateway.auth.oauth_login import (
+from core.auth.oauth_login import (
     _load_auth_store,
     _save_auth_store,
     get_auth_status,
@@ -24,7 +24,7 @@ def _isolate(tmp_path: Path, monkeypatch) -> Path:
     toml_path = tmp_path / "auth.toml"
     monkeypatch.setenv("GEODE_AUTH_TOML", str(toml_path))
     monkeypatch.setattr(
-        "core.gateway.auth.oauth_login.LEGACY_AUTH_STORE_PATH",
+        "core.auth.oauth_login.LEGACY_AUTH_STORE_PATH",
         tmp_path / "auth.json",
     )
     return toml_path
@@ -118,7 +118,7 @@ class TestAuthStatus:
         )
 
         with patch(
-            "core.gateway.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None
+            "core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None
         ):
             statuses = get_auth_status()
 
@@ -131,11 +131,11 @@ class TestAuthStatus:
 
     def test_status_empty(self, tmp_path: Path, monkeypatch):
         monkeypatch.setattr(
-            "core.gateway.auth.oauth_login.AUTH_STORE_PATH", tmp_path / "empty.json"
+            "core.auth.oauth_login.AUTH_STORE_PATH", tmp_path / "empty.json"
         )
 
         with patch(
-            "core.gateway.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None
+            "core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None
         ):
             statuses = get_auth_status()
 
@@ -152,7 +152,7 @@ class TestCmdLogin:
     def test_login_status(self, tmp_path: Path, monkeypatch):
         from core.cli.commands import cmd_login
 
-        monkeypatch.setattr("core.gateway.auth.oauth_login.AUTH_STORE_PATH", tmp_path / "a.json")
+        monkeypatch.setattr("core.auth.oauth_login.AUTH_STORE_PATH", tmp_path / "a.json")
         cmd_login("status")  # Should not raise
 
     def test_login_unknown_provider(self):

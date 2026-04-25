@@ -44,9 +44,9 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from core.gateway.auth.plan_registry import PlanRegistry, get_plan_registry
-from core.gateway.auth.plans import Plan, PlanKind, Quota
-from core.gateway.auth.profiles import AuthProfile, CredentialType, ProfileStore
+from core.auth.plan_registry import PlanRegistry, get_plan_registry
+from core.auth.plans import Plan, PlanKind, Quota
+from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
 
 log = logging.getLogger(__name__)
 
@@ -159,7 +159,7 @@ def save_auth_toml(
     Codex CLI OAuth and similar borrowed credentials live in their CLI's
     own store and are re-read on every boot.
     """
-    from core.runtime_wiring.infra import ensure_profile_store
+    from core.lifecycle.container import ensure_profile_store
 
     registry = registry or get_plan_registry()
     store = store or ensure_profile_store()
@@ -258,7 +258,7 @@ def load_auth_toml(
     Returns True if the file existed and was parsed. Profiles already in
     the store (e.g. from .env / managed CLIs) are NOT removed.
     """
-    from core.runtime_wiring.infra import ensure_profile_store
+    from core.lifecycle.container import ensure_profile_store
 
     registry = registry or get_plan_registry()
     store = store or ensure_profile_store()
@@ -300,8 +300,8 @@ def migrate_env_to_toml(
     Returns the number of plans persisted. Idempotent — re-running after
     the file exists is a no-op (data is loaded but not duplicated).
     """
-    from core.gateway.auth.plans import default_plan_for_payg
-    from core.runtime_wiring.infra import ensure_profile_store
+    from core.auth.plans import default_plan_for_payg
+    from core.lifecycle.container import ensure_profile_store
 
     registry = registry or get_plan_registry()
     store = store or ensure_profile_store()

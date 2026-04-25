@@ -8,10 +8,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from core.auth.cooldown import CooldownTracker
+from core.auth.profiles import ProfileStore
+from core.auth.rotation import ProfileRotator
 from core.config import settings
-from core.gateway.auth.cooldown import CooldownTracker
-from core.gateway.auth.profiles import ProfileStore
-from core.gateway.auth.rotation import ProfileRotator
 from core.llm.providers.openai import OpenAIAdapter
 from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.orchestration.lane_queue import LaneQueue
@@ -264,7 +264,7 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     if _profile_store is not None and _profile_rotator is not None:
         return _profile_store, _profile_rotator, CooldownTracker()
 
-    from core.gateway.auth.profiles import AuthProfile, CredentialType
+    from core.auth.profiles import AuthProfile, CredentialType
 
     profile_store = ProfileStore()
 
@@ -275,7 +275,7 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
 
     # Codex CLI OAuth — OpenAI managed credential
     try:
-        from core.gateway.auth.codex_cli_oauth import (
+        from core.auth.codex_cli_oauth import (
             read_codex_cli_credentials,
         )
 
@@ -337,7 +337,7 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     # On first run we migrate any env-loaded API keys into the file so the
     # next startup sees them as PAYG plans.
     try:
-        from core.gateway.auth.auth_toml import auth_toml_path, load_auth_toml, migrate_env_to_toml
+        from core.auth.auth_toml import auth_toml_path, load_auth_toml, migrate_env_to_toml
 
         if auth_toml_path().exists():
             load_auth_toml()
@@ -348,7 +348,7 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
 
     # Register managed token refreshers
     try:
-        from core.gateway.auth.codex_cli_oauth import refresh_codex_cli_token
+        from core.auth.codex_cli_oauth import refresh_codex_cli_token
 
         profile_rotator.register_refresher("codex-cli", refresh_codex_cli_token)
     except Exception:

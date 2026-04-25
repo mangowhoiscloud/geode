@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from core.gateway.auth.profiles import AuthProfile, EligibilityResult, ProfileStore
+from core.auth.profiles import AuthProfile, EligibilityResult, ProfileStore
 
 # Module-level cache of the most recent eligibility breakdown per provider.
 # Read by ``credential_breadcrumb.format()`` so the LLM-facing system

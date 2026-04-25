@@ -3,14 +3,14 @@
 OpenClaw-inspired: type priority rotation + cooldown + failover.
 """
 
-from core.gateway.auth.cooldown import CooldownEntry, CooldownTracker
-from core.gateway.auth.profiles import (
+from core.auth.cooldown import CooldownEntry, CooldownTracker
+from core.auth.profiles import (
     TYPE_PRIORITY,
     AuthProfile,
     CredentialType,
     ProfileStore,
 )
-from core.gateway.auth.rotation import ProfileRotator, calculate_cooldown_ms
+from core.auth.rotation import ProfileRotator, calculate_cooldown_ms
 
 __all__ = [
     "TYPE_PRIORITY",

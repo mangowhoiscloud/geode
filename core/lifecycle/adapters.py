@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.runtime_wiring.bootstrap import _plugin_status
+from core.lifecycle.bootstrap import _plugin_status
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ def build_gateway() -> None:
         return
 
     # Use the unified LaneQueue from runtime (gateway lane already registered)
-    from core.runtime_wiring.infra import build_default_lanes
+    from core.lifecycle.container import build_default_lanes
 
     try:
         lane_queue = build_default_lanes()

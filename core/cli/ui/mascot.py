@@ -122,7 +122,7 @@ def _resolve_active_plan_summary(model: str) -> str:
     Returns "" when no plan is registered or routing isn't initialised.
     """
     try:
-        from core.gateway.auth.plan_registry import resolve_routing
+        from core.auth.plan_registry import resolve_routing
 
         target = resolve_routing(model)
         if target is None:
@@ -131,7 +131,7 @@ def _resolve_active_plan_summary(model: str) -> str:
         label = f"Plan: {plan.display_name}"
         if plan.quota is None:
             return label
-        from core.gateway.auth.plan_registry import get_plan_registry
+        from core.auth.plan_registry import get_plan_registry
 
         usage = get_plan_registry().usage_for(plan.id)
         remaining = usage.remaining_in_window(plan)

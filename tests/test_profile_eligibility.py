@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from unittest.mock import patch
 
-from core.gateway.auth.credential_breadcrumb import format as fmt_breadcrumb
-from core.gateway.auth.profiles import (
+from core.auth.credential_breadcrumb import format as fmt_breadcrumb
+from core.auth.profiles import (
     AuthProfile,
     CredentialType,
     EligibilityResult,
@@ -129,7 +129,7 @@ class TestEvaluateEligibility:
 
 class TestRotatorLoggingAndCache:
     def test_resolve_caches_verdicts_for_breadcrumb(self) -> None:
-        from core.gateway.auth.rotation import (
+        from core.auth.rotation import (
             ProfileRotator,
             get_last_eligibility_verdicts,
         )
@@ -152,7 +152,7 @@ class TestRotatorLoggingAndCache:
         assert cached[0].reason is ProfileRejectReason.COOLING_DOWN
 
     def test_resolve_logs_rejection_breakdown(self, caplog) -> None:
-        from core.gateway.auth.rotation import ProfileRotator
+        from core.auth.rotation import ProfileRotator
 
         s = _store_with(
             AuthProfile(
@@ -164,7 +164,7 @@ class TestRotatorLoggingAndCache:
             )
         )
         rotator = ProfileRotator(s)
-        with caplog.at_level("WARNING", logger="core.gateway.auth.rotation"):
+        with caplog.at_level("WARNING", logger="core.auth.rotation"):
             assert rotator.resolve("openai") is None
         joined = "\n".join(rec.message for rec in caplog.records)
         assert "openai:expired=expired" in joined
@@ -235,7 +235,7 @@ class TestAgenticLoopBreadcrumbInjection:
 
         # Simulate a cached cooldown verdict for openai
         with patch(
-            "core.gateway.auth.rotation._LAST_VERDICTS",
+            "core.auth.rotation._LAST_VERDICTS",
             {
                 "openai": [
                     EligibilityResult(

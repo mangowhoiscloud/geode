@@ -9,12 +9,12 @@ from reality. These tests pin the single-store invariant.
 
 from __future__ import annotations
 
-from core.gateway.auth.profiles import AuthProfile, CredentialType
+from core.auth.profiles import AuthProfile, CredentialType
 
 
 def _reset_singletons() -> None:
     """Force build_auth() to re-seed for isolated test runs."""
-    from core.runtime_wiring import infra
+    from core.lifecycle import container as infra
 
     infra._profile_store = None
     infra._profile_rotator = None
@@ -23,7 +23,7 @@ def _reset_singletons() -> None:
 class TestSingleStore:
     def test_ensure_profile_store_is_idempotent(self) -> None:
         _reset_singletons()
-        from core.runtime_wiring.infra import ensure_profile_store
+        from core.lifecycle.container import ensure_profile_store
 
         s1 = ensure_profile_store()
         s2 = ensure_profile_store()
@@ -32,7 +32,7 @@ class TestSingleStore:
     def test_cli_and_runtime_share_store(self) -> None:
         _reset_singletons()
         from core.cli.commands import _get_profile_store
-        from core.runtime_wiring.infra import ensure_profile_store
+        from core.lifecycle.container import ensure_profile_store
 
         runtime_store = ensure_profile_store()
         cli_store = _get_profile_store()
@@ -41,7 +41,7 @@ class TestSingleStore:
     def test_credential_added_via_cli_is_visible_to_rotator(self) -> None:
         _reset_singletons()
         from core.cli.commands import _get_profile_store
-        from core.runtime_wiring.infra import get_profile_rotator
+        from core.lifecycle.container import get_profile_rotator
 
         store = _get_profile_store()
         store.add(
@@ -63,7 +63,7 @@ class TestSingleStore:
 
     def test_build_auth_returns_same_singleton(self) -> None:
         _reset_singletons()
-        from core.runtime_wiring.infra import build_auth
+        from core.lifecycle.container import build_auth
 
         s1, r1, _ = build_auth()
         s2, r2, _ = build_auth()
