@@ -300,7 +300,7 @@ class CLIPoller:
 
         # Thread-local session meter — each IPC session tracks its own
         # model, elapsed time, and token counts independently.
-        from core.cli.ui.agentic_ui import init_session_meter
+        from core.ui.agentic_ui import init_session_meter
 
         init_session_meter()
 
@@ -413,8 +413,8 @@ class CLIPoller:
         the shared default Console — preventing cross-session output
         contamination when multiple thin-CLI clients connect concurrently.
         """
-        from core.cli.ui.agentic_ui import _ipc_writer_local
-        from core.cli.ui.console import (
+        from core.ui.agentic_ui import _ipc_writer_local
+        from core.ui.console import (
             make_session_console,
             reset_thread_console,
             set_thread_console,
@@ -489,7 +489,7 @@ class CLIPoller:
         args = msg.get("args", "")
         try:
             from core.cli import _handle_command
-            from core.cli.ui.console import capture_output
+            from core.ui.console import capture_output
 
             with capture_output() as buf:
                 should_break, _verbose, _resume = _handle_command(

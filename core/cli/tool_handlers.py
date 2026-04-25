@@ -22,8 +22,8 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from core.cli.ui.console import console
 from core.config import settings
+from core.ui.console import console
 
 log = logging.getLogger(__name__)
 

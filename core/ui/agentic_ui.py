@@ -5,7 +5,7 @@ in a clean, compact format inspired by Claude Code's output style.
 
 Usage::
 
-    from core.cli.ui.agentic_ui import render_tool_call, render_tool_result, render_tokens
+    from core.ui.agentic_ui import render_tool_call, render_tool_result, render_tokens
 
     render_tool_call("analyze_ip", {"ip_name": "Berserk"})
     # ▸ analyze_ip(ip_name="Berserk")
@@ -25,8 +25,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.cli.ui.console import console
-from core.cli.ui.event_renderer import _fmt_tokens
+from core.ui.console import console
+from core.ui.event_renderer import _fmt_tokens
 
 # Thread-local IPC writer for structured tool events.
 # When set (by CLIPoller._run_prompt_streaming), OperationLogger sends

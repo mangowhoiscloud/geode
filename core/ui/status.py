@@ -19,8 +19,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from core.cli.ui.console import console
 from core.llm.router import LLMUsageAccumulator, get_usage_accumulator
+from core.ui.console import console
 
 
 class TextSpinner:
@@ -63,7 +63,7 @@ class TextSpinner:
             return
         # IPC mode: thin CLI has its own ToolCallTracker.
         # Serve-side spinner would send raw ANSI over IPC → cursor race.
-        from core.cli.ui.agentic_ui import _ipc_writer_local
+        from core.ui.agentic_ui import _ipc_writer_local
 
         if getattr(_ipc_writer_local, "writer", None) is not None:
             return

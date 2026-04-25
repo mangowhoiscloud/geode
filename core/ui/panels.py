@@ -15,20 +15,20 @@ from rich.text import Text
 from rich.tree import Tree
 
 from core import __version__
-from core.cli.ui.console import console
 from core.state import AnalysisResult, EvaluatorResult, PSMResult, SynthesisResult
+from core.ui.console import console
 
 
 def _is_ipc() -> bool:
     """Check if we're in IPC mode (thin client rendering)."""
-    from core.cli.ui.agentic_ui import _ipc_writer_local
+    from core.ui.agentic_ui import _ipc_writer_local
 
     return getattr(_ipc_writer_local, "writer", None) is not None
 
 
 def header_panel(ip_name: str, pipeline_mode: str, model: str) -> None:
     if _is_ipc():
-        from core.cli.ui.agentic_ui import _ipc_writer_local
+        from core.ui.agentic_ui import _ipc_writer_local
 
         writer = getattr(_ipc_writer_local, "writer", None)
         if writer is not None:
@@ -62,7 +62,7 @@ def gather_panel(
     monolake: dict[str, Any],
     signals: dict[str, Any],
 ) -> None:
-    from core.cli.ui.agentic_ui import emit_pipeline_gather
+    from core.ui.agentic_ui import emit_pipeline_gather
 
     if _is_ipc():
         emit_pipeline_gather(ip_info, monolake, signals)
@@ -92,7 +92,7 @@ def gather_panel(
 
 
 def analyst_panel(analyses: list[AnalysisResult]) -> None:
-    from core.cli.ui.agentic_ui import emit_pipeline_analysis
+    from core.ui.agentic_ui import emit_pipeline_analysis
 
     if _is_ipc():
         emit_pipeline_analysis(analyses)  # type: ignore[arg-type]
@@ -116,7 +116,7 @@ def analyst_panel(analyses: list[AnalysisResult]) -> None:
 
 
 def evaluator_panel(evaluations: dict[str, EvaluatorResult]) -> None:
-    from core.cli.ui.agentic_ui import emit_pipeline_evaluation
+    from core.ui.agentic_ui import emit_pipeline_evaluation
 
     if _is_ipc():
         emit_pipeline_evaluation(evaluations)
@@ -155,8 +155,8 @@ def score_panel(
     subscores: dict[str, float],
     confidence: float = 0.0,
 ) -> None:
-    from core.cli.ui.agentic_ui import emit_pipeline_score
     from core.domains.game_ip.scoring_constants import classify_tier
+    from core.ui.agentic_ui import emit_pipeline_score
 
     tier = classify_tier(final_score)
 
@@ -196,7 +196,7 @@ def verify_panel(
     *,
     details: list[str] | None = None,
 ) -> None:
-    from core.cli.ui.agentic_ui import emit_pipeline_verification
+    from core.ui.agentic_ui import emit_pipeline_verification
 
     if _is_ipc():
         emit_pipeline_verification(guardrails_pass, biasbuster_pass, details=details)
@@ -216,7 +216,7 @@ def result_panel(
     errors: list[str] | None = None,
 ) -> None:
     if _is_ipc():
-        from core.cli.ui.agentic_ui import _ipc_writer_local
+        from core.ui.agentic_ui import _ipc_writer_local
 
         writer = getattr(_ipc_writer_local, "writer", None)
         if writer is not None:

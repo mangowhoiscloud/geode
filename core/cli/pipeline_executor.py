@@ -12,8 +12,11 @@ import re as _re
 import shutil
 from typing import Any
 
-from core.cli.ui.console import console
-from core.cli.ui.panels import (
+from core.config import settings
+from core.runtime import GeodeRuntime
+from core.state import AnalysisResult, EvaluatorResult, GeodeState
+from core.ui.console import console
+from core.ui.panels import (
     _is_ipc,
     analyst_panel,
     evaluator_panel,
@@ -23,9 +26,6 @@ from core.cli.ui.panels import (
     score_panel,
     verify_panel,
 )
-from core.config import settings
-from core.runtime import GeodeRuntime
-from core.state import AnalysisResult, EvaluatorResult, GeodeState
 
 log = logging.getLogger(__name__)
 
@@ -204,7 +204,7 @@ def _execute_pipeline(
     # Serve-side Rich spinner sends raw ANSI over IPC → cursor race.
     from contextlib import contextmanager
 
-    from core.cli.ui.agentic_ui import _ipc_writer_local
+    from core.ui.agentic_ui import _ipc_writer_local
 
     @contextmanager
     def _noop_status() -> Any:
@@ -574,7 +574,7 @@ def _run_analysis(
     ip_name = resolved
 
     # Tag pipeline events with IP name (thread-safe, for future parallel UI)
-    from core.cli.ui.agentic_ui import set_pipeline_ip
+    from core.ui.agentic_ui import set_pipeline_ip
 
     set_pipeline_ip(ip_name)
 

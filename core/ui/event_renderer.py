@@ -16,7 +16,7 @@ import threading
 import time
 from typing import Any
 
-from core.cli.ui.tool_tracker import ToolCallTracker
+from core.ui.tool_tracker import ToolCallTracker
 
 
 def _fmt_tokens(n: int) -> str:

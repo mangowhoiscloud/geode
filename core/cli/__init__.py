@@ -73,13 +73,13 @@ from core.cli.startup import (
 from core.cli.tool_handlers import (
     _build_tool_handlers as _build_tool_handlers,
 )
-from core.cli.ui.console import console
-from core.cli.ui.status import GeodeStatus
 from core.config import settings
 from core.hooks import HookEvent, HookSystem
 from core.llm.commentary import (
     generate_commentary,
 )
+from core.ui.console import console
+from core.ui.status import GeodeStatus
 
 log = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ app.add_typer(skill_app, name="skill")
 
 def _render_welcome_brand() -> None:
     """Render animated Claude Code-style branding with axolotl mascot."""
-    from core.cli.ui.mascot import play_mascot_animation
+    from core.ui.mascot import play_mascot_animation
 
     cwd = str(Path.cwd())
     play_mascot_animation(version=__version__, model=settings.model, cwd=cwd)
@@ -277,7 +277,7 @@ def _handle_command(
     action = resolve_action(cmd)
 
     if action == "quit":
-        from core.cli.ui.agentic_ui import render_session_cost_summary
+        from core.ui.agentic_ui import render_session_cost_summary
 
         render_session_cost_summary()
         console.print("  [muted]Goodbye.[/muted]\n")
@@ -790,7 +790,7 @@ def _thin_interactive_loop(
                 continue
 
             # Free text → relay as prompt (client-side direct rendering)
-            from core.cli.ui.event_renderer import EventRenderer
+            from core.ui.event_renderer import EventRenderer
 
             _renderer = EventRenderer()
             _stream_started = False
@@ -914,7 +914,7 @@ def main(
         from core.cli.ipc_client import is_serve_running, start_serve_if_needed
 
         if not is_serve_running():
-            from core.cli.ui.status import TextSpinner
+            from core.ui.status import TextSpinner
 
             spinner = TextSpinner("Starting serve...")
             spinner.start()

@@ -26,7 +26,7 @@ from dataclasses import dataclass
 
 from rich.text import Text
 
-from core.cli.ui.console import console
+from core.ui.console import console
 
 _G = "mascot.gills"
 _B = "mascot.body"

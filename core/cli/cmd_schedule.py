@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any as _Any
 
-from core.cli.ui.console import console
+from core.ui.console import console
 
 
 def _format_schedule_desc(job: _Any) -> str:

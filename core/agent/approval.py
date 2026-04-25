@@ -20,7 +20,7 @@ from core.agent.safety_constants import (
     SAFE_BASH_PREFIXES,
     WRITE_TOOLS,
 )
-from core.cli.ui.console import console
+from core.ui.console import console
 
 if TYPE_CHECKING:
     from core.hooks import HookSystem

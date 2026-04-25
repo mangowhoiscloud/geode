@@ -189,7 +189,7 @@ class TestUpdateModelIntegration:
         loop = _make_loop(ctx, model="claude-opus-4-6")
         before = check_context(ctx.messages, "glm-5").estimated_tokens
 
-        with patch("core.cli.ui.agentic_ui.update_session_model"):
+        with patch("core.ui.agentic_ui.update_session_model"):
             loop.update_model("glm-5", "zhipuai")
 
         after = check_context(ctx.messages, "glm-5").estimated_tokens
@@ -199,7 +199,7 @@ class TestUpdateModelIntegration:
         ctx = ConversationContext()  # empty
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        with patch("core.cli.ui.agentic_ui.update_session_model"):
+        with patch("core.ui.agentic_ui.update_session_model"):
             loop.update_model("glm-5", "zhipuai")
         # No crash
 
@@ -214,7 +214,7 @@ class TestUpdateModelIntegration:
         old = settings.model
         try:
             settings.model = "glm-5"
-            with patch("core.cli.ui.agentic_ui.update_session_model"):
+            with patch("core.ui.agentic_ui.update_session_model"):
                 loop._sync_model_from_settings()
             assert loop.model == "glm-5"
         finally:

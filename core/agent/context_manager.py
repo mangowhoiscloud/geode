@@ -323,7 +323,7 @@ class ContextWindowManager:
         if self._quiet:
             return
         try:
-            from core.cli.ui.agentic_ui import render_context_event
+            from core.ui.agentic_ui import render_context_event
 
             render_context_event(event_type, original_count=original_count, new_count=new_count)
         except Exception:

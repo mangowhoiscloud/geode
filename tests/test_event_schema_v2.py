@@ -21,7 +21,7 @@ class TestAgenticLoopEmitters:
 
     @pytest.fixture(autouse=True)
     def _setup_writer(self) -> None:
-        from core.cli.ui.agentic_ui import _ipc_writer_local
+        from core.ui.agentic_ui import _ipc_writer_local
 
         self.mock_writer = MagicMock()
         _ipc_writer_local.writer = self.mock_writer
@@ -29,7 +29,7 @@ class TestAgenticLoopEmitters:
         _ipc_writer_local.writer = None
 
     def test_emit_model_escalation(self) -> None:
-        from core.cli.ui.agentic_ui import emit_model_escalation
+        from core.ui.agentic_ui import emit_model_escalation
 
         emit_model_escalation("claude-opus-4-6", "claude-sonnet-4-6", 2)
         self.mock_writer.send_event.assert_called_once_with(
@@ -40,7 +40,7 @@ class TestAgenticLoopEmitters:
         )
 
     def test_emit_cost_budget_exceeded(self) -> None:
-        from core.cli.ui.agentic_ui import emit_cost_budget_exceeded
+        from core.ui.agentic_ui import emit_cost_budget_exceeded
 
         emit_cost_budget_exceeded(1.0, 1.25)
         self.mock_writer.send_event.assert_called_once_with(
@@ -50,7 +50,7 @@ class TestAgenticLoopEmitters:
         )
 
     def test_emit_time_budget_expired(self) -> None:
-        from core.cli.ui.agentic_ui import emit_time_budget_expired
+        from core.ui.agentic_ui import emit_time_budget_expired
 
         emit_time_budget_expired(300.0, 305.0, 5)
         self.mock_writer.send_event.assert_called_once_with(
@@ -61,7 +61,7 @@ class TestAgenticLoopEmitters:
         )
 
     def test_emit_convergence_detected(self) -> None:
-        from core.cli.ui.agentic_ui import emit_convergence_detected
+        from core.ui.agentic_ui import emit_convergence_detected
 
         emit_convergence_detected("timeout", 3)
         self.mock_writer.send_event.assert_called_once_with(
@@ -71,7 +71,7 @@ class TestAgenticLoopEmitters:
         )
 
     def test_emit_goal_decomposition(self) -> None:
-        from core.cli.ui.agentic_ui import emit_goal_decomposition
+        from core.ui.agentic_ui import emit_goal_decomposition
 
         steps = ["Search web", "Summarize results"]
         emit_goal_decomposition(steps)
@@ -82,7 +82,7 @@ class TestAgenticLoopEmitters:
         )
 
     def test_emit_tool_backpressure(self) -> None:
-        from core.cli.ui.agentic_ui import emit_tool_backpressure
+        from core.ui.agentic_ui import emit_tool_backpressure
 
         emit_tool_backpressure(3)
         self.mock_writer.send_event.assert_called_once_with(
@@ -91,7 +91,7 @@ class TestAgenticLoopEmitters:
         )
 
     def test_emit_tool_diversity_forced(self) -> None:
-        from core.cli.ui.agentic_ui import emit_tool_diversity_forced
+        from core.ui.agentic_ui import emit_tool_diversity_forced
 
         emit_tool_diversity_forced("web_search", 5)
         self.mock_writer.send_event.assert_called_once_with(
@@ -101,7 +101,7 @@ class TestAgenticLoopEmitters:
         )
 
     def test_emit_model_switched(self) -> None:
-        from core.cli.ui.agentic_ui import emit_model_switched
+        from core.ui.agentic_ui import emit_model_switched
 
         emit_model_switched("opus", "sonnet", "user_switch")
         self.mock_writer.send_event.assert_called_once_with(
@@ -112,7 +112,7 @@ class TestAgenticLoopEmitters:
         )
 
     def test_emit_checkpoint_saved(self) -> None:
-        from core.cli.ui.agentic_ui import emit_checkpoint_saved
+        from core.ui.agentic_ui import emit_checkpoint_saved
 
         emit_checkpoint_saved("s-abc123", 5)
         self.mock_writer.send_event.assert_called_once_with(
@@ -127,7 +127,7 @@ class TestPipelineEmitters:
 
     @pytest.fixture(autouse=True)
     def _setup_writer(self) -> None:
-        from core.cli.ui.agentic_ui import _ipc_writer_local
+        from core.ui.agentic_ui import _ipc_writer_local
 
         self.mock_writer = MagicMock()
         _ipc_writer_local.writer = self.mock_writer
@@ -135,7 +135,7 @@ class TestPipelineEmitters:
         _ipc_writer_local.writer = None
 
     def test_emit_pipeline_gather(self) -> None:
-        from core.cli.ui.agentic_ui import emit_pipeline_gather
+        from core.ui.agentic_ui import emit_pipeline_gather
 
         emit_pipeline_gather(
             {
@@ -152,7 +152,7 @@ class TestPipelineEmitters:
         assert call_args[1]["ip_name"] == "Berserk"
 
     def test_emit_pipeline_score(self) -> None:
-        from core.cli.ui.agentic_ui import emit_pipeline_score
+        from core.ui.agentic_ui import emit_pipeline_score
 
         emit_pipeline_score(81.2, {"psm": 85.0}, 92.0, "S")
         self.mock_writer.send_event.assert_called_once_with(
@@ -167,7 +167,7 @@ class TestPipelineEmitters:
         )
 
     def test_emit_feedback_loop(self) -> None:
-        from core.cli.ui.agentic_ui import emit_feedback_loop
+        from core.ui.agentic_ui import emit_feedback_loop
 
         emit_feedback_loop(2, 55.0, 70.0)
         self.mock_writer.send_event.assert_called_once_with(
@@ -178,7 +178,7 @@ class TestPipelineEmitters:
         )
 
     def test_emit_node_skipped(self) -> None:
-        from core.cli.ui.agentic_ui import emit_node_skipped
+        from core.ui.agentic_ui import emit_node_skipped
 
         emit_node_skipped("verification", "extreme score")
         self.mock_writer.send_event.assert_called_once_with(
@@ -188,7 +188,7 @@ class TestPipelineEmitters:
         )
 
     def test_emit_pipeline_verification(self) -> None:
-        from core.cli.ui.agentic_ui import emit_pipeline_verification
+        from core.ui.agentic_ui import emit_pipeline_verification
 
         emit_pipeline_verification(True, False)
         self.mock_writer.send_event.assert_called_once_with(
@@ -200,10 +200,10 @@ class TestPipelineEmitters:
 
     def test_no_writer_no_crash(self) -> None:
         """When no IPC writer, pipeline emitters should not crash."""
-        from core.cli.ui.agentic_ui import _ipc_writer_local
+        from core.ui.agentic_ui import _ipc_writer_local
 
         _ipc_writer_local.writer = None
-        from core.cli.ui.agentic_ui import emit_pipeline_gather
+        from core.ui.agentic_ui import emit_pipeline_gather
 
         emit_pipeline_gather({"ip_name": "X"}, {"dau_current": 0})  # no crash
 
@@ -213,7 +213,7 @@ class TestEventRendererV2:
 
     @pytest.fixture()
     def renderer(self) -> Any:
-        from core.cli.ui.event_renderer import EventRenderer
+        from core.ui.event_renderer import EventRenderer
 
         r = EventRenderer()
         r._out = io.StringIO()

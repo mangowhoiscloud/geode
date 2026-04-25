@@ -27,8 +27,6 @@ from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
 )
-from core.cli.ui.agentic_ui import OperationLogger
-from core.cli.ui.status import TextSpinner
 from core.config import (
     ANTHROPIC_PRIMARY,
     _resolve_provider,
@@ -43,6 +41,8 @@ from core.llm.router import (
     resolve_agentic_adapter,
 )
 from core.tools.base import load_all_tool_definitions
+from core.ui.agentic_ui import OperationLogger
+from core.ui.status import TextSpinner
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
@@ -299,7 +299,7 @@ class AgenticLoop:
             )
             self._checkpoint.save(state)
 
-            from core.cli.ui.agentic_ui import emit_checkpoint_saved
+            from core.ui.agentic_ui import emit_checkpoint_saved
 
             emit_checkpoint_saved(self._session_id, round_idx)
         except Exception:
@@ -483,14 +483,14 @@ class AgenticLoop:
         self._tool_processor._model = model
 
         # Sync SessionMeter so "Worked for" status line shows the correct model
-        from core.cli.ui.agentic_ui import update_session_model
+        from core.ui.agentic_ui import update_session_model
 
         update_session_model(model)
         log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
 
         # Fire MODEL_SWITCHED hook + IPC event for observability
         if old_model != model:
-            from core.cli.ui.agentic_ui import emit_model_switched
+            from core.ui.agentic_ui import emit_model_switched
 
             emit_model_switched(old_model, model, reason)
             if self._hooks:
@@ -595,7 +595,7 @@ class AgenticLoop:
         try:
             decomposition_hint = self._try_decompose(user_input)
         except BillingError as exc:
-            from core.cli.ui.agentic_ui import emit_billing_error
+            from core.ui.agentic_ui import emit_billing_error
 
             emit_billing_error(str(exc))
             return AgenticResult(
@@ -703,7 +703,7 @@ class AgenticLoop:
 
             # Show spinner while waiting for LLM response
             # IPC mode: send structured event; direct mode: TextSpinner
-            from core.cli.ui.agentic_ui import _ipc_writer_local
+            from core.ui.agentic_ui import _ipc_writer_local
 
             _ipc_writer = getattr(_ipc_writer_local, "writer", None)
             if _ipc_writer is not None and not self._quiet:
@@ -717,7 +717,7 @@ class AgenticLoop:
                 response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
             except BillingError as exc:
                 _spinner.stop()
-                from core.cli.ui.agentic_ui import emit_billing_error
+                from core.ui.agentic_ui import emit_billing_error
 
                 emit_billing_error(str(exc))
                 return AgenticResult(
@@ -814,7 +814,7 @@ class AgenticLoop:
                     # so skip intra-provider fallback and go straight to cross-provider.
                     if _et == "auth":
                         if not self._quiet:
-                            from core.cli.ui.agentic_ui import emit_llm_error
+                            from core.ui.agentic_ui import emit_llm_error
 
                             emit_llm_error(_et, _sev, _hint, self.model, self._provider)
                         # v0.51.0: inject LLM-readable credential breadcrumb so
@@ -824,7 +824,7 @@ class AgenticLoop:
                         old_model = self.model
                         escalated = self._try_cross_provider_escalation()
                         if escalated:
-                            from core.cli.ui.agentic_ui import emit_model_escalation
+                            from core.ui.agentic_ui import emit_model_escalation
 
                             emit_model_escalation(
                                 old_model, self.model, self._consecutive_llm_failures
@@ -845,7 +845,7 @@ class AgenticLoop:
                     # Non-retryable errors → immediate exit (no retry budget waste)
                     if _et == "bad_request":
                         if not self._quiet:
-                            from core.cli.ui.agentic_ui import emit_llm_error
+                            from core.ui.agentic_ui import emit_llm_error
 
                             emit_llm_error(_et, _sev, _hint, self.model, self._provider)
                         detail = self._last_llm_error or str(adapter_exc)
@@ -858,7 +858,7 @@ class AgenticLoop:
                         return self._finalize_and_return(result, user_input, round_idx + 1)
 
                     if not self._quiet:
-                        from core.cli.ui.agentic_ui import emit_llm_error
+                        from core.ui.agentic_ui import emit_llm_error
 
                         emit_llm_error(
                             _et,
@@ -892,7 +892,7 @@ class AgenticLoop:
                     old_model = self.model
                     escalated = self._try_model_escalation()
                     if escalated:
-                        from core.cli.ui.agentic_ui import emit_model_escalation
+                        from core.ui.agentic_ui import emit_model_escalation
 
                         emit_model_escalation(old_model, self.model, self._consecutive_llm_failures)
                         self._consecutive_llm_failures = 0
@@ -921,7 +921,7 @@ class AgenticLoop:
                     old_model = self.model
                     escalated = self._try_model_escalation()
                     if escalated:
-                        from core.cli.ui.agentic_ui import emit_model_escalation
+                        from core.ui.agentic_ui import emit_model_escalation
 
                         emit_model_escalation(old_model, self.model, self._consecutive_llm_failures)
                         log.info(
@@ -946,7 +946,7 @@ class AgenticLoop:
                         self._LLM_RETRY_CAP,
                     )
                     if not self._quiet:
-                        from core.cli.ui.agentic_ui import emit_llm_retry
+                        from core.ui.agentic_ui import emit_llm_retry
 
                         emit_llm_retry(
                             delay,
@@ -1005,7 +1005,7 @@ class AgenticLoop:
                     ):
                         self._budget_warned = True
                         if not self._quiet:
-                            from core.cli.ui.agentic_ui import emit_budget_warning
+                            from core.ui.agentic_ui import emit_budget_warning
 
                             emit_budget_warning(
                                 self._cost_budget,
@@ -1014,7 +1014,7 @@ class AgenticLoop:
                             )
 
                     if _session_cost >= self._cost_budget:
-                        from core.cli.ui.agentic_ui import emit_cost_budget_exceeded
+                        from core.ui.agentic_ui import emit_cost_budget_exceeded
 
                         emit_cost_budget_exceeded(self._cost_budget, _session_cost)
                         self._op_logger.finalize()
@@ -1076,7 +1076,7 @@ class AgenticLoop:
             self._update_tool_error_tracking(tool_results)
 
             if self._check_convergence_break():
-                from core.cli.ui.agentic_ui import emit_convergence_detected
+                from core.ui.agentic_ui import emit_convergence_detected
 
                 last_err = (
                     self._convergence.recent_errors[-1]
@@ -1099,7 +1099,7 @@ class AgenticLoop:
 
             if self._convergence.total_consecutive_tool_errors >= 3:
                 # Backpressure: inject a cooldown hint
-                from core.cli.ui.agentic_ui import emit_tool_backpressure
+                from core.ui.agentic_ui import emit_tool_backpressure
 
                 emit_tool_backpressure(self._convergence.total_consecutive_tool_errors)
                 await asyncio.sleep(1.0)
@@ -1153,7 +1153,7 @@ class AgenticLoop:
                         tool_results.append(diversity_hint)
                         self._consecutive_tool_tracker.clear()
 
-                        from core.cli.ui.agentic_ui import emit_tool_diversity_forced
+                        from core.ui.agentic_ui import emit_tool_diversity_forced
 
                         emit_tool_diversity_forced(_repeated_tool, 5)
                         log.warning(
@@ -1172,7 +1172,7 @@ class AgenticLoop:
         self._op_logger.finalize()
         elapsed = _time.monotonic() - self._loop_start_time
         if self._time_budget_s > 0 and elapsed >= self._time_budget_s:
-            from core.cli.ui.agentic_ui import emit_time_budget_expired
+            from core.ui.agentic_ui import emit_time_budget_expired
 
             emit_time_budget_expired(self._time_budget_s, elapsed, round_idx)
             reason = "time_budget_expired"
@@ -1303,7 +1303,7 @@ class AgenticLoop:
             plan_text = "\n".join(lines)
 
             # Emit structured event for thin client
-            from core.cli.ui.agentic_ui import emit_goal_decomposition
+            from core.ui.agentic_ui import emit_goal_decomposition
 
             emit_goal_decomposition([g.description for g in result.goals])
             log.info(
@@ -1448,8 +1448,8 @@ class AgenticLoop:
         if not response.usage:
             return
         try:
-            from core.cli.ui.agentic_ui import render_tokens
             from core.llm.token_tracker import get_tracker
+            from core.ui.agentic_ui import render_tokens
 
             in_tok = response.usage.input_tokens
             out_tok = response.usage.output_tokens

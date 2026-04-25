@@ -220,7 +220,7 @@ def login_openai() -> dict[str, Any]:
 
     # Step 2: Surface the code to the user via IPC events (v0.51.1).
     # The thin-client renderer translates these into an in-place rich prompt.
-    from core.cli.ui.agentic_ui import (
+    from core.ui.agentic_ui import (
         emit_oauth_login_failed,
         emit_oauth_login_pending,
         emit_oauth_login_started,
@@ -335,7 +335,7 @@ def login_openai() -> dict[str, Any]:
     store["providers"]["openai"] = creds
     _save_auth_store(store)
 
-    from core.cli.ui.agentic_ui import emit_oauth_login_success
+    from core.ui.agentic_ui import emit_oauth_login_success
 
     emit_oauth_login_success(
         provider=_PROVIDER_LABEL,

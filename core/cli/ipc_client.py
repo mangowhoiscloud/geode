@@ -274,7 +274,7 @@ class IPCClient:
         """Display approval prompt to user."""
         import time
 
-        from core.cli.ui.console import console as c
+        from core.ui.console import console as c
 
         self._restore_terminal()
 

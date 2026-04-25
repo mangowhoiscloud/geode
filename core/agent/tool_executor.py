@@ -21,8 +21,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from core.agent.error_recovery import ErrorRecoveryStrategy
     from core.agent.sub_agent import SubAgentManager
-    from core.cli.ui.agentic_ui import OperationLogger
     from core.hooks import HookResult, HookSystem, InterceptResult
+    from core.ui.agentic_ui import OperationLogger
 
 from core.agent.approval import (
     _write_denial_with_fallback as _write_denial_with_fallback,
@@ -34,7 +34,7 @@ from core.agent.safety_constants import SAFE_BASH_PREFIXES as SAFE_BASH_PREFIXES
 from core.agent.safety_constants import SAFE_TOOLS as SAFE_TOOLS
 from core.agent.safety_constants import WRITE_TOOLS as WRITE_TOOLS
 from core.cli.bash_tool import BashTool
-from core.cli.ui.console import console
+from core.ui.console import console
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def _tool_spinner(label: str) -> Iterator[None]:
     Running both causes ANSI cursor-up race → UI corruption.
     """
     # IPC mode: ToolCallTracker on thin CLI handles the spinner
-    from core.cli.ui.agentic_ui import _ipc_writer_local
+    from core.ui.agentic_ui import _ipc_writer_local
 
     if getattr(_ipc_writer_local, "writer", None) is not None:
         yield
@@ -341,7 +341,7 @@ class ToolExecutor:
             nonlocal completed_count
             completed_count += 1
             task_elapsed = time.time() - _task_starts.get(result.task_id, _start_ts)
-            from core.cli.ui.agentic_ui import render_subagent_progress
+            from core.ui.agentic_ui import render_subagent_progress
 
             render_subagent_progress(
                 completed_count,
@@ -357,7 +357,7 @@ class ToolExecutor:
         )
 
         # Final summary line
-        from core.cli.ui.agentic_ui import render_subagent_complete
+        from core.ui.agentic_ui import render_subagent_complete
 
         render_subagent_complete(len(results), time.time() - _start_ts)
 

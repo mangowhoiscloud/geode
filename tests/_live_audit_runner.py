@@ -15,7 +15,7 @@ import sys
 os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
 os.environ.setdefault("LANGCHAIN_PROJECT", "geode")
 
-from core.cli.ui.console import console
+from core.ui.console import console
 
 console.file = io.StringIO()
 

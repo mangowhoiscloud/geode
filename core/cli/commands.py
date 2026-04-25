@@ -21,7 +21,6 @@ from core.auth.profiles import AuthProfile, ProfileStore
 from core.cli._helpers import is_glm_key as _is_glm_key
 from core.cli._helpers import mask_key as _mask_key
 from core.cli._helpers import upsert_env as _upsert_env
-from core.cli.ui.console import console
 from core.config import (
     ANTHROPIC_BUDGET,
     ANTHROPIC_PRIMARY,
@@ -29,6 +28,7 @@ from core.config import (
     GLM_PRIMARY,
     OPENAI_PRIMARY,
 )
+from core.ui.console import console
 
 log = logging.getLogger(__name__)
 
@@ -1165,7 +1165,7 @@ def cmd_skill_invoke(skill_registry: _Any, arg: str, *, agentic_ref: _Any = None
         if _loop is not None:
             prompt = f"[skill:{name}] {rendered}"
             result = _loop.run(prompt)
-            from core.cli.ui.agentic_ui import render_status_line
+            from core.ui.agentic_ui import render_status_line
 
             render_status_line()
         else:
@@ -1779,7 +1779,7 @@ def cmd_clear(args: str) -> None:
         # v0.51.1: in IPC mode, native input() blocks the daemon and never
         # reaches the thin client REPL. Detect via the IPC writer thread-local
         # and require an explicit --force flag instead.
-        from core.cli.ui.agentic_ui import _ipc_writer_local
+        from core.ui.agentic_ui import _ipc_writer_local
 
         in_ipc_mode = getattr(_ipc_writer_local, "writer", None) is not None
         if in_ipc_mode:
