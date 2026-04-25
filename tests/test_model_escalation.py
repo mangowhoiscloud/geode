@@ -113,15 +113,16 @@ class TestModelEscalation:
         assert loop.model == ANTHROPIC_PRIMARY
         assert loop._provider == "anthropic"
 
-    def test_cross_provider_glm_to_openai(self) -> None:
-        """When GLM chain is exhausted, escalate to OpenAI."""
+    def test_glm_does_not_auto_escalate_cross_provider(self) -> None:
+        """v0.50.0: GLM Coding Plan auth errors must not silently divert to a
+        metered OpenAI key. CROSS_PROVIDER_FALLBACK['glm'] is now empty;
+        cross-plan jumps require explicit user confirmation (Phase 5)."""
         last_glm = GLM_FALLBACK_CHAIN[-1]
         loop = _make_loop(model=last_glm, provider="glm")
 
         result = loop._try_model_escalation()
-        assert result is True
-        assert loop.model == OPENAI_PRIMARY
-        assert loop._provider == "openai"
+        assert result is False
+        assert loop._provider == "glm"
 
     def test_escalation_returns_false_when_fully_exhausted(self) -> None:
         """Returns False when both intra-chain and cross-provider are exhausted."""

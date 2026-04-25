@@ -109,7 +109,7 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "bad_request_error": _openai_bad_request,
         "circuit_breaker": lambda: _glm_cb,
     },
-    "codex": {
+    "openai-codex": {
         "get_client": lambda: __import__(
             "core.llm.providers.codex", fromlist=["_get_codex_client"]
         )._get_codex_client(),

@@ -80,7 +80,14 @@ def _brand_line(
     model: str,
     cwd: str,
 ) -> Text:
-    """Build the full 3-line brand block."""
+    """Build the full 3-line brand block.
+
+    A 4th line is appended when an active plan is registered for the
+    current model (Phase 5 v0.50.0): ``Plan: GLM Coding Lite (used 23/80,
+    resets 2h 14m)`` so users see how much subscription quota they have
+    left at a glance — the same role Claude Code's account/Usage tab
+    plays.
+    """
     pad = "                     "  # align lines 2-3 under text start
 
     t = Text()
@@ -100,7 +107,43 @@ def _brand_line(
     # Line 3: cwd
     t.append(f"  {pad}{cwd}", "dim")
 
+    # Line 4 (optional): active plan summary
+    plan_summary = _resolve_active_plan_summary(model)
+    if plan_summary:
+        t.append("\n")
+        t.append(f"  {pad}{plan_summary}", "dim")
+
     return t
+
+
+def _resolve_active_plan_summary(model: str) -> str:
+    """Render a one-line plan/quota label for the mascot block.
+
+    Returns "" when no plan is registered or routing isn't initialised.
+    """
+    try:
+        from core.gateway.auth.plan_registry import resolve_routing
+
+        target = resolve_routing(model)
+        if target is None:
+            return ""
+        plan = target.plan
+        label = f"Plan: {plan.display_name}"
+        if plan.quota is None:
+            return label
+        from core.gateway.auth.plan_registry import get_plan_registry
+
+        usage = get_plan_registry().usage_for(plan.id)
+        remaining = usage.remaining_in_window(plan)
+        used = int(usage.weighted_calls)
+        if usage.next_reset_at > 0:
+            mins = max(0, usage.seconds_until_reset() // 60)
+            reset_label = f"resets {mins}m"
+        else:
+            reset_label = f"window {plan.quota.window_s // 3600}h"
+        return f"{label} (used {used}/{plan.quota.max_calls} · {remaining} left · {reset_label})"
+    except Exception:
+        return ""
 
 
 # -- Public API -----------------------------------------------------------

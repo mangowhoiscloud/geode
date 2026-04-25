@@ -28,8 +28,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.50.0] — 2026-04-25
+
+### Added
+- **Plan + ProviderSpec credential model** — first-class `Plan` entity with `PlanKind` (PAYG / SUBSCRIPTION / OAUTH_BORROWED / CLOUD_PROVIDER), per-Plan endpoint binding, and optional `Quota(window_s, max_calls, model_weights)`. Built-in templates for GLM Coding Lite/Pro/Max. (`core/gateway/auth/plans.py`, `core/llm/registry.py`)
+- **`/login` unified credentials command** — replaces split `/key` + `/auth` + `/login` UX with a single dashboard + verb hierarchy modeled on Hermes (`hermes auth ...`) and Claude Code (`/login` / `/status`). Subcommands: `add` (interactive wizard), `oauth openai`, `set-key`, `use`, `route`, `remove`, `quota`, `status`. The bare `/login` shows a unified view of Plans + Profiles + Routing + OAuth credentials. (`core/cli/commands.py`)
+- **`~/.geode/auth.toml` persistence** — Plans and bound profiles survive process restarts in a single TOML file (0600 perms). First boot auto-migrates `.env` PAYG keys into PAYG plans. `GEODE_AUTH_TOML` env var redirects the path for testing/sandboxing. (`core/gateway/auth/auth_toml.py`)
+- **Mascot plan line** — startup brand block shows the active subscription quota: `Plan: GLM Coding Lite (used 23/80 · 57 left · resets 134m)`. Hidden when no quota-bearing plan is registered. (`core/cli/ui/mascot.py`)
+- **`AuthError` + `ERROR_HINTS`** — structured auth errors map to user-actionable hints (subscription upgrade URLs, `/login set-key` invocations, OAuth refresh prompts). Hermes `format_auth_error` pattern. (`core/gateway/auth/errors.py`)
+- **Model-switch reason in IPC events** — `MODEL_SWITCHED` events now surface the trigger (`rate_limit`, `auth_cross_provider`, `failure_escalation`) inline so users can tell quota exhaustion apart from auth errors at a glance. (`core/cli/ui/event_renderer.py`)
+
 ### Fixed
 - **Anthropic sampling parameters on adaptive-thinking models** — `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6` rejected requests with `temperature` set ("temperature is deprecated for this model" → 400 BadRequest). Sampling parameters are now omitted on adaptive-thinking models per Anthropic's Opus 4.7 breaking change. `claude-opus-4-7` also registered for the context-management + compaction beta. Fixes the `/model` hot-swap to Opus 4.7. Source: https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7
+- **Codex OAuth poisoning general OpenAI calls** — Codex CLI OAuth was registered as `provider="openai"`, so `ProfileRotator.resolve("openai")` returned the Codex token for every GPT call. Codex tokens lack `model.request` scope on `api.openai.com`, causing 403 + slow API-key fallback. The provider variant is now `openai-codex` with its own endpoint (`chatgpt.com/backend-api/codex`). (`core/runtime_wiring/infra.py`, `core/llm/providers/codex.py`)
+- **GLM Coding Plan endpoint** — `GLM_BASE_URL` pointed at the metered PAYG endpoint (`api.z.ai/api/paas/v4`), so Coding Plan keys silently bypassed the subscription quota. Default flipped to `api.z.ai/api/coding/paas/v4`; PAYG endpoint preserved as `GLM_PAYG_BASE_URL`. (`core/config.py`, `core/llm/providers/glm.py`)
+- **Dual ProfileStore drift** — CLI (`/auth`) and runtime LLM dispatch held separate `ProfileStore` instances. Credentials added through `/auth add` were invisible to `ProfileRotator.resolve()`. Single singleton via `runtime_wiring.infra.ensure_profile_store()`. (`core/runtime_wiring/infra.py`, `core/cli/commands.py`)
+- **Provider label fragmentation (`zhipuai` vs `glm`)** — UI store used `provider="zhipuai"` while dispatch keyed off `provider="glm"`. Profile rotator could never find UI-added GLM keys. Normalized to `glm`. (`core/cli/commands.py`)
+- **`MODEL_PROFILES` mislabel** — `gpt-5.4-mini` was advertised as `Codex (Plus)` even though it routes to plain `openai` (PAYG). Users believed they were on the Plus subscription while being billed metered. Now labeled `OpenAI`. (`core/cli/commands.py`)
+
+### Changed
+- **Cross-provider auto-escalation disabled for `glm` and `openai-codex`** — `CROSS_PROVIDER_FALLBACK["glm"]` and `["openai-codex"]` are now empty. A GLM Coding Plan auth error no longer silently diverts traffic to a metered OpenAI key. Cross-plan jumps will return as an explicit user-confirmed action in a future release. (`core/llm/adapters.py`)
+- **`/key` and `/auth` are aliases that surface the unified `/login` dashboard** — bare `/key` redirects to `/login`. Setting an API key still works (`/key sk-...`) and now also seeds a PAYG plan into the registry so the credential is visible in `/login`.
+
+### Architecture
+- **Provider variant registry** — `core/llm/registry.py` introduces `ProviderSpec(id, display_name, default_base_url, auth_type, extra_headers_factory)` modeled on Hermes' `ProviderConfig`. Five variants registered: `anthropic`, `openai`, `openai-codex`, `glm`, `glm-coding`. The Codex variant carries the Cloudflare-bypass header factory.
+- **`AuthProfile.plan_id`** — additive FK linking a profile to a Plan. `base_url_override` allows per-profile endpoint overrides (China-mainland mirrors etc.). Backward compatible — env-loaded profiles default to a synthetic PAYG Plan.
 
 ## [0.49.1] — 2026-04-23
 
