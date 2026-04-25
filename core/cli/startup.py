@@ -190,13 +190,16 @@ def key_registration_gate() -> str | None:
 
     console.print(
         Panel(
-            "[bold]GEODE requires at least one LLM API key to operate.[/bold]\n\n"
-            "  [cyan]/key <sk-ant-...>[/cyan]        — Anthropic\n"
-            "  [cyan]/key openai <sk-...>[/cyan]     — OpenAI\n"
-            "  [cyan]/key glm <key>[/cyan]           — ZhipuAI (GLM)\n"
+            "[bold]GEODE needs a credential to talk to an LLM.[/bold]\n\n"
+            "  [cyan]/login add[/cyan]                — Interactive wizard "
+            "(plans + keys + OAuth)\n"
+            "  [cyan]/login oauth openai[/cyan]      — Codex OAuth (Plus quota)\n"
+            "  [cyan]/key <sk-ant-...>[/cyan]        — Quick paste (Anthropic)\n"
+            "  [cyan]/key openai <sk-...>[/cyan]     — Quick paste (OpenAI)\n"
+            "  [cyan]/key glm <key>[/cyan]           — Quick paste (GLM PAYG)\n"
             "  [cyan]/quit[/cyan]                    — exit\n\n"
             "[muted]Or just paste an API key directly.[/muted]",
-            title="API Key Required",
+            title="Credentials Required",
             border_style="yellow",
         )
     )
@@ -207,6 +210,15 @@ def key_registration_gate() -> str | None:
             return None
         if user_input.lower() in ("/quit", "quit", "exit"):
             return None
+
+        # /login add — full wizard takes precedence
+        if user_input.lower().startswith("/login"):
+            from core.cli.commands import cmd_login
+
+            cmd_login(user_input[len("/login"):].strip())
+            if _has_any_llm_key():
+                return "configured"
+            continue
 
         # /key command
         if user_input.startswith("/key "):

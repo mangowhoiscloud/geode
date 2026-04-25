@@ -5,6 +5,7 @@ OpenClaw-inspired Binding Router pattern: static command → handler mapping.
 
 from __future__ import annotations
 
+import logging
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,8 @@ from core.config import (
     OPENAI_PRIMARY,
 )
 from core.gateway.auth.profiles import ProfileStore
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Model Registry (OpenClaw Auth Profile Rotation pattern)
@@ -136,12 +139,12 @@ def show_help() -> None:
     console.print("  [label]/search[/label] <query>     — Search IPs by keyword")
     console.print("  [label]/list[/label]               — Show available IPs")
     console.print("  [label]/verbose[/label]            — Toggle verbose mode")
-    console.print("  [label]/key[/label] <value>        — Set API key (auto-detect provider)")
-    console.print("  [label]/key openai[/label] <value> — Set OpenAI API key")
-    console.print("  [label]/key glm[/label] <value>    — Set ZhipuAI API key")
-    console.print("  [label]/login[/label] <provider>   — OAuth login (openai, status)")
+    console.print("  [label]/login[/label]              — Plans + credentials dashboard (unified)")
+    console.print("  [label]/login add[/label]          — Interactive plan/key wizard")
+    console.print("  [label]/login oauth openai[/label] — Codex OAuth (Plus quota)")
+    console.print("  [label]/key[/label] <value>        — Quick PAYG API key (legacy alias)")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
-    console.print("  [label]/auth[/label]               — Manage auth profiles")
+    console.print("  [label]/auth[/label]               — Auth profile rotator (legacy)")
     console.print("  [label]/generate[/label] [count]   — Generate synthetic demo data")
     console.print("  [label]/report[/label] <IP> [fmt]  — Generate report (md/html/json)")
     console.print("  [label]/batch[/label] <IP1> <IP2>  — Batch analyze multiple IPs")
@@ -178,31 +181,20 @@ def cmd_list() -> None:
 
 
 def cmd_key(args: str) -> bool:
-    """Handle /key command. Returns True if readiness should be rechecked."""
+    """Handle /key command (legacy; prefer /login).
+
+    Returns True if readiness should be rechecked.
+    """
     from core.config import settings
 
     parts = args.split(None, 1) if args else []
 
-    # /key (no args) → show current status
+    # /key (no args) → defer to the unified /login dashboard
     if not parts:
-        anthro = (
-            _mask_key(settings.anthropic_api_key)
-            if settings.anthropic_api_key
-            else "[muted]not set[/muted]"
+        console.print(
+            "\n  [muted]/key now redirects to the unified /login dashboard.[/muted]"
         )
-        openai = (
-            _mask_key(settings.openai_api_key)
-            if settings.openai_api_key
-            else "[muted]not set[/muted]"
-        )
-        zhipu = (
-            _mask_key(settings.zai_api_key) if settings.zai_api_key else "[muted]not set[/muted]"
-        )
-        console.print()
-        console.print(f"  [label]Anthropic[/label]  {anthro}")
-        console.print(f"  [label]OpenAI[/label]    {openai}")
-        console.print(f"  [label]ZhipuAI[/label]   {zhipu}")
-        console.print()
+        cmd_login("")
         return False
 
     # /key openai <value>
@@ -246,6 +238,7 @@ def cmd_key(args: str) -> bool:
     if value.startswith("sk-ant-"):
         settings.anthropic_api_key = value
         _upsert_env("ANTHROPIC_API_KEY", value)
+        _seed_payg_plan_from_key("anthropic", value)
         console.print(f"  [success]Anthropic API key set[/success]  {_mask_key(value)}")
     elif value.startswith("sk-proj-") or value.startswith("sk-"):
         settings.openai_api_key = value
@@ -256,6 +249,7 @@ def cmd_key(args: str) -> bool:
             reset_openai_client()
         except ImportError:
             pass
+        _seed_payg_plan_from_key("openai", value)
         console.print(f"  [success]OpenAI API key set[/success]  {_mask_key(value)}")
     elif _is_glm_key(value):
         settings.zai_api_key = value
@@ -266,18 +260,62 @@ def cmd_key(args: str) -> bool:
             reset_glm_client()
         except ImportError:
             pass
-        console.print(f"  [success]ZhipuAI API key set[/success]  {_mask_key(value)}")
+        _seed_payg_plan_from_key("glm", value)
+        console.print(f"  [success]GLM API key set[/success]  {_mask_key(value)}")
     else:
         console.print(
             "  [warning]Unrecognized key prefix. Use:[/warning]\n"
             "  [muted]/key <sk-ant-...>          → Anthropic[/muted]\n"
             "  [muted]/key openai <sk-proj-...>  → OpenAI[/muted]\n"
-            "  [muted]/key glm <key>             → ZhipuAI[/muted]"
+            "  [muted]/key glm <key>             → GLM[/muted]\n"
+            "  [muted]Tip: use /login add for subscription plans (Coding Lite/Pro/Max).[/muted]"
         )
         console.print()
         return False
+    console.print(
+        "  [muted]Tip: /login add to register a Coding Plan "
+        "(cheaper than PAYG for heavy use).[/muted]"
+    )
     console.print()
     return True
+
+
+def _seed_payg_plan_from_key(provider: str, key: str) -> None:
+    """Mirror a freshly-set env API key into the Plan registry as PAYG.
+
+    Keeps `/login` dashboard in sync with `/key` writes so users see the
+    same credential in both views (Phase 1 single-store + Phase 2 plans).
+    """
+    try:
+        from core.gateway.auth.plan_registry import get_plan_registry
+        from core.gateway.auth.plans import default_plan_for_payg
+        from core.gateway.auth.profiles import AuthProfile, CredentialType
+        from core.runtime_wiring.infra import ensure_profile_store
+
+        registry = get_plan_registry()
+        plan = registry.get(f"{provider}-payg") or default_plan_for_payg(provider, key)
+        registry.add(plan)
+        store = ensure_profile_store()
+        name = f"{plan.id}:env"
+        existing = store.get(name)
+        if existing is not None:
+            existing.key = key
+            existing.plan_id = plan.id
+            existing.error_count = 0
+            existing.cooldown_until = 0.0
+        else:
+            store.add(
+                AuthProfile(
+                    name=name,
+                    provider=plan.provider,
+                    credential_type=CredentialType.API_KEY,
+                    key=key,
+                    plan_id=plan.id,
+                )
+            )
+    except Exception:
+        # The legacy /key path must not fail because of plan-seeding.
+        log.debug("Plan seed from /key failed", exc_info=True)
 
 
 def _check_provider_key(selected: ModelProfile) -> None:
@@ -1822,65 +1860,553 @@ def cmd_tasks(args: str) -> None:
 
 
 def cmd_login(args: str) -> None:
-    """Handle /login command — OAuth login for LLM providers.
+    """Handle /login — unified credentials/plans command (v0.50.0+).
 
-    /login openai    → OpenAI Codex device code OAuth flow
-    /login status    → Show all auth credentials status
-    /login           → Show usage help
+    Subcommands (mirrors Hermes `auth` + Claude Code `/login`/`/status`):
+
+      /login                — show plans, profiles, routing, quota
+      /login add            — interactive wizard (kind → provider → key/OAuth)
+      /login oauth <prov>   — OAuth device flow (currently: openai/codex)
+      /login set-key <plan> <key>
+      /login use <plan>     — pin a plan as the active one for its provider
+      /login remove <plan>
+      /login route <model> <plan> [<plan>...]
+      /login quota          — per-plan usage breakdown
+      /login status         — legacy alias of bare /login
     """
-    arg = args.strip().lower()
-
-    if not arg:
-        console.print("\n  [label]/login[/label] — OAuth login for LLM providers\n")
-        console.print("  [label]/login openai[/label]   — OpenAI Codex OAuth (Plus quota)")
-        console.print("  [label]/login status[/label]   — Show auth credentials status\n")
+    raw = args.strip()
+    if not raw:
+        _login_show_status()
         return
 
-    if arg == "status":
-        from core.gateway.auth.oauth_login import get_auth_status
+    parts = raw.split(None, 1)
+    sub = parts[0].lower()
+    rest = parts[1] if len(parts) > 1 else ""
 
-        statuses = get_auth_status()
-        if not statuses:
-            console.print("\n  No OAuth credentials found.\n")
-            console.print("  Run [label]/login openai[/label] to authenticate.\n")
-            return
+    if sub in ("status", "list", "ls"):
+        _login_show_status()
+        return
+    if sub in ("add", "new"):
+        _login_add_interactive(rest)
+        return
+    if sub in ("oauth", "openai"):
+        # `/login openai` is preserved for backwards compatibility — it always
+        # ran the Codex device-code flow even before v0.50.0.
+        target = rest.strip().lower() or "openai"
+        _login_oauth(target)
+        return
+    if sub in ("set-key", "setkey", "key"):
+        _login_set_key(rest)
+        return
+    if sub == "use":
+        _login_use(rest)
+        return
+    if sub in ("remove", "rm", "delete"):
+        _login_remove(rest)
+        return
+    if sub == "route":
+        _login_route(rest)
+        return
+    if sub == "quota":
+        _login_quota()
+        return
+    if sub in ("help", "?"):
+        _login_help()
+        return
 
-        console.print("\n  [label]Auth Credentials[/label]\n")
-        for s in statuses:
-            status_color = "green" if s["status"] == "active" else "red"
+    console.print(
+        f"\n  [warning]Unknown /login subcommand:[/warning] {sub}\n"
+        "  Run [label]/login help[/label] for the full menu.\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# /login subcommands — implementation
+# ---------------------------------------------------------------------------
+
+
+def _login_help() -> None:
+    console.print(
+        "\n  [header]/login[/header] — credentials & subscription plans\n"
+        "\n"
+        "  [label]/login[/label]                       Show all plans, profiles, routing\n"
+        "  [label]/login add[/label]                   Interactive wizard\n"
+        "  [label]/login oauth openai[/label]          OAuth device flow (Codex Plus)\n"
+        "  [label]/login set-key[/label] <plan> <key>  Update a plan's API key\n"
+        "  [label]/login use[/label] <plan>            Pin a plan as active for its provider\n"
+        "  [label]/login route[/label] <model> <plan>… Bind a model to plan(s) in priority order\n"
+        "  [label]/login remove[/label] <plan>         Delete a plan\n"
+        "  [label]/login quota[/label]                 Per-plan quota / usage\n"
+    )
+
+
+def _login_show_status() -> None:
+    """Render the unified plans + profiles + routing dashboard.
+
+    Combines OpenClaw `/status` (auth-mode badge), Hermes `hermes status`
+    (per-provider expiry + subscription line), and Claude Code Settings
+    Status tab (plan + token source + provider).
+    """
+    from core.gateway.auth.oauth_login import get_auth_status as get_oauth_status
+    from core.gateway.auth.plan_registry import get_plan_registry
+    from core.gateway.auth.profiles import CredentialType
+    from core.runtime_wiring.infra import ensure_profile_store
+
+    store = ensure_profile_store()
+    registry = get_plan_registry()
+    plans = registry.list_all()
+    profiles = store.list_all()
+
+    console.print()
+    console.print("  [header]Plans[/header]")
+    if not plans and not profiles:
+        console.print("  [muted]No plans or credentials registered yet.[/muted]")
+        console.print("  [muted]Run /login add to register a plan, or paste an API key.[/muted]")
+        console.print()
+        return
+
+    if plans:
+        for plan in plans:
+            usage = registry.usage_for(plan.id)
+            tier_label = f" · {plan.subscription_tier}" if plan.subscription_tier else ""
+            quota_label = ""
+            if plan.quota is not None:
+                remaining = usage.remaining_in_window(plan)
+                quota_label = (
+                    f"  [muted]used {int(usage.weighted_calls)}/{plan.quota.max_calls}"
+                    f" ({plan.quota.window_s // 3600}h window, {remaining} left)[/muted]"
+                )
+            bound = [p for p in profiles if p.plan_id == plan.id]
+            mark = "[success]✓[/success]" if bound else "[warning]?[/warning]"
             console.print(
-                f"  [{status_color}]{s['status']:8s}[/{status_color}] "
-                f"{s['provider']:20s} "
-                f"{s['email'] or '-':25s} "
-                f"{s['expires_in']:10s} "
-                f"[muted]({s['source']})[/muted]"
+                f"  {mark} [bold]{plan.id}[/bold]  "
+                f"[muted]{plan.kind.value}[/muted]  {plan.base_url}{tier_label}{quota_label}"
+            )
+    else:
+        console.print("  [muted]No Plans registered. Profiles below run via PAYG defaults.[/muted]")
+    console.print()
+
+    # Profiles section — aggregates env-loaded keys + interactively added
+    console.print("  [header]Profiles[/header]")
+    if not profiles:
+        console.print("  [muted]No credentials. Run /login add or set provider env vars.[/muted]")
+    else:
+        # Group by provider for readability
+        from core.gateway.auth.profiles import AuthProfile as _AP
+
+        by_provider: dict[str, list[_AP]] = {}
+        for p in profiles:
+            by_provider.setdefault(p.provider, []).append(p)
+        for provider in sorted(by_provider.keys()):
+            for p in by_provider[provider]:
+                badge = {
+                    CredentialType.OAUTH: "oauth",
+                    CredentialType.TOKEN: "token",
+                    CredentialType.API_KEY: "api-key",
+                }.get(p.credential_type, "?")
+                plan_id = p.plan_id or "[muted](none)[/muted]"
+                managed = f" · managed:{p.managed_by}" if p.managed_by else ""
+                expiry = ""
+                if p.expires_at:
+                    import time as _t
+
+                    rem = int(p.expires_at - _t.time())
+                    expiry = (
+                        f" · expires {rem // 60}m"
+                        if rem > 0
+                        else " · [error]expired[/error]"
+                    )
+                console.print(
+                    f"  [muted]•[/muted] {p.name:<28} "
+                    f"[muted]{badge:<7}[/muted] {p.masked_key} "
+                    f"plan={plan_id}{managed}{expiry}"
+                )
+    console.print()
+
+    # Routing section
+    routing = registry.all_routing()
+    if routing:
+        console.print("  [header]Routing[/header]")
+        for model, plan_ids in sorted(routing.items()):
+            chain = " → ".join(plan_ids) if plan_ids else "[muted](none)[/muted]"
+            console.print(f"  {model:<24} → {chain}")
+        console.print()
+
+    # OAuth status (shows expiry + email when available)
+    try:
+        oauth = get_oauth_status()
+    except Exception:
+        oauth = []
+    if oauth:
+        console.print("  [header]OAuth (external CLIs)[/header]")
+        for s in oauth:
+            colour = "success" if s.get("status") == "active" else "warning"
+            console.print(
+                f"  [{colour}]{s.get('status', '?'):<8}[/{colour}] "
+                f"{s.get('provider', ''):<20} "
+                f"{s.get('email') or '-':<24} "
+                f"{s.get('expires_in', ''):<10} "
+                f"[muted]({s.get('source', '')})[/muted]"
             )
         console.print()
+
+    console.print(
+        "  [muted]Tip: /login add to register a plan · /login quota for usage detail[/muted]\n"
+    )
+
+
+def _login_add_interactive(_args: str) -> None:
+    """Interactive wizard — Plan kind → Provider → endpoint/key/OAuth.
+
+    Mirrors OpenClaw setup wizard (`prompter.select` levels) collapsed
+    into a single CLI command so existing users can run it any time.
+    """
+    import sys
+
+    from core.gateway.auth.plan_registry import get_plan_registry
+    from core.gateway.auth.plans import (
+        GLM_CODING_TIERS,
+        default_plan_for_payg,
+    )
+    from core.gateway.auth.profiles import AuthProfile, CredentialType
+    from core.runtime_wiring.infra import ensure_profile_store
+
+    if not sys.stdin.isatty():
+        console.print(
+            "  [warning]/login add requires an interactive terminal.[/warning]\n"
+            "  [muted]Set keys via env vars (ZAI_API_KEY, OPENAI_API_KEY, "
+            "ANTHROPIC_API_KEY) for non-interactive setup.[/muted]"
+        )
         return
 
-    if arg == "openai":
-        console.print()
+    kinds = [
+        ("subscription", "Subscription (GLM Coding Plan, ChatGPT Plus, Claude Pro)"),
+        ("payg", "Pay-as-you-go API key (Anthropic, OpenAI, GLM PAYG)"),
+        ("oauth", "OAuth borrowed (Codex CLI / Claude Code)"),
+    ]
+    menu = TerminalMenu(
+        [label for _, label in kinds],
+        title="\n  Plan kind?  (↑↓ select, Enter confirm, q cancel)\n",
+        menu_cursor="  > ",
+        menu_cursor_style=("fg_cyan", "bold"),
+    )
+    idx = menu.show()
+    if idx is None:
+        console.print("  [muted]Cancelled[/muted]\n")
+        return
+    kind_id = kinds[idx][0]
+
+    registry = get_plan_registry()
+    store = ensure_profile_store()
+
+    if kind_id == "subscription":
+        # Currently only GLM Coding Plan tiers are templated
+        tier_entries = [
+            "GLM Coding Lite  ($6/mo · 80 calls/5h · 3× weight on glm-5.1)",
+            "GLM Coding Pro   ($30/mo · 240 calls/5h)",
+            "GLM Coding Max   ($80/mo · 600 calls/5h)",
+        ]
+        tier_keys = ["lite", "pro", "max"]
+        tmenu = TerminalMenu(
+            tier_entries,
+            title="\n  Subscription tier?\n",
+            menu_cursor="  > ",
+        )
+        tidx = tmenu.show()
+        if tidx is None:
+            console.print("  [muted]Cancelled[/muted]\n")
+            return
+        plan = GLM_CODING_TIERS[tier_keys[tidx]]
         try:
-            from core.gateway.auth.oauth_login import login_openai
+            key = console.input(f"  [label]{plan.display_name} API key:[/label] ").strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n  [muted]Cancelled[/muted]\n")
+            return
+        if not key:
+            console.print("  [warning]No key provided.[/warning]\n")
+            return
+        registry.add(plan)
+        registry.set_routing(
+            "glm-5.1", [plan.id, *registry.get_routing("glm-5.1")]
+        )
+        for m in ("glm-5", "glm-5-turbo", "glm-4.7-flash"):
+            registry.set_routing(m, [plan.id, *registry.get_routing(m)])
+        store.add(
+            AuthProfile(
+                name=f"{plan.id}:user",
+                provider=plan.provider,
+                credential_type=CredentialType.API_KEY,
+                key=key,
+                plan_id=plan.id,
+            )
+        )
+        # Reset the GLM client so the next call picks up the new endpoint+key
+        try:
+            from core.llm.providers.glm import reset_glm_client
 
-            creds = login_openai()
-            if creds:
-                # Invalidate cached Codex client so next call picks up new token
-                import contextlib
-
-                with contextlib.suppress(Exception):
-                    from core.llm.providers.codex import reset_codex_client
-
-                    reset_codex_client()
-        except Exception as exc:
-            console.print(f"  [red]Login failed: {exc}[/red]\n")
+            reset_glm_client()
+        except Exception:  # noqa: S110 — best-effort cache invalidation
+            pass
+        console.print(
+            f"  [success]Registered[/success] {plan.display_name}  "
+            f"[muted]({plan.base_url})[/muted]\n"
+        )
         return
 
-    # Unknown provider — prompt user to specify
-    known = ["openai"]
-    console.print(f"\n  Unknown provider: [label]{arg}[/label]")
-    console.print(f"  Available: {', '.join(known)}")
-    console.print("  Which provider did you mean? Run [label]/login <provider>[/label]\n")
+    if kind_id == "payg":
+        providers = [
+            ("anthropic", "Anthropic"),
+            ("openai", "OpenAI"),
+            ("glm", "GLM (z.ai PAYG)"),
+        ]
+        pmenu = TerminalMenu(
+            [label for _, label in providers],
+            title="\n  Provider?\n",
+            menu_cursor="  > ",
+        )
+        pidx = pmenu.show()
+        if pidx is None:
+            console.print("  [muted]Cancelled[/muted]\n")
+            return
+        provider = providers[pidx][0]
+        try:
+            key = console.input(
+                f"  [label]{providers[pidx][1]} API key:[/label] "
+            ).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n  [muted]Cancelled[/muted]\n")
+            return
+        if not key:
+            console.print("  [warning]No key provided.[/warning]\n")
+            return
+        plan = default_plan_for_payg(provider, key)
+        registry.add(plan)
+        store.add(
+            AuthProfile(
+                name=f"{plan.id}:user",
+                provider=provider,
+                credential_type=CredentialType.API_KEY,
+                key=key,
+                plan_id=plan.id,
+            )
+        )
+        # Mirror to settings + .env so legacy fallbacks keep working
+        from core.config import settings
+
+        env_field_map = {
+            "anthropic": ("anthropic_api_key", "ANTHROPIC_API_KEY"),
+            "openai": ("openai_api_key", "OPENAI_API_KEY"),
+            "glm": ("zai_api_key", "ZAI_API_KEY"),
+        }
+        if provider in env_field_map:
+            field_name, env_var = env_field_map[provider]
+            object.__setattr__(settings, field_name, key)
+            _upsert_env(env_var, key)
+        console.print(
+            f"  [success]Registered[/success] {plan.display_name}  "
+            f"[muted](key {_mask_key(key)})[/muted]\n"
+        )
+        return
+
+    if kind_id == "oauth":
+        oauth_entries = [
+            "OpenAI Codex CLI (chatgpt.com/backend-api/codex)",
+            "Claude Code (currently disabled — Anthropic ToS)",
+        ]
+        omenu = TerminalMenu(
+            oauth_entries,
+            title="\n  OAuth source?\n",
+            menu_cursor="  > ",
+        )
+        oidx = omenu.show()
+        if oidx is None:
+            console.print("  [muted]Cancelled[/muted]\n")
+            return
+        if oidx == 1:
+            console.print(
+                "  [warning]Claude Code OAuth is disabled (Anthropic ToS, "
+                "see core/runtime_wiring/infra.py).[/warning]\n"
+            )
+            return
+        _login_oauth("openai")
+        return
+
+
+def _login_oauth(target: str) -> None:
+    """Run the OAuth device-code flow for an external CLI provider."""
+    target = target.lower().strip()
+    if target not in ("openai", "codex"):
+        console.print(
+            f"  [warning]OAuth not implemented for '{target}'.[/warning]\n"
+            "  [muted]Available: openai (Codex CLI Plus quota)[/muted]\n"
+        )
+        return
+    console.print()
+    try:
+        from core.gateway.auth.oauth_login import login_openai
+
+        creds = login_openai()
+        if creds:
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                from core.llm.providers.codex import reset_codex_client
+
+                reset_codex_client()
+            console.print(
+                "  [success]Codex OAuth registered.[/success]  "
+                "[muted]Provider: openai-codex[/muted]\n"
+            )
+    except Exception as exc:
+        console.print(f"  [red]Login failed: {exc}[/red]\n")
+
+
+def _login_set_key(rest: str) -> None:
+    parts = rest.split(None, 1)
+    if len(parts) < 2:
+        console.print("  [warning]Usage: /login set-key <plan-id> <api-key>[/warning]\n")
+        return
+    plan_id, key = parts[0], parts[1].strip()
+
+    from core.gateway.auth.plan_registry import get_plan_registry
+    from core.gateway.auth.profiles import AuthProfile, CredentialType
+    from core.runtime_wiring.infra import ensure_profile_store
+
+    registry = get_plan_registry()
+    plan = registry.get(plan_id)
+    if plan is None:
+        console.print(
+            f"  [warning]Unknown plan: {plan_id}[/warning]  "
+            "[muted](use /login add first)[/muted]\n"
+        )
+        return
+    store = ensure_profile_store()
+    name = f"{plan.id}:user"
+    existing = store.get(name)
+    if existing is not None:
+        existing.key = key
+        existing.error_count = 0
+        existing.cooldown_until = 0.0
+    else:
+        store.add(
+            AuthProfile(
+                name=name,
+                provider=plan.provider,
+                credential_type=CredentialType.API_KEY,
+                key=key,
+                plan_id=plan.id,
+            )
+        )
+    if plan.provider == "glm-coding":
+        from core.llm.providers.glm import reset_glm_client
+
+        reset_glm_client()
+    console.print(
+        f"  [success]Updated key[/success] for {plan.display_name}  "
+        f"[muted]({_mask_key(key)})[/muted]\n"
+    )
+
+
+def _login_use(rest: str) -> None:
+    plan_id = rest.strip()
+    if not plan_id:
+        console.print("  [warning]Usage: /login use <plan-id>[/warning]\n")
+        return
+    from core.gateway.auth.plan_registry import get_plan_registry
+
+    registry = get_plan_registry()
+    plan = registry.get(plan_id)
+    if plan is None:
+        console.print(f"  [warning]Unknown plan: {plan_id}[/warning]\n")
+        return
+    # Pin this plan ahead of any other for a few common models in its provider
+    model_hints = {
+        "glm-coding": ["glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"],
+        "glm": ["glm-5.1", "glm-5", "glm-5-turbo"],
+        "openai": ["gpt-5.4", "gpt-5.4-mini"],
+        "openai-codex": ["gpt-5.3-codex", "gpt-5.4-mini"],
+        "anthropic": ["claude-opus-4-7", "claude-sonnet-4-6"],
+    }
+    for model in model_hints.get(plan.provider, []):
+        existing = [pid for pid in registry.get_routing(model) if pid != plan.id]
+        registry.set_routing(model, [plan.id, *existing])
+    console.print(
+        f"  [success]Activated[/success] {plan.display_name} for {plan.provider} models.\n"
+    )
+
+
+def _login_remove(rest: str) -> None:
+    plan_id = rest.strip()
+    if not plan_id:
+        console.print("  [warning]Usage: /login remove <plan-id>[/warning]\n")
+        return
+    from core.gateway.auth.plan_registry import get_plan_registry
+    from core.runtime_wiring.infra import ensure_profile_store
+
+    registry = get_plan_registry()
+    if not registry.remove(plan_id):
+        console.print(f"  [warning]Plan not found: {plan_id}[/warning]\n")
+        return
+    store = ensure_profile_store()
+    for p in list(store.list_all()):
+        if p.plan_id == plan_id:
+            store.remove(p.name)
+    console.print(f"  [success]Removed plan and its profiles:[/success] {plan_id}\n")
+
+
+def _login_route(rest: str) -> None:
+    parts = rest.split()
+    if len(parts) < 2:
+        console.print(
+            "  [warning]Usage: /login route <model> <plan-id> [<plan-id>...][/warning]\n"
+        )
+        return
+    model, plan_ids = parts[0], parts[1:]
+    from core.gateway.auth.plan_registry import get_plan_registry
+
+    registry = get_plan_registry()
+    unknown = [pid for pid in plan_ids if registry.get(pid) is None]
+    if unknown:
+        console.print(f"  [warning]Unknown plan(s): {', '.join(unknown)}[/warning]\n")
+        return
+    registry.set_routing(model, plan_ids)
+    console.print(
+        f"  [success]Routing[/success] {model} → "
+        + " → ".join(plan_ids)
+        + "\n"
+    )
+
+
+def _login_quota() -> None:
+    from core.gateway.auth.plan_registry import get_plan_registry
+
+    registry = get_plan_registry()
+    plans = registry.list_all()
+    quoted = [p for p in plans if p.quota is not None]
+    if not quoted:
+        console.print("  [muted]No quota-bearing plans registered.[/muted]\n")
+        return
+    console.print("\n  [header]Plan Quota[/header]")
+    for plan in quoted:
+        usage = registry.usage_for(plan.id)
+        assert plan.quota is not None
+        reset_in = usage.seconds_until_reset()
+        reset_label = f"{reset_in // 60}m" if reset_in > 0 else "ready"
+        console.print(
+            f"  {plan.id:<24} "
+            f"used {int(usage.weighted_calls):>4}/{plan.quota.max_calls} "
+            f"· resets in {reset_label}"
+            + (
+                "  [muted](weights: "
+                + ", ".join(
+                    f"{m}×{int(w)}" for m, w in plan.quota.model_weights.items()
+                )
+                + ")[/muted]"
+                if plan.quota.model_weights
+                else ""
+            )
+        )
+    console.print()
 
 
 def resolve_action(cmd: str) -> str | None:

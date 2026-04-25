@@ -11,8 +11,14 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 
+from typing import TYPE_CHECKING
+
 from core.gateway.auth.plans import Plan, PlanUsage, default_plan_for_payg
 from core.gateway.auth.profiles import AuthProfile
+
+if TYPE_CHECKING:
+    from core.gateway.auth.profiles import ProfileStore
+    from core.gateway.auth.rotation import ProfileRotator
 
 
 @dataclass
@@ -172,10 +178,16 @@ def resolve_routing(model: str) -> RoutingTarget | None:
     return None
 
 
-def _pick_profile_for_plan(store, rotator, plan: Plan) -> AuthProfile | None:
+def _pick_profile_for_plan(
+    store: "ProfileStore",
+    rotator: "ProfileRotator",
+    plan: Plan,
+) -> AuthProfile | None:
     """Find an available AuthProfile bound to this Plan, or fall back
     to any available profile for the Plan's provider."""
-    bound = [p for p in store.list_all() if p.plan_id == plan.id and p.is_available]
+    bound: list[AuthProfile] = [
+        p for p in store.list_all() if p.plan_id == plan.id and p.is_available
+    ]
     if bound:
         bound.sort(key=lambda p: p.sort_key())
         return bound[0]

@@ -32,3 +32,23 @@ import core.cli.transcript as _tx_mod  # noqa: E402
 
 _cp_mod.DEFAULT_SESSION_DIR = Path(_test_session_dir)
 _tx_mod.DEFAULT_TRANSCRIPT_DIR = Path(_test_transcript_dir)
+
+
+# v0.50.0 — auth-plans singletons (ProfileStore, ProfileRotator, PlanRegistry)
+# leak between tests. Reset them around every test so state from one suite
+# (e.g. seeding a Coding Plan profile) doesn't influence another.
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_singletons():
+    from core.gateway.auth import plan_registry as _pr
+    from core.runtime_wiring import infra as _infra
+
+    _infra._profile_store = None
+    _infra._profile_rotator = None
+    _pr._plan_registry = None
+    yield
+    _infra._profile_store = None
+    _infra._profile_rotator = None
+    _pr._plan_registry = None

@@ -13,7 +13,6 @@ from core.gateway.auth.plans import (
     Plan,
     PlanKind,
     PlanUsage,
-    Quota,
     default_plan_for_payg,
 )
 from core.gateway.auth.profiles import AuthProfile, CredentialType
