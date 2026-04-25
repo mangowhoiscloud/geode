@@ -2,6 +2,12 @@
 
 OpenClaw Auth Profile pattern: three credential types with
 type-priority rotation (oauth > token > api_key).
+
+v0.51.0 — Eligibility observability: every rejection emits a structured
+``EligibilityResult`` with a ``ProfileRejectReason`` enum so silent skips
+are eliminated. Rotator logs the full breakdown when no profile matches,
+and the same verdicts feed both the ``/login`` dashboard and the
+LLM-readable credential breadcrumb (``credential_breadcrumb.format``).
 """
 
 from __future__ import annotations
@@ -26,6 +32,44 @@ TYPE_PRIORITY: dict[CredentialType, int] = {
     CredentialType.TOKEN: 1,
     CredentialType.API_KEY: 2,
 }
+
+
+class ProfileRejectReason(Enum):
+    """Why a profile was filtered out by eligibility evaluation.
+
+    Mirrors OpenClaw ``AuthCredentialReasonCode`` so external observers
+    can map verdicts cross-system.
+    """
+
+    PROVIDER_MISMATCH = "provider_mismatch"
+    DISABLED = "disabled"
+    EXPIRED = "expired"
+    COOLING_DOWN = "cooling_down"
+    MISSING_KEY = "missing_key"
+
+
+@dataclass(frozen=True)
+class EligibilityResult:
+    """Per-profile verdict from ``ProfileStore.evaluate_eligibility``.
+
+    Every profile in the store gets exactly one verdict — either
+    ``eligible=True`` (no reason) or ``eligible=False`` with a structured
+    reason + human-readable detail.
+    """
+
+    profile_name: str
+    provider: str
+    credential_type: CredentialType
+    eligible: bool
+    reason: ProfileRejectReason | None = None
+    detail: str = ""
+    expires_at: float = 0.0
+    cooldown_until: float = 0.0
+    error_count: int = 0
+
+    @property
+    def reason_code(self) -> str:
+        return self.reason.value if self.reason else "ok"
 
 
 @dataclass
@@ -128,6 +172,93 @@ class ProfileStore:
         if provider:
             all_profiles = [p for p in all_profiles if p.provider == provider]
         return [p for p in all_profiles if p.is_available]
+
+    def evaluate_eligibility(
+        self,
+        provider: str,
+        *,
+        now: float | None = None,
+    ) -> list[EligibilityResult]:
+        """Return one ``EligibilityResult`` per profile in the store.
+
+        Unlike ``list_available``, this surfaces *why* each profile is
+        out of consideration — provider mismatch, expired, in cooldown,
+        disabled, or missing a key. Used by:
+          * ``ProfileRotator.resolve()`` for diagnostic logging when no
+            profile matches.
+          * The ``/login`` dashboard to show inline reject badges.
+          * ``credential_breadcrumb.format()`` to inject an LLM-readable
+            note into the agentic loop after auth failures.
+        """
+        ts = now if now is not None else time.time()
+        results: list[EligibilityResult] = []
+        for p in self._profiles.values():
+
+            def make(
+                eligible: bool,
+                reason: ProfileRejectReason | None = None,
+                detail: str = "",
+                _p: AuthProfile = p,
+            ) -> EligibilityResult:
+                return EligibilityResult(
+                    profile_name=_p.name,
+                    provider=_p.provider,
+                    credential_type=_p.credential_type,
+                    expires_at=_p.expires_at,
+                    cooldown_until=_p.cooldown_until,
+                    error_count=_p.error_count,
+                    eligible=eligible,
+                    reason=reason,
+                    detail=detail,
+                )
+
+            if p.provider != provider:
+                results.append(
+                    make(
+                        False,
+                        ProfileRejectReason.PROVIDER_MISMATCH,
+                        f"profile.provider={p.provider!r} != requested={provider!r}",
+                    )
+                )
+                continue
+            if p.disabled:
+                results.append(
+                    make(
+                        False,
+                        ProfileRejectReason.DISABLED,
+                        p.disabled_reason or "no reason given",
+                    )
+                )
+                continue
+            if not p.key:
+                results.append(
+                    make(
+                        False,
+                        ProfileRejectReason.MISSING_KEY,
+                        "profile has no key set — run /login set-key",
+                    )
+                )
+                continue
+            if p.expires_at and ts > p.expires_at:
+                results.append(
+                    make(
+                        False,
+                        ProfileRejectReason.EXPIRED,
+                        f"expired {int(ts - p.expires_at)}s ago (at {p.expires_at:.0f})",
+                    )
+                )
+                continue
+            if ts < p.cooldown_until:
+                results.append(
+                    make(
+                        False,
+                        ProfileRejectReason.COOLING_DOWN,
+                        f"{int(p.cooldown_until - ts)}s remaining (error_count={p.error_count})",
+                    )
+                )
+                continue
+            results.append(make(True))
+        return results
 
     def group_by_provider(self) -> dict[str, list[AuthProfile]]:
         groups: dict[str, list[AuthProfile]] = {}

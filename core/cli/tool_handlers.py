@@ -839,16 +839,36 @@ def _build_system_handlers(
                         "quota_used": int(usage.weighted_calls),
                     }
                 )
-            profiles_payload = [
-                {
-                    "name": p.name,
-                    "provider": p.provider,
-                    "type": p.credential_type.value,
-                    "plan_id": p.plan_id or None,
-                    "managed_by": p.managed_by or None,
-                }
-                for p in store.list_all()
-            ]
+            # v0.51.0 — annotate each profile with its current eligibility
+            # verdict per the profile's own provider. This lets the LLM see
+            # *why* a credential is unusable (cooldown / expired / disabled
+            # / missing key) without needing a second tool call.
+            verdict_index: dict[tuple[str, str], tuple[bool, str, str]] = {}
+            for prov in {p.provider for p in store.list_all()}:
+                for v in store.evaluate_eligibility(prov):
+                    verdict_index[(v.profile_name, v.provider)] = (
+                        v.eligible,
+                        v.reason_code,
+                        v.detail,
+                    )
+
+            profiles_payload = []
+            for p in store.list_all():
+                eligible, reason, detail = verdict_index.get(
+                    (p.name, p.provider), (False, "unknown", "")
+                )
+                profiles_payload.append(
+                    {
+                        "name": p.name,
+                        "provider": p.provider,
+                        "type": p.credential_type.value,
+                        "plan_id": p.plan_id or None,
+                        "managed_by": p.managed_by or None,
+                        "eligible": eligible,
+                        "reason": reason,
+                        "reason_detail": detail,
+                    }
+                )
             routing_payload = registry.all_routing()
         except Exception:
             plans_payload = []
