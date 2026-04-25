@@ -817,6 +817,10 @@ class AgenticLoop:
                             from core.cli.ui.agentic_ui import emit_llm_error
 
                             emit_llm_error(_et, _sev, _hint, self.model, self._provider)
+                        # v0.51.0: inject LLM-readable credential breadcrumb so
+                        # the next round sees structured eligibility verdicts
+                        # (Claude Code createModelSwitchBreadcrumbs pattern).
+                        self._inject_credential_breadcrumb()
                         old_model = self.model
                         escalated = self._try_cross_provider_escalation()
                         if escalated:
@@ -1601,6 +1605,29 @@ class AgenticLoop:
                     )
                 return True
         return False
+
+    def _inject_credential_breadcrumb(self) -> None:
+        """Append an LLM-readable credential note after auth failure (v0.51.0).
+
+        The next agentic round sees a structured rejection breakdown so
+        the model can self-recover (call ``manage_login``) or surface a
+        meaningful message to the user instead of a generic 'LLM call
+        failed' line.
+        """
+        try:
+            from core.gateway.auth.credential_breadcrumb import format as fmt_breadcrumb
+            from core.gateway.auth.rotation import get_last_eligibility_verdicts
+
+            verdicts = get_last_eligibility_verdicts(self._provider)
+            note = fmt_breadcrumb(
+                verdicts,
+                attempted_provider=self._provider,
+                attempted_model=self.model,
+            )
+            if note and not self.context.is_empty:
+                self.context.add_user_message(note)
+        except Exception:
+            log.debug("credential breadcrumb injection failed", exc_info=True)
 
     # ---------------------------------------------------------------------------
     # Feature 5: Backpressure on tool failures

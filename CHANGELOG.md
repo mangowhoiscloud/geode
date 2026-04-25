@@ -28,6 +28,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.51.0] — 2026-04-25
+
+### Added
+- **`ProfileRejectReason` + `EligibilityResult`** — `ProfileStore.evaluate_eligibility(provider)`가 모든 profile에 대해 (무엇이/왜) 거부됐는지 구조화된 verdict를 반환합니다. 이전에는 `list_available()`이 silent skip으로 처리해서 "왜 이 profile이 안 잡히지?" 추적이 불가능했습니다. 5종 이유: `provider_mismatch`, `disabled`, `expired`, `cooling_down`, `missing_key`. (`core/gateway/auth/profiles.py`)
+- **Rotator 진단 로깅** — `ProfileRotator.resolve()`가 매칭 실패 시 모든 거부 사유를 한 줄에 요약 로그로 남깁니다 (예: `No eligible profiles for provider=openai (evaluated 2, rejected 2): openai:expired=expired(...) ; openai:cooldown=cooling_down(...)`). 마지막 verdict는 provider별로 캐시되어 LLM breadcrumb이 같은 정보를 참조합니다. (`core/gateway/auth/rotation.py`)
+- **LLM-readable credential breadcrumb** — auth 에러로 LLM 호출이 실패하면 다음 agentic round에 `[system] credential note: ...` 시스템 메시지가 자동 주입됩니다. 거부된 profile별 reason + 다음 액션(예: `manage_login(subcommand='use', args='<other-plan>')`)이 포함되어 모델이 자가 복구하거나 사용자에게 의미 있는 메시지를 줄 수 있습니다. Claude Code `createModelSwitchBreadcrumbs` 패턴 차용. (`core/gateway/auth/credential_breadcrumb.py`, `core/agent/agentic_loop.py:_inject_credential_breadcrumb`)
+- **`/login` dashboard reject badges** — Profiles 섹션의 각 행에 ✓/✗ 배지 + reason + detail 표시 (예: `✗ cooling_down (47s remaining, error_count=3)`). OpenClaw `auth-health.ts`의 `AuthProfileHealth.reasonCode` 패턴 차용. (`core/cli/commands.py:_login_show_status`)
+- **`manage_login` 도구 응답에 eligibility verdict 포함** — `profiles[].eligible / reason / reason_detail` 필드 추가. LLM이 status 한 번 호출로 모든 거부 사유를 보고 후속 결정 가능. (`core/cli/tool_handlers.py:handle_manage_login`)
+
+### Changed
+- `ProfileRotator.resolve()`가 내부적으로 `list_available` 대신 `evaluate_eligibility`를 호출 (시그니처/반환 타입 보존, 동작 동일).
+
 ## [0.50.2] — 2026-04-25
 
 ### Changed

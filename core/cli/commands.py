@@ -2004,6 +2004,14 @@ def _login_show_status() -> None:
         by_provider: dict[str, list[AuthProfile]] = {}
         for p in profiles:
             by_provider.setdefault(p.provider, []).append(p)
+        # v0.51.0 — pre-compute eligibility per provider so each profile row
+        # carries an inline reject badge (cooldown / expired / disabled / etc).
+        verdicts_by_name: dict[str, str] = {}
+        details_by_name: dict[str, str] = {}
+        for prov in by_provider:
+            for v in store.evaluate_eligibility(prov):
+                verdicts_by_name[v.profile_name] = v.reason_code
+                details_by_name[v.profile_name] = v.detail
         for provider in sorted(by_provider.keys()):
             for p in by_provider[provider]:
                 badge = {
@@ -2019,8 +2027,17 @@ def _login_show_status() -> None:
 
                     rem = int(p.expires_at - _t.time())
                     expiry = f" · expires {rem // 60}m" if rem > 0 else " · [error]expired[/error]"
+                # Eligibility badge — green ✓ when ok, yellow/red with reason otherwise.
+                reason = verdicts_by_name.get(p.name, "ok")
+                if reason == "ok":
+                    badge_str = "[success]✓[/success]"
+                else:
+                    detail = details_by_name.get(p.name, "")
+                    badge_str = f"[warning]✗ {reason}[/warning]"
+                    if detail:
+                        badge_str += f" [muted]({detail})[/muted]"
                 console.print(
-                    f"  [muted]•[/muted] {p.name:<28} "
+                    f"  {badge_str}  {p.name:<28} "
                     f"[muted]{badge:<7}[/muted] {p.masked_key} "
                     f"plan={plan_id}{managed}{expiry}"
                 )
