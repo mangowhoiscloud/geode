@@ -40,17 +40,13 @@ class TestAuthStore:
     def test_save_and_load_round_trip(self, tmp_path: Path, monkeypatch):
         _isolate(tmp_path, monkeypatch)
 
-        _save_auth_store(
-            {"version": 1, "providers": {"openai": {"access_token": "test-rt"}}}
-        )
+        _save_auth_store({"version": 1, "providers": {"openai": {"access_token": "test-rt"}}})
         loaded = _load_auth_store()
         assert loaded["providers"]["openai"]["access_token"] == "test-rt"
 
     def test_save_routes_through_authtoml(self, tmp_path: Path, monkeypatch):
         toml_path = _isolate(tmp_path, monkeypatch)
-        _save_auth_store(
-            {"version": 1, "providers": {"openai": {"access_token": "abc-perm"}}}
-        )
+        _save_auth_store({"version": 1, "providers": {"openai": {"access_token": "abc-perm"}}})
         # auth.toml is the new SOT — written with 0600 perms (auth_toml.save_auth_toml).
         assert toml_path.exists()
         assert oct(toml_path.stat().st_mode)[-3:] == "600"

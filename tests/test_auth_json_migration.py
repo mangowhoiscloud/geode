@@ -60,9 +60,7 @@ class TestLegacyMigration:
         view = _load_auth_store()
         assert view["providers"] == {}
 
-    def test_migration_is_idempotent_after_second_call(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_migration_is_idempotent_after_second_call(self, tmp_path: Path, monkeypatch) -> None:
         legacy = tmp_path / "auth.json"
         legacy.write_text(
             json.dumps(
@@ -90,9 +88,7 @@ class TestLegacyMigration:
 
 
 class TestSaveRoutesThroughAuthToml:
-    def test_save_auth_store_persists_oauth_to_toml(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_save_auth_store_persists_oauth_to_toml(self, tmp_path: Path, monkeypatch) -> None:
         toml_path = tmp_path / "auth.toml"
         monkeypatch.setenv("GEODE_AUTH_TOML", str(toml_path))
 
