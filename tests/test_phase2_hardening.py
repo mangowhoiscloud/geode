@@ -25,7 +25,7 @@ class TestC3FileLock:
 
     def test_save_atomic_write(self, tmp_path: Path) -> None:
         """save() should atomically write job store using O_EXCL lock."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
         svc = SchedulerService(store_path=store, enable_jitter=False)
@@ -45,7 +45,7 @@ class TestC3FileLock:
 
     def test_load_with_lock(self, tmp_path: Path) -> None:
         """load() should work correctly with file locking."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
         svc1 = SchedulerService(store_path=store, enable_jitter=False)
@@ -66,7 +66,7 @@ class TestC3FileLock:
 
     def test_save_load_roundtrip_with_running_since(self, tmp_path: Path) -> None:
         """running_since_ms should persist through save/load."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
         svc = SchedulerService(store_path=store, enable_jitter=False)
@@ -261,7 +261,7 @@ class TestM3StuckJobDetection:
     """Verify stuck job detection in scheduler tick loop."""
 
     def test_detect_stuck_marks_status(self) -> None:
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         job = ScheduledJob(
@@ -282,7 +282,7 @@ class TestM3StuckJobDetection:
         assert job.running_since_ms is None
 
     def test_not_stuck_below_threshold(self) -> None:
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         now = time.time() * 1000
@@ -300,7 +300,7 @@ class TestM3StuckJobDetection:
         assert job.running_since_ms is not None  # unchanged
 
     def test_no_running_jobs_returns_empty(self) -> None:
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         job = ScheduledJob(
@@ -317,7 +317,7 @@ class TestM3StuckJobDetection:
 
     def test_execute_job_tracks_running_since(self) -> None:
         """_execute_job should set and clear running_since_ms."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         job = ScheduledJob(
@@ -334,7 +334,7 @@ class TestM3StuckJobDetection:
         assert job.last_status == "ok"
 
     def test_stuck_timeout_configurable(self) -> None:
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         svc.STUCK_TIMEOUT_MS = 5000  # 5 seconds

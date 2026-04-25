@@ -18,7 +18,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from core.automation.scheduler import (
+from core.scheduler.scheduler import (
     ActiveHours,
     Schedule,
     ScheduledJob,

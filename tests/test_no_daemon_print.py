@@ -23,21 +23,20 @@ from pathlib import Path
 DAEMON_DIRS = [
     "core/agent",
     "core/auth",
-    "core/automation",
-    "core/channels",  # phase 4 — gateway 분해 결과 (외부 IO 정의)
+    "core/automation",  # 잔여: drift, expert_panel, feedback_loop 등 자율 학습
+    "core/channels",  # phase 4 — gateway 분해 결과
     "core/hooks",
     "core/lifecycle",
     "core/llm",
     "core/mcp",
     "core/memory",
     "core/orchestration",
+    "core/scheduler",  # phase 5 — automation/scheduler 분리
     "core/server",  # phase 4 — daemon process infrastructure
     "core/skills",
     "core/tools",
     "core/verification",
 ]
-# Phase 5 이후 추가:
-#   "core/scheduler", "core/config"
 
 
 _FORBIDDEN_CALL_NAMES = {

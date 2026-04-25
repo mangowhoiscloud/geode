@@ -1475,7 +1475,7 @@ def serve(
     _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str]] = _queue_mod.Queue()
     _sched_svc = None
     try:
-        from core.automation.scheduler import create_scheduler
+        from core.scheduler.scheduler import create_scheduler
 
         _sched_svc = create_scheduler(
             on_job_fired=lambda jid, act, iso, aid: _sched_queue.put((jid, act, iso, aid)),

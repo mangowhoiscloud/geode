@@ -43,7 +43,6 @@ from core.automation.feedback_loop import FeedbackLoop
 from core.automation.model_registry import ModelRegistry
 from core.automation.outcome_tracking import OutcomeTracker
 from core.automation.snapshot import SnapshotManager
-from core.automation.triggers import TriggerManager
 from core.config import settings
 from core.domains.loader import load_domain_adapter
 from core.domains.port import set_domain
@@ -72,6 +71,7 @@ from core.orchestration.run_log import RunLog
 from core.orchestration.stuck_detection import StuckDetector
 from core.orchestration.task_bridge import TaskGraphHookBridge
 from core.orchestration.task_system import TaskGraph
+from core.scheduler.triggers import TriggerManager
 from core.tools.policy import NodeScopePolicy, PolicyChain
 from core.tools.registry import ToolRegistry
 

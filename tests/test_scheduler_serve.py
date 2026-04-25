@@ -308,7 +308,7 @@ class TestSchedulerServiceLifecycle:
 
     def test_job_count_property(self) -> None:
         """job_count should reflect number of registered jobs."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         assert svc.job_count == 0
@@ -324,7 +324,7 @@ class TestSchedulerServiceLifecycle:
 
     def test_save_and_load_roundtrip(self, tmp_path: Path) -> None:
         """Jobs should persist across save/load cycle."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
         svc = SchedulerService(store_path=store, enable_jitter=False)
@@ -344,7 +344,7 @@ class TestSchedulerServiceLifecycle:
 
     def test_start_stop(self) -> None:
         """start()/stop() should manage the background thread."""
-        from core.automation.scheduler import SchedulerService
+        from core.scheduler.scheduler import SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         assert not svc.is_running
@@ -357,7 +357,7 @@ class TestSchedulerServiceLifecycle:
 
     def test_graceful_shutdown_saves(self, tmp_path: Path) -> None:
         """Graceful shutdown pattern: save() then stop()."""
-        from core.automation.scheduler import SchedulerService
+        from core.scheduler.scheduler import SchedulerService
 
         store = tmp_path / "jobs.json"
         svc = SchedulerService(store_path=store, enable_jitter=False)

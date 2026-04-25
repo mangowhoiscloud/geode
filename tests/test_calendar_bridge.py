@@ -9,12 +9,12 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
-from core.automation.calendar_bridge import (
+from core.mcp.calendar_port import CalendarEvent
+from core.scheduler.calendar_bridge import (
     CalendarSchedulerBridge,
     get_calendar_bridge,
     set_calendar_bridge,
 )
-from core.mcp.calendar_port import CalendarEvent
 
 NOW = datetime(2026, 3, 18, 14, 0, 0, tzinfo=UTC)
 

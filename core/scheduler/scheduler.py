@@ -32,8 +32,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.automation.triggers import CronParser, TriggerManager
 from core.paths import PROJECT_SCHEDULER_FILE, PROJECT_SCHEDULER_LOG_DIR
+from core.scheduler.triggers import CronParser, TriggerManager
 
 if TYPE_CHECKING:
     from core.hooks import HookSystem
@@ -515,7 +515,7 @@ class SchedulerService:
     """Advanced scheduler with 3-type scheduling + active hours.
 
     Extends (via composition) the existing :class:`TriggerManager` from
-    ``core.automation.triggers``.  The scheduler manages its own job store
+    ``core.scheduler.triggers``.  The scheduler manages its own job store
     (atomic JSON) and per-job JSONL run logs.
     """
 

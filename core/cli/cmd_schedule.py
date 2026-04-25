@@ -84,7 +84,7 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
     /schedule disable <id>       → disable a job/template
     /schedule run <id>           → run a job/template immediately
     """
-    from core.automation.predefined import PREDEFINED_AUTOMATIONS
+    from core.scheduler.predefined import PREDEFINED_AUTOMATIONS
 
     arg = args.strip()
     arg_lower = arg.lower()
@@ -147,7 +147,7 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
             console.print()
             return
 
-        from core.automation.nl_scheduler import NLScheduleParser
+        from core.scheduler.nl_scheduler import NLScheduleParser
 
         parser = NLScheduleParser()
         result = parser.parse(schedule_expr)

@@ -944,7 +944,7 @@ def _build_execution_handlers() -> dict[str, Any]:
             if not svc:
                 return {"status": "error", "action": "schedule", "error": "Scheduler not available"}
             try:
-                from core.automation.nl_scheduler import NLScheduleParser
+                from core.scheduler.nl_scheduler import NLScheduleParser
 
                 result = NLScheduleParser().parse(expression)
                 if not result.success or not result.job:
@@ -1021,7 +1021,7 @@ def _build_execution_handlers() -> dict[str, Any]:
 
         # list / status — return structured data
         try:
-            from core.automation.predefined import PREDEFINED_AUTOMATIONS
+            from core.scheduler.predefined import PREDEFINED_AUTOMATIONS
 
             templates = [
                 {"id": t.id, "name": t.name, "enabled": t.enabled} for t in PREDEFINED_AUTOMATIONS

@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from core.automation.triggers import TriggerConfig, TriggerType
+from core.scheduler.triggers import TriggerConfig, TriggerType
 
 
 class PipelineConfig(BaseModel):

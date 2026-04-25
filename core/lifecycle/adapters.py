@@ -300,8 +300,8 @@ def build_plugins() -> None:
     build_calendar_adapter()
     build_gateway()
     try:
-        from core.automation.calendar_bridge import set_calendar_bridge
         from core.mcp.calendar_port import get_calendar
+        from core.scheduler.calendar_bridge import set_calendar_bridge
 
         cal = get_calendar()
         if cal is None or not cal.is_available():

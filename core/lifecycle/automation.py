@@ -16,10 +16,10 @@ from core.automation.feedback_loop import FeedbackLoop
 from core.automation.model_registry import ModelRegistry
 from core.automation.outcome_tracking import OutcomeTracker
 from core.automation.snapshot import SnapshotManager
-from core.automation.triggers import TriggerManager, TriggerType
 from core.config import settings
 from core.hooks import HookEvent, HookSystem
 from core.memory.project import ProjectMemory
+from core.scheduler.triggers import TriggerManager, TriggerType
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def build_automation(
     trigger_manager.start_scheduler()
 
     # Advanced scheduler service (3-type: AT/EVERY/CRON + active hours)
-    from core.automation.scheduler import create_scheduler
+    from core.scheduler.scheduler import create_scheduler
 
     scheduler_service = create_scheduler(
         trigger_manager=trigger_manager,
