@@ -28,7 +28,7 @@ from core.config import (
     GLM_PRIMARY,
     OPENAI_PRIMARY,
 )
-from core.gateway.auth.profiles import ProfileStore
+from core.gateway.auth.profiles import AuthProfile, ProfileStore
 
 log = logging.getLogger(__name__)
 
@@ -313,9 +313,20 @@ def _seed_payg_plan_from_key(provider: str, key: str) -> None:
                     plan_id=plan.id,
                 )
             )
+        _persist_auth_state()
     except Exception:
         # The legacy /key path must not fail because of plan-seeding.
         log.debug("Plan seed from /key failed", exc_info=True)
+
+
+def _persist_auth_state() -> None:
+    """Persist Plan + Profile state to ~/.geode/auth.toml (best-effort)."""
+    try:
+        from core.gateway.auth.auth_toml import save_auth_toml
+
+        save_auth_toml()
+    except Exception:
+        log.debug("auth.toml save failed", exc_info=True)
 
 
 def _check_provider_key(selected: ModelProfile) -> None:
@@ -1992,9 +2003,7 @@ def _login_show_status() -> None:
         console.print("  [muted]No credentials. Run /login add or set provider env vars.[/muted]")
     else:
         # Group by provider for readability
-        from core.gateway.auth.profiles import AuthProfile as _AP
-
-        by_provider: dict[str, list[_AP]] = {}
+        by_provider: dict[str, list[AuthProfile]] = {}
         for p in profiles:
             by_provider.setdefault(p.provider, []).append(p)
         for provider in sorted(by_provider.keys()):
@@ -2147,6 +2156,7 @@ def _login_add_interactive(_args: str) -> None:
             reset_glm_client()
         except Exception:  # noqa: S110 — best-effort cache invalidation
             pass
+        _persist_auth_state()
         console.print(
             f"  [success]Registered[/success] {plan.display_name}  "
             f"[muted]({plan.base_url})[/muted]\n"
@@ -2202,6 +2212,7 @@ def _login_add_interactive(_args: str) -> None:
             field_name, env_var = env_field_map[provider]
             object.__setattr__(settings, field_name, key)
             _upsert_env(env_var, key)
+        _persist_auth_state()
         console.print(
             f"  [success]Registered[/success] {plan.display_name}  "
             f"[muted](key {_mask_key(key)})[/muted]\n"
@@ -2301,6 +2312,7 @@ def _login_set_key(rest: str) -> None:
         from core.llm.providers.glm import reset_glm_client
 
         reset_glm_client()
+    _persist_auth_state()
     console.print(
         f"  [success]Updated key[/success] for {plan.display_name}  "
         f"[muted]({_mask_key(key)})[/muted]\n"
@@ -2330,6 +2342,7 @@ def _login_use(rest: str) -> None:
     for model in model_hints.get(plan.provider, []):
         existing = [pid for pid in registry.get_routing(model) if pid != plan.id]
         registry.set_routing(model, [plan.id, *existing])
+    _persist_auth_state()
     console.print(
         f"  [success]Activated[/success] {plan.display_name} for {plan.provider} models.\n"
     )
@@ -2351,6 +2364,7 @@ def _login_remove(rest: str) -> None:
     for p in list(store.list_all()):
         if p.plan_id == plan_id:
             store.remove(p.name)
+    _persist_auth_state()
     console.print(f"  [success]Removed plan and its profiles:[/success] {plan_id}\n")
 
 
@@ -2370,6 +2384,7 @@ def _login_route(rest: str) -> None:
         console.print(f"  [warning]Unknown plan(s): {', '.join(unknown)}[/warning]\n")
         return
     registry.set_routing(model, plan_ids)
+    _persist_auth_state()
     console.print(
         f"  [success]Routing[/success] {model} → "
         + " → ".join(plan_ids)

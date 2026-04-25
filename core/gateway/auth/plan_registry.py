@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-
 from typing import TYPE_CHECKING
 
 from core.gateway.auth.plans import Plan, PlanUsage, default_plan_for_payg
@@ -179,8 +178,8 @@ def resolve_routing(model: str) -> RoutingTarget | None:
 
 
 def _pick_profile_for_plan(
-    store: "ProfileStore",
-    rotator: "ProfileRotator",
+    store: ProfileStore,
+    rotator: ProfileRotator,
     plan: Plan,
 ) -> AuthProfile | None:
     """Find an available AuthProfile bound to this Plan, or fall back

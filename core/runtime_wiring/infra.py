@@ -333,6 +333,19 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     _profile_store = profile_store
     cooldown_tracker = CooldownTracker()
 
+    # v0.50.0 — hydrate Plans + user-defined Profiles from ~/.geode/auth.toml.
+    # On first run we migrate any env-loaded API keys into the file so the
+    # next startup sees them as PAYG plans.
+    try:
+        from core.gateway.auth.auth_toml import auth_toml_path, load_auth_toml, migrate_env_to_toml
+
+        if auth_toml_path().exists():
+            load_auth_toml()
+        else:
+            migrate_env_to_toml()
+    except Exception:  # pragma: no cover — bootstrap must never fail on auth I/O
+        log.debug("auth.toml hydration skipped", exc_info=True)
+
     # Register managed token refreshers
     try:
         from core.gateway.auth.codex_cli_oauth import refresh_codex_cli_token

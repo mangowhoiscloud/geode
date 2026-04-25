@@ -36,8 +36,13 @@ _tx_mod.DEFAULT_TRANSCRIPT_DIR = Path(_test_transcript_dir)
 
 # v0.50.0 — auth-plans singletons (ProfileStore, ProfileRotator, PlanRegistry)
 # leak between tests. Reset them around every test so state from one suite
-# (e.g. seeding a Coding Plan profile) doesn't influence another.
+# (e.g. seeding a Coding Plan profile) doesn't influence another. Also
+# redirect ~/.geode/auth.toml writes to a temp file so tests can never
+# clobber a developer's real credentials.
 import pytest  # noqa: E402
+
+_test_auth_toml = os.path.join(tempfile.gettempdir(), "geode_test_auth.toml")
+os.environ.setdefault("GEODE_AUTH_TOML", _test_auth_toml)
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +53,12 @@ def _reset_auth_singletons():
     _infra._profile_store = None
     _infra._profile_rotator = None
     _pr._plan_registry = None
+    # Make sure no leftover auth.toml from a prior test run influences this one
+    if os.path.exists(_test_auth_toml):
+        os.remove(_test_auth_toml)
     yield
     _infra._profile_store = None
     _infra._profile_rotator = None
     _pr._plan_registry = None
+    if os.path.exists(_test_auth_toml):
+        os.remove(_test_auth_toml)
