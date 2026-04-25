@@ -144,7 +144,7 @@ class TestCLIPollerStopAccepting:
 
     def test_stop_accepting_exists(self):
         """CLIPoller has stop_accepting method."""
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         assert hasattr(CLIPoller, "stop_accepting")
 
@@ -152,7 +152,7 @@ class TestCLIPollerStopAccepting:
         """Calling stop_accepting on non-started poller does not crash."""
         from unittest.mock import MagicMock
 
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         services = MagicMock()
         poller = CLIPoller(services)

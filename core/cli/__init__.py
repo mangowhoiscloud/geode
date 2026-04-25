@@ -73,13 +73,13 @@ from core.cli.startup import (
 from core.cli.tool_handlers import (
     _build_tool_handlers as _build_tool_handlers,
 )
-from core.cli.ui.console import console
-from core.cli.ui.status import GeodeStatus
 from core.config import settings
 from core.hooks import HookEvent, HookSystem
 from core.llm.commentary import (
     generate_commentary,
 )
+from core.ui.console import console
+from core.ui.status import GeodeStatus
 
 log = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ app.add_typer(skill_app, name="skill")
 
 def _render_welcome_brand() -> None:
     """Render animated Claude Code-style branding with axolotl mascot."""
-    from core.cli.ui.mascot import play_mascot_animation
+    from core.ui.mascot import play_mascot_animation
 
     cwd = str(Path.cwd())
     play_mascot_animation(version=__version__, model=settings.model, cwd=cwd)
@@ -277,7 +277,7 @@ def _handle_command(
     action = resolve_action(cmd)
 
     if action == "quit":
-        from core.cli.ui.agentic_ui import render_session_cost_summary
+        from core.ui.agentic_ui import render_session_cost_summary
 
         render_session_cost_summary()
         console.print("  [muted]Goodbye.[/muted]\n")
@@ -774,6 +774,28 @@ def _thin_interactive_loop(
                 if cmd == "/clear" and "--force" not in args:
                     args = (args + " --force").strip()
 
+                # v0.52 phase 3 — central command registry decides execution
+                # location. THIN commands run locally so terminal stdin/stdout/
+                # browser stay attached (fixes OAuth device-code invisibility,
+                # bug class B1/B3).
+                from core.cli.routing import RunLocation
+                from core.cli.routing import lookup as _lookup_spec
+
+                _spec = _lookup_spec(cmd)
+                if _spec is not None and _spec.location is RunLocation.THIN:
+                    try:
+                        _handle_command(cmd, args, False)
+                    except (SystemExit, EOFError):
+                        break
+                    # Notify daemon to reload auth state if this command
+                    # may have written to ~/.geode/auth.toml.
+                    if cmd in ("/login", "/key", "/auth"):
+                        import contextlib
+
+                        with contextlib.suppress(Exception):
+                            client.send_command("/login", "refresh")
+                    continue
+
                 # All other commands → relay to serve
                 response = client.send_command(cmd, args)
                 # Render captured output from serve (ANSI-styled text)
@@ -790,7 +812,7 @@ def _thin_interactive_loop(
                 continue
 
             # Free text → relay as prompt (client-side direct rendering)
-            from core.cli.ui.event_renderer import EventRenderer
+            from core.ui.event_renderer import EventRenderer
 
             _renderer = EventRenderer()
             _stream_started = False
@@ -914,7 +936,7 @@ def main(
         from core.cli.ipc_client import is_serve_running, start_serve_if_needed
 
         if not is_serve_running():
-            from core.cli.ui.status import TextSpinner
+            from core.ui.status import TextSpinner
 
             spinner = TextSpinner("Starting serve...")
             spinner.start()
@@ -1410,7 +1432,7 @@ def serve(
 
     # Wire AgenticLoop as gateway processor
     from core.agent.conversation import ConversationContext
-    from core.gateway.channel_manager import get_gateway
+    from core.channels.binding import get_gateway
 
     gateway = get_gateway()
     if gateway is None:
@@ -1428,7 +1450,7 @@ def serve(
     )
 
     # Build SharedServices for serve mode (same factory as REPL)
-    from core.gateway.shared_services import SessionMode, build_shared_services
+    from core.server.supervised.services import SessionMode, build_shared_services
 
     _gw_max_turns = gateway.gateway_max_turns if hasattr(gateway, "gateway_max_turns") else 20
     _gw_time_budget = (
@@ -1453,7 +1475,7 @@ def serve(
     _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str]] = _queue_mod.Queue()
     _sched_svc = None
     try:
-        from core.automation.scheduler import create_scheduler
+        from core.scheduler.scheduler import create_scheduler
 
         _sched_svc = create_scheduler(
             on_job_fired=lambda jid, act, iso, aid: _sched_queue.put((jid, act, iso, aid)),
@@ -1534,7 +1556,7 @@ def serve(
     _webhook_server = None
     if settings.webhook_enabled:
         try:
-            from core.gateway.webhook_handler import start_webhook_server
+            from core.server.supervised.webhook_handler import start_webhook_server
 
             _webhook_server = start_webhook_server(_gateway_processor, port=settings.webhook_port)
             console.print(
@@ -1550,7 +1572,7 @@ def serve(
     # CLI Channel — Unix socket for thin CLI client IPC
     _cli_poller = None
     try:
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         _cli_poller = CLIPoller(_gw_services, scheduler_service=_sched_svc)
         _cli_poller.start()

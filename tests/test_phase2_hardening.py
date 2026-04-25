@@ -25,7 +25,7 @@ class TestC3FileLock:
 
     def test_save_atomic_write(self, tmp_path: Path) -> None:
         """save() should atomically write job store using O_EXCL lock."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
         svc = SchedulerService(store_path=store, enable_jitter=False)
@@ -45,7 +45,7 @@ class TestC3FileLock:
 
     def test_load_with_lock(self, tmp_path: Path) -> None:
         """load() should work correctly with file locking."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
         svc1 = SchedulerService(store_path=store, enable_jitter=False)
@@ -66,7 +66,7 @@ class TestC3FileLock:
 
     def test_save_load_roundtrip_with_running_since(self, tmp_path: Path) -> None:
         """running_since_ms should persist through save/load."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
         svc = SchedulerService(store_path=store, enable_jitter=False)
@@ -159,22 +159,22 @@ class TestM1ConfigDrivenPollers:
     """Verify config-driven poller registration."""
 
     def test_poller_registry_has_three_defaults(self) -> None:
-        from core.runtime_wiring.adapters import _DEFAULT_POLLERS, _POLLER_REGISTRY
+        from core.lifecycle.adapters import _DEFAULT_POLLERS, _POLLER_REGISTRY
 
         assert set(_DEFAULT_POLLERS) == {"slack", "discord", "telegram"}
         for name in _DEFAULT_POLLERS:
             assert name in _POLLER_REGISTRY
 
     def test_load_poller_class_resolves(self) -> None:
-        from core.runtime_wiring.adapters import _load_poller_class
+        from core.lifecycle.adapters import _load_poller_class
 
-        cls = _load_poller_class("core.gateway.pollers.slack_poller:SlackPoller")
-        from core.gateway.pollers.slack_poller import SlackPoller
+        cls = _load_poller_class("core.server.supervised.slack_poller:SlackPoller")
+        from core.server.supervised.slack_poller import SlackPoller
 
         assert cls is SlackPoller
 
     def test_load_poller_class_invalid_raises(self) -> None:
-        from core.runtime_wiring.adapters import _load_poller_class
+        from core.lifecycle.adapters import _load_poller_class
 
         with pytest.raises(ModuleNotFoundError):
             _load_poller_class("nonexistent.module:Cls")
@@ -189,14 +189,14 @@ class TestM2SchedulerPolicyChain:
     """Verify DANGEROUS tools are filtered in headless modes."""
 
     def test_headless_denied_tools_defined(self) -> None:
-        from core.gateway.shared_services import _HEADLESS_DENIED_TOOLS
+        from core.server.supervised.services import _HEADLESS_DENIED_TOOLS
 
         assert "run_bash" in _HEADLESS_DENIED_TOOLS
         assert "delegate_task" in _HEADLESS_DENIED_TOOLS
 
     def test_scheduler_mode_filters_dangerous(self) -> None:
         """create_session(SCHEDULER) should exclude DANGEROUS tools."""
-        from core.gateway.shared_services import SessionMode, SharedServices
+        from core.server.supervised.services import SessionMode, SharedServices
 
         services = SharedServices(
             tool_handlers={
@@ -209,8 +209,8 @@ class TestM2SchedulerPolicyChain:
         )
 
         with (
-            patch("core.gateway.shared_services.SharedServices._build_sub_agent_manager"),
-            patch("core.agent.agentic_loop.AgenticLoop.__init__", return_value=None),
+            patch("core.server.supervised.services.SharedServices._build_sub_agent_manager"),
+            patch("core.agent.loop.AgenticLoop.__init__", return_value=None),
             patch("core.agent.tool_executor.ToolExecutor.__init__", return_value=None) as te_init,
             patch("core.cli.session_state.set_current_loop"),
         ):
@@ -227,7 +227,7 @@ class TestM2SchedulerPolicyChain:
 
     def test_repl_mode_keeps_all_tools(self) -> None:
         """create_session(REPL) should NOT filter tools."""
-        from core.gateway.shared_services import SessionMode, SharedServices
+        from core.server.supervised.services import SessionMode, SharedServices
 
         services = SharedServices(
             tool_handlers={
@@ -239,8 +239,8 @@ class TestM2SchedulerPolicyChain:
         )
 
         with (
-            patch("core.gateway.shared_services.SharedServices._build_sub_agent_manager"),
-            patch("core.agent.agentic_loop.AgenticLoop.__init__", return_value=None),
+            patch("core.server.supervised.services.SharedServices._build_sub_agent_manager"),
+            patch("core.agent.loop.AgenticLoop.__init__", return_value=None),
             patch("core.agent.tool_executor.ToolExecutor.__init__", return_value=None) as te_init,
             patch("core.cli.session_state.set_current_loop"),
         ):
@@ -261,7 +261,7 @@ class TestM3StuckJobDetection:
     """Verify stuck job detection in scheduler tick loop."""
 
     def test_detect_stuck_marks_status(self) -> None:
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         job = ScheduledJob(
@@ -282,7 +282,7 @@ class TestM3StuckJobDetection:
         assert job.running_since_ms is None
 
     def test_not_stuck_below_threshold(self) -> None:
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         now = time.time() * 1000
@@ -300,7 +300,7 @@ class TestM3StuckJobDetection:
         assert job.running_since_ms is not None  # unchanged
 
     def test_no_running_jobs_returns_empty(self) -> None:
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         job = ScheduledJob(
@@ -317,7 +317,7 @@ class TestM3StuckJobDetection:
 
     def test_execute_job_tracks_running_since(self) -> None:
         """_execute_job should set and clear running_since_ms."""
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         job = ScheduledJob(
@@ -334,7 +334,7 @@ class TestM3StuckJobDetection:
         assert job.last_status == "ok"
 
     def test_stuck_timeout_configurable(self) -> None:
-        from core.automation.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+        from core.scheduler.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         svc = SchedulerService(enable_jitter=False)
         svc.STUCK_TIMEOUT_MS = 5000  # 5 seconds

@@ -22,8 +22,8 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from core.cli.ui.console import console
 from core.config import settings
+from core.ui.console import console
 
 log = logging.getLogger(__name__)
 
@@ -819,8 +819,8 @@ def _build_system_handlers(
         cmd_login(login_input)
 
         try:
-            from core.gateway.auth.plan_registry import get_plan_registry
-            from core.runtime_wiring.infra import ensure_profile_store
+            from core.auth.plan_registry import get_plan_registry
+            from core.lifecycle.container import ensure_profile_store
 
             store = ensure_profile_store()
             registry = get_plan_registry()
@@ -944,7 +944,7 @@ def _build_execution_handlers() -> dict[str, Any]:
             if not svc:
                 return {"status": "error", "action": "schedule", "error": "Scheduler not available"}
             try:
-                from core.automation.nl_scheduler import NLScheduleParser
+                from core.scheduler.nl_scheduler import NLScheduleParser
 
                 result = NLScheduleParser().parse(expression)
                 if not result.success or not result.job:
@@ -1021,7 +1021,7 @@ def _build_execution_handlers() -> dict[str, Any]:
 
         # list / status — return structured data
         try:
-            from core.automation.predefined import PREDEFINED_AUTOMATIONS
+            from core.scheduler.predefined import PREDEFINED_AUTOMATIONS
 
             templates = [
                 {"id": t.id, "name": t.name, "enabled": t.enabled} for t in PREDEFINED_AUTOMATIONS

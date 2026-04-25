@@ -6,7 +6,7 @@ import time
 from typing import Any
 from unittest.mock import patch
 
-from core.cli.ui.agentic_ui import (
+from core.ui.agentic_ui import (
     OperationLogger,
     SessionMeter,
     _fmt_tokens,
@@ -47,7 +47,7 @@ class TestFmtTokens:
 class TestRenderToolCall:
     """Tool call rendering: ▸ tool_name(args)."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_string_arg(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_call("analyze_ip", {"ip_name": "Berserk"})
         printed = str(mock_console.print.call_args)
@@ -55,25 +55,25 @@ class TestRenderToolCall:
         assert "Berserk" in printed
         assert "▸" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_bool_arg(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_call("list_ips", {"verbose": True})
         printed = str(mock_console.print.call_args)
         assert "verbose=true" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_numeric_arg(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_call("search_ips", {"limit": 10})
         printed = str(mock_console.print.call_args)
         assert "limit=10" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_dict_arg(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_call("test_tool", {"config": {"key": "val"}})
         printed = str(mock_console.print.call_args)
         assert "config=" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_empty_args(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_call("list_ips", {})
         printed = str(mock_console.print.call_args)
@@ -84,7 +84,7 @@ class TestRenderToolCall:
 class TestRenderToolResult:
     """Tool result rendering: ✓ tool_name → summary."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_success_with_tier_score(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_result("analyze_ip", {"tier": "S", "score": 81.3})
         printed = str(mock_console.print.call_args)
@@ -92,26 +92,26 @@ class TestRenderToolResult:
         assert "analyze_ip" in printed
         assert "S" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_success_with_count(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_result("list_ips", {"count": 5})
         printed = str(mock_console.print.call_args)
         assert "5 items" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_success_with_plan_id(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_result("create_plan", {"plan_id": "abc12345678"})
         printed = str(mock_console.print.call_args)
         assert "plan:abc12345" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_error_result(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_result("analyze_ip", {"error": "Not found"})
         printed = str(mock_console.print.call_args)
         assert "✗" in printed
         assert "Not found" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_empty_result_shows_ok(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_result("list_ips", {})
         printed = str(mock_console.print.call_args)
@@ -121,7 +121,7 @@ class TestRenderToolResult:
 class TestRenderTokens:
     """Token usage rendering: ✢ model · ↓in ↑out · time."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_with_elapsed(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tokens("claude-opus-4-6", 1200, 350, elapsed_s=2.1)
         printed = str(mock_console.print.call_args)
@@ -131,7 +131,7 @@ class TestRenderTokens:
         assert "350" in printed
         assert "2.1s" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_without_elapsed(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tokens("claude-opus-4-6", 500, 100)
         printed = str(mock_console.print.call_args)
@@ -143,7 +143,7 @@ class TestRenderTokens:
 class TestRenderPlanSteps:
     """Plan step rendering: ● Plan: ip_name."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_renders_steps(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_plan_steps("Berserk", ["Analyze", "Score", "Verify"])
         calls = [str(c) for c in mock_console.print.call_args_list]
@@ -157,14 +157,14 @@ class TestRenderPlanSteps:
 class TestRenderSubagent:
     """Sub-agent dispatch/complete rendering."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_dispatch(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_subagent_dispatch("task-1", "analyze", "Analyze Berserk IP")
         printed = str(mock_console.print.call_args)
         assert "delegate_task" in printed
         assert "analyze" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_complete(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_subagent_complete(3, 5.2)
         calls = [str(c) for c in mock_console.print.call_args_list]
@@ -216,14 +216,14 @@ class TestSessionMeter:
 class TestOperationLogger:
     """OperationLogger progressive tree rendering tests."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_below_threshold_visible(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         logger = OperationLogger()
         visible = logger.log_tool_call("analyze_ip", {"ip_name": "Berserk"})
         assert visible is True
         assert mock_console.print.called
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_above_threshold_collapsed(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         logger = OperationLogger()
         for i in range(OperationLogger.COLLAPSE_THRESHOLD):
@@ -231,7 +231,7 @@ class TestOperationLogger:
         # Next call should be collapsed
         assert logger.log_tool_call("tool_extra", {}) is False
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_finalize_shows_grouped_summary(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """When total tools >= GROUPING_THRESHOLD (6), finalize shows grouped summary."""
         logger = OperationLogger()
@@ -245,7 +245,7 @@ class TestOperationLogger:
         assert "8 tools" in combined
         assert "1 rounds" in combined
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_finalize_no_collapsed(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         logger = OperationLogger()
         logger.log_tool_call("tool_1", {})
@@ -253,21 +253,21 @@ class TestOperationLogger:
         logger.finalize()
         assert not mock_console.print.called
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_begin_round_prints_header(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         logger = OperationLogger()
         logger.begin_round("TestRound")
         printed = str(mock_console.print.call_args)
         assert "TestRound" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_begin_round_only_once(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         logger = OperationLogger()
         logger.begin_round("TestRound")
         logger.begin_round("TestRound")
         assert mock_console.print.call_count == 1
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_reset_clears_state(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         logger = OperationLogger()
         for i in range(3):
@@ -280,7 +280,7 @@ class TestOperationLogger:
         assert logger._tool_type_counts == {}
         assert logger._round_count == 0
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_log_tool_result_error(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         logger = OperationLogger()
         logger.log_tool_result("test", {"error": "fail"}, visible=True)
@@ -288,7 +288,7 @@ class TestOperationLogger:
         assert "✗" in printed
         assert "fail" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_log_tool_result_invisible_noop(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         logger = OperationLogger()
         logger.log_tool_result("test", {"tier": "S"}, visible=False)
@@ -298,9 +298,9 @@ class TestOperationLogger:
 class TestRenderStatusLine:
     """Status line rendering tests."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_renders_with_session_meter(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        import core.cli.ui.agentic_ui as _ui_mod
+        import core.ui.agentic_ui as _ui_mod
         from core.llm.token_tracker import get_tracker, reset_tracker
 
         # Isolate: clear stale _turn_snapshot from other tests
@@ -321,10 +321,10 @@ class TestRenderStatusLine:
         finally:
             _ui_mod._turn_snapshot = old_snap
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_noop_without_meter(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         # Force no meter by clearing thread-local
-        import core.cli.ui.agentic_ui as mod
+        import core.ui.agentic_ui as mod
 
         old = getattr(mod._meter_local, "meter", None)
         mod._meter_local.__dict__.pop("meter", None)
@@ -335,7 +335,7 @@ class TestRenderStatusLine:
             if old is not None:
                 mod._meter_local.meter = old
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_status_line_shows_per_turn_delta(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """After mark_turn_start(), status line should show only the turn's tokens."""
         from core.llm.token_tracker import get_tracker, reset_tracker
@@ -362,10 +362,10 @@ class TestRenderStatusLine:
         assert "10.0k" not in printed
         assert "10.5k" not in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_status_line_no_snapshot_uses_cumulative(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """Without mark_turn_start(), status line falls back to cumulative."""
-        import core.cli.ui.agentic_ui as mod
+        import core.ui.agentic_ui as mod
         from core.llm.token_tracker import get_tracker, reset_tracker
 
         reset_tracker()
@@ -462,7 +462,7 @@ class TestMarkTurnStart:
     """Tests for the module-level mark_turn_start() function."""
 
     def test_mark_turn_start_sets_snapshot(self) -> None:
-        import core.cli.ui.agentic_ui as mod
+        import core.ui.agentic_ui as mod
         from core.llm.token_tracker import get_tracker, reset_tracker
 
         reset_tracker()
@@ -494,7 +494,7 @@ class TestMarkTurnStart:
 class TestToolTypeGrouping:
     """OperationLogger tool-type grouping (6+ tools)."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_grouping_with_mixed_types(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """8 tool calls of mixed types produce compact aggregate summary."""
         logger = OperationLogger()
@@ -517,7 +517,7 @@ class TestToolTypeGrouping:
         assert "8 tools" in combined
         assert "1 rounds" in combined
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_grouping_sorted_by_count(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """6+ tools produce compact aggregate summary."""
         logger = OperationLogger()
@@ -537,7 +537,7 @@ class TestToolTypeGrouping:
         assert "6 tools" in combined
         assert "1 rounds" in combined
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_below_grouping_threshold_no_summary(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """<= 5 tools: no grouping, no collapsed count."""
         logger = OperationLogger()
@@ -549,7 +549,7 @@ class TestToolTypeGrouping:
         # 5 tools, 0 collapsed, total < 6 → nothing printed
         assert not mock_console.print.called
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_exactly_6_tools_triggers_grouping(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """Exactly 6 tools (GROUPING_THRESHOLD) triggers compact summary."""
         logger = OperationLogger()
@@ -564,7 +564,7 @@ class TestToolTypeGrouping:
 
         assert "6 tools" in combined
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_round_counting(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """Multiple begin_round() calls increment round count."""
         logger = OperationLogger()
@@ -587,7 +587,7 @@ class TestToolTypeGrouping:
 class TestSubagentProgressCounter:
     """Sub-agent progressive counter rendering."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_progress_in_flight(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """Partial completion shows [completed/total] counter."""
         render_subagent_progress(2, 5, "thread-safety", 2.1)
@@ -596,7 +596,7 @@ class TestSubagentProgressCounter:
         assert "2.1s" in printed
         assert "[2/5]" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_progress_final(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """Last completion still shows [completed/total]."""
         render_subagent_progress(5, 5, "final-task", 3.4)
@@ -605,7 +605,7 @@ class TestSubagentProgressCounter:
         assert "3.4s" in printed
         assert "[5/5]" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_progress_first(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """First completion shows [1/total]."""
         render_subagent_progress(1, 3, "task-alpha", 1.0)
@@ -617,7 +617,7 @@ class TestSubagentProgressCounter:
 class TestTurnSummary:
     """Turn-end compact summary line."""
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_basic_summary(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """Summary shows rounds, tools, time, cost."""
         render_turn_summary(3, 8, 4.2, 0.012)
@@ -628,7 +628,7 @@ class TestTurnSummary:
         assert "$0.012" in printed
         assert "────" in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_summary_no_cost(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """When cost is 0, cost part is omitted."""
         render_turn_summary(2, 5, 1.5, 0.0)
@@ -638,13 +638,13 @@ class TestTurnSummary:
         assert "1.5s" in printed
         assert "$" not in printed
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_summary_zero_tools_noop(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """No tool calls means no summary rendered."""
         render_turn_summary(1, 0, 0.5, 0.0)
         assert not mock_console.print.called
 
-    @patch("core.cli.ui.agentic_ui.console")
+    @patch("core.ui.agentic_ui.console")
     def test_summary_single_round(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         """Single round summary."""
         render_turn_summary(1, 2, 0.8, 0.001)
@@ -690,7 +690,7 @@ class TestRepeatCounter:
     """Tests for EventRenderer cross-batch repeat counter."""
 
     def _make_renderer(self) -> Any:
-        from core.cli.ui.event_renderer import EventRenderer
+        from core.ui.event_renderer import EventRenderer
 
         r = EventRenderer()
         # Redirect output to avoid terminal noise in tests
@@ -804,8 +804,8 @@ class TestThreadLocalConsoleIsolation:
         import threading
         from io import StringIO
 
-        from core.cli.ui.console import console as proxy
-        from core.cli.ui.console import (
+        from core.ui.console import console as proxy
+        from core.ui.console import (
             make_session_console,
             reset_thread_console,
             set_thread_console,
@@ -875,8 +875,8 @@ class TestThreadLocalConsoleIsolation:
 
     def test_default_console_fallback(self) -> None:
         """Without set_thread_console(), proxy falls back to default."""
-        from core.cli.ui.console import _default_console
-        from core.cli.ui.console import console as proxy
+        from core.ui.console import _default_console
+        from core.ui.console import console as proxy
 
         # In main thread (no thread-local set), proxy._current() returns default
         assert proxy._current() is _default_console

@@ -13,14 +13,14 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from core.agent.safety_constants import (
+from core.agent.safety import (
     AUTO_APPROVED_MCP_SERVERS,
     DANGEROUS_TOOLS,
     EXPENSIVE_TOOLS,
     SAFE_BASH_PREFIXES,
     WRITE_TOOLS,
 )
-from core.cli.ui.console import console
+from core.ui.console import console
 
 if TYPE_CHECKING:
     from core.hooks import HookSystem

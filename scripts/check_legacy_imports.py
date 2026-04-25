@@ -21,13 +21,33 @@ LEGACY_PATTERNS: list[tuple[str, str]] = [
     (r"import core\.nodes\b", "core.domains.game_ip.nodes"),
     (r"from core\.fixtures\b", "core.domains.game_ip.fixtures"),
     (r"import core\.fixtures\b", "core.domains.game_ip.fixtures"),
-    (r"from core\.ui\b", "core.cli.ui"),
-    (r"import core\.ui\b", "core.cli.ui"),
-    (r"from core\.auth\b", "core.gateway.auth"),
-    (r"import core\.auth\b", "core.gateway.auth"),
+    # v0.52 — directional flip: ui와 auth가 top-level로 승격되어 cli.ui /
+    # gateway.auth 가 이제 legacy. 새 위치를 권장.
+    (r"from core\.cli\.ui\b", "core.ui"),
+    (r"import core\.cli\.ui\b", "core.ui"),
+    (r"from core\.gateway\.auth\b", "core.auth"),
+    (r"import core\.gateway\.auth\b", "core.auth"),
+    # v0.52 phase 4 — gateway/ 폐기. pollers는 server/, channels는 channels/
+    (r"from core\.gateway\.pollers\b", "core.server.{ipc_server,supervised}"),
+    (r"from core\.gateway\.channel_manager\b", "core.channels.binding"),
+    (r"from core\.gateway\.models\b", "core.channels.models"),
+    (r"from core\.gateway\.shared_services\b", "core.server.supervised.services"),
+    (r"from core\.gateway\.webhook_handler\b", "core.server.supervised.webhook_handler"),
+    # v0.52 phase 1 — runtime_wiring → lifecycle, infra → container
+    (r"from core\.runtime_wiring\b", "core.lifecycle"),
+    (r"import core\.runtime_wiring\b", "core.lifecycle"),
+    # v0.52 phase 5 — automation/ cron 부분이 scheduler/ 로 분리
+    (r"from core\.automation\.scheduler\b", "core.scheduler.scheduler"),
+    (r"from core\.automation\.triggers\b", "core.scheduler.triggers"),
+    (r"from core\.automation\.predefined\b", "core.scheduler.predefined"),
+    (r"from core\.automation\.nl_scheduler\b", "core.scheduler.nl_scheduler"),
+    (r"from core\.automation\.calendar_bridge\b", "core.scheduler.calendar_bridge"),
+    # v0.52 phase 7 — agent rename
+    (r"from core\.agent\.agentic_loop\b", "core.agent.loop"),
+    (r"from core\.agent\.safety_constants\b", "core.agent.safety"),
+    (r"from core\.cli\.agentic_loop\b", "core.agent.loop"),
     (r"from core\.extensibility\b", "core.skills"),
     (r"import core\.extensibility\b", "core.skills"),
-    (r"from core\.cli\.agentic_loop\b", "core.agent.agentic_loop"),
     (r"from core\.cli\.sub_agent\b", "core.agent.sub_agent"),
     (r"from core\.cli\.conversation\b", "core.agent.conversation"),
     (r"from core\.cli\.error_recovery\b", "core.agent.error_recovery"),
@@ -39,15 +59,11 @@ LEGACY_PATTERNS: list[tuple[str, str]] = [
     (r"from core\.infrastructure\.ports\.calendar_port\b", "core.mcp.calendar_port"),
 ]
 
-# Bridge proxy files are exempt (they ARE the re-export layer)
+# Bridge proxy files are exempt (they ARE the re-export layer).
+# v0.52 — ui/ + auth/ 는 이제 top-level 정식 위치이므로 exempt 불필요.
 EXEMPT_FILES = {
     "core/nodes/__init__.py",
     "core/fixtures/__init__.py",
-    "core/ui/__init__.py",
-    "core/auth/__init__.py",
-    "core/auth/cooldown.py",
-    "core/auth/profiles.py",
-    "core/auth/rotation.py",
     "core/extensibility/__init__.py",
     "core/extensibility/_frontmatter.py",
     "core/extensibility/agents.py",

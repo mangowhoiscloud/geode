@@ -13,8 +13,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from core.agent.agentic_loop import AgenticLoop
 from core.agent.conversation import ConversationContext
+from core.agent.loop import AgenticLoop
 from core.agent.tool_executor import ToolExecutor
 from core.config import (
     ANTHROPIC_FALLBACK_CHAIN,

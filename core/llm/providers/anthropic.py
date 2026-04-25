@@ -441,7 +441,7 @@ class ClaudeAgenticAdapter:
                 ) from exc
             log.warning("Anthropic BadRequest in agentic loop: %s", msg)
             if "tool_use_id" in msg or "tool_result" in msg:
-                from core.agent.agentic_loop import AgenticLoop
+                from core.agent.loop import AgenticLoop
 
                 AgenticLoop._repair_messages(messages)
                 log.info("Repaired orphaned tool_result in conversation history")

@@ -10,8 +10,8 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock, patch
 
-from core.gateway.auth.profiles import AuthProfile, CredentialType, ProfileStore
-from core.gateway.auth.rotation import ProfileRotator
+from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
+from core.auth.rotation import ProfileRotator
 from core.llm.credentials import (
     _last_profile,
     get_last_profile,
@@ -38,14 +38,14 @@ class TestProfileTracking:
         store.add(profile)
         rotator = ProfileRotator(store)
 
-        with patch("core.runtime_wiring.infra.get_profile_rotator", return_value=rotator):
+        with patch("core.lifecycle.container.get_profile_rotator", return_value=rotator):
             key = resolve_provider_key("openai", "fallback-key")
 
         assert key == "test-token"
         assert get_last_profile("openai") is profile
 
     def test_resolve_fallback_no_profile(self):
-        with patch("core.runtime_wiring.infra.get_profile_rotator", return_value=None):
+        with patch("core.lifecycle.container.get_profile_rotator", return_value=None):
             key = resolve_provider_key("openai", "fallback-key")
 
         assert key == "fallback-key"
@@ -75,7 +75,7 @@ class TestNotifySuccess:
         rotator = ProfileRotator(store)
         _last_profile["openai"] = profile
 
-        with patch("core.runtime_wiring.infra.get_profile_rotator", return_value=rotator):
+        with patch("core.lifecycle.container.get_profile_rotator", return_value=rotator):
             notify_llm_success("openai")
 
         assert profile.error_count == 0
@@ -83,13 +83,13 @@ class TestNotifySuccess:
 
     def test_success_noop_without_profile(self):
         """No crash when no profile was resolved."""
-        with patch("core.runtime_wiring.infra.get_profile_rotator", return_value=MagicMock()):
+        with patch("core.lifecycle.container.get_profile_rotator", return_value=MagicMock()):
             notify_llm_success("openai")  # should not raise
 
     def test_success_noop_without_rotator(self):
         """No crash when rotator is not available."""
         _last_profile["openai"] = MagicMock()
-        with patch("core.runtime_wiring.infra.get_profile_rotator", return_value=None):
+        with patch("core.lifecycle.container.get_profile_rotator", return_value=None):
             notify_llm_success("openai")  # should not raise
 
 
@@ -118,7 +118,7 @@ class TestNotifyFailure:
         # Simulate auth error (401)
         exc = Exception("401 Unauthorized")
         with (
-            patch("core.runtime_wiring.infra.get_profile_rotator", return_value=rotator),
+            patch("core.lifecycle.container.get_profile_rotator", return_value=rotator),
             patch("core.llm.fallback._is_auth_error", return_value=True),
         ):
             notify_llm_failure("openai", exc)
@@ -140,7 +140,7 @@ class TestNotifyFailure:
 
         exc = Exception("Connection timeout")
         with (
-            patch("core.runtime_wiring.infra.get_profile_rotator", return_value=rotator),
+            patch("core.lifecycle.container.get_profile_rotator", return_value=rotator),
             patch("core.llm.fallback._is_auth_error", return_value=False),
         ):
             notify_llm_failure("openai", exc)
@@ -151,7 +151,7 @@ class TestNotifyFailure:
     def test_failure_noop_without_profile(self):
         """No crash when no profile was resolved."""
         exc = Exception("error")
-        with patch("core.runtime_wiring.infra.get_profile_rotator", return_value=MagicMock()):
+        with patch("core.lifecycle.container.get_profile_rotator", return_value=MagicMock()):
             notify_llm_failure("openai", exc)  # should not raise
 
 
@@ -241,10 +241,10 @@ class TestAuditLoggerCompleteness:
         from unittest.mock import patch as _patch
 
         with (
-            _patch("core.runtime_wiring.bootstrap.RunLog"),
-            _patch("core.runtime_wiring.bootstrap.StuckDetector"),
+            _patch("core.lifecycle.bootstrap.RunLog"),
+            _patch("core.lifecycle.bootstrap.StuckDetector"),
         ):
-            from core.runtime_wiring.bootstrap import build_hooks
+            from core.lifecycle.bootstrap import build_hooks
 
             hooks, _, _, _ = build_hooks(
                 session_key="test",

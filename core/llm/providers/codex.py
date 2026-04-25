@@ -54,7 +54,7 @@ def _extract_account_id(token: str) -> str:
 def _resolve_codex_token() -> str:
     """Resolve Codex OAuth token from ~/.codex/auth.json."""
     try:
-        from core.gateway.auth.codex_cli_oauth import read_codex_cli_credentials
+        from core.auth.codex_cli_oauth import read_codex_cli_credentials
 
         creds = read_codex_cli_credentials()
         if creds:

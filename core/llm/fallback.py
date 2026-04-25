@@ -41,7 +41,7 @@ def _try_oauth_refresh(provider_label: str) -> bool:
     Returns True if a token was refreshed and clients were reset.
     """
     try:
-        from core.runtime_wiring.infra import get_profile_rotator
+        from core.lifecycle.container import get_profile_rotator
 
         rotator = get_profile_rotator()
         if not rotator:
@@ -54,7 +54,7 @@ def _try_oauth_refresh(provider_label: str) -> bool:
 
         # claude-code OAuth disabled (Anthropic ToS violation)
         if profile.managed_by == "codex-cli":
-            from core.gateway.auth.codex_cli_oauth import (
+            from core.auth.codex_cli_oauth import (
                 refresh_codex_cli_token,
             )
             from core.llm.providers.openai import reset_openai_client

@@ -103,7 +103,7 @@ def tool_error(
         hint: Actionable suggestion for the LLM (e.g. "use list_ips first").
         context: Extra key-value pairs (parameter name, value, etc.).
     """
-    from core.gateway.auth.scrub import scrub_credentials
+    from core.auth.scrub import scrub_credentials
 
     result: dict[str, Any] = {
         "error": scrub_credentials(message),

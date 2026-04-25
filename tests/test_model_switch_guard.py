@@ -14,8 +14,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from core.agent.agentic_loop import AgenticLoop
 from core.agent.conversation import ConversationContext
+from core.agent.loop import AgenticLoop
 from core.agent.tool_executor import ToolExecutor
 from core.orchestration.context_monitor import (
     check_context,
@@ -189,7 +189,7 @@ class TestUpdateModelIntegration:
         loop = _make_loop(ctx, model="claude-opus-4-6")
         before = check_context(ctx.messages, "glm-5").estimated_tokens
 
-        with patch("core.cli.ui.agentic_ui.update_session_model"):
+        with patch("core.ui.agentic_ui.update_session_model"):
             loop.update_model("glm-5", "zhipuai")
 
         after = check_context(ctx.messages, "glm-5").estimated_tokens
@@ -199,7 +199,7 @@ class TestUpdateModelIntegration:
         ctx = ConversationContext()  # empty
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        with patch("core.cli.ui.agentic_ui.update_session_model"):
+        with patch("core.ui.agentic_ui.update_session_model"):
             loop.update_model("glm-5", "zhipuai")
         # No crash
 
@@ -214,7 +214,7 @@ class TestUpdateModelIntegration:
         old = settings.model
         try:
             settings.model = "glm-5"
-            with patch("core.cli.ui.agentic_ui.update_session_model"):
+            with patch("core.ui.agentic_ui.update_session_model"):
                 loop._sync_model_from_settings()
             assert loop.model == "glm-5"
         finally:
@@ -308,7 +308,7 @@ class TestConversationContextWired:
         """arun must call set_conversation_context so /model guard works."""
         import inspect
 
-        from core.agent.agentic_loop import AgenticLoop
+        from core.agent.loop import AgenticLoop
 
         source = inspect.getsource(AgenticLoop.arun)
         assert "set_conversation_context" in source
@@ -325,7 +325,7 @@ def _make_loop(ctx: ConversationContext, model: str = "claude-opus-4-6") -> Agen
     adapter.fallback_chain = [model]
     executor = ToolExecutor()
 
-    with patch("core.agent.agentic_loop.resolve_agentic_adapter", return_value=adapter):
+    with patch("core.agent.loop.resolve_agentic_adapter", return_value=adapter):
         loop = AgenticLoop(
             model=model,
             context=ctx,

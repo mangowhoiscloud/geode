@@ -7,15 +7,15 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from core.automation.nl_scheduler import NLScheduleParser
-from core.automation.predefined import PREDEFINED_AUTOMATIONS
-from core.automation.scheduler import (
+from core.cli.commands import cmd_schedule
+from core.scheduler.nl_scheduler import NLScheduleParser
+from core.scheduler.predefined import PREDEFINED_AUTOMATIONS
+from core.scheduler.scheduler import (
     Schedule,
     ScheduledJob,
     ScheduleKind,
     SchedulerService,
 )
-from core.cli.commands import cmd_schedule
 
 # ---------------------------------------------------------------------------
 # Fixtures

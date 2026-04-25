@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.agent.safety_constants import SAFE_BASH_PREFIXES
+from core.agent.safety import SAFE_BASH_PREFIXES
 
 
 class TestSafeBashPrefixBypass:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from core.automation.predefined import (
+from core.scheduler.predefined import (
     PREDEFINED_AUTOMATIONS,
     AutomationTemplate,
     PipelineConfig,
