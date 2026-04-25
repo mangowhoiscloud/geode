@@ -388,8 +388,8 @@ class TestAgenticLoopIntegration:
 
     def test_decomposition_disabled(self) -> None:
         """When decomposition is disabled, _try_decompose returns None."""
-        from core.agent.agentic_loop import AgenticLoop
         from core.agent.conversation import ConversationContext
+        from core.agent.loop import AgenticLoop
         from core.agent.tool_executor import ToolExecutor
 
         context = ConversationContext()
@@ -426,8 +426,8 @@ class TestAgenticLoopIntegration:
             reasoning="Analysis then report",
         )
 
-        from core.agent.agentic_loop import AgenticLoop
         from core.agent.conversation import ConversationContext
+        from core.agent.loop import AgenticLoop
         from core.agent.tool_executor import ToolExecutor
 
         context = ConversationContext()
@@ -446,8 +446,8 @@ class TestAgenticLoopIntegration:
 
     def test_simple_request_no_hint(self) -> None:
         """Simple requests should not produce a decomposition hint."""
-        from core.agent.agentic_loop import AgenticLoop
         from core.agent.conversation import ConversationContext
+        from core.agent.loop import AgenticLoop
         from core.agent.tool_executor import ToolExecutor
 
         context = ConversationContext()

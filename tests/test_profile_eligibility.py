@@ -217,7 +217,7 @@ class TestBreadcrumbFormatter:
 class TestAgenticLoopBreadcrumbInjection:
     def test_inject_credential_breadcrumb_appends_user_message(self) -> None:
         # Light smoke — exercises the wiring without spinning up a real loop.
-        from core.agent.agentic_loop import AgenticLoop
+        from core.agent.loop import AgenticLoop
 
         loop = AgenticLoop.__new__(AgenticLoop)
         loop._provider = "openai"  # type: ignore[attr-defined]

@@ -123,7 +123,7 @@ class ContextWindowManager:
                 # Re-check: if still critical after pruning, context is exhausted
                 post = check_context(messages, model, system_prompt=system)
                 if post.is_critical:
-                    from core.agent.agentic_loop import _ContextExhaustedError
+                    from core.agent.loop import _ContextExhaustedError
 
                     raise _ContextExhaustedError(
                         f"Context exhausted: {post.usage_pct:.0f}% after pruning"

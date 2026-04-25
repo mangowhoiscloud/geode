@@ -155,7 +155,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     conversation = ConversationContext(max_turns=200)
 
     # 6. Build AgenticLoop
-    from core.agent.agentic_loop import AgenticLoop
+    from core.agent.loop import AgenticLoop
 
     loop = AgenticLoop(
         conversation,

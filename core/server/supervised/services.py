@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.agent.agentic_loop import AgenticLoop
+    from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
 
 log = logging.getLogger(__name__)
@@ -128,7 +128,7 @@ class SharedServices:
         Every call receives identical shared resources (hooks, MCP, skills,
         cost_budget).  Only mode-specific behavior differs.
         """
-        from core.agent.agentic_loop import AgenticLoop
+        from core.agent.loop import AgenticLoop
         from core.agent.tool_executor import ToolExecutor
 
         if propagate_context:

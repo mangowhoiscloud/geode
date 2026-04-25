@@ -27,12 +27,12 @@ if TYPE_CHECKING:
 from core.agent.approval import (
     _write_denial_with_fallback as _write_denial_with_fallback,
 )
-from core.agent.safety_constants import AUTO_APPROVED_MCP_SERVERS as AUTO_APPROVED_MCP_SERVERS
-from core.agent.safety_constants import DANGEROUS_TOOLS as DANGEROUS_TOOLS
-from core.agent.safety_constants import EXPENSIVE_TOOLS as EXPENSIVE_TOOLS
-from core.agent.safety_constants import SAFE_BASH_PREFIXES as SAFE_BASH_PREFIXES
-from core.agent.safety_constants import SAFE_TOOLS as SAFE_TOOLS
-from core.agent.safety_constants import WRITE_TOOLS as WRITE_TOOLS
+from core.agent.safety import AUTO_APPROVED_MCP_SERVERS as AUTO_APPROVED_MCP_SERVERS
+from core.agent.safety import DANGEROUS_TOOLS as DANGEROUS_TOOLS
+from core.agent.safety import EXPENSIVE_TOOLS as EXPENSIVE_TOOLS
+from core.agent.safety import SAFE_BASH_PREFIXES as SAFE_BASH_PREFIXES
+from core.agent.safety import SAFE_TOOLS as SAFE_TOOLS
+from core.agent.safety import WRITE_TOOLS as WRITE_TOOLS
 from core.cli.bash_tool import BashTool
 from core.ui.console import console
 

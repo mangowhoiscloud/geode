@@ -210,7 +210,7 @@ class TestM2SchedulerPolicyChain:
 
         with (
             patch("core.server.supervised.services.SharedServices._build_sub_agent_manager"),
-            patch("core.agent.agentic_loop.AgenticLoop.__init__", return_value=None),
+            patch("core.agent.loop.AgenticLoop.__init__", return_value=None),
             patch("core.agent.tool_executor.ToolExecutor.__init__", return_value=None) as te_init,
             patch("core.cli.session_state.set_current_loop"),
         ):
@@ -240,7 +240,7 @@ class TestM2SchedulerPolicyChain:
 
         with (
             patch("core.server.supervised.services.SharedServices._build_sub_agent_manager"),
-            patch("core.agent.agentic_loop.AgenticLoop.__init__", return_value=None),
+            patch("core.agent.loop.AgenticLoop.__init__", return_value=None),
             patch("core.agent.tool_executor.ToolExecutor.__init__", return_value=None) as te_init,
             patch("core.cli.session_state.set_current_loop"),
         ):

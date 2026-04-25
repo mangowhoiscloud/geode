@@ -394,7 +394,7 @@ class TestEscalationCompact:
         loop._adapter = MagicMock(fallback_chain=["glm-5", "glm-5-turbo", "glm-4.7-flash"])
         loop.update_model = MagicMock()
 
-        from core.agent.agentic_loop import AgenticLoop
+        from core.agent.loop import AgenticLoop
 
         result = AgenticLoop._try_model_escalation(loop)
         assert result is True
@@ -411,7 +411,7 @@ class TestEscalationCompact:
         loop._adapter = MagicMock(fallback_chain=["glm-5", "glm-5-turbo"])
         loop.update_model = MagicMock()
 
-        from core.agent.agentic_loop import AgenticLoop
+        from core.agent.loop import AgenticLoop
 
         result = AgenticLoop._try_model_escalation(loop)
         assert result is True

@@ -60,7 +60,7 @@ class TestHandlerWired:
 
 class TestSafetyRegistration:
     def test_manage_login_in_write_tools(self) -> None:
-        from core.agent.safety_constants import WRITE_TOOLS
+        from core.agent.safety import WRITE_TOOLS
 
         assert "manage_login" in WRITE_TOOLS
 
