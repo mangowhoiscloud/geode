@@ -204,15 +204,19 @@ _ADAPTER_MAP: dict[str, str] = {
     "anthropic": "core.llm.providers.anthropic:ClaudeAgenticAdapter",
     "openai": "core.llm.providers.openai:OpenAIAgenticAdapter",
     "glm": "core.llm.providers.glm:GlmAgenticAdapter",
-    "codex": "core.llm.providers.codex:CodexAgenticAdapter",
+    "openai-codex": "core.llm.providers.codex:CodexAgenticAdapter",
 }
 
 # Cross-provider fallback: when a provider's chain is exhausted, try these.
+# Plan-aware fallback (Phase 5) replaces this; for v0.50.0 Phase 0 we drop
+# implicit GLM↔OpenAI jumps so a Coding Plan auth error doesn't silently
+# spill onto a metered OpenAI key. openai-codex shares OAuth scope with no
+# other provider, so its Anthropic fallback is removed too.
 CROSS_PROVIDER_FALLBACK: dict[str, list[tuple[str, str]]] = {
     "anthropic": [("openai", OPENAI_PRIMARY)],
     "openai": [("anthropic", ANTHROPIC_PRIMARY)],
-    "glm": [("openai", OPENAI_PRIMARY), ("anthropic", ANTHROPIC_PRIMARY)],
-    "codex": [("openai", OPENAI_PRIMARY), ("anthropic", ANTHROPIC_PRIMARY)],
+    "glm": [],
+    "openai-codex": [],
 }
 
 

@@ -33,6 +33,14 @@ class AuthProfile:
     """A single authentication profile.
 
     Naming convention: {provider}:{identifier} e.g. 'anthropic:work'.
+
+    plan_id (v0.50.0+) optionally links the profile to a Plan in
+    `core.gateway.auth.plans`, which carries the endpoint, auth type,
+    quota, and subscription metadata. When unset, the profile defaults
+    to a synthetic PAYG Plan derived from `provider`.
+
+    base_url_override (v0.50.0+) lets a profile point at a non-default
+    endpoint without modifying the Plan (e.g. China-mainland mirror).
     """
 
     name: str  # e.g. "anthropic:work"
@@ -48,6 +56,8 @@ class AuthProfile:
     disabled: bool = False
     disabled_reason: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    plan_id: str = ""  # FK into PlanRegistry (Phase 4)
+    base_url_override: str | None = None  # overrides Plan.base_url for this profile
 
     @property
     def is_expired(self) -> bool:

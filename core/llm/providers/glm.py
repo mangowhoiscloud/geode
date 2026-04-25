@@ -30,6 +30,25 @@ _glm_lock = threading.Lock()
 _glm_circuit_breaker = CircuitBreaker()
 
 
+def _resolve_glm_endpoint() -> tuple[str, str]:
+    """Pick (api_key, base_url) for GLM, preferring a Plan-bound profile.
+
+    When the user registered a `glm-coding-*` Plan via /login, that Plan's
+    base_url + bound API key are used (so a Coding Plan key actually
+    calls the coding endpoint). Falls back to settings.zai_api_key +
+    GLM_BASE_URL for legacy .env-only setups.
+    """
+    try:
+        from core.gateway.auth.plan_registry import resolve_routing
+
+        target = resolve_routing("glm-5.1")
+        if target is not None and target.profile.key:
+            return target.profile.key, target.base_url
+    except Exception:
+        log.debug("GLM Plan-aware endpoint resolution failed", exc_info=True)
+    return settings.zai_api_key, GLM_BASE_URL
+
+
 def _get_glm_client() -> Any:
     """Lazy import and return cached GLM client (OpenAI-compatible, thread-safe).
 
@@ -41,9 +60,10 @@ def _get_glm_client() -> Any:
             if _glm_client is None:
                 import openai
 
+                api_key, base_url = _resolve_glm_endpoint()
                 _glm_client = openai.OpenAI(
-                    api_key=settings.zai_api_key,
-                    base_url=GLM_BASE_URL,
+                    api_key=api_key,
+                    base_url=base_url,
                 )
     return _glm_client
 
@@ -99,7 +119,7 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
         return list(GLM_FALLBACK_CHAIN)
 
     def _resolve_config(self, model: str) -> tuple[str, str | None]:
-        return settings.zai_api_key, GLM_BASE_URL
+        return _resolve_glm_endpoint()
 
     async def agentic_call(
         self,

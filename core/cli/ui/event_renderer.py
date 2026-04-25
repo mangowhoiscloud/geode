@@ -367,7 +367,13 @@ class EventRenderer:
         self._clear_activity_line()
         frm = str(event.get("from_model", ""))
         to = str(event.get("to_model", ""))
-        self._out.write(f"  \033[2m\u21c4 Model: {frm} \u2192 {to}\033[0m\n")
+        # v0.50.0: surface the reason so users can tell quota exhaustion
+        # ("rate_limit") apart from auth errors ("auth_cross_provider") and
+        # context overflow ("failure_escalation"). Pre-0.50 the bare arrow
+        # left users guessing why the model changed mid-turn.
+        reason = str(event.get("reason", ""))
+        suffix = f"  ({reason})" if reason else ""
+        self._out.write(f"  \033[2m\u21c4 Model: {frm} \u2192 {to}{suffix}\033[0m\n")
         self._out.flush()
 
     def _handle_checkpoint_saved(self, event: dict[str, Any]) -> None:

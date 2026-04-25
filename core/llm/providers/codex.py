@@ -126,7 +126,7 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
 
     @property
     def provider_name(self) -> str:
-        return "codex"
+        return "openai-codex"
 
     @property
     def fallback_chain(self) -> list[str]:

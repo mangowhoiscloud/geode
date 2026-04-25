@@ -518,10 +518,10 @@ class TestCheckProviderKey:
             settings.openai_api_key = old
 
     def test_warns_missing_glm_key(self):
-        """Switching to ZhipuAI model without key should warn."""
+        """Switching to GLM model without key should warn."""
         from core.config import GLM_PRIMARY, settings
 
-        profile = ModelProfile(GLM_PRIMARY, "ZhipuAI", "GLM-5", "$")
+        profile = ModelProfile(GLM_PRIMARY, "GLM", "GLM-5", "$")
         old = settings.zai_api_key
         try:
             settings.zai_api_key = ""
