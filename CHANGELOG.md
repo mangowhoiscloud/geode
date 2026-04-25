@@ -28,6 +28,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.50.1] — 2026-04-25
+
+### Added
+- **`manage_login` agentic tool** — natural-language access to the unified `/login` command. Supports the same subcommands as the slash command (`status`, `add`, `oauth`, `set-key`, `use`, `route`, `remove`, `quota`, `help`). Returns a structured snapshot (plans, profiles, routing) so the LLM can reason about credential state without re-rendering the Rich dashboard. (`core/tools/definitions.json`, `core/cli/tool_handlers.py`)
+- **Safety/policy registration** — `manage_login` is in `WRITE_TOOLS`, blocked for sub-agents (`SUBAGENT_DENIED_TOOLS`), excluded from auto-recovery (`error_recovery._EXCLUDED_TOOLS`), denied for read-only profiles, and emits an HITL approval card with `subcommand`/`args` summary. (`core/agent/safety_constants.py`, `core/agent/sub_agent.py`, `core/agent/error_recovery.py`, `core/tools/policy.py`, `core/agent/approval.py`)
+
+### Changed
+- **`set_api_key` and `manage_auth` tool descriptions** — both now point users (and the model) at `manage_login` as the preferred path. Approval denial messages updated to reference `/login` instead of the legacy `/key` and `/auth` commands.
+
 ## [0.50.0] — 2026-04-25
 
 ### Added

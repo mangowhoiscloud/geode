@@ -33,6 +33,7 @@ _EXCLUDED_TOOLS: frozenset[str] = frozenset(
         "note_save",
         "set_api_key",
         "manage_auth",
+        "manage_login",
     }
 )
 

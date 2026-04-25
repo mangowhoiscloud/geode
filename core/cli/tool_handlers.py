@@ -809,6 +809,61 @@ def _build_system_handlers(
             "profiles": profiles,
         }
 
+    def handle_manage_login(**kwargs: Any) -> dict[str, Any]:
+        """Natural-language entry to /login (Plans + Profiles + OAuth + Routing)."""
+        from core.cli.commands import cmd_login
+
+        sub = (kwargs.get("subcommand") or "status").strip().lower()
+        args = (kwargs.get("args") or "").strip()
+        login_input = "" if sub in ("", "status", "list", "ls") else f"{sub} {args}".strip()
+        cmd_login(login_input)
+
+        try:
+            from core.gateway.auth.plan_registry import get_plan_registry
+            from core.runtime_wiring.infra import ensure_profile_store
+
+            store = ensure_profile_store()
+            registry = get_plan_registry()
+            plans_payload = []
+            for plan in registry.list_all():
+                usage = registry.usage_for(plan.id)
+                plans_payload.append(
+                    {
+                        "id": plan.id,
+                        "provider": plan.provider,
+                        "kind": plan.kind.value,
+                        "display_name": plan.display_name,
+                        "base_url": plan.base_url,
+                        "subscription_tier": plan.subscription_tier,
+                        "quota_max": (plan.quota.max_calls if plan.quota else None),
+                        "quota_used": int(usage.weighted_calls),
+                    }
+                )
+            profiles_payload = [
+                {
+                    "name": p.name,
+                    "provider": p.provider,
+                    "type": p.credential_type.value,
+                    "plan_id": p.plan_id or None,
+                    "managed_by": p.managed_by or None,
+                }
+                for p in store.list_all()
+            ]
+            routing_payload = registry.all_routing()
+        except Exception:
+            plans_payload = []
+            profiles_payload = []
+            routing_payload = {}
+
+        return {
+            "status": "ok",
+            "action": "login",
+            "subcommand": sub or "status",
+            "plans": plans_payload,
+            "profiles": profiles_payload,
+            "routing": routing_payload,
+        }
+
     def handle_doctor_slack(**_kwargs: Any) -> dict[str, Any]:
         from core.cli.doctor import format_doctor_report, run_doctor_slack
 
@@ -821,6 +876,7 @@ def _build_system_handlers(
         "switch_model": handle_switch_model,
         "set_api_key": handle_set_api_key,
         "manage_auth": handle_manage_auth,
+        "manage_login": handle_manage_login,
         "doctor_slack": handle_doctor_slack,
     }
 
