@@ -366,7 +366,11 @@ CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 # ZhipuAI (GLM) models — OpenAI-compatible API, separate provider
 GLM_PRIMARY = "glm-5.1"
 GLM_FALLBACK_CHAIN: list[str] = ["glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"]
-GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
+# Coding Plan endpoint (subscription-billed). PAYG endpoint is api/paas/v4 — a
+# Coding Plan key called against PAYG path silently bypasses the subscription
+# quota and incurs metered billing instead.
+GLM_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
+GLM_PAYG_BASE_URL = "https://api.z.ai/api/paas/v4"
 
 
 def _resolve_provider(model: str) -> str:
@@ -388,7 +392,7 @@ def _resolve_provider(model: str) -> str:
     if model.startswith("glm-"):
         return "glm"
     if model.endswith("-codex") or model.endswith("-codex-max") or model.endswith("-codex-mini"):
-        return "codex"
+        return "openai-codex"
     if model.startswith(("gpt-", "o3-", "o4-")):
         return "openai"
     if model.startswith("gemini-"):

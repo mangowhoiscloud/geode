@@ -492,7 +492,9 @@ class TestModelProfiles:
     def test_glm_profiles_provider(self):
         from core.cli.commands import MODEL_PROFILES
 
-        glm_profiles = [p for p in MODEL_PROFILES if p.provider == "ZhipuAI"]
+        # v0.50.0: provider label normalised to "GLM" so the UI store
+        # matches the dispatch key (was "ZhipuAI" / "glm" mismatch).
+        glm_profiles = [p for p in MODEL_PROFILES if p.provider == "GLM"]
         assert len(glm_profiles) == 3
 
 

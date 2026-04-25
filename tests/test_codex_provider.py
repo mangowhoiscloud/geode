@@ -22,10 +22,12 @@ class TestCodexConfig:
     def test_resolve_provider_codex_models(self):
         from core.config import _resolve_provider
 
-        assert _resolve_provider("gpt-5.3-codex") == "codex"
-        assert _resolve_provider("gpt-5.2-codex") == "codex"
-        assert _resolve_provider("gpt-5.1-codex-max") == "codex"
-        assert _resolve_provider("gpt-5.1-codex-mini") == "codex"
+        # v0.50.0: Codex OAuth is a distinct provider variant ("openai-codex")
+        # so its credentials never leak into general OpenAI calls.
+        assert _resolve_provider("gpt-5.3-codex") == "openai-codex"
+        assert _resolve_provider("gpt-5.2-codex") == "openai-codex"
+        assert _resolve_provider("gpt-5.1-codex-max") == "openai-codex"
+        assert _resolve_provider("gpt-5.1-codex-mini") == "openai-codex"
 
     def test_resolve_provider_non_codex(self):
         from core.config import _resolve_provider
@@ -94,7 +96,7 @@ class TestCodexAdapterProperties:
         from core.llm.providers.codex import CodexAgenticAdapter
 
         adapter = CodexAgenticAdapter()
-        assert adapter.provider_name == "codex"
+        assert adapter.provider_name == "openai-codex"
 
     def test_fallback_chain(self):
         from core.llm.providers.codex import CodexAgenticAdapter
@@ -156,21 +158,26 @@ class TestAdapterMap:
     def test_codex_in_adapter_map(self):
         from core.llm.adapters import _ADAPTER_MAP
 
-        assert "codex" in _ADAPTER_MAP
-        assert "CodexAgenticAdapter" in _ADAPTER_MAP["codex"]
+        assert "openai-codex" in _ADAPTER_MAP
+        assert "CodexAgenticAdapter" in _ADAPTER_MAP["openai-codex"]
 
     def test_codex_cross_provider_fallback(self):
         from core.llm.adapters import CROSS_PROVIDER_FALLBACK
 
-        assert "codex" in CROSS_PROVIDER_FALLBACK
-        providers = [p for p, _ in CROSS_PROVIDER_FALLBACK["codex"]]
-        assert "openai" in providers
+        # v0.50.0: openai-codex no longer auto-falls back across providers.
+        # OAuth scope is provider-specific (chatgpt.com/backend-api/codex),
+        # so silent jumps to PAYG OpenAI/Anthropic would surprise users.
+        assert "openai-codex" in CROSS_PROVIDER_FALLBACK
+        assert CROSS_PROVIDER_FALLBACK["openai-codex"] == []
 
 
 class TestModelSelector:
     def test_codex_in_model_profiles(self):
         from core.cli.commands import MODEL_PROFILES
 
+        # v0.50.0: only models with the "-codex" suffix actually route to
+        # Codex (Plus). gpt-5.4-mini was relabelled to plain OpenAI because
+        # it routes to PAYG.
         codex_profiles = [p for p in MODEL_PROFILES if "Codex" in p.provider]
-        assert len(codex_profiles) >= 2
-        assert any("Codex" in p.provider for p in codex_profiles)
+        assert len(codex_profiles) >= 1
+        assert any(p.id.endswith("-codex") for p in codex_profiles)

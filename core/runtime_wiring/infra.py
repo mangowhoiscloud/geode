@@ -253,8 +253,8 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
         if codex_creds:
             profile_store.add(
                 AuthProfile(
-                    name="openai:codex-cli",
-                    provider="openai",
+                    name="openai-codex:codex-cli",
+                    provider="openai-codex",
                     credential_type=CredentialType.OAUTH,
                     key=codex_creds["access_token"],
                     refresh_token=codex_creds.get("refresh_token", ""),

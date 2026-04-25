@@ -50,11 +50,14 @@ MODEL_PROFILES: list[ModelProfile] = [
     ModelProfile(ANTHROPIC_SECONDARY, "Anthropic", "Sonnet 4.6", "$$"),
     ModelProfile(ANTHROPIC_BUDGET, "Anthropic", "Haiku 4.5", "$"),
     ModelProfile(OPENAI_PRIMARY, "OpenAI", "GPT-5.4", "$$"),
-    ModelProfile("gpt-5.4-mini", "Codex (Plus)", "GPT-5.4 Mini", "$"),
+    # `gpt-5.4-mini` has no `-codex` suffix → routes to "openai" provider
+    # (PAYG API key), not Codex Plus quota. Labelling it "Codex (Plus)" misled
+    # users into thinking it consumed their subscription.
+    ModelProfile("gpt-5.4-mini", "OpenAI", "GPT-5.4 Mini", "$"),
     ModelProfile("gpt-5.3-codex", "Codex (Plus)", "GPT-5.3 Codex", "$$"),
-    ModelProfile(GLM_PRIMARY, "ZhipuAI", "GLM-5.1", "$"),
-    ModelProfile("glm-5-turbo", "ZhipuAI", "GLM-5 Turbo", "$"),
-    ModelProfile("glm-4.7-flash", "ZhipuAI", "GLM-4.7 Flash", "$"),
+    ModelProfile(GLM_PRIMARY, "GLM", "GLM-5.1", "$"),
+    ModelProfile("glm-5-turbo", "GLM", "GLM-5 Turbo", "$"),
+    ModelProfile("glm-4.7-flash", "GLM", "GLM-4.7 Flash", "$"),
 ]
 
 _MODEL_INDEX: dict[str, ModelProfile] = {m.id: m for m in MODEL_PROFILES}
@@ -285,7 +288,7 @@ def _check_provider_key(selected: ModelProfile) -> None:
     provider_key_map: dict[str, tuple[str, str]] = {
         "Anthropic": (settings.anthropic_api_key, "ANTHROPIC_API_KEY"),
         "OpenAI": (settings.openai_api_key, "OPENAI_API_KEY"),
-        "ZhipuAI": (settings.zai_api_key, "ZAI_API_KEY"),
+        "GLM": (settings.zai_api_key, "ZAI_API_KEY"),
     }
 
     # Codex (Plus) requires OAuth — check token availability
@@ -578,8 +581,8 @@ def _sync_oauth_profile_after_login(cli_name: str) -> None:
         codex_creds = read_codex_cli_credentials(force_refresh=True)
         if codex_creds:
             profile = AuthProfile(
-                name="openai:codex-cli",
-                provider="openai",
+                name="openai-codex:codex-cli",
+                provider="openai-codex",
                 credential_type=CredentialType.OAUTH,
                 key=codex_creds["access_token"],
                 refresh_token=codex_creds.get("refresh_token", ""),
@@ -684,8 +687,8 @@ def _auth_add_interactive(store: ProfileStore, add_args: str) -> None:
     from core.gateway.auth.profiles import AuthProfile, CredentialType
 
     # Level 1: Provider selection
-    providers = ["anthropic", "openai", "zhipuai"]
-    entries = ["Anthropic", "OpenAI", "ZhipuAI"]
+    providers = ["anthropic", "openai", "glm"]
+    entries = ["Anthropic", "OpenAI", "GLM"]
 
     menu = TerminalMenu(
         entries,
@@ -783,8 +786,8 @@ def _get_profile_store() -> ProfileStore:
     if settings.zai_api_key:
         store.add(
             AuthProfile(
-                name="zhipuai:default",
-                provider="zhipuai",
+                name="glm:default",
+                provider="glm",
                 credential_type=CredentialType.API_KEY,
                 key=settings.zai_api_key,
             )
