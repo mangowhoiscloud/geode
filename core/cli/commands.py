@@ -1935,6 +1935,18 @@ def cmd_login(args: str) -> None:
     if sub == "quota":
         _login_quota()
         return
+    if sub == "refresh":
+        # v0.52 phase 3 — daemon-side reload of auth.toml after thin client
+        # writes (e.g. /login oauth completed in CLI process). When invoked
+        # in CLI process this is a no-op; the actual reload happens when the
+        # CLI relays /login refresh to the daemon via IPC.
+        try:
+            from core.auth.auth_toml import load_auth_toml
+
+            load_auth_toml()
+        except Exception:
+            log.debug("auth.toml reload skipped", exc_info=True)
+        return
     if sub in ("help", "?"):
         _login_help()
         return

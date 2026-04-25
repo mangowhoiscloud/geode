@@ -774,6 +774,28 @@ def _thin_interactive_loop(
                 if cmd == "/clear" and "--force" not in args:
                     args = (args + " --force").strip()
 
+                # v0.52 phase 3 — central command registry decides execution
+                # location. THIN commands run locally so terminal stdin/stdout/
+                # browser stay attached (fixes OAuth device-code invisibility,
+                # bug class B1/B3).
+                from core.cli.routing import RunLocation
+                from core.cli.routing import lookup as _lookup_spec
+
+                _spec = _lookup_spec(cmd)
+                if _spec is not None and _spec.location is RunLocation.THIN:
+                    try:
+                        _handle_command(cmd, args, False)
+                    except (SystemExit, EOFError):
+                        break
+                    # Notify daemon to reload auth state if this command
+                    # may have written to ~/.geode/auth.toml.
+                    if cmd in ("/login", "/key", "/auth"):
+                        import contextlib
+
+                        with contextlib.suppress(Exception):
+                            client.send_command("/login", "refresh")
+                    continue
+
                 # All other commands → relay to serve
                 response = client.send_command(cmd, args)
                 # Render captured output from serve (ANSI-styled text)
