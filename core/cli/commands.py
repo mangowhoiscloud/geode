@@ -748,52 +748,16 @@ def _auth_add_interactive(store: ProfileStore, add_args: str) -> None:
     console.print()
 
 
-# Module-level profile store singleton
-_profile_store: ProfileStore | None = None
-
-
 def _get_profile_store() -> ProfileStore:
-    """Get or create the module-level profile store, seeded from settings."""
-    global _profile_store
-    from core.gateway.auth.profiles import AuthProfile, CredentialType
+    """Return the runtime ProfileStore singleton.
 
-    if _profile_store is not None:
-        return _profile_store
+    Pre-v0.50.0 the CLI maintained its own parallel store, so credentials
+    added through `/auth add` were invisible to the LLM dispatch layer.
+    Both layers now read from `runtime_wiring.infra` directly.
+    """
+    from core.runtime_wiring.infra import ensure_profile_store
 
-    store = ProfileStore()
-
-    # Seed from existing settings
-    from core.config import settings
-
-    if settings.anthropic_api_key:
-        store.add(
-            AuthProfile(
-                name="anthropic:default",
-                provider="anthropic",
-                credential_type=CredentialType.API_KEY,
-                key=settings.anthropic_api_key,
-            )
-        )
-    if settings.openai_api_key:
-        store.add(
-            AuthProfile(
-                name="openai:default",
-                provider="openai",
-                credential_type=CredentialType.API_KEY,
-                key=settings.openai_api_key,
-            )
-        )
-    if settings.zai_api_key:
-        store.add(
-            AuthProfile(
-                name="glm:default",
-                provider="glm",
-                credential_type=CredentialType.API_KEY,
-                key=settings.zai_api_key,
-            )
-        )
-    _profile_store = store
-    return store
+    return ensure_profile_store()
 
 
 def cmd_generate(args: str) -> None:

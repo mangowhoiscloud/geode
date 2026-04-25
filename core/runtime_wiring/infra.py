@@ -27,13 +27,35 @@ log = logging.getLogger(__name__)
 DEFAULT_GLOBAL_CONCURRENCY = 8
 DEFAULT_GATEWAY_CONCURRENCY = 4
 
-# Module-level accessor for ProfileRotator (set by build_auth, used by providers)
+# Module-level accessors set by build_auth().
+# Both runtime LLM dispatch and the CLI (`/login`, `/auth`) read from the
+# same singletons so a credential added through the UI is immediately seen
+# by ProfileRotator.resolve(). Pre-v0.50.0 there were two parallel
+# ProfileStore instances and they drifted out of sync.
+_profile_store: ProfileStore | None = None
 _profile_rotator: ProfileRotator | None = None
 
 
 def get_profile_rotator() -> ProfileRotator | None:
     """Return the ProfileRotator built by build_auth(), or None if not yet initialized."""
     return _profile_rotator
+
+
+def get_profile_store() -> ProfileStore | None:
+    """Return the ProfileStore built by build_auth(), or None if not yet initialized."""
+    return _profile_store
+
+
+def ensure_profile_store() -> ProfileStore:
+    """Return the singleton ProfileStore, building it if necessary.
+
+    Used by CLI commands that may run before the runtime bootstrap (e.g.
+    `/login` invoked at startup). Idempotent.
+    """
+    if _profile_store is None:
+        build_auth()
+    assert _profile_store is not None  # build_auth populates the singleton
+    return _profile_store
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +255,15 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     Claude Code OAuth tokens are auto-detected from macOS Keychain or
     ~/.claude/.credentials.json (OpenClaw managedBy pattern).
     ProfileRotator selects OAUTH over API_KEY by type priority.
+
+    Idempotent: returns the cached singleton on subsequent calls so the
+    CLI and runtime bootstrap can both reach for the store without
+    creating duplicate instances (pre-v0.50.0 caused dispatch/UI drift).
     """
+    global _profile_store, _profile_rotator
+    if _profile_store is not None and _profile_rotator is not None:
+        return _profile_store, _profile_rotator, CooldownTracker()
+
     from core.gateway.auth.profiles import AuthProfile, CredentialType
 
     profile_store = ProfileStore()
@@ -298,9 +328,9 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
                 key=settings.zai_api_key,
             )
         )
-    global _profile_rotator
     profile_rotator = ProfileRotator(profile_store)
     _profile_rotator = profile_rotator
+    _profile_store = profile_store
     cooldown_tracker = CooldownTracker()
 
     # Register managed token refreshers
