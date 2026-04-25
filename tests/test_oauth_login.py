@@ -117,9 +117,7 @@ class TestAuthStatus:
             }
         )
 
-        with patch(
-            "core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None
-        ):
+        with patch("core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None):
             statuses = get_auth_status()
 
         assert len(statuses) >= 1
@@ -130,13 +128,9 @@ class TestAuthStatus:
         assert openai_rows[0]["status"] == "active"
 
     def test_status_empty(self, tmp_path: Path, monkeypatch):
-        monkeypatch.setattr(
-            "core.auth.oauth_login.AUTH_STORE_PATH", tmp_path / "empty.json"
-        )
+        monkeypatch.setattr("core.auth.oauth_login.AUTH_STORE_PATH", tmp_path / "empty.json")
 
-        with patch(
-            "core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None
-        ):
+        with patch("core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None):
             statuses = get_auth_status()
 
         assert statuses == []

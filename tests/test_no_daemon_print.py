@@ -83,18 +83,14 @@ def _scan(dir_path: Path) -> list[str]:
                 if isinstance(func, ast.Name) and func.id in _FORBIDDEN_CALL_NAMES:
                     if _line_is_allowed(text_lines, node.lineno):
                         continue
-                    violations.append(
-                        f"{rel}:{node.lineno} — {_FORBIDDEN_CALL_NAMES[func.id]}"
-                    )
+                    violations.append(f"{rel}:{node.lineno} — {_FORBIDDEN_CALL_NAMES[func.id]}")
 
         # Regex pass for `Console()` patterns (AST overkill for attr chains)
         for ln, line in enumerate(text_lines, 1):
             if _line_is_allowed(text_lines, ln):
                 continue
             if _DIRECT_CONSOLE_RE.search(line) or _BARE_CONSOLE_RE.match(line):
-                violations.append(
-                    f"{rel}:{ln} — direct Console() — use core.ui.console or emit_*"
-                )
+                violations.append(f"{rel}:{ln} — direct Console() — use core.ui.console or emit_*")
     return violations
 
 
