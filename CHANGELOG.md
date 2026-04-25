@@ -28,6 +28,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.50.2] — 2026-04-25
+
+### Changed
+- **`~/.geode/auth.json` → `~/.geode/auth.toml` 단일 SOT 통합** — v0.50.0이 도입한 `auth.toml` Plan/Profile 영구 저장소가 OAuth 토큰까지 흡수합니다. `oauth_login.py`의 `_save_auth_store` / `_load_auth_store`가 내부적으로 `auth.toml`로 라우팅됩니다 (호출 시그니처는 호환 유지). `~/.geode/auth.json`이 발견되면 한 번 읽어 OAUTH_BORROWED Plan + Profile 쌍으로 변환한 뒤 `auth.json.migrated.bak`으로 자동 백업합니다. (`core/gateway/auth/oauth_login.py`)
+- **OAuth Plan 표현** — GEODE가 직접 발급한 device-code OAuth는 `kind = "oauth_borrowed"`, `provider = "openai-codex"`, plan id = `openai-codex-geode`로 저장됩니다. 외부 Codex CLI(`~/.codex/auth.json`)는 이전과 동일하게 `managed_by="codex-cli"` Profile로 read-only 미러됩니다.
+
+### Fixed
+- **이중 SOT 혼동 제거** — pre-v0.50.0 시절의 `auth.json`이 v0.50.0 `auth.toml` 도입 후에도 잔존해서 `/login` dashboard가 두 파일을 동시에 참조하던 미세 버그가 해소됩니다. 한 번 마이그레이션 후 `auth.toml`만 SOT로 사용.
+
 ## [0.50.1] — 2026-04-25
 
 ### Added
