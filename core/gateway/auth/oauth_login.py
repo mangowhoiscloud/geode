@@ -218,13 +218,20 @@ def login_openai() -> dict[str, Any]:
     if not user_code or not device_auth_id:
         raise RuntimeError("Device code response missing required fields")
 
-    # Step 2: Show user the code
-    print("\n  OpenAI Codex OAuth Login\n")
-    print("  1. Open this URL in your browser:")
-    print(f"     \033[94m{_DEVICE_PAGE}\033[0m\n")
-    print("  2. Enter this code:")
-    print(f"     \033[1;93m{user_code}\033[0m\n")
-    print("  Waiting for sign-in... (press Ctrl+C to cancel)\n")
+    # Step 2: Surface the code to the user via IPC events (v0.51.1).
+    # The thin-client renderer translates these into an in-place rich prompt.
+    from core.cli.ui.agentic_ui import (
+        emit_oauth_login_failed,
+        emit_oauth_login_pending,
+        emit_oauth_login_started,
+    )
+
+    _PROVIDER_LABEL = "OpenAI Codex"
+    emit_oauth_login_started(
+        provider=_PROVIDER_LABEL,
+        verification_uri=_DEVICE_PAGE,
+        user_code=user_code,
+    )
 
     # Step 3: Poll for authorization
     start = time.monotonic()
@@ -244,14 +251,15 @@ def login_openai() -> dict[str, Any]:
                     break
                 if poll_resp.status_code in (403, 404):
                     elapsed = int(time.monotonic() - start)
-                    print(f"\r  Waiting... ({elapsed}s)", end="", flush=True)
+                    emit_oauth_login_pending(_PROVIDER_LABEL, elapsed)
                     continue
                 raise RuntimeError(f"Polling returned status {poll_resp.status_code}")
     except KeyboardInterrupt:
-        print("\n\n  Login cancelled.")
+        emit_oauth_login_failed(_PROVIDER_LABEL, "cancelled by user")
         return {}
 
     if code_resp is None:
+        emit_oauth_login_failed(_PROVIDER_LABEL, "timed out after 15 minutes")
         raise RuntimeError("Login timed out after 15 minutes")
 
     # Step 4: Exchange authorization code for tokens
@@ -320,16 +328,22 @@ def login_openai() -> dict[str, Any]:
         "source": "geode-device-code",
     }
 
-    # Save to ~/.geode/auth.json
+    # Save to ~/.geode/auth.toml (v0.50.2 SOT — _save_auth_store internally
+    # routes via auth_toml.save_auth_toml + plan registry).
     store = _load_auth_store()
     store.setdefault("providers", {})
     store["providers"]["openai"] = creds
     _save_auth_store(store)
 
-    print("\n  \033[92mLogin successful!\033[0m")
-    print(f"  Account: {email or account_id}")
-    print(f"  Plan: {plan_type or 'unknown'}")
-    print(f"  Stored: {AUTH_STORE_PATH}\n")
+    from core.cli.ui.agentic_ui import emit_oauth_login_success
+
+    emit_oauth_login_success(
+        provider=_PROVIDER_LABEL,
+        account_id=account_id,
+        email=email,
+        plan_type=plan_type or "unknown",
+        stored_at=str(AUTH_STORE_PATH),
+    )
 
     return creds
 

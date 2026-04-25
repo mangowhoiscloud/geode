@@ -216,6 +216,13 @@ class IPCClient:
                 "tool_diversity_forced",
                 "model_switched",
                 "checkpoint_saved",
+                # OAuth device-code lifecycle (v0.51.1 IPC parity)
+                "oauth_login_started",
+                "oauth_login_pending",
+                "oauth_login_success",
+                "oauth_login_failed",
+                # Daemon-side error surfaces (v0.51.1 IPC parity)
+                "billing_error",
                 # LLM lifecycle events
                 "llm_retry",
                 "llm_error",

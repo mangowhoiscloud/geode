@@ -1776,6 +1776,22 @@ def cmd_clear(args: str) -> None:
     console.print()
 
     if "--force" not in args:
+        # v0.51.1: in IPC mode, native input() blocks the daemon and never
+        # reaches the thin client REPL. Detect via the IPC writer thread-local
+        # and require an explicit --force flag instead.
+        from core.cli.ui.agentic_ui import _ipc_writer_local
+
+        in_ipc_mode = getattr(_ipc_writer_local, "writer", None) is not None
+        if in_ipc_mode:
+            console.print(
+                f"  [warning]Refusing to clear {msg_count} messages without --force.[/warning]"
+            )
+            console.print(
+                "  [muted]Run /clear --force to confirm "
+                "(IPC mode disables interactive prompts).[/muted]"
+            )
+            console.print()
+            return
         console.print(f"  Clear all {msg_count} messages? (y/N): ", end="")
         try:
             answer = input().strip().lower()
