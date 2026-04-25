@@ -107,6 +107,7 @@ _TYPE_AGENT_MAP: dict[str, str] = {
 SUBAGENT_DENIED_TOOLS: set[str] = {
     "set_api_key",  # credential changes — parent only
     "manage_auth",  # auth profile management — parent only
+    "manage_login",  # plans + credentials + routing — parent only
     "profile_update",  # user profile changes — parent only
     "calendar_create_event",  # external system mutation — parent only
     "calendar_sync_scheduler",  # external system mutation — parent only
