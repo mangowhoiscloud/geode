@@ -28,6 +28,43 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.52.1] — 2026-04-26
+
+### Added
+- **B7 invariant test** — `tests/test_signal_reload.py` (4 cases) pins the thin → daemon state-propagation contract for `/login`, `/key`, `/auth`. Asserts (1) the CLI dispatch loop relays `/login refresh` after THIN auth commands, (2) `cmd_login("refresh")` calls `load_auth_toml()` and the merge is **additive only** (managed-by-CLI profiles such as Codex CLI OAuth survive a refresh), (3) refresh on a missing auth.toml is a silent no-op.
+- **`docs/v053-cleanup-targets.md`** — tracker for the 33 `import-linter` `ignore_imports` legacy violations registered in v0.52.0. Grouped into 9 PR-sized batches (G1-G9) and slotted into v0.53.0 → v0.53.7. Each entry lists the violation, root cause, and the planned move/rule change.
+
+### Documentation
+- `cmd_login("refresh")` 안에 **additive-only invariant** docstring 추가 — `load_auth_toml()` 이 cached singleton 에 merge 만 하고 evict 안 한다는 점을 코드에서 바로 보이게 함. 리팩토링 시 "rebuild from disk" 실수로 v0.51 stale-state 버그가 거꾸로 재발하는 걸 막기 위함. (`core/cli/commands.py:1938-1962`)
+
+## [0.52.0] — 2026-04-25
+
+### Architecture
+- **Process binding split — cli/server/agent/channels** — 단일 `core/` 안에 thin-client (`cli/`), daemon (`server/`), 추론 엔진 (`agent/`), 외부 채널 (`channels/`) 4개 프로세스 경계를 디렉토리 위치로 가시화. Hermes/OpenClaw/Claude Code 의 동일 패턴 차용. 이전엔 `gateway/`, `runtime_wiring/`, `automation/` 가 모두 daemon-side 코드를 섞어 호스팅해서 OAuth 출력이 어느 프로세스에서 나는지 추적이 불가능했음. 7 phase 에 걸쳐 165+ 파일 이동 + import 갱신.
+- **`import-linter` 4 contracts** — `core.cli ↛ core.server | core.channels`, `core.agent ↛ core.cli | core.server`, `core.server ↛ core.cli`, `core.channels ↛ core.cli | core.server | core.agent` 를 CI ratchet 으로 강제. 33 legacy violation 은 `ignore_imports` 로 등록 후 v0.53.x 시리즈에서 정리 (위 tracker 참고).
+- **`COMMAND_REGISTRY` + `RunLocation`** — `core/cli/routing.py` 가 모든 슬래시 명령에 대해 thin/daemon 실행 위치를 명시. `/login`, `/key`, `/auth`, `/help`, `/list`, `/model` 6 개는 `THIN` (CLI 프로세스 직접 실행), 그 외는 IPC relay. OAuth device-code prompt 가 daemon `capture_output()` 에 swallow 되던 v0.51 버그(B1/B3)의 정식 해결.
+
+### Added
+- **8 invariant tests for bug class regression prevention** —
+  - `tests/test_no_daemon_print.py` (B1) — daemon dirs (`server/`, `agent/`, `channels/`, `lifecycle/`, ...) AST 스캔, native `print/input/Console()` 사용 시 fail.
+  - `tests/test_command_registry.py` (B2) — 모든 명령이 정확히 1 RunLocation 을 갖고, THIN 핸들러가 `_ipc_writer_local` 에 의존하지 않음을 검증.
+  - `tests/test_auth_store_singleton.py` (B4) — ProfileStore 가 dual SOT 가 아님을 검증.
+  - `tests/test_provider_label_consistency.py` (B5) — provider label fragmentation 검출.
+  - `tests/test_ipc_event_parity.py` (B6) — `emit_*` 호출이 ipc_client `KNOWN_EVENT_TYPES` allowlist 에 등록됐는지 검증.
+  - `tests/test_import_linter.py` (B8) — `uv run lint-imports` 결과 0 broken 을 CI 에 wrap.
+  - `tests/test_signal_reload.py` (B7) — v0.52.1 에서 신설 (위 항목).
+
+### Changed
+- `core/runtime_wiring/` → `core/lifecycle/` (이름 변경 + container.py 신설).
+- `core/gateway/auth/` → `core/auth/` (top-level capability).
+- `core/cli/ui/` → `core/ui/` (cross-process 공유 컴포넌트).
+- `core/gateway/` 디렉토리 폐기 — pollers → `core/server/{ipc_server,supervised}/`, channel 코드 → `core/channels/`.
+- `core/automation/cron*` → `core/scheduler/`.
+- `core/agent/agentic_loop.py` → `core/agent/loop.py`, `core/agent/safety_constants.py` → `core/agent/safety.py`.
+
+### Fixed
+- v0.51.1 의 IPC OAuth event 패치는 증상 해소만 했음. v0.52.0 의 `COMMAND_REGISTRY` 가 `/login` 을 THIN 으로 바인딩하면서 OAuth wizard 가 CLI 프로세스 stdin/stdout/browser 에 직접 붙어 root cause 가 사라짐.
+
 ## [0.51.1] — 2026-04-25
 
 ### Fixed

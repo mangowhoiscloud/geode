@@ -1940,6 +1940,19 @@ def cmd_login(args: str) -> None:
         # writes (e.g. /login oauth completed in CLI process). When invoked
         # in CLI process this is a no-op; the actual reload happens when the
         # CLI relays /login refresh to the daemon via IPC.
+        #
+        # Semantics — ADDITIVE ONLY (v0.52.1 documented invariant):
+        #   * Plans/Profiles newly written to auth.toml ARE picked up.
+        #   * Plans/Profiles REMOVED from auth.toml are NOT removed from the
+        #     daemon's in-memory singletons. Use `/login remove <plan-id>`
+        #     for explicit deletion (which goes through the same IPC path
+        #     and updates both file + memory atomically).
+        #
+        # Why additive: lifecycle.container.ensure_profile_store() returns
+        # the cached singleton on subsequent calls; load_auth_toml() merges
+        # into the existing store rather than rebuilding it. This protects
+        # in-flight requests using profiles loaded from .env / managed CLIs
+        # (Codex CLI OAuth) which never appear in auth.toml.
         try:
             from core.auth.auth_toml import load_auth_toml
 
