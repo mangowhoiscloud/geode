@@ -14,9 +14,7 @@ from core.cli.tool_handlers import _build_system_handlers
 
 
 def _handler():
-    handlers = _build_system_handlers(
-        force_dry=True, readiness=MagicMock(), mcp_manager=None
-    )
+    handlers = _build_system_handlers(force_dry=True, readiness=MagicMock(), mcp_manager=None)
     return handlers["manage_login"]
 
 
@@ -37,9 +35,7 @@ class TestToolDefinition:
 
 class TestHandlerWired:
     def test_handler_is_registered(self) -> None:
-        handlers = _build_system_handlers(
-            force_dry=True, readiness=MagicMock(), mcp_manager=None
-        )
+        handlers = _build_system_handlers(force_dry=True, readiness=MagicMock(), mcp_manager=None)
         assert "manage_login" in handlers
 
     def test_status_returns_structured_snapshot(self) -> None:

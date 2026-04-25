@@ -304,13 +304,8 @@ class ApprovalWorkflow:
             elif tool_name == "manage_auth":
                 summary = f"action={tool_input.get('action', '?')}"
             elif tool_name == "manage_login":
-                summary = (
-                    f"sub={tool_input.get('subcommand', 'status')}"
-                    + (
-                        f" args={tool_input.get('args', '')[:60]}"
-                        if tool_input.get("args")
-                        else ""
-                    )
+                summary = f"sub={tool_input.get('subcommand', 'status')}" + (
+                    f" args={tool_input.get('args', '')[:60]}" if tool_input.get("args") else ""
                 )
             elif tool_name == "profile_update":
                 fields = [k for k in ("role", "expertise", "name", "team") if tool_input.get(k)]
