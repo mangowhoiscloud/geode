@@ -28,6 +28,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.51.1] — 2026-04-25
+
+### Fixed
+- **OAuth device-code flow invisible in IPC mode** — `/login oauth openai`이 daemon 안에서 실행되며 native `print()`로 출력해서 thin-client REPL이 verification URL과 user code를 받지 못하던 버그. 사용자가 브라우저에 입력할 코드를 볼 수 없어 OAuth 등록 자체가 막혔습니다. (`core/gateway/auth/oauth_login.py`)
+- **Billing error 메시지가 thin client에 도달 못 함** — `agentic_loop.py`가 `rich.console.Console()`을 직접 인스턴스화해서 `print()`로 출력. IPC 모드에서 daemon stdout(`/tmp/geode_serve.log`)에만 기록됐습니다.
+- **`/clear` 확인 프롬프트 daemon hang** — `input()`이 daemon stdin을 블록하지만 thin client는 그것을 모름. 사용자가 무한 대기 상태에 빠질 수 있었음.
+
+### Added
+- **IPC OAuth events** — `oauth_login_started`, `oauth_login_pending`, `oauth_login_success`, `oauth_login_failed` (4종). thin-client renderer가 in-place 진행 표시(`Waiting... (5s)`) + URL/code highlight + 성공 metadata(account_id, plan, stored path) 렌더링. (`core/cli/ui/agentic_ui.py`, `core/cli/ui/event_renderer.py`, `core/cli/ipc_client.py`)
+- **`billing_error` IPC event** — agentic loop의 `BillingError` catch 양 지점이 모두 `emit_billing_error(message)`로 전환.
+- **IPC mode `/clear` 가드** — IPC mode 감지 시 interactive 확인 차단, `--force` 명시 요구. 사용자에게 명확한 안내 메시지 표시.
+
+### Architecture
+- **Daemon-side print/input ban** — daemon 코드 경로에서 native `print()` / `input()` / `rich.console.Console()` 직접 인스턴스화 사용 금지. 모든 사용자 가시 출력은 IPC event를 거쳐야 함. `tests/test_ipc_event_parity.py`가 신규 event 모두 `ipc_client.py` allowlist에 등록됐는지 검증.
+
 ## [0.51.0] — 2026-04-25
 
 ### Added

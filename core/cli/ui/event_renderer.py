@@ -379,6 +379,65 @@ class EventRenderer:
     def _handle_checkpoint_saved(self, event: dict[str, Any]) -> None:
         pass  # silent — no user-visible output needed
 
+    # -- OAuth device-code events (v0.51.1 IPC parity) ------------------------
+
+    def _handle_oauth_login_started(self, event: dict[str, Any]) -> None:
+        """Render the device-code prompt with URL + user code highlighted."""
+        self._suppress_all_spinners()
+        provider = str(event.get("provider", ""))
+        uri = str(event.get("verification_uri", ""))
+        code = str(event.get("user_code", ""))
+        self._out.write("\n")
+        self._out.write(f"  \033[1;36m{provider} OAuth Login\033[0m\n")
+        self._out.write("\n")
+        self._out.write("  1. Open this URL in your browser:\n")
+        self._out.write(f"     \033[94m{uri}\033[0m\n")
+        self._out.write("\n")
+        self._out.write("  2. Enter this code:\n")
+        self._out.write(f"     \033[1;93m{code}\033[0m\n")
+        self._out.write("\n")
+        self._out.write("  \033[2mWaiting for sign-in... (Ctrl+C to cancel)\033[0m\n")
+        self._out.flush()
+
+    def _handle_oauth_login_pending(self, event: dict[str, Any]) -> None:
+        """Heartbeat — overwrite a single 'Waiting…' line in place."""
+        elapsed = int(event.get("elapsed_s", 0))
+        self._out.write(f"\r  \033[2mWaiting... ({elapsed}s)\033[0m\033[K")
+        self._out.flush()
+
+    def _handle_oauth_login_success(self, event: dict[str, Any]) -> None:
+        provider = str(event.get("provider", ""))
+        email = str(event.get("email", ""))
+        account_id = str(event.get("account_id", ""))
+        plan_type = str(event.get("plan_type", ""))
+        stored_at = str(event.get("stored_at", ""))
+        # Wipe the heartbeat line, then announce success.
+        self._out.write("\r\033[2K\n")
+        self._out.write(f"  \033[1;32m✓ {provider} login successful\033[0m\n")
+        if email or account_id:
+            self._out.write(f"  \033[2m  Account:\033[0m {email or account_id}\n")
+        if plan_type:
+            self._out.write(f"  \033[2m  Plan:\033[0m {plan_type}\n")
+        if stored_at:
+            self._out.write(f"  \033[2m  Stored:\033[0m {stored_at}\n")
+        self._out.write("\n")
+        self._out.flush()
+
+    def _handle_oauth_login_failed(self, event: dict[str, Any]) -> None:
+        provider = str(event.get("provider", ""))
+        reason = str(event.get("reason", ""))
+        self._out.write("\r\033[2K\n")
+        self._out.write(f"  \033[1;31m✗ {provider} login failed:\033[0m {reason}\n\n")
+        self._out.flush()
+
+    # -- Billing error (v0.51.1 IPC parity) -----------------------------------
+
+    def _handle_billing_error(self, event: dict[str, Any]) -> None:
+        message = str(event.get("message", ""))
+        self._clear_activity_line()
+        self._out.write(f"\n  \033[1;31m✗ Billing error\033[0m — {message}\n\n")
+        self._out.flush()
+
     # -- Pipeline milestone events (client-side rendering) --------------------
 
     def _handle_pipeline_header(self, event: dict[str, Any]) -> None:

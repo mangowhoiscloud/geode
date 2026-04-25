@@ -595,9 +595,9 @@ class AgenticLoop:
         try:
             decomposition_hint = self._try_decompose(user_input)
         except BillingError as exc:
-            from rich.console import Console as _Con
+            from core.cli.ui.agentic_ui import emit_billing_error
 
-            _Con().print(f"\n  [bold red]✗ Billing error[/bold red] — {exc}")
+            emit_billing_error(str(exc))
             return AgenticResult(
                 text=str(exc),
                 rounds=0,
@@ -717,9 +717,9 @@ class AgenticLoop:
                 response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
             except BillingError as exc:
                 _spinner.stop()
-                from rich.console import Console as _Con
+                from core.cli.ui.agentic_ui import emit_billing_error
 
-                _Con().print(f"\n  [bold red]✗ Billing error[/bold red] — {exc}")
+                emit_billing_error(str(exc))
                 return AgenticResult(
                     text=str(exc),
                     rounds=round_idx + 1,

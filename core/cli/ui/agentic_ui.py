@@ -850,6 +850,121 @@ def emit_checkpoint_saved(session_id: str, round_idx: int) -> None:
 
 
 # ───────────────────────────────────────────────────────────────────────────
+# OAuth device-code flow events (v0.51.1 IPC parity)
+# ───────────────────────────────────────────────────────────────────────────
+#
+# Pre-v0.51.1 the OAuth login flow printed directly to daemon stdout, so
+# thin-client REPLs never saw the verification URL or user code. The flow
+# now emits structured events that ``event_renderer`` translates into
+# rich, in-place terminal output for both modes (IPC + direct).
+
+
+def emit_oauth_login_started(provider: str, verification_uri: str, user_code: str) -> None:
+    """Surface the device-code prompt to the user.
+
+    The thin client renders this as the highlighted "Open URL → Enter
+    code" pair. In direct mode (no IPC writer), falls back to console.
+    """
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "oauth_login_started",
+            provider=provider,
+            verification_uri=verification_uri,
+            user_code=user_code,
+        )
+        return
+    console.print()
+    console.print(f"  [header]{provider} OAuth Login[/header]")
+    console.print()
+    console.print("  1. Open this URL in your browser:")
+    console.print(f"     [link]{verification_uri}[/link]")
+    console.print()
+    console.print("  2. Enter this code:")
+    console.print(f"     [bold yellow]{user_code}[/bold yellow]")
+    console.print()
+    console.print("  [muted]Waiting for sign-in... (Ctrl+C to cancel)[/muted]")
+    console.print()
+
+
+def emit_oauth_login_pending(provider: str, elapsed_s: int) -> None:
+    """Periodic heartbeat while polling the token endpoint."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "oauth_login_pending",
+            provider=provider,
+            elapsed_s=elapsed_s,
+        )
+
+
+def emit_oauth_login_success(
+    provider: str,
+    *,
+    account_id: str = "",
+    email: str = "",
+    plan_type: str = "",
+    stored_at: str = "",
+) -> None:
+    """Surface successful token receipt + storage location."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "oauth_login_success",
+            provider=provider,
+            account_id=account_id,
+            email=email,
+            plan_type=plan_type,
+            stored_at=stored_at,
+        )
+        return
+    console.print()
+    console.print(f"  [success]✓ {provider} login successful[/success]")
+    if email or account_id:
+        console.print(f"  [muted]  Account:[/muted] {email or account_id}")
+    if plan_type:
+        console.print(f"  [muted]  Plan:[/muted] {plan_type}")
+    if stored_at:
+        console.print(f"  [muted]  Stored:[/muted] {stored_at}")
+    console.print()
+
+
+def emit_oauth_login_failed(provider: str, reason: str) -> None:
+    """Surface a failed/cancelled login flow."""
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "oauth_login_failed",
+            provider=provider,
+            reason=reason,
+        )
+        return
+    console.print()
+    console.print(f"  [error]✗ {provider} login failed:[/error] {reason}")
+    console.print()
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Billing error event (v0.51.1 IPC parity)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def emit_billing_error(message: str) -> None:
+    """Surface a billing/credit error from the agentic loop.
+
+    Pre-v0.51.1 used a raw ``rich.console.Console`` print that bypassed
+    the thin-client renderer.
+    """
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("billing_error", message=message)
+        return
+    console.print()
+    console.print(f"  [error]✗ Billing error[/error] — {message}")
+    console.print()
+
+
+# ───────────────────────────────────────────────────────────────────────────
 # Structured IPC event emitters — Pipeline milestones
 # ───────────────────────────────────────────────────────────────────────────
 
