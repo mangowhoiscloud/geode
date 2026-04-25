@@ -168,8 +168,8 @@ class TestM1ConfigDrivenPollers:
     def test_load_poller_class_resolves(self) -> None:
         from core.lifecycle.adapters import _load_poller_class
 
-        cls = _load_poller_class("core.gateway.pollers.slack_poller:SlackPoller")
-        from core.gateway.pollers.slack_poller import SlackPoller
+        cls = _load_poller_class("core.server.supervised.slack_poller:SlackPoller")
+        from core.server.supervised.slack_poller import SlackPoller
 
         assert cls is SlackPoller
 
@@ -189,14 +189,14 @@ class TestM2SchedulerPolicyChain:
     """Verify DANGEROUS tools are filtered in headless modes."""
 
     def test_headless_denied_tools_defined(self) -> None:
-        from core.gateway.shared_services import _HEADLESS_DENIED_TOOLS
+        from core.server.supervised.services import _HEADLESS_DENIED_TOOLS
 
         assert "run_bash" in _HEADLESS_DENIED_TOOLS
         assert "delegate_task" in _HEADLESS_DENIED_TOOLS
 
     def test_scheduler_mode_filters_dangerous(self) -> None:
         """create_session(SCHEDULER) should exclude DANGEROUS tools."""
-        from core.gateway.shared_services import SessionMode, SharedServices
+        from core.server.supervised.services import SessionMode, SharedServices
 
         services = SharedServices(
             tool_handlers={
@@ -209,7 +209,7 @@ class TestM2SchedulerPolicyChain:
         )
 
         with (
-            patch("core.gateway.shared_services.SharedServices._build_sub_agent_manager"),
+            patch("core.server.supervised.services.SharedServices._build_sub_agent_manager"),
             patch("core.agent.agentic_loop.AgenticLoop.__init__", return_value=None),
             patch("core.agent.tool_executor.ToolExecutor.__init__", return_value=None) as te_init,
             patch("core.cli.session_state.set_current_loop"),
@@ -227,7 +227,7 @@ class TestM2SchedulerPolicyChain:
 
     def test_repl_mode_keeps_all_tools(self) -> None:
         """create_session(REPL) should NOT filter tools."""
-        from core.gateway.shared_services import SessionMode, SharedServices
+        from core.server.supervised.services import SessionMode, SharedServices
 
         services = SharedServices(
             tool_handlers={
@@ -239,7 +239,7 @@ class TestM2SchedulerPolicyChain:
         )
 
         with (
-            patch("core.gateway.shared_services.SharedServices._build_sub_agent_manager"),
+            patch("core.server.supervised.services.SharedServices._build_sub_agent_manager"),
             patch("core.agent.agentic_loop.AgenticLoop.__init__", return_value=None),
             patch("core.agent.tool_executor.ToolExecutor.__init__", return_value=None) as te_init,
             patch("core.cli.session_state.set_current_loop"),

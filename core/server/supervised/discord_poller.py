@@ -6,13 +6,13 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
-from core.gateway.models import InboundMessage
-from core.gateway.pollers.base import BasePoller
+from core.channels.models import InboundMessage
+from core.server.supervised.poller_base import BasePoller
 
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from core.gateway.channel_manager import ChannelManager
+    from core.channels.binding import ChannelManager
     from core.mcp.manager import MCPServerManager
     from core.mcp.notification_port import NotificationPort
 

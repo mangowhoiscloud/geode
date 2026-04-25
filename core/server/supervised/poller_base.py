@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.gateway.channel_manager import ChannelManager
+    from core.channels.binding import ChannelManager
     from core.mcp.manager import MCPServerManager
     from core.mcp.notification_port import NotificationPort
 

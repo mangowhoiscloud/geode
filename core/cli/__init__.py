@@ -1432,7 +1432,7 @@ def serve(
 
     # Wire AgenticLoop as gateway processor
     from core.agent.conversation import ConversationContext
-    from core.gateway.channel_manager import get_gateway
+    from core.channels.binding import get_gateway
 
     gateway = get_gateway()
     if gateway is None:
@@ -1450,7 +1450,7 @@ def serve(
     )
 
     # Build SharedServices for serve mode (same factory as REPL)
-    from core.gateway.shared_services import SessionMode, build_shared_services
+    from core.server.supervised.services import SessionMode, build_shared_services
 
     _gw_max_turns = gateway.gateway_max_turns if hasattr(gateway, "gateway_max_turns") else 20
     _gw_time_budget = (
@@ -1556,7 +1556,7 @@ def serve(
     _webhook_server = None
     if settings.webhook_enabled:
         try:
-            from core.gateway.webhook_handler import start_webhook_server
+            from core.server.supervised.webhook_handler import start_webhook_server
 
             _webhook_server = start_webhook_server(_gateway_processor, port=settings.webhook_port)
             console.print(
@@ -1572,7 +1572,7 @@ def serve(
     # CLI Channel — Unix socket for thin CLI client IPC
     _cli_poller = None
     try:
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         _cli_poller = CLIPoller(_gw_services, scheduler_service=_sched_svc)
         _cli_poller.start()

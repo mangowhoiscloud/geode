@@ -76,7 +76,7 @@ def drain_scheduler_queue(
                 _lanes_acquired = True
                 try:
                     _iso_conv = ConversationContext()
-                    from core.gateway.shared_services import SessionMode
+                    from core.server.supervised.services import SessionMode
 
                     _, _iso_loop = services.create_session(
                         SessionMode.SCHEDULER,

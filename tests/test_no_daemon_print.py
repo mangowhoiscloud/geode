@@ -24,21 +24,20 @@ DAEMON_DIRS = [
     "core/agent",
     "core/auth",
     "core/automation",
-    "core/gateway",  # phase 4에서 server/, channels/ 로 분해 후 제거
+    "core/channels",  # phase 4 — gateway 분해 결과 (외부 IO 정의)
     "core/hooks",
-    "core/lifecycle",  # phase 1 — runtime_wiring/ rename 결과
+    "core/lifecycle",
     "core/llm",
     "core/mcp",
     "core/memory",
     "core/orchestration",
+    "core/server",  # phase 4 — daemon process infrastructure
     "core/skills",
     "core/tools",
     "core/verification",
 ]
-# Phase 4 이후 추가될 예정:
-#   "core/server", "core/channels", "core/scheduler"
-# Phase 5 이후:
-#   "core/config"
+# Phase 5 이후 추가:
+#   "core/scheduler", "core/config"
 
 
 _FORBIDDEN_CALL_NAMES = {

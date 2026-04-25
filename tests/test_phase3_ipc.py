@@ -85,7 +85,7 @@ class TestCLIPoller:
     """Test the Unix socket server for CLI IPC."""
 
     def test_start_creates_socket(self) -> None:
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -99,7 +99,7 @@ class TestCLIPoller:
             poller.stop()
 
     def test_stop_removes_socket(self) -> None:
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -111,7 +111,7 @@ class TestCLIPoller:
         assert not sock_path.exists()
 
     def test_cleans_stale_socket(self) -> None:
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         sock_path.touch()  # stale file from previous run
@@ -137,7 +137,7 @@ class TestCLIChannelIntegration:
     def test_connect_and_receive_session(self) -> None:
         """Client should receive session ID on connect."""
         from core.cli.ipc_client import IPCClient
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -161,7 +161,7 @@ class TestCLIChannelIntegration:
     def test_send_prompt_and_receive_result(self) -> None:
         """Client sends prompt, server runs loop, client gets result."""
         from core.cli.ipc_client import IPCClient
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -199,7 +199,7 @@ class TestCLIChannelIntegration:
     def test_send_prompt_error_handling(self) -> None:
         """Server should return error when loop.run() raises."""
         from core.cli.ipc_client import IPCClient
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -227,7 +227,7 @@ class TestCLIChannelIntegration:
     def test_empty_prompt_rejected(self) -> None:
         """Empty prompt should return error without calling loop."""
         from core.cli.ipc_client import IPCClient
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -254,7 +254,7 @@ class TestCLIChannelIntegration:
     def test_multiple_prompts_same_session(self) -> None:
         """Multiple prompts on same connection should use same session."""
         from core.cli.ipc_client import IPCClient
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -292,7 +292,7 @@ class TestCLIChannelIntegration:
     def test_is_serve_running_with_real_server(self) -> None:
         """is_serve_running should detect a live CLIPoller."""
         from core.cli.ipc_client import is_serve_running
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -312,7 +312,7 @@ class TestCLIChannelIntegration:
     def test_quit_relayed_returns_should_break(self) -> None:
         """P1 fix: /quit should relay to serve and return should_break=True."""
         from core.cli.ipc_client import IPCClient
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -340,7 +340,7 @@ class TestCLIChannelIntegration:
     def test_resume_with_checkpoint(self) -> None:
         """P2 fix: resume message should load checkpoint into conversation."""
         from core.cli.ipc_client import IPCClient
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -386,7 +386,7 @@ class TestCLIChannelIntegration:
     def test_resume_continue_latest(self) -> None:
         """P2 fix: --continue should resume the most recent session."""
         from core.cli.ipc_client import IPCClient
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()
@@ -439,7 +439,7 @@ class TestCLIChannelIntegration:
     def test_resume_no_sessions(self) -> None:
         """Resume should return error when no sessions exist."""
         from core.cli.ipc_client import IPCClient
-        from core.gateway.pollers.cli_poller import CLIPoller
+        from core.server.ipc_server.poller import CLIPoller
 
         sock_path = _test_sock()
         mock_services = MagicMock()

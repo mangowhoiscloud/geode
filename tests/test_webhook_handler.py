@@ -6,7 +6,7 @@ import json
 import urllib.request
 from typing import Any
 
-from core.gateway.webhook_handler import WebhookHandler, start_webhook_server
+from core.server.supervised.webhook_handler import WebhookHandler, start_webhook_server
 
 
 class TestWebhookHandler:

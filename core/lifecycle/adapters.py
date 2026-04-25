@@ -128,9 +128,9 @@ def build_calendar_adapter() -> None:
 
 
 _POLLER_REGISTRY: dict[str, str] = {
-    "slack": "core.gateway.pollers.slack_poller:SlackPoller",
-    "discord": "core.gateway.pollers.discord_poller:DiscordPoller",
-    "telegram": "core.gateway.pollers.telegram_poller:TelegramPoller",
+    "slack": "core.server.supervised.slack_poller:SlackPoller",
+    "discord": "core.server.supervised.discord_poller:DiscordPoller",
+    "telegram": "core.server.supervised.telegram_poller:TelegramPoller",
     # CLI poller is registered separately in serve() (not config-driven)
 }
 
@@ -180,8 +180,8 @@ def build_gateway() -> None:
     which pollers to register. Defaults to all three (slack, discord,
     telegram) when the config key is absent.
     """
+    from core.channels.binding import ChannelManager, set_gateway
     from core.config import settings
-    from core.gateway.channel_manager import ChannelManager, set_gateway
     from core.mcp.notification_port import get_notification
 
     if not settings.gateway_enabled:

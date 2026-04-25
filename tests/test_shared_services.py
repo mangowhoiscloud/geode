@@ -1,11 +1,11 @@
-"""Tests for core.gateway.shared_services — SharedServices + SessionMode."""
+"""Tests for core.server.supervised.services — SharedServices + SessionMode."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.gateway.shared_services import (
+from core.server.supervised.services import (
     _MODE_DEFAULTS,
     SessionMode,
     SharedServices,

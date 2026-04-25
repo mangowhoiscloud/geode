@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from core.gateway.shared_services import SharedServices
+    from core.server.supervised.services import SharedServices
 
 DEFAULT_SOCKET_PATH = Path.home() / ".geode" / "cli.sock"
 
@@ -293,7 +293,7 @@ class CLIPoller:
         gated by SessionLane + Global Lane via acquire_all().
         """
         from core.agent.conversation import ConversationContext
-        from core.gateway.shared_services import SessionMode
+        from core.server.supervised.services import SessionMode
 
         # ContextVars do NOT propagate to threads — set them explicitly
         self._propagate_contextvars()
