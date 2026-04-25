@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from core.automation.triggers import (
+from core.scheduler.triggers import (
     CronParser,
     TriggerConfig,
     TriggerManager,

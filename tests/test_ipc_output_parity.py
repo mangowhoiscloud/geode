@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.cli.ui import agentic_ui
-from core.cli.ui.event_renderer import EventRenderer
+from core.ui import agentic_ui
+from core.ui.event_renderer import EventRenderer
 
 
 class _CapturingWriter:

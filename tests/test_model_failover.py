@@ -344,8 +344,8 @@ class TestAgenticLoopFailover:
 
     def _make_loop(self, model: str | None = None) -> Any:
         """Create a minimal AgenticLoop instance for testing."""
-        from core.agent.agentic_loop import AgenticLoop
         from core.agent.conversation import ConversationContext
+        from core.agent.loop import AgenticLoop
         from core.agent.tool_executor import ToolExecutor
 
         context = ConversationContext()

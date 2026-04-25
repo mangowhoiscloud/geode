@@ -50,10 +50,10 @@ class TestAuditLoggers:
         from unittest.mock import patch
 
         with (
-            patch("core.runtime_wiring.bootstrap.RunLog"),
-            patch("core.runtime_wiring.bootstrap.StuckDetector"),
+            patch("core.lifecycle.bootstrap.RunLog"),
+            patch("core.lifecycle.bootstrap.StuckDetector"),
         ):
-            from core.runtime_wiring.bootstrap import build_hooks
+            from core.lifecycle.bootstrap import build_hooks
 
             hooks, _, _, _ = build_hooks(
                 session_key="test",
@@ -74,10 +74,10 @@ class TestAuditLoggers:
         from unittest.mock import patch
 
         with (
-            patch("core.runtime_wiring.bootstrap.RunLog"),
-            patch("core.runtime_wiring.bootstrap.StuckDetector"),
+            patch("core.lifecycle.bootstrap.RunLog"),
+            patch("core.lifecycle.bootstrap.StuckDetector"),
         ):
-            from core.runtime_wiring.bootstrap import build_hooks
+            from core.lifecycle.bootstrap import build_hooks
 
             hooks, _, _, _ = build_hooks(
                 session_key="test",
@@ -865,10 +865,10 @@ class TestNewAuditLoggers:
         from unittest.mock import patch
 
         with (
-            patch("core.runtime_wiring.bootstrap.RunLog"),
-            patch("core.runtime_wiring.bootstrap.StuckDetector"),
+            patch("core.lifecycle.bootstrap.RunLog"),
+            patch("core.lifecycle.bootstrap.StuckDetector"),
         ):
-            from core.runtime_wiring.bootstrap import build_hooks
+            from core.lifecycle.bootstrap import build_hooks
 
             hooks, _, _, _ = build_hooks(
                 session_key="test",

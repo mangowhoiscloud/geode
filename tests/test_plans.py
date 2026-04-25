@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-from core.gateway.auth.plan_registry import (
+from core.auth.plan_registry import (
     PlanRegistry,
     get_plan_registry,
     reset_plan_registry,
     resolve_routing,
 )
-from core.gateway.auth.plans import (
+from core.auth.plans import (
     GLM_CODING_TIERS,
     Plan,
     PlanKind,
     PlanUsage,
     default_plan_for_payg,
 )
-from core.gateway.auth.profiles import AuthProfile, CredentialType
+from core.auth.profiles import AuthProfile, CredentialType
 from core.llm.registry import PROVIDER_VARIANTS, get_provider_spec
 
 
@@ -107,7 +107,7 @@ class TestPlanUsage:
 class TestResolveRouting:
     def test_falls_back_to_payg_when_no_plan_registered(self) -> None:
         # Reset state for a clean test
-        from core.runtime_wiring.infra import build_auth
+        from core.lifecycle.container import build_auth
 
         reset_plan_registry()
         store, _, _ = build_auth()
@@ -128,7 +128,7 @@ class TestResolveRouting:
         assert target.plan.kind == PlanKind.PAYG
 
     def test_explicit_plan_routing_takes_precedence(self) -> None:
-        from core.runtime_wiring.infra import build_auth
+        from core.lifecycle.container import build_auth
 
         reset_plan_registry()
         store, _, _ = build_auth()

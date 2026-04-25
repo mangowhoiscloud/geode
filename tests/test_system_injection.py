@@ -164,7 +164,7 @@ class TestAgenticLoopIntegration:
         """Verify _call_llm source references system_injection."""
         import inspect
 
-        from core.agent.agentic_loop import AgenticLoop
+        from core.agent.loop import AgenticLoop
 
         source = inspect.getsource(AgenticLoop._call_llm)
         assert "prepend_system_reminder" in source

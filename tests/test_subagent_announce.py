@@ -16,8 +16,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from core.agent.agentic_loop import AgenticLoop
 from core.agent.conversation import ConversationContext
+from core.agent.loop import AgenticLoop
 from core.agent.sub_agent import (
     SubAgentManager,
     SubAgentResult,

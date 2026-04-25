@@ -9,16 +9,16 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from core.cli.commands import cmd_login
-from core.gateway.auth.plan_registry import (
+from core.auth.plan_registry import (
     get_plan_registry,
     reset_plan_registry,
 )
-from core.gateway.auth.plans import GLM_CODING_TIERS, default_plan_for_payg
+from core.auth.plans import GLM_CODING_TIERS, default_plan_for_payg
+from core.cli.commands import cmd_login
 
 
 def _reset_state() -> None:
-    from core.runtime_wiring import infra
+    from core.lifecycle import container as infra
 
     infra._profile_store = None
     infra._profile_rotator = None
@@ -59,7 +59,7 @@ class TestSetKeyAndUse:
         plan = default_plan_for_payg("openai", "")
         registry.add(plan)
         cmd_login(f"set-key {plan.id} sk-fresh-key-1234567890")
-        from core.runtime_wiring.infra import ensure_profile_store
+        from core.lifecycle.container import ensure_profile_store
 
         store = ensure_profile_store()
         bound = [p for p in store.list_all() if p.plan_id == plan.id]

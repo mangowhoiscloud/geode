@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import time
 
-from core.gateway.auth.cooldown import CooldownTracker
-from core.gateway.auth.profiles import (
+from core.auth.cooldown import CooldownTracker
+from core.auth.profiles import (
     TYPE_PRIORITY,
     AuthProfile,
     CredentialType,
     ProfileStore,
 )
-from core.gateway.auth.rotation import ProfileRotator, calculate_cooldown_ms
+from core.auth.rotation import ProfileRotator, calculate_cooldown_ms
 
 # ---------------------------------------------------------------------------
 # CredentialType + Priority
@@ -600,10 +600,10 @@ class TestAutoRefreshOn401:
 
 
 class TestCredentialScrubbing:
-    """Tests for core.gateway.auth.scrub module."""
+    """Tests for core.auth.scrub module."""
 
     def test_scrub_openai_key(self):
-        from core.gateway.auth.scrub import scrub_credentials
+        from core.auth.scrub import scrub_credentials
 
         msg = "Authentication failed: sk-proj-abcdef1234567890XYZ"
         result = scrub_credentials(msg)
@@ -611,28 +611,28 @@ class TestCredentialScrubbing:
         assert "[REDACTED]" in result
 
     def test_scrub_github_pat(self):
-        from core.gateway.auth.scrub import scrub_credentials
+        from core.auth.scrub import scrub_credentials
 
         msg = "Rate limit exceeded for ghp_1234567890abcdefABCDEF"
         result = scrub_credentials(msg)
         assert "ghp_" not in result
 
     def test_scrub_bearer_token(self):
-        from core.gateway.auth.scrub import scrub_credentials
+        from core.auth.scrub import scrub_credentials
 
         msg = "Invalid header: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.abc123"
         result = scrub_credentials(msg)
         assert "eyJhbGci" not in result
 
     def test_scrub_slack_token(self):
-        from core.gateway.auth.scrub import scrub_credentials
+        from core.auth.scrub import scrub_credentials
 
         msg = "Slack error: xoxb-1234-5678-abcdefghij/klmnop"
         result = scrub_credentials(msg)
         assert "xoxb-" not in result
 
     def test_scrub_query_params(self):
-        from core.gateway.auth.scrub import scrub_credentials
+        from core.auth.scrub import scrub_credentials
 
         msg = "Request to https://api.example.com?api_key=abcdef1234567890&foo=bar"
         result = scrub_credentials(msg)
@@ -640,13 +640,13 @@ class TestCredentialScrubbing:
         assert "foo=bar" in result
 
     def test_no_scrub_clean_text(self):
-        from core.gateway.auth.scrub import scrub_credentials
+        from core.auth.scrub import scrub_credentials
 
         msg = "Connection timed out after 30 seconds"
         assert scrub_credentials(msg) == msg
 
     def test_scrub_multiple_patterns(self):
-        from core.gateway.auth.scrub import scrub_credentials
+        from core.auth.scrub import scrub_credentials
 
         msg = "Failed with sk-test-abc1234567890xyz and Bearer tok_longvalue1234"
         result = scrub_credentials(msg)
@@ -665,12 +665,12 @@ class TestBuildAuthZAI:
     def test_zai_profile_registered(self):
         from unittest.mock import patch
 
-        with patch("core.runtime_wiring.infra.settings") as mock_settings:
+        with patch("core.lifecycle.container.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             mock_settings.openai_api_key = ""
             mock_settings.zai_api_key = "test-zai-key"
 
-            from core.runtime_wiring.infra import build_auth
+            from core.lifecycle.container import build_auth
 
             store, _rotator, _cooldown = build_auth()
 
@@ -683,12 +683,12 @@ class TestBuildAuthZAI:
     def test_zai_profile_not_registered_when_empty(self):
         from unittest.mock import patch
 
-        with patch("core.runtime_wiring.infra.settings") as mock_settings:
+        with patch("core.lifecycle.container.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             mock_settings.openai_api_key = ""
             mock_settings.zai_api_key = ""
 
-            from core.runtime_wiring.infra import build_auth
+            from core.lifecycle.container import build_auth
 
             store, _rotator, _cooldown = build_auth()
 

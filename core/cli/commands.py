@@ -17,10 +17,10 @@ if TYPE_CHECKING:
 
 from simple_term_menu import TerminalMenu
 
+from core.auth.profiles import AuthProfile, ProfileStore
 from core.cli._helpers import is_glm_key as _is_glm_key
 from core.cli._helpers import mask_key as _mask_key
 from core.cli._helpers import upsert_env as _upsert_env
-from core.cli.ui.console import console
 from core.config import (
     ANTHROPIC_BUDGET,
     ANTHROPIC_PRIMARY,
@@ -28,7 +28,7 @@ from core.config import (
     GLM_PRIMARY,
     OPENAI_PRIMARY,
 )
-from core.gateway.auth.profiles import AuthProfile, ProfileStore
+from core.ui.console import console
 
 log = logging.getLogger(__name__)
 
@@ -285,10 +285,10 @@ def _seed_payg_plan_from_key(provider: str, key: str) -> None:
     same credential in both views (Phase 1 single-store + Phase 2 plans).
     """
     try:
-        from core.gateway.auth.plan_registry import get_plan_registry
-        from core.gateway.auth.plans import default_plan_for_payg
-        from core.gateway.auth.profiles import AuthProfile, CredentialType
-        from core.runtime_wiring.infra import ensure_profile_store
+        from core.auth.plan_registry import get_plan_registry
+        from core.auth.plans import default_plan_for_payg
+        from core.auth.profiles import AuthProfile, CredentialType
+        from core.lifecycle.container import ensure_profile_store
 
         registry = get_plan_registry()
         plan = registry.get(f"{provider}-payg") or default_plan_for_payg(provider, key)
@@ -320,7 +320,7 @@ def _seed_payg_plan_from_key(provider: str, key: str) -> None:
 def _persist_auth_state() -> None:
     """Persist Plan + Profile state to ~/.geode/auth.toml (best-effort)."""
     try:
-        from core.gateway.auth.auth_toml import save_auth_toml
+        from core.auth.auth_toml import save_auth_toml
 
         save_auth_toml()
     except Exception:
@@ -341,8 +341,8 @@ def _check_provider_key(selected: ModelProfile) -> None:
     # Codex (Plus) requires OAuth — check token availability
     if "Codex" in selected.provider:
         try:
-            from core.gateway.auth.codex_cli_oauth import read_codex_cli_credentials
-            from core.gateway.auth.oauth_login import read_geode_openai_credentials
+            from core.auth.codex_cli_oauth import read_codex_cli_credentials
+            from core.auth.oauth_login import read_geode_openai_credentials
 
             geode_creds = read_geode_openai_credentials()
             codex_creds = read_codex_cli_credentials()
@@ -529,7 +529,7 @@ def _auth_login_status() -> None:
     # OpenAI
     codex_ok = False
     try:
-        from core.gateway.auth.codex_cli_oauth import (
+        from core.auth.codex_cli_oauth import (
             read_codex_cli_credentials,
         )
 
@@ -608,7 +608,7 @@ def _auth_login_status() -> None:
 
 def _sync_oauth_profile_after_login(cli_name: str) -> None:
     """Re-read OAuth credentials and update ProfileStore after login."""
-    from core.gateway.auth.profiles import AuthProfile, CredentialType
+    from core.auth.profiles import AuthProfile, CredentialType
 
     store = _get_profile_store()
 
@@ -617,10 +617,10 @@ def _sync_oauth_profile_after_login(cli_name: str) -> None:
         return
 
     if cli_name == "codex":
-        from core.gateway.auth.codex_cli_oauth import (
+        from core.auth.codex_cli_oauth import (
             invalidate_cache as codex_invalidate,
         )
-        from core.gateway.auth.codex_cli_oauth import (
+        from core.auth.codex_cli_oauth import (
             read_codex_cli_credentials,
         )
 
@@ -646,7 +646,7 @@ def cmd_auth(args: str) -> None:
     /auth add         → interactive add profile
     /auth remove <n>  → remove a profile
     """
-    from core.gateway.auth.rotation import ProfileRotator
+    from core.auth.rotation import ProfileRotator
 
     # Module-level singleton (lazy init)
     store = _get_profile_store()
@@ -731,7 +731,7 @@ def _auth_add_interactive(store: ProfileStore, add_args: str) -> None:
         console.print()
         return
 
-    from core.gateway.auth.profiles import AuthProfile, CredentialType
+    from core.auth.profiles import AuthProfile, CredentialType
 
     # Level 1: Provider selection
     providers = ["anthropic", "openai", "glm"]
@@ -802,7 +802,7 @@ def _get_profile_store() -> ProfileStore:
     added through `/auth add` were invisible to the LLM dispatch layer.
     Both layers now read from `runtime_wiring.infra` directly.
     """
-    from core.runtime_wiring.infra import ensure_profile_store
+    from core.lifecycle.container import ensure_profile_store
 
     return ensure_profile_store()
 
@@ -1165,7 +1165,7 @@ def cmd_skill_invoke(skill_registry: _Any, arg: str, *, agentic_ref: _Any = None
         if _loop is not None:
             prompt = f"[skill:{name}] {rendered}"
             result = _loop.run(prompt)
-            from core.cli.ui.agentic_ui import render_status_line
+            from core.ui.agentic_ui import render_status_line
 
             render_status_line()
         else:
@@ -1779,7 +1779,7 @@ def cmd_clear(args: str) -> None:
         # v0.51.1: in IPC mode, native input() blocks the daemon and never
         # reaches the thin client REPL. Detect via the IPC writer thread-local
         # and require an explicit --force flag instead.
-        from core.cli.ui.agentic_ui import _ipc_writer_local
+        from core.ui.agentic_ui import _ipc_writer_local
 
         in_ipc_mode = getattr(_ipc_writer_local, "writer", None) is not None
         if in_ipc_mode:
@@ -1935,6 +1935,18 @@ def cmd_login(args: str) -> None:
     if sub == "quota":
         _login_quota()
         return
+    if sub == "refresh":
+        # v0.52 phase 3 — daemon-side reload of auth.toml after thin client
+        # writes (e.g. /login oauth completed in CLI process). When invoked
+        # in CLI process this is a no-op; the actual reload happens when the
+        # CLI relays /login refresh to the daemon via IPC.
+        try:
+            from core.auth.auth_toml import load_auth_toml
+
+            load_auth_toml()
+        except Exception:
+            log.debug("auth.toml reload skipped", exc_info=True)
+        return
     if sub in ("help", "?"):
         _login_help()
         return
@@ -1972,10 +1984,10 @@ def _login_show_status() -> None:
     (per-provider expiry + subscription line), and Claude Code Settings
     Status tab (plan + token source + provider).
     """
-    from core.gateway.auth.oauth_login import get_auth_status as get_oauth_status
-    from core.gateway.auth.plan_registry import get_plan_registry
-    from core.gateway.auth.profiles import CredentialType
-    from core.runtime_wiring.infra import ensure_profile_store
+    from core.auth.oauth_login import get_auth_status as get_oauth_status
+    from core.auth.plan_registry import get_plan_registry
+    from core.auth.profiles import CredentialType
+    from core.lifecycle.container import ensure_profile_store
 
     store = ensure_profile_store()
     registry = get_plan_registry()
@@ -2099,13 +2111,13 @@ def _login_add_interactive(_args: str) -> None:
     """
     import sys
 
-    from core.gateway.auth.plan_registry import get_plan_registry
-    from core.gateway.auth.plans import (
+    from core.auth.plan_registry import get_plan_registry
+    from core.auth.plans import (
         GLM_CODING_TIERS,
         default_plan_for_payg,
     )
-    from core.gateway.auth.profiles import AuthProfile, CredentialType
-    from core.runtime_wiring.infra import ensure_profile_store
+    from core.auth.profiles import AuthProfile, CredentialType
+    from core.lifecycle.container import ensure_profile_store
 
     if not sys.stdin.isatty():
         console.print(
@@ -2277,7 +2289,7 @@ def _login_oauth(target: str) -> None:
         return
     console.print()
     try:
-        from core.gateway.auth.oauth_login import login_openai
+        from core.auth.oauth_login import login_openai
 
         creds = login_openai()
         if creds:
@@ -2302,9 +2314,9 @@ def _login_set_key(rest: str) -> None:
         return
     plan_id, key = parts[0], parts[1].strip()
 
-    from core.gateway.auth.plan_registry import get_plan_registry
-    from core.gateway.auth.profiles import AuthProfile, CredentialType
-    from core.runtime_wiring.infra import ensure_profile_store
+    from core.auth.plan_registry import get_plan_registry
+    from core.auth.profiles import AuthProfile, CredentialType
+    from core.lifecycle.container import ensure_profile_store
 
     registry = get_plan_registry()
     plan = registry.get(plan_id)
@@ -2346,7 +2358,7 @@ def _login_use(rest: str) -> None:
     if not plan_id:
         console.print("  [warning]Usage: /login use <plan-id>[/warning]\n")
         return
-    from core.gateway.auth.plan_registry import get_plan_registry
+    from core.auth.plan_registry import get_plan_registry
 
     registry = get_plan_registry()
     plan = registry.get(plan_id)
@@ -2375,8 +2387,8 @@ def _login_remove(rest: str) -> None:
     if not plan_id:
         console.print("  [warning]Usage: /login remove <plan-id>[/warning]\n")
         return
-    from core.gateway.auth.plan_registry import get_plan_registry
-    from core.runtime_wiring.infra import ensure_profile_store
+    from core.auth.plan_registry import get_plan_registry
+    from core.lifecycle.container import ensure_profile_store
 
     registry = get_plan_registry()
     if not registry.remove(plan_id):
@@ -2396,7 +2408,7 @@ def _login_route(rest: str) -> None:
         console.print("  [warning]Usage: /login route <model> <plan-id> [<plan-id>...][/warning]\n")
         return
     model, plan_ids = parts[0], parts[1:]
-    from core.gateway.auth.plan_registry import get_plan_registry
+    from core.auth.plan_registry import get_plan_registry
 
     registry = get_plan_registry()
     unknown = [pid for pid in plan_ids if registry.get(pid) is None]
@@ -2409,7 +2421,7 @@ def _login_route(rest: str) -> None:
 
 
 def _login_quota() -> None:
-    from core.gateway.auth.plan_registry import get_plan_registry
+    from core.auth.plan_registry import get_plan_registry
 
     registry = get_plan_registry()
     plans = registry.list_all()

@@ -6,8 +6,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.agent.agentic_loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
 from core.agent.conversation import ConversationContext
+from core.agent.loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.agent.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, WRITE_TOOLS, ToolExecutor
 from core.hooks import HookEvent, HookSystem

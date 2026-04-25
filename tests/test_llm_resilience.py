@@ -666,7 +666,7 @@ class TestCostRatioGuard:
 
     def test_sequential_tool_batch_clearing(self) -> None:
         """Sequential tool calls clear completed entries from previous batch."""
-        from core.cli.ui.tool_tracker import ToolCallTracker
+        from core.ui.tool_tracker import ToolCallTracker
 
         tracker = ToolCallTracker()
         # First batch: single tool call
@@ -683,7 +683,7 @@ class TestCostRatioGuard:
 
     def test_parallel_tools_not_cleared(self) -> None:
         """Parallel tool calls within a batch are preserved."""
-        from core.cli.ui.tool_tracker import ToolCallTracker
+        from core.ui.tool_tracker import ToolCallTracker
 
         tracker = ToolCallTracker()
         tracker.on_tool_start({"name": "web_search", "args_preview": "q=A"})
@@ -697,7 +697,7 @@ class TestCostRatioGuard:
 
     def test_suspend_resets_line_count(self) -> None:
         """suspend() erases lines and resets _line_count so on_tool_end prints at cursor."""
-        from core.cli.ui.tool_tracker import ToolCallTracker
+        from core.ui.tool_tracker import ToolCallTracker
 
         tracker = ToolCallTracker()
         tracker.on_tool_start({"name": "analyze_ip", "args_preview": 'ip_name="Berserk"'})
@@ -718,7 +718,7 @@ class TestCostRatioGuard:
 
     def test_suspend_idempotent(self) -> None:
         """Second suspend() call is a no-op."""
-        from core.cli.ui.tool_tracker import ToolCallTracker
+        from core.ui.tool_tracker import ToolCallTracker
 
         tracker = ToolCallTracker()
         tracker.on_tool_start({"name": "list_ips", "args_preview": ""})

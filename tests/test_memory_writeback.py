@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from core.hooks import HookEvent, HookSystem
+from core.lifecycle.automation import build_automation
 from core.memory.project import ProjectMemory
-from core.runtime_wiring.automation import build_automation
 
 
 def _make_hooks_and_memory(

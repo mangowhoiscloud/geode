@@ -39,7 +39,7 @@ def _resolve_glm_endpoint() -> tuple[str, str]:
     GLM_BASE_URL for legacy .env-only setups.
     """
     try:
-        from core.gateway.auth.plan_registry import resolve_routing
+        from core.auth.plan_registry import resolve_routing
 
         target = resolve_routing("glm-5.1")
         if target is not None and target.profile.key:

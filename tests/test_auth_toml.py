@@ -6,18 +6,18 @@ import os
 import tempfile
 from pathlib import Path
 
-from core.gateway.auth.auth_toml import (
+from core.auth.auth_toml import (
     auth_toml_path,
     load_auth_toml,
     migrate_env_to_toml,
     save_auth_toml,
 )
-from core.gateway.auth.plan_registry import (
+from core.auth.plan_registry import (
     get_plan_registry,
     reset_plan_registry,
 )
-from core.gateway.auth.plans import GLM_CODING_TIERS
-from core.gateway.auth.profiles import AuthProfile, CredentialType
+from core.auth.plans import GLM_CODING_TIERS
+from core.auth.profiles import AuthProfile, CredentialType
 
 
 def _fresh_path() -> Path:
@@ -29,7 +29,7 @@ def _fresh_path() -> Path:
 
 
 def _reset_state() -> None:
-    from core.runtime_wiring import infra as _infra
+    from core.lifecycle import container as _infra
 
     _infra._profile_store = None
     _infra._profile_rotator = None
@@ -39,7 +39,7 @@ def _reset_state() -> None:
 class TestRoundtrip:
     def test_save_then_load_preserves_plan(self) -> None:
         _reset_state()
-        from core.runtime_wiring.infra import ensure_profile_store
+        from core.lifecycle.container import ensure_profile_store
 
         store = ensure_profile_store()
         registry = get_plan_registry()
@@ -79,7 +79,7 @@ class TestRoundtrip:
 
     def test_managed_profiles_are_not_persisted(self) -> None:
         _reset_state()
-        from core.runtime_wiring.infra import ensure_profile_store
+        from core.lifecycle.container import ensure_profile_store
 
         store = ensure_profile_store()
         store.add(

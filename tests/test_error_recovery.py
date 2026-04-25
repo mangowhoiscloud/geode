@@ -14,7 +14,6 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.agent.agentic_loop import AgenticLoop
 from core.agent.conversation import ConversationContext
 from core.agent.error_recovery import (
     _EXCLUDED_TOOLS,
@@ -22,6 +21,7 @@ from core.agent.error_recovery import (
     RecoveryResult,
     RecoveryStrategy,
 )
+from core.agent.loop import AgenticLoop
 from core.agent.tool_executor import ToolExecutor
 from core.hooks import HookEvent, HookSystem
 

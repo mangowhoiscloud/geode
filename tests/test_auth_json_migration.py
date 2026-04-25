@@ -31,9 +31,9 @@ class TestLegacyMigration:
         )
         toml_path = tmp_path / "auth.toml"
         monkeypatch.setenv("GEODE_AUTH_TOML", str(toml_path))
-        monkeypatch.setattr("core.gateway.auth.oauth_login.LEGACY_AUTH_STORE_PATH", legacy)
+        monkeypatch.setattr("core.auth.oauth_login.LEGACY_AUTH_STORE_PATH", legacy)
 
-        from core.gateway.auth.oauth_login import _load_auth_store
+        from core.auth.oauth_login import _load_auth_store
 
         view = _load_auth_store()
 
@@ -53,9 +53,9 @@ class TestLegacyMigration:
         legacy = tmp_path / "auth.json"  # never created
         toml_path = tmp_path / "auth.toml"
         monkeypatch.setenv("GEODE_AUTH_TOML", str(toml_path))
-        monkeypatch.setattr("core.gateway.auth.oauth_login.LEGACY_AUTH_STORE_PATH", legacy)
+        monkeypatch.setattr("core.auth.oauth_login.LEGACY_AUTH_STORE_PATH", legacy)
 
-        from core.gateway.auth.oauth_login import _load_auth_store
+        from core.auth.oauth_login import _load_auth_store
 
         view = _load_auth_store()
         assert view["providers"] == {}
@@ -77,9 +77,9 @@ class TestLegacyMigration:
         )
         toml_path = tmp_path / "auth.toml"
         monkeypatch.setenv("GEODE_AUTH_TOML", str(toml_path))
-        monkeypatch.setattr("core.gateway.auth.oauth_login.LEGACY_AUTH_STORE_PATH", legacy)
+        monkeypatch.setattr("core.auth.oauth_login.LEGACY_AUTH_STORE_PATH", legacy)
 
-        from core.gateway.auth.oauth_login import _load_auth_store
+        from core.auth.oauth_login import _load_auth_store
 
         _load_auth_store()
         # Second call: legacy file gone, view rebuilt from auth.toml
@@ -92,7 +92,7 @@ class TestSaveRoutesThroughAuthToml:
         toml_path = tmp_path / "auth.toml"
         monkeypatch.setenv("GEODE_AUTH_TOML", str(toml_path))
 
-        from core.gateway.auth.oauth_login import _save_auth_store
+        from core.auth.oauth_login import _save_auth_store
 
         _save_auth_store(
             {

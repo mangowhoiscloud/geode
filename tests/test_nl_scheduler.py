@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 
 import pytest
-from core.automation.nl_scheduler import NLJobNormalizer, NLScheduleParser
-from core.automation.scheduler import ScheduleKind
+from core.scheduler.nl_scheduler import NLJobNormalizer, NLScheduleParser
+from core.scheduler.scheduler import ScheduleKind
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -209,8 +209,8 @@ def _build_agentic_stack_minimal(prompt: str, *, quiet: bool = True) -> Any:
     Returns AgenticResult.  Inline construction — no SharedServices overhead.
     Fork is a lightweight one-shot execution, not a session mode.
     """
-    from core.agent.agentic_loop import AgenticLoop
     from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
     from core.config import _resolve_provider
     from core.config import settings as _stk_settings

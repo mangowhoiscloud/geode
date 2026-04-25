@@ -37,8 +37,8 @@ def _make_loop(
 
     Returns (loop, context, executor, sub_mgr) 4-tuple.
     """
-    from core.agent.agentic_loop import AgenticLoop
     from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
     from core.cli import (
         _build_sub_agent_manager,

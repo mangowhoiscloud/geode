@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.51.1"
+version = "0.52.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -51,12 +51,98 @@ markers = [
 [dependency-groups]
 dev = [
     "bandit>=1.8.0",
+    "import-linter>=2.0",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
     "pytest-cov>=6.0.0",
     "ruff>=0.15.2",
     "types-pyyaml>=6.0.12.20250915",
+]
+
+
+# v0.52 phase 6 — process binding 강제 (B2/B8 재발 방지)
+# CLI/agent/server/channels 사이의 직접 import 를 정적 차단한다.
+# 위반 시 `lint-imports` 실패 → CI 에서 PR merge 차단.
+[tool.importlinter]
+root_package = "core"
+
+[[tool.importlinter.contracts]]
+name = "CLI must not import server/channels (process boundary)"
+type = "forbidden"
+source_modules = ["core.cli"]
+forbidden_modules = ["core.server", "core.channels"]
+# v0.52 phase 6 — geode serve 명령이 cli/__init__.py 안에 있어서
+# daemon entry 가 cli/ 의 일부로 남아있음. v0.53 에서 server/entrypoint.py
+# 로 분리하면 이들 ignore 제거.
+ignore_imports = [
+    "core.cli -> core.server.supervised.services",
+    "core.cli -> core.server.supervised.webhook_handler",
+    "core.cli -> core.server.ipc_server.poller",
+    "core.cli -> core.channels.binding",
+    "core.cli.scheduler_drain -> core.server.supervised.services",
+    "core.lifecycle.adapters -> core.channels.binding",
+]
+
+[[tool.importlinter.contracts]]
+name = "Agent stays pure (no CLI/server)"
+type = "forbidden"
+source_modules = ["core.agent"]
+forbidden_modules = ["core.cli", "core.server"]
+# v0.52 phase 6 — agent/ 모듈들이 여전히 cli/ 의 utilities (session_checkpoint,
+# transcript, redaction, ip_names, bash_tool, commands) 를 import. v0.53 에서
+# server/runtime_state/ 또는 utils/ 로 이동 예정.
+ignore_imports = [
+    "core.agent.loop -> core.cli.commands",
+    "core.agent.loop -> core.cli.session_checkpoint",
+    "core.agent.loop -> core.cli.transcript",
+    "core.agent.approval -> core.cli",
+    "core.agent.tool_executor -> core.cli.bash_tool",
+    "core.agent.tool_executor -> core.cli.redaction",
+    "core.agent.system_prompt -> core.cli.ip_names",
+    "core.agent.worker -> core.cli.tool_handlers",
+]
+
+[[tool.importlinter.contracts]]
+name = "Server may host agent but never CLI"
+type = "forbidden"
+source_modules = ["core.server"]
+forbidden_modules = ["core.cli"]
+# v0.52 phase 6 — server/supervised/services.py (구 gateway/shared_services) 가
+# 여전히 cli/{commands,session_state,tool_handlers} + lifecycle/bootstrap 을 통해
+# cli/startup 을 import. v0.53 에서 daemon-side handler 를 server/ipc_server/handlers/
+# 로 옮기면서 정리.
+ignore_imports = [
+    "core.server.supervised.services -> core.cli.commands",
+    "core.server.supervised.services -> core.cli.session_state",
+    "core.server.supervised.services -> core.cli.tool_handlers",
+    "core.server.supervised.services -> core.cli.bootstrap",
+    "core.lifecycle.bootstrap -> core.cli.startup",
+    "core.memory.context -> core.cli.project_detect",
+    "core.agent.system_prompt -> core.cli.ip_names",
+    "core.agent.worker -> core.cli.tool_handlers",
+    "core.agent.loop -> core.cli.session_checkpoint",
+    "core.agent.loop -> core.cli.transcript",
+    "core.agent.tool_executor -> core.cli.redaction",
+    "core.agent.tool_executor -> core.cli.bash_tool",
+    "core.agent.approval -> core.cli",
+    "core.server.ipc_server.poller -> core.cli",
+    "core.server.ipc_server.poller -> core.cli.session_state",
+    "core.server.ipc_server.poller -> core.cli.startup",
+    "core.server.ipc_server.poller -> core.cli.session_checkpoint",
+    "core.agent.loop -> core.cli.commands",
+]
+
+[[tool.importlinter.contracts]]
+name = "Channels are capability-pure (no process imports)"
+type = "forbidden"
+source_modules = ["core.channels"]
+forbidden_modules = ["core.cli", "core.server", "core.agent"]
+# v0.52 phase 6 — channel_manager (구) 의 BasePoller 의존은 사실 channels 가
+# poller 추상화를 알아야 함. v0.53 에서 poller_base 를 channels/ 로 승격할지
+# server/ 에 둘지 결정.
+ignore_imports = [
+    "core.channels.binding -> core.server.supervised.poller_base",
 ]
 
 [tool.ruff]
