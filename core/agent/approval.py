@@ -36,8 +36,9 @@ def _write_denial_with_fallback(tool_name: str) -> dict[str, Any]:
     _WRITE_FALLBACK_HINTS: dict[str, str] = {
         "memory_save": "Try memory_search to read existing data instead.",
         "note_save": "Try reading existing notes or suggest the content to the user.",
-        "set_api_key": "Show the user the /key command to set it themselves.",
-        "manage_auth": "Show the user the /auth command to manage auth profiles.",
+        "set_api_key": "Show the user the /login command to set it themselves.",
+        "manage_auth": "Show the user the /login command to manage credentials.",
+        "manage_login": "Show the user the /login command to register plans / keys / OAuth.",
         "profile_update": "Show current profile with profile_get instead.",
         "profile_preference": "Show current preferences with profile_get instead.",
         "profile_learn": "Show current learning patterns with profile_get instead.",
@@ -302,6 +303,15 @@ class ApprovalWorkflow:
                 summary = f"provider={tool_input.get('provider', '?')}"
             elif tool_name == "manage_auth":
                 summary = f"action={tool_input.get('action', '?')}"
+            elif tool_name == "manage_login":
+                summary = (
+                    f"sub={tool_input.get('subcommand', 'status')}"
+                    + (
+                        f" args={tool_input.get('args', '')[:60]}"
+                        if tool_input.get("args")
+                        else ""
+                    )
+                )
             elif tool_name == "profile_update":
                 fields = [k for k in ("role", "expertise", "name", "team") if tool_input.get(k)]
                 summary = f"fields={','.join(fields)}" if fields else "profile update"

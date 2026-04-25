@@ -201,6 +201,7 @@ class ProfilePolicy:
                         "memory_save",
                         "note_save",
                         "set_api_key",
+                        "manage_login",
                         "profile_update",
                         "calendar_create_event",
                         "calendar_sync_scheduler",

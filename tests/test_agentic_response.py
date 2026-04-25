@@ -280,7 +280,9 @@ class TestWriteDenialWithFallback:
 
     def test_set_api_key(self):
         result = _write_denial_with_fallback("set_api_key")
-        assert "/key" in result["fallback_hint"]
+        # v0.50.1: denial hint now points users at the unified /login command
+        # (set_api_key is a thin alias for the legacy /key paste path).
+        assert "/login" in result["fallback_hint"]
 
     def test_all_write_tools_have_fallbacks(self):
         from core.agent.tool_executor import WRITE_TOOLS

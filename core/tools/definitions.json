@@ -257,7 +257,7 @@
   },
   {
     "name": "set_api_key",
-    "description": "Sets an API key. Use when the user requests API key setup or change.",
+    "description": "Sets a single PAYG API key. Prefer manage_login for richer flows (subscription plans, OAuth, routing). Use this only when the user pastes a raw key without context.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -273,7 +273,7 @@
   },
   {
     "name": "manage_auth",
-    "description": "Manages authentication profiles. Use when the user wants to manage authentication, profiles, or credentials.",
+    "description": "Legacy auth-profile manager. Prefer manage_login. Retained for the existing /auth interactive add path.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -282,6 +282,37 @@
         "sub_action": {
           "type": "string",
           "description": "Action to perform (add, remove, list). If omitted, displays status."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "manage_login",
+    "description": "Unified credentials/plans command — Plans + API keys + OAuth + routing in one tool. Use whenever the user says login/logout, sets up a subscription (GLM Coding Lite/Pro/Max, ChatGPT Plus, Claude Pro), changes credentials, asks about quota, switches active plan, or pastes an API key with intent. Mirrors the /login slash command (see `core.cli.commands.cmd_login`).",
+    "category": "model",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "subcommand": {
+          "type": "string",
+          "description": "One of: status (default — show plans/profiles/routing/quota), add (interactive wizard), oauth (Codex OAuth device flow), set-key, use, route, remove, quota, help.",
+          "enum": [
+            "status",
+            "add",
+            "oauth",
+            "set-key",
+            "use",
+            "route",
+            "remove",
+            "quota",
+            "help"
+          ]
+        },
+        "args": {
+          "type": "string",
+          "description": "Optional positional arguments for the subcommand. Examples: oauth → 'openai'; set-key → 'glm-coding-lite zai-xxxx'; use → 'glm-coding-lite'; route → 'glm-5.1 glm-coding-lite glm-payg'; remove → 'glm-coding-lite'."
         }
       },
       "required": []
