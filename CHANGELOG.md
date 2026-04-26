@@ -28,6 +28,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.52.5] — 2026-04-27
+
+### Fixed
+- **Codex token resolution silently shadowed by Codex CLI session** — `_resolve_codex_token` iterated `ProfileStore` in insertion order, and `build_auth` adds external CLI profiles (`managed_by="codex-cli"`) BEFORE reading auth.toml. So a user who registered an OAuth token via `/login oauth openai` but also had Codex CLI logged in would silently use Codex CLI's token, not theirs. v0.52.4's stated "GEODE-issued first" contract was ineffective. Fix: 2-pass iteration — `managed_by == ""` (GEODE-issued) wins; `managed_by="codex-cli"` is the second-pass fallback. (`core/llm/providers/codex.py:_resolve_codex_token`)
+- **System prompt staleness after escalation** — `_try_model_escalation` and `_try_cross_provider_escalation` call `update_model()` directly + persist via `_persist_escalated_model(settings.model = next)`. The next round's `_sync_model_from_settings()` then sees no drift and skips the system prompt rebuild — leaving the model card pinned to the previously-failed model. Fix: `update_model()` sets `self._prompt_dirty = True`; the run-loop rebuilds when EITHER drift OR dirty flag is set. (`core/agent/loop.py:update_model`, `core/agent/loop.py:704`)
+
+### Added
+- **`tests/test_provider_switching.py`** — 11 invariant cases pinning the 5 switch paths (3C2 cross-provider + 2 within-provider Plan switches):
+  - Path A: Codex Plus OAuth → Anthropic API key
+  - Path B: Codex Plus OAuth → GLM Coding Plan
+  - Path C: Anthropic → GLM
+  - Path D: Codex Plus OAuth → OpenAI PAYG (within-provider, with `forced_login_method="apikey"` variant)
+  - Path E: GLM Coding → GLM PAYG (within-provider)
+  - Plus cross-cutting: token-leak detection (no provider's credential leaks into another's call), GEODE-issued OAuth precedence, adapter swap on cross-provider, adapter reuse on within-provider, `_prompt_dirty` invariant.
+
+### Reference
+- 2 parallel reference agents:
+  - GEODE switch code-path audit — identified 2 real bugs (token shadowing, prompt staleness) + flagged false positives that turned out non-issues (ContextVar carryover affects pipeline only, not chat loop)
+  - Codex CLI / Claude Code / aider / simonw-llm / OpenClaw switch-state policies — Codex has no in-session switch (resume only); Claude Code preserves history + invalidates prompt cache + confirmation gate on prior output; aider rebuilds Coder via SwitchCoder exception; simonw/llm stateless. **GEODE chose aider's preserve-history pattern** (already implemented).
+
 ## [0.52.4] — 2026-04-26
 
 ### Fixed

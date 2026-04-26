@@ -70,6 +70,20 @@ def _resolve_codex_token() -> str:
 
         store = get_profile_store()
         if store is not None:
+            # v0.52.5 — two passes so a GEODE-issued OAuth token
+            # (managed_by="") wins over a borrowed Codex CLI token
+            # (managed_by="codex-cli"). Pre-fix the iteration was
+            # insertion-order — and ``build_auth`` adds external CLIs
+            # *before* reading auth.toml, so an active Codex CLI session
+            # silently shadowed the geode token.
+            for profile in store.list_all():
+                if (
+                    profile.provider == "openai-codex"
+                    and profile.is_available
+                    and profile.key
+                    and not profile.managed_by
+                ):
+                    return profile.key
             for profile in store.list_all():
                 if profile.provider == "openai-codex" and profile.is_available and profile.key:
                     return profile.key
