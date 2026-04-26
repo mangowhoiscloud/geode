@@ -306,8 +306,15 @@ class Settings(BaseSettings):
     llm_retry_max_delay: float = 30.0  # max delay cap for retries (seconds)
     llm_max_retries: int = 3  # max retry attempts per model
 
-    # LLM — Cross-Provider Failover (opt-in)
-    llm_cross_provider_failover: bool = False  # cross-provider fallback on all retries exhausted
+    # LLM — Cross-Provider Failover (opt-in).
+    # When True, the router walks ``llm_cross_provider_order`` after all
+    # retries+fallbacks within the active provider exhaust. v0.52.2 keeps
+    # this opt-in (it auto-switches *silently*, which is a behaviour
+    # change with broader surface than the resilience patch should own).
+    # The B5 cross-provider breadcrumb (``credential_breadcrumb.format``)
+    # already surfaces alternative providers to the LLM so the model can
+    # ask the user to run ``/model <slug>`` — a transparent path.
+    llm_cross_provider_failover: bool = False
     llm_cross_provider_order: list[str] = ["anthropic", "openai", "glm"]
 
     # LLM — Fallback cost ratio control (C2: 0 = unlimited)

@@ -185,3 +185,42 @@ def test_cmd_login_refresh_swallows_missing_auth_toml(
     assert not auth_path.exists()
     # Must not raise.
     cmd_login("refresh")
+
+
+def test_cmd_login_refresh_emits_observability_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog
+) -> None:
+    """B2 v0.52.2 — refresh must emit an INFO log on success.
+
+    Pre-fix the success path was completely silent. Production
+    observability black hole — no way to verify the thin → daemon refresh
+    signal was firing in the field.
+    """
+    import logging
+
+    auth_path = tmp_path / "auth.toml"
+    monkeypatch.setenv("GEODE_AUTH_TOML", str(auth_path))
+    _seed_auth_toml_with_plan("plan-observability")
+
+    # Reset singletons so the reload actually merges new entries.
+    from core.auth import plan_registry as _pr
+    from core.lifecycle import container as _infra
+
+    _infra._profile_store = None
+    _pr._plan_registry = None
+
+    with caplog.at_level(logging.INFO, logger="core.cli.commands"):
+        cmd_login("refresh")
+
+    messages = [rec.message for rec in caplog.records]
+    assert any("auth.toml reload" in m for m in messages), (
+        "cmd_login('refresh') must emit an INFO log on success — pre-v0.52.2 "
+        "this branch was silent and B7 fires were undetectable in production"
+    )
+    # The summary line must include count fields so SREs can see at a glance
+    # whether a refresh was a no-op vs. actually merged something.
+    summary = next(m for m in messages if "auth.toml reload" in m and "loaded=" in m)
+    assert "total_plans=" in summary
+    assert "total_profiles=" in summary
+    assert "new_plans=" in summary
+    assert "new_profiles=" in summary

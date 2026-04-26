@@ -443,23 +443,62 @@ class AgenticLoop:
         from inside a tool handler, which swapped the adapter while the
         current round was still processing tool results.
 
+        v0.52.2 — refuse the drift if the target provider has no eligible
+        profile. Prior shape would silently overwrite the loop's chosen
+        model with a stale settings value pointing at an exhausted
+        provider (e.g. just-registered Codex Plus → drift back to GLM
+        without quota → 5×4=20 retry storm). Pattern from OpenClaw
+        ``evaluate_eligibility`` + ``_LAST_VERDICTS`` cached health view.
+
         Returns True if the model was changed (caller should rebuild
         system_prompt), False otherwise.
         """
         try:
             from core.config import settings
 
-            if settings.model != self.model:
-                log.info(
-                    "Model drift detected: loop=%s settings=%s — syncing",
-                    self.model,
+            if settings.model == self.model:
+                return False
+            if not self._drift_target_is_healthy(settings.model):
+                log.warning(
+                    "Model drift refused: target=%s has no eligible profile — "
+                    "keeping loop=%s. Run `/login use <plan>` to enable target.",
                     settings.model,
+                    self.model,
                 )
-                self.update_model(settings.model)
-                return True
+                return False
+            log.info(
+                "Model drift detected: loop=%s settings=%s — syncing",
+                self.model,
+                settings.model,
+            )
+            self.update_model(settings.model)
+            return True
         except Exception:
             log.debug("Model drift check failed", exc_info=True)
         return False
+
+    def _drift_target_is_healthy(self, target_model: str) -> bool:
+        """Return False if no profile in target_model's provider can serve a call.
+
+        Uses ProfileRotator.resolve to mirror the actual selection path the
+        next LLM call would take. None ⇒ all profiles missing/cooled-down/
+        disabled. We refuse the drift rather than silently swap to a model
+        the next call cannot fulfil.
+        """
+        try:
+            target_provider = _resolve_provider(target_model)
+            from core.lifecycle.container import get_profile_rotator
+
+            rotator = get_profile_rotator()
+            if rotator is None:
+                # Rotator not initialised yet (early bootstrap) — accept drift.
+                return True
+            return rotator.resolve(target_provider) is not None
+        except Exception:
+            log.debug("Drift health check failed for %s", target_model, exc_info=True)
+            # On any introspection failure, accept the drift to avoid
+            # blocking legitimate user-initiated /model switches.
+            return True
 
     def update_model(
         self,

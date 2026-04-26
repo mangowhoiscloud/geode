@@ -28,6 +28,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.52.3] — 2026-04-26
+
+### Fixed
+- **B4 — billing-fatal errors retried as transient** (v0.52.1 incident: 40s wasted per LLM call). GLM 429 with code `1113` ("Insufficient balance"), OpenAI `insufficient_quota`, Anthropic `permission_error` 가 SDK 의 `RateLimitError` 로 분류되어 5×4=20 retry × exp-backoff 으로 ~40s 동안 헛돌았음. `core/llm/errors.py` 에 `is_billing_fatal()` + `extract_billing_message()` 신설, `core/llm/fallback.py:235` retry 루프 진입 직전에 호출 → `BillingError` 즉시 raise. 사용자가 본 "thinking ↔ working 무한루프" 증상의 정체.
+- **B6 — parallel HITL approval race** (v0.52.1 incident: `manage_login` 승인 받고도 거부됨). LLM 이 같은 round 에서 같은 tool 을 2회 parallel 호출 → 2개 `approval_request` 가 thin client 로 동시 발사 → 사용자가 `A` 한 번 입력 (첫 prompt 가 소비) → 두번째 prompt 가 120s timeout → silent denial. `core/agent/approval.py:80` 에 이미 존재했지만 사용 안 되던 `_approval_lock` 을 `apply_safety_gates` 의 WRITE/EXPENSIVE branch 에 wrap. 두번째 caller 는 lock 안에서 `_always_approved_categories` 를 re-check 해서 첫 caller 의 "A" promotion 을 즉시 관측, prompt 없이 short-circuit.
+- **B3 — model drift sync 가 unhealthy target 으로 silent 전환** (v0.52.1 incident: OAuth 직후 GLM 으로 회귀). settings store 의 stale `glm-4.7-flash` 가 loop 의 `glm-5.1` 을 quota 확인 없이 덮어씀. `core/agent/loop.py:_sync_model_from_settings` 에 `_drift_target_is_healthy()` 신설 — `update_model()` 호출 전에 `ProfileRotator.resolve(target_provider)` 결과 확인, None 이면 drift 거부 + WARNING 로그. 패턴: OpenClaw `evaluate_eligibility` + `_LAST_VERDICTS`.
+- **B1 — OAuth success 메시지가 잘못된 경로 표시** (`Stored: ~/.geode/auth.json` 출력 but 실제는 `auth.toml`). v0.50.2 SOT migration 후 `AUTH_STORE_PATH` 가 legacy `auth.json` constant 의 alias 로 남아있었음. `core/auth/oauth_login.py` 에 `auth_store_path()` 신설 — `auth_toml_path()` 로 위임, `GEODE_AUTH_TOML` env 도 honor. `emit_oauth_login_success(stored_at=...)` call site 도 갱신.
+
+### Added
+- **B2 — `cmd_login("refresh")` 관측성 로그** (`core/cli/commands.py:1956`). 이전에는 success 시 완전 silent 이었던 daemon-side reload 가 INFO 로그를 emit — `auth.toml reload: file=... loaded=True new_plans=N new_profiles=M total_plans=X total_profiles=Y` + per-plan/profile 라인. 프로덕션에서 thin → daemon refresh signal 이 fire 하는지 사후 확인 가능. Hermes `tracing::info!(field=value, "event")` 패턴 + OpenClaw `markAuthProfileGood` 차용.
+- **B5 — credential breadcrumb cross-provider escalation** (`core/auth/credential_breadcrumb.py`). 활성 provider 의 모든 profile 이 거부됐을 때 다른 provider 들의 healthy profile 을 스캔해서 `cross-provider: openai-codex(codex-cli); anthropic(default)` 한 줄을 LLM context 에 주입. 이전에는 GLM exhausted 시 LLM 이 "GLM rejection" 만 보고 등록된 Codex Plus OAuth 의 존재를 알 수 없었음. 패턴: OpenClaw Lane fail-over (Session Lane → Global Lane). 자동 cross-provider failover (`llm_cross_provider_failover` flag) 는 default OFF 유지 — 정보 surface 만 추가하고 실제 switch 는 LLM/사용자 결정.
+- **6 invariant test files** (34 cases) — `test_billing_fatal.py` (11), `test_parallel_approval.py` (5), `test_model_drift_health.py` (6), `test_oauth_path_display.py` (3), `test_credential_breadcrumb_cross_provider.py` (4), `test_signal_reload.py` +1 case for B2.
+
+### Reference
+- v0.52.1 production incident (transcript: `/login oauth openai` → GLM model drift → 40s retry storm + parallel `manage_login` denial).
+- OpenClaw 차용 매핑 (`.claude/skills/openclaw-patterns/`): `evaluate_eligibility`, `_LAST_VERDICTS`, `markAuthProfileGood`, Lane fail-over, `managedBy`.
+- Hermes 차용 매핑 (`rsasaki0109/hermes-agent-rs`): `tracing::info!` 구조화 로그, `LlmError` 분류 (no false-retries by omission), session model authoritative pattern.
+- simonw/llm #112: "billing/quota error → log + surface + DO NOT retry".
+
 ## [0.52.2] — 2026-04-26
 
 ### Fixed

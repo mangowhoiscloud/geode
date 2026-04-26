@@ -233,6 +233,26 @@ def retry_with_backoff_generic(
                 _notify_success(_provider_for_rotator)
                 return result
             except retryable_errors as exc:
+                # v0.52.2 — short-circuit billing-fatal errors. RateLimitError
+                # with code=1113 (GLM "Insufficient balance") or
+                # insufficient_quota (OpenAI) cannot be cured by waiting; the
+                # 5×exp-backoff retry loop wastes ~40s per failure across all
+                # fallback models for an error that needs user action.
+                from core.llm.errors import (
+                    BillingError,
+                    extract_billing_message,
+                    is_billing_fatal,
+                )
+
+                if is_billing_fatal(exc):
+                    msg = extract_billing_message(exc)
+                    log.error(
+                        "Billing-fatal error on %s (model=%s) — no retry: %s",
+                        provider_label,
+                        current_model,
+                        msg,
+                    )
+                    raise BillingError(msg or billing_message) from exc
                 last_error = exc
                 delay = random.uniform(0, min(retry_base_delay * (2**attempt), retry_max_delay))
                 elapsed = time.monotonic() - t0_retry
