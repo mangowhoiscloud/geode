@@ -1954,11 +1954,38 @@ def cmd_login(args: str) -> None:
         # in-flight requests using profiles loaded from .env / managed CLIs
         # (Codex CLI OAuth) which never appear in auth.toml.
         try:
-            from core.auth.auth_toml import load_auth_toml
+            from core.auth.auth_toml import auth_toml_path, load_auth_toml
+            from core.auth.plan_registry import get_plan_registry
+            from core.lifecycle.container import ensure_profile_store
 
-            load_auth_toml()
+            registry = get_plan_registry()
+            store = ensure_profile_store()
+            plans_before = {p.id for p in registry.list_all()}
+            profiles_before = {p.name for p in store.list_all()}
+            ok = load_auth_toml()
+            plans_after = {p.id for p in registry.list_all()}
+            profiles_after = {p.name for p in store.list_all()}
+            new_plans = plans_after - plans_before
+            new_profiles = profiles_after - profiles_before
+            # v0.52.2 — production observability for the B7 thin → daemon
+            # refresh signal. Pre-fix this branch was completely silent on
+            # success, making it impossible to verify the relay was firing.
+            log.info(
+                "auth.toml reload: file=%s loaded=%s new_plans=%d "
+                "new_profiles=%d total_plans=%d total_profiles=%d",
+                auth_toml_path(),
+                ok,
+                len(new_plans),
+                len(new_profiles),
+                len(plans_after),
+                len(profiles_after),
+            )
+            for plan_id in sorted(new_plans):
+                log.info("auth.toml reload: + plan %s", plan_id)
+            for profile_name in sorted(new_profiles):
+                log.info("auth.toml reload: + profile %s", profile_name)
         except Exception:
-            log.debug("auth.toml reload skipped", exc_info=True)
+            log.warning("auth.toml reload failed", exc_info=True)
         return
     if sub in ("help", "?"):
         _login_help()
