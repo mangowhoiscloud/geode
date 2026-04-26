@@ -161,76 +161,93 @@ class ApprovalWorkflow:
 
         approved = False
 
+        # v0.52.2 — wrap the HITL prompt + always-set mutation under a single
+        # mutex so parallel tool calls in the same round serialize their
+        # approval prompts. Without this, two concurrent confirm_write() calls
+        # both send approval_request to the thin client and the second blocks
+        # on a recv() that no input ever satisfies (the user typed "A" once,
+        # which the first prompt consumed). Result: 120s timeout → silent
+        # denial. Bug 6 root cause from v0.52.1 incident.
+        #
+        # The lock also lets the second caller observe the first caller's
+        # "A" → ``_always_approved_categories.add("write")`` and short-circuit
+        # without re-prompting the user.
+
         # Write tools
         if tool_name in WRITE_TOOLS:
-            if (
-                self._hitl_level == 0
-                or "write" in self._always_approved_categories
-                or tool_name in self._always_approved_tools
-            ):
-                approved = True
-            else:
-                self._fire_hook(
-                    "tool_approval_requested",
-                    {"tool_name": tool_name, "safety_level": "write"},
-                )
-                if not self.confirm_write(tool_name, tool_input):
+            with self._approval_lock:
+                if (
+                    self._hitl_level == 0
+                    or "write" in self._always_approved_categories
+                    or tool_name in self._always_approved_tools
+                ):
+                    approved = True
+                else:
                     self._fire_hook(
-                        "tool_approval_denied",
+                        "tool_approval_requested",
+                        {"tool_name": tool_name, "safety_level": "write"},
+                    )
+                    if not self.confirm_write(tool_name, tool_input):
+                        self._fire_hook(
+                            "tool_approval_denied",
+                            {
+                                "tool_name": tool_name,
+                                "safety_level": "write",
+                                "permission_level": "HITL",
+                                "decision": "denied",
+                                "latency_ms": 0.0,
+                            },
+                        )
+                        return _write_denial_with_fallback(tool_name), False
+                    self._fire_hook(
+                        "tool_approval_granted",
                         {
                             "tool_name": tool_name,
                             "safety_level": "write",
-                            "permission_level": "HITL",
-                            "decision": "denied",
-                            "latency_ms": 0.0,
+                            "always": "write" in self._always_approved_categories,
                         },
                     )
-                    return _write_denial_with_fallback(tool_name), False
-                self._fire_hook(
-                    "tool_approval_granted",
-                    {
-                        "tool_name": tool_name,
-                        "safety_level": "write",
-                        "always": "write" in self._always_approved_categories,
-                    },
-                )
-                approved = True
+                    approved = True
 
         # Expensive tools
         if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
-            if (
-                self._hitl_level == 0
-                or "cost" in self._always_approved_categories
-                or tool_name in self._always_approved_tools
-            ):
-                approved = True
-            else:
-                cost = EXPENSIVE_TOOLS[tool_name]
-                self._fire_hook(
-                    "tool_approval_requested",
-                    {"tool_name": tool_name, "safety_level": "cost"},
-                )
-                if not self.confirm_cost(tool_name, cost):
+            with self._approval_lock:
+                if (
+                    self._hitl_level == 0
+                    or "cost" in self._always_approved_categories
+                    or tool_name in self._always_approved_tools
+                ):
+                    approved = True
+                else:
+                    cost = EXPENSIVE_TOOLS[tool_name]
                     self._fire_hook(
-                        "tool_approval_denied",
+                        "tool_approval_requested",
+                        {"tool_name": tool_name, "safety_level": "cost"},
+                    )
+                    if not self.confirm_cost(tool_name, cost):
+                        self._fire_hook(
+                            "tool_approval_denied",
+                            {
+                                "tool_name": tool_name,
+                                "safety_level": "cost",
+                                "permission_level": "HITL",
+                                "decision": "denied",
+                                "latency_ms": 0.0,
+                            },
+                        )
+                        return {
+                            "error": "User denied expensive operation",
+                            "denied": True,
+                        }, False
+                    self._fire_hook(
+                        "tool_approval_granted",
                         {
                             "tool_name": tool_name,
                             "safety_level": "cost",
-                            "permission_level": "HITL",
-                            "decision": "denied",
-                            "latency_ms": 0.0,
+                            "always": "cost" in self._always_approved_categories,
                         },
                     )
-                    return {"error": "User denied expensive operation", "denied": True}, False
-                self._fire_hook(
-                    "tool_approval_granted",
-                    {
-                        "tool_name": tool_name,
-                        "safety_level": "cost",
-                        "always": "cost" in self._always_approved_categories,
-                    },
-                )
-                approved = True
+                    approved = True
 
         return None, approved
 

@@ -6,7 +6,35 @@ so that no consumer needs to import provider SDKs directly.
 
 from __future__ import annotations
 
+from typing import Any
+
 import anthropic
+
+# v0.52.2 — billing-fatal error codes by provider SDK shape.
+# Retrying these wastes 40s per call (5 attempts × exponential backoff)
+# and never succeeds — billing/quota issues require user action, not a retry.
+# Source: simonw/llm #112 (insufficient_quota → no retry), Hermes lesson
+# (no retry on classified non-transient), OpenClaw NON_RETRYABLE_ERRORS.
+_GLM_BILLING_CODES: frozenset[str] = frozenset(
+    {
+        "1113",  # Insufficient balance / no resource package
+        "1114",  # Quota exhausted
+        "1301",  # Account suspended
+    }
+)
+_OPENAI_BILLING_CODES: frozenset[str] = frozenset(
+    {
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "billing_not_active",
+    }
+)
+_ANTHROPIC_BILLING_TYPES: frozenset[str] = frozenset(
+    {
+        "permission_error",  # API key lacks billing access
+        "billing_error",
+    }
+)
 
 
 class UserCancelledError(Exception):
@@ -119,6 +147,63 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
         return result
 
     return _ERROR_CLASSIFICATION["unknown"]
+
+
+def is_billing_fatal(exc: Exception) -> bool:
+    """Return True if exc represents a non-retryable billing/quota error.
+
+    Inspects the SDK exception's response body for provider-specific error
+    codes that retrying cannot fix:
+      - GLM (1113/1114/1301): user must recharge or upgrade plan
+      - OpenAI (insufficient_quota, billing_hard_limit): account-level cap
+      - Anthropic (permission_error, billing_error): API key lacks access
+
+    Caller should raise BillingError instead of entering the retry loop.
+    """
+    body = _extract_error_body(exc)
+    if not body:
+        return False
+    code = str(body.get("code") or body.get("type") or "").lower()
+    err_obj = body.get("error")
+    if isinstance(err_obj, dict):
+        code = code or str(err_obj.get("code") or err_obj.get("type") or "").lower()
+    if not code:
+        return False
+    return (
+        code in _GLM_BILLING_CODES
+        or code in _OPENAI_BILLING_CODES
+        or code in _ANTHROPIC_BILLING_TYPES
+    )
+
+
+def extract_billing_message(exc: Exception) -> str:
+    """Extract a human-readable billing message from the SDK exception."""
+    body = _extract_error_body(exc) or {}
+    msg = body.get("message") or ""
+    err_obj = body.get("error")
+    if isinstance(err_obj, dict):
+        msg = msg or err_obj.get("message", "")
+    return str(msg) or str(exc)
+
+
+def _extract_error_body(exc: Exception) -> dict[str, Any] | None:
+    """Pull the parsed JSON body out of an SDK exception, if present.
+
+    Anthropic / OpenAI / openai-compatible SDKs all expose .body or
+    .response.json() with the structured error. We try both.
+    """
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        return body
+    response = getattr(exc, "response", None)
+    if response is not None:
+        try:
+            parsed = response.json()
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return None
+    return None
 
 
 def _classify_openai_error(exc: Exception) -> tuple[str, str, str] | None:
