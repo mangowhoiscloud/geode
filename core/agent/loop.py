@@ -211,6 +211,9 @@ class AgenticLoop:
         self._loop_start_time: float = 0.0
         self.model = model or ANTHROPIC_PRIMARY
         self._provider = provider  # "anthropic", "openai", or "glm"
+        # v0.52.5 — set by update_model() when model changes; consumed by
+        # the run-loop to rebuild system_prompt before the next LLM call.
+        self._prompt_dirty: bool = False
         self._tool_registry = tool_registry
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
@@ -511,6 +514,17 @@ class AgenticLoop:
         Resolves a fresh adapter when the provider changes. Within the
         same provider, the adapter is reused (it owns its own client).
         Also syncs the SessionMeter so status lines show the correct model.
+
+        v0.52.5 — sets ``self._prompt_dirty = True`` whenever the model
+        changes so the run-loop rebuilds the system prompt before the
+        next LLM call. Prior to v0.52.5 the prompt was only rebuilt
+        when ``_sync_model_from_settings()`` returned True; escalation
+        paths (``_try_model_escalation``, ``_try_cross_provider_escalation``)
+        called ``update_model`` directly + persisted via
+        ``_persist_escalated_model``, so the *next* sync detected no
+        drift and the prompt stayed stale (model card pointed at the
+        old model). Cosmetic in most cases, schema-wrong when a fresh
+        provider needs a fresh prompt template.
         """
         old_model = self.model
         new_provider = provider or _resolve_provider(model)
@@ -519,6 +533,8 @@ class AgenticLoop:
             self._adapter = resolve_agentic_adapter(new_provider)
         self.model = model
         self._tool_processor._model = model
+        if old_model != model:
+            self._prompt_dirty = True
 
         # Sync SessionMeter so "Worked for" status line shows the correct model
         from core.ui.agentic_ui import update_session_model
@@ -701,11 +717,17 @@ class AgenticLoop:
 
             # Model drift check: settings may have changed via switch_model tool
             # or /model command between rounds. Apply safely before next LLM call.
-            if self._sync_model_from_settings():
-                # Rebuild system prompt for the new model (model card, context window)
+            #
+            # v0.52.5 — _prompt_dirty also catches escalation paths
+            # (`_try_model_escalation`, `_try_cross_provider_escalation`)
+            # which call update_model() without going through the drift sync.
+            # Without this, the system_prompt model card stays pinned to the
+            # previous model after escalation.
+            if self._sync_model_from_settings() or self._prompt_dirty:
                 system_prompt = self._build_system_prompt()
                 if decomposition_hint:
                     system_prompt += "\n\n" + decomposition_hint
+                self._prompt_dirty = False
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
             self._check_announced_results(messages)
