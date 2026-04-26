@@ -10,7 +10,9 @@ from core.config import CODEX_BASE_URL, CODEX_FALLBACK_CHAIN, CODEX_PRIMARY
 
 class TestCodexConfig:
     def test_codex_primary(self):
-        assert CODEX_PRIMARY == "gpt-5.4-mini"
+        # v0.52.4 — Codex's new default per developers.openai.com/codex/models
+        # (gpt-5.5 is OAuth-only, can't even be called with API-key auth).
+        assert CODEX_PRIMARY == "gpt-5.5"
 
     def test_codex_base_url(self):
         assert "chatgpt.com/backend-api" in CODEX_BASE_URL
@@ -40,7 +42,10 @@ class TestCodexPricing:
     def test_codex_models_have_pricing(self):
         from core.llm.token_tracker import MODEL_PRICING
 
-        for model in ["gpt-5.3-codex", "gpt-5.2-codex", "gpt-5.1-codex-max"]:
+        # v0.52.4 — refreshed against developers.openai.com/codex/models 2026-04-26.
+        # gpt-5.5 added (Codex's new default, OAuth-only). gpt-5.2-codex,
+        # gpt-5.1-codex-max/mini removed (no longer in current Codex models page).
+        for model in ["gpt-5.5", "gpt-5.4-mini", "gpt-5.3-codex"]:
             price = MODEL_PRICING.get(model)
             assert price is not None, f"{model} missing from MODEL_PRICING"
             assert price.input > 0, f"{model} should have non-zero pricing"
@@ -49,7 +54,7 @@ class TestCodexPricing:
     def test_codex_context_windows(self):
         from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
-        for model in ["gpt-5.3-codex", "gpt-5.2-codex"]:
+        for model in ["gpt-5.5", "gpt-5.4-mini", "gpt-5.3-codex"]:
             ctx = MODEL_CONTEXT_WINDOW.get(model)
             assert ctx is not None, f"{model} missing from MODEL_CONTEXT_WINDOW"
             assert ctx >= 200_000

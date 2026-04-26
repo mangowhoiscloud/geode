@@ -317,6 +317,16 @@ class Settings(BaseSettings):
     llm_cross_provider_failover: bool = False
     llm_cross_provider_order: list[str] = ["anthropic", "openai", "glm"]
 
+    # v0.52.4 — per-provider auth-mode escape hatch (Codex CLI parity).
+    # Default routing prefers SUBSCRIPTION/OAUTH plans over PAYG when both
+    # can serve the requested model (matches openai/codex CLI default).
+    # Override per provider when the user deliberately wants metered PAYG:
+    #   forced_login_method = {"openai": "apikey"}    # use OPENAI_API_KEY even
+    #                                                  # if Codex Plus OAuth is registered
+    # Valid values: "subscription" (default), "apikey", "auto" (alias).
+    # Reference: openai/codex#2733, #3286.
+    forced_login_method: dict[str, str] = {}
+
     # LLM — Fallback cost ratio control (C2: 0 = unlimited)
     llm_max_fallback_cost_ratio: float = 0.0
 
@@ -355,19 +365,24 @@ settings = _get_settings()
 # All code MUST reference these instead of hardcoding model strings.
 # ---------------------------------------------------------------------------
 
-# Anthropic models
+# Anthropic models — verified 2026-04-26 against platform.claude.com
 ANTHROPIC_PRIMARY = "claude-opus-4-7"
 ANTHROPIC_SECONDARY = "claude-sonnet-4-6"
 ANTHROPIC_BUDGET = "claude-haiku-4-5-20251001"
 ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, "claude-opus-4-6", ANTHROPIC_SECONDARY]
 
-# OpenAI models
-OPENAI_PRIMARY = "gpt-5.4"
-OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.4", "gpt-5.2", "gpt-4.1"]
+# OpenAI models — verified 2026-04-26 against developers.openai.com.
+# v0.52.4 — gpt-5.5 promoted to primary (Codex's new default model);
+# pre-5.3 generation dropped per current CLAUDE.md model-currency policy.
+OPENAI_PRIMARY = "gpt-5.5"
+OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.4", "gpt-5.3-codex"]
 
-# OpenAI Codex — Plus quota via chatgpt.com/backend-api/codex (Responses API)
-CODEX_PRIMARY = "gpt-5.4-mini"
-CODEX_FALLBACK_CHAIN: list[str] = ["gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex"]
+# OpenAI Codex — Plus quota via chatgpt.com/backend-api/codex (Responses API).
+# v0.52.4 — gpt-5.5 is OAuth-only ("isn't available with API-key
+# authentication" per developers.openai.com/codex/models). Promoted to
+# CODEX_PRIMARY so /login oauth users get the real default.
+CODEX_PRIMARY = "gpt-5.5"
+CODEX_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.3-codex", "gpt-5.4-mini"]
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 
 # ZhipuAI (GLM) models — OpenAI-compatible API, separate provider
