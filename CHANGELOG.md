@@ -28,6 +28,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.52.2] — 2026-04-26
+
+### Fixed
+- **REASONING_METRICS audit logger silently emitted blank rows** — the audit-logger keys list (`["rounds", "tool_call_count"]`) never matched `ReasoningMetrics.to_dict()` field names (`total_rounds`, `tool_calls_total`), so every reasoning_metrics audit log line rendered with empty `%s` substitutions. Realigned the keys list and added a contract test in `tests/test_reasoning_metrics.py` that asserts both ends agree. (`core/lifecycle/bootstrap.py:448`)
+- **`_total_empty_rounds` quadratic inflation** — every overthinking round added the running consecutive-counter (`+= self._consecutive_text_only_rounds`), so 3 flagged rounds reported as `2+3+4=9`. Now increments by 1 per flagged round, matching the metric's documented meaning. (`core/agent/loop.py:1046`)
+- **`min(adaptive_thinking, adaptive_thinking // 2)` no-op** — collapsed to `max(0, adaptive_thinking // 2)`, which is what the comment ("reduce budget") actually implies. Adds a 0 floor in case the legacy budget ever goes negative. (`core/agent/loop.py:1395`)
+- **`cost_per_tool_call` zero-tool-call ambiguity** — sessions with zero tool calls reported `0.0`, indistinguishable from "very cheap per tool call." Now `None`, and omitted from `to_dict()` so downstream alerting can detect "not measured" cleanly. (`core/agent/reasoning_metrics.py:35-50`)
+
+### Removed
+- **Dead `_total_thinking_tokens` instance variable** — initialized to 0 and never mutated; `_build_reasoning_metrics` always added 0 to the tracker value. Removed both. (`core/agent/loop.py:209,413`)
+
+### Documentation
+- **`reasoning_metrics.py` module docstring** — clarified that `thinking_ratio` is `thinking / output` (input excluded), a GEODE variant rather than the layer-wise JSD ratio from the original DTR paper. Prevents future contributors from inferring paper-equivalent semantics.
+
 ## [0.52.1] — 2026-04-26
 
 ### Added
