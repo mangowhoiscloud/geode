@@ -403,6 +403,32 @@ class ToolUseResult:
 T = TypeVar("T", bound=BaseModel)
 
 
+def _route_provider(model: str) -> str:
+    """Resolve the provider for a model, honoring registered Plans.
+
+    v0.52.4 — wraps ``resolve_routing(model)`` so the LLM call dispatch
+    sees the actually-routed provider (e.g. ``openai-codex`` when a Plus
+    OAuth Plan is registered) instead of the static
+    ``_resolve_provider`` mapping (which always returned ``openai`` for
+    ``gpt-5.4`` regardless of OAuth state). Falls back to the static
+    resolver when no Plan is registered.
+
+    Caller flow unchanged: dispatch sees a provider string and looks up
+    the client via ``_get_provider_client(provider)``. The credential
+    lookup inside each provider client (``_get_codex_client`` etc.) now
+    consults the same ProfileStore, so the path is end-to-end coherent.
+    """
+    try:
+        from core.auth.plan_registry import resolve_routing
+
+        target = resolve_routing(model)
+        if target is not None:
+            return target.plan.provider
+    except Exception:
+        log.debug("resolve_routing failed for model=%s", model, exc_info=True)
+    return _resolve_provider(model)
+
+
 @maybe_traceable(run_type="llm", name="call_llm")  # type: ignore[untyped-decorator]
 def call_llm(
     system: str,
@@ -419,7 +445,7 @@ def call_llm(
     Returns text content. Supports cross-provider fallback when enabled.
     """
     target_model = model or settings.model
-    provider = _resolve_provider(target_model)
+    provider = _route_provider(target_model)
 
     if seed is not None:
         log.info("Reproducibility seed=%d requested (logged for auditing)", seed)
@@ -515,7 +541,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
     Supports cross-provider fallback when enabled.
     """
     target_model = model or settings.model
-    provider = _resolve_provider(target_model)
+    provider = _route_provider(target_model)
 
     def _dispatch(p: str, m: str) -> T:
         _fire_hook(
@@ -669,7 +695,7 @@ def call_llm_with_tools(
     Supports cross-provider fallback when enabled.
     """
     target_model = model or settings.model
-    provider = _resolve_provider(target_model)
+    provider = _route_provider(target_model)
 
     def _dispatch(p: str, m: str) -> ToolUseResult:
         _fire_hook(
@@ -861,7 +887,7 @@ def call_llm_streaming(
 
     client = get_anthropic_client()
     target_model = model or settings.model
-    provider = _resolve_provider(target_model)
+    provider = _route_provider(target_model)
     circuit_breaker = get_circuit_breaker()
 
     # Hook: LLM_CALL_START

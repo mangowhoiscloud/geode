@@ -83,8 +83,9 @@ class TestCalculateCost:
         assert calculate_cost(ANTHROPIC_PRIMARY, 0, 0) == 0.0
 
     def test_gpt_model(self):
+        # v0.52.4 — OPENAI_PRIMARY is now gpt-5.5 (input $5/1M, output $30/1M)
         cost = calculate_cost(OPENAI_PRIMARY, 1000, 1000)
-        expected = 1000 * (2.50 / 1_000_000) + 1000 * (15.0 / 1_000_000)
+        expected = 1000 * (5.00 / 1_000_000) + 1000 * (30.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
 

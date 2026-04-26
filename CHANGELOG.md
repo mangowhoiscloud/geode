@@ -28,6 +28,34 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.52.4] — 2026-04-26
+
+### Fixed
+- **Plan-aware model routing — SUBSCRIPTION/OAUTH wins over PAYG by default** (production incident: `gpt-5.4` calls hit `api.openai.com/v1` at $0.10/call even after `/login oauth openai` registered Codex Plus). Root cause: `_resolve_provider("gpt-5.4")` was a static map returning `"openai"`; the `PlanRegistry.resolve_routing()` resolver was never consulted by `core/llm/router.py`. The four `call_llm*()` entry points now go through a new `_route_provider(model)` helper that calls `resolve_routing()` and returns the actually-routed provider (e.g. `openai-codex` when a Plus OAuth Plan is registered). Pattern source: openai/codex CLI default (`forced_login_method` unset → ChatGPT subscription wins; issues #2733, #3286).
+
+### Added
+- **`PlanKind` priority + provider-equivalence routing** (`core/auth/plans.py`, `core/llm/registry.py`, `core/auth/plan_registry.py`). New `PLAN_KIND_PRIORITY` ranks `SUBSCRIPTION → OAUTH_BORROWED → CLOUD_PROVIDER → PAYG` (lower wins). `PROVIDER_EQUIVALENCE` map declares sibling provider classes (`openai ↔ openai-codex`, `glm ↔ glm-coding`). `resolve_routing()` gains a step 1.5 between explicit `set_routing` and provider fallback: scan all sibling providers, sort by `PLAN_KIND_PRIORITY`, return the first with an available profile. Pattern source: OpenClaw Lane fail-over + already-existing `AuthProfile.sort_key()` infra.
+- **`forced_login_method` per-provider escape hatch** (`core/config.py`). `settings.forced_login_method = {"openai": "apikey"}` flips kind-priority so PAYG wins for users who deliberately want metered API access despite an active subscription. Default empty dict ⇒ subscription default. Codex CLI parity.
+- **GEODE-issued Codex token resolution** (`core/llm/providers/codex.py:_resolve_codex_token`). Now checks ProfileStore for an `openai-codex` profile FIRST (the one registered by `/login oauth openai`), with the legacy `~/.codex/auth.json` path as fallback. Pre-fix the OAuth login wizard wrote to GEODE's auth.toml but the Codex client only read from Codex CLI's separate store, so geode-issued tokens were silently invisible to LLM calls.
+- **`tests/test_routing_policy.py`** — 10 invariant cases pinning equivalence-class scan, kind-priority sort, escape hatch, explicit-override precedence, and router wiring (4 call sites must use `_route_provider`, none may use `_resolve_provider(target_model)` directly).
+
+### Changed
+- **Model registry refresh — verified 2026-04-26 against official docs** (`core/config.py`, `core/llm/token_tracker.py`). Per CLAUDE.md model-currency policy: drop sub-5.3 OpenAI IDs, add `gpt-5.5` (Codex's new default, **OAuth-only** per developers.openai.com/codex/models — "isn't available with API-key authentication"), refresh stale GLM pricing.
+  - `OPENAI_PRIMARY` `gpt-5.4` → `gpt-5.5`. Chain `[gpt-5.4, gpt-5.2, gpt-4.1]` → `[gpt-5.5, gpt-5.4, gpt-5.3-codex]`.
+  - `CODEX_PRIMARY` `gpt-5.4-mini` → `gpt-5.5`. Chain `[gpt-5.4-mini, gpt-5.4, gpt-5.3-codex]` → `[gpt-5.5, gpt-5.3-codex, gpt-5.4-mini]`.
+  - Removed: `gpt-5.1`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`, `gpt-4.1*`. (All sub-5.3 generation or absent from current Codex models page.)
+  - GLM pricing: `glm-5.1` $0.95/$3.15 → $1.40/$4.40 (stale by 6+ months). `glm-5` $0.72/$2.30 → $1.00/$3.20. `glm-4.7` $0.40/$1.75 → $0.60/$2.20. `glm-5v-turbo` removed (not on docs.z.ai pricing table).
+  - Anthropic chain unchanged (already 4.5-4.7 generation, verified current). OAuth status unchanged (still disabled per Anthropic ToS clarification 2026-01-09 — `platform.claude.com/docs/en/api/oauth` returned 404 on 2026-04-26 verification).
+- 4 test fixtures updated to match refreshed model lists (`test_codex_provider`, `test_llm_client`, `test_model_escalation`).
+
+### Reference
+- v0.52.1 production incident transcript (gpt-5.4 routes PAYG despite Codex Plus OAuth registered).
+- 4 parallel reference agents:
+  - GEODE code-path map: `_resolve_provider`/`resolve_routing`/`ProfileRotator.resolve` end-to-end trace
+  - Codex CLI / Claude Code / aider / mods / simonw-llm precedence policies (openai/codex#2733/#3286 — subscription default; Claude Code env-key default is documented footgun)
+  - OpenClaw routing patterns (`evaluate_eligibility`, `_LAST_VERDICTS`, `managedBy`, Lane fail-over)
+  - Official model availability research (developers.openai.com, platform.claude.com, docs.z.ai — all retrieved 2026-04-26)
+
 ## [0.52.3] — 2026-04-26
 
 ### Fixed

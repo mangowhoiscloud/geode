@@ -87,3 +87,29 @@ def get_provider_spec(provider: str) -> ProviderSpec | None:
 def list_provider_ids() -> list[str]:
     """Return all registered provider variant IDs."""
     return list(PROVIDER_VARIANTS.keys())
+
+
+# v0.52.4 — equivalence classes: two providers serving the same model
+# family. The classes are listed in *preferred-first* order so the
+# routing resolver can prefer the OAuth/subscription variant over PAYG
+# when both can serve the requested model. Pairs with PLAN_KIND_PRIORITY
+# (subscription/oauth before payg) for the kind-aware sort.
+#
+# A model resolved to base provider X gets candidate plans from
+# PROVIDER_EQUIVALENCE.get(X, [X]) — i.e. unrelated providers (anthropic,
+# glm) still resolve to themselves only.
+PROVIDER_EQUIVALENCE: dict[str, list[str]] = {
+    "openai": ["openai-codex", "openai"],
+    "openai-codex": ["openai-codex", "openai"],
+    "glm": ["glm-coding", "glm"],
+    "glm-coding": ["glm-coding", "glm"],
+    # Anthropic OAuth (Claude Code) is currently disabled in GEODE
+    # per Anthropic ToS clarification 2026-01-09; kept singleton until
+    # policy changes.
+    "anthropic": ["anthropic"],
+}
+
+
+def equivalent_providers(provider: str) -> list[str]:
+    """Return preferred-first list of providers that share a model family."""
+    return PROVIDER_EQUIVALENCE.get(provider, [provider])
