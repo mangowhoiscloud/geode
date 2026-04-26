@@ -445,7 +445,7 @@ def build_hooks(
             _E.REASONING_METRICS,
             "reasoning_metrics",
             "Reasoning: %s rounds, %s tools",
-            ["rounds", "tool_call_count"],
+            ["total_rounds", "tool_calls_total"],
         ),
     ]
 

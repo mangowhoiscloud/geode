@@ -206,7 +206,6 @@ class AgenticLoop:
         self._time_budget_s = time_budget_s
         # Adaptive compute: track consecutive text-only rounds for overthinking detection
         self._consecutive_text_only_rounds = 0
-        self._total_thinking_tokens = 0
         self._total_empty_rounds = 0
         self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
@@ -411,7 +410,7 @@ class AgenticLoop:
 
         metrics = ReasoningMetrics(
             total_rounds=result.rounds,
-            thinking_tokens=self._total_thinking_tokens + thinking_tok,
+            thinking_tokens=thinking_tok,
             output_tokens=output_tok,
             tool_calls_total=len(result.tool_calls),
             empty_rounds=self._total_empty_rounds,
@@ -1044,7 +1043,10 @@ class AgenticLoop:
                 else:
                     self._consecutive_text_only_rounds = 0
                 if self._consecutive_text_only_rounds >= 2:
-                    self._total_empty_rounds += self._consecutive_text_only_rounds
+                    # Count this round once (the running consec is reported in the warning).
+                    # Previous code added the running counter every round, inflating the total
+                    # quadratically (consec=2,3,4 → +2+3+4=9 instead of 3 actual flagged rounds).
+                    self._total_empty_rounds += 1
                     log.warning(
                         "Overthinking detected: %d consecutive text-only rounds (>2000 tok each)",
                         self._consecutive_text_only_rounds,
@@ -1392,7 +1394,7 @@ class AgenticLoop:
             # Overthinking: reduce budget — curb verbose non-actionable output
             # Context-proportional: 2% of window, floor 8192
             adaptive_max_tokens = max(8192, min(self.max_tokens, ctx_window // 50))
-            adaptive_thinking = min(adaptive_thinking, adaptive_thinking // 2)
+            adaptive_thinking = max(0, adaptive_thinking // 2)
             # Downgrade effort by one level
             idx = _EFFORT_LEVELS.index(adaptive_effort) if adaptive_effort in _EFFORT_LEVELS else 2
             adaptive_effort = _EFFORT_LEVELS[max(0, idx - 1)]
