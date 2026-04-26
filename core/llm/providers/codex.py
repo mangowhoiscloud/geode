@@ -52,7 +52,30 @@ def _extract_account_id(token: str) -> str:
 
 
 def _resolve_codex_token() -> str:
-    """Resolve Codex OAuth token from ~/.codex/auth.json."""
+    """Resolve Codex OAuth token.
+
+    v0.52.4 — checks two sources, GEODE-issued first:
+      1. ProfileStore for an ``openai-codex`` profile (the one created
+         by ``/login oauth openai`` device flow). This is the token the
+         user just registered through GEODE.
+      2. ~/.codex/auth.json (external Codex CLI store) — fallback for
+         users who only have Codex CLI logged in.
+
+    Without (1) the geode-registered ``openai-codex-geode`` plan would
+    be invisible to the actual LLM call path and the OAuth login wizard
+    would do nothing for users who don't also run Codex CLI.
+    """
+    try:
+        from core.lifecycle.container import get_profile_store
+
+        store = get_profile_store()
+        if store is not None:
+            for profile in store.list_all():
+                if profile.provider == "openai-codex" and profile.is_available and profile.key:
+                    return profile.key
+    except Exception:
+        log.debug("GEODE openai-codex profile lookup failed", exc_info=True)
+
     try:
         from core.auth.codex_cli_oauth import read_codex_cli_credentials
 
@@ -60,7 +83,7 @@ def _resolve_codex_token() -> str:
         if creds:
             return creds["access_token"]
     except Exception:
-        log.debug("Codex token resolution failed", exc_info=True)
+        log.debug("Codex CLI token resolution failed", exc_info=True)
     return ""
 
 

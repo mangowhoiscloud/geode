@@ -33,6 +33,26 @@ class PlanKind(Enum):
     CLOUD_PROVIDER = "cloud_provider"  # AWS Bedrock / GCP Vertex etc.
 
 
+# v0.52.4 — cost-class priority for cross-provider equivalence routing.
+# Lower = preferred. The user paid for SUBSCRIPTION/OAUTH up front, so
+# an LLM call that *could* be served either way must use the prepaid
+# bucket first; PAYG only as last resort.
+#
+# Reference: openai/codex CLI default (`forced_login_method` unset →
+# ChatGPT subscription wins over OPENAI_API_KEY). Issues:
+#   * https://github.com/openai/codex/issues/2733
+#   * https://github.com/openai/codex/issues/3286
+# Anthropic Claude Code defaults the OTHER way (env-key wins) and the
+# Help Center documents it as a footgun requiring `unset ANTHROPIC_API_KEY`.
+# GEODE adopts the Codex semantics (subscription default).
+PLAN_KIND_PRIORITY: dict[PlanKind, int] = {
+    PlanKind.SUBSCRIPTION: 0,
+    PlanKind.OAUTH_BORROWED: 1,
+    PlanKind.CLOUD_PROVIDER: 2,
+    PlanKind.PAYG: 3,
+}
+
+
 @dataclass
 class Quota:
     """Sliding-window quota metadata for a Plan.

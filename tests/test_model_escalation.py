@@ -68,18 +68,20 @@ class TestModelEscalation:
         assert loop._provider == "anthropic"
 
     def test_try_model_escalation_openai_chain(self) -> None:
-        """Escalate within OpenAI chain."""
-        loop = _make_loop(model="gpt-5.4", provider="openai")
+        """Escalate within OpenAI chain.
+        v0.52.4 — chain refreshed to [gpt-5.5, gpt-5.4, gpt-5.3-codex];
+        gpt-5.2/gpt-4.1 dropped per current model-currency policy."""
+        loop = _make_loop(model="gpt-5.5", provider="openai")
         result = loop._try_model_escalation()
         assert result is True
-        assert loop.model == "gpt-5.2"
+        assert loop.model == "gpt-5.4"
 
     def test_try_model_escalation_openai_second_step(self) -> None:
         """Escalate to third model in OpenAI chain."""
-        loop = _make_loop(model="gpt-5.2", provider="openai")
+        loop = _make_loop(model="gpt-5.4", provider="openai")
         result = loop._try_model_escalation()
         assert result is True
-        assert loop.model == "gpt-4.1"
+        assert loop.model == "gpt-5.3-codex"
 
     def test_try_model_escalation_glm_chain(self) -> None:
         """Escalate within GLM chain."""

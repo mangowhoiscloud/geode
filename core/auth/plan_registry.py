@@ -123,12 +123,24 @@ def resolve_routing(model: str) -> RoutingTarget | None:
     """Resolve which Plan + AuthProfile should serve a given model.
 
     Resolution order:
-      1. Explicit per-model routing (`PlanRegistry.set_routing`) — try
+      1. Explicit per-model routing (``PlanRegistry.set_routing``) — try
          each Plan ID in order and return the first whose linked
          AuthProfile is available.
-      2. Fall back to the model's resolved provider (`_resolve_provider`)
-         and use any registered Plan for that provider, picking the
-         AuthProfile by ProfileRotator priority.
+      2. (v0.52.4) **Equivalence-class scan** — gather every Plan whose
+         provider is in the resolved provider's equivalence class
+         (e.g. ``openai`` → ``[openai-codex, openai]``), sort by
+         ``(PLAN_KIND_PRIORITY, profile.sort_key())`` so SUBSCRIPTION /
+         OAUTH plans win over PAYG, then pick the first with an
+         available profile. The user paid for the prepaid plan; routing
+         it to PAYG silently re-meters the same call.
+      3. Fall back to the model's resolved provider directly
+         (``_resolve_provider``) — keeps the legacy single-provider path
+         alive for environments where no Plan was registered.
+      4. Synthesize a PAYG Plan so env-var-only users still route.
+
+    The user can override the policy globally via the per-provider
+    ``settings.forced_login_method`` config (Codex CLI parity) — see
+    ``_apply_forced_login_method`` below.
 
     Returns None when no usable credential exists.
     """
@@ -141,31 +153,38 @@ def resolve_routing(model: str) -> RoutingTarget | None:
     if store is None or rotator is None:
         return None
 
-    plan_chain: list[Plan] = []
-
     # 1) explicit per-model routing
+    explicit_chain: list[Plan] = []
     for plan_id in registry.get_routing(model):
         plan = registry.get(plan_id)
         if plan is not None:
-            plan_chain.append(plan)
+            explicit_chain.append(plan)
+    if explicit_chain:
+        for plan in explicit_chain:
+            profile = _pick_profile_for_plan(store, rotator, plan)
+            if profile is not None:
+                return RoutingTarget(
+                    plan=plan,
+                    profile=profile,
+                    base_url=profile.base_url_override or plan.base_url,
+                )
 
-    # 2) fallback by provider
-    if not plan_chain:
-        provider = _resolve_provider(model)
-        plan_chain = registry.list_for_provider(provider)
-        if not plan_chain:
-            # Synthesize a PAYG Plan so legacy env-var users still route.
-            profile = rotator.resolve(provider)
-            if profile is None:
-                return None
-            plan = default_plan_for_payg(provider, profile.key)
+    base_provider = _resolve_provider(model)
+
+    # 2) equivalence-class scan — sibling providers, kind-priority sorted
+    eq_chain = _equivalence_class_plans(registry, base_provider)
+    eq_chain = _apply_forced_login_method(eq_chain, base_provider)
+    for plan in eq_chain:
+        profile = _pick_profile_for_plan(store, rotator, plan)
+        if profile is not None:
             return RoutingTarget(
                 plan=plan,
                 profile=profile,
                 base_url=profile.base_url_override or plan.base_url,
             )
 
-    # Pick the first Plan whose preferred profile is available
+    # 3) single-provider fallback (legacy)
+    plan_chain = registry.list_for_provider(base_provider)
     for plan in plan_chain:
         profile = _pick_profile_for_plan(store, rotator, plan)
         if profile is not None:
@@ -174,7 +193,67 @@ def resolve_routing(model: str) -> RoutingTarget | None:
                 profile=profile,
                 base_url=profile.base_url_override or plan.base_url,
             )
-    return None
+
+    # 4) synthesize PAYG Plan so legacy env-var users still route
+    profile = rotator.resolve(base_provider)
+    if profile is None:
+        return None
+    plan = default_plan_for_payg(base_provider, profile.key)
+    return RoutingTarget(
+        plan=plan,
+        profile=profile,
+        base_url=profile.base_url_override or plan.base_url,
+    )
+
+
+def _equivalence_class_plans(registry: PlanRegistry, base_provider: str) -> list[Plan]:
+    """Collect Plans across the equivalence class, sorted by kind priority.
+
+    Sort key: ``PLAN_KIND_PRIORITY[plan.kind]`` (lower wins).
+    Within tier, preserve registry insertion order (stable sort).
+    """
+    from core.auth.plans import PLAN_KIND_PRIORITY
+    from core.llm.registry import equivalent_providers
+
+    candidates: list[Plan] = []
+    for sibling in equivalent_providers(base_provider):
+        candidates.extend(registry.list_for_provider(sibling))
+    # De-duplicate by Plan.id while preserving order
+    seen: set[str] = set()
+    unique: list[Plan] = []
+    for plan in candidates:
+        if plan.id in seen:
+            continue
+        seen.add(plan.id)
+        unique.append(plan)
+    unique.sort(key=lambda p: PLAN_KIND_PRIORITY.get(p.kind, 99))
+    return unique
+
+
+def _apply_forced_login_method(plans: list[Plan], base_provider: str) -> list[Plan]:
+    """Apply the per-provider ``forced_login_method`` escape hatch.
+
+    Codex CLI's ``forced_login_method = "api"`` semantic: when set, the
+    user wants the API-key path even though a subscription is active.
+    GEODE mirrors this so users who deliberately want metered PAYG can
+    keep their config.
+
+    Values:
+      - ``"subscription"`` (default) — keep current sort (sub/oauth first)
+      - ``"apikey"`` — promote PAYG plans to the front
+      - ``"auto"`` — alias for default
+    """
+    from core.auth.plans import PlanKind
+    from core.config import settings
+
+    forced = (getattr(settings, "forced_login_method", {}) or {}).get(base_provider, "subscription")
+    forced = str(forced).strip().lower()
+    if forced in ("apikey", "api", "api_key", "key"):
+        # Stable partition: PAYG first, then everyone else in original order.
+        payg = [p for p in plans if p.kind is PlanKind.PAYG]
+        rest = [p for p in plans if p.kind is not PlanKind.PAYG]
+        return payg + rest
+    return plans
 
 
 def _pick_profile_for_plan(
