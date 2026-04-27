@@ -28,6 +28,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.52.6] — 2026-04-27
+
+### Fixed
+- **Codex backend rejected every call with 400 — `max_output_tokens` not allowed** (production hotfix). Every call to `https://chatgpt.com/backend-api/codex/responses` returned `{'detail': 'Unsupported parameter: max_output_tokens'}`, hitting all 3 fallback Codex models × 5 retries × exp-backoff for ~30s before the circuit breaker opened. Plus subscription manages output limits server-side; client cap is forbidden. Removed the kwarg from `CodexAgenticAdapter.agentic_call`'s `client.responses.stream(...)` call. (`core/llm/providers/codex.py:228`)
+- **400 "Unsupported parameter" / "Invalid value" retried** — same fail-fast shape as the v0.52.3 billing-fatal storm. Added `is_request_fatal(exc)` in `core/llm/errors.py` that recognises 4xx (non-429) bodies with markers `unsupported parameter`, `invalid parameter`, `invalid value for parameter`, `unknown parameter`, `missing required parameter`. `fallback.retry_with_backoff_generic`'s `bad_request` branch re-raises immediately so the same backend rejection cannot cascade across retries + fallback models.
+
+### Added
+- **`docs/research/codex-oauth-request-spec.md`** — definitive Codex OAuth request spec grounded in 3 reference codebases (Hermes Agent `agent/transports/codex.py`, OpenClaw `src/agents/openai-transport-stream.ts`, Codex CLI Rust `codex-rs/codex-api/src/common.rs`). Documents required headers, required body fields, and a FORBIDDEN list (`max_output_tokens`, `max_tokens`, `top_p`, `presence_penalty`, `frequency_penalty`, `seed`, `n`, `stop`, `logprobs`). Future-proofs against Codex backend spec changes.
+- **`tests/test_codex_request_shape.py`** — 13 invariant cases covering Codex adapter source-level (no `max_output_tokens` in `responses.stream` call) + functional (`is_request_fatal` recognises 5 marker shapes, ignores 429/500, fallback loop re-raises without retry).
+
+### Backlog (v0.52.7 — separate scope)
+- Per the new spec doc, GEODE Codex adapter still has 3 gaps (NOT cause of the 400 incident, but real):
+  - `tools` / `tool_choice` / `parallel_tool_calls` never sent → function calling broken on Codex
+  - `include=["reasoning.encrypted_content"]` + `reasoning={effort, summary}` never sent → encrypted reasoning lost across turns on gpt-5.x-codex
+  - `temperature` sent unconditionally; Hermes uses `_fixed_temperature_for_model` to OMIT for gpt-5.x-codex
+
+### Reference
+- Production daemon log 2026-04-27 (every Codex call → 400 → circuit breaker OPEN within ~30s)
+- Hermes Agent `agent/transports/codex.py:123-125` — `if max_tokens is not None and not is_codex_backend: kwargs["max_output_tokens"] = max_tokens`
+- Codex CLI Rust `codex-rs/codex-api/src/common.rs:117-133` — `ResponsesApiRequest` struct has no `max_output_tokens` field
+- OpenClaw `src/agents/openai-transport-stream.ts:751-753` — `buildOpenAIResponsesParams` only adds `max_output_tokens` when caller passes `options.maxTokens`; Codex callers don't
+
 ## [0.52.5] — 2026-04-27
 
 ### Fixed
