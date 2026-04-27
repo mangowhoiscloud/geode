@@ -28,6 +28,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.52.7] — 2026-04-27
+
+### Fixed
+- **Codex function-calling broken** — `tools` / `tool_choice` / `parallel_tool_calls` were never forwarded to the Codex Responses API. The Codex agentic loop received no native tool dispatch path on Plus subscriptions; LLM saw "no tools available" on every turn. Forward all three per Codex Rust `ResponsesApiRequest` struct + Hermes `agent/transports/codex.py` shape. (`core/llm/providers/codex.py:CodexAgenticAdapter.agentic_call`)
+- **Encrypted reasoning lost across turns on gpt-5.x-codex** — `include=["reasoning.encrypted_content"]` + `reasoning={effort, summary}` were never sent. Codex backend strips encrypted reasoning blocks from non-include responses, breaking multi-turn reasoning continuity (each turn re-discovers what it already worked out). Sent for all gpt-5.x models. (Same file)
+- **Temperature sent to gpt-5.x-codex unconditionally** — Hermes `_fixed_temperature_for_model` returns OMIT for these models; sending it can return 400 or skew the reasoning sampler. Now omitted for gpt-5.x; preserved for non-reasoning models. (Same file)
+
+### Added
+- **`_is_codex_reasoning_model(model)` classifier** — gates the include / reasoning / temperature behaviour. Currently `model.startswith("gpt-5")` covers gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.3-codex (the entire CODEX_FALLBACK_CHAIN). Future Codex additions inherit the same handling without code changes.
+- **`tests/test_codex_responses_shape.py`** — 11 invariant cases covering: tools forwarded with correct Responses-API flat schema; tool_choice="auto" + parallel_tool_calls=True when tools present; both omitted when tools empty; include + reasoning + temperature-omit for gpt-5.x; temperature preserved + reasoning skipped for non-gpt-5.x; v0.52.6 max_output_tokens absence still pinned post-refactor.
+
+### Reference
+- `docs/research/codex-oauth-request-spec.md` — definitive spec grounded in Hermes Agent + OpenClaw + Codex CLI Rust (introduced in v0.52.6). v0.52.7 closes the 3 remaining gaps the doc identified.
+
 ## [0.52.6] — 2026-04-27
 
 ### Fixed

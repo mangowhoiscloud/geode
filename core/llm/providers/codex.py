@@ -151,8 +151,20 @@ from core.llm.errors import UserCancelledError  # noqa: E402
 from core.llm.providers.openai import (  # noqa: E402
     OpenAIAgenticAdapter,
     _convert_messages_to_openai,
+    _tools_to_openai,
 )
 from core.llm.router import call_with_failover  # noqa: E402
+
+
+# v0.52.7 — gpt-5.x family supports reasoning + omits temperature on Codex
+# backend. Pattern from Hermes ``_fixed_temperature_for_model`` (which returns
+# OMIT for these models) + Codex Rust ``Reasoning`` field on ResponsesApiRequest.
+# All current Codex-routed models (gpt-5.5, gpt-5.4, gpt-5.4-mini,
+# gpt-5.3-codex) are gpt-5.x — we gate by prefix so future spec additions
+# (gpt-5.6, gpt-5.x-codex-spark, etc.) inherit the same handling.
+def _is_codex_reasoning_model(model: str) -> bool:
+    """Return True for Codex models that accept ``reasoning`` + omit temperature."""
+    return model.startswith("gpt-5")
 
 
 class CodexAgenticAdapter(OpenAIAgenticAdapter):
@@ -209,29 +221,47 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
 
         failover_models = [model] + [m for m in self.fallback_chain if m != model]
 
+        # v0.52.7 — build kwargs to match Codex Rust ``ResponsesApiRequest``
+        # struct + Hermes ``agent/transports/codex.py`` shape. Spec doc:
+        # ``docs/research/codex-oauth-request-spec.md`` (3-codebase grounded).
+        oai_tools = _tools_to_openai(tools)
+        tc_val = tool_choice.get("type", "auto") if isinstance(tool_choice, dict) else tool_choice
+        is_reasoning = _is_codex_reasoning_model(model)
+
         async def _do_call(m: str) -> Any:
             def _sync_call() -> Any:
                 # v0.52.6 hotfix — chatgpt.com/backend-api/codex/responses
                 # rejects ``max_output_tokens`` with 400 ("Unsupported
                 # parameter"). The Plus subscription manages output limits
-                # server-side via the user's quota, so passing a client
-                # cap is both unnecessary and fatal here. Removing it
-                # resolves a 100% Codex-call failure observed in
-                # production logs (every request → 400, all 4 retries +
-                # all 3 fallback models hit the same error → circuit
-                # breaker OPEN within ~30s).
-                #
-                # Standard OpenAI Responses API still accepts the
-                # parameter, but this adapter is Codex-only — it never
-                # talks to api.openai.com. The PAYG `OpenAIAgenticAdapter`
-                # still sends max_output_tokens for its own endpoint.
-                with client.responses.stream(
-                    model=m,
-                    instructions=system or "You are a helpful assistant.",
-                    input=resp_input or [{"role": "user", "content": "hello"}],
-                    store=False,
-                    temperature=temperature,
-                ) as stream:
+                # server-side; client cap is forbidden. PAYG
+                # ``OpenAIAgenticAdapter`` still sends it for api.openai.com.
+                kwargs: dict[str, Any] = {
+                    "model": m,
+                    "instructions": system or "You are a helpful assistant.",
+                    "input": resp_input or [{"role": "user", "content": "hello"}],
+                    "store": False,
+                }
+                # v0.52.7 — function-calling parity with Hermes / Codex Rust.
+                # Pre-fix ``tools`` was dropped silently → Codex agentic loop
+                # had no way to invoke any tool, breaking the entire native
+                # tool dispatch path on Plus subscriptions.
+                if oai_tools:
+                    kwargs["tools"] = oai_tools
+                    kwargs["tool_choice"] = tc_val or "auto"
+                    # Hermes default; Codex Rust forwards prompt setting.
+                    kwargs["parallel_tool_calls"] = True
+                # v0.52.7 — encrypted reasoning passthrough. Without
+                # ``include`` + ``reasoning`` the gpt-5.x-codex models lose
+                # their reasoning state across turns (Codex backend strips
+                # the encrypted block from non-include responses).
+                if is_reasoning:
+                    kwargs["include"] = ["reasoning.encrypted_content"]
+                    kwargs["reasoning"] = {"effort": effort, "summary": "auto"}
+                    # gpt-5.x-codex omits temperature per Hermes
+                    # ``_fixed_temperature_for_model``.
+                else:
+                    kwargs["temperature"] = temperature
+                with client.responses.stream(**kwargs) as stream:
                     for _event in stream:
                         pass
                     return stream.get_final_response()
