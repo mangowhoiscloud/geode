@@ -280,6 +280,24 @@ def retry_with_backoff_generic(
                 time.sleep(delay)
             except Exception as exc:
                 if bad_request_error is not None and isinstance(exc, bad_request_error):
+                    # v0.52.6 — short-circuit "Unsupported parameter" /
+                    # "Invalid value" 400-class errors. Same backend will
+                    # reject every retry with the same body; the v0.52.5
+                    # incident burned 30s on Codex's
+                    # ``Unsupported parameter: max_output_tokens`` before
+                    # the circuit breaker tripped. Re-raise so the
+                    # outer except (non-retryable_errors) catches and
+                    # surfaces the original message.
+                    from core.llm.errors import is_request_fatal
+
+                    if is_request_fatal(exc):
+                        log.error(
+                            "Request-fatal 400 on %s (model=%s) — no retry: %s",
+                            provider_label,
+                            current_model,
+                            str(exc)[:200],
+                        )
+                        raise
                     error_msg = str(exc)
                     if "billing" in error_msg.lower() or "credit" in error_msg.lower():
                         from core.llm.errors import BillingError
