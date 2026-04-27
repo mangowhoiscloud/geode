@@ -562,6 +562,12 @@ class AgenticLoop:
             # Inject model-switch breadcrumb so the new model knows the switch
             # happened (Claude Code SDK pattern: createModelSwitchBreadcrumbs).
             if not self.context.is_empty:
+                # v0.52.8 — strip stale "Understood. I am now <prev>" acks
+                # left by earlier model switches in the same session. Without
+                # this, the new model reads "I am gpt-5.4-mini" assistant
+                # messages and asserts the wrong identity (production
+                # incident 2026-04-27 — gpt-5.5 answered "I am gpt-5.4-mini").
+                self._purge_stale_model_switch_acks()
                 self.context.add_user_message(
                     f"[system] Model switched: {old_model} -> {model}. "
                     "You are now the new model. Do not reference the previous "
@@ -571,6 +577,35 @@ class AgenticLoop:
 
         # Proactively adapt context for the new model's context window
         self._adapt_context_for_model(model)
+
+    def _purge_stale_model_switch_acks(self) -> None:
+        """Remove prior ``Understood. I am now <prev_model>.`` assistant acks.
+
+        v0.52.8 — added after a production incident where gpt-5.5 (post
+        ``/model`` switch from gpt-5.4-mini) silently inherited the prior
+        model's identity from a lingering history message. The OpenAI
+        gpt-5.5 system card explicitly says it should identify as
+        "GPT-5.5", so the bug was not model behaviour — it was our
+        breadcrumb pollution. Each model switch should leave **only one**
+        active "I am now <model>" ack at any time.
+
+        Conservative: only matches the exact ``Understood. I am now ``
+        prefix we ourselves emit; never touches user content. Mutates
+        ``self.context.messages`` in place.
+        """
+        msgs = self.context.messages
+        prefix = "Understood. I am now "
+        kept: list[Any] = []
+        for msg in msgs:
+            if msg.get("role") != "assistant":
+                kept.append(msg)
+                continue
+            content = msg.get("content", "")
+            if isinstance(content, str) and content.startswith(prefix):
+                continue
+            kept.append(msg)
+        msgs.clear()
+        msgs.extend(kept)
 
     def _adapt_context_for_model(self, target_model: str) -> None:
         """Proactively adapt conversation context when switching to a smaller model.

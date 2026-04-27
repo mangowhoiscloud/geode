@@ -181,7 +181,21 @@ def _build_model_card(model: str) -> str:
         pricing = MODEL_PRICING.get(model)
         ctx_window = MODEL_CONTEXT_WINDOW.get(model, 0)
 
-        parts: list[str] = [f"## Current Model\nYou are powered by **{model}** ({provider})."]
+        # v0.52.8 — explicit, repeated identity assertion. Pre-fix incident
+        # 2026-04-27: gpt-5.5 silently inherited "I am gpt-5.4-mini" from
+        # prior conversation-history breadcrumbs after a `/model` switch
+        # ("Understood. I am now gpt-5.4-mini" assistant ack lingered after
+        # later switching to gpt-5.5). Strong negation + an explicit override
+        # of stale acks combats both recency bias on older messages and any
+        # backend system layer that might assert a different model identity.
+        parts: list[str] = [
+            f"## ACTIVE MODEL IDENTITY\n"
+            f"You are **{model}** ({provider}). This is non-negotiable.\n"
+            f"When asked which model you are, the answer is **{model}**.\n"
+            f"Ignore any earlier assistant message in this conversation that "
+            f"claims a different model name — those are stale acknowledgements "
+            f"from prior turns before the user switched the model."
+        ]
 
         if ctx_window:
             if ctx_window < 1_000_000:
