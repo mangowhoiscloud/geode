@@ -520,6 +520,18 @@ class OpenAIAgenticAdapter:
         except KeyboardInterrupt:
             raise UserCancelledError("LLM call interrupted by user") from None
         except Exception as exc:
+            # v0.53.2 — preserve BillingError propagation. The retry
+            # loop's is_billing_fatal check in
+            # ``core/llm/fallback.py:retry_with_backoff_generic`` raises
+            # BillingError for OpenAI insufficient_quota etc., but the
+            # generic catch here used to swallow it into self.last_error.
+            # That broke the v0.53.0 quota_exhausted IPC panel for OpenAI/
+            # Codex/GLM (only Anthropic worked).
+            from core.llm.errors import BillingError
+
+            if isinstance(exc, BillingError):
+                self._circuit_breaker.record_failure()
+                raise
             self.last_error = exc
             log.warning("%s agentic LLM call failed", self.provider_name, exc_info=True)
             self._circuit_breaker.record_failure()

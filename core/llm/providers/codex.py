@@ -273,6 +273,16 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
         except KeyboardInterrupt:
             raise UserCancelledError("LLM call interrupted by user") from None
         except Exception as exc:
+            # v0.53.2 — preserve BillingError propagation so AgenticLoop
+            # renders the quota_exhausted IPC panel. Pre-fix the generic
+            # Exception catch swallowed BillingError into self.last_error
+            # and returned None, breaking the v0.53.0 fail-fast governance
+            # for Codex Plus quota exhaustion.
+            from core.llm.errors import BillingError
+
+            if isinstance(exc, BillingError):
+                _codex_circuit_breaker.record_failure()
+                raise
             self.last_error = exc
             log.warning("Codex agentic LLM call failed", exc_info=True)
             _codex_circuit_breaker.record_failure()
