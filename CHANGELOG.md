@@ -28,6 +28,29 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.52.8] — 2026-04-27
+
+### Fixed
+- **Model identity drift across `/model` switches** (production incident). User did `/model gpt-5.5`, daemon log confirmed gpt-5.5 was called, but the LLM responded "현재 사용 중인 모델은 gpt-5.4-mini" (claimed to be the previous model). Root cause: the v0.52.5 ``_prompt_dirty`` rebuild correctly updated the system-prompt model card, BUT the conversation history still contained earlier ``Understood. I am now <prev_model>.`` assistant acks from prior switches in the same session. The new model deferred to those historical assertions over the system prompt. OpenAI's gpt-5.5 system card (deploymentsafety.openai.com) explicitly says it should identify as "GPT-5.5" — so the model itself is capable; this was our breadcrumb pollution.
+  - **Fix 1**: ``_build_model_card(model)`` now uses an explicit, repeated identity assertion ("ACTIVE MODEL IDENTITY ... You are **{model}** ... When asked which model you are, the answer is **{model}** ... Ignore any earlier assistant message that claims a different model name") — combats both recency bias and any backend system-layer claim. (`core/agent/system_prompt.py:184`)
+  - **Fix 2**: ``AgenticLoop._purge_stale_model_switch_acks()`` strips prior ``Understood. I am now <prev>.`` assistant acks from history before injecting the new switch ack — each switch leaves exactly one active ack. (`core/agent/loop.py:update_model` + new helper)
+- **Codex backend system layer override** (Fix 3 candidate) — DEFERRED. WebFetch verification (Agent C): 3 openai.com URLs returned 403, no public docs describe whether ChatGPT outer system layer overrides user `instructions` on `chatgpt.com/backend-api/codex/responses`. Without evidence, do not add complexity. Re-open if the identity bug recurs after Fix 1+2.
+
+### Added
+- **`tests/test_model_identity.py`** — 9 invariant cases. Card-side: assertion text + model-name repetition + anti-stale-ack instruction + provider name + Anthropic parity. Purge-side: removes acks (single + multiple), preserves user messages even if matching prefix verbatim, preserves unrelated assistant replies, no-op on empty history, handles non-string content (Anthropic block format).
+
+### Reference
+- gpt-5.5 official spec verified 2026-04-27 via WebFetch (Agent C):
+  - Released 2026-04-23 to ChatGPT/Codex (Plus/Pro/Business/Enterprise); API rollout 2026-04-24
+  - Codex backend (`chatgpt.com/backend-api/codex`): ChatGPT sign-in only, no API-key auth
+  - System card: "should identify itself as **GPT-5.5**" (deploymentsafety.openai.com/gpt-5-5)
+  - Pricing matches GEODE v0.52.4 values: $5.00 / $0.50 cached / $30.00 per 1M tokens, 1,050,000 context, 128K max output, knowledge cutoff 2025-12-01
+  - Plus quota: 15-80 local msgs / 5h
+  - **NEW backlog**: >272K-token prompts cost 2× input / 1.5× output (premium tier — not yet captured in our token tracker)
+- 2 parallel reference agents:
+  - Agent A — GEODE model identity flow audit (system_prompt rebuild path → conversation history breadcrumbs → Codex backend layer)
+  - Agent C — gpt-5.5 official spec via WebFetch (developers.openai.com 200, 3 openai.com URLs 403 / Cloudflare)
+
 ## [0.52.7] — 2026-04-27
 
 ### Fixed
