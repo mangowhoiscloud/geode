@@ -431,13 +431,23 @@ class ClaudeAgenticAdapter:
         except LLMBadRequestError as exc:
             self.last_error = exc
             msg = str(exc)
-            # Billing/credit errors — propagate as BillingError for clean UI
+            # Billing/credit errors — propagate as BillingError for clean UI.
+            # v0.53.2 — carry plan context so AgenticLoop renders the
+            # quota_exhausted IPC panel (parity with OpenAI/Codex/GLM).
             if "credit balance" in msg.lower() or "billing" in msg.lower():
                 from core.llm.errors import BillingError
 
+                _circuit_breaker.record_failure()
+                plan_meta = _resolve_plan_meta(model)
                 raise BillingError(
                     "Anthropic API credit balance too low. "
-                    "Visit https://console.anthropic.com/settings/billing to add credits."
+                    "Visit https://console.anthropic.com/settings/billing to add credits.",
+                    provider=plan_meta.get("provider", "anthropic"),
+                    plan_id=plan_meta.get("plan_id", ""),
+                    plan_display_name=plan_meta.get("plan_display_name", ""),
+                    upgrade_url=plan_meta.get(
+                        "upgrade_url", "https://console.anthropic.com/settings/billing"
+                    ),
                 ) from exc
             log.warning("Anthropic BadRequest in agentic loop: %s", msg)
             if "tool_use_id" in msg or "tool_result" in msg:
@@ -447,28 +457,68 @@ class ClaudeAgenticAdapter:
                 log.info("Repaired orphaned tool_result in conversation history")
                 try:
                     response = await _do_call(model)
+                    _circuit_breaker.record_success()
                     return normalize_anthropic(response)
                 except Exception:
                     log.warning("Retry after repair failed", exc_info=True)
+                    _circuit_breaker.record_failure()
                     return None
             if "input_schema" in msg:
                 log.error(
                     "Tool schema error — likely an MCP tool missing input_schema. tools=%d",
                     len(tools),
                 )
+            _circuit_breaker.record_failure()
             return None
         except Exception as exc:
+            # v0.53.2 — preserve BillingError propagation (mirror of the
+            # OpenAI/Codex/GLM fix). Without the early re-raise the loop
+            # treats quota exhaustion as a generic failure → no
+            # quota_exhausted IPC event fires.
+            from core.llm.errors import BillingError
+
+            if isinstance(exc, BillingError):
+                _circuit_breaker.record_failure()
+                raise
             self.last_error = exc
             log.warning("Agentic LLM call failed", exc_info=True)
+            _circuit_breaker.record_failure()
             return None
 
         if response is None:
+            _circuit_breaker.record_failure()
             return None
 
         if used_model and used_model != model:
             log.warning("Model failover: %s -> %s", model, used_model)
 
+        _circuit_breaker.record_success()
         return normalize_anthropic(response)
 
     def reset_client(self) -> None:
         self._client = None
+
+
+def _resolve_plan_meta(model: str) -> dict[str, str]:
+    """v0.53.2 — resolve Plan metadata for BillingError context.
+
+    Mirrors ``core/llm/fallback.py:_resolve_plan_for_billing_error``;
+    duplicated here because the Anthropic adapter uses the async router
+    path (``call_with_failover``) instead of ``retry_with_backoff_generic``.
+    """
+    try:
+        from core.auth.plan_registry import resolve_routing
+
+        target = resolve_routing(model)
+        if target is None:
+            return {}
+        plan = target.plan
+        return {
+            "provider": plan.provider,
+            "plan_id": plan.id,
+            "plan_display_name": plan.display_name,
+            "upgrade_url": plan.upgrade_url or "",
+        }
+    except Exception:
+        log.debug("Plan resolution for Anthropic billing error failed", exc_info=True)
+        return {}

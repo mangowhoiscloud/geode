@@ -196,12 +196,18 @@ MODEL_PRICING: dict[str, ModelPrice] = {
 
 # fmt: off
 MODEL_CONTEXT_WINDOW: dict[str, int] = {
-    # Anthropic — verified 2026-04-26
+    # Anthropic — verified 2026-04-26.
+    # v0.53.2 — claude-opus-4 / claude-opus-4-1 added to match
+    # MODEL_PRICING entries (D3: pre-fix lookup fell through to 200K
+    # default silently if the user picked one of these legacy models).
     "claude-opus-4-7":            1_000_000,
     "claude-opus-4-6":            1_000_000,
     "claude-opus-4-5":              200_000,
+    "claude-opus-4-1":              200_000,
+    "claude-opus-4":                200_000,
     "claude-sonnet-4-6":          1_000_000,
     "claude-sonnet-4-5-20250929":   200_000,
+    "claude-sonnet-4":              200_000,
     "claude-haiku-4-5-20251001":    200_000,
     # OpenAI 5.3-5.5 generation — verified 2026-04-26
     "gpt-5.5":                    1_050_000,

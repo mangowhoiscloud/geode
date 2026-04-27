@@ -171,6 +171,15 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
         except KeyboardInterrupt:
             raise UserCancelledError("LLM call interrupted by user") from None
         except Exception as exc:
+            # v0.53.2 — preserve BillingError so the loop fires
+            # quota_exhausted IPC panel (parity with Anthropic +
+            # post-v0.53.2 OpenAI / Codex). GLM 1113 ("Insufficient
+            # balance") is the v0.52.3 incident shape.
+            from core.llm.errors import BillingError
+
+            if isinstance(exc, BillingError):
+                self._circuit_breaker.record_failure()
+                raise
             self.last_error = exc
             log.warning("%s agentic LLM call failed", self.provider_name, exc_info=True)
             self._circuit_breaker.record_failure()
