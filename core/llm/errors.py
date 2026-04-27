@@ -50,7 +50,62 @@ class BillingError(Exception):
 
     Caught at the UI layer to display a clean one-line message instead
     of a full traceback.  Never retried or counted as a model failure.
+
+    v0.53.0 — carries provider/plan context so the UI can render a
+    plan-aware quota-exhausted panel (resets-in, upgrade URL, options
+    to switch provider). Plain-string ``str(exc)`` still works for
+    legacy call sites.
     """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: str = "",
+        plan_id: str = "",
+        plan_display_name: str = "",
+        upgrade_url: str = "",
+        resets_in_seconds: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.plan_id = plan_id
+        self.plan_display_name = plan_display_name
+        self.upgrade_url = upgrade_url
+        self.resets_in_seconds = resets_in_seconds
+
+    def user_message(self) -> str:
+        """Render a multi-line, plan-aware quota-exhausted message.
+
+        Pattern: header (provider + plan) + reset-time + 3 options
+        (wait / switch auth / switch provider). Pre-v0.53.0 the user
+        saw "All glm models exhausted" with no actionable next step.
+        """
+        lines: list[str] = []
+        if self.plan_display_name or self.provider:
+            who = self.plan_display_name or self.provider or "this provider"
+            lines.append(f"⚠ {who} quota exhausted")
+        else:
+            lines.append("⚠ Provider quota exhausted")
+        lines.append(f"  {str(self) or 'Billing/credit limit reached.'}")
+        if self.resets_in_seconds and self.resets_in_seconds > 0:
+            mins = self.resets_in_seconds // 60
+            ttl = f"{mins // 60}h {mins % 60}m" if mins >= 60 else f"{mins}m"
+            lines.append(f"  Resets in: {ttl}")
+        lines.append("")
+        lines.append("Options:")
+        lines.append("  1. Wait for quota reset")
+        if self.provider:
+            lines.append(
+                f"  2. Switch auth: /login set-key {self.provider} <api-key>  "
+                "(use a different credential)"
+            )
+        else:
+            lines.append("  2. Switch auth: /login set-key <provider> <api-key>")
+        lines.append("  3. Switch provider: /model <other-model>")
+        if self.upgrade_url:
+            lines.append(f"  4. Upgrade plan: {self.upgrade_url}")
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

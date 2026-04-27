@@ -964,6 +964,43 @@ def emit_billing_error(message: str) -> None:
     console.print()
 
 
+def emit_quota_exhausted(
+    *,
+    provider: str,
+    plan_id: str = "",
+    plan_display_name: str = "",
+    upgrade_url: str = "",
+    resets_in_seconds: int = 0,
+    message: str = "",
+) -> None:
+    """v0.53.0 — emit a plan-aware quota-exhausted panel event.
+
+    Distinct from ``emit_billing_error`` (which is a single-line UI):
+    this carries the structured Plan context so the thin client renders
+    a multi-line actionable panel (header + reset-time + Options 1/2/3).
+    Pre-v0.53.0 the user saw ``"All glm models exhausted"`` with no
+    next step; this surfaces the user-paid plan + a switch path.
+    """
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "quota_exhausted",
+            provider=provider,
+            plan_id=plan_id,
+            plan_display_name=plan_display_name,
+            upgrade_url=upgrade_url,
+            resets_in_seconds=resets_in_seconds,
+            message=message,
+        )
+        return
+    console.print()
+    label = plan_display_name or provider or "Provider"
+    console.print(f"  [error]⚠ {label} quota exhausted[/error]")
+    if message:
+        console.print(f"  {message}")
+    console.print()
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # Structured IPC event emitters — Pipeline milestones
 # ───────────────────────────────────────────────────────────────────────────

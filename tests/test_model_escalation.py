@@ -20,8 +20,8 @@ from core.config import (
     ANTHROPIC_FALLBACK_CHAIN,
     ANTHROPIC_PRIMARY,
     GLM_FALLBACK_CHAIN,
+    GLM_PRIMARY,
     OPENAI_FALLBACK_CHAIN,
-    OPENAI_PRIMARY,
 )
 
 
@@ -57,68 +57,72 @@ class TestModelEscalation:
         assert loop._ESCALATION_THRESHOLD == 2
 
     def test_try_model_escalation_anthropic_chain(self) -> None:
-        """Escalate from primary to next in fallback chain."""
+        """Escalate from primary to next in fallback chain.
+        v0.53.0 — chain depth reduced to 1 (primary → secondary).
+        Pre-fix opus-4-7 → opus-4-6; now opus-4-7 → sonnet-4-6 (next)."""
         loop = _make_loop(model=ANTHROPIC_PRIMARY, provider="anthropic")
         assert loop.model == ANTHROPIC_PRIMARY
 
         result = loop._try_model_escalation()
         assert result is True
-        # Fallback chain: opus-4-7 → opus-4-6 → sonnet-4-6
-        assert loop.model == "claude-opus-4-6"
+        assert loop.model == "claude-sonnet-4-6"
         assert loop._provider == "anthropic"
 
     def test_try_model_escalation_openai_chain(self) -> None:
         """Escalate within OpenAI chain.
-        v0.52.4 — chain refreshed to [gpt-5.5, gpt-5.4, gpt-5.3-codex];
-        gpt-5.2/gpt-4.1 dropped per current model-currency policy."""
+        v0.53.0 — chain shortened to [gpt-5.5, gpt-5.4]."""
         loop = _make_loop(model="gpt-5.5", provider="openai")
         result = loop._try_model_escalation()
         assert result is True
         assert loop.model == "gpt-5.4"
 
-    def test_try_model_escalation_openai_second_step(self) -> None:
-        """Escalate to third model in OpenAI chain."""
+    def test_try_model_escalation_openai_chain_exhausted(self) -> None:
+        """v0.53.0: chain depth=1 means after primary→secondary the chain
+        is exhausted. No cross-provider fallback fires (governance)."""
         loop = _make_loop(model="gpt-5.4", provider="openai")
         result = loop._try_model_escalation()
-        assert result is True
-        assert loop.model == "gpt-5.3-codex"
+        # Last in chain — no further model to escalate to.
+        assert result is False, (
+            "v0.53.0 chain depth=1: gpt-5.4 is last; must return False, no cross-provider auto-swap"
+        )
 
     def test_try_model_escalation_glm_chain(self) -> None:
-        """Escalate within GLM chain."""
-        loop = _make_loop(model="glm-5", provider="glm")
+        """Escalate within GLM chain (v0.53.0: glm-5.1 → glm-5)."""
+        loop = _make_loop(model=GLM_PRIMARY, provider="glm")
         result = loop._try_model_escalation()
         assert result is True
-        assert loop.model == "glm-5-turbo"
+        assert loop.model == "glm-5"
 
     # ---------------------------------------------------------------------------
-    # Feature 4: Cross-provider escalation
+    # v0.53.0 — Cross-provider escalation REMOVED (fail-fast governance)
     # ---------------------------------------------------------------------------
 
-    def test_cross_provider_anthropic_to_openai(self) -> None:
-        """When Anthropic chain is exhausted, escalate to OpenAI."""
-        # Start from the last model in Anthropic chain
+    def test_cross_provider_anthropic_to_openai_removed(self) -> None:
+        """v0.53.0: cross-provider auto-swap removed. When Anthropic chain
+        exhausted, escalation returns False — user picks next via /model.
+        Pre-fix: silent jump to OpenAI created cost surprise (PAYG bills)."""
         last_anthropic = ANTHROPIC_FALLBACK_CHAIN[-1]
         loop = _make_loop(model=last_anthropic, provider="anthropic")
 
         result = loop._try_model_escalation()
-        assert result is True
-        assert loop.model == OPENAI_PRIMARY
-        assert loop._provider == "openai"
+        assert result is False
+        assert loop._provider == "anthropic", (
+            "provider must NOT change — cross-provider auto-swap is removed"
+        )
 
-    def test_cross_provider_openai_to_anthropic(self) -> None:
-        """When OpenAI chain is exhausted, escalate to Anthropic."""
+    def test_cross_provider_openai_to_anthropic_removed(self) -> None:
+        """v0.53.0: same as above for OpenAI → Anthropic."""
         last_openai = OPENAI_FALLBACK_CHAIN[-1]
         loop = _make_loop(model=last_openai, provider="openai")
 
         result = loop._try_model_escalation()
-        assert result is True
-        assert loop.model == ANTHROPIC_PRIMARY
-        assert loop._provider == "anthropic"
+        assert result is False
+        assert loop._provider == "openai"
 
     def test_glm_does_not_auto_escalate_cross_provider(self) -> None:
-        """v0.50.0: GLM Coding Plan auth errors must not silently divert to a
-        metered OpenAI key. CROSS_PROVIDER_FALLBACK['glm'] is now empty;
-        cross-plan jumps require explicit user confirmation (Phase 5)."""
+        """Pre-existing v0.50.0 invariant: GLM Coding Plan auth errors must
+        not silently divert to a metered OpenAI key. v0.53.0 generalises this
+        to all providers."""
         last_glm = GLM_FALLBACK_CHAIN[-1]
         loop = _make_loop(model=last_glm, provider="glm")
 
@@ -126,33 +130,16 @@ class TestModelEscalation:
         assert result is False
         assert loop._provider == "glm"
 
-    def test_escalation_returns_false_when_fully_exhausted(self) -> None:
-        """Returns False when both intra-chain and cross-provider are exhausted."""
-        # If we're already at the cross-provider target
-        loop = _make_loop(model=OPENAI_PRIMARY, provider="anthropic")
-        # Set model to the cross-provider fallback to simulate exhaustion
-        loop.model = OPENAI_PRIMARY
-        loop._provider = "openai"
-        # The last model in OpenAI chain
-        loop.model = OPENAI_FALLBACK_CHAIN[-1]
-
-        # Cross-provider for openai -> anthropic, but anthropic primary != current
-        result = loop._try_model_escalation()
-        # Should escalate to anthropic primary
-        assert result is True
-        assert loop.model == ANTHROPIC_PRIMARY
-
-    def test_unknown_model_cross_provider(self) -> None:
-        """Unknown model not in chain triggers cross-provider fallback."""
+    def test_unknown_model_does_not_cross_provider(self) -> None:
+        """v0.53.0: unknown model not in chain ⇒ no escalation (no auto-swap)."""
         loop = _make_loop(model="claude-unknown-999", provider="anthropic")
         result = loop._try_model_escalation()
-        # Model not in chain, so should try cross-provider
-        assert result is True
-        assert loop.model == OPENAI_PRIMARY
-        assert loop._provider == "openai"
+        assert result is False
+        assert loop._provider == "anthropic"
 
-    def test_cross_provider_emits_fallback_hook(self) -> None:
-        """Cross-provider escalation fires FALLBACK_CROSS_PROVIDER hook."""
+    def test_cross_provider_hook_not_fired(self) -> None:
+        """v0.53.0: FALLBACK_CROSS_PROVIDER hook must never fire from
+        _try_model_escalation since the cross-provider branch is removed."""
         from core.hooks import HookEvent
 
         last_anthropic = ANTHROPIC_FALLBACK_CHAIN[-1]
@@ -161,16 +148,12 @@ class TestModelEscalation:
         loop._hooks = hooks
 
         result = loop._try_model_escalation()
-        assert result is True
-
-        hooks.trigger.assert_any_call(
-            HookEvent.FALLBACK_CROSS_PROVIDER,
-            {
-                "from_model": last_anthropic,
-                "to_model": OPENAI_PRIMARY,
-                "from_provider": "anthropic",
-                "to_provider": "openai",
-            },
+        assert result is False
+        # No FALLBACK_CROSS_PROVIDER hook trigger.
+        called_events = [call.args[0] for call in hooks.trigger.call_args_list if call.args]
+        assert HookEvent.FALLBACK_CROSS_PROVIDER not in called_events, (
+            "FALLBACK_CROSS_PROVIDER hook must not fire — cross-provider "
+            "auto-swap removed in v0.53.0"
         )
 
     def test_arun_escalation_on_consecutive_failures(self) -> None:

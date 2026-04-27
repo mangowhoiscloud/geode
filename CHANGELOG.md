@@ -28,6 +28,34 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.53.0] — 2026-04-27
+
+### Architecture (BREAKING — fail-fast governance redesign)
+- **Cross-provider auto-failover REMOVED**. Per the user-confirmed v0.53.0 governance: API/구독 quota 초과 시 silent provider switch 는 cost surprise + behavior drift + identity 혼동 을 만들어 시스템 불확실성을 키운다 — 친절한 안내 + 시스템 정지가 안정적. Audit doc (3 parallel agents) confirmed claw + hermes 둘 다 같은 원칙 (post-pick auth resolve, no auto-cross-swap).
+  - `core/llm/adapters.py:CROSS_PROVIDER_FALLBACK` map emptied for all providers (anthropic / openai / glm / openai-codex). Back-compat preserved for external imports.
+  - `core/agent/loop.py:_try_cross_provider_escalation` returns False unconditionally (documented no-op).
+  - `core/agent/loop.py:_try_model_escalation` cross-provider for-loop removed; same-provider chain exhaustion now surfaces to user.
+- **Same-provider fallback chain depth reduced to 1** (primary → secondary). Pre-fix `[opus-4-7, opus-4-6, sonnet-4-6]` (depth 2). v0.53.0 `[opus-4-7, sonnet-4-6]`. Same for openai/glm/codex chains. Reduces cost-surprise from cascading retries.
+
+### Fixed
+- **`/model` picker provider label vs ID 불일치** — `"Codex (Plus)"` (marketing) vs `"openai-codex"` (technical) misled users about which auth-mode their pick would consume. v0.53.0 standardises ModelProfile.provider to **canonical provider IDs** (`anthropic` / `openai` / `openai-codex` / `glm`) matching `/login` dashboard + auth.toml. (`core/cli/commands.py:50-64`)
+- **`gpt-5.5` static provider mapping** — pre-fix `_resolve_provider("gpt-5.5")` returned `"openai"` even though OpenAI's official Codex models page (verified v0.52.8 spec doc) says gpt-5.5 is **OAuth-only** ("isn't available with API-key authentication"). Added `_CODEX_ONLY_MODELS` set in `core/config.py` so the static mapping is honest; `resolve_routing()` equivalence-class scan still handles the actual routing. (`core/config.py:_resolve_provider`)
+
+### Added
+- **Plan-aware quota panel** (`quota_exhausted` IPC event). When `BillingError` carries Plan context (provider/plan_id/plan_display_name/upgrade_url/resets_in_seconds), the thin client renders a multi-line panel: header + reset-time + 3 actionable Options (wait / switch auth / switch provider) + upgrade URL. Pre-v0.53.0 the user saw a single-line "Billing error" with no next step; cross-provider auto-failover then silently swapped providers (cost surprise). Now the loop stops + the user decides. (`core/llm/errors.py:BillingError.user_message`, `core/ui/agentic_ui.py:emit_quota_exhausted`, `core/ui/event_renderer.py:_handle_quota_exhausted`, `core/cli/ipc_client.py KNOWN_EVENT_TYPES`)
+- **`_resolve_plan_for_billing_error(model)`** — `core/llm/fallback.py` resolves Plan metadata via `resolve_routing()` so `BillingError` raised from the retry loop carries provider/plan context for the panel.
+- **`docs/research/model-ux-governance.md`** — 544-line audit doc (3 parallel agents: claw+hermes /model UX, GEODE current state, /login UX). All claims cite file:line. Includes 13-gap GAP matrix + Phase 1/F/2/3 redesign plan + Addendum (fail-fast on quota). Source-of-truth for v0.53.0 design decisions.
+
+### Tests
+- **`tests/test_quota_fail_fast.py`** — 11 invariant cases. Cross-provider map empty across all providers. Escalation methods return False (no auto-swap). BillingError carries Plan context. user_message renders multi-line panel with options. `_emit_quota_panel` routes to `quota_exhausted` event when provider present, falls back to `billing_error` legacy path otherwise. `quota_exhausted` in IPC allowlist + EventRenderer handler exists.
+- 7 fixture updates in `tests/test_model_escalation.py` for chain-depth-1 + cross-provider-removed semantics.
+- Fixture update in `tests/test_codex_provider.py` for canonical provider ID (`openai-codex` not `Codex (Plus)`).
+
+### Reference
+- `docs/research/model-ux-governance.md` (544 lines, 3 codebase-grounded agents — all file:line cited).
+- v0.52.4 `resolve_routing()` equivalence-class scan + v0.52.5 GEODE-issued OAuth precedence + v0.52.6 `is_request_fatal` + v0.52.7 Codex Responses parity all stand: governance redesign is *additive policy + UX surface*, not architectural change.
+- User direction (2026-04-27): "사용자가 picks model only; 시스템이 OAuth/API 결정" + "API/구독 quota 초과 → 친절한 안내 + 시스템 중지".
+
 ## [0.52.8] — 2026-04-27
 
 ### Fixed

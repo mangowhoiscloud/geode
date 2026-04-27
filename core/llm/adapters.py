@@ -14,7 +14,7 @@ from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel
 
-from core.config import ANTHROPIC_PRIMARY, OPENAI_PRIMARY, settings
+from core.config import settings
 from core.llm.agentic_response import AgenticResponse
 
 log = logging.getLogger(__name__)
@@ -207,14 +207,20 @@ _ADAPTER_MAP: dict[str, str] = {
     "openai-codex": "core.llm.providers.codex:CodexAgenticAdapter",
 }
 
-# Cross-provider fallback: when a provider's chain is exhausted, try these.
-# Plan-aware fallback (Phase 5) replaces this; for v0.50.0 Phase 0 we drop
-# implicit GLM↔OpenAI jumps so a Coding Plan auth error doesn't silently
-# spill onto a metered OpenAI key. openai-codex shares OAuth scope with no
-# other provider, so its Anthropic fallback is removed too.
+# v0.53.0 — Cross-provider fallback REMOVED.
+# Per the v0.53.0 governance redesign: API/구독 quota 초과 시 silent
+# provider switch 는 cost surprise + model behavior drift 를 만들어
+# 시스템 불확실성을 키운다. 사용자에게 명시적으로 quota 안내 + system
+# stop 이 정확. The v0.53.0 BillingError → quota_exhausted IPC event
+# 경로가 fail-fast 를 담당. Cross-provider hint (B5 breadcrumb,
+# v0.52.3) 는 LLM 이 다른 provider 존재를 알 수 있게 *정보* 만 주입 —
+# 자동 swap 과 분리.
+#
+# Empty map preserved for back-compat with any external import; will be
+# removed in a future release once all callers stop importing.
 CROSS_PROVIDER_FALLBACK: dict[str, list[tuple[str, str]]] = {
-    "anthropic": [("openai", OPENAI_PRIMARY)],
-    "openai": [("anthropic", ANTHROPIC_PRIMARY)],
+    "anthropic": [],
+    "openai": [],
     "glm": [],
     "openai-codex": [],
 }

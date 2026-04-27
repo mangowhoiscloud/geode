@@ -99,6 +99,31 @@ def _notify_failure(provider: str, exc: Exception) -> None:
         log.debug("Profile notify_failure failed for %s", provider, exc_info=True)
 
 
+def _resolve_plan_for_billing_error(model: str) -> dict[str, str]:
+    """Resolve Plan metadata for a model so BillingError carries context.
+
+    v0.53.0 — used to render plan-aware quota-exhausted panels. Returns
+    ``provider``, ``plan_id``, ``plan_display_name``, ``upgrade_url``.
+    Empty values when routing fails (caller falls back to generic msg).
+    """
+    try:
+        from core.auth.plan_registry import resolve_routing
+
+        target = resolve_routing(model)
+        if target is None:
+            return {}
+        plan = target.plan
+        return {
+            "provider": plan.provider,
+            "plan_id": plan.id,
+            "plan_display_name": plan.display_name,
+            "upgrade_url": plan.upgrade_url or "",
+        }
+    except Exception:
+        log.debug("Plan resolution for billing error failed", exc_info=True)
+        return {}
+
+
 class CircuitBreaker:
     """Thread-safe circuit breaker for LLM API calls.
 
@@ -252,7 +277,16 @@ def retry_with_backoff_generic(
                         current_model,
                         msg,
                     )
-                    raise BillingError(msg or billing_message) from exc
+                    # v0.53.0 — attach plan context so the UI can render a
+                    # plan-aware quota-exhausted panel.
+                    plan_meta = _resolve_plan_for_billing_error(current_model)
+                    raise BillingError(
+                        msg or billing_message,
+                        provider=plan_meta.get("provider", ""),
+                        plan_id=plan_meta.get("plan_id", ""),
+                        plan_display_name=plan_meta.get("plan_display_name", ""),
+                        upgrade_url=plan_meta.get("upgrade_url", ""),
+                    ) from exc
                 last_error = exc
                 delay = random.uniform(0, min(retry_base_delay * (2**attempt), retry_max_delay))
                 elapsed = time.monotonic() - t0_retry
