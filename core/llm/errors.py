@@ -176,6 +176,55 @@ def is_billing_fatal(exc: Exception) -> bool:
     )
 
 
+def is_request_fatal(exc: Exception) -> bool:
+    """Return True if exc is a 400-class permanent error that cannot be cured by retry.
+
+    v0.52.6 — extends the v0.52.3 ``is_billing_fatal`` shape to cover
+    request-shape errors that the same backend will reject on every
+    attempt. Production trigger: Codex backend rejected
+    ``max_output_tokens`` with 400 ``"Unsupported parameter: max_output_tokens"``;
+    the retry loop hammered the same 400 across 5 attempts × 3 fallback
+    models = ~30s wasted before the circuit breaker opened.
+
+    We match on a small allow-list of HTTP status / detail substrings so
+    a transient 400 (e.g. malformed JSON in a streamed body) doesn't
+    accidentally short-circuit. The caller should raise the original
+    exception (no separate exception type) — the loop's outer handler
+    treats it as terminal because the retryable_errors filter excludes
+    BadRequestError already.
+    """
+    # Status check first — only true 400-class shapes qualify.
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        response = getattr(exc, "response", None)
+        if response is not None:
+            status = getattr(response, "status_code", None)
+    if status is not None and not (400 <= int(status) < 500 and int(status) != 429):
+        return False
+
+    body = _extract_error_body(exc) or {}
+    detail = str(body.get("detail") or body.get("message") or "").lower()
+    err_obj = body.get("error")
+    if isinstance(err_obj, dict):
+        detail = detail or str(err_obj.get("message") or "").lower()
+    if not detail:
+        # No structured detail — fall back to the exception text. Codex
+        # backend uses ``{'detail': '...'}`` so this branch handles
+        # custom shapes from other providers too.
+        detail = str(exc).lower()
+
+    return any(
+        marker in detail
+        for marker in (
+            "unsupported parameter",
+            "unknown parameter",
+            "invalid parameter",
+            "invalid value for parameter",
+            "missing required parameter",
+        )
+    )
+
+
 def extract_billing_message(exc: Exception) -> str:
     """Extract a human-readable billing message from the SDK exception."""
     body = _extract_error_body(exc) or {}

@@ -211,12 +211,25 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
 
         async def _do_call(m: str) -> Any:
             def _sync_call() -> Any:
+                # v0.52.6 hotfix — chatgpt.com/backend-api/codex/responses
+                # rejects ``max_output_tokens`` with 400 ("Unsupported
+                # parameter"). The Plus subscription manages output limits
+                # server-side via the user's quota, so passing a client
+                # cap is both unnecessary and fatal here. Removing it
+                # resolves a 100% Codex-call failure observed in
+                # production logs (every request → 400, all 4 retries +
+                # all 3 fallback models hit the same error → circuit
+                # breaker OPEN within ~30s).
+                #
+                # Standard OpenAI Responses API still accepts the
+                # parameter, but this adapter is Codex-only — it never
+                # talks to api.openai.com. The PAYG `OpenAIAgenticAdapter`
+                # still sends max_output_tokens for its own endpoint.
                 with client.responses.stream(
                     model=m,
                     instructions=system or "You are a helpful assistant.",
                     input=resp_input or [{"role": "user", "content": "hello"}],
                     store=False,
-                    max_output_tokens=max_tokens,
                     temperature=temperature,
                 ) as stream:
                     for _event in stream:
