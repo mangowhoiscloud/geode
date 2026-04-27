@@ -28,6 +28,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.53.2] — 2026-04-27
+
+### Fixed
+- **Anthropic adapter circuit-breaker observability gap** (D1). Pre-fix `ClaudeAgenticAdapter.agentic_call` never invoked `_circuit_breaker.record_failure()` / `record_success()` while OpenAI/Codex/GLM all did — the async LLM path was invisible to the breaker, so a streak of Anthropic failures could not trip the breaker even though the same shape of failure on every other provider would. v0.53.2 adds explicit `record_success()` after the happy path and `record_failure()` on every exception/None branch. (`core/llm/providers/anthropic.py:agentic_call`)
+- **`BillingError` swallowed by OpenAI / Codex / GLM adapters** (D2 — quota panel parity gap). v0.53.0 introduced the `quota_exhausted` IPC panel via `BillingError` re-raise from `AgenticLoop._emit_quota_panel`, but only Anthropic's `LLMBadRequestError` branch raised `BillingError`. The other three adapters had a generic `except Exception:` that converted `BillingError` (raised inside `retry_with_backoff_generic` via `is_billing_fatal`) into `self.last_error` and returned `None` — the panel never fired for OpenAI/Codex/GLM, so the v0.52.3 GLM 1113 ("Insufficient balance") incident shape would have been silent on every non-Anthropic provider. v0.53.2 adds `if isinstance(exc, BillingError): record_failure(); raise` ahead of the generic catch on all three adapters. Anthropic's adapter receives the same shape (mirrored on the bare-Exception branch) for symmetry, plus a new `_resolve_plan_meta(model)` helper so async-path BillingErrors carry Plan context. (`core/llm/providers/openai.py`, `codex.py`, `glm.py`, `anthropic.py`)
+- **`claude-opus-4` / `claude-opus-4-1` silently fell back to 200K context** (D3). Pricing rows existed in `MODEL_PRICING` but `MODEL_CONTEXT_WINDOW` was missing both keys — `MODEL_CONTEXT_WINDOW.get(model, 200_000)` silently returned 200K for legacy Opus models that actually have larger windows. v0.53.2 adds explicit entries for `claude-opus-4`, `claude-opus-4-1`, and `claude-sonnet-4`. (`core/llm/token_tracker.py:MODEL_CONTEXT_WINDOW`)
+- **`gpt-5.5` ModelProfile.provider mismatch** (D4 — `/model` picker label was lying). v0.53.0 added `_CODEX_ONLY_MODELS = {"gpt-5.5"}` so `_resolve_provider("gpt-5.5") == "openai-codex"` (correct: gpt-5.5 is OAuth-only per developers.openai.com/codex/models). But `MODEL_PROFILES` still tagged `gpt-5.5` as `"openai"`, so the picker showed `"OpenAI"` while the actual call consumed Plus quota via Codex backend. The v0.52.4 `resolve_routing()` equivalence-class scan made the routing correct anyway, but the user-visible label was dishonest. v0.53.2 corrects the profile to `"openai-codex"` so picker label == real auth-mode. (`core/cli/commands.py:MODEL_PROFILES`)
+
+### Added
+- **`tests/test_provider_parity_v0532.py`** — 11 cross-provider parity invariants pinning all four contracts. Source-level: Anthropic `agentic_call` source contains `_circuit_breaker.record_failure` and `record_success`; every adapter (OpenAI/Codex/GLM/Anthropic) has the `isinstance(exc, BillingError)` re-raise pattern. Functional: `BillingError` is a subclass of `Exception` (so the re-raise must precede the generic catch). Pricing-side: every Anthropic key in `MODEL_PRICING` is also in `MODEL_CONTEXT_WINDOW` (no silent 200K fallback). Profile-side: every `ModelProfile.provider` equals `_resolve_provider(profile.id)` (catches future picker-label drift).
+
+### Reference
+- `docs/research/v0531-defect-scan.md` — 213-line scan output (post-v0.53.1, pre-v0.53.2). 4 defects (D1–D4) cited file:line with severity + repro shape. Drove the v0.53.2 scope.
+
 ## [0.53.1] — 2026-04-27
 
 ### Fixed

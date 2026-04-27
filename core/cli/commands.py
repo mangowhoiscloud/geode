@@ -63,7 +63,12 @@ MODEL_PROFILES: list[ModelProfile] = [
     ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
     ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
     ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
-    ModelProfile(OPENAI_PRIMARY, "openai", "GPT-5.5", "$$"),
+    # v0.53.2 — gpt-5.5 is OAuth-only (Codex backend per
+    # developers.openai.com/codex/models). _resolve_provider returns
+    # "openai-codex" for it via _CODEX_ONLY_MODELS; ModelProfile.provider
+    # must match so the /model picker label is honest about which
+    # auth-mode the user's pick will actually consume.
+    ModelProfile(OPENAI_PRIMARY, "openai-codex", "GPT-5.5", "$$"),
     ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
     ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
     ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),
