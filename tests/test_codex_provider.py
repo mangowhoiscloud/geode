@@ -118,28 +118,36 @@ class TestCodexAdapterProperties:
 
 
 class TestNormalizeResponsesApi:
+    """v0.53.1 — Codex adapter now uses the SHARED normalize_openai_responses
+    (returns AgenticResponse dataclass) instead of a local dict-returning
+    helper. Pre-fix the dict path crashed AgenticLoop._track_usage with
+    `'dict' object has no attribute 'usage'` (production incident
+    2026-04-27, immediately after v0.53.0). See test_codex_normalize_parity
+    for the full invariant cohort."""
+
     def test_text_output(self):
-        from core.llm.providers.codex import _normalize_responses_api
+        from core.llm.agentic_response import AgenticResponse, normalize_openai_responses
 
         mock_response = MagicMock()
         mock_content = MagicMock()
+        mock_content.type = "output_text"
         mock_content.text = "Hello!"
         mock_block = MagicMock()
         mock_block.content = [mock_content]
         mock_block.type = "message"
         mock_response.output = [mock_block]
-        mock_response.model = "gpt-5.4-mini"
+        mock_response.usage = MagicMock()
         mock_response.usage.input_tokens = 10
         mock_response.usage.output_tokens = 5
 
-        result = _normalize_responses_api(mock_response)
-        assert result["content"] == "Hello!"
-        assert result["role"] == "assistant"
-        assert result["stop_reason"] == "end_turn"
-        assert result["usage"]["input_tokens"] == 10
+        result = normalize_openai_responses(mock_response)
+        assert isinstance(result, AgenticResponse)
+        assert result.stop_reason == "end_turn"
+        assert result.usage.input_tokens == 10
+        assert any(b.type == "text" and b.text == "Hello!" for b in result.content)
 
     def test_tool_call_output(self):
-        from core.llm.providers.codex import _normalize_responses_api
+        from core.llm.agentic_response import AgenticResponse, normalize_openai_responses
 
         mock_response = MagicMock()
         mock_tool_block = MagicMock()
@@ -147,16 +155,18 @@ class TestNormalizeResponsesApi:
         mock_tool_block.name = "web_search"
         mock_tool_block.arguments = '{"query": "test"}'
         mock_tool_block.call_id = "call_123"
-        mock_tool_block.content = []
         mock_response.output = [mock_tool_block]
-        mock_response.model = "gpt-5.4-mini"
+        mock_response.usage = MagicMock()
         mock_response.usage.input_tokens = 15
         mock_response.usage.output_tokens = 8
 
-        result = _normalize_responses_api(mock_response)
-        assert result["stop_reason"] == "tool_use"
-        assert len(result["tool_calls"]) == 1
-        assert result["tool_calls"][0]["function"]["name"] == "web_search"
+        result = normalize_openai_responses(mock_response)
+        assert isinstance(result, AgenticResponse)
+        assert result.stop_reason == "tool_use"
+        tool_blocks = [b for b in result.content if b.type == "tool_use"]
+        assert len(tool_blocks) == 1
+        assert tool_blocks[0].name == "web_search"
+        assert tool_blocks[0].input == {"query": "test"}
 
 
 class TestAdapterMap:

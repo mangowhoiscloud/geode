@@ -284,7 +284,10 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
 
         _codex_circuit_breaker.record_success()
 
-        # Track token usage
+        # Track token usage at the provider layer for the per-provider
+        # cost ledger. The agentic loop's _track_usage runs separately on
+        # the normalized AgenticResponse below; both paths read the same
+        # underlying response.usage so the numbers match.
         if hasattr(response, "usage") and response.usage:
             from core.llm.token_tracker import get_tracker
 
@@ -296,46 +299,14 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
         if used_model and used_model != model:
             log.warning("Model failover: %s -> %s", model, used_model)
 
-        # Normalize Responses API output to standard format
-        return _normalize_responses_api(response)
+        # v0.53.1 — return the standard AgenticResponse dataclass so the
+        # agentic loop's _track_usage (response.usage attribute access)
+        # works for Codex too. Pre-fix this adapter returned a raw dict
+        # via _normalize_responses_api → loop crashed with
+        # ``'dict' object has no attribute 'usage'`` on first /model
+        # claude-* → gpt-5.5 switch (production incident 2026-04-27).
+        # The Anthropic + OpenAI PAYG adapters already use the standard
+        # normaliser; this brings Codex into parity.
+        from core.llm.agentic_response import normalize_openai_responses
 
-
-def _normalize_responses_api(response: Any) -> dict[str, Any]:
-    """Convert Responses API response to normalized format for agentic loop."""
-    out_text = ""
-    tool_calls: list[dict[str, Any]] = []
-
-    for block in response.output:
-        if hasattr(block, "content"):
-            for c in block.content:
-                if hasattr(c, "text"):
-                    out_text += c.text
-        if hasattr(block, "type") and block.type == "function_call":
-            tool_calls.append(
-                {
-                    "id": getattr(block, "call_id", getattr(block, "id", "")),
-                    "type": "function",
-                    "function": {
-                        "name": block.name,
-                        "arguments": block.arguments,
-                    },
-                }
-            )
-
-    result: dict[str, Any] = {
-        "role": "assistant",
-        "content": out_text,
-        "model": response.model,
-        "stop_reason": "end_turn" if not tool_calls else "tool_use",
-    }
-    if tool_calls:
-        result["tool_calls"] = tool_calls
-
-    usage = response.usage
-    if usage:
-        result["usage"] = {
-            "input_tokens": usage.input_tokens or 0,
-            "output_tokens": usage.output_tokens or 0,
-        }
-
-    return result
+        return normalize_openai_responses(response)
