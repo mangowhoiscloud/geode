@@ -28,6 +28,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.53.1] — 2026-04-27
+
+### Fixed
+- **Codex adapter returned dict, agentic loop expected AgenticResponse** (production hotfix). v0.53.0 dogfooding incident: `/model claude-opus-4-7 → gpt-5.5` succeeded (gpt-5.5 routes to `openai-codex` per v0.53.0 `_CODEX_ONLY_MODELS`), but the very first LLM call crashed with `'dict' object has no attribute 'usage'` at `core/agent/loop.py:1565` (`_track_usage`). Root cause: `CodexAgenticAdapter.agentic_call` returned a raw dict via a local `_normalize_responses_api` helper while the loop reads `response.usage` (attribute access). Anthropic + OpenAI PAYG adapters already used the standard `core.llm.agentic_response.normalize_openai_responses` (returns `AgenticResponse` dataclass); v0.52.7's Codex parity refactor missed this last contract. Fix: Codex adapter now calls `normalize_openai_responses(response)`; the local dict-returning helper is removed entirely. (`core/llm/providers/codex.py:300`)
+
+### Added
+- **`tests/test_codex_normalize_parity.py`** — 4 invariant cases. Source-level: `agentic_call` calls `normalize_openai_responses(response)` and never invokes the legacy local helper. Module-level: the legacy `_normalize_responses_api` function definition is removed. Functional: `agentic_call` returns `AgenticResponse` end-to-end with proper `.usage` attribute access. End-to-end: `_track_usage(codex_result)` does not raise.
+
+### Reference
+- Production daemon log 2026-04-27 17:32:32 — `AttributeError: 'dict' object has no attribute 'usage'` at loop.py:1565.
+
 ## [0.53.0] — 2026-04-27
 
 ### Architecture (BREAKING — fail-fast governance redesign)
