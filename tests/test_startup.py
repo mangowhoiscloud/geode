@@ -402,7 +402,14 @@ class TestResolveProvider:
     def test_openai(self):
         from core.config import _resolve_provider
 
-        assert _resolve_provider(OPENAI_PRIMARY) == "openai"
+        # v0.53.0 — OPENAI_PRIMARY = "gpt-5.5" is OAuth-only per
+        # developers.openai.com/codex/models, so it routes to openai-codex
+        # by canonical mapping. Pre-fix returned "openai" which misled the
+        # router; v0.52.4 equivalence-class scan corrected at runtime, but
+        # the static map is now honest about the constraint.
+        assert _resolve_provider(OPENAI_PRIMARY) == "openai-codex"
+        assert _resolve_provider("gpt-5.4") == "openai"
+        assert _resolve_provider("gpt-5.4-mini") == "openai"
         assert _resolve_provider("gpt-4.1") == "openai"
 
     def test_glm(self):
@@ -492,9 +499,10 @@ class TestModelProfiles:
     def test_glm_profiles_provider(self):
         from core.cli.commands import MODEL_PROFILES
 
-        # v0.50.0: provider label normalised to "GLM" so the UI store
-        # matches the dispatch key (was "ZhipuAI" / "glm" mismatch).
-        glm_profiles = [p for p in MODEL_PROFILES if p.provider == "GLM"]
+        # v0.53.0 — provider labels are CANONICAL provider IDs (lowercase
+        # `glm`), matching /login dashboard + auth.toml. Pre-fix used
+        # capitalised "GLM" which diverged from the dispatch key.
+        glm_profiles = [p for p in MODEL_PROFILES if p.provider == "glm"]
         assert len(glm_profiles) == 3
 
 

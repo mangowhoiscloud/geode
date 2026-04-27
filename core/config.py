@@ -365,29 +365,32 @@ settings = _get_settings()
 # All code MUST reference these instead of hardcoding model strings.
 # ---------------------------------------------------------------------------
 
-# Anthropic models — verified 2026-04-26 against platform.claude.com
+# Anthropic models — verified 2026-04-26 against platform.claude.com.
+# v0.53.0 — chain depth reduced to 1 (primary → secondary only) per
+# fail-fast governance: deeper chains create cost surprise + unclear
+# user attribution. Quota exhaustion now surfaces a panel + stops loop.
 ANTHROPIC_PRIMARY = "claude-opus-4-7"
 ANTHROPIC_SECONDARY = "claude-sonnet-4-6"
 ANTHROPIC_BUDGET = "claude-haiku-4-5-20251001"
-ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, "claude-opus-4-6", ANTHROPIC_SECONDARY]
+ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY]
 
 # OpenAI models — verified 2026-04-26 against developers.openai.com.
-# v0.52.4 — gpt-5.5 promoted to primary (Codex's new default model);
-# pre-5.3 generation dropped per current CLAUDE.md model-currency policy.
+# v0.52.4 — gpt-5.5 promoted to primary (Codex's new default model).
+# v0.53.0 — chain depth reduced to 1 (primary → next).
 OPENAI_PRIMARY = "gpt-5.5"
-OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.4", "gpt-5.3-codex"]
+OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.4"]
 
 # OpenAI Codex — Plus quota via chatgpt.com/backend-api/codex (Responses API).
-# v0.52.4 — gpt-5.5 is OAuth-only ("isn't available with API-key
-# authentication" per developers.openai.com/codex/models). Promoted to
-# CODEX_PRIMARY so /login oauth users get the real default.
+# v0.52.4 — gpt-5.5 OAuth-only (developers.openai.com/codex/models).
+# v0.53.0 — chain depth reduced to 1.
 CODEX_PRIMARY = "gpt-5.5"
-CODEX_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.3-codex", "gpt-5.4-mini"]
+CODEX_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.3-codex"]
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 
-# ZhipuAI (GLM) models — OpenAI-compatible API, separate provider
+# ZhipuAI (GLM) models — OpenAI-compatible API, separate provider.
+# v0.53.0 — chain depth reduced to 1 (primary → secondary).
 GLM_PRIMARY = "glm-5.1"
-GLM_FALLBACK_CHAIN: list[str] = ["glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"]
+GLM_FALLBACK_CHAIN: list[str] = ["glm-5.1", "glm-5"]
 # Coding Plan endpoint (subscription-billed). PAYG endpoint is api/paas/v4 — a
 # Coding Plan key called against PAYG path silently bypasses the subscription
 # quota and incurs metered billing instead.
@@ -395,24 +398,42 @@ GLM_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
 GLM_PAYG_BASE_URL = "https://api.z.ai/api/paas/v4"
 
 
+# v0.53.0 — models that are CODEX-ONLY per OpenAI's official Codex
+# models page (developers.openai.com/codex/models, verified 2026-04-27).
+# These can ONLY be called via chatgpt.com/backend-api/codex (OAuth);
+# no API-key path. Pre-fix _resolve_provider returned "openai" for
+# gpt-5.5 → static map misled router; resolve_routing's equivalence-
+# class scan corrected at runtime, but the user-visible mapping was
+# wrong. Listing here makes the OAuth-only constraint explicit.
+_CODEX_ONLY_MODELS: frozenset[str] = frozenset(
+    {
+        "gpt-5.5",
+        "gpt-5.5-pro",
+    }
+)
+
+
 def _resolve_provider(model: str) -> str:
     """Resolve provider name from model ID.
 
     Prefix-based inference with broad model coverage:
-      claude-*   → anthropic
-      glm-*      → glm
-      gpt-*      → openai
-      o3-*/o4-*  → openai
-      gemini-*   → google
-      deepseek-* → deepseek
-      llama-*    → meta
-      qwen-*/qwen3* → alibaba
-      (fallback) → openai
+      claude-*                    → anthropic
+      glm-*                       → glm
+      gpt-5.5 / gpt-5.5-pro       → openai-codex (OAuth-only models)
+      *-codex / *-codex-max/mini  → openai-codex
+      gpt-* / o3-* / o4-*         → openai
+      gemini-*                    → google
+      deepseek-*                  → deepseek
+      llama-*                     → meta
+      qwen-*/qwen3*               → alibaba
+      (fallback)                  → openai
     """
     if model.startswith("claude-"):
         return "anthropic"
     if model.startswith("glm-"):
         return "glm"
+    if model in _CODEX_ONLY_MODELS:
+        return "openai-codex"
     if model.endswith("-codex") or model.endswith("-codex-max") or model.endswith("-codex-mini"):
         return "openai-codex"
     if model.startswith(("gpt-", "o3-", "o4-")):

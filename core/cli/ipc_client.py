@@ -223,6 +223,7 @@ class IPCClient:
                 "oauth_login_failed",
                 # Daemon-side error surfaces (v0.51.1 IPC parity)
                 "billing_error",
+                "quota_exhausted",  # v0.53.0 — plan-aware quota panel
                 # LLM lifecycle events
                 "llm_retry",
                 "llm_error",

@@ -74,10 +74,11 @@ class TestModelProfileLabels:
         raise AssertionError("gpt-5.4-mini missing from MODEL_PROFILES")
 
     def test_glm_models_use_glm_provider_label(self) -> None:
-        # The UI label must match the dispatch provider (`glm`); pre-0.50
-        # the UI said "ZhipuAI" while dispatch keyed off "glm" so the
-        # /auth interactive add path stored credentials the rotator never
-        # found.
+        # v0.53.0 — provider label MUST equal the canonical provider ID
+        # (lowercase ``glm``), matching /login dashboard + auth.toml +
+        # rotator dispatch key. Pre-fix used capitalised "GLM" which
+        # diverged from the dispatch key. v0.50 originally moved away
+        # from "ZhipuAI" → "GLM"; v0.53.0 finishes by lowercasing.
         for profile in MODEL_PROFILES:
             if profile.id.startswith("glm-"):
-                assert profile.provider == "GLM", profile.id
+                assert profile.provider == "glm", profile.id

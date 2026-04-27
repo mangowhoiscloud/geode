@@ -47,20 +47,29 @@ class ModelProfile:
     cost: str  # relative cost indicator
 
 
+# v0.53.0 — provider labels are CANONICAL provider IDs (matching
+# /login dashboard + auth.toml), not marketing names. Pre-fix:
+# "Codex (Plus)" label vs "openai-codex" provider ID mismatch caused
+# user confusion. Auth-mode (OAuth vs PAYG) is NOT in the picker —
+# the system auto-resolves at LLM call time via resolve_routing()
+# based on the user's active /login state.
+#
+# Label = canonical provider ID + cost ($) tier.
+# `gpt-5.5` default routes to `openai-codex` per equivalence-class
+# scan when Codex Plus OAuth is registered (v0.52.4 routing policy);
+# otherwise to `openai` PAYG. Both paths visible via /login dashboard.
 MODEL_PROFILES: list[ModelProfile] = [
-    ModelProfile(ANTHROPIC_PRIMARY, "Anthropic", "Opus 4.7", "$$$"),
-    ModelProfile("claude-opus-4-6", "Anthropic", "Opus 4.6", "$$$"),
-    ModelProfile(ANTHROPIC_SECONDARY, "Anthropic", "Sonnet 4.6", "$$"),
-    ModelProfile(ANTHROPIC_BUDGET, "Anthropic", "Haiku 4.5", "$"),
-    ModelProfile(OPENAI_PRIMARY, "OpenAI", "GPT-5.4", "$$"),
-    # `gpt-5.4-mini` has no `-codex` suffix → routes to "openai" provider
-    # (PAYG API key), not Codex Plus quota. Labelling it "Codex (Plus)" misled
-    # users into thinking it consumed their subscription.
-    ModelProfile("gpt-5.4-mini", "OpenAI", "GPT-5.4 Mini", "$"),
-    ModelProfile("gpt-5.3-codex", "Codex (Plus)", "GPT-5.3 Codex", "$$"),
-    ModelProfile(GLM_PRIMARY, "GLM", "GLM-5.1", "$"),
-    ModelProfile("glm-5-turbo", "GLM", "GLM-5 Turbo", "$"),
-    ModelProfile("glm-4.7-flash", "GLM", "GLM-4.7 Flash", "$"),
+    ModelProfile(ANTHROPIC_PRIMARY, "anthropic", "Opus 4.7", "$$$"),
+    ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
+    ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
+    ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
+    ModelProfile(OPENAI_PRIMARY, "openai", "GPT-5.5", "$$"),
+    ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
+    ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
+    ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),
+    ModelProfile(GLM_PRIMARY, "glm", "GLM-5.1", "$"),
+    ModelProfile("glm-5-turbo", "glm", "GLM-5 Turbo", "$"),
+    ModelProfile("glm-4.7-flash", "glm", "GLM-4.7 Flash", "$"),
 ]
 
 _MODEL_INDEX: dict[str, ModelProfile] = {m.id: m for m in MODEL_PROFILES}
