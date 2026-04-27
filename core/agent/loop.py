@@ -36,7 +36,6 @@ from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.llm.router import (
-    CROSS_PROVIDER_FALLBACK,
     maybe_traceable,
     resolve_agentic_adapter,
 )
@@ -578,6 +577,30 @@ class AgenticLoop:
         # Proactively adapt context for the new model's context window
         self._adapt_context_for_model(model)
 
+    def _emit_quota_panel(self, exc: BillingError) -> None:
+        """v0.53.0 — emit structured quota_exhausted IPC event with Plan
+        context, falling back to legacy billing_error if context absent.
+
+        Pre-v0.53.0 BillingError surfaced as a single-line message and
+        cross-provider auto-failover masked the issue by silently
+        swapping providers (cost surprise + behavior drift). The new
+        flow stops the loop and renders a multi-line panel
+        (header + reset-time + 3 actionable options).
+        """
+        from core.ui.agentic_ui import emit_billing_error, emit_quota_exhausted
+
+        if exc.provider:
+            emit_quota_exhausted(
+                provider=exc.provider,
+                plan_id=exc.plan_id,
+                plan_display_name=exc.plan_display_name,
+                upgrade_url=exc.upgrade_url,
+                resets_in_seconds=exc.resets_in_seconds,
+                message=str(exc),
+            )
+        else:
+            emit_billing_error(str(exc))
+
     def _purge_stale_model_switch_acks(self) -> None:
         """Remove prior ``Understood. I am now <prev_model>.`` assistant acks.
 
@@ -684,11 +707,9 @@ class AgenticLoop:
         try:
             decomposition_hint = self._try_decompose(user_input)
         except BillingError as exc:
-            from core.ui.agentic_ui import emit_billing_error
-
-            emit_billing_error(str(exc))
+            self._emit_quota_panel(exc)
             return AgenticResult(
-                text=str(exc),
+                text=exc.user_message(),
                 rounds=0,
                 termination_reason="billing_error",
             )
@@ -812,11 +833,9 @@ class AgenticLoop:
                 response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
             except BillingError as exc:
                 _spinner.stop()
-                from core.ui.agentic_ui import emit_billing_error
-
-                emit_billing_error(str(exc))
+                self._emit_quota_panel(exc)
                 return AgenticResult(
-                    text=str(exc),
+                    text=exc.user_message(),
                     rounds=round_idx + 1,
                     termination_reason="billing_error",
                 )
@@ -1623,40 +1642,19 @@ class AgenticLoop:
                 self._persist_escalated_model(next_model)
                 return True
 
-        # Current provider's chain exhausted — try cross-provider (Feature 4)
+        # v0.53.0 — Cross-provider escalation REMOVED. When the current
+        # provider's chain is exhausted, surface to user via
+        # quota_exhausted IPC event (handled by BillingError caller path).
+        # No silent provider swap — the user picks the next provider via
+        # /model. Cross-provider info hint (B5 breadcrumb) still surfaces
+        # available alternatives in the next round's LLM context.
         from_provider = self._provider
-        fallbacks = CROSS_PROVIDER_FALLBACK.get(from_provider, [])
-        for fallback_provider, fallback_model in fallbacks:
-            if fallback_model != current:
-                log.warning(
-                    "Cross-provider escalation: %s(%s) -> %s(%s)",
-                    current,
-                    from_provider,
-                    fallback_model,
-                    fallback_provider,
-                )
-                self.update_model(
-                    fallback_model, fallback_provider, reason="cross_provider_escalation"
-                )
-                self._persist_escalated_model(fallback_model)
-                # Emit dedicated cross-provider hook for observability
-                # (MODEL_SWITCHED is also fired by update_model, but this
-                # event carries provider-level context for audit loggers)
-                if self._hooks:
-                    from core.hooks import HookEvent
-
-                    self._hooks.trigger(
-                        HookEvent.FALLBACK_CROSS_PROVIDER,
-                        {
-                            "from_model": current,
-                            "to_model": fallback_model,
-                            "from_provider": from_provider,
-                            "to_provider": fallback_provider,
-                        },
-                    )
-                return True
-
-        log.warning("Model escalation failed: no more fallback models available")
+        log.warning(
+            "Provider %s chain exhausted at model=%s — surfacing to user "
+            "(cross-provider auto-swap removed in v0.53.0)",
+            from_provider,
+            current,
+        )
         return False
 
     @staticmethod
@@ -1670,38 +1668,20 @@ class AgenticLoop:
             log.debug("Failed to persist escalated model to settings", exc_info=True)
 
     def _try_cross_provider_escalation(self) -> bool:
-        """Skip intra-provider chain and go directly to cross-provider fallback.
+        """Disabled in v0.53.0 — cross-provider auto-failover removed.
 
-        Used for auth errors where all models in the same provider share
-        the same expired key — cycling within the chain is pointless.
+        Per the v0.53.0 governance redesign: silent provider switch on
+        auth/quota error creates cost surprise + model behavior drift.
+        Quota exhaustion now emits a ``quota_exhausted`` IPC event so
+        the user can decide whether to switch providers, refresh the
+        token, or wait for quota reset. The cross-provider breadcrumb
+        (B5, v0.52.3) still surfaces *available* alternatives to the
+        LLM as information — but the system will not auto-swap.
         """
-        from_provider = self._provider
-        current = self.model
-        fallbacks = CROSS_PROVIDER_FALLBACK.get(from_provider, [])
-        for fallback_provider, fallback_model in fallbacks:
-            if fallback_model != current:
-                log.warning(
-                    "Auth-triggered cross-provider escalation: %s(%s) -> %s(%s)",
-                    current,
-                    from_provider,
-                    fallback_model,
-                    fallback_provider,
-                )
-                self.update_model(fallback_model, fallback_provider, reason="auth_cross_provider")
-                self._persist_escalated_model(fallback_model)
-                if self._hooks:
-                    from core.hooks import HookEvent
-
-                    self._hooks.trigger(
-                        HookEvent.FALLBACK_CROSS_PROVIDER,
-                        {
-                            "from_model": current,
-                            "to_model": fallback_model,
-                            "from_provider": from_provider,
-                            "to_provider": fallback_provider,
-                        },
-                    )
-                return True
+        log.info(
+            "Cross-provider escalation disabled (v0.53.0) — surfacing quota "
+            "exhaustion to user instead of silent swap"
+        )
         return False
 
     def _inject_credential_breadcrumb(self) -> None:

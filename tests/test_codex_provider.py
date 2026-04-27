@@ -180,9 +180,12 @@ class TestModelSelector:
     def test_codex_in_model_profiles(self):
         from core.cli.commands import MODEL_PROFILES
 
-        # v0.50.0: only models with the "-codex" suffix actually route to
-        # Codex (Plus). gpt-5.4-mini was relabelled to plain OpenAI because
-        # it routes to PAYG.
-        codex_profiles = [p for p in MODEL_PROFILES if "Codex" in p.provider]
-        assert len(codex_profiles) >= 1
+        # v0.53.0 — provider labels are CANONICAL provider IDs ("openai-codex"),
+        # NOT marketing names ("Codex (Plus)"). Pre-fix label/ID mismatch
+        # confused users about which auth-mode would be consumed.
+        codex_profiles = [p for p in MODEL_PROFILES if p.provider == "openai-codex"]
+        assert len(codex_profiles) >= 1, (
+            "at least one model must be tagged with the canonical provider "
+            "ID 'openai-codex' so the picker matches the /login dashboard"
+        )
         assert any(p.id.endswith("-codex") for p in codex_profiles)

@@ -438,6 +438,47 @@ class EventRenderer:
         self._out.write(f"\n  \033[1;31m✗ Billing error\033[0m — {message}\n\n")
         self._out.flush()
 
+    def _handle_quota_exhausted(self, event: dict[str, Any]) -> None:
+        """v0.53.0 — render plan-aware quota panel.
+
+        Multi-line: header (provider/plan) + reset-time + 3 actionable
+        options (wait / switch auth / switch provider). Replaces the
+        single-line billing_error UX which gave the user no next step.
+        """
+        provider = str(event.get("provider", ""))
+        plan_id = str(event.get("plan_id", ""))
+        plan_label = str(event.get("plan_display_name", ""))
+        upgrade_url = str(event.get("upgrade_url", ""))
+        resets_in = int(event.get("resets_in_seconds", 0) or 0)
+        message = str(event.get("message", ""))
+
+        self._clear_activity_line()
+        label = plan_label or provider or "Provider"
+        self._out.write(f"\n  \033[1;31m⚠ {label} quota exhausted\033[0m\n")
+        if message:
+            self._out.write(f"  {message}\n")
+        if plan_id and plan_id != plan_label:
+            self._out.write(f"  Plan: \033[1m{plan_id}\033[0m\n")
+        if resets_in > 0:
+            mins = resets_in // 60
+            ttl = f"{mins // 60}h {mins % 60}m" if mins >= 60 else f"{mins}m"
+            self._out.write(f"  Resets in: \033[1m{ttl}\033[0m\n")
+        self._out.write("\n  \033[1mOptions:\033[0m\n")
+        self._out.write("    1. Wait for quota reset\n")
+        if provider:
+            self._out.write(
+                f"    2. Switch auth: \033[36m/login set-key {provider} <api-key>\033[0m\n"
+            )
+        else:
+            self._out.write(
+                "    2. Switch auth: \033[36m/login set-key <provider> <api-key>\033[0m\n"
+            )
+        self._out.write("    3. Switch provider: \033[36m/model <other-model>\033[0m\n")
+        if upgrade_url:
+            self._out.write(f"    4. Upgrade plan: \033[36m{upgrade_url}\033[0m\n")
+        self._out.write("\n")
+        self._out.flush()
+
     # -- Pipeline milestone events (client-side rendering) --------------------
 
     def _handle_pipeline_header(self, event: dict[str, Any]) -> None:
