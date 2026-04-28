@@ -153,14 +153,19 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
     - ``message`` items contain text sub-blocks → TextBlock
     - ``function_call`` items → ToolUseBlock (GEODE tool invocations)
     - ``web_search_call`` items → skipped (server-side, transparent)
-    """
-    if not hasattr(response, "output") or not response.output:
-        return AgenticResponse()
 
+    v0.53.3 — usage is always extracted (even when ``output`` is empty)
+    so cost/token telemetry survives the Codex Plus
+    ``response.completed``-with-empty-output edge case. The CodexAgenticAdapter
+    pre-populates ``response.output`` from accumulated
+    ``response.output_item.done`` events before calling this normaliser
+    (Codex Rust pattern — never trust ``Completed.output``).
+    """
     blocks: list[TextBlock | ToolUseBlock] = []
     has_function_calls = False
 
-    for item in response.output:
+    output = getattr(response, "output", None) or []
+    for item in output:
         item_type = getattr(item, "type", "")
 
         if item_type == "message":
@@ -182,7 +187,9 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
                 args = {}
             blocks.append(ToolUseBlock(id=call_id, name=name, input=args))
 
-        # web_search_call, file_search_call, etc. → skip (server-side)
+        # reasoning, web_search_call, file_search_call, etc. → skip
+        # (server-side or already represented via encrypted_content
+        # passthrough on the next request)
 
     stop_reason = "tool_use" if has_function_calls else "end_turn"
 
@@ -197,6 +204,22 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
             input_tokens=getattr(response.usage, "input_tokens", 0) or 0,
             output_tokens=getattr(response.usage, "output_tokens", 0) or 0,
             thinking_tokens=thinking_tok,
+        )
+
+    if not blocks and (usage.output_tokens or 0) > (usage.thinking_tokens or 0):
+        # The model produced visible output tokens but the normaliser
+        # extracted no blocks. This is anomalous — most likely the
+        # Codex Plus accumulator missed an item type, or a future
+        # message sub-type. Surface as a single warning rather than
+        # silently dropping a paid response.
+        log.warning(
+            "normalize_openai_responses: usage reports visible output "
+            "(out=%d, reasoning=%d) but no content blocks extracted "
+            "(items=%d, has_output_attr=%s)",
+            usage.output_tokens,
+            usage.thinking_tokens,
+            len(output),
+            hasattr(response, "output"),
         )
 
     return AgenticResponse(

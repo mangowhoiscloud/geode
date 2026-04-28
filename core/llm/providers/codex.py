@@ -150,7 +150,7 @@ import asyncio  # noqa: E402
 from core.llm.errors import UserCancelledError  # noqa: E402
 from core.llm.providers.openai import (  # noqa: E402
     OpenAIAgenticAdapter,
-    _convert_messages_to_openai,
+    _convert_messages_to_responses,
     _tools_to_openai,
 )
 from core.llm.router import call_with_failover  # noqa: E402
@@ -210,14 +210,64 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
             log.warning("Codex circuit breaker is OPEN, skipping call")
             return None
 
-        # Build Responses API input from messages
-        oai_messages = _convert_messages_to_openai(system, messages)
-        # Convert to Responses API input format
+        # v0.53.3 — use the Responses-API converter (was previously the
+        # Chat-Completions converter ``_convert_messages_to_openai``,
+        # which produced ``{role:"assistant", content:None,
+        # tool_calls:[...]}`` shapes that Codex Plus rejects with
+        # ``input[i].content must be array or string, got null``). The
+        # Responses API expects per-item-type wire shapes:
+        # function_call (no content field), function_call_output
+        # (output not content), message (content always string/array,
+        # never null). OpenAI PAYG already used this converter
+        # (``openai.py:496``); Codex Plus inherits the same behaviour
+        # now. Spec-grounded against openai-python TypedDicts
+        # ResponseFunctionToolCallParam / FunctionCallOutput /
+        # ResponseOutputMessageParam.
+        oai_messages = _convert_messages_to_responses(system, messages)
         resp_input: list[dict[str, Any]] = []
         for msg in oai_messages:
             if msg.get("role") == "system":
-                continue  # instructions parameter handles this
+                continue  # ``instructions`` kwarg below handles system prompt
             resp_input.append(msg)
+
+        # v0.53.3 — pre-send observability. Logs one structured line so
+        # any future ``input[i].content == null`` (or other shape regressions)
+        # surface in the daemon log without needing a wire trace. Per-item
+        # summary: index, role|type, content type/length (or "<absent>"),
+        # extra keys. Single line, capped at first 30 items.
+        if log.isEnabledFor(logging.DEBUG) or any(
+            (msg.get("content") is None) for msg in resp_input[:30]
+        ):
+            _shape: list[str] = []
+            for _i, _m in enumerate(resp_input[:30]):
+                _kind = _m.get("type") or _m.get("role") or "<unknown>"
+                if "content" in _m:
+                    _c = _m["content"]
+                    _ct = (
+                        "None"
+                        if _c is None
+                        else f"str({len(_c)})"
+                        if isinstance(_c, str)
+                        else f"list({len(_c)})"
+                        if isinstance(_c, list)
+                        else type(_c).__name__
+                    )
+                    _shape.append(f"[{_i}]{_kind} content={_ct}")
+                elif "output" in _m:
+                    _o = _m["output"]
+                    _ot = (
+                        "None"
+                        if _o is None
+                        else f"str({len(_o)})"
+                        if isinstance(_o, str)
+                        else f"list({len(_o)})"
+                        if isinstance(_o, list)
+                        else type(_o).__name__
+                    )
+                    _shape.append(f"[{_i}]{_kind} output={_ot}")
+                else:
+                    _shape.append(f"[{_i}]{_kind} keys={sorted(_m.keys())}")
+            log.warning("Codex resp_input shape: %s", " | ".join(_shape))
 
         failover_models = [model] + [m for m in self.fallback_chain if m != model]
 
@@ -261,10 +311,36 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
                     # ``_fixed_temperature_for_model``.
                 else:
                     kwargs["temperature"] = temperature
+                # v0.53.3 — Codex Rust pattern: accumulate output items
+                # from ``response.output_item.done`` events as they arrive.
+                # The Codex Plus backend (chatgpt.com/backend-api/codex)
+                # omits the ``output`` field from its
+                # ``response.completed`` event payload (verified against
+                # codex-rs ``ResponseCompleted`` struct in
+                # ``codex-api/src/sse/responses.rs:120-128`` which has no
+                # ``output`` field at all). The OpenAI Python SDK's
+                # ``stream.get_final_response()`` therefore returns
+                # ``response.output == []`` even though the model
+                # generated visible text (proven by ``usage.output_tokens
+                # > usage.output_tokens_details.reasoning_tokens``).
+                # We mirror the Rust client: trust ``output_item.done``
+                # events for the conversation items and use
+                # ``get_final_response()`` only as a shell for usage /
+                # status / response_id.
                 with client.responses.stream(**kwargs) as stream:
-                    for _event in stream:
-                        pass
-                    return stream.get_final_response()
+                    accumulated_items: list[Any] = []
+                    for event in stream:
+                        if getattr(event, "type", "") == "response.output_item.done":
+                            item = getattr(event, "item", None)
+                            if item is not None:
+                                accumulated_items.append(item)
+                    final = stream.get_final_response()
+                    # Always overwrite — never trust SDK's reconstructed
+                    # output for Codex Plus (it's structurally empty per
+                    # the backend's SSE contract).
+                    if accumulated_items:
+                        final.output = accumulated_items
+                    return final
 
             return await asyncio.to_thread(_sync_call)
 

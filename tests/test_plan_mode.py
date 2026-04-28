@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from core.orchestration.plan_mode import (
     AnalysisPlan,
@@ -401,13 +403,18 @@ class TestHandleCreatePlanAutoExecute:
         exec_result = result["execution_result"]
         assert exec_result["completed_steps"] == 10
 
-    def test_auto_mode_does_not_cache_plan(self) -> None:
-        """Auto-executed plans should not be left in plan_cache."""
+    def test_auto_mode_caches_plan_for_audit(self) -> None:
+        """v0.53.3 — B2 fix: AUTO-executed plans MUST be cached so the
+        audit trail (``list_plans``) can surface them. Pre-fix the AUTO
+        branch only returned the result without storing → user could
+        not enumerate previously-run plans → "0 items" UX bug."""
         from core.cli import _build_tool_handlers
+        from core.cli.tool_handlers import _get_plan_store
         from core.config import settings
 
         handlers = _build_tool_handlers(verbose=False)
         handler = handlers["create_plan"]
+        list_handler = handlers["list_plans"]
 
         original = settings.plan_auto_execute
         try:
@@ -416,8 +423,14 @@ class TestHandleCreatePlanAutoExecute:
         finally:
             settings.plan_auto_execute = original
 
-        # Auto-executed plans should NOT be cached (no manual approval needed)
         assert result["auto_executed"] is True
+        plan_id = result["plan_id"]
+        # Direct store access — proves the write happened
+        assert plan_id in _get_plan_store()
+        # End-to-end via list_plans — proves audit surface works
+        listed = list_handler()
+        assert listed["count"] >= 1
+        assert any(p["plan_id"] == plan_id for p in listed["plans"])
 
     def test_manual_mode_preserves_existing_behavior(self) -> None:
         """With plan_auto_execute=False, behavior should be identical to before."""
@@ -443,6 +456,246 @@ class TestHandleCreatePlanAutoExecute:
         approve_result = approve_handler(plan_id=plan_id)
         assert approve_result["status"] == "ok"
         assert approve_result["executed"] is True
+
+
+# ---------------------------------------------------------------------------
+# v0.53.3 — Plan cache invariants (B1, C, observability)
+# ---------------------------------------------------------------------------
+
+
+class TestPlanCacheInvariants:
+    """v0.53.3 cross-factory cache + no-pop-on-approve invariants.
+
+    Pre-fix bugs the user reproduced 2026-04-27 — ``create_plan → ok``
+    immediately followed by ``list_plans → 0 items``:
+      B1: ``_plan_cache`` lived in the ``_build_plan_handlers`` closure
+          → multiple ``_build_tool_handlers`` invocations (daemon at
+          services.py, fork at bootstrap.py, sub-agent at worker.py)
+          produced multiple closures with separate dicts → cross-handler
+          reads saw an empty cache.
+      C : ``handle_approve_plan`` / ``reject_plan`` immediately popped
+          the entry → audit trail destroyed for any approved plan.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup_readiness(self, tmp_path: Any, monkeypatch: Any) -> None:
+        from core.cli import _set_readiness
+        from core.cli.startup import ReadinessReport
+
+        readiness = ReadinessReport()
+        readiness.force_dry_run = True
+        readiness.has_api_key = True
+        _set_readiness(readiness)
+        # v0.53.3 — isolate PlanStore to a tmp file so tests don't
+        # pollute / get polluted by .geode/plans.json
+        import core.cli.tool_handlers as th
+        from core.orchestration.plan_store import PlanStore
+
+        monkeypatch.setattr(th, "_PLAN_STORE", PlanStore(tmp_path / "plans.json"))
+
+    def test_b1_cache_shared_across_factory_calls(self) -> None:
+        """The PlanStore is a module-level singleton, so a plan created
+        via factory invocation #1 must be visible to ``list_plans``
+        retrieved from factory invocation #2."""
+        from core.cli import _build_tool_handlers
+        from core.config import settings
+
+        handlers_a = _build_tool_handlers(verbose=False)
+        handlers_b = _build_tool_handlers(verbose=False)
+        # Two separate factory calls — pre-fix each had its own
+        # closure dict; post-fix both share the module-level PlanStore.
+        original = settings.plan_auto_execute
+        try:
+            settings.plan_auto_execute = False
+            create_result = handlers_a["create_plan"](
+                ip_name="Berserk", template="full_pipeline"
+            )
+        finally:
+            settings.plan_auto_execute = original
+        plan_id = create_result["plan_id"]
+        listed = handlers_b["list_plans"]()
+        assert any(p["plan_id"] == plan_id for p in listed["plans"]), (
+            "create_plan from factory A must be visible to list_plans "
+            "from factory B (single module-level PlanStore)"
+        )
+
+    def test_c_approved_plan_remains_listable(self) -> None:
+        """v0.53.3 C fix — approving a plan must NOT remove it from
+        the cache; ``list_plans`` should still surface it (with status
+        reflecting approve/execute lifecycle)."""
+        from core.cli import _build_tool_handlers
+        from core.config import settings
+
+        handlers = _build_tool_handlers(verbose=False)
+        original = settings.plan_auto_execute
+        try:
+            settings.plan_auto_execute = False
+            create_result = handlers["create_plan"](
+                ip_name="Berserk", template="full_pipeline"
+            )
+        finally:
+            settings.plan_auto_execute = original
+        plan_id = create_result["plan_id"]
+        approve_result = handlers["approve_plan"](plan_id=plan_id)
+        assert approve_result["executed"] is True
+        listed = handlers["list_plans"]()
+        assert any(p["plan_id"] == plan_id for p in listed["plans"]), (
+            "approved plan must remain in list_plans for audit trail"
+        )
+
+    def test_c_rejected_plan_remains_listable(self) -> None:
+        """v0.53.3 C fix — same invariant for reject_plan."""
+        from core.cli import _build_tool_handlers
+        from core.config import settings
+
+        handlers = _build_tool_handlers(verbose=False)
+        original = settings.plan_auto_execute
+        try:
+            settings.plan_auto_execute = False
+            create_result = handlers["create_plan"](
+                ip_name="Berserk", template="full_pipeline"
+            )
+        finally:
+            settings.plan_auto_execute = original
+        plan_id = create_result["plan_id"]
+        handlers["reject_plan"](plan_id=plan_id, reason="testing")
+        listed = handlers["list_plans"]()
+        assert any(p["plan_id"] == plan_id for p in listed["plans"])
+
+    def test_list_plans_status_filter(self) -> None:
+        """v0.53.3 — optional ``status`` arg slices the audit trail.
+
+        Uses the goal-path (uuid plan_id) instead of the IP-path
+        because the IP-path has a separate per-instance counter
+        collision (B5: ``PlanMode._counter`` resets per fresh
+        instance → both calls get ``plan-0001``)."""
+        from core.cli import _build_tool_handlers
+        from core.config import settings
+        from core.orchestration.plan_mode import PlanStatus
+
+        handlers = _build_tool_handlers(verbose=False)
+        original = settings.plan_auto_execute
+        try:
+            settings.plan_auto_execute = False
+            r1 = handlers["create_plan"](
+                goal="research task A", steps=["step a1", "step a2"]
+            )
+            r2 = handlers["create_plan"](
+                goal="research task B", steps=["step b1"]
+            )
+        finally:
+            settings.plan_auto_execute = original
+        assert r1["plan_id"] != r2["plan_id"], "goal-path uuid must be unique"
+        # Approve r1 → its status moves DRAFT → APPROVED. r2 stays DRAFT.
+        # (Goal-path skips PlanMode.present_plan, unlike the IP-path.)
+        handlers["approve_plan"](plan_id=r1["plan_id"])
+        only_draft = handlers["list_plans"](status=PlanStatus.DRAFT.value)
+        assert all(p["status"] == "draft" for p in only_draft["plans"])
+        assert any(p["plan_id"] == r2["plan_id"] for p in only_draft["plans"])
+        assert not any(p["plan_id"] == r1["plan_id"] for p in only_draft["plans"])
+
+
+# ---------------------------------------------------------------------------
+# v0.53.3 — Disk-persistent PlanStore
+# ---------------------------------------------------------------------------
+
+
+class TestPlanStorePersistence:
+    """v0.53.3 — disk persistence (B fix). Plans must survive across
+    PlanStore instance lifecycles (modeling daemon restart)."""
+
+    def test_roundtrip_preserves_all_fields(self, tmp_path: Any) -> None:
+        from core.orchestration.plan_mode import AnalysisPlan, PlanStatus, PlanStep
+        from core.orchestration.plan_store import PlanStore
+
+        path = tmp_path / "plans.json"
+        store_a = PlanStore(path)
+        plan = AnalysisPlan(
+            plan_id="plan_test01",
+            ip_name="Berserk",
+            steps=[
+                PlanStep(
+                    step_id="s1",
+                    description="step one",
+                    node_name="agentic",
+                    estimated_time_s=12.0,
+                    dependencies=["s0"],
+                    metadata={"k": "v"},
+                ),
+            ],
+            status=PlanStatus.APPROVED,
+            metadata={"template": "agentic"},
+        )
+        store_a.put(plan)
+        # Fresh PlanStore = simulates daemon restart
+        store_b = PlanStore(path)
+        loaded = store_b.get("plan_test01")
+        assert loaded is not None
+        assert loaded.plan_id == "plan_test01"
+        assert loaded.ip_name == "Berserk"
+        assert loaded.status == PlanStatus.APPROVED
+        assert len(loaded.steps) == 1
+        assert loaded.steps[0].step_id == "s1"
+        assert loaded.steps[0].dependencies == ["s0"]
+        assert loaded.steps[0].metadata == {"k": "v"}
+        assert loaded.metadata == {"template": "agentic"}
+
+    def test_status_update_persists(self, tmp_path: Any) -> None:
+        """Updating status (DRAFT → APPROVED) must hit disk via subsequent put."""
+        from core.orchestration.plan_mode import AnalysisPlan, PlanStatus, PlanStep
+        from core.orchestration.plan_store import PlanStore
+
+        path = tmp_path / "plans.json"
+        store = PlanStore(path)
+        plan = AnalysisPlan(
+            plan_id="plan_xy",
+            ip_name="x",
+            steps=[PlanStep("s", "d", "agentic", 1.0)],
+        )
+        store.put(plan)
+        plan.status = PlanStatus.APPROVED
+        store.put(plan)
+        store2 = PlanStore(path)
+        assert store2.get("plan_xy").status == PlanStatus.APPROVED  # type: ignore[union-attr]
+
+    def test_malformed_entry_does_not_block_others(self, tmp_path: Any) -> None:
+        """A bad entry in plans.json must be skipped with a warning,
+        not crash the whole load."""
+        import json
+
+        from core.orchestration.plan_store import PlanStore
+
+        path = tmp_path / "plans.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "plan_bad": {"this is": "not a plan"},
+                    "plan_good": {
+                        "plan_id": "plan_good",
+                        "ip_name": "ok",
+                        "steps": [],
+                        "status": "draft",
+                        "created_at": 0.0,
+                        "total_estimated_time_s": 0.0,
+                        "total_estimated_cost": 0.0,
+                        "metadata": {},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        store = PlanStore(path)
+        assert "plan_good" in store
+        assert "plan_bad" not in store
+
+    def test_corrupt_file_falls_back_to_empty(self, tmp_path: Any) -> None:
+        """Invalid JSON must not crash startup."""
+        from core.orchestration.plan_store import PlanStore
+
+        path = tmp_path / "plans.json"
+        path.write_text("{not valid json", encoding="utf-8")
+        store = PlanStore(path)
+        assert len(store) == 0
 
 
 # ---------------------------------------------------------------------------
