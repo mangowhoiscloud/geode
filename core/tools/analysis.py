@@ -13,8 +13,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from core.domains.game_ip.fixtures import load_fixture
-from core.domains.game_ip.nodes.analysts import ANALYST_TYPES, get_dry_run_result
+from plugins.game_ip.fixtures import load_fixture
+from plugins.game_ip.nodes.analysts import ANALYST_TYPES, get_dry_run_result
+
 from core.state import PSMResult
 
 # Load parameter schemas from centralized JSON
@@ -119,7 +120,7 @@ class RunEvaluatorTool:
         ip_name = kwargs["ip_name"]
 
         # Use fixture-based dry-run evaluator data
-        from core.domains.game_ip.fixtures import load_fixture
+        from plugins.game_ip.fixtures import load_fixture
 
         try:
             data = load_fixture(ip_name)

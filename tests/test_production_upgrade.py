@@ -13,8 +13,8 @@ from __future__ import annotations
 import os
 from unittest.mock import MagicMock, patch
 
-from core.domains.game_ip.nodes.scoring import _calc_analyst_confidence
 from core.state import AnalysisResult
+from plugins.game_ip.nodes.scoring import _calc_analyst_confidence
 
 # ---------------------------------------------------------------------------
 # Phase 1-A: Confidence Calculation Bug Fix
@@ -228,14 +228,14 @@ class TestPartialRetry:
         }
 
     def test_first_iteration_sends_all_four(self):
-        from core.domains.game_ip.nodes.analysts import make_analyst_sends
+        from plugins.game_ip.nodes.analysts import make_analyst_sends
 
         state = self._base_state(iteration=1)
         sends = make_analyst_sends(state)
         assert len(sends) == 4
 
     def test_second_iteration_skips_good_results(self):
-        from core.domains.game_ip.nodes.analysts import make_analyst_sends
+        from plugins.game_ip.nodes.analysts import make_analyst_sends
 
         good_analysis = AnalysisResult(
             analyst_type="game_mechanics",

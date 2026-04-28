@@ -30,7 +30,7 @@ from core.verification.calibration import (
 # ---------------------------------------------------------------------------
 
 GOLDEN_SET_PATH = (
-    Path(__file__).parent.parent / "core" / "domains" / "game_ip" / "fixtures" / "_golden_set.json"
+    Path(__file__).parent.parent / "plugins" / "game_ip" / "fixtures" / "_golden_set.json"
 )
 
 

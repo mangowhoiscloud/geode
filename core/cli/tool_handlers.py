@@ -82,8 +82,9 @@ def _build_analysis_handlers(
     )
 
     def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
+        from plugins.game_ip.fixtures import FIXTURE_MAP as _FM
+
         from core.cli.commands import cmd_list
-        from core.domains.game_ip.fixtures import FIXTURE_MAP as _FM
 
         cmd_list()
         names = [n.title() for n in _FM]
@@ -779,7 +780,7 @@ def _build_system_handlers(
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
         from importlib.metadata import version as _pkg_version
 
-        from core.domains.game_ip.fixtures import FIXTURE_MAP as _FM
+        from plugins.game_ip.fixtures import FIXTURE_MAP as _FM
 
         geode_version = _pkg_version("geode")
         ant_ok = bool(settings.anthropic_api_key)

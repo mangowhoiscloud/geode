@@ -19,8 +19,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from plugins.game_ip.fixtures import load_fixture
+
 from core.config import ANTHROPIC_PRIMARY
-from core.domains.game_ip.fixtures import load_fixture
 
 log = logging.getLogger(__name__)
 

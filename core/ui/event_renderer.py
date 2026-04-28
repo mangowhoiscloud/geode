@@ -564,7 +564,7 @@ class EventRenderer:
                 label = labels.get(key, key.replace("_", " ").title())
                 score = float(val.get("score", 0)) if isinstance(val, dict) else 0
                 rationale = str(val.get("rationale", ""))[:50] if isinstance(val, dict) else ""
-                from core.domains.game_ip.scoring_constants import score_ansi_color
+                from plugins.game_ip.scoring_constants import score_ansi_color
 
                 color = score_ansi_color(score)
                 self._out.write(

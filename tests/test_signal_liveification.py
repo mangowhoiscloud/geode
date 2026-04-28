@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.domains.game_ip.nodes.signals import set_signal_adapter, signals_node
 from core.mcp.composite_signal import CompositeSignalAdapter
 from core.mcp.steam_adapter import SteamMCPSignalAdapter
 from core.state import GeodeState
+from plugins.game_ip.nodes.signals import set_signal_adapter, signals_node
 
 # ---------------------------------------------------------------------------
 # Mock MCP adapters

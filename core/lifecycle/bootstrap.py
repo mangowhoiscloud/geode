@@ -525,7 +525,7 @@ def build_memory(
     )
 
     # Wire ContextAssembler into router node (L2 -> L3 bridge)
-    from core.domains.game_ip.nodes.router import set_context_assembler
+    from plugins.game_ip.nodes.router import set_context_assembler
 
     set_context_assembler(context_assembler)
 

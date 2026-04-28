@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from core.domains.game_ip.nodes.synthesizer import (
+from core.state import EvaluatorResult
+from plugins.game_ip.nodes.synthesizer import (
     ACTION_DESCRIPTIONS,
     CAUSE_DESCRIPTIONS,
     CAUSE_TO_ACTION,
@@ -10,7 +11,6 @@ from core.domains.game_ip.nodes.synthesizer import (
     _detect_timing_issue,
     _extract_def_scores,
 )
-from core.state import EvaluatorResult
 
 
 class TestExtractDefScores:

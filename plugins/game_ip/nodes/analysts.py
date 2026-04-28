@@ -10,8 +10,6 @@ import json
 import logging
 from typing import Any
 
-from pydantic import ValidationError
-
 from core.config import get_node_model
 from core.domains.port import get_domain_or_none
 from core.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_TOOLS_SUFFIX, ANALYST_USER
@@ -24,6 +22,7 @@ from core.llm.router import (
 )
 from core.state import AnalysisResult, GeodeState
 from core.tools.registry import get_tool_executor
+from pydantic import ValidationError
 
 log = logging.getLogger(__name__)
 

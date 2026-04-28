@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 # Registry of built-in domain adapters (lazy-loaded)
 _BUILTIN_DOMAINS: dict[str, str] = {
-    "game_ip": "core.domains.game_ip.adapter:GameIPDomain",
+    "game_ip": "plugins.game_ip.adapter:GameIPDomain",
 }
 
 

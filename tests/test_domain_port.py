@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from core.domains.game_ip.adapter import GameIPDomain
 from core.domains.loader import list_domains, load_domain_adapter
 from core.domains.port import (
     DomainPort,
@@ -11,6 +10,7 @@ from core.domains.port import (
     get_domain_or_none,
     set_domain,
 )
+from plugins.game_ip.adapter import GameIPDomain
 
 # ---------------------------------------------------------------------------
 # DomainPort Protocol compliance
