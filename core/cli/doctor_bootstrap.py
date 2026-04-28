@@ -182,9 +182,7 @@ def _check_local_bin_on_path() -> CheckResult:
         name="~/.local/bin on PATH",
         ok=ok,
         detail="present" if ok else f"missing — PATH does not include {local_bin}",
-        fix=""
-        if ok
-        else "Add `export PATH=\"$HOME/.local/bin:$PATH\"` to ~/.zshrc or ~/.bashrc",
+        fix="" if ok else 'Add `export PATH="$HOME/.local/bin:$PATH"` to ~/.zshrc or ~/.bashrc',
     )
 
 
