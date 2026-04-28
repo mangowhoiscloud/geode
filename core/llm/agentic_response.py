@@ -126,6 +126,16 @@ def normalize_openai(response: Any) -> AgenticResponse:
         return AgenticResponse()
 
     blocks: list[TextBlock | ToolUseBlock] = []
+    # v0.58.0 R2 — capture GLM ``message.reasoning_content`` (separate
+    # from ``message.content``) into the R6 sidecar so the AgenticUI
+    # surfaces it like Anthropic ``thinking`` blocks. GLM-4.5+ returns
+    # this field when ``thinking={"type":"enabled"}`` is sent (see
+    # ``core/llm/providers/glm.py``). Other Chat-Completions providers
+    # (OpenAI legacy, etc.) leave it absent → sidecar stays None.
+    reasoning_summaries: list[str] = []
+    _glm_reasoning = getattr(choice.message, "reasoning_content", None)
+    if isinstance(_glm_reasoning, str) and _glm_reasoning.strip():
+        reasoning_summaries.append(_glm_reasoning)
 
     # Text content
     if choice.message.content:
@@ -170,6 +180,7 @@ def normalize_openai(response: Any) -> AgenticResponse:
         content=blocks,
         stop_reason=stop_reason,
         usage=usage,
+        reasoning_summaries=reasoning_summaries or None,
     )
 
 
