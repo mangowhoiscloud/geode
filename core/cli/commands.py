@@ -379,8 +379,16 @@ def _check_provider_key(selected: ModelProfile) -> None:
         console.print(f"  [warning]Warning: {env_var} not set. Model may not work.[/warning]")
 
 
-def _apply_model(selected: ModelProfile) -> None:
+def _apply_model(selected: ModelProfile, *, effort: str | None = None) -> None:
     """Apply a model selection — update settings + .env.
+
+    v0.59.0 — accepts an optional ``effort`` parameter coming from the
+    two-axis picker (``effort_picker.pick_model_and_effort``). When
+    set, persists to ``settings.agentic_effort`` + ``GEODE_AGENTIC_EFFORT``
+    env var so the next AgenticLoop turn picks it up via
+    ``_sync_model_from_settings`` (same hot-swap pathway as the model
+    field). ``None`` means "no effort knob applies for this model" —
+    leave the existing setting untouched.
 
     Includes context window guard: blocks downgrade when current context
     exceeds 80% of the target model's window.
@@ -388,7 +396,11 @@ def _apply_model(selected: ModelProfile) -> None:
     from core.config import settings
 
     old = settings.model
-    if selected.id == old:
+    old_effort = getattr(settings, "agentic_effort", "high")
+    same_model = selected.id == old
+    same_effort = effort is None or effort == old_effort
+
+    if same_model and same_effort:
         console.print(f"  [muted]Already using {selected.label}[/muted]")
         console.print()
         return
@@ -416,48 +428,65 @@ def _apply_model(selected: ModelProfile) -> None:
             console.print()
             return
 
-    settings.model = selected.id
-    _upsert_env("GEODE_MODEL", selected.id)
+    if not same_model:
+        settings.model = selected.id
+        _upsert_env("GEODE_MODEL", selected.id)
+    if effort is not None and effort != old_effort:
+        # Persist effort separately so config.toml + env var stay in sync
+        # with the picker's choice. The AgenticLoop's adaptive-compute
+        # path reads ``self._effort`` (set at ctor time) — model-hot-swap
+        # path picks up the new value on the next round via the same
+        # settings.model deferred-apply mechanism.
+        try:
+            object.__setattr__(settings, "agentic_effort", effort)
+        except Exception:
+            log.debug("Could not persist agentic_effort to settings", exc_info=True)
+        _upsert_env("GEODE_AGENTIC_EFFORT", effort)
 
     # Model hot-swap is deferred: AgenticLoop._sync_model_from_settings()
     # checks settings.model at the start of each round and applies
     # the change safely between LLM calls. Direct loop.update_model()
     # during tool execution caused adapter swap mid-call → crash.
 
-    console.print(
-        f"  [success]Model[/success]  {old} → [bold]{selected.label}[/bold]"
-        f"  [muted]({selected.id})[/muted]"
-    )
+    if not same_model and effort is not None:
+        console.print(
+            f"  [success]Model[/success]  {old} → [bold]{selected.label}[/bold]"
+            f"  [muted]({selected.id} · effort={effort})[/muted]"
+        )
+    elif not same_model:
+        console.print(
+            f"  [success]Model[/success]  {old} → [bold]{selected.label}[/bold]"
+            f"  [muted]({selected.id})[/muted]"
+        )
+    elif effort is not None:
+        console.print(
+            f"  [success]Effort[/success]  {old_effort} → [bold]{effort}[/bold]"
+            f"  [muted](model unchanged: {selected.label})[/muted]"
+        )
     console.print()
 
 
 def _interactive_model_picker() -> None:
-    """Arrow-key interactive model picker (OpenClaw Auth Profile Rotation)."""
+    """Two-axis interactive picker — model (↑↓) + effort level (←→).
+
+    v0.59.0 — replaces the legacy single-axis ``TerminalMenu`` with the
+    Claude Code ``ModelPicker.tsx`` pattern. Per-provider effort enum
+    in ``core/cli/effort_picker.py``. Ctrl+C / q / ESC cancels; Enter
+    confirms both the model and its current effort selection.
+    """
+    from core.cli.effort_picker import pick_model_and_effort
     from core.config import settings
 
-    # Build menu entries
-    entries: list[str] = []
-    current_idx = 0
-    for i, p in enumerate(MODEL_PROFILES):
-        if p.id == settings.model:
-            current_idx = i
-        entries.append(f"{p.label:<12} {p.provider:<10} {p.cost}")
-
-    menu = TerminalMenu(
-        entries,
-        title="\n  Models  (↑↓ select, Enter confirm, q cancel)\n",
-        cursor_index=current_idx,
-        menu_cursor="  > ",
-        menu_cursor_style=("fg_cyan", "bold"),
-        menu_highlight_style=("fg_cyan", "bold"),
-    )
-    idx = menu.show()
-    if idx is None:
+    profiles = [(p.id, p.provider, p.label, p.cost) for p in MODEL_PROFILES]
+    current_effort = getattr(settings, "agentic_effort", "high")
+    result = pick_model_and_effort(profiles, settings.model, current_effort)
+    if result.cancelled:
         console.print("  [muted]Cancelled[/muted]")
         console.print()
         return
 
-    _apply_model(MODEL_PROFILES[idx])
+    chosen_profile = next(p for p in MODEL_PROFILES if p.id == result.model_id)
+    _apply_model(chosen_profile, effort=result.effort)
 
 
 def cmd_model(args: str) -> None:
