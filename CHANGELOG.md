@@ -28,6 +28,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.58.0] — 2026-04-28
+
+### Added
+- **GLM `thinking` field activation** (R2 of the reasoning-depth audit). All three reference frontier harnesses (Hermes, OpenClaw, Claude Code) leave this dead — Hermes routes GLM through a generic `chat_completions` transport that doesn't know about the field; OpenClaw has no GLM plugin; Claude Code is Anthropic-only. v0.58.0 makes GEODE the **leader** on this dimension. The adapter sends `extra_body={"thinking": {"type": "enabled", "clear_thinking": False}}` for every model in `_GLM_THINKING_MODELS` (GLM-4.5+ family). `clear_thinking=False` preserves prior-turn `reasoning_content` in the model's context — same multi-turn-coherence goal as R1 on Codex Plus. Per-failover-model gate drops the field on pre-GLM-4.5 models that reject it. Spec re-verified 2026-04-28 against `docs.z.ai/api-reference/llm/chat-completion` + `docs.z.ai/guides/capabilities/thinking-mode`. (`core/llm/providers/glm.py:_GLM_THINKING_MODELS, _glm_thinking_supported`)
+- **GLM `message.reasoning_content` extraction** (R2 + R6 integration). The GLM Chat Completion endpoint returns reasoning text on a separate `message.reasoning_content` field (distinct from `message.content`). `normalize_openai` (the Chat Completions normaliser used by GLM) now extracts it into `AgenticResponse.reasoning_summaries` so the R6 surfacing path treats GLM the same as Anthropic + Codex. Empty/whitespace-only payloads are filtered. Other Chat-Completions providers (without `reasoning_content`) leave the sidecar `None` — backward-compat preserved. (`core/llm/agentic_response.py:normalize_openai`)
+- **`tests/test_glm_thinking_r2.py`** — 15 invariants. Per-model gate (GLM-5.1, GLM-5, GLM-4.7, GLM-4.6, GLM-4.5, legacy reject, unknown reject, empty reject, frozenset constraint), reasoning_content extraction (extracted, no-content → None, empty filtered, OpenAI legacy isolation), source-level wiring pins (extra_body, gate, clear_thinking=False default).
+
+### Reference
+- ZhipuAI Z.AI official docs:
+  - `https://docs.z.ai/api-reference/llm/chat-completion` (Chat Completion API reference)
+  - `https://docs.z.ai/guides/capabilities/thinking-mode` (`thinking` field shape + `clear_thinking` semantics)
+  - `https://docs.z.ai/guides/llm/glm-4.5` (GLM-4.5 thinking guide)
+  - `https://docs.z.ai/guides/llm/glm-4.6` (GLM-4.6 hybrid mode)
+  - `https://docs.z.ai/guides/llm/glm-4.7` (GLM-4.7 turn-level thinking)
+  - `https://docs.z.ai/guides/llm/glm-5.1` (GLM-5.1 always-on)
+- Cross-codebase comparison: 0/3 references implement this (audit B2/B4 in the prior reasoning-depth scans), making v0.58.0 the leader.
+
 ## [0.57.0] — 2026-04-28
 
 ### Added

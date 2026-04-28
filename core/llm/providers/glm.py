@@ -103,6 +103,45 @@ _GLM_NATIVE_WEB_SEARCH: dict[str, Any] = {
     },
 }
 
+# v0.58.0 R2 — GLM ``thinking`` parameter (docs.z.ai/api-reference/llm/
+# chat-completion + docs.z.ai/guides/capabilities/thinking-mode).
+# Spec re-verified 2026-04-28:
+#   - Field shape: ``{"type": "enabled"|"disabled", "clear_thinking": bool}``
+#   - GLM-4.5+ honours the flag (hybrid models — opt in/out)
+#   - GLM-5.x / GLM-5V / GLM-4.7 / GLM-4.5V will think *compulsorily*
+#     (sending ``"disabled"`` is silently ignored — but harmless)
+#   - Pre-GLM-4.5 models reject the field; we omit it for them
+#   - openai-python doesn't know ``thinking`` — must go via ``extra_body``
+# Models that accept the ``thinking`` field. Anything not listed gets the
+# field omitted entirely so the request shape stays compatible with the
+# legacy GLM-4.x endpoints.
+_GLM_THINKING_MODELS: frozenset[str] = frozenset(
+    {
+        # GLM-5 family — thinking always-on, but the field is accepted
+        "glm-5.1",
+        "glm-5",
+        "glm-5-turbo",
+        "glm-5v-turbo",
+        # GLM-4.7 family — thinking always-on
+        "glm-4.7",
+        "glm-4.7-flash",
+        "glm-4.7-flashx",
+        # GLM-4.6 family — hybrid (honors enabled/disabled)
+        "glm-4.6",
+        "glm-4.6v",
+        # GLM-4.5 family — hybrid
+        "glm-4.5",
+        "glm-4.5v",
+        "glm-4.5-air",
+        "glm-4.5-flash",
+    }
+)
+
+
+def _glm_thinking_supported(model: str) -> bool:
+    """Return True if the GLM model accepts the ``thinking`` field."""
+    return model in _GLM_THINKING_MODELS
+
 
 class GlmAgenticAdapter(OpenAIAgenticAdapter):
     """ZhipuAI GLM adapter (glm-5.1, glm-5, glm-5-turbo, glm-5v-turbo, glm-4.7-flash).
@@ -155,6 +194,16 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
         failover_models = [model] + [m for m in self.fallback_chain if m != model]
 
         async def _do_call(m: str) -> Any:
+            # v0.58.0 R2 — GLM ``thinking`` field (passed via ``extra_body``
+            # because openai-python's ``ChatCompletion.create`` doesn't know
+            # about it). Default ``clear_thinking=False`` — keep prior-turn
+            # ``reasoning_content`` in context across rounds (matches the
+            # multi-turn-reasoning-preservation goal of R1 on Codex Plus).
+            # Per-failover-model gate: drop the field on pre-GLM-4.5
+            # models so the request is accepted.
+            local_extra: dict[str, Any] = {}
+            if _glm_thinking_supported(m):
+                local_extra["thinking"] = {"type": "enabled", "clear_thinking": False}
             return await asyncio.to_thread(
                 client.chat.completions.create,
                 model=m,
@@ -163,6 +212,7 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
                 tool_choice=tc_val if oai_tools else None,
                 max_completion_tokens=max_tokens,
                 temperature=temperature,
+                extra_body=local_extra or None,
                 timeout=120.0,
             )
 
