@@ -28,6 +28,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.55.0] — 2026-04-28
+
+### Fixed
+- **Codex Plus multi-turn lost reasoning state on every round** (R1 of the reasoning-depth audit). gpt-5.x reasoning is opaque continuation state — the encrypted blob in each `response.output_item.done` of type `reasoning` must be echoed back into the next-turn `input` array, or the model has to re-derive reasoning from scratch every turn. v0.53.3 only handled single-call output. v0.55.0 mirrors the Hermes Agent pattern (`agent/codex_responses_adapter.py:228-246, 720-738`) — extract reasoning items into `AgenticResponse.codex_reasoning_items` (sidecar; `None` on non-Codex providers), persist on the assistant message dict in the loop, replay them in `CodexAgenticAdapter` immediately before the corresponding assistant entry. The `id` field is stripped on replay because `store=False` makes the server unable to resolve items by ID — Hermes calls this out explicitly: *"with store=False the API cannot resolve items by ID and returns 404."* Spec-grounded against `codex-rs/protocol/src/models.rs:701-711` (the `ResponseItem::Reasoning` variant) and `developers.openai.com/codex/cli/`.
+
+### Added
+- **`AgenticResponse.codex_reasoning_items: list[dict] | None`** — sidecar field for opaque reasoning continuation state. Populated only by the Codex Plus normaliser (`normalize_openai_responses`); other providers leave it `None`. Loop persists it onto the assistant message dict so the next-turn converter can replay it. (`core/llm/agentic_response.py:AgenticResponse`)
+- **`tests/test_codex_multiturn_reasoning.py`** — 10 invariants pinning the round-trip: extraction filters out reasoning items with no `encrypted_content`; other providers' normalisers don't set the sidecar; replay strips `id` and precedes the assistant entry; no-sidecar case doesn't inject; default sidecar is `None`.
+
+### Reference
+- `docs/research/reasoning-depth-audit.md` — 3-codebase comparison + per-provider official-doc grounding (the audit that drove this fix).
+- Codex Rust source: `codex-rs/protocol/src/models.rs:701-711` (Reasoning variant), `codex-rs/codex-api/src/sse/responses.rs` (event handling), `codex-rs/core/src/client.rs:880` (input echo pattern).
+- Hermes Agent: `agent/codex_responses_adapter.py:228-246` (replay loop), `:720-738` (extraction).
+- OpenClaw: `src/agents/openai-transport-stream.ts:771` (include unconditional), `:257-264` (replay echo).
+
 ## [0.54.0] — 2026-04-28
 
 ### Added
