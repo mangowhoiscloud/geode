@@ -319,27 +319,54 @@ def _build_memory_handlers() -> dict[str, Any]:
 # Handler group: Plan mode
 # ---------------------------------------------------------------------------
 
+# v0.53.3 — module-level disk-persistent store. Replaces the v0.53.2-and-earlier
+# closure-bound ``_plan_cache: dict = {}`` inside ``_build_plan_handlers``,
+# which had two compounding bugs:
+#   B1: Each ``_build_tool_handlers`` invocation (daemon at services.py:269,
+#       fork at bootstrap.py:233-237) produced a fresh closure with its own
+#       dict → ``create_plan`` and ``list_plans`` could end up bound to
+#       different dicts and the user saw "0 items" after a successful
+#       ``create_plan``.
+#   Persistence: in-memory only → daemon restart wiped all plan history.
+# ``PlanStore`` lives at ``.geode/plans.json`` (atomic write via tmp+rename,
+# mirrors ``core/scheduler/scheduler.py:save``) and is shared across factories.
+_PLAN_STORE: Any | None = None
+
+
+def _get_plan_store() -> Any:
+    """Lazy singleton accessor for the disk-persistent PlanStore.
+
+    Lazy so test fixtures that monkeypatch ``PROJECT_PLANS_FILE`` (or that
+    reset ``_PLAN_STORE`` to None) take effect on the next call.
+    """
+    global _PLAN_STORE
+    if _PLAN_STORE is None:
+        from core.orchestration.plan_store import PlanStore
+
+        _PLAN_STORE = PlanStore()
+    return _PLAN_STORE
+
 
 def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
-    """Build plan mode tool handlers (multi-plan cache keyed by plan_id)."""
+    """Build plan mode tool handlers (multi-plan store keyed by plan_id)."""
 
-    _plan_cache: dict[str, tuple[Any, Any]] = {}
+    store = _get_plan_store()
 
-    def _resolve_plan(
-        plan_id: str,
-    ) -> tuple[Any, Any] | None:
-        """Resolve plan from cache by ID, falling back to most recent."""
-        cached = _plan_cache.get(plan_id)
-        if not cached and _plan_cache:
-            last_key = list(_plan_cache.keys())[-1]
-            cached = _plan_cache.get(last_key)
-            if cached:
-                log.debug(
-                    "Plan ID '%s' not found, using latest '%s'",
-                    plan_id,
-                    last_key,
-                )
-        return cached
+    def _resolve_plan(plan_id: str) -> Any | None:
+        """Resolve plan by ID, falling back to most recent."""
+        plan = store.get(plan_id) if plan_id else None
+        if plan is None:
+            keys = store.keys()
+            if keys:
+                last_key = keys[-1]
+                plan = store.get(last_key)
+                if plan is not None:
+                    log.debug(
+                        "Plan ID '%s' not found, using latest '%s'",
+                        plan_id,
+                        last_key,
+                    )
+        return plan
 
     def handle_create_plan(**kwargs: Any) -> dict[str, Any]:
         from core.config import settings
@@ -416,8 +443,19 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
 
         # AUTO mode: approve and execute immediately without user intervention
         if settings.plan_auto_execute:
+            # v0.53.3 — B2 fix: also persist AUTO plans so ``list_plans``
+            # surfaces them. Pre-fix only the MANUAL branch saved, making
+            # AUTO plans invisible to the audit trail.
+            store.put(plan)
+            log.info(
+                "PlanStore write (AUTO): plan_id=%s len=%d",
+                plan.plan_id,
+                len(store),
+            )
             console.print(f"  [bold cyan]▸ Auto-executing plan {plan.plan_id}[/bold cyan]")
             exec_result = planner.auto_execute_plan(plan)
+            # Persist post-execute status (COMPLETED / FAILED)
+            store.put(plan)
 
             completed = exec_result.get("completed_steps", 0)
             total = exec_result.get("total_steps", 0)
@@ -450,8 +488,13 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
                 ),
             }
 
-        # MANUAL mode: cache plan and wait for user approval
-        _plan_cache[plan.plan_id] = (planner, plan)
+        # MANUAL mode: persist plan and wait for user approval
+        store.put(plan)
+        log.info(
+            "PlanStore write (MANUAL): plan_id=%s len=%d",
+            plan.plan_id,
+            len(store),
+        )
         return {
             "status": "ok",
             "action": "plan",
@@ -467,17 +510,27 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
 
     def handle_approve_plan(**kwargs: Any) -> dict[str, Any]:
         plan_id = kwargs.get("plan_id", "")
-        cached = _resolve_plan(plan_id)
-        if not cached:
+        plan = _resolve_plan(plan_id)
+        if plan is None:
             return {"error": "No plan to approve. Use create_plan first."}
 
-        planner, plan = cached
         if plan_id and plan.plan_id != plan_id:
             return {"error": (f"Plan ID mismatch: expected {plan.plan_id}, got {plan_id}")}
 
+        # PlanMode methods take a plan object directly and mutate its
+        # status — no per-plan PlanMode state needed. Fresh instance per
+        # call is cheap (only _stats counters live there).
+        from core.orchestration.plan_mode import PlanMode
+
+        planner = PlanMode()
         planner.approve_plan(plan)
         result = planner.execute_plan(plan)
-        _plan_cache.pop(plan.plan_id, None)
+        # v0.53.3 — C fix: don't drop the store entry on approve. The
+        # plan's lifecycle status (DRAFT → APPROVED → COMPLETED/FAILED)
+        # is tracked on the AnalysisPlan; persist the post-execute status
+        # so ``list_plans`` surfaces it (was previously popped → audit
+        # trail lost).
+        store.put(plan)
 
         ip = plan.ip_name
         console.print(f"  [success]✓ Plan approved: {ip}[/success]")
@@ -495,13 +548,17 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
     def handle_reject_plan(**kwargs: Any) -> dict[str, Any]:
         plan_id = kwargs.get("plan_id", "")
         reason = kwargs.get("reason", "")
-        cached = _resolve_plan(plan_id)
-        if not cached:
+        plan = _resolve_plan(plan_id)
+        if plan is None:
             return {"error": "No plan to reject."}
 
-        planner, plan = cached
+        from core.orchestration.plan_mode import PlanMode
+
+        planner = PlanMode()
         planner.reject_plan(plan, reason=reason)
-        _plan_cache.pop(plan.plan_id, None)
+        # v0.53.3 — C fix: same as approve_plan; keep the entry so audit
+        # surfaces rejected plans (PlanStatus.REJECTED filter).
+        store.put(plan)
         console.print(f"  [warning]✗ Plan rejected: {plan.ip_name}[/warning]")
         log.info(
             "Plan '%s' rejected (reason=%s)",
@@ -517,19 +574,21 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
 
     def handle_modify_plan(**kwargs: Any) -> dict[str, Any]:
         plan_id = kwargs.get("plan_id", "")
-        cached = _resolve_plan(plan_id)
-        if not cached:
+        plan = _resolve_plan(plan_id)
+        if plan is None:
             return {"error": "No plan to modify."}
 
-        planner, plan = cached
         template = kwargs.get("template")
         remove = kwargs.get("remove_steps")
+        from core.orchestration.plan_mode import PlanMode
+
+        planner = PlanMode()
         planner.modify_plan(
             plan,
             template=template,
             remove_steps=remove,
         )
-        _plan_cache[plan.plan_id] = (planner, plan)
+        store.put(plan)
         console.print(f"  [header]● Plan modified: {plan.ip_name}[/header]")
         for i, step in enumerate(plan.steps, 1):
             console.print(f"    {i}. {step.description}")
@@ -548,11 +607,21 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         }
 
     def handle_list_plans(**kwargs: Any) -> dict[str, Any]:
+        # v0.53.3 — observability: log read-side store length so audit-
+        # path divergence (the original B1 closure bug) shows up
+        # immediately in the daemon log if it ever recurs.
+        all_plans = store.list_all()
+        log.info("PlanStore read (list_plans): len=%d", len(all_plans))
+        # Optional ``status`` filter (e.g. "approved", "rejected",
+        # "completed") so the audit trail can be sliced. Default is all.
+        status_filter = str(kwargs.get("status", "")).strip().lower()
         plans = []
-        for pid, (_, plan) in _plan_cache.items():
+        for plan in all_plans:
+            if status_filter and plan.status.value != status_filter:
+                continue
             plans.append(
                 {
-                    "plan_id": pid,
+                    "plan_id": plan.plan_id,
                     "ip_name": plan.ip_name,
                     "status": plan.status.value,
                     "steps": plan.step_count,

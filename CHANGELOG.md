@@ -28,6 +28,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.53.3] — 2026-04-28
+
+### Fixed
+- **Codex Plus returned `output=[]` for every call** (production incident: REPL showed "AgenticLoop" header with empty body, daemon log showed `in=0 out=0 cost=$0` despite the Codex Plus backend returning `usage_in=25555, usage_out=182, usage_reasoning=26` — the model demonstrably generated ~156 visible tokens). Root cause: the `chatgpt.com/backend-api/codex/responses` SSE protocol omits the `output` field from its `response.completed` event payload by design (verified against the Codex Rust client's `ResponseCompleted` struct in `codex-rs/codex-api/src/sse/responses.rs:120-128` which has no `output` field at all). The OpenAI Python SDK's `client.responses.stream(...).get_final_response()` therefore returns `response.output == []` for Codex Plus. v0.53.3 mirrors the Codex Rust pattern: accumulate items from `response.output_item.done` events as they arrive and overwrite `final.output` with the accumulator before normalising. SDK final-response is now used only as a shell for `usage`/`status`/`response_id`. (`core/llm/providers/codex.py:agentic_call`, 3-codebase grounded against Codex Rust + Hermes Agent + OpenClaw)
+- **Codex Plus 400 on multi-turn conversations after a tool call** (regression surfaced post v0.53.3 fix #1). After a `function_call` round, the next LLM call would 400 with `Invalid type for 'input[i].content': expected one of an array of objects or string, but got null instead.` Root cause: `CodexAgenticAdapter.agentic_call` used `_convert_messages_to_openai` (Chat Completions converter — produces `{role:"assistant", content:None, tool_calls:[...]}` for tool-only assistant turns) instead of the Responses API converter `_convert_messages_to_responses` which OpenAI PAYG already used (`openai.py:496`). The Responses API expects per-item-type wire shapes: `function_call` (no `content` field), `function_call_output` (uses `output` not `content`), `message` (content always string/array, never null) — all spec-grounded against the official `openai-python` `ResponseFunctionToolCallParam` / `FunctionCallOutput` / `ResponseOutputMessageParam` TypedDicts. v0.53.3 switches the import + call. Pre-send observability log added (`Codex resp_input shape: ...`) for any future shape regression. (`core/llm/providers/codex.py:213-221`)
+- **`normalize_openai_responses` dropped `usage` on empty output** (silent telemetry gap). Pre-fix the early-return for `not response.output` returned a bare `AgenticResponse()` with zero usage even when `response.usage` was populated. v0.53.3 always extracts usage; the empty-output branch additionally surfaces a single WARNING when `usage.output_tokens > usage.thinking_tokens` (model produced visible tokens but the normaliser extracted no blocks — anomalous, never silently dropped). (`core/llm/agentic_response.py:normalize_openai_responses`)
+- **`/list_plans` returned `0 items` immediately after a successful `/create_plan`** (production UX bug). Three compounding root causes (B1+B2+C):
+  - **B1**: The `_plan_cache` dict lived inside `_build_plan_handlers`'s closure → each invocation of `_build_tool_handlers` (daemon at `services.py:269`, fork at `bootstrap.py:233-237`) created a fresh dict. Cross-handler reads could see an empty cache. v0.53.3 replaces it with a module-level disk-persistent `PlanStore` singleton.
+  - **B2**: The AUTO-execute branch of `handle_create_plan` never wrote to the cache (only the MANUAL branch did) → `GEODE_PLAN_AUTO_EXECUTE=true` made all plans invisible to the audit trail. v0.53.3 caches in both branches and persists post-execute status (COMPLETED / FAILED).
+  - **C**: `handle_approve_plan` and `handle_reject_plan` immediately popped the entry from the cache → audit trail destroyed for any approved/rejected plan. v0.53.3 keeps the entry; lifecycle is tracked via `PlanStatus` on the plan object itself, and `list_plans` now supports an optional `status` filter for slicing the audit trail. (`core/cli/tool_handlers.py:_build_plan_handlers`)
+
+### Added
+- **`core/orchestration/plan_store.py`** — new disk-persistent `PlanStore` (atomic write via tmp+rename, mirrors `core/scheduler/scheduler.py:save`; lazy-loaded; thread-safe via double-checked locking; malformed entries skipped with WARNING; corrupt JSON falls back to empty store rather than crashing daemon startup). Storage at `.geode/plans.json`. Plans now survive daemon restarts.
+- **`core/paths.py:PROJECT_PLANS_FILE`** constant for the new store location.
+- **`tests/test_plan_mode.py:TestPlanCacheInvariants`** — 4 invariants pinning the B1+B2+C fixes (cross-factory cache sharing, approved-plan audit trail, rejected-plan audit trail, status filter slicing).
+- **`tests/test_plan_mode.py:TestPlanStorePersistence`** — 4 invariants for the disk store: roundtrip preserves all fields (steps, dependencies, metadata, status), status update persists, malformed entry does not block others, corrupt JSON falls back to empty.
+
+### Reference
+- Codex Rust client (`openai/codex` repo, `codex-rs/`): `ResponseCompleted` struct (`sse/responses.rs:120-128`), accumulator pattern (`core/src/client.rs:1641-1678`), `ResponseItem` enum + serde tagging (`protocol/src/models.rs:751-902`).
+- Hermes Agent (`/Users/mango/workspace/hermes-agent`): `_chat_messages_to_responses_input` (`agent/codex_responses_adapter.py:204-325`), output_item.done accumulator (`run_agent.py:4709-4785`).
+- OpenClaw (`/Users/mango/workspace/openclaw`): `processResponsesStream` (`src/agents/openai-transport-stream.ts:353-542`).
+- OpenAI Responses API spec (`openai-python` TypedDicts): `ResponseFunctionToolCallParam`, `FunctionCallOutput`, `ResponseOutputMessageParam`, `ResponseReasoningItemParam`. Confirmed `function_call` has NO `content` field; `function_call_output` uses `output` not `content`.
+- Production daemon log 2026-04-27 19:07:06 — `HTTP 400 Invalid type for 'input[4].content'` after a `create_plan → tool_use → continuation` cycle.
+
 ## [0.53.2] — 2026-04-27
 
 ### Fixed

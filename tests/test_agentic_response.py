@@ -250,8 +250,15 @@ class TestNormalizeOpenAIResponses:
     def test_empty_output(self) -> None:
         resp = MagicMock()
         resp.output = []
+        resp.usage = None  # explicit: no usage so the post-parse anomaly
+        # check (visible-output-but-zero-blocks) cannot trip on MagicMock
         result = normalize_openai_responses(resp)
         assert result.content == []
+        # v0.53.3 — empty output no longer drops usage; usage is preserved
+        # as zeros even when output is empty (the Codex Plus
+        # ``Completed.output``-omitted edge case).
+        assert result.usage.input_tokens == 0
+        assert result.usage.output_tokens == 0
 
 
 # ---------------------------------------------------------------------------
