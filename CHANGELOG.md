@@ -28,6 +28,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.63.0] — 2026-04-29
+
+### Added
+- **D-1 — Lifecycle command suite (`/stop`, `/clean`, `/uninstall`, extended `/status`).** Hermes-precedent (`hermes_cli/main.py:cmd_status, cmd_uninstall`) daemon control, selective cache cleanup, and full system removal. `/stop` SIGTERMs serve daemon (with `--force` for SIGKILL); `/clean` walks per-project + global caches with `--scope=all|project|global|build` + `--all-data` + `--dry-run` flags; `/uninstall` removes the entire `~/.geode/` tree with `--keep-config` / `--keep-data` for partial uninstall. Existing `/status` action extended with daemon PID + per-directory disk usage block (cmd_lifecycle.show_status). Module was sitting orphaned in main as untracked work since 2026-04-09; this cycle wires it into the CLI dispatcher (`core/cli/__init__.py`) and adds the missing path constants to `core/paths.py` so the dispatcher can route. (`core/cli/cmd_lifecycle.py`, `core/cli/__init__.py:295-501`, `core/paths.py`)
+- **9 new path constants in `core/paths.py`** — single source of truth for daemon/cache directories that previously lived as duplicates in `core/cli/ipc_client.py`, `core/server/ipc_server/poller.py`, `core/mcp/registry.py`. The new constants (`CLI_SOCKET_PATH`, `CLI_STARTUP_LOCK`, `SERVE_LOG_PATH`, `GLOBAL_JOURNAL_DIR`, `GLOBAL_WORKERS_DIR`, `MCP_REGISTRY_CACHE`, `APPROVE_HISTORY`, `PROJECT_EMBEDDING_CACHE`, `PROJECT_TOOL_OFFLOAD`, `PROJECT_VECTORS_DIR`) match the values already used at those duplicate sites. Dedup of the existing duplicates is a follow-up refactor — out of scope for the lifecycle-integration cycle. (`core/paths.py`)
+- **`tests/test_lifecycle_commands.py`** — 30 invariants (file was alongside `cmd_lifecycle.py` as untracked since 2026-04-09; passes after the import path fix from `core.cli.ui.console` → `core.ui.console`). Coverage: `stop_serve` (not-running, running-then-killed, force, timeout), `show_status` (daemon report, disk usage scan, JSON output), `do_clean` (per-scope filtering, dry-run, force, older_than), `do_uninstall` (full removal, keep-config, keep-data, dry-run preview).
+
+### Reference
+- Hermes precedent: `hermes_cli/main.py:cmd_status` (line 4144), `cmd_uninstall` (line 4252), `_clear_bytecode_cache` (line 4260) — same status + uninstall split.
+- Backlog cleanup plan from 2026-04-29 user direction: D-1 (lifecycle, this cycle) → D-2 (research docs commit, next) → D-3 (memory/compression defer to experimental/) → E (Game Domain plugin separation).
+
 ## [0.62.0] — 2026-04-28
 
 ### Added
