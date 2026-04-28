@@ -11,8 +11,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Anthropic-Opus_4.7-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.7">
-  <img src="https://img.shields.io/badge/OpenAI-GPT--5.4-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.4">
-  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5">
+  <img src="https://img.shields.io/badge/OpenAI-GPT--5.5-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.5">
+  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.1">
   <img src="https://img.shields.io/badge/+10_fallback-models-555?style=flat-square" alt="+10 fallback models">
 </p>
 
@@ -20,222 +20,246 @@
 
 # GEODE v0.53.3 — Long-running Autonomous Execution Harness
 
-범용 자율 실행 에이전트. 자연어 한 줄로 리서치, 분석, 자동화, 스케줄링을 수행합니다.
+**탐색적 리서치와 시그널 예측**을 위한 범용 자율 에이전트. 자연어로 묻기만 하면 GEODE 가 계획을 세우고, 도구를 호출하고, 결과를 보고합니다 — 1회성 프롬프트부터 장시간 세션까지.
 
-**생산**: Claude Code Scaffold(CLAUDE.md + 개발 Skills + CI Hooks)가 GEODE를 만듭니다.
-**실행**: GEODE(`while(tool_use)` 루프)가 56 도구 + 44 MCP 중에서 자율 선택하고, 58개 런타임 Hook이 라이프사이클을 제어하고, 5-Layer Verification이 출력을 검증합니다.
+> **이미 ChatGPT Plus 또는 Claude Pro 구독자세요?** API 키가 필요 없습니다. [구독자 setup 으로 바로 가기 ↓](#path-a--기존-구독을-그대로-사용-권장)
 
-## Quick Start
+---
 
-### 사전 준비
+## 무엇을 시킬 수 있나요
 
-| 도구 | 설치 방법 | 확인 |
-|------|----------|------|
-| **Python 3.12 이상** | [python.org/downloads](https://www.python.org/downloads/) | `python3 --version` |
-| **Git** | [git-scm.com](https://git-scm.com/) | `git --version` |
-| **uv** (패키지 매니저) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `uv --version` |
+복붙해서 바로 시도해보세요:
 
-### 1단계 — 다운로드 및 설치
+```
+"이번 달 arXiv 의 최신 RAG 논문 요약해줘"
+"내 프로필에 맞는 LinkedIn 채용 공고 찾아서 우선순위 매겨줘"
+"평일 오전 9시 스탠드업 알림 만들어줘"
+"hacker news 에서 LangGraph 관련 글 모니터링하다가 Slack 으로 DM 보내줘"
+"코드 리뷰용으로 gpt-5.5 와 claude-opus-4.7 비교해줘"
+```
+
+GEODE 는 적합한 도구(웹 검색, 파일 작업, MCP 서버, 서브에이전트)를 골라 실행한 뒤, 출처와 비용까지 포함해 답을 보여줍니다.
+
+---
+
+## 5분 setup
+
+### 사전 준비물
+
+<details>
+<summary><strong>이게 뭔지 모르세요?</strong> 클릭하면 1줄 설명이 나옵니다.</summary>
+
+- **Python 3.12 이상** — GEODE 가 작성된 언어. 대부분의 노트북엔 충분히 최신 버전이 안 깔려 있습니다. [python.org/downloads](https://www.python.org/downloads/) 에서 macOS 또는 Windows 인스톨러 다운로드 후 설치.
+- **Git** — GitHub 에서 GEODE 소스를 복사해오는 도구. Mac 은 `xcode-select --install`. Windows 는 [git-scm.com](https://git-scm.com/) 인스톨러.
+- **uv** — 빠른 Python 패키지 매니저(pip 대체). 아래 `curl` 명령을 터미널/PowerShell 에 그대로 붙여넣기.
+
+이 중 하나라도 안 되면 아래 [트러블슈팅](#트러블슈팅) 참고.
+</details>
+
+| 도구 | 설치 | 확인 |
+|------|------|------|
+| Python 3.12+ | [python.org/downloads](https://www.python.org/downloads/) | `python3 --version` |
+| Git | [git-scm.com](https://git-scm.com/) | `git --version` |
+| uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `uv --version` |
+
+### 1단계 — 코드 받기
 
 ```bash
 git clone https://github.com/mangowhoiscloud/geode.git
 cd geode
-uv sync          # 모든 의존성 설치 (~30초)
+uv sync                              # 의존성 설치 (~30초)
+uv tool install -e . --force         # `geode` 를 어디서나 쓸 수 있게 등록
 ```
 
-### 2단계 — API 키 등록
+### 2단계 — 모델과 어떻게 통신할지 선택
+
+아래 두 경로 중 **하나** 선택. 둘 다 동작하지만, 이미 챗봇 구독을 하고 있다면 그게 더 쌉니다.
+
+---
+
+#### Path A — 기존 구독을 그대로 사용 (권장)
+
+이미 **ChatGPT Plus** ($20/월) 또는 **Claude Pro** ($20/월) 결제 중이라면, **추가 비용 없이** 구독을 통해 GEODE 호출을 라우팅할 수 있습니다. API 키 불필요.
+
+**ChatGPT Plus / Pro / Business** → Codex 백엔드 사용:
+
+```bash
+brew install codex                    # macOS — 또는: npm install -g @openai/codex
+codex auth login                      # 브라우저 열림 → ChatGPT 계정으로 로그인
+geode                                 # GEODE 가 OAuth 토큰을 자동 감지
+```
+
+**Claude Pro / Max** → Claude CLI 사용:
+
+```bash
+brew install claude                   # macOS — 또는: npm install -g @anthropic-ai/claude-code
+claude /login                         # 브라우저 열림 → Anthropic 계정으로 로그인
+geode                                 # GEODE 가 OAuth 토큰을 자동 감지
+```
+
+> **원리**: Codex 와 Claude CLI 는 구독 로그인을 단기 토큰으로 교환하는 OAuth 플로우를 내장하고 있습니다. GEODE 는 같은 토큰 파일(`~/.codex/auth.json`, `~/.claude/.credentials.json`)을 읽기만 합니다 — 복붙도, 키 노출도 없음. 구독이 리셋되면 토큰 자동 갱신 (만료 120초 전, 401 자동 재시도).
+
+---
+
+#### Path B — API 키 (사용량 과금)
+
+구독이 없다면 API 크레딧을 직접 구매할 수 있습니다. 신규 Anthropic 계정은 **$5 무료 크레딧** 으로 시작 — 수백 회 대화 가능.
+
+**Anthropic API 키 발급** (4클릭):
+
+1. [console.anthropic.com](https://console.anthropic.com) 가입
+2. 우상단 메뉴 → **Settings** → **API Keys**
+3. **Create Key** → 이름 "geode" → `sk-ant-...` 문자열 **Copy**
+4. GEODE 가 찾을 위치에 저장:
 
 ```bash
 mkdir -p ~/.geode
-echo 'ANTHROPIC_API_KEY=sk-ant-여기에-키-입력' > ~/.geode/.env
+echo 'ANTHROPIC_API_KEY=sk-ant-여기에-붙여넣기' > ~/.geode/.env
 chmod 600 ~/.geode/.env
 ```
 
-키 발급: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (무료 티어 가능)
+OpenAI 또는 ZhipuAI GLM 도 쓰고 싶다면 같은 파일에 `OPENAI_API_KEY=sk-proj-...` 또는 `ZAI_API_KEY=...` 추가. GEODE 는 사용 가능한 키를 자동으로 선택합니다.
 
-> **OpenAI 모델 (GPT-5.4) 사용하려면?** 두 가지 방법:
->
-> **옵션 A — Codex CLI OAuth (권장)**
-> ```bash
-> brew install codex          # 또는: npm install -g @openai/codex
-> codex auth login            # 브라우저에서 Google/OpenAI OAuth 인증
-> ```
-> 로그인 후 GEODE가 `~/.codex/auth.json`에서 OAuth 토큰을 자동 감지합니다. `.env` 불필요 — 만료 120초 전 자동 갱신 + 401 자동 재시도 내장.
->
-> **옵션 B — API 키 직접 등록**
-> ```bash
-> echo 'OPENAI_API_KEY=sk-proj-여기에-키-입력' >> ~/.geode/.env
-> ```
+> **비용 감각**. 단일 프롬프트는 보통 ~3,000 토큰, ~$0.01. 도구 호출 10개 포함된 긴 리서치 세션은 보통 $0.05–$0.30. 무료 $5 크레딧으로 ~500회 프롬프트 가능. `.env` 에 `cost_limit_usd=5` 설정하면 상한선 잠금.
 
-> API 키가 없어도 **dry-run 모드**로 동작합니다 — 파이프라인 전체가 fixture 데이터로 실행됩니다.
+---
 
 ### 3단계 — 실행
 
 ```bash
-uv run geode                                       # 대화형 CLI
-uv run geode "최신 AI 연구 동향 요약해줘"              # 단발 프롬프트
-uv run geode analyze "Cowboy Bebop" --dry-run       # Game IP 분석 (키 불필요)
+geode                                                # 인터랙티브 채팅
+geode "오늘 AI 새 소식 뭐야?"                         # 1회성 프롬프트
 ```
 
-### AI 코딩 에이전트를 쓰고 있다면? 더 쉽습니다.
-
-**Claude Code**, **Codex** 등 에이전트 코딩 도구를 사용 중이라면, 아래 한 줄만 붙여넣으세요:
+이런 모습이 보이면:
 
 ```
-https://github.com/mangowhoiscloud/geode.git 클론하고, uv sync 실행한 다음,
-"uv run geode analyze Berserk --dry-run"으로 동작 확인해줘.
-```
-
-에이전트가 CLAUDE.md를 읽고, 의존성을 설치하고, 검증까지 알아서 수행합니다.
-
-### 실행 화면
-
-```
-$ uv run geode "뭘 할 수 있어?"
-
 ● AgenticLoop
-  ⠋ ✢ Thinking...
-  ✓ show_help → ok (0.1s)
+  ✓ web_search → ok (1.5s)
+  ✓ web_fetch → ok (1.1s)
 
-  리서치, 분석, 자동화, 스케줄링을 도와드립니다.
-  /help로 전체 명령어를 확인하세요.
+  오늘의 AI 주요 뉴스:
+  • Anthropic, 1M 토큰 컨텍스트 Claude Opus 4.7 출시...
+  • OpenAI, GPT-5.5 시스템 카드 공개; 가격은 4.6 와 동일...
+  • LangGraph 0.6, 도구 호출 네이티브 스트리밍 지원...
 
-  ✢ Worked for 3s · claude-opus-4-7 · ↓1.2k ↑200 · $0.0065
+  ✢ Worked for 8s · claude-opus-4-7 · ↓2.1k ↑412 · $0.018
 ```
 
-### 선택 — 전역 설치
+성공입니다. 에러가 나면 [트러블슈팅](#트러블슈팅) 으로.
+
+---
+
+### Optional — Slack / Discord / Telegram 연결
+
+터미널에서 GEODE 가 동작한 뒤에는, 이미 쓰는 메신저 채널에서도 답하게 할 수 있습니다:
 
 ```bash
+geode serve                          # 백그라운드 Gateway 데몬 시작
+```
+
+`.geode/config.toml` 에 채널 바인딩 설정 (Slack 봇 토큰, Discord 웹훅 등). 자세한 setup 은 [docs/setup.md → Gateway](docs/setup.md#gateway) 참고. 설정 후엔 채널에서 봇을 멘션하면 로컬에서 쓰는 그 동일한 에이전트 루프로 메시지가 라우팅됩니다.
+
+---
+
+## 트러블슈팅
+
+<details>
+<summary><strong>"command not found: python3"</strong> — Python 미설치 또는 PATH 누락.</summary>
+
+Mac: `xcode-select --install` 후 `brew install python@3.12`. Windows: [python.org](https://www.python.org/downloads/) 에서 인스톨러 다운로드, 설치 시 "Add Python to PATH" 체크 필수. `python3 --version` 으로 3.12 이상인지 확인.
+</details>
+
+<details>
+<summary><strong>"command not found: uv"</strong> — uv 가 PATH 에 안 잡힘.</summary>
+
+설치 스크립트는 uv 를 `~/.local/bin` 에 둡니다. 터미널 재시작 또는 `source ~/.bashrc` (bash) / `source ~/.zshrc` (zsh) 실행. `uv --version` 으로 확인.
+</details>
+
+<details>
+<summary><strong>"command not found: geode"</strong> — 글로벌 install 미실행.</summary>
+
+`geode/` 디렉토리에서 `uv tool install -e . --force` 실행. `geode` 명령이 `~/.local/bin/` 에 들어갑니다. 그 경로가 PATH 에 없으면 셸 설정에 `export PATH="$HOME/.local/bin:$PATH"` 추가.
+</details>
+
+<details>
+<summary><strong>"401 Unauthorized" 또는 "Invalid API key"</strong> — 잘못된 키, 만료된 키, 또는 잘못된 파일 위치.</summary>
+
+`cat ~/.geode/.env` 로 확인 — 키는 `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), `id.secret` (ZhipuAI GLM) 으로 시작해야 함. 공백이나 따옴표 추가되지 않았는지 체크. 구독 경로면 `codex auth login` / `claude /login` 재실행해서 OAuth 토큰 갱신.
+</details>
+
+<details>
+<summary><strong>"Address already in use" — `geode serve` 실행 시 포트 충돌.</strong></summary>
+
+`ps aux | grep "geode serve"` 로 PID 찾아 `kill <PID>`. 또는 `geode serve --port <other>` 로 다른 포트 사용.
+</details>
+
+<details>
+<summary><strong>모델이 도구를 안 쓰거나, 빙빙 도는 느낌.</strong></summary>
+
+`geode model` 로 확인 — 모델마다 도구 사용 능력이 다릅니다. 기본은 `claude-opus-4-7` (가장 강력). `gpt-5.5` 사용 중이면 `.geode/config.toml` 에 `effort: "high"` 설정. `tail -f /tmp/geode-serve.log` 로 모델이 실제로 뭘 하고 있는지 관찰.
+</details>
+
+<details>
+<summary><strong>GEODE 내부 동작을 보고 싶어요.</strong></summary>
+
+`tail -f ~/.local/share/geode/logs/serve.log` (수동 실행 시 `/tmp/geode-serve.log`). 모든 LLM 호출, 도구 invocation, 의사결정이 타이밍과 함께 기록됩니다.
+</details>
+
+<details>
+<summary><strong>업데이트는 어떻게 하나요?</strong></summary>
+
+```bash
+cd geode
+git pull origin main
+uv sync
 uv tool install -e . --force
-geode version    # 어디서든 실행 가능
 ```
-
-> 상세 설정(Slack Gateway, 멀티 LLM, 고급 설정)은 [Setup Guide](docs/setup.md)를 참고하세요.
+</details>
 
 ---
 
-## GEODE in Action
-
-```
-❯ 나와 어울리는 채용 공고 찾아줘
-● AgenticLoop  ✢ glm-5.1 · ↓8.2k ↑185 · $0.006
-  3건의 채용 공고를 찾았습니다.
-  • ML Engineer — LangGraph 경험 우대
-  • Agent Platform Lead — Python, 자율 실행
-  • AI Infra — Kubernetes + LLM Ops
-  3 rounds · 2 tools · ~4s
-```
-
-```
-❯ arXiv에서 RAG 관련 최신 논문 찾아서 요약해줘
-● AgenticLoop  ✢ claude-opus-4-7 · ↓12.4k ↑890 · $0.084
-  5편의 논문을 찾아 요약했습니다.
-  1. GraphRAG: Knowledge Graph + Retrieval (2026-03)
-  2. Adaptive Chunking for Long-Context RAG (2026-02)
-  ...
-  5 rounds · 3 tools · ~12s
-```
-
-```
-❯ Berserk IP 분석해줘
-▸ analyze_ip(ip_name="Berserk")
-✓ analyze_ip → S · 81.3 · conversion_failure
-  Dark Fantasy 장르의 강력한 팬덤과 게임 적합성.
-  전환 최적화에 집중하면 상업적 성공 가능성 높음.
-  9 nodes · 8 LLM calls · ~45s
-```
-
-### 실전 사례 — 레거시 마이그레이션 (REODE)
-
-| 항목 | 값 |
-|------|-----|
-| 코드베이스 | 5,523파일 (Java 241 + JSP 355 + XML 47) |
-| 마이그레이션 | Java 1.8 → 22, Spring 4 → 6 |
-| 결과 | 83/83 테스트 + FE/BE E2E 실측 성공 |
-| 비용 | ~$388 (33 세션, 1,133 LLM 라운드) |
-| 소요 시간 | 5시간 48분 (자율 실행, 사람 개입 0) |
-
-> REODE — GEODE의 `while(tool_use)` 루프를 공유하는 자매 프로젝트. 레거시 마이그레이션 도메인 플러그인 탑재. 고객 평가: *"기대 이상"*.
-
----
-
-## Highlights
+## 내부 구성
 
 | 기능 | 설명 |
 |------|------|
-| **`while(tool_use)` Loop** | 모든 자율 행동의 핵심 프리미티브. 서브에이전트, 계획 실행, 배치 분석 전부 AgenticLoop 인스턴스 |
-| **56 Tools + MCP** | 네이티브 56개 도구 + MCP 카탈로그 44종 자동 설치. Bash 실행 (41종 자동승인, 9종 차단) |
-| **Sub-Agent** | 부모 역량 전체 상속, Lane("global") gating, depth guard, Token Guard |
-| **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain. Codex OAuth 자동 감지, proactive token refresh, 401 자동 재시도 |
-| **4-Tier Memory** | SOUL → User Profile → Organization → Project → Session |
-| **`.geode/` Context** | 프로젝트-로컬 영속 저장소 — journal, vault, rules, cache |
-| **Domain Plugin** | `DomainPort` Protocol로 파이프라인 교체 — Game IP 분석 기본 탑재 |
-| **Scaffold (생산)** | Claude Code + CLAUDE.md(428줄) + 개발 Skills + CI Hooks — GEODE를 만드는 제어 구조 |
-| **15 Runtime Skills** | `.geode/skills/` + `~/.geode/skills/` — 3-tier visibility (`public`/`private`/`unlisted`). `geode skill list/create/show/remove`로 관리 |
-| **58 Runtime Hooks** | 파이프라인/노드/도구/LLM/세션 라이프사이클 이벤트 — matcher 기반 필터링, interceptor/feedback/observer 모드 |
-| **5-Layer Verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM(Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
-| **Safety** | 4-tier HITL(SAFE/STANDARD/WRITE/DANGEROUS), 9종 bash 차단, PolicyChain, credential scrubbing (sk-\*/ghp\_\*/Bearer 자동 제거) |
+| **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 — 전부 같은 루프의 인스턴스 |
+| **56 도구 + 44 MCP 서버** | 웹 검색, 파일 작업, 스케줄링, 메모리, 캘린더, Slack/Discord, MCP 카탈로그. 첫 사용 시 자동 설치 |
+| **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. 구독 OAuth (Codex, Claude CLI) 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
+| **4-tier 메모리** | SOUL (정체성) → User Profile → Organization → Project → Session. 영속화, 데몬 재시작 후에도 유지 |
+| **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
+| **장시간 데몬** | `geode serve` 가 백그라운드로 상주. Slack / Discord / Telegram 폴러 + 스케줄러 tick + thin CLI 용 IPC |
+| **서브에이전트** | 부모 권한 완전 상속, depth/cost 가드, Lane 격리 |
+| **5-layer 검증** | Guardrails G1-G4 + BiasBuster + Cross-LLM (Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
+| **도메인-specific DAG (교체 가능)** | 파이프라인 (리서치, 다축 평가, 합성) 은 `DomainPort` Protocol 로 plug-in. 레퍼런스 DAG 1개 동봉 — 어떤 탐색적 리서치 / 시그널 예측 도메인에도 교체해 사용 |
 
 ---
 
-## Scaffold
+## GEODE 비교
 
-두 가지 제어 계층이 있습니다.
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| 상시 데몬 | ❌ 세션 only | ❌ 세션 only | ✅ Gateway | ✅ `geode serve` |
+| Slack/Discord 채널 | ❌ | ❌ | ✅ 다수 | ✅ Slack first-class |
+| 멀티 프로바이더 페일오버 | ⚠️ Anthropic only | ⚠️ OpenAI only | ✅ 다수 | ✅ 3 + 거버넌스 |
+| 구독 OAuth (API 키 불필요) | ✅ Pro/Max | ✅ Plus | ✅ 둘 다 | ✅ 둘 다 |
+| 디스크 영구 plan + 메모리 | ⚠️ 부분 | ⚠️ 부분 | ✅ | ✅ 4-tier |
+| 교체 가능한 도메인 DAG | ❌ | ❌ | ❌ | ✅ `DomainPort` |
+| 스케줄러 (장시간) | ❌ | ❌ | ⚠️ 부분 | ✅ cron + triggers |
 
-**Scaffold (생산 체계)**: Claude Code + CLAUDE.md + 개발 Skills + CI Hooks. GEODE의 코드를 생산하고 품질을 보장하는 외부 하네스.
+짧은 코딩 세션엔 **Claude Code** 또는 **Codex**. 몇 시간/며칠 동안 계속 돌면서 시그널을 watch 하고 보고하는 작업엔 **GEODE**.
 
-**GEODE Runtime (에이전트)**: `while(tool_use)` 루프 + 56 도구 + 15 런타임 Skills + 58 런타임 Hooks + 5-Layer Verification. 자율 실행하는 에이전트의 내부 시스템.
+---
 
-### Project Structure
+<details>
+<summary><strong>아키텍처 개요</strong> (기여자용)</summary>
 
-```
-geode/
-├── core/                          # 226 modules, 4-Layer Stack
-│   ├── agent/                     # Agent: AgenticLoop, ToolCallProcessor, SubAgentManager
-│   ├── cli/                       # Agent: Commands, UI
-│   ├── llm/                       # Model: Claude/OpenAI/GLM Adapters, Router, Prompts
-│   ├── memory/                    # Runtime: 4-Tier Memory, Context Assembly, User Profile
-│   ├── hooks/                     # HookSystem(58) — cross-cutting lifecycle events
-│   ├── orchestration/             # Harness: TaskGraph, PlanMode, SessionLane, LaneQueue(global:8)
-│   ├── tools/                     # Runtime: 56 Tool Definitions + Handlers
-│   ├── skills/                    # Runtime: Skill Templates
-│   ├── mcp/                       # Runtime: MCP Catalog(44) + Manager
-│   ├── domains/game_ip/           # Domain: Game IP Domain Plugin (7 pipeline nodes)
-│   ├── gateway/                   # Agent: Slack Gateway (geode serve)
-│   ├── runtime_wiring/            # Runtime bootstrap modules (5-module split)
-│   └── verification/              # Guardrails, BiasBuster, Cross-LLM
-├── tests/                         # 3,995+ tests
-├── docs/                          # Architecture, Workflow, Plans
-│   ├── architecture/              # Hook system, orchestration decisions
-│   ├── workflow.md                # CANNOT/CAN, GitFlow, Kanban
-│   ├── setup.md                   # Installation, API keys, Slack
-│   └── progress.md                # Kanban board (multi-agent shared)
-├── .geode/                        # Project-local agent context
-├── CLAUDE.md                      # Agent behavior rules (SOT)
-└── pyproject.toml                 # uv package config
-```
+GEODE 는 두 개의 컨트롤 레이어가 있습니다:
 
-[Hook System →](docs/architecture/hook-system.md) | [Wiring Audit Matrix →](docs/architecture/wiring-audit-matrix.md)
+- **Scaffold (생산)** — Claude Code + `CLAUDE.md` + 개발 Skills + CI Hooks. GEODE 의 코드를 만들고 품질을 보장하는 외부 하네스.
+- **GEODE Runtime (에이전트)** — `while(tool_use)` 루프 + 56 도구 + 15 런타임 Skills + 58 런타임 Hooks + 5-Layer Verification. 자율 실행 에이전트의 내부 시스템.
 
-### `.geode/` -- Agent Context Lifecycle
-
-```mermaid
-graph LR
-    Init["geode init"] --> J["journal/<br/>runs + errors<br/>(append-only)"]
-    Init --> M["memory/<br/>PROJECT.md<br/>(max 50, rotate)"]
-    Init --> R["rules/<br/>domain rules<br/>(auto-generated)"]
-    Init --> V["vault/<br/>reports, research<br/>(permanent)"]
-    Init --> C["result_cache/<br/>SHA-256 + 24h TTL"]
-
-    style Init fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
-    style J fill:#1e293b,stroke:#10b981,color:#e2e8f0
-    style M fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style R fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-    style V fill:#1e293b,stroke:#ec4899,color:#e2e8f0
-    style C fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-```
-
-### `core/` -- 4-Layer Stack (Model → Runtime → Harness → Agent)
+4-Layer Stack (Model → Runtime → Harness → Agent) + 서브에이전트 시스템 + 4-Tier 메모리.
 
 ```mermaid
 graph LR
@@ -243,7 +267,7 @@ graph LR
     HA --> RT["Runtime<br/>Tools(56), MCP(44)<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
-    AG -.-> DP["⊥ Domain<br/>DomainPort Protocol"]
+    AG -.-> DP["⊥ Domain<br/>DomainPort Protocol<br/>(swappable DAG)"]
     HA -.-> DP
     RT -.-> DP
 
@@ -254,123 +278,60 @@ graph LR
     style DP fill:#1e293b,stroke:#06b6d4,color:#e2e8f0,stroke-dasharray: 5 5
 ```
 
-| Layer | 핵심 | 진입점 |
-|-------|------|--------|
+| Layer | 핵심 | Entry points |
+|-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | ToolRegistry(56), MCP Catalog(44), Skills, Memory(4-Tier) | `core/tools/`, `core/memory/` |
-| **Model** | ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback) | `core/llm/` |
-| | | |
-| **⊥ Domain** | DomainPort Protocol, GameIPDomain (cross-cutting, binds to Runtime + Harness via Port) | `core/domains/` |
+| **Runtime** | ToolRegistry(56), MCP Catalog(44), Skills, Memory(4-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
+| **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
+| **⊥ Domain** | `DomainPort` Protocol — 도메인-specific DAG 가 Port 통해 plug-in (cross-cutting). 레퍼런스 DAG 1개 동봉. 어떤 탐색적 리서치 / 시그널 예측 도메인이든 교체해 사용 | `core/domains/` |
 
-### GitFlow + Worktree
-
-```
-alloc → own(.owner) → execute(isolated) → free(worktree remove)
-```
+`.geode/` — 에이전트 컨텍스트 라이프사이클 (모든 LLM 호출에 5-tier 계층 어셈블):
 
 ```
-feature/<task> ──PR──▸ develop ──PR──▸ main
+Tier 0    SOUL            GEODE.md — 에이전트 정체성 + 제약
+Tier 0.5  User Profile    ~/.geode/user_profile/ — 역할, 전문성, 언어
+Tier 1    Organization    크로스-프로젝트 데이터 (시그널, 이력)
+Tier 2    Project         .geode/memory/PROJECT.md — 분석 이력 (LRU-50)
+Tier 3    Session         메모리 — 대화, 도구 결과, 플랜
 ```
 
-**CI Ratchet — 5-Job Gate**
-
-PR은 CI 5개 Job이 모두 통과해야 머지됩니다. 실패 시 Claude Code가 자동으로 원인을 분석하고 수정한 뒤 재시도합니다.
-사람이 개입하지 않아도 pytest, mypy, ruff, import-order, test-count 게이트를 반복적으로 통과할 때까지 루프합니다.
-
-테스트 수는 단조증가만 허용됩니다(Ratchet). 기존 테스트를 삭제하면 CI가 거부합니다.
-이 구조 덕분에 777+ PR을 머지하면서 회귀를 한 건도 발생시키지 않았습니다.
-
 ```
-while CI fails:
-    Claude Code → analyze failure → fix → push → re-run CI
+.geode/
+├── config.toml         # Gateway, MCP 서버, 모델
+├── memory/             # T2: 프로젝트 메모리 (LRU 회전)
+├── rules/              # 자동 생성 도메인 규칙
+├── vault/              # 영구 산출물 (리포트, 리서치)
+├── skills/             # 15 런타임 스킬 (3-tier visibility)
+├── plans.json          # 디스크 영구 PlanStore (v0.53.3)
+└── result_cache/       # 파이프라인 LRU (SHA-256, 24h TTL)
 ```
 
-| Job | 역할 | 실패 시 |
-|-----|------|---------|
-| `pytest` | 3,995 테스트 전체 실행 | 실패 테스트 자동 수정 후 재시도 |
-| `mypy` | 타입 체크 strict 모드 | 타입 힌트 추가 후 재시도 |
-| `ruff` | 린트 + 포매팅 | auto-fix 적용 후 재시도 |
-| `import-order` | 임포트 정렬 검증 | isort 적용 후 재시도 |
-| `test-count` | 테스트 수 단조증가 검증 | 삭제된 테스트 복원 또는 대체 작성 |
-
-**3-Checkpoint**: (1) alloc (Backlog→In Progress) → (2) merge (PR→Done, CI 5/5 필수) → (3) verify (다음 세션 시작 시 이전 상태 교차 검증)
-
-개발 워크플로우 상세는 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
-
----
-
-<details>
-<summary><strong>Architecture Overview</strong></summary>
-
-4-Layer Stack (Model → Runtime → Harness → Agent) + `while(tool_use)` Agentic Loop + Sub-Agent System + 4-Tier Memory.
-
-```mermaid
-graph TD
-    CLI["geode<br/>(thin CLI)"] -->|Unix socket IPC| SERVE["geode serve<br/>(unified daemon)"]
-
-    SERVE --> RT["GeodeRuntime"]
-    RT --> SL["SessionLane<br/>per-key serial"]
-    RT --> GL["Lane global:8<br/>total capacity"]
-
-    SL --> CLIP["CLIPoller<br/>SessionMode.IPC"]
-    SL --> GW["Gateway Pollers<br/>Slack / Discord"]
-    SL --> SCHED["Scheduler<br/>60s tick"]
-
-    GL --> CLIP
-    GL --> GW
-    GL --> SCHED
-
-    style CLI fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
-    style SERVE fill:#1e293b,stroke:#10b981,color:#e2e8f0
-    style RT fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style SL fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-    style GL fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-    style CLIP fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-    style GW fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-    style SCHED fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-```
-
-주요 구성:
-- **Thin-Only**: `geode` = thin CLI. serve 필수 (자동 시작). 모든 실행은 IPC → serve 경유.
-- **SessionLane**: per-session-key `Semaphore(1)`. 같은 key 직렬, 다른 key 병렬. `max_sessions=256`.
-- **Agentic Loop**: Claude Opus 4.7 기반 `while(tool_use)` 루프. 1M context.
-- **Tool Hierarchy**: Built-in(56) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
-- **Sub-Agent**: 부모 역량 전체 상속, Lane("global") gating, depth guard, Token Guard.
-- **Memory**: SOUL → User Profile → Organization → Project → Session. ContextAssembler 280자 압축.
-- **Auth**: ProfileRotator (OAuth > Token > API_KEY), Codex CLI 자동 감지, proactive refresh (120s), 401 자동 재시도, credential scrubbing.
-- **Domain Plugin**: `DomainPort` Protocol로 파이프라인 교체. Game IP 기본 탑재 (LangGraph 9-node).
+[전체 아키텍처 →](docs/architecture/) | [Hook System →](docs/architecture/hook-system.md) | [Wiring Audit →](docs/architecture/wiring-audit-matrix.md)
 
 </details>
 
 <details>
-<summary><strong>Development Workflow (Scaffold)</strong></summary>
+<summary><strong>개발 워크플로 (Scaffold)</strong></summary>
 
-CANNOT(가드레일)이 CAN(자유도)보다 먼저 온다. 7단계 워크플로우 + 품질 게이트.
+CANNOT (가드레일) 이 CAN (자유) 보다 먼저. 7-step 워크플로 + 품질 게이트. CI 래칫 — 5 잡 (pytest, mypy, ruff, import-order, test-count) 통과해야 머지. 테스트 카운트는 단조 증가만 허용.
 
-모든 상세 내용은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
+| Gate | 명령 | 목표 |
+|------|------|------|
+| Lint | `uv run ruff check core/ tests/` | 0 에러 |
+| Type | `uv run mypy core/` | 0 에러 |
+| Test | `uv run pytest tests/ -q` | 4200+ pass |
 
-**Quality Gates:**
-
-| Gate | Command | Target |
-|------|---------|--------|
-| Lint | `uv run ruff check core/ tests/` | 0 errors |
-| Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 3900+ pass |
-| E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
+[CONTRIBUTING.md](CONTRIBUTING.md) 와 [docs/workflow.md](docs/workflow.md) 참고.
 
 </details>
 
 <details>
-<summary><strong>Why -- 왜 만들었는가</strong></summary>
+<summary><strong>Why — 동기</strong></summary>
 
-**문제.** 2026년 현재, AI 코딩 에이전트는 눈부시게 발전했습니다. 코드를 읽고, 쓰고, 고치고, 테스트까지 자율적으로 수행합니다. 그런데 실제 업무에서 코딩이 차지하는 비중은 얼마나 될까요? 리서치, 문서 분석, 일정 관리, 알림 전송, 데이터 파이프라인, 의사결정을 위한 다축 평가 -- 코딩 *이외의* 자율 실행이 필요한 영역이 훨씬 넓습니다.
+2026년, AI 코딩 에이전트는 놀랍게 발전했습니다. 코드를 읽고, 쓰고, 고치고, 테스트합니다. 그런데 실제 업무 중 코딩이 차지하는 비중은 얼마나 될까요? 리서치, 문서 분석, 스케줄링, 알림, 데이터 파이프라인, 의사결정용 다축 평가 — 코딩 *너머* 자율 실행이 필요한 공간이 훨씬 넓습니다.
 
-**인사이트.** 그런데 이 모든 자율 행동의 핵심은 놀라울 만큼 단순합니다. LLM이 도구를 호출하고, 결과를 관찰하고, 다음 행동을 결정하는 `while(tool_use)` 루프. Claude Code, Codex, OpenClaw -- 프론티어 하네스들이 모두 이 프리미티브 위에 서 있습니다.
-
-**출발점.** GEODE는 넥슨 AI 엔지니어 과제에서 시작했습니다. 게임 IP의 저평가 여부를 추론하는 단방향 LLM/ML 기반 DAG -- 과제는 합격했지만, 이 파이프라인은 에이전트가 아니라 *워크플로우*였습니다.
-
-**전환.** 그래서 IP 분석 파이프라인 전체를 `DomainPort` Protocol 뒤의 플러그인으로 내렸습니다. 그리고 그 위에 범용 자율 실행 하네스를 올렸습니다. `while(tool_use)` 루프 하나로 리서치, 분석, 자동화, 스케줄링을 수행하는 에이전트. 도메인은 교체 가능한 플러그인이고, 하네스는 도메인을 가리지 않습니다.
+그런데 모든 자율 행동의 핵심은 의외로 단순합니다: LLM 이 도구를 호출하고, 결과를 관찰하고, 다음 행동을 결정하는 것 — `while(tool_use)` 루프. Claude Code, Codex, OpenClaw — 모든 프론티어 하네스가 이 원시 동작 위에 서 있습니다. GEODE 는 이를 일반화합니다: 도메인-agnostic 하네스, 어떤 탐색적 또는 시그널 예측 문제든 교체 가능한 `DomainPort` DAG.
 
 </details>
 
