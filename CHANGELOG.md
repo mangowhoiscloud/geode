@@ -28,6 +28,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.57.0] — 2026-04-28
+
+### Added
+- **Reasoning summaries surface to AgenticUI** (R6 of the reasoning-depth audit). All three reference frontier harnesses (Hermes, Claude Code, OpenClaw) render the model's reasoning chunks live so the user sees "thinking…" rather than a silent spinner; GEODE was the only one dropping them. v0.57.0 captures `reasoning.summary[].text` (Codex Plus) and `thinking` content blocks (Anthropic adaptive thinking with `display:"summarized"` from R4-mini) into a new `AgenticResponse.reasoning_summaries` sidecar, then emits one `reasoning_summary` IPC event per item from `AgenticLoop` after each LLM call returns. Per-item granularity (not per-delta) avoids threading the IPC writer into the `asyncio.to_thread` worker that drives the streaming loop. (`core/llm/agentic_response.py:AgenticResponse.reasoning_summaries`, `core/agent/loop.py` post-call emit, `core/ui/agentic_ui.py:emit_reasoning_summary`, `core/ui/event_renderer.py:_handle_reasoning_summary`)
+- **`reasoning_summary` IPC event** in the structured-events allowlist (`core/cli/ipc_client.py`) and renderer dispatch (`core/ui/event_renderer.py:_handle_reasoning_summary`). Long summaries truncate to 240 chars + ellipsis on the inline render; full text is in the IPC event payload for any client that wants the complete summary.
+- **`tests/test_reasoning_summary_r6.py`** — 16 invariants covering Codex extraction (with + without encrypted blob, empty filtering, no-reasoning case), Anthropic thinking extraction (block, no-block, empty), sidecar default, other-provider isolation, emit helper console + truncation paths, IPC allowlist + renderer handler presence + truncation/skip-empty rendering, loop wiring source check.
+
+### Reference
+- 3-codebase consensus: Hermes `agent/anthropic_adapter.py:793` (TUI activity feed accumulation), Claude Code `screens/REPL.tsx:139-157` (React state + rainbow + 30 s auto-hide), OpenClaw `src/agents/openai-transport-stream.ts:398-407` (per-event push).
+- Original audit + R6 priority: `docs/research/reasoning-depth-audit.md` and `docs/research/reasoning-depth-post-r1r5-gaps.md` (both deleted on this commit per user direction "작업 끝나면 해당 MD 삭제하고" — content rolled into changelog entries for R1, R5, R4-mini, R6).
+
+### Removed
+- **`docs/research/reasoning-depth-audit.md`** and **`docs/research/reasoning-depth-post-r1r5-gaps.md`** — scratch research notes that drove the R1/R5/R4-mini/R6 cycle. Per user direction these were always temporary; the actionable findings have been captured in the corresponding CHANGELOG entries (v0.55.0 R1, v0.55.1 R5, v0.56.0 R4-mini, v0.57.0 R6).
+
 ## [0.56.0] — 2026-04-28
 
 ### Added

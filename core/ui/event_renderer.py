@@ -274,6 +274,23 @@ class EventRenderer:
         )
         self._out.flush()
 
+    def _handle_reasoning_summary(self, event: dict[str, Any]) -> None:
+        """v0.57.0 R6 — render a model's reasoning-summary chunk.
+
+        Per-item granularity (not per-delta). Shown as a muted single
+        line; full text is in the IPC event payload for any client that
+        wants to display the complete summary.
+        """
+        self._clear_activity_line()
+        text = str(event.get("text", "")).strip().replace("\n", " ")
+        if len(text) > 240:
+            text = text[:237] + "…"
+        if not text:
+            return
+        # ANSI 90 = bright black (muted); matches console.print muted style.
+        self._out.write(f"  \033[90m∙ thinking · {text}\033[0m\n")
+        self._out.flush()
+
     def _handle_retry_wait(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
         model = str(event.get("model", ""))

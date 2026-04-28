@@ -672,6 +672,37 @@ def emit_budget_warning(budget: float, actual: float, pct: float) -> None:
     )
 
 
+def emit_reasoning_summary(provider: str, model: str, text: str) -> None:
+    """v0.57.0 R6 — surface a model's reasoning-summary chunk to the UI.
+
+    Called from ``AgenticLoop`` after each LLM call returns with one
+    or more summaries on ``response.reasoning_summaries`` (sidecar).
+    Per-item granularity, not per-delta — emitting from inside the
+    streaming worker thread would require thread-local IPC writer
+    plumbing for marginal UX gain.
+
+    Long summaries are truncated for the inline render (full text is
+    in the IPC event); 3-codebase consensus is "show enough to confirm
+    progress, not enough to overwhelm." Hermes uses a TUI activity
+    feed; Claude Code uses rainbow-coloured React state with 30 s auto-
+    hide; OpenClaw pushes per-event. We keep it simple: one muted
+    line per summary chunk, prefixed with a bullet.
+    """
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "reasoning_summary",
+            provider=provider,
+            model=model,
+            text=text,
+        )
+        return
+    snippet = text.strip().replace("\n", " ")
+    if len(snippet) > 240:
+        snippet = snippet[:237] + "…"
+    console.print(f"  [muted]∙ thinking · {snippet}[/muted]")
+
+
 def emit_retry_wait(
     model: str,
     attempt: int,
