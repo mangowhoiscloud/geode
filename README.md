@@ -20,9 +20,11 @@
 
 # GEODE v0.53.3 — Long-running Autonomous Execution Harness
 
-A general-purpose autonomous agent for **exploratory research and signal prediction**. You ask in plain language; GEODE plans, calls tools, and reports — across one prompt or a long-running session.
+A general-purpose autonomous agent for exploratory research and signal prediction. You ask in plain language. GEODE plans, calls tools, and reports — for one prompt or a long-running session.
 
-> **Already pay for ChatGPT Plus or Claude Pro?** You don't need an API key. [Skip to subscription setup ↓](#path-a--use-your-existing-subscription-recommended)
+> **Have a ChatGPT Plus, Pro, Business, Edu, or Enterprise plan?** Route GEODE through that subscription. No API key. [Subscription setup ↓](#path-a--chatgpt-subscription-the-recommended-path-for-openai-users)
+>
+> **Claude Pro / Max?** Anthropic's terms (effective 2026-01-09) forbid third-party tools from using the Claude Code OAuth token, so GEODE doesn't read it. Use an Anthropic API key instead (Path B). Your Console account is the same; new accounts get $5 free credit.
 
 ---
 
@@ -77,33 +79,34 @@ Pick **one** of the two paths below. Both work; one is cheaper if you already pa
 
 ---
 
-#### Path A — Use your existing subscription (recommended)
+#### Path A — ChatGPT subscription (the recommended path for OpenAI users)
 
-If you already pay for **ChatGPT Plus** ($20/mo) or **Claude Pro** ($20/mo), you can route GEODE's calls through that subscription with **no extra charge** and no API key.
-
-**ChatGPT Plus / Pro / Business** → use the Codex backend:
+Codex CLI signs you in once. GEODE picks up the token from `~/.codex/auth.json` and uses it for every call. Your subscription pays the bill; nothing extra to set up.
 
 ```bash
-brew install codex                    # macOS — or: npm install -g @openai/codex
-codex auth login                      # opens browser → sign in with your ChatGPT account
-geode                                 # GEODE auto-detects the OAuth token
+brew install codex                    # macOS  (or: npm install -g @openai/codex)
+codex auth login                      # opens a browser; sign in with your ChatGPT account
+geode                                 # done. GEODE finds the token automatically.
 ```
 
-**Claude Pro / Max** → use Claude CLI:
+**Plans that work** (per the [official Codex CLI docs](https://developers.openai.com/codex/cli/)): Plus, Pro, Business, Edu, Enterprise.
 
-```bash
-brew install claude                   # macOS — or: npm install -g @anthropic-ai/claude-code
-claude /login                         # opens browser → sign in with your Anthropic account
-geode                                 # GEODE auto-detects the OAuth token
-```
+**Quotas** (OpenAI-published, per 5-hour window): roughly 15–80 messages on Plus, up to 1,600 on Pro 20x. Edu and Enterprise have no fixed cap; usage scales with your workspace credits. Your admin needs to flip "Allow members to use Codex Local" before sign-in works on those tiers.
 
-> **Why this works**: Codex and Claude CLI both ship with OAuth flows that exchange your subscription login for a short-lived token. GEODE reads the same token file (`~/.codex/auth.json`, `~/.claude/.credentials.json`) — no copy-paste, no leaks. If your subscription resets, GEODE refreshes the token automatically (120s before expiry, 401 auto-retry).
+**Tier notes**:
+- **gpt-5.5 is subscription-only.** API-key users (Path B) top out at gpt-5.4. If you want 5.5, you need ChatGPT.
+- **ChatGPT Team is not currently supported** by Codex CLI. Team users should use Path B.
+- **Free / Go** appear on OpenAI's pricing page but aren't listed in the CLI README. Treat them as best-effort; if it works, great, but no promises.
+
+When the token nears expiry, GEODE refreshes it on its own (120 seconds before, plus a 401 retry). You shouldn't see this happen.
+
+**Why Claude Pro isn't a Path A option.** Anthropic's terms changed on 2026-01-09: third-party tools may no longer reuse the Claude Code OAuth token. GEODE doesn't read `~/.claude/.credentials.json` to keep your account safe. The only Anthropic path GEODE accepts is an API key (Path B). ([Reference](https://www.theregister.com/2026/02/20/anthropic_clarifies_ban_third_party_claude_access))
 
 ---
 
-#### Path B — Use an API key (pay-as-you-go)
+#### Path B — API key (pay-as-you-go)
 
-If you don't have a subscription, you can buy API credits directly. New Anthropic accounts come with **$5 free credits**, enough for hundreds of conversations.
+For Anthropic users (any tier, including Claude Pro / Max — OAuth isn't available), ChatGPT Team users, and anyone without a paid OpenAI subscription. You buy API credits directly. New Anthropic accounts get $5 in free credits, enough for hundreds of prompts.
 
 **Get an Anthropic API key** (4 clicks):
 
@@ -120,7 +123,7 @@ chmod 600 ~/.geode/.env
 
 Want OpenAI or ZhipuAI GLM instead? Add `OPENAI_API_KEY=sk-proj-...` or `ZAI_API_KEY=...` to the same file. GEODE picks whichever is available.
 
-> **Cost reality check.** A typical single-prompt session uses ~3,000 tokens at ~$0.01. A long research session with 10 tool calls is usually $0.05–$0.30. The free $5 credit covers ~500 prompts. Set `cost_limit_usd=5` in your `.env` to cap spend.
+**What it costs in practice.** A single prompt runs around 3,000 tokens, about $0.01. A research session with ten tool calls usually lands between $0.05 and $0.30. Your $5 free credit lasts roughly 500 prompts. Set `cost_limit_usd=5` in `.env` if you want a hard cap.
 
 ---
 
@@ -185,7 +188,7 @@ Run `uv tool install -e . --force` from the `geode/` directory. This puts the `g
 <details>
 <summary><strong>"401 Unauthorized" or "Invalid API key"</strong> — wrong key, expired key, or wrong file location.</summary>
 
-Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), or `id.secret` (ZhipuAI GLM). Make sure there are no extra spaces or quote characters. If you used the subscription path, re-run `codex auth login` or `claude /login` to refresh the OAuth token.
+Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), or `id.secret` (ZhipuAI GLM). Make sure there are no extra spaces or quote characters. If you used the ChatGPT subscription path (Path A), re-run `codex auth login` to refresh the OAuth token.
 </details>
 
 <details>
@@ -242,7 +245,7 @@ uv tool install -e . --force
 | Always-on daemon | ❌ session only | ❌ session only | ✅ Gateway | ✅ `geode serve` |
 | Slack/Discord channels | ❌ | ❌ | ✅ many | ✅ Slack first-class |
 | Multi-provider failover | ⚠️ Anthropic only | ⚠️ OpenAI only | ✅ many | ✅ 3 + governance |
-| Subscription OAuth (no API key) | ✅ Pro/Max | ✅ Plus | ✅ both | ✅ both |
+| Subscription OAuth (no API key) | ✅ Pro/Max | ✅ Plus | ✅ both | ⚠️ ChatGPT only (Plus, Pro, Business, Edu, Enterprise — Anthropic ToS blocks Claude OAuth) |
 | Disk-persistent plans + memory | ⚠️ partial | ⚠️ partial | ✅ | ✅ 4-tier |
 | Swappable domain DAG | ❌ | ❌ | ❌ | ✅ `DomainPort` |
 | Scheduler (long-running) | ❌ | ❌ | ⚠️ partial | ✅ cron + triggers |
