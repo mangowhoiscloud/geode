@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **D-3 — Experimental modules parking lot (`experimental/`).** New top-level directory for working prototypes whose product fit hasn't been validated. Committed there: 4 memory modules (`embeddings.py`, `vector_store.py`, `rag_router.py`, `raptor.py` — RAPTOR per Sarthi et al. ICLR 2024) totalling ~1.9K lines + 36 tests, plus the `progressive_compression.py` 3-zone compressor (~320 lines + 14 tests). All 50 tests pass under their new `experimental.*` import paths. Default-excluded from the production quality gates: pytest collects only `tests/` (per `pyproject.toml:testpaths`), ruff lints only `["core", "tests"]` (per `[tool.ruff] src`), mypy runs against command-line paths so `core/` checks ignore the new tree. Run `uv run pytest experimental/tests/ -v` to opt in. `experimental/README.md` documents promotion criteria (concrete production caller + product trade-off + 1+ frontier ref + integration test) and removal criteria (6+ months with no caller). Third cycle of the 2026-04-29 backlog cleanup direction. (`experimental/`)
+
 ### Documentation
 - **D-2 — Research notes commit + personal-report gitignore.** Four research markdown files that were sitting in the working tree as untracked since the late-March / early-April research bursts now land in `docs/research/` (Codex OAuth routing cross-codebase notes, deep-thinking ratio research + explainer) and `docs/scaffold-architecture.md` (portfolio v028 architecture writeup). `.gitignore` extended to suppress agent-generated personal reports (`/*_trend_report_*.md`, `/*_stock_report_*.md`, `/*_report_2*.md`) plus the ad-hoc `docs/progress-report.html` dashboard so future runs don't leak personal output into git status. No code change, no version bump (Docs-only per CHANGELOG rule). Second cycle of the 2026-04-29 backlog cleanup direction.
 
