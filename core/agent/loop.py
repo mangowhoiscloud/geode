@@ -1553,6 +1553,19 @@ class AgenticLoop:
             else:
                 self._last_llm_error = f"All {self._provider} models exhausted"
 
+        # v0.57.0 R6 — surface reasoning summaries to AgenticUI. Per-item
+        # granularity (the sidecar collects one entry per finished
+        # reasoning item / thinking block) — see ``emit_reasoning_summary``
+        # for the rationale on not streaming per-delta.
+        if response is not None and not self._quiet:
+            summaries = getattr(response, "reasoning_summaries", None) or []
+            for summary in summaries:
+                if not summary:
+                    continue
+                from core.ui.agentic_ui import emit_reasoning_summary
+
+                emit_reasoning_summary(self._provider, self.model, summary)
+
         return response
 
     def _extract_text(self, response: Any) -> str:

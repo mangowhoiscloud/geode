@@ -18,7 +18,7 @@
 
 [한국어](README.ko.md)
 
-# GEODE v0.56.0 — Long-running Autonomous Execution Harness
+# GEODE v0.57.0 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous agent for exploratory research and signal prediction. You ask in plain language. GEODE plans, calls tools, and reports — for one prompt or a long-running session.
 
