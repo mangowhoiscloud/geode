@@ -49,6 +49,32 @@ class TestWorkerRequest:
         parsed = json.loads(raw)
         assert parsed["task_id"] == "t-003"
 
+    def test_reasoning_depth_roundtrip(self) -> None:
+        """v0.55.0 R5 — pre-fix ``from_dict`` silently dropped ``effort``,
+        ``thinking_budget``, ``time_budget_s`` so every sub-agent ran at
+        the dataclass defaults. Wired in v0.55.0 to mirror Hermes
+        (``delegate_tool.py:608`` parent-inherit) + Claude Code
+        (``loadAgentsDir.ts:116`` agent-level effort frontmatter)."""
+        req = WorkerRequest(
+            task_id="t-r5",
+            description="reasoning-heavy subtask",
+            effort="max",
+            thinking_budget=8192,
+            time_budget_s=180.0,
+        )
+        data = req.to_dict()
+        restored = WorkerRequest.from_dict(data)
+        assert restored.effort == "max"
+        assert restored.thinking_budget == 8192
+        assert restored.time_budget_s == 180.0
+
+    def test_reasoning_depth_defaults(self) -> None:
+        """Defaults preserved when fields omitted from dict."""
+        req = WorkerRequest.from_dict({"task_id": "t-default"})
+        assert req.effort == "high"
+        assert req.thinking_budget == 0
+        assert req.time_budget_s == 0.0
+
 
 class TestWorkerResult:
     def test_roundtrip(self) -> None:
@@ -143,3 +169,46 @@ class TestWorkerSubprocess:
         assert backup.exists()
         data = json.loads(backup.read_text())
         assert data["task_id"] == "bk-001"
+
+
+class TestSubAgentReasoningWiring:
+    """v0.55.0 R5 — verify ``_run_agentic`` actually plumbs the
+    request's reasoning depth fields into ``AgenticLoop()``. Pre-fix
+    these kwargs were never threaded through, so every sub-agent ran
+    at the dataclass defaults (effort='high', thinking_budget=0,
+    time_budget_s=0.0) regardless of what the parent put on the wire.
+    """
+
+    def test_loop_receives_reasoning_kwargs(self, monkeypatch, tmp_path) -> None:
+        from unittest.mock import MagicMock, patch
+
+        captured: dict = {}
+
+        def _fake_loop(*args, **kwargs):
+            captured.update(kwargs)
+            mock_loop = MagicMock()
+            mock_loop.run.return_value = MagicMock(text="ok", tool_calls=[], rounds=1)
+            return mock_loop
+
+        # Stub out everything _run_agentic touches except the bit we test.
+        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+        with (
+            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
+            patch("core.agent.tool_executor.ToolExecutor"),
+            patch("core.agent.conversation.ConversationContext"),
+            patch("core.agent.loop.AgenticLoop", side_effect=_fake_loop),
+        ):
+            from core.agent.worker import WorkerRequest, _run_agentic
+
+            request = WorkerRequest(
+                task_id="r5-test",
+                description="reasoning subtask",
+                effort="max",
+                thinking_budget=8192,
+                time_budget_s=240.0,
+            )
+            _run_agentic(request)
+
+        assert captured.get("effort") == "max"
+        assert captured.get("thinking_budget") == 8192
+        assert captured.get("time_budget_s") == 240.0

@@ -28,6 +28,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.55.1] — 2026-04-28
+
+### Fixed
+- **Sub-agent reasoning depth never reached the spawned loop** (R5 of the reasoning-depth audit). `WorkerRequest` declared `effort`, `thinking_budget`, `time_budget_s` since v0.50.x but `WorkerRequest.from_dict` silently dropped them and `_run_agentic` never passed them to `AgenticLoop()`. Every sub-agent ran at the dataclass defaults — `effort="high"`, `thinking_budget=0`, `time_budget_s=0.0` — regardless of what the parent intended. Hermes Agent (`agent/delegate_tool.py:607-636`, parent-inherit + per-child config override) and Claude Code (`utils/AgentTool/loadAgentsDir.ts:116`, agent-level effort frontmatter) both wire this correctly. v0.55.1 mirrors that: `from_dict` deserialises the three fields and `_run_agentic` threads them as `AgenticLoop()` ctor kwargs. (`core/agent/worker.py:WorkerRequest.from_dict, _run_agentic`)
+
+### Tests
+- `tests/test_worker.py:TestWorkerRequest::test_reasoning_depth_roundtrip` + `test_reasoning_depth_defaults` — pin the deserialiser invariant.
+- `tests/test_worker.py:TestSubAgentReasoningWiring::test_loop_receives_reasoning_kwargs` — verifies `_run_agentic` actually plumbs the kwargs into `AgenticLoop()` (uses `MagicMock` to capture the ctor call).
+
+### Reference
+- `docs/research/reasoning-depth-audit.md` — R5 in the cross-codebase comparison; 2/3 references implement parent-inherit, GEODE was the outlier.
+- Hermes: `agent/delegate_tool.py:607-636`.
+- Claude Code: `utils/AgentTool/loadAgentsDir.ts:116`.
+
 ## [0.55.0] — 2026-04-28
 
 ### Fixed
