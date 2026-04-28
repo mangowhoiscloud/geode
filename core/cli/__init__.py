@@ -206,18 +206,34 @@ def _welcome_screen() -> None:
     # Auto-generate .env from .env.example (placeholder → empty)
     auto_generate_env()
 
-    # .env setup wizard — runs when .env is absent and no API keys set
-    env_path = Path(".env")
-    if not env_path.exists():
-        from core.cli.startup import _has_any_llm_key
+    # v0.54.0 — proactive subscription OAuth detection. If the user already
+    # ran ``codex auth login``, GEODE picks up the token from
+    # ``~/.codex/auth.json`` and skips the wizard entirely. Anthropic OAuth
+    # is intentionally excluded (Anthropic ToS prohibits third-party
+    # reuse — see ``core/lifecycle/container.py:271``).
+    from core.cli.startup import _has_any_llm_key, detect_subscription_oauth
 
-        if not _has_any_llm_key():
-            env_setup_wizard()
+    if not _has_any_llm_key():
+        oauth_provider = detect_subscription_oauth()
+        if oauth_provider:
+            console.print(f"  [success]OAuth detected: {oauth_provider}[/success]\n")
+        else:
+            env_path = Path(".env")
+            if not env_path.exists():
+                env_setup_wizard()
 
     # OpenClaw gateway:startup — readiness check
     readiness = check_readiness()
     _set_readiness(readiness)
     _render_readiness_compact(readiness)
+
+    # v0.54.0 — surface dry-run mode explicitly. Pre-fix the user could
+    # land on a dry-run prompt thinking it was a real LLM call.
+    if readiness.force_dry_run:
+        console.print(
+            "  [warning]Running in dry-run mode (fixture data, no LLM).[/warning]\n"
+            "  [muted]Run [cyan]geode setup[/cyan] to add a credential.[/muted]\n"
+        )
 
     # OpenClaw boot-md — initialize project memory if absent
     setup_project_memory()
@@ -1018,17 +1034,142 @@ def version() -> None:
 
 
 @app.command()
-def doctor(
-    target: str = typer.Argument("slack", help="Diagnostic target (slack)"),
+def about() -> None:
+    """Show what GEODE is currently using.
+
+    One-screen summary: version, active model + provider, registered
+    auth profiles (no secrets), ``.geode`` paths, daemon socket status.
+    Use this when you want to know "what am I running right now?" without
+    digging through logs.
+    """
+    from core.config import _resolve_provider, settings
+
+    console.print()
+    console.print(f"  [header]GEODE v{__version__}[/header]")
+    console.print()
+
+    # Active model + provider
+    model = settings.model
+    provider = _resolve_provider(model)
+    console.print(f"  [bold]Model[/bold]      [value]{model}[/value]  [muted]({provider})[/muted]")
+
+    # Auth profiles (mask all keys)
+    try:
+        from core.lifecycle.container import ensure_profile_store
+
+        store = ensure_profile_store()
+        profiles = [p for p in store.list_all() if p.key]
+    except Exception:
+        profiles = []
+
+    if profiles:
+        console.print(
+            f"  [bold]Auth[/bold]       {len(profiles)} profile(s) — "
+            f"[muted]{', '.join(sorted({p.provider for p in profiles}))}[/muted]"
+        )
+    else:
+        console.print(
+            "  [bold]Auth[/bold]       [warning]none — run [cyan]geode setup[/cyan][/warning]"
+        )
+
+    # Paths
+    geode_home = Path("~/.geode").expanduser()
+    project_geode = Path(".geode")
+    console.print(f"  [bold]User home[/bold]  [muted]{geode_home}[/muted]")
+    console.print(
+        f"  [bold]Project[/bold]    [muted]{project_geode}"
+        f"{' (present)' if project_geode.exists() else ' (none)'}[/muted]"
+    )
+
+    # Daemon socket
+    sock_path = Path("~/.geode/cli.sock").expanduser()
+    if sock_path.exists():
+        console.print(
+            f"  [bold]Daemon[/bold]     [success]running[/success]  [muted]({sock_path})[/muted]"
+        )
+    else:
+        console.print(
+            "  [bold]Daemon[/bold]     [muted]not started "
+            "— auto-launches on next [cyan]geode[/cyan][/muted]"
+        )
+
+    console.print()
+    console.print(
+        "  [muted]Diagnose with [cyan]geode doctor[/cyan]  ·  "
+        "Configure with [cyan]geode setup[/cyan][/muted]"
+    )
+    console.print()
+
+
+@app.command()
+def setup(
+    reset: bool = typer.Option(
+        False,
+        "--reset",
+        "-r",
+        help="Wipe ~/.geode/.env and re-run from scratch",
+    ),
 ) -> None:
-    """Run diagnostic checks on gateway integrations."""
-    if target == "slack":
+    """Re-run the first-time setup wizard.
+
+    Detects ChatGPT subscription OAuth (`~/.codex/auth.json`) before
+    prompting for API keys. Use ``--reset`` to clear existing
+    credentials and start over.
+    """
+    from core.cli.startup import (
+        _has_any_llm_key,
+        detect_subscription_oauth,
+        env_setup_wizard,
+    )
+
+    if reset:
+        env_path = Path("~/.geode/.env").expanduser()
+        if env_path.exists():
+            env_path.unlink()
+            console.print(f"  [muted]Removed {env_path}[/muted]")
+
+    oauth_provider = detect_subscription_oauth()
+    if oauth_provider:
+        console.print(f"  [success]OAuth detected: {oauth_provider}[/success]")
+        console.print("  [muted]No further setup needed. Run [cyan]geode[/cyan] to start.[/muted]")
+        return
+
+    if _has_any_llm_key() and not reset:
+        console.print(
+            "  [success]API key already configured.[/success]\n"
+            "  [muted]Run [cyan]geode[/cyan] to start, or [cyan]geode setup --reset[/cyan] "
+            "to start over.[/muted]"
+        )
+        return
+
+    env_setup_wizard()
+
+
+@app.command()
+def doctor(
+    target: str = typer.Argument("bootstrap", help="Diagnostic target (bootstrap | slack)"),
+) -> None:
+    """Run diagnostic checks.
+
+    ``geode doctor`` (default ``bootstrap``) verifies the first-run
+    surface — Python version, ``geode`` PATH, ``~/.geode/.env`` state,
+    OAuth credentials, API key validity, serve daemon status. Useful
+    when ``geode`` doesn't behave as expected.
+
+    ``geode doctor slack`` checks Slack Gateway integration only.
+    """
+    if target == "bootstrap":
+        from core.cli.doctor_bootstrap import format_bootstrap_report, run_bootstrap_doctor
+
+        boot_report = run_bootstrap_doctor()
+        console.print(format_bootstrap_report(boot_report))
+    elif target == "slack":
         from core.cli.doctor import format_doctor_report, run_doctor_slack
 
-        report = run_doctor_slack()
-        console.print(format_doctor_report(report))
+        slack_report = run_doctor_slack()
+        console.print(format_doctor_report(slack_report))
     else:
-        console.print(f"Unknown target: {target}. Available: slack")
+        console.print(f"Unknown target: {target}. Available: bootstrap, slack")
 
 
 @app.command(name="list")

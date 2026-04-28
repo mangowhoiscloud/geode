@@ -86,29 +86,143 @@ def _has_any_llm_key() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Proactive subscription OAuth detection (v0.54.0)
+# ---------------------------------------------------------------------------
+
+
+def detect_subscription_oauth() -> str | None:
+    """Detect a usable subscription-OAuth credential before any wizard runs.
+
+    Currently supports Codex CLI OAuth (ChatGPT Plus / Pro / Business / Edu /
+    Enterprise). Anthropic OAuth is intentionally excluded — Anthropic's
+    terms of service (effective 2026-01-09) prohibit third-party tools from
+    reusing the Claude Code OAuth token; ``core/lifecycle/container.py:271``
+    documents the policy decision.
+
+    Returns the provider id (``"openai-codex"``) if a fresh, non-expired
+    credential is found and the matching profile is registered in the
+    ProfileStore. Returns ``None`` otherwise.
+    """
+    try:
+        from core.auth.codex_cli_oauth import read_codex_cli_credentials
+    except ImportError:
+        return None
+
+    try:
+        creds = read_codex_cli_credentials()
+    except Exception:
+        log.debug("Codex CLI OAuth probe failed", exc_info=True)
+        return None
+    if not creds or not creds.get("access_token"):
+        return None
+
+    # The Codex CLI credential is real; ensure ProfileStore knows about it.
+    # ``build_auth()`` already registers it at startup, but on first run we
+    # may need to seed an empty store right after detection.
+    try:
+        from core.auth.profiles import AuthProfile, CredentialType
+        from core.lifecycle.container import ensure_profile_store
+
+        store = ensure_profile_store()
+        existing = next(
+            (p for p in store.list_all() if p.provider == "openai-codex" and p.key),
+            None,
+        )
+        if existing is None:
+            store.add(
+                AuthProfile(
+                    name="openai-codex:codex-cli",
+                    provider="openai-codex",
+                    credential_type=CredentialType.OAUTH,
+                    key=creds["access_token"],
+                    refresh_token=creds.get("refresh_token", ""),
+                    expires_at=creds.get("expires_at", 0.0),
+                    managed_by="codex-cli",
+                )
+            )
+    except Exception:
+        log.debug("Profile registration after OAuth detection failed", exc_info=True)
+
+    return "openai-codex"
+
+
+# ---------------------------------------------------------------------------
 # .env Setup Wizard
 # ---------------------------------------------------------------------------
 
 
 def env_setup_wizard() -> bool:
-    """Interactive .env setup wizard — runs when .env is absent.
+    """Interactive .env setup wizard — runs when no credential is found.
 
-    Guides user through setting up API keys for available providers.
-    Enter to skip, Ctrl+C to abort. Returns True if any key was set.
+    v0.54.0 — three branches: subscription guidance, API key paste, or
+    skip into dry-run mode. Returns True if any credential or skip was
+    chosen (i.e. the wizard need not re-run on next launch).
     """
     from rich.panel import Panel
 
     console.print(
         Panel(
-            "[bold]Welcome to GEODE![/bold]\n\n"
-            "No .env file found. Let's set up your API keys.\n"
-            "Enter each key or press Enter to skip.\n"
-            "Press Ctrl+C to abort at any time.",
-            title="Setup Wizard",
+            "[bold]Welcome to GEODE.[/bold]\n\n"
+            "Pick how you want to talk to the model:\n"
+            "  [cyan]1[/cyan]  ChatGPT subscription (Plus / Pro / Business / Edu / Enterprise)\n"
+            "  [cyan]2[/cyan]  API key (Anthropic / OpenAI / ZhipuAI GLM)\n"
+            "  [cyan]3[/cyan]  Skip — explore in dry-run mode (fixture data, no LLM)\n\n"
+            "[muted]Press Ctrl+C to abort at any time.[/muted]",
+            title="Setup",
             border_style="cyan",
         )
     )
 
+    try:
+        choice = console.input("  Choice [1/2/3]: ").strip()
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n  [muted]Setup cancelled.[/muted]\n")
+        return False
+
+    if choice == "1":
+        return _wizard_subscription_path()
+    if choice == "3":
+        console.print(
+            "\n  [muted]Skipped. Run [cyan]geode setup[/cyan] later to add a credential.[/muted]\n"
+        )
+        return True  # user explicitly chose dry-run; suppress re-prompt
+    return _wizard_api_key_path()
+
+
+def _wizard_subscription_path() -> bool:
+    """Path A guidance — Codex CLI OAuth (ChatGPT-only).
+
+    GEODE doesn't drive ``codex auth login`` itself; the Codex CLI owns
+    that flow. We tell the user the exact two commands and re-probe.
+    """
+    console.print(
+        "\n  [header]Path A — ChatGPT subscription[/header]\n"
+        "  Run these in another terminal, then come back:\n\n"
+        "    [cyan]brew install codex[/cyan]   "
+        "[muted](or: npm install -g @openai/codex)[/muted]\n"
+        "    [cyan]codex auth login[/cyan]   "
+        "[muted](opens a browser; sign in with your ChatGPT account)[/muted]\n\n"
+        "  [muted]Press Enter when done — GEODE will detect the token.[/muted]"
+    )
+    try:
+        console.input("  > ")
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n  [muted]Setup cancelled.[/muted]\n")
+        return False
+    provider = detect_subscription_oauth()
+    if provider:
+        console.print(f"\n  [success]Detected {provider} OAuth credential.[/success]\n")
+        return True
+    console.print(
+        "\n  [warning]No Codex CLI credential found at ~/.codex/auth.json.[/warning]\n"
+        "  [muted]Re-run [cyan]geode setup[/cyan] after [cyan]codex auth login[/cyan] "
+        "completes.[/muted]\n"
+    )
+    return False
+
+
+def _wizard_api_key_path() -> bool:
+    """Path B — paste API keys for any of the three providers."""
     any_set = False
     providers = [
         (
@@ -120,6 +234,11 @@ def env_setup_wizard() -> bool:
         ("OpenAI", "OPENAI_API_KEY", "openai_api_key", "https://platform.openai.com/api-keys"),
         ("ZhipuAI", "ZAI_API_KEY", "zai_api_key", "https://open.bigmodel.cn/usercenter/apikeys"),
     ]
+
+    console.print(
+        "\n  [header]Path B — API key[/header]\n"
+        "  [muted]Paste each key or press Enter to skip.[/muted]"
+    )
 
     for label, env_var, settings_field, url in providers:
         try:
@@ -139,7 +258,7 @@ def env_setup_wizard() -> bool:
         any_set = True
 
     if any_set:
-        console.print("\n  [success].env created with your API keys.[/success]")
+        console.print("\n  [success].env updated with your API keys.[/success]")
     console.print()
     return any_set
 

@@ -28,6 +28,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.54.0] — 2026-04-28
+
+### Added
+- **`geode setup`** — re-runnable first-time setup wizard. Detects ChatGPT subscription OAuth (`~/.codex/auth.json`) before prompting for API keys. `--reset` wipes the existing `~/.geode/.env` and starts over. Anthropic OAuth is intentionally excluded; Anthropic's terms of service (effective 2026-01-09) prohibit third-party reuse of the Claude Code OAuth token. (`core/cli/__init__.py:setup`)
+- **`geode about`** — one-screen summary of the runtime: version, active model + provider, registered ProfileStore profiles (no secrets), `~/.geode` paths, daemon socket status. Use this when you want to know "what am I running right now?" without digging through logs. (`core/cli/__init__.py:about`)
+- **`geode doctor`** (new default target `bootstrap`) — verifies the first-run surface so beginners aren't left guessing. Seven checks: Python ≥ 3.12, `geode` on PATH, `~/.local/bin` on PATH, `~/.geode/.env` present, Codex CLI OAuth status (with expiry), ProfileStore content, serve daemon socket. Each failure prints a concrete fix command. The previous `geode doctor slack` behaviour is preserved as `geode doctor slack`. (`core/cli/doctor_bootstrap.py` new file)
+- **Proactive subscription OAuth detection at first run** — `_welcome_screen()` now calls `detect_subscription_oauth()` before any wizard. If the user has already run `codex auth login`, GEODE picks up the token and skips the wizard entirely. The token is registered in the ProfileStore so the very next prompt routes through the subscription. (`core/cli/startup.py:detect_subscription_oauth`, `core/cli/__init__.py:_welcome_screen`)
+- **`env_setup_wizard()` is now a 3-branch menu** — Path A (subscription guidance), Path B (API key paste, the original behaviour), Path C (skip into dry-run mode without re-prompting on next launch). The previous wizard offered only Path B. (`core/cli/startup.py:env_setup_wizard`)
+- **Silent dry-run guard** — when readiness reports dry-run mode, `_welcome_screen()` now prints a yellow warning + a one-line hint to run `geode setup`. Previously a user with no credentials could land on a dry-run prompt thinking it was a real LLM call.
+
+### Changed
+- **README onboarding flow** rewritten to match the new commands. "5분 setup" now shows three first-class steps: clone + install, `geode setup` (or just `geode`, since proactive OAuth detection runs on first launch), `geode` to start chatting. Path A enumerates the official Codex CLI plan list (Plus, Pro, Business, Edu, Enterprise) per `developers.openai.com/codex/cli/`. The Troubleshooting section now points to `geode doctor` first.
+
+### Tests
+- `tests/test_doctor_bootstrap.py` — 17 invariants covering every check (Python version, PATH, env file, OAuth, ProfileStore, serve socket, local-bin) plus aggregator + renderer.
+- `tests/test_startup.py:TestDetectSubscriptionOAuth` — 3 cases (no creds → None, valid creds → provider id, probe error swallowed).
+- `tests/test_startup.py:TestEnvSetupWizard` rewritten for the new menu. 6 cases: skip/Enter on Path B, Anthropic key set on Path B, Ctrl+C at menu, Path A with OAuth detected, Path A with no OAuth, Path C explicit dry-run.
+
+### Reference
+- Anthropic ToS exclusion (re-cited from v0.53.3 hotfix): `https://www.theregister.com/2026/02/20/anthropic_clarifies_ban_third_party_claude_access` and commit `de18dcd9`.
+- Codex CLI plan support: `https://developers.openai.com/codex/cli/` and `https://github.com/openai/codex` README.
+
 ## [0.53.3] — 2026-04-28
 
 ### Fixed
