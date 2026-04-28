@@ -65,11 +65,24 @@ class AgenticResponse:
     stop_reason: str = "end_turn"  # "end_turn" or "tool_use"
     usage: ResponseUsage = field(default_factory=ResponseUsage)
     codex_reasoning_items: list[dict[str, Any]] | None = None
+    # v0.57.0 R6 — reasoning summaries for the "live thinking..." UI
+    # surface. Per-item granularity to avoid thread-local IPC writer
+    # complexity (the streaming loop runs in ``asyncio.to_thread``).
+    # Codex populates from ``reasoning.summary[].text``; Anthropic from
+    # ``thinking`` content blocks. ``None`` when the call produced no
+    # reasoning summary; never set by GLM/OpenAI Chat Completions.
+    reasoning_summaries: list[str] | None = None
 
 
 def normalize_anthropic(response: Any) -> AgenticResponse:
     """Normalize an Anthropic SDK response to AgenticResponse."""
     blocks: list[TextBlock | ToolUseBlock] = []
+    # v0.57.0 R6 — capture ``thinking`` block text into the reasoning
+    # summary sidecar so the AgenticUI can render the "live thinking..."
+    # surface. Mirrors the Codex normaliser pattern. Anthropic's
+    # adaptive thinking with ``display:"summarized"`` (set in the
+    # adapter since v0.56.0) produces visible summary text here.
+    reasoning_summaries: list[str] = []
     for block in response.content:
         if block.type == "text":
             blocks.append(TextBlock(text=block.text))
@@ -81,6 +94,10 @@ def normalize_anthropic(response: Any) -> AgenticResponse:
                     input=block.input,
                 )
             )
+        elif block.type == "thinking":
+            _thinking_text = getattr(block, "thinking", "") or ""
+            if _thinking_text:
+                reasoning_summaries.append(_thinking_text)
 
     usage = ResponseUsage()
     if response.usage:
@@ -98,6 +115,7 @@ def normalize_anthropic(response: Any) -> AgenticResponse:
         content=blocks,
         stop_reason=response.stop_reason,
         usage=usage,
+        reasoning_summaries=reasoning_summaries or None,
     )
 
 
@@ -174,6 +192,8 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
     """
     blocks: list[TextBlock | ToolUseBlock] = []
     has_function_calls = False
+    # v0.57.0 R6 — sidecar accumulator for the "live thinking..." UI surface.
+    reasoning_summaries: list[str] = []
     # v0.55.0 — sidecar accumulator for Codex Plus encrypted reasoning.
     # Hermes pattern (codex_responses_adapter.py:720-738): capture every
     # ``reasoning`` item the server emits so the loop can echo it back
@@ -211,6 +231,16 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
             # state and would just bloat the next request for nothing.
             encrypted = getattr(item, "encrypted_content", None)
             if not isinstance(encrypted, str) or not encrypted:
+                # v0.57.0 R6 — even when the encrypted blob is missing,
+                # capture the summary text for the UI surface (some
+                # transient errors strip encrypted_content but keep
+                # summary).
+                summary_only = getattr(item, "summary", None)
+                if isinstance(summary_only, list):
+                    for part in summary_only:
+                        _text = getattr(part, "text", None)
+                        if isinstance(_text, str) and _text:
+                            reasoning_summaries.append(_text)
                 continue
             replay: dict[str, Any] = {"type": "reasoning", "encrypted_content": encrypted}
             item_id = getattr(item, "id", None)
@@ -223,6 +253,9 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
                     text = getattr(part, "text", None)
                     if isinstance(text, str):
                         serialised.append({"type": "summary_text", "text": text})
+                        # v0.57.0 R6 — also surface to UI sidecar
+                        if text:
+                            reasoning_summaries.append(text)
                 replay["summary"] = serialised
             codex_reasoning_items.append(replay)
 
@@ -264,4 +297,5 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
         stop_reason=stop_reason,
         usage=usage,
         codex_reasoning_items=codex_reasoning_items or None,
+        reasoning_summaries=reasoning_summaries or None,
     )

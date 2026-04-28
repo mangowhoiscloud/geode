@@ -229,6 +229,7 @@ class IPCClient:
                 "llm_error",
                 "retry_wait",
                 "budget_warning",
+                "reasoning_summary",  # v0.57.0 R6 — live thinking surface
                 # Pipeline milestone events
                 "pipeline_header",
                 "pipeline_gather",
