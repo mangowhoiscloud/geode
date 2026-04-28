@@ -240,6 +240,21 @@ _ADAPTIVE_MODELS: frozenset[str] = frozenset(
     }
 )
 
+# v0.56.0 R4-mini — Opus 4.7 supports the new ``xhigh`` effort level (one
+# step above ``high``); 4.6 / Sonnet 4.6 reject it with 400. Mirrors
+# Hermes ``anthropic_adapter.py:49-53`` substring-based gate. Anthropic
+# explicitly recommends ``xhigh`` as the starting effort for Opus 4.7
+# coding/agentic workloads (platform.claude.com/docs/en/build-with-claude/
+# effort) — but only the GEODE caller can opt in by setting
+# ``agentic.effort = "xhigh"``; we never auto-upgrade ``high → xhigh``.
+_XHIGH_EFFORT_MODELS: frozenset[str] = frozenset({"claude-opus-4-7"})
+
+
+def _supports_xhigh_effort(model: str) -> bool:
+    """Return True if the model accepts ``output_config.effort = "xhigh"``."""
+    return model in _XHIGH_EFFORT_MODELS
+
+
 _ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
     {"type": "web_search_20260209", "name": "web_search", "allowed_callers": ["direct"]},
     {"type": "web_fetch_20260209", "name": "web_fetch", "allowed_callers": ["direct"]},
@@ -367,8 +382,22 @@ class ClaudeAgenticAdapter:
             if m in _ADAPTIVE_MODELS:
                 # Adaptive thinking (Opus 4.6+ and Sonnet 4.6): effort controls depth.
                 # Sampling parameters (temperature/top_p/top_k) are rejected — omit.
-                thinking_param = {"type": "adaptive"}
-                output_config = {"effort": effort}
+                #
+                # v0.56.0 R4-mini — explicit ``display: "summarized"``. Opus 4.7
+                # changed the default to ``"omitted"`` (whats-new-claude-4-7) which
+                # makes thinking blocks arrive empty; without summaries the
+                # GEODE activity feed has no reasoning trace to render. Hermes
+                # forces this same value (``anthropic_adapter.py:1440``) for the
+                # same reason: *"explicit override preserves UX."*
+                thinking_param = {"type": "adaptive", "display": "summarized"}
+                # v0.56.0 R4-mini — version-gate ``xhigh``. Opus 4.7 accepts it
+                # (Anthropic recommends as starting effort for coding/agentic);
+                # 4.6 / Sonnet 4.6 reject with 400. Downgrade to ``"max"`` on
+                # the older models. Mirrors Hermes ``_supports_xhigh_effort``.
+                effective_effort = effort
+                if effort == "xhigh" and not _supports_xhigh_effort(m):
+                    effective_effort = "max"
+                output_config = {"effort": effective_effort}
                 call_temperature = None
             elif thinking_budget > 0:
                 # Legacy: manual budget_tokens for older models

@@ -249,8 +249,10 @@ class Settings(BaseSettings):
     agentic_thinking_budget: int = 0  # 0 = disabled; >0 = thinking token budget per call (legacy)
 
     # Agentic Loop — effort level (replaces thinking_budget for Opus 4.6+ / Sonnet 4.6+)
-    # Maps to Anthropic output_config.effort + OpenAI reasoning.effort
-    agentic_effort: str = "high"  # "low" | "medium" | "high" | "max"
+    # Maps to Anthropic output_config.effort + OpenAI reasoning.effort.
+    # v0.56.0 R4-mini — ``xhigh`` added; Opus 4.7-only (the adapter
+    # downgrades to ``"max"`` on Opus 4.6 / Sonnet 4.6).
+    agentic_effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh"
 
     # Cost guard — session-level cost limit (0 = no limit)
     cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%

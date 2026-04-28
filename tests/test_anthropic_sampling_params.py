@@ -79,7 +79,11 @@ def test_adaptive_models_omit_sampling_params(model: str) -> None:
     assert "temperature" not in kwargs, (
         f"{model} must not receive `temperature` (rejected with 400). Got: {sorted(kwargs)}"
     )
-    assert kwargs.get("thinking") == {"type": "adaptive"}
+    # v0.56.0 R4-mini — ``display: "summarized"`` added to keep Opus
+    # 4.7 thinking blocks visible (default is now "omitted"). Accept
+    # both the legacy shape and the new explicit-display shape so
+    # this regression test stays valid across the upgrade.
+    assert kwargs.get("thinking") == {"type": "adaptive", "display": "summarized"}
 
 
 def test_opus_4_7_registered_for_context_management() -> None:
