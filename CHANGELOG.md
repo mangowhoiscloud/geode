@@ -28,6 +28,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.59.0] — 2026-04-28
+
+### Added
+- **Two-axis interactive `/model` picker — model (↑↓) + effort (←→).** Mirrors the recent Claude Code `ModelPicker.tsx` UX (cursor `❯`, default-marker `✔`, single-line effort indicator with disc symbol, `Enter to confirm · Esc to exit` footer). Per-provider effort enum table (`core/cli/effort_picker.py`) is grounded in each provider's official spec — Anthropic adaptive (`low/medium/high/max/xhigh`, `xhigh` Opus 4.7-only per `platform.claude.com/docs/en/build-with-claude/effort`), OpenAI Responses (`none/minimal/low/medium/high/xhigh` per `openai-python/src/openai/types/shared/reasoning_effort.py` + `codex-rs/protocol/src/openai_models.rs:43-51`), GLM hybrid binary (`disabled/enabled` per `docs.z.ai/guides/capabilities/thinking-mode`); always-on / non-reasoning models display the `· No effort knob for this model` row and arrow keys are silently no-op. Raw-tty input (termios + ANSI escape sequences for arrow keys) replaces the legacy `simple-term-menu` single-axis picker. Selected effort persists to `settings.agentic_effort` + `GEODE_AGENTIC_EFFORT` env so the next AgenticLoop turn picks it up via the same `_sync_model_from_settings` deferred hot-swap path the model field uses. (`core/cli/effort_picker.py`, `core/cli/commands.py:_interactive_model_picker, _apply_model`)
+- **`tests/test_effort_picker.py`** — 21 invariants. Per-provider enum integrity (Anthropic adaptive vs Opus-4.7-xhigh gate, OpenAI Responses full enum, GLM hybrid binary vs always-on `()`), `cycle_effort` cycling + wrap-around + empty-tuple no-op + cross-model snap-to-middle on unknown current, default-effort table (Opus 4.7 → `xhigh`, Sonnet/Opus 4.6 → `high`, Codex → `medium`, GLM → `enabled`), cross-provider sanity that every `MODEL_PROFILES` entry has a valid enum + default.
+
+### Reference
+- Claude Code `ModelPicker.tsx` (cursor + default-marker + footer layout), `keybindings/defaultBindings.ts` (arrow-key bindings).
+- User direction 2026-04-28: "방향키로 조절할 수 있게 디벨롭하자. claude-code 최근 ui/ux를 확인하면 돼" + render-shape spec showing `❯ 1. Default (recommended) ✔` + `◉ xHigh effort (default) ← → to adjust` + `Enter to confirm · Esc to exit`.
+
 ## [0.58.0] — 2026-04-28
 
 ### Added

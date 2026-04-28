@@ -153,35 +153,43 @@ class TestCmdKey:
 
 class TestCmdModel:
     def test_interactive_picker_select(self, tmp_path: Path, monkeypatch):
-        """Arrow-key picker: user selects index 2 (Haiku)."""
+        """v0.59.0 — two-axis picker: user picks model + effort."""
         monkeypatch.chdir(tmp_path)
+        from core.cli.effort_picker import PickerResult
         from core.config import settings
 
         old = settings.model
         try:
             with (
-                patch("core.cli.commands.TerminalMenu") as MockMenu,
+                patch("core.cli.effort_picker.pick_model_and_effort") as mock_picker,
                 patch("sys.stdin") as mock_stdin,
             ):
                 mock_stdin.isatty.return_value = True
-                MockMenu.return_value.show.return_value = 2  # Haiku
+                mock_picker.return_value = PickerResult(
+                    model_id=MODEL_PROFILES[2].id,
+                    effort="high",
+                    cancelled=False,
+                )
                 cmd_model("")
             assert settings.model == MODEL_PROFILES[2].id
         finally:
             settings.model = old
 
     def test_interactive_picker_cancel(self, tmp_path: Path, monkeypatch):
-        """Arrow-key picker: user presses q/Esc → cancel."""
+        """v0.59.0 — picker cancelled (q / ESC) leaves model unchanged."""
         monkeypatch.chdir(tmp_path)
+        from core.cli.effort_picker import PickerResult
         from core.config import settings
 
         old = settings.model
         with (
-            patch("core.cli.commands.TerminalMenu") as MockMenu,
+            patch("core.cli.effort_picker.pick_model_and_effort") as mock_picker,
             patch("sys.stdin") as mock_stdin,
         ):
             mock_stdin.isatty.return_value = True
-            MockMenu.return_value.show.return_value = None
+            mock_picker.return_value = PickerResult(
+                model_id=settings.model, effort=None, cancelled=True
+            )
             cmd_model("")
         assert settings.model == old
 
