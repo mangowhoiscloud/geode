@@ -211,19 +211,21 @@ class TestDetectApiKey:
 
 
 class TestEnvSetupWizard:
-    def test_wizard_skips_on_enter(self, tmp_path):
-        """User presses Enter for all prompts → no keys set."""
+    """v0.54.0 — three-branch menu (1: subscription / 2: API key / 3: skip)."""
+
+    def test_wizard_skips_on_enter_after_choosing_path_b(self, tmp_path):
+        """User picks Path B then presses Enter for every key → no keys set."""
         with (
             patch("core.cli.startup.console") as mock_console,
             patch("core.cli.startup.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
-            mock_console.input.return_value = ""
+            mock_console.input.side_effect = ["2", "", "", ""]
             result = env_setup_wizard()
         assert result is False
 
-    def test_wizard_sets_key(self, tmp_path):
-        """User enters a key for Anthropic, skips others."""
+    def test_wizard_sets_key_via_path_b(self, tmp_path):
+        """User picks Path B and enters an Anthropic key."""
         with (
             patch("core.cli.startup.console") as mock_console,
             patch("core.cli.startup._upsert_env"),
@@ -231,6 +233,7 @@ class TestEnvSetupWizard:
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = [
+                "2",  # menu — API key path
                 "sk-ant-test-key-12345678",  # Anthropic
                 "",  # OpenAI skip
                 "",  # ZhipuAI skip
@@ -239,7 +242,7 @@ class TestEnvSetupWizard:
         assert result is True
 
     def test_wizard_handles_ctrl_c(self, tmp_path):
-        """Ctrl+C during wizard gracefully stops."""
+        """Ctrl+C at the menu prompt gracefully stops."""
         with (
             patch("core.cli.startup.console") as mock_console,
             patch("core.cli.startup.settings") as mock_settings,
@@ -248,6 +251,75 @@ class TestEnvSetupWizard:
             mock_console.input.side_effect = KeyboardInterrupt
             result = env_setup_wizard()
         assert result is False
+
+    def test_wizard_path_a_subscription(self, tmp_path):
+        """Path A — user chose subscription; OAuth detected on probe."""
+        with (
+            patch("core.cli.startup.console") as mock_console,
+            patch("core.cli.startup.detect_subscription_oauth", return_value="openai-codex"),
+            patch("core.cli.startup.settings") as mock_settings,
+        ):
+            _no_keys_mock(mock_settings)
+            mock_console.input.side_effect = ["1", ""]  # menu, then Enter on prompt
+            result = env_setup_wizard()
+        assert result is True
+
+    def test_wizard_path_a_no_oauth_found(self, tmp_path):
+        """Path A — user chose subscription but no token at ~/.codex/auth.json."""
+        with (
+            patch("core.cli.startup.console") as mock_console,
+            patch("core.cli.startup.detect_subscription_oauth", return_value=None),
+            patch("core.cli.startup.settings") as mock_settings,
+        ):
+            _no_keys_mock(mock_settings)
+            mock_console.input.side_effect = ["1", ""]
+            result = env_setup_wizard()
+        assert result is False
+
+    def test_wizard_skip_path_explicitly(self, tmp_path):
+        """Path C — user chose skip (dry-run). Returns True so wizard
+        won't re-prompt on next launch."""
+        with (
+            patch("core.cli.startup.console") as mock_console,
+            patch("core.cli.startup.settings") as mock_settings,
+        ):
+            _no_keys_mock(mock_settings)
+            mock_console.input.side_effect = ["3"]
+            result = env_setup_wizard()
+        assert result is True
+
+
+class TestDetectSubscriptionOAuth:
+    """v0.54.0 — proactive Codex CLI OAuth detection (Anthropic excluded by ToS)."""
+
+    def test_no_credentials_returns_none(self):
+        with patch("core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None):
+            from core.cli.startup import detect_subscription_oauth
+
+            assert detect_subscription_oauth() is None
+
+    def test_returns_provider_id_on_success(self):
+        from core.cli.startup import detect_subscription_oauth
+
+        fake_creds = {"access_token": "tok-abc", "refresh_token": "rt", "expires_at": 9999999999.0}
+        with (
+            patch(
+                "core.auth.codex_cli_oauth.read_codex_cli_credentials",
+                return_value=fake_creds,
+            ),
+            patch("core.cli.startup.log"),
+        ):
+            result = detect_subscription_oauth()
+        assert result == "openai-codex"
+
+    def test_swallows_probe_errors(self):
+        with patch(
+            "core.auth.codex_cli_oauth.read_codex_cli_credentials",
+            side_effect=OSError("nope"),
+        ):
+            from core.cli.startup import detect_subscription_oauth
+
+            assert detect_subscription_oauth() is None
 
 
 class TestIsPlaceholder:

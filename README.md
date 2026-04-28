@@ -18,7 +18,7 @@
 
 [한국어](README.ko.md)
 
-# GEODE v0.53.3 — Long-running Autonomous Execution Harness
+# GEODE v0.54.0 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous agent for exploratory research and signal prediction. You ask in plain language. GEODE plans, calls tools, and reports — for one prompt or a long-running session.
 
@@ -73,9 +73,19 @@ uv sync                              # installs dependencies (~30s)
 uv tool install -e . --force         # makes `geode` available everywhere
 ```
 
-### Step 2 — Pick how you'll talk to the model
+### Step 2 — Run the setup wizard
 
-Pick **one** of the two paths below. Both work; one is cheaper if you already pay for a chat subscription.
+```bash
+geode setup
+```
+
+The wizard offers three paths: ChatGPT subscription (auto-detects `codex auth login` if you've already done it), API key (paste and go), or skip into dry-run mode for now. Pick whichever fits.
+
+If you already ran `codex auth login` before installing GEODE, you can skip this step entirely — the next `geode` invocation will detect the token and start.
+
+### Step 3 — Pick a path (manual reference)
+
+The wizard above covers everything below; this section exists as a manual reference for what each path actually does.
 
 ---
 
@@ -127,7 +137,7 @@ Want OpenAI or ZhipuAI GLM instead? Add `OPENAI_API_KEY=sk-proj-...` or `ZAI_API
 
 ---
 
-### Step 3 — Run
+### Step 4 — Run
 
 ```bash
 geode                                                # interactive chat
@@ -149,7 +159,15 @@ You should see something like:
   ✢ Worked for 8s · claude-opus-4-7 · ↓2.1k ↑412 · $0.018
 ```
 
-If you see this, you're done. If you see an error, jump to [Troubleshooting](#troubleshooting).
+If you see this, you're done. If you see an error, run `geode doctor` for a diagnosis or jump to [Troubleshooting](#troubleshooting).
+
+### Other useful commands
+
+```bash
+geode about           # version, model, registered auth, paths, daemon status
+geode doctor          # 7-check bootstrap diagnosis with fix hints
+geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
+```
 
 ---
 
@@ -166,6 +184,8 @@ Configure channel bindings in `.geode/config.toml` (Slack bot token, Discord web
 ---
 
 ## Troubleshooting
+
+Run `geode doctor` first. It checks Python version, `geode` PATH, `~/.geode/.env`, Codex CLI OAuth, ProfileStore, the serve socket, and `~/.local/bin` PATH — and prints a concrete fix command for each failure. The expanders below cover the same ground in narrative form.
 
 <details>
 <summary><strong>"command not found: python3"</strong> — Python isn't installed or isn't on your PATH.</summary>
