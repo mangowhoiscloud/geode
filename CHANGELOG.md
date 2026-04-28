@@ -28,6 +28,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.62.0] — 2026-04-28
+
+### Added
+- **R9 — live wire-level tests for the reasoning-depth audit series.** New `tests/test_e2e_live_reasoning_depth.py` (5 tests, `@pytest.mark.live`, default-excluded) covers the full R1+R2+R3-mini+R4-mini+R6 chain at the actual provider wire. Each test independently gates on its provider env var (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY`/`GLM_API_KEY`, `CHATGPT_OAUTH_TOKEN`) so partial-key environments run whichever subset they have. Direct-adapter calls (no full agentic loop) keep cost low (~$0.01-0.05 / test). Coverage: Anthropic Opus 4.7 `effort=xhigh` returns thinking summaries (R4-mini + R6); PAYG OpenAI gpt-5.5 returns `codex_reasoning_items` with `encrypted_content` + `reasoning_summaries` (R3-mini + R6); PAYG OpenAI multi-turn replay (round 2 with prior reasoning items succeeds — proves the v0.60.0 shared `inject_reasoning_replay` walker is wired in `openai.py`); GLM-4.6 thinking field returns `reasoning_summaries` (R2 + R6); Codex Plus returns `codex_reasoning_items` + `reasoning_summaries` (R1 + R6). Run with `uv run pytest tests/test_e2e_live_reasoning_depth.py -v -m live`. (`tests/test_e2e_live_reasoning_depth.py`)
+
+### Reference
+- Audit series tracked in this CHANGELOG: R1 (v0.55.0 Codex encrypted), R2 (v0.58.0 GLM thinking), R3-mini (v0.60.0 PAYG OpenAI parity), R4-mini (v0.56.0 Opus 4.7 xhigh), R6 (v0.57.0 reasoning summaries surface).
+- Live test pattern mirrors existing `tests/test_e2e_live_llm.py` (skipif on env var, `pytest.mark.live` exclusion via `pyproject.toml addopts`).
+
 ## [0.61.0] — 2026-04-28
 
 ### Added
