@@ -428,20 +428,26 @@ def _apply_model(selected: ModelProfile, *, effort: str | None = None) -> None:
             console.print()
             return
 
+    # v0.61.0 — picker choices now persist to BOTH .env (session) and
+    # .geode/config.toml (durable). Previously the comment claimed
+    # config.toml sync but only .env was actually written; on next
+    # session the user got the env-loaded value, but only because .env
+    # happens to survive — wiping .env would lose the choice silently.
+    # 3-codebase consensus (Hermes/Codex/Claude Code all persist picker
+    # choices to durable config).
+    from core.cli._helpers import upsert_config_toml
+
     if not same_model:
         settings.model = selected.id
         _upsert_env("GEODE_MODEL", selected.id)
+        upsert_config_toml("llm", "primary_model", selected.id)
     if effort is not None and effort != old_effort:
-        # Persist effort separately so config.toml + env var stay in sync
-        # with the picker's choice. The AgenticLoop's adaptive-compute
-        # path reads ``self._effort`` (set at ctor time) — model-hot-swap
-        # path picks up the new value on the next round via the same
-        # settings.model deferred-apply mechanism.
         try:
             object.__setattr__(settings, "agentic_effort", effort)
         except Exception:
             log.debug("Could not persist agentic_effort to settings", exc_info=True)
         _upsert_env("GEODE_AGENTIC_EFFORT", effort)
+        upsert_config_toml("agentic", "effort", effort)
 
     # Model hot-swap is deferred: AgenticLoop._sync_model_from_settings()
     # checks settings.model at the start of each round and applies

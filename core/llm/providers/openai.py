@@ -526,10 +526,17 @@ class OpenAIAgenticAdapter:
                 "tool_choice": tc_val if oai_tools else None,
                 "max_output_tokens": max_tokens,
                 "temperature": temperature,
+                # v0.61.0 — explicit ``store=False`` for parity with the
+                # Codex Plus path (``codex.py:331``). We feed conversations
+                # via the ``input`` array + encrypted-content replay rather
+                # than ``previous_response_id``, so server-side storage is
+                # unused; opting out avoids unnecessary OpenAI-side
+                # retention of every response. SDK default is ``True``.
+                "store": False,
             }
             # v0.60.0 R3-mini — Responses-API reasoning kwargs.
             # ``include=["reasoning.encrypted_content"]`` is required when
-            # ``store=False`` (default) so the server returns the opaque
+            # ``store=False`` so the server returns the opaque
             # continuation blob; ``summary="auto"`` opts the response into
             # reasoning summaries so the R6 surfacing path can render
             # "live thinking..." for PAYG users (Codex Plus already had this).

@@ -28,6 +28,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.61.0] — 2026-04-28
+
+### Added
+- **Picker effort + model now persist to `.geode/config.toml`** (durable layer), not just `.env`. Previously `_apply_model` wrote `GEODE_AGENTIC_EFFORT` / `GEODE_MODEL` to `.env` only — a stale comment claimed config.toml sync, but the config-toml write never happened. Sessions worked in practice because `.env` survives, but wiping `.env` silently lost the picker choice. New shared helper `upsert_config_toml(section, key, value)` in `core/cli/_helpers.py` performs minimal-diff TOML upserts (creates file + section if absent, replaces existing keys including commented defaults like `# effort = "high"`, inserts before next section heading). Called from `_apply_model` for both `[agentic] effort` and `[llm] primary_model`. 3-codebase consensus pattern (Hermes `~/.hermes/config.json`, Codex `~/.codex/config.toml`, Claude Code project + global config) — chosen settings persist to the config layer. (`core/cli/_helpers.py:upsert_config_toml`, `core/cli/commands.py:_apply_model`)
+- **Explicit `store=False` on PAYG OpenAI Responses calls** (R3-mini follow-up). The PAYG `OpenAIAgenticAdapter` now sends `store=False` for parity with the Codex Plus path (`codex.py:331`). We feed conversations via the `input` array + the v0.60.0 encrypted-content replay walker, never via `previous_response_id`, so server-side response storage is unused on our side; opting out matches Codex Plus behaviour and avoids OpenAI-side retention of every response. SDK default is `True`. (`core/llm/providers/openai.py:OpenAIAgenticAdapter._do_call`)
+- **`tests/test_config_effort_knob.py`** — 8 invariants. `upsert_config_toml` (creates file with section, updates existing key, inserts into existing section preserving siblings + other sections, uncomments commented defaults exactly once, appends section when missing), picker persistence (`_apply_model` round-trips effort + model into `.geode/config.toml`), source-pin (`store=False` literal in both `openai.py` and `codex.py`).
+
+### Reference
+- 3-codebase config persistence: Hermes `hermes_cli/main.py:cmd_model` (writes to `~/.hermes/config.json`), Codex CLI `codex-rs/cli/src/config.rs` (writes to `~/.codex/config.toml`), Claude Code `screens/REPL.tsx` (project + global JSON config write).
+- openai-python Stainless SDK `responses/response_create_params.py` — `store: Optional[bool]` defaults to `True`; `store=False` is the supported opt-out for ZDR / privacy-conscious flows.
+
 ## [0.60.0] — 2026-04-28
 
 ### Added
