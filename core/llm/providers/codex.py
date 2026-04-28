@@ -248,9 +248,11 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
                 continue  # ``instructions`` kwarg below handles system prompt
             # When entering a new logical message in oai_messages, advance
             # ``_current_msg`` to the matching original message.
-            entry_role = entry.get("role") or (
-                "assistant" if entry.get("type") in ("function_call",) else None
-            ) or ("user" if entry.get("type") == "function_call_output" else None)
+            entry_role = (
+                entry.get("role")
+                or ("assistant" if entry.get("type") in ("function_call",) else None)
+                or ("user" if entry.get("type") == "function_call_output" else None)
+            )
             while _current_msg is not None and _current_msg.get("role") != entry_role:
                 _current_msg = next(_msg_iter, None)
             if (

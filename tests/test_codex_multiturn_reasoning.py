@@ -41,9 +41,7 @@ def _make_reasoning_item(
     *, encrypted: str, item_id: str | None = None, summary_texts: list[str] | None = None
 ) -> SimpleNamespace:
     summary = (
-        [SimpleNamespace(text=t) for t in summary_texts]
-        if summary_texts is not None
-        else None
+        [SimpleNamespace(text=t) for t in summary_texts] if summary_texts is not None else None
     )
     kwargs: dict = {"type": "reasoning", "encrypted_content": encrypted}
     if item_id is not None:
@@ -160,9 +158,11 @@ class TestCodexInputReplay:
         for entry in oai_messages:
             if entry.get("role") == "system":
                 continue
-            entry_role = entry.get("role") or (
-                "assistant" if entry.get("type") in ("function_call",) else None
-            ) or ("user" if entry.get("type") == "function_call_output" else None)
+            entry_role = (
+                entry.get("role")
+                or ("assistant" if entry.get("type") in ("function_call",) else None)
+                or ("user" if entry.get("type") == "function_call_output" else None)
+            )
             while current_msg is not None and current_msg.get("role") != entry_role:
                 current_msg = next(msg_iter, None)
             if (
@@ -177,9 +177,7 @@ class TestCodexInputReplay:
             resp_input.append(entry)
 
         # Must contain reasoning replay BEFORE the assistant entry
-        types_or_roles = [
-            (e.get("type"), e.get("role")) for e in resp_input
-        ]
+        types_or_roles = [(e.get("type"), e.get("role")) for e in resp_input]
         # Expected sequence: user, reasoning, assistant, user
         assert types_or_roles == [
             (None, "user"),
