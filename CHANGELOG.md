@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+- **D-2 — Research notes commit + personal-report gitignore.** Four research markdown files that were sitting in the working tree as untracked since the late-March / early-April research bursts now land in `docs/research/` (Codex OAuth routing cross-codebase notes, deep-thinking ratio research + explainer) and `docs/scaffold-architecture.md` (portfolio v028 architecture writeup). `.gitignore` extended to suppress agent-generated personal reports (`/*_trend_report_*.md`, `/*_stock_report_*.md`, `/*_report_2*.md`) plus the ad-hoc `docs/progress-report.html` dashboard so future runs don't leak personal output into git status. No code change, no version bump (Docs-only per CHANGELOG rule). Second cycle of the 2026-04-29 backlog cleanup direction.
+
 ## [0.63.0] — 2026-04-29
 
 ### Added
