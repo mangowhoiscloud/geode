@@ -28,6 +28,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.60.0] — 2026-04-28
+
+### Added
+- **R3-mini — PAYG OpenAI Responses reasoning parity.** The PAYG `OpenAIAgenticAdapter` now sends `include=["reasoning.encrypted_content"]` + `reasoning={"effort": …, "summary": "auto"}` for every gpt-5.x model (and the o-series whitelist). Without these, gpt-5.x silently lost its reasoning state on every multi-turn round (server omits the encrypted continuation blob from non-`include` responses, and `summary` is opt-in). The `_REASONING_MODELS` whitelist is replaced by a `_is_payg_reasoning_model(model)` helper that gates on `gpt-5*` prefix + the legacy o-series — previously gpt-5.5 / 5.4 / 5.4-mini / 5.3-codex got NO reasoning kwarg, so the picker's effort knob was being silently dropped on PAYG. Spec-grounded against `openai-python/src/openai/types/shared/reasoning.py` (`Reasoning` model, `summary: Literal["auto", "concise", "detailed"]`) + `openai-python/src/openai/types/responses/response_create_params.py:70-74` (`reasoning.encrypted_content` semantics under `store=False`). (`core/llm/providers/openai.py:_is_payg_reasoning_model, OpenAIAgenticAdapter._do_call`)
+- **Shared encrypted-reasoning replay walker** (`inject_reasoning_replay`). The 29-line walker that re-injects prior-turn `codex_reasoning_items` into the next-turn `input` array (originally inlined in `core/llm/providers/codex.py:243-271` for Codex Plus) is now a shared helper in `core/llm/agentic_response.py`. Both adapters call the same function, so a future change to the wire format only has to land once. Strips the `id` field on replay (server can 404 on item lookup with `store=False`); skips items with no `encrypted_content` (otherwise we just bloat the request); drops the `system` entry (system prompt rides the `instructions` kwarg). (`core/llm/agentic_response.py:inject_reasoning_replay`, `core/llm/providers/codex.py`, `core/llm/providers/openai.py`)
+- **`tests/test_r3_mini_payg_reasoning.py`** — 13 invariants. Reasoning-model gate (gpt-5.x family in, o-series in, gpt-4 / claude out), shared walker (blob-precedes-assistant ordering, id strip, missing-blob skip, system drop, plain-conversation pass-through), source-level pins (`include` + `summary:"auto"` + `inject_reasoning_replay` literally appear in `openai.py`; codex.py no longer carries the inline walker; `_EFFORT_MAP` keeps `max → high`).
+
+### Reference
+- openai-python (Stainless-generated SDK):
+  - `src/openai/types/shared/reasoning.py:13` — "**gpt-5 and o-series models only**"
+  - `src/openai/types/shared/reasoning.py:44-52` — `summary: Literal["auto", "concise", "detailed"]`
+  - `src/openai/types/responses/response_create_params.py:70-74` — `reasoning.encrypted_content` purpose + `store=False`/ZDR conditions
+  - `src/openai/types/responses/response_includable.py` — `Literal["reasoning.encrypted_content", …]`
+- 3-codebase consensus: Hermes `agent/codex_responses_adapter.py:228-246, 720-738`, Codex Rust `codex-rs/protocol/src/openai_models.rs:43-51`, GEODE Codex Plus path `core/llm/providers/codex.py:347-348` (R1, v0.55.0).
+
 ## [0.59.0] — 2026-04-28
 
 ### Added
