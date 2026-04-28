@@ -74,6 +74,52 @@ class AgenticResponse:
     reasoning_summaries: list[str] | None = None
 
 
+def inject_reasoning_replay(
+    oai_messages: list[dict[str, Any]],
+    anthropic_messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Inject prior-turn ``codex_reasoning_items`` back into a Responses
+    API ``input`` array.
+
+    For every assistant entry in ``oai_messages``, look up the matching
+    original Anthropic-format message and prepend any captured
+    ``encrypted_content`` reasoning items immediately before the
+    assistant entry. Strips ``id`` so the server can't 404 on item
+    lookup — mirrors Hermes ``codex_responses_adapter.py:228-246``.
+
+    Both lists must preserve order (one Anthropic message → ≥1 entries
+    in oai_messages). Used by Codex Plus and PAYG OpenAI Responses
+    adapters; without this, gpt-5.x loses reasoning state every turn
+    when ``store=False`` (no server-side item resolution).
+    """
+    resp_input: list[dict[str, Any]] = []
+    msg_iter = iter(anthropic_messages)
+    current_msg: dict[str, Any] | None = next(msg_iter, None)
+    for entry in oai_messages:
+        if entry.get("role") == "system":
+            # Adapter passes system via ``instructions`` kwarg, not input.
+            continue
+        entry_role = (
+            entry.get("role")
+            or ("assistant" if entry.get("type") in ("function_call",) else None)
+            or ("user" if entry.get("type") == "function_call_output" else None)
+        )
+        while current_msg is not None and current_msg.get("role") != entry_role:
+            current_msg = next(msg_iter, None)
+        if (
+            current_msg is not None
+            and current_msg.get("role") == "assistant"
+            and entry_role == "assistant"
+        ):
+            reasoning = current_msg.get("codex_reasoning_items")
+            if isinstance(reasoning, list):
+                for ri in reasoning:
+                    if isinstance(ri, dict) and ri.get("encrypted_content"):
+                        resp_input.append({k: v for k, v in ri.items() if k != "id"})
+        resp_input.append(entry)
+    return resp_input
+
+
 def normalize_anthropic(response: Any) -> AgenticResponse:
     """Normalize an Anthropic SDK response to AgenticResponse."""
     blocks: list[TextBlock | ToolUseBlock] = []

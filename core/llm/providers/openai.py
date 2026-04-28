@@ -383,6 +383,23 @@ _OPENAI_COMPUTER_USE_TOOL: dict[str, Any] = {
     "environment": "mac",
 }
 
+# v0.60.0 R3-mini — PAYG OpenAI Responses reasoning models.
+# Spec-grounded against openai-python ``shared/reasoning.py:13`` ("gpt-5
+# and o-series models only") + ``response_create_params.py:70-74``
+# (``reasoning.encrypted_content`` semantics under ``store=False``).
+_PAYG_REASONING_O_SERIES = frozenset({"o3", "o4-mini", "o3-mini"})
+
+
+def _is_payg_reasoning_model(model: str) -> bool:
+    """True for any PAYG OpenAI model that accepts the ``reasoning`` kwarg.
+
+    Includes the gpt-5.x family (gpt-5.5, gpt-5.4, gpt-5.4-mini,
+    gpt-5.3-codex, …) plus the legacy o-series whitelist. Other models
+    silently drop the kwarg, so this gate keeps the request shape
+    correct.
+    """
+    return model in _PAYG_REASONING_O_SERIES or model.startswith("gpt-5")
+
 
 class OpenAIAgenticAdapter:
     """OpenAI agentic adapter via Responses API (P1 Gateway pattern).
@@ -492,12 +509,14 @@ class OpenAIAgenticAdapter:
         if is_computer_use_enabled():
             oai_tools.append(_OPENAI_COMPUTER_USE_TOOL)
 
-        # Convert messages to Responses API input format
-        responses_input = _convert_messages_to_responses(system, messages)
-        failover_models = [model] + [m for m in self.fallback_chain if m != model]
+        # Convert messages to Responses API input format, then inject any
+        # prior-turn encrypted reasoning blobs so gpt-5.x can resume
+        # state across turns (R3-mini parity with Codex Plus).
+        from core.llm.agentic_response import inject_reasoning_replay
 
-        # OpenAI reasoning models that support reasoning effort
-        _REASONING_MODELS = {"o3", "o4-mini", "o3-mini"}
+        oai_messages = _convert_messages_to_responses(system, messages)
+        responses_input = inject_reasoning_replay(oai_messages, messages)
+        failover_models = [model] + [m for m in self.fallback_chain if m != model]
 
         async def _do_call(m: str) -> Any:
             create_kwargs: dict[str, Any] = {
@@ -508,11 +527,17 @@ class OpenAIAgenticAdapter:
                 "max_output_tokens": max_tokens,
                 "temperature": temperature,
             }
-            # Map effort to OpenAI reasoning effort for reasoning models
+            # v0.60.0 R3-mini — Responses-API reasoning kwargs.
+            # ``include=["reasoning.encrypted_content"]`` is required when
+            # ``store=False`` (default) so the server returns the opaque
+            # continuation blob; ``summary="auto"`` opts the response into
+            # reasoning summaries so the R6 surfacing path can render
+            # "live thinking..." for PAYG users (Codex Plus already had this).
             _EFFORT_MAP = {"low": "low", "medium": "medium", "high": "high", "max": "high"}
-            if m in _REASONING_MODELS:
+            if _is_payg_reasoning_model(m):
                 oai_effort = _EFFORT_MAP.get(effort, "medium")
-                create_kwargs["reasoning"] = {"effort": oai_effort}
+                create_kwargs["reasoning"] = {"effort": oai_effort, "summary": "auto"}
+                create_kwargs["include"] = ["reasoning.encrypted_content"]
             return await asyncio.to_thread(client.responses.create, **create_kwargs)
 
         try:
