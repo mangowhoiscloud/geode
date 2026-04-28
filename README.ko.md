@@ -18,7 +18,7 @@
 
 [English](README.md)
 
-# GEODE v0.58.0 — Long-running Autonomous Execution Harness
+# GEODE v0.59.0 — Long-running Autonomous Execution Harness
 
 탐색적 리서치와 시그널 예측을 위한 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게.
 
