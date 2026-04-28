@@ -28,6 +28,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.56.0] — 2026-04-28
+
+### Added
+- **`xhigh` effort level** (R4-mini, audit B3). Opus 4.7 supports a new `xhigh` reasoning level above `high` (Anthropic recommends it as the starting effort for coding/agentic workloads — see [platform.claude.com/docs/en/build-with-claude/effort](https://platform.claude.com/docs/en/build-with-claude/effort)). The Anthropic adapter now version-gates: `xhigh` passes through on Opus 4.7 and downgrades to `"max"` on Opus 4.6 / Sonnet 4.6 (which reject it with 400). Mirrors Hermes `_supports_xhigh_effort` substring-based gate (`anthropic_adapter.py:49-53, 1445-1446`). The `_EFFORT_LEVELS` table in `core/agent/loop.py:1513` was extended to include `xhigh` so the overthinking auto-downgrade can index it without crashing. Users opt in via `agentic.effort = "xhigh"`; we never auto-upgrade `high → xhigh`. (`core/llm/providers/anthropic.py:_XHIGH_EFFORT_MODELS, _supports_xhigh_effort`, `core/agent/loop.py:_EFFORT_LEVELS`, `core/config.py:agentic_effort`)
+
+### Fixed
+- **Anthropic `thinking.display = "summarized"` always set on adaptive thinking** (R4-mini, audit C1). Opus 4.7 changed the default for `thinking.display` from `"summarized"` to `"omitted"` (per [whats-new-claude-4-7](https://platform.claude.com/docs/en/docs/about-claude/models/whats-new-claude-4-7)) — meaning thinking blocks come back empty unless the caller explicitly asks for a summary. Without the override the GEODE activity feed had no reasoning trace to render on Opus 4.7. v0.56.0 forces `display: "summarized"` on every adaptive call. Mirrors Hermes (`anthropic_adapter.py:1440`): *"explicit override preserves UX."* (`core/llm/providers/anthropic.py:adaptive thinking branch`)
+- **Anthropic thinking-block `signature` round-trip safety pinned** (R4-mini, audit C2). All three reference codebases (OpenClaw, Claude Code, Hermes) preserve the `signature` field when echoing thinking blocks back into the next-turn `messages` array — Claude Code documents the consequence: *"mismatched thinking block signatures cause API 400 errors"* (`utils/messages.ts:2311-2322`). GEODE's normaliser already drops thinking blocks from `AgenticResponse.content` and `_serialize_content` only emits text + tool_use blocks, so a stale signature can't accidentally reach the next request. v0.56.0 pins both invariants with explicit tests so future code that adds thinking-block round-trip support can't silently regress this safety.
+
+### Tests
+- `tests/test_anthropic_reasoning_v056.py` — 11 invariants covering the three R4-mini items: `xhigh` model gate (4 cases), `_XHIGH_EFFORT_MODELS ⊆ _ADAPTIVE_MODELS`, loop `_EFFORT_LEVELS` includes `xhigh`, adapter source asserts `display: "summarized"`, downgrade contract on Opus 4.6, normaliser drops thinking blocks, `_serialize_content` only emits text + tool_use.
+- `tests/test_anthropic_sampling_params.py:test_adaptive_models_omit_sampling_params` updated to expect the new `{type:"adaptive", display:"summarized"}` shape.
+
+### Reference
+- `docs/research/reasoning-depth-audit.md` — R4 in cross-codebase comparison (Hermes was 1/3 to ship `display`; April 23 Anthropic postmortem named `xhigh` as the new default).
+- `docs/research/reasoning-depth-post-r1r5-gaps.md` — R4-mini bundle (C1 + B3 + C2) recommended as the next single PR.
+- Hermes Agent: `agent/anthropic_adapter.py:49-53` (xhigh gate), `:1440` (display=summarized), `:1445-1446` (downgrade).
+- Anthropic official docs: `platform.claude.com/docs/en/build-with-claude/effort` (xhigh), `whats-new-claude-4-7` (display default change), `extended-thinking#preserving-thinking-blocks` (signature round-trip).
+
 ## [0.55.1] — 2026-04-28
 
 ### Fixed

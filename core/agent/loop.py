@@ -1510,7 +1510,11 @@ class AgenticLoop:
         from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
         ctx_window = MODEL_CONTEXT_WINDOW.get(self.model, 200_000)
-        _EFFORT_LEVELS = ["low", "medium", "high", "max"]
+        # v0.56.0 R4-mini — ``xhigh`` added (Opus 4.7-only level per
+        # platform.claude.com/docs/en/build-with-claude/effort).
+        # Adapter version-gates: ``xhigh`` downgrades to ``"max"`` on
+        # models that reject it (4.6 / Sonnet 4.6).
+        _EFFORT_LEVELS = ["low", "medium", "high", "max", "xhigh"]
 
         adaptive_max_tokens = self.max_tokens
         adaptive_thinking = self._thinking_budget
