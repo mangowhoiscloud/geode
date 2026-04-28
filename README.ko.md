@@ -18,7 +18,7 @@
 
 [English](README.md)
 
-# GEODE v0.53.3 — Long-running Autonomous Execution Harness
+# GEODE v0.54.0 — Long-running Autonomous Execution Harness
 
 탐색적 리서치와 시그널 예측을 위한 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게.
 
@@ -73,9 +73,19 @@ uv sync                              # 의존성 설치 (~30초)
 uv tool install -e . --force         # `geode` 를 어디서나 쓸 수 있게 등록
 ```
 
-### 2단계 — 모델과 어떻게 통신할지 선택
+### 2단계 — setup wizard 실행
 
-아래 두 경로 중 **하나** 선택. 둘 다 동작하지만, 이미 챗봇 구독을 하고 있다면 그게 더 쌉니다.
+```bash
+geode setup
+```
+
+Wizard 가 세 가지 경로를 제시합니다: ChatGPT 구독 (이미 `codex auth login` 했다면 자동 감지), API 키 (붙여넣기), dry-run 으로 일단 둘러보기. 본인에 맞는 걸 고르면 됩니다.
+
+GEODE 설치 전에 이미 `codex auth login` 을 해뒀다면 이 단계 건너뛰어도 됩니다 — 다음 `geode` 실행 시 토큰을 자동 감지하고 바로 시작합니다.
+
+### 3단계 — 경로별 수동 안내 (참고용)
+
+위 wizard 가 아래 내용을 다 처리합니다. 이 섹션은 각 경로가 실제로 무엇을 하는지 알고 싶을 때 참고하세요.
 
 ---
 
@@ -127,7 +137,7 @@ OpenAI 또는 ZhipuAI GLM 도 쓰고 싶다면 같은 파일에 `OPENAI_API_KEY=
 
 ---
 
-### 3단계 — 실행
+### 4단계 — 실행
 
 ```bash
 geode                                                # 인터랙티브 채팅
@@ -149,7 +159,15 @@ geode "오늘 AI 새 소식 뭐야?"                         # 1회성 프롬프
   ✢ Worked for 8s · claude-opus-4-7 · ↓2.1k ↑412 · $0.018
 ```
 
-성공입니다. 에러가 나면 [트러블슈팅](#트러블슈팅) 으로.
+성공입니다. 에러가 나면 `geode doctor` 로 진단하거나 [트러블슈팅](#트러블슈팅) 으로.
+
+### 그 외 유용한 명령
+
+```bash
+geode about           # 버전, 모델, 등록된 auth, 경로, 데몬 상태
+geode doctor          # 7-항목 부트스트랩 진단 + fix 힌트
+geode setup --reset   # ~/.geode/.env 지우고 wizard 재실행
+```
 
 ---
 
@@ -166,6 +184,8 @@ geode serve                          # 백그라운드 Gateway 데몬 시작
 ---
 
 ## 트러블슈팅
+
+먼저 `geode doctor` 부터 실행하세요. Python 버전, `geode` PATH, `~/.geode/.env`, Codex CLI OAuth, ProfileStore, serve 소켓, `~/.local/bin` PATH 까지 확인하고, 실패한 항목마다 fix 명령을 알려줍니다. 아래 expander 들은 같은 내용을 글로 풀어쓴 것입니다.
 
 <details>
 <summary><strong>"command not found: python3"</strong> — Python 미설치 또는 PATH 누락.</summary>
