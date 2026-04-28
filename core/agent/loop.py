@@ -1175,7 +1175,18 @@ class AgenticLoop:
                 text = self._extract_text(response)
                 # Sync all intermediate tool-use messages + final response to context
                 assistant_content = self._serialize_content(response.content)
-                messages.append({"role": "assistant", "content": assistant_content})
+                _assistant_msg: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": assistant_content,
+                }
+                # v0.55.0 — Codex Plus encrypted reasoning passthrough.
+                # Sidecar stays on the assistant message and is consumed
+                # by ``_convert_messages_to_responses`` (Codex adapter)
+                # to echo the reasoning items back into the next-turn
+                # ``input`` array. Other adapters ignore the field.
+                if getattr(response, "codex_reasoning_items", None):
+                    _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
+                messages.append(_assistant_msg)
                 self._sync_messages_to_context(messages)
                 reason = "forced_text" if is_last_round else "natural"
                 result = AgenticResult(
@@ -1281,7 +1292,12 @@ class AgenticLoop:
             # Accumulate messages for next round
             # Convert content blocks to serializable format
             assistant_content = self._serialize_content(response.content)
-            messages.append({"role": "assistant", "content": assistant_content})
+            _assistant_msg = {"role": "assistant", "content": assistant_content}
+            # v0.55.0 — Codex reasoning passthrough (see end_turn branch
+            # above for the rationale; same shape on tool-use rounds).
+            if getattr(response, "codex_reasoning_items", None):
+                _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
+            messages.append(_assistant_msg)
             messages.append({"role": "user", "content": tool_results})
             round_idx += 1
 

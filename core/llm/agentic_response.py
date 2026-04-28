@@ -49,11 +49,22 @@ class AgenticResponse:
     Normalizes Anthropic and OpenAI responses into a common format.
     The content list contains TextBlock and ToolUseBlock objects
     with the same attribute names (.type, .text, .name, .input, .id).
+
+    ``codex_reasoning_items`` (v0.55.0): sidecar list of opaque
+    Reasoning items extracted from a Codex Plus stream. Each entry is
+    a dict with ``{type:"reasoning", encrypted_content, summary?, id?}``
+    fit for re-injection into the next-turn ``input`` array. Present
+    only on responses from ``CodexAgenticAdapter``; ``None`` for every
+    other provider. Mirrors the Hermes Agent pattern at
+    ``agent/codex_responses_adapter.py:228-246, 720-738`` — required
+    for multi-turn reasoning continuity on gpt-5.x because
+    ``store=False`` makes the server unable to resolve items by ID.
     """
 
     content: list[TextBlock | ToolUseBlock] = field(default_factory=list)
     stop_reason: str = "end_turn"  # "end_turn" or "tool_use"
     usage: ResponseUsage = field(default_factory=ResponseUsage)
+    codex_reasoning_items: list[dict[str, Any]] | None = None
 
 
 def normalize_anthropic(response: Any) -> AgenticResponse:
@@ -163,6 +174,13 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
     """
     blocks: list[TextBlock | ToolUseBlock] = []
     has_function_calls = False
+    # v0.55.0 — sidecar accumulator for Codex Plus encrypted reasoning.
+    # Hermes pattern (codex_responses_adapter.py:720-738): capture every
+    # ``reasoning`` item the server emits so the loop can echo it back
+    # in the next-turn ``input`` array. Without this, multi-turn gpt-5.x
+    # sessions lose reasoning state on every round (the encrypted blob
+    # is opaque continuation state, not optional metadata).
+    codex_reasoning_items: list[dict[str, Any]] = []
 
     output = getattr(response, "output", None) or []
     for item in output:
@@ -187,9 +205,28 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
                 args = {}
             blocks.append(ToolUseBlock(id=call_id, name=name, input=args))
 
-        # reasoning, web_search_call, file_search_call, etc. → skip
-        # (server-side or already represented via encrypted_content
-        # passthrough on the next request)
+        elif item_type == "reasoning":
+            # Capture for multi-turn replay. Skip if the encrypted blob
+            # is missing — without it, replay can't resume reasoning
+            # state and would just bloat the next request for nothing.
+            encrypted = getattr(item, "encrypted_content", None)
+            if not isinstance(encrypted, str) or not encrypted:
+                continue
+            replay: dict[str, Any] = {"type": "reasoning", "encrypted_content": encrypted}
+            item_id = getattr(item, "id", None)
+            if isinstance(item_id, str) and item_id:
+                replay["id"] = item_id
+            summary = getattr(item, "summary", None)
+            if isinstance(summary, list):
+                serialised: list[dict[str, Any]] = []
+                for part in summary:
+                    text = getattr(part, "text", None)
+                    if isinstance(text, str):
+                        serialised.append({"type": "summary_text", "text": text})
+                replay["summary"] = serialised
+            codex_reasoning_items.append(replay)
+
+        # web_search_call, file_search_call, etc. → skip (server-side)
 
     stop_reason = "tool_use" if has_function_calls else "end_turn"
 
@@ -226,4 +263,5 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
         content=blocks,
         stop_reason=stop_reason,
         usage=usage,
+        codex_reasoning_items=codex_reasoning_items or None,
     )
