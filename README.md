@@ -11,247 +11,263 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Anthropic-Opus_4.7-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.7">
-  <img src="https://img.shields.io/badge/OpenAI-GPT--5.4-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.4">
-  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5">
-  <img src="https://img.shields.io/badge/+10_fallback-models-555?style=flat-square" alt="+6 fallback models">
+  <img src="https://img.shields.io/badge/OpenAI-GPT--5.5-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.5">
+  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.1">
+  <img src="https://img.shields.io/badge/+10_fallback-models-555?style=flat-square" alt="+10 fallback models">
 </p>
 
 [한국어](README.ko.md)
 
 # GEODE v0.53.3 — Long-running Autonomous Execution Harness
 
-A general-purpose autonomous execution agent. Performs research, analysis, automation, and scheduling from a single natural-language command.
+A general-purpose autonomous agent for **exploratory research and signal prediction**. You ask in plain language; GEODE plans, calls tools, and reports — across one prompt or a long-running session.
 
-**Production**: Claude Code Scaffold (CLAUDE.md + development Skills + CI Hooks) builds GEODE.
-**Execution**: GEODE (a `while(tool_use)` loop) autonomously selects from 56 tools + 44 MCP servers. 58 runtime Hooks control the lifecycle, and 5-Layer Verification validates all output.
+> **Already pay for ChatGPT Plus or Claude Pro?** You don't need an API key. [Skip to subscription setup ↓](#path-a--use-your-existing-subscription-recommended)
 
-## Quick Start
+---
 
-### Prerequisites
+## What you can ask it
 
-| Tool | Install | Check |
-|------|---------|-------|
-| **Python 3.12+** | [python.org/downloads](https://www.python.org/downloads/) | `python3 --version` |
-| **Git** | [git-scm.com](https://git-scm.com/) | `git --version` |
-| **uv** (Python package manager) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `uv --version` |
+Copy-paste these to see what it does:
 
-### Step 1 — Clone and install
+```
+"Summarize the latest RAG papers on arXiv from this month"
+"Find LinkedIn job postings that match my profile and rank them"
+"Schedule a 9 AM standup reminder every weekday"
+"Watch hacker news for posts about LangGraph and DM me on Slack"
+"Compare gpt-5.5 vs claude-opus-4.7 for code review"
+```
+
+GEODE chooses the right tools (web search, file ops, MCP servers, sub-agents), runs them, and shows you the answer with sources and cost.
+
+---
+
+## Setup in 5 minutes
+
+### Prerequisites — what you need first
+
+<details>
+<summary><strong>Don't know what these are?</strong> Click here for a 1-line explainer of each.</summary>
+
+- **Python 3.12+** — the language GEODE is written in. Most laptops don't have a recent enough version. Install from [python.org/downloads](https://www.python.org/downloads/) (download the macOS or Windows installer, click through).
+- **Git** — how you copy GEODE's source code from GitHub. Mac: comes with Xcode Command Line Tools (`xcode-select --install`). Windows: [git-scm.com](https://git-scm.com/) installer.
+- **uv** — a fast Python package manager (replaces pip). One-line install: copy the `curl` command below into Terminal/PowerShell.
+
+If any of these fail, see [Troubleshooting](#troubleshooting) below.
+</details>
+
+| Tool | Install | Verify |
+|------|---------|--------|
+| Python 3.12+ | [python.org/downloads](https://www.python.org/downloads/) | `python3 --version` |
+| Git | [git-scm.com](https://git-scm.com/) | `git --version` |
+| uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `uv --version` |
+
+### Step 1 — Get the code
 
 ```bash
 git clone https://github.com/mangowhoiscloud/geode.git
 cd geode
-uv sync          # installs all dependencies (takes ~30 seconds)
+uv sync                              # installs dependencies (~30s)
+uv tool install -e . --force         # makes `geode` available everywhere
 ```
 
-### Step 2 — Add your API key
+### Step 2 — Pick how you'll talk to the model
+
+Pick **one** of the two paths below. Both work; one is cheaper if you already pay for a chat subscription.
+
+---
+
+#### Path A — Use your existing subscription (recommended)
+
+If you already pay for **ChatGPT Plus** ($20/mo) or **Claude Pro** ($20/mo), you can route GEODE's calls through that subscription with **no extra charge** and no API key.
+
+**ChatGPT Plus / Pro / Business** → use the Codex backend:
+
+```bash
+brew install codex                    # macOS — or: npm install -g @openai/codex
+codex auth login                      # opens browser → sign in with your ChatGPT account
+geode                                 # GEODE auto-detects the OAuth token
+```
+
+**Claude Pro / Max** → use Claude CLI:
+
+```bash
+brew install claude                   # macOS — or: npm install -g @anthropic-ai/claude-code
+claude /login                         # opens browser → sign in with your Anthropic account
+geode                                 # GEODE auto-detects the OAuth token
+```
+
+> **Why this works**: Codex and Claude CLI both ship with OAuth flows that exchange your subscription login for a short-lived token. GEODE reads the same token file (`~/.codex/auth.json`, `~/.claude/.credentials.json`) — no copy-paste, no leaks. If your subscription resets, GEODE refreshes the token automatically (120s before expiry, 401 auto-retry).
+
+---
+
+#### Path B — Use an API key (pay-as-you-go)
+
+If you don't have a subscription, you can buy API credits directly. New Anthropic accounts come with **$5 free credits**, enough for hundreds of conversations.
+
+**Get an Anthropic API key** (4 clicks):
+
+1. Sign up at [console.anthropic.com](https://console.anthropic.com)
+2. Top-right menu → **Settings** → **API Keys**
+3. Click **Create Key** → name it "geode" → **Copy** the `sk-ant-...` string
+4. Save it where GEODE will find it:
 
 ```bash
 mkdir -p ~/.geode
-echo 'ANTHROPIC_API_KEY=sk-ant-your-key-here' > ~/.geode/.env
+echo 'ANTHROPIC_API_KEY=sk-ant-paste-your-key-here' > ~/.geode/.env
 chmod 600 ~/.geode/.env
 ```
 
-Get your key at [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (free tier available).
+Want OpenAI or ZhipuAI GLM instead? Add `OPENAI_API_KEY=sk-proj-...` or `ZAI_API_KEY=...` to the same file. GEODE picks whichever is available.
 
-> **Want to use OpenAI models (GPT-5.4)?** Two options:
->
-> **Option A — Codex CLI OAuth (recommended)**
-> ```bash
-> brew install codex          # or: npm install -g @openai/codex
-> codex auth login            # opens browser for Google/OpenAI OAuth
-> ```
-> After login, GEODE auto-detects your OAuth token from `~/.codex/auth.json`. No `.env` needed — proactive refresh (120s before expiry) and 401 auto-retry are built in.
->
-> **Option B — API key**
-> ```bash
-> echo 'OPENAI_API_KEY=sk-proj-your-key-here' >> ~/.geode/.env
-> ```
+> **Cost reality check.** A typical single-prompt session uses ~3,000 tokens at ~$0.01. A long research session with 10 tool calls is usually $0.05–$0.30. The free $5 credit covers ~500 prompts. Set `cost_limit_usd=5` in your `.env` to cap spend.
 
-> No API key? GEODE still works in **dry-run mode** — all pipeline features run with fixture data, no LLM calls.
+---
 
 ### Step 3 — Run
 
 ```bash
-uv run geode                                       # interactive CLI
-uv run geode "summarize the latest AI research"     # one-shot prompt
-uv run geode analyze "Cowboy Bebop" --dry-run       # Game IP analysis (no API key needed)
+geode                                                # interactive chat
+geode "what's new in AI today?"                      # one-shot prompt
 ```
 
-### Using an AI coding agent? Even easier.
-
-If you're using **Claude Code**, **Codex**, or any agentic coding tool, just paste this:
+You should see something like:
 
 ```
-Clone https://github.com/mangowhoiscloud/geode.git, run uv sync,
-then run "uv run geode analyze Berserk --dry-run" to verify it works.
-```
-
-The agent reads CLAUDE.md, installs dependencies, and runs the verification — no manual steps needed.
-
-### What you'll see
-
-```
-$ uv run geode "what can you do?"
-
 ● AgenticLoop
-  ⠋ ✢ Thinking...
-  ✓ show_help → ok (0.1s)
+  ✓ web_search → ok (1.5s)
+  ✓ web_fetch → ok (1.1s)
 
-  I can help with research, analysis, automation, and scheduling.
-  Use /help to see all available commands.
+  Today's top AI stories:
+  • Anthropic released Claude Opus 4.7 with 1M-token context...
+  • OpenAI's GPT-5.5 system card published; pricing matches 4.6...
+  • LangGraph 0.6 ships native streaming for tool calls...
 
-  ✢ Worked for 3s · claude-opus-4-7 · ↓1.2k ↑200 · $0.0065
+  ✢ Worked for 8s · claude-opus-4-7 · ↓2.1k ↑412 · $0.018
 ```
 
-### Optional — Install globally
+If you see this, you're done. If you see an error, jump to [Troubleshooting](#troubleshooting).
+
+---
+
+### Optional — Hook into Slack / Discord / Telegram
+
+Once GEODE works in your terminal, you can let it answer on the messaging channels you already use:
 
 ```bash
+geode serve                          # starts the always-on Gateway daemon
+```
+
+Configure channel bindings in `.geode/config.toml` (Slack bot token, Discord webhook, etc.). See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a channel routes the message into the same agent loop you use locally.
+
+---
+
+## Troubleshooting
+
+<details>
+<summary><strong>"command not found: python3"</strong> — Python isn't installed or isn't on your PATH.</summary>
+
+Mac: `xcode-select --install` then `brew install python@3.12`. Windows: download the installer from [python.org](https://www.python.org/downloads/) and check "Add Python to PATH" during setup. Verify with `python3 --version` — must be 3.12 or higher.
+</details>
+
+<details>
+<summary><strong>"command not found: uv"</strong> — uv isn't on your PATH yet.</summary>
+
+The install script writes uv to `~/.local/bin`. Either restart your terminal, or run `source ~/.bashrc` (bash) / `source ~/.zshrc` (zsh). Verify with `uv --version`.
+</details>
+
+<details>
+<summary><strong>"command not found: geode"</strong> — the global install hasn't run.</summary>
+
+Run `uv tool install -e . --force` from the `geode/` directory. This puts the `geode` command in `~/.local/bin/`. If that directory isn't on your PATH, add `export PATH="$HOME/.local/bin:$PATH"` to your shell config.
+</details>
+
+<details>
+<summary><strong>"401 Unauthorized" or "Invalid API key"</strong> — wrong key, expired key, or wrong file location.</summary>
+
+Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), or `id.secret` (ZhipuAI GLM). Make sure there are no extra spaces or quote characters. If you used the subscription path, re-run `codex auth login` or `claude /login` to refresh the OAuth token.
+</details>
+
+<details>
+<summary><strong>"Address already in use" when running `geode serve`</strong> — daemon is already running.</summary>
+
+`ps aux | grep "geode serve"` to find the PID, then `kill <PID>`. Or use `geode serve --port <other>` to pick a different port.
+</details>
+
+<details>
+<summary><strong>The model doesn't seem to use my tools / runs in circles.</strong></summary>
+
+Check `geode model` — some models are better at tool use than others. Default is `claude-opus-4-7` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f /tmp/geode-serve.log` to see what the model is actually doing.
+</details>
+
+<details>
+<summary><strong>I want to see what GEODE is doing under the hood.</strong></summary>
+
+`tail -f ~/.local/share/geode/logs/serve.log` (or `/tmp/geode-serve.log` if you started it manually). Every LLM call, tool invocation, and decision is logged with timing.
+</details>
+
+<details>
+<summary><strong>How do I update?</strong></summary>
+
+```bash
+cd geode
+git pull origin main
+uv sync
 uv tool install -e . --force
-geode version    # now works from any directory
 ```
-
-> See the [full Setup Guide](docs/setup.md) for Slack Gateway, multi-provider LLM, and advanced configuration.
+</details>
 
 ---
 
-## GEODE in Action
+## What's inside
 
-```
-> Find job postings that match my profile
-  AgenticLoop  glm-5.1 · in:8.2k out:185 · $0.006
-  Found 3 matching job postings.
-  - ML Engineer — LangGraph experience preferred
-  - Agent Platform Lead — Python, autonomous execution
-  - AI Infra — Kubernetes + LLM Ops
-  3 rounds · 2 tools · ~4s
-```
-
-```
-> Find and summarize the latest RAG papers on arXiv
-  AgenticLoop  claude-opus-4-7 · in:12.4k out:890 · $0.084
-  Summarized 5 papers.
-  1. GraphRAG: Knowledge Graph + Retrieval (2026-03)
-  2. Adaptive Chunking for Long-Context RAG (2026-02)
-  ...
-  5 rounds · 3 tools · ~12s
-```
-
-```
-> Analyze the Berserk IP
-  analyze_ip(ip_name="Berserk")
-  analyze_ip -> S · 81.3 · conversion_failure
-  Strong fandom and game suitability in the Dark Fantasy genre.
-  High commercial potential if conversion optimization is prioritized.
-  9 nodes · 8 LLM calls · ~45s
-```
-
-### Real-World Case — Legacy Migration (REODE)
-
-| Metric | Value |
-|--------|-------|
-| Codebase | 5,523 files (241 Java + 355 JSP + 47 XML) |
-| Migration | Java 1.8 → 22, Spring 4 → 6 |
-| Result | 83/83 tests + FE/BE E2E verified |
-| Cost | ~$388 (33 sessions, 1,133 LLM rounds) |
-| Time | 5h 48m (autonomous, zero human intervention) |
-
-> REODE — a sibling project sharing GEODE's `while(tool_use)` loop with a legacy migration domain plugin. Client feedback: *"exceeded expectations."*
-
----
-
-## Highlights
-
-| Feature | Description |
+| Feature | What it does |
 |---------|-------------|
-| **`while(tool_use)` Loop** | Core primitive for all autonomous behavior. Sub-agents, plan execution, and batch analysis are all AgenticLoop instances |
-| **56 Tools + MCP** | 56 native tools + 44 MCP catalog servers auto-installed. Bash execution (41 auto-approved, 9 blocked) |
-| **Sub-Agent** | Full inheritance of parent capabilities, Lane("global") gating, depth guard, Token Guard |
-| **Multi-Provider LLM** | Anthropic + OpenAI + ZhipuAI 3-provider failover chain. Codex OAuth auto-detect, proactive token refresh, 401 auto-retry |
-| **4-Tier Memory** | SOUL --> User Profile --> Organization --> Project --> Session |
-| **`.geode/` Context** | Project-local persistent store — journal, vault, rules, cache |
-| **Domain Plugin** | Swap pipelines via `DomainPort` Protocol — Game IP analysis included by default |
-| **Scaffold (Production)** | Claude Code + CLAUDE.md + development Skills + CI Hooks — the control structure that builds GEODE |
-| **15 Runtime Skills** | `.geode/skills/` + `~/.geode/skills/` — 3-tier visibility (`public`/`private`/`unlisted`). Manage via `geode skill list/create/show/remove` |
-| **58 Runtime Hooks** | Pipeline/node/tool/LLM/session lifecycle events — matcher-based filtering, interceptor/feedback/observer modes |
-| **5-Layer Verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM (Krippendorff alpha >= 0.67) + Confidence Gate + Rights Risk |
-| **Safety** | 4-tier HITL (SAFE/STANDARD/WRITE/DANGEROUS), 9 blocked bash patterns, PolicyChain, credential scrubbing (sk-\*/ghp\_\*/Bearer auto-redact) |
+| **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches — all instances of the same loop |
+| **56 tools + 44 MCP servers** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, native MCP catalog. Auto-installed on first use |
+| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. Subscription OAuth (Codex, Claude CLI) auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
+| **4-tier memory** | SOUL (identity) → User Profile → Organization → Project → Session. Persistent, survives daemon restarts |
+| **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` for multi-step work. Disk-persistent (`.geode/plans.json`), survives restarts |
+| **Long-running daemon** | `geode serve` runs as background daemon. Slack / Discord / Telegram pollers + scheduler tick + IPC for the thin CLI |
+| **Sub-agents** | Full inheritance of parent capability, depth/cost guards, isolation by Lane |
+| **5-layer verification** | Guardrails G1-G4 + BiasBuster + Cross-LLM (Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
+| **Domain-specific DAG (swappable)** | Pipelines (research, multi-axis evaluation, synthesis) plug in via the `DomainPort` Protocol. Ships with one reference DAG out-of-the-box; replace it for any exploratory-research / signal-prediction problem |
 
 ---
 
-## Scaffold
+## How GEODE compares
 
-There are two control layers.
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| Always-on daemon | ❌ session only | ❌ session only | ✅ Gateway | ✅ `geode serve` |
+| Slack/Discord channels | ❌ | ❌ | ✅ many | ✅ Slack first-class |
+| Multi-provider failover | ⚠️ Anthropic only | ⚠️ OpenAI only | ✅ many | ✅ 3 + governance |
+| Subscription OAuth (no API key) | ✅ Pro/Max | ✅ Plus | ✅ both | ✅ both |
+| Disk-persistent plans + memory | ⚠️ partial | ⚠️ partial | ✅ | ✅ 4-tier |
+| Swappable domain DAG | ❌ | ❌ | ❌ | ✅ `DomainPort` |
+| Scheduler (long-running) | ❌ | ❌ | ⚠️ partial | ✅ cron + triggers |
 
-**Scaffold (production system)**: Claude Code + CLAUDE.md + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality.
+Use **Claude Code** or **Codex** for short coding sessions. Use **GEODE** when you need it to keep running, watch signals, and report back over hours or days.
 
-**GEODE Runtime (agent)**: `while(tool_use)` loop + 56 tools + 15 runtime Skills + 58 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
+---
 
-### Project Structure
+<details>
+<summary><strong>Architecture overview</strong> (for contributors)</summary>
 
-```
-geode/
-├── core/                          # 226 modules, 4-Layer Stack
-│   ├── agent/                     # Agent: AgenticLoop, ToolCallProcessor, SubAgentManager
-│   ├── cli/                       # Agent: Commands, UI
-│   ├── llm/                       # Model: Claude/OpenAI/GLM Adapters, Router, Prompts
-│   ├── memory/                    # Runtime: 4-Tier Memory, Context Assembly, User Profile
-│   ├── hooks/                     # HookSystem(58) — cross-cutting lifecycle events
-│   ├── orchestration/             # Harness: TaskGraph, PlanMode, SessionLane, LaneQueue(global:8)
-│   ├── tools/                     # Runtime: 56 Tool Definitions + Handlers
-│   ├── skills/                    # Runtime: Skill Templates
-│   ├── mcp/                       # Runtime: MCP Catalog(44) + Manager
-│   ├── domains/game_ip/           # Domain: Game IP Domain Plugin (7 pipeline nodes)
-│   ├── gateway/                   # Agent: Slack Gateway (geode serve)
-│   ├── runtime_wiring/            # Runtime bootstrap modules (5-module split)
-│   └── verification/              # Guardrails, BiasBuster, Cross-LLM
-├── tests/                         # 3,995+ tests
-├── docs/                          # Architecture, Workflow, Plans
-│   ├── architecture/              # Hook system, orchestration decisions
-│   ├── workflow.md                # CANNOT/CAN, GitFlow, Kanban
-│   ├── setup.md                   # Installation, API keys, Slack
-│   └── progress.md                # Kanban board (multi-agent shared)
-├── .geode/                        # Project-local agent context
-├── CLAUDE.md                      # Agent behavior rules (SOT)
-└── pyproject.toml                 # uv package config
-```
+GEODE has two control layers:
 
-[Hook System -->](docs/architecture/hook-system.md) | [Wiring Audit Matrix -->](docs/architecture/wiring-audit-matrix.md)
+- **Scaffold (production)** — Claude Code + `CLAUDE.md` + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality.
+- **GEODE Runtime (agent)** — `while(tool_use)` loop + 56 tools + 15 runtime Skills + 58 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
 
-### `.geode/` -- Agent Context Lifecycle
-
-Every LLM call receives a 5-tier context hierarchy assembled from persistent stores.
-
-```
-Tier 0    SOUL            GEODE.md — agent identity + constraints
-Tier 0.5  User Profile    ~/.geode/user_profile/ — role, expertise, language
-Tier 1    Organization    MonoLake — cross-project data (DAU, revenue, signals)
-Tier 2    Project         .geode/memory/PROJECT.md — analysis history (max 50, LRU)
-Tier 3    Session         In-memory — conversation, tool results, plans
-```
-
-```
-.geode/
-├── config.toml         # Gateway, MCP servers, model
-├── memory/             # T2: Project Memory (LRU rotate)
-├── rules/              # Auto-generated domain rules
-├── vault/              # Permanent artifacts (reports, research)
-├── skills/             # 15 runtime skills (3-tier visibility)
-└── result_cache/       # Pipeline LRU (SHA-256, 24h TTL)
-```
-
-Lower tiers override higher tiers. Budget: SOUL 10% | Org 25% | Project 25% | Session 40%.
-
-[Context Lifecycle (full architecture) -->](docs/architecture/context-lifecycle.md)
-
-### `core/` -- 4-Layer Stack (Model --> Runtime --> Harness --> Agent)
+4-Layer Stack (Model → Runtime → Harness → Agent) + Sub-Agent System + 4-Tier Memory.
 
 ```mermaid
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
-    HA --> RT["Runtime<br/>Tools(52), MCP(44)<br/>Memory, Skills"]
+    HA --> RT["Runtime<br/>Tools(56), MCP(44)<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
-    AG -.-> DP["⊥ Domain<br/>DomainPort Protocol"]
+    AG -.-> DP["⊥ Domain<br/>DomainPort Protocol<br/>(swappable DAG)"]
     HA -.-> DP
     RT -.-> DP
 
@@ -262,123 +278,60 @@ graph LR
     style DP fill:#1e293b,stroke:#06b6d4,color:#e2e8f0,stroke-dasharray: 5 5
 ```
 
-| Layer | Core | Entry Points |
+| Layer | Core | Entry points |
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | ToolRegistry(56), MCP Catalog(44), Skills, Memory(4-Tier) | `core/tools/`, `core/memory/` |
-| **Model** | ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback) | `core/llm/` |
-| | | |
-| **⊥ Domain** | DomainPort Protocol, GameIPDomain (cross-cutting, binds to Runtime + Harness via Port) | `core/domains/` |
+| **Runtime** | ToolRegistry(56), MCP Catalog(44), Skills, Memory(4-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
+| **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
+| **⊥ Domain** | `DomainPort` Protocol — domain-specific DAG plugged in via Port (cross-cutting). One reference DAG ships in the repo; replace for any exploratory-research / signal-prediction domain | `core/domains/` |
 
-### GitFlow + Worktree
-
-```
-alloc --> own(.owner) --> execute(isolated) --> free(worktree remove)
-```
+`.geode/` — agent context lifecycle (5-tier hierarchy assembled into every LLM call):
 
 ```
-feature/<task> --PR--> develop --PR--> main
+Tier 0    SOUL            GEODE.md — agent identity + constraints
+Tier 0.5  User Profile    ~/.geode/user_profile/ — role, expertise, language
+Tier 1    Organization    Cross-project data (signals, history)
+Tier 2    Project         .geode/memory/PROJECT.md — analysis history (LRU-50)
+Tier 3    Session         In-memory — conversation, tool results, plans
 ```
 
-**CI Ratchet -- 5-Job Gate**
-
-All PRs must pass 5 CI jobs before merging. On failure, Claude Code automatically analyzes the cause, applies a fix, and retries.
-Without human intervention, it loops until pytest, mypy, ruff, import-order, and test-count gates all pass.
-
-Test count is monotonically increasing only (Ratchet). Deleting existing tests causes CI rejection.
-This structure has allowed 774+ PRs to be merged with zero regressions.
-
 ```
-while CI fails:
-    Claude Code --> analyze failure --> fix --> push --> re-run CI
+.geode/
+├── config.toml         # Gateway, MCP servers, model
+├── memory/             # T2: Project Memory (LRU rotate)
+├── rules/              # Auto-generated domain rules
+├── vault/              # Permanent artifacts (reports, research)
+├── skills/             # 15 runtime skills (3-tier visibility)
+├── plans.json          # Disk-persistent PlanStore (v0.53.3)
+└── result_cache/       # Pipeline LRU (SHA-256, 24h TTL)
 ```
 
-| Job | Role | On Failure |
-|-----|------|------------|
-| `pytest` | Run all 3,995+ tests | Auto-fix failing tests and retry |
-| `mypy` | Strict mode type checking | Add type hints and retry |
-| `ruff` | Lint + formatting | Apply auto-fix and retry |
-| `import-order` | Import sorting verification | Apply isort and retry |
-| `test-count` | Monotonic test count verification | Restore deleted tests or write replacements |
-
-**3-Checkpoint**: (1) alloc (Backlog --> In Progress) --> (2) merge (PR --> Done, CI 5/5 required) --> (3) verify (cross-check previous state at next session start)
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow details.
-
----
-
-<details>
-<summary><strong>Architecture Overview</strong></summary>
-
-4-Layer Stack (Model --> Runtime --> Harness --> Agent) + `while(tool_use)` Agentic Loop + Sub-Agent System + 4-Tier Memory.
-
-```mermaid
-graph TD
-    CLI["geode<br/>(thin CLI)"] -->|Unix socket IPC| SERVE["geode serve<br/>(unified daemon)"]
-
-    SERVE --> RT["GeodeRuntime"]
-    RT --> SL["SessionLane<br/>per-key serial"]
-    RT --> GL["Lane global:8<br/>total capacity"]
-
-    SL --> CLIP["CLIPoller<br/>SessionMode.IPC"]
-    SL --> GW["Gateway Pollers<br/>Slack / Discord"]
-    SL --> SCHED["Scheduler<br/>60s tick"]
-
-    GL --> CLIP
-    GL --> GW
-    GL --> SCHED
-
-    style CLI fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
-    style SERVE fill:#1e293b,stroke:#10b981,color:#e2e8f0
-    style RT fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style SL fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-    style GL fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-    style CLIP fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-    style GW fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-    style SCHED fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-```
-
-Key components:
-- **Thin-Only**: `geode` = thin CLI. serve mandatory (auto-start). All execution routes through IPC --> serve.
-- **SessionLane**: per-session-key `Semaphore(1)`. Same key serializes, different keys run in parallel. `max_sessions=256`.
-- **Agentic Loop**: Claude Opus 4.7 powered `while(tool_use)` loop. 1M context.
-- **Tool Hierarchy**: Built-in(56) + MCP(44) + Bash. 4-tier safety (SAFE/STANDARD/WRITE/DANGEROUS).
-- **Sub-Agent**: Full parent capability inheritance, Lane("global") gating, depth guard, Token Guard.
-- **Memory**: SOUL --> User Profile --> Organization --> Project --> Session. ContextAssembler 280-char compression.
-- **Auth**: ProfileRotator (OAuth > Token > API_KEY), Codex CLI auto-detect, proactive refresh (120s), 401 auto-retry, credential scrubbing.
-- **Domain Plugin**: Swap pipelines via `DomainPort` Protocol. Game IP included by default (LangGraph 9-node).
+[Full architecture →](docs/architecture/) | [Hook System →](docs/architecture/hook-system.md) | [Wiring Audit →](docs/architecture/wiring-audit-matrix.md)
 
 </details>
 
 <details>
-<summary><strong>Development Workflow (Scaffold)</strong></summary>
+<summary><strong>Development workflow (Scaffold)</strong></summary>
 
-CANNOT (guardrails) comes before CAN (freedom). 7-step workflow + quality gates.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full workflow details.
-
-**Quality Gates:**
+CANNOT (guardrails) before CAN (freedom). 7-step workflow + quality gates. CI ratchet — 5 jobs (pytest, mypy, ruff, import-order, test-count) must pass before any merge. Test count is monotonically increasing only.
 
 | Gate | Command | Target |
 |------|---------|--------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 3900+ pass |
-| E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
+| Test | `uv run pytest tests/ -q` | 4200+ pass |
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/workflow.md](docs/workflow.md).
 
 </details>
 
 <details>
-<summary><strong>Why -- Motivation</strong></summary>
+<summary><strong>Why — motivation</strong></summary>
 
-**Problem.** In 2026, AI coding agents have made remarkable progress. They read, write, fix, and test code autonomously. But how much of real work is actually coding? Research, document analysis, scheduling, notifications, data pipelines, multi-axis evaluation for decision-making -- the space requiring autonomous execution *beyond* coding is far broader.
+In 2026, AI coding agents have made remarkable progress. They read, write, fix, and test code autonomously. But how much of real work is actually coding? Research, document analysis, scheduling, notifications, data pipelines, multi-axis evaluation for decision-making — the space requiring autonomous execution *beyond* coding is far broader.
 
-**Insight.** Yet the core of all autonomous behavior is surprisingly simple. An LLM calls tools, observes results, and decides the next action -- a `while(tool_use)` loop. Claude Code, Codex, OpenClaw -- all frontier harnesses stand on this primitive.
-
-**Origin.** GEODE began as a Nexon AI engineer assignment. A unidirectional LLM/ML-based DAG that reasons about whether a game IP is undervalued -- the assignment was accepted, but that pipeline was a *workflow*, not an agent.
-
-**Pivot.** So the entire IP analysis pipeline was pushed behind a `DomainPort` Protocol as a plugin. On top of it, a general-purpose autonomous execution harness was built. An agent that performs research, analysis, automation, and scheduling through a single `while(tool_use)` loop. Domains are swappable plugins; the harness is domain-agnostic.
+Yet the core of all autonomous behavior is surprisingly simple: an LLM calls tools, observes results, decides the next action — a `while(tool_use)` loop. Claude Code, Codex, OpenClaw — all frontier harnesses stand on this primitive. GEODE generalizes it: domain-agnostic harness, swappable `DomainPort` DAGs for whatever exploratory or signal-prediction problem you're solving.
 
 </details>
 
