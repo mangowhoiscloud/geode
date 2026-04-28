@@ -224,11 +224,50 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
         # ResponseFunctionToolCallParam / FunctionCallOutput /
         # ResponseOutputMessageParam.
         oai_messages = _convert_messages_to_responses(system, messages)
+        # v0.55.0 — Codex multi-turn encrypted reasoning replay. For each
+        # assistant turn that produced reasoning items in a prior round,
+        # inject the opaque ``encrypted_content`` blobs back into the
+        # ``input`` array immediately before the corresponding assistant
+        # entry. Without this, gpt-5.x loses its reasoning state every
+        # turn (the server has no way to resolve item IDs server-side
+        # because we run with ``store=False``). Mirrors Hermes
+        # ``codex_responses_adapter.py:228-246``: strip the ``id`` field
+        # so the server can't 404 on item lookup; trust only the
+        # ``encrypted_content`` blob + summary.
+        #
+        # ``oai_messages`` is the converted Responses-API form; we re-walk
+        # the original ``messages`` (Anthropic-format) in lockstep so we
+        # know which assistant entry the sidecar belongs to. Both lists
+        # preserve ordering: every Anthropic message produces ≥1 entry
+        # in oai_messages, and assistant entries are always non-system.
         resp_input: list[dict[str, Any]] = []
-        for msg in oai_messages:
-            if msg.get("role") == "system":
+        _msg_iter = iter(messages)
+        _current_msg: dict[str, Any] | None = next(_msg_iter, None)
+        for entry in oai_messages:
+            if entry.get("role") == "system":
                 continue  # ``instructions`` kwarg below handles system prompt
-            resp_input.append(msg)
+            # When entering a new logical message in oai_messages, advance
+            # ``_current_msg`` to the matching original message.
+            entry_role = (
+                entry.get("role")
+                or ("assistant" if entry.get("type") in ("function_call",) else None)
+                or ("user" if entry.get("type") == "function_call_output" else None)
+            )
+            while _current_msg is not None and _current_msg.get("role") != entry_role:
+                _current_msg = next(_msg_iter, None)
+            if (
+                _current_msg is not None
+                and _current_msg.get("role") == "assistant"
+                and entry_role == "assistant"
+            ):
+                _reasoning = _current_msg.get("codex_reasoning_items")
+                if isinstance(_reasoning, list):
+                    for ri in _reasoning:
+                        if isinstance(ri, dict) and ri.get("encrypted_content"):
+                            resp_input.append({k: v for k, v in ri.items() if k != "id"})
+            resp_input.append(entry)
+            # The user-side function_call_output items come from the same
+            # original user message, so don't advance until we see a new role.
 
         # v0.53.3 — pre-send observability. Logs one structured line so
         # any future ``input[i].content == null`` (or other shape regressions)
