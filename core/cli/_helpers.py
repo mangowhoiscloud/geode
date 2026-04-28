@@ -38,6 +38,62 @@ def upsert_env(var_name: str, value: str) -> None:
     os.environ[var_name] = value
 
 
+def upsert_config_toml(section: str, key: str, value: str) -> None:
+    """Insert or update ``[section] key = "value"`` in ``.geode/config.toml``.
+
+    Creates the file (and ``[section]`` heading) if absent. Mirrors the
+    write semantics of ``upsert_env``: durable layer for picker choices
+    so the next session starts from the same effort / model after the
+    user clears ``.env``. 3-codebase consensus pattern (Hermes
+    ``~/.hermes/config.json``, Codex ``~/.codex/config.toml``, Claude
+    Code project + global config) — chosen settings persist to the
+    config layer, not just the env layer.
+
+    Section headings use ``[section.subsection]`` notation per TOML.
+    """
+    config_path = Path(".geode") / "config.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    target_line = f'{key} = "{value}"'
+    section_heading = f"[{section}]"
+
+    raw = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    lines = raw.splitlines()
+
+    in_section = False
+    found_section = False
+    found_key = False
+    new_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped == section_heading:
+            in_section = True
+            found_section = True
+            new_lines.append(line)
+            continue
+        if in_section and stripped.startswith("["):
+            # Hit the next section without finding the key — insert before it
+            if not found_key:
+                new_lines.append(target_line)
+                found_key = True
+            in_section = False
+        if in_section and re.match(rf"^\s*#?\s*{re.escape(key)}\s*=", line):
+            new_lines.append(target_line)
+            found_key = True
+            continue
+        new_lines.append(line)
+
+    if found_section and not found_key:
+        new_lines.append(target_line)
+    elif not found_section:
+        if new_lines and new_lines[-1] != "":
+            new_lines.append("")
+        new_lines.append(section_heading)
+        new_lines.append(target_line)
+
+    config_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+
 def parse_dry_run_flag(args: str) -> tuple[bool, str]:
     """Extract --dry-run / --dry_run flag from CLI args.
 
