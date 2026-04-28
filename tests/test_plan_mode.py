@@ -507,9 +507,7 @@ class TestPlanCacheInvariants:
         original = settings.plan_auto_execute
         try:
             settings.plan_auto_execute = False
-            create_result = handlers_a["create_plan"](
-                ip_name="Berserk", template="full_pipeline"
-            )
+            create_result = handlers_a["create_plan"](ip_name="Berserk", template="full_pipeline")
         finally:
             settings.plan_auto_execute = original
         plan_id = create_result["plan_id"]
@@ -530,9 +528,7 @@ class TestPlanCacheInvariants:
         original = settings.plan_auto_execute
         try:
             settings.plan_auto_execute = False
-            create_result = handlers["create_plan"](
-                ip_name="Berserk", template="full_pipeline"
-            )
+            create_result = handlers["create_plan"](ip_name="Berserk", template="full_pipeline")
         finally:
             settings.plan_auto_execute = original
         plan_id = create_result["plan_id"]
@@ -552,9 +548,7 @@ class TestPlanCacheInvariants:
         original = settings.plan_auto_execute
         try:
             settings.plan_auto_execute = False
-            create_result = handlers["create_plan"](
-                ip_name="Berserk", template="full_pipeline"
-            )
+            create_result = handlers["create_plan"](ip_name="Berserk", template="full_pipeline")
         finally:
             settings.plan_auto_execute = original
         plan_id = create_result["plan_id"]
@@ -577,12 +571,8 @@ class TestPlanCacheInvariants:
         original = settings.plan_auto_execute
         try:
             settings.plan_auto_execute = False
-            r1 = handlers["create_plan"](
-                goal="research task A", steps=["step a1", "step a2"]
-            )
-            r2 = handlers["create_plan"](
-                goal="research task B", steps=["step b1"]
-            )
+            r1 = handlers["create_plan"](goal="research task A", steps=["step a1", "step a2"])
+            r2 = handlers["create_plan"](goal="research task B", steps=["step b1"])
         finally:
             settings.plan_auto_execute = original
         assert r1["plan_id"] != r2["plan_id"], "goal-path uuid must be unique"
