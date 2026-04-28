@@ -65,6 +65,15 @@ class WorkerRequest:
             model=data.get("model", "claude-opus-4-6"),
             provider=data.get("provider", "anthropic"),
             timeout_s=data.get("timeout_s", 120.0),
+            # v0.55.0 R5 — reasoning depth fields were declared on the
+            # dataclass since v0.50.x but never deserialised, so every
+            # sub-agent ran at the dataclass defaults regardless of
+            # what the parent put on the wire. Hermes / Claude Code
+            # both inherit reasoning depth into spawned children
+            # (delegate_tool.py:608, loadAgentsDir.ts:116).
+            time_budget_s=data.get("time_budget_s", 0.0),
+            thinking_budget=data.get("thinking_budget", 0),
+            effort=data.get("effort", "high"),
             domain=data.get("domain", ""),
             isolation=data.get("isolation", ""),
         )
@@ -164,6 +173,17 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         max_tokens=32768,
         model=request.model,
         provider=request.provider,
+        # v0.55.0 R5 — propagate reasoning depth + time budget into the
+        # sub-agent's loop. Pre-fix every sub-agent ran at the
+        # AgenticLoop defaults (effort="high", thinking_budget=0,
+        # time_budget_s=0.0) because the kwargs were never threaded
+        # through, even though WorkerRequest carried them. Mirrors
+        # Hermes ``delegate_tool.py:607-636`` (parent-inherit + per-child
+        # config override) and Claude Code ``loadAgentsDir.ts:116``
+        # (agent-level effort frontmatter).
+        thinking_budget=request.thinking_budget,
+        effort=request.effort,
+        time_budget_s=request.time_budget_s,
         quiet=True,  # Suppress spinner — parent handles UI
     )
 
