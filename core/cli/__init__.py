@@ -414,6 +414,17 @@ def _handle_command(
         if not _mcp_st["active"]:
             console.print("    [muted]No active servers[/muted]")
         console.print()
+
+        # v0.63.0 — daemon + disk usage block (lifecycle parity with Hermes
+        # ``cmd_status``). Skipped silently if json_output requested.
+        if "--json" in args.split():
+            from core.cli.cmd_lifecycle import show_status
+
+            show_status(json_output=True)
+        else:
+            from core.cli.cmd_lifecycle import show_status
+
+            show_status()
     elif action == "compare":
         parts = args.strip().split()
         if len(parts) < 2:
@@ -470,6 +481,42 @@ def _handle_command(
         from core.cli.commands import cmd_tasks
 
         cmd_tasks(args)
+    elif action == "stop":
+        # v0.63.0 — Hermes-style daemon shutdown (`hermes stop`).
+        # Args: ``/stop --force`` for SIGKILL, optional ``--timeout=N``.
+        from core.cli.cmd_lifecycle import stop_serve
+
+        force = "--force" in args.split()
+        stop_serve(force=force)
+    elif action == "clean":
+        # v0.63.0 — selective cache cleanup. Args: ``--scope=all|project|global|build``
+        # ``--all-data`` ``--force`` ``--dry-run``.
+        from core.cli.cmd_lifecycle import do_clean
+
+        opts = args.split()
+        scope = next(
+            (o.split("=", 1)[1] for o in opts if o.startswith("--scope=")),
+            "all",
+        )
+        do_clean(
+            scope=scope,
+            all_data=("--all-data" in opts),
+            force=("--force" in opts),
+            dry_run=("--dry-run" in opts),
+        )
+    elif action == "uninstall":
+        # v0.63.0 — full system removal (Hermes ``cmd_uninstall`` parity).
+        # Args: ``--force`` to skip confirmation, ``--dry-run`` to preview,
+        # ``--keep-config`` ``--keep-data`` for partial uninstall.
+        from core.cli.cmd_lifecycle import do_uninstall
+
+        opts = args.split()
+        do_uninstall(
+            force=("--force" in opts),
+            dry_run=("--dry-run" in opts),
+            keep_config=("--keep-config" in opts),
+            keep_data=("--keep-data" in opts),
+        )
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")

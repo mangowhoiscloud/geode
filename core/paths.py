@@ -45,6 +45,19 @@ GLOBAL_SCHEDULER_DIR = GEODE_HOME / "scheduler"
 # Project-scoped user data root
 GLOBAL_PROJECTS_DIR = GEODE_HOME / "projects"
 
+# Lifecycle / daemon paths (v0.63.0 — surfaced for /stop, /clean, /uninstall).
+# Single source of truth so any future relocation is one-line. Existing
+# duplicates in ``ipc_client.py`` + ``poller.py`` (DEFAULT_SOCKET_PATH) +
+# ``mcp/registry.py`` (_CACHE_FILE) match these values; dedup is a
+# follow-up refactor.
+CLI_SOCKET_PATH = GEODE_HOME / "cli.sock"
+CLI_STARTUP_LOCK = GEODE_HOME / "cli.startup.lock"
+SERVE_LOG_PATH = GEODE_HOME / "logs" / "serve.log"
+GLOBAL_JOURNAL_DIR = GEODE_HOME / "journal"
+GLOBAL_WORKERS_DIR = GEODE_HOME / "workers"
+MCP_REGISTRY_CACHE = GEODE_HOME / "mcp-registry-cache.json"
+APPROVE_HISTORY = GEODE_HOME / "approve_history.json"
+
 # ---------------------------------------------------------------------------
 # Project-level — {workspace}/.geode/
 # ---------------------------------------------------------------------------
@@ -62,6 +75,11 @@ PROJECT_SCHEDULER_LOG_DIR = PROJECT_GEODE_DIR / "scheduler_logs"
 PROJECT_PLANS_FILE = PROJECT_GEODE_DIR / "plans.json"
 PROJECT_LEARNING_FILE = PROJECT_GEODE_DIR / "LEARNING.md"
 PROJECT_MEMORY_INDEX = PROJECT_GEODE_DIR / "MEMORY.md"
+
+# Per-project caches surfaced by /clean for selective wipe.
+PROJECT_EMBEDDING_CACHE = PROJECT_GEODE_DIR / "embedding-cache"
+PROJECT_TOOL_OFFLOAD = PROJECT_GEODE_DIR / "tool-offload"
+PROJECT_VECTORS_DIR = PROJECT_GEODE_DIR / "vectors"
 
 
 # ---------------------------------------------------------------------------
