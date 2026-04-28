@@ -109,14 +109,14 @@ class GameIPDomain:
     # --- Scoring ---
 
     def get_scoring_weights(self) -> dict[str, float]:
-        from core.domains.game_ip.scoring_constants import DEFAULT_WEIGHTS
+        from plugins.game_ip.scoring_constants import DEFAULT_WEIGHTS
 
         cfg = _load_scoring_config()
         weights: dict[str, float] = cfg.get("weights", DEFAULT_WEIGHTS)
         return weights
 
     def get_confidence_multiplier_params(self) -> tuple[float, float]:
-        from core.domains.game_ip.scoring_constants import (
+        from plugins.game_ip.scoring_constants import (
             CONFIDENCE_BASE_FACTOR,
             CONFIDENCE_SCALE_FACTOR,
         )

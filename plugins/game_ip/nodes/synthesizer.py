@@ -14,8 +14,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import ValidationError
-
 from core.config import get_node_model
 from core.domains.port import get_domain_or_none
 from core.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_TOOLS_SUFFIX, SYNTHESIZER_USER
@@ -26,6 +24,7 @@ from core.state import (
     SynthesisResult,
 )
 from core.tools.registry import get_tool_executor
+from pydantic import ValidationError
 
 log = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.domains.game_ip.nodes.evaluators import (
+from plugins.game_ip.nodes.evaluators import (
     _EVALUATOR_OUTPUT_MODELS,
     EVALUATOR_TYPES,
     CommunityMomentumAxes,

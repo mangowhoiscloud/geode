@@ -136,7 +136,7 @@ def evaluator_panel(evaluations: dict[str, EvaluatorResult]) -> None:
     for key, ev in sorted(evaluations.items()):
         label = labels.get(key, key.replace("_", " ").title())
         score = ev.composite_score
-        from core.domains.game_ip.scoring_constants import score_style as _score_style
+        from plugins.game_ip.scoring_constants import score_style as _score_style
 
         score_style = _score_style(score)
         rationale = ev.rationale.split(".")[0] + "." if ev.rationale else ""
@@ -155,7 +155,8 @@ def score_panel(
     subscores: dict[str, float],
     confidence: float = 0.0,
 ) -> None:
-    from core.domains.game_ip.scoring_constants import classify_tier
+    from plugins.game_ip.scoring_constants import classify_tier
+
     from core.ui.agentic_ui import emit_pipeline_score
 
     tier = classify_tier(final_score)

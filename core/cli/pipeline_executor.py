@@ -513,8 +513,9 @@ def _resolve_ip_name(ip_name: str) -> str | None:
     3. Substring: fixture key is contained in input
     4. Substring: input is contained in fixture key
     """
+    from plugins.game_ip.fixtures import FIXTURE_MAP
+
     from core.cli.ip_names import get_ip_name_map
-    from core.domains.game_ip.fixtures import FIXTURE_MAP
 
     key = ip_name.lower().strip()
 
@@ -558,7 +559,8 @@ def _run_analysis(
     import core.cli as _cli_mod
 
     _set_last_result = _cli_mod._set_last_result
-    from core.domains.game_ip.fixtures import FIXTURE_MAP
+    from plugins.game_ip.fixtures import FIXTURE_MAP
+
     from core.utils.language import detect_language
 
     output_language = detect_language(ip_name)  # detect before normalization

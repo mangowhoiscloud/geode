@@ -21,7 +21,8 @@ def build_signal_adapter() -> None:
     are configured or available, the adapter will report is_available()=False
     and signals_node falls back to fixtures.
     """
-    from core.domains.game_ip.nodes.signals import set_signal_adapter
+    from plugins.game_ip.nodes.signals import set_signal_adapter
+
     from core.mcp.composite_signal import CompositeSignalAdapter
     from core.mcp.manager import get_mcp_manager
     from core.mcp.steam_adapter import SteamMCPSignalAdapter

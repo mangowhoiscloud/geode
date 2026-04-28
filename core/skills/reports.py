@@ -14,7 +14,7 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
-from core.domains.game_ip.scoring_constants import (
+from plugins.game_ip.scoring_constants import (
     CONFIDENCE_BASE_FACTOR,
     CONFIDENCE_SCALE_FACTOR,
     REPORT_WEIGHTS,

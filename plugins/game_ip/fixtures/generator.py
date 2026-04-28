@@ -118,7 +118,7 @@ def generate_ip(
     # Tier calculation
     final_score = round(avg_score * 20 + random.uniform(-5, 5), 1)
     final_score = max(0, min(100, final_score))
-    from core.domains.game_ip.scoring_constants import classify_tier
+    from plugins.game_ip.scoring_constants import classify_tier
 
     tier = classify_tier(final_score)
 

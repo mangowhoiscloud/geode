@@ -10,7 +10,7 @@ with systematic boundary values to cover the property-based test intent:
 from __future__ import annotations
 
 import pytest
-from core.domains.game_ip.nodes.scoring import (
+from plugins.game_ip.nodes.scoring import (
     _calc_analyst_confidence,
     _calc_final_score,
     _determine_tier,

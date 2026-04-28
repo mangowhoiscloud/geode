@@ -400,8 +400,8 @@ class TestAnalystConfidenceClamping:
     """Karpathy P1 — defensive confidence clamp [0, 100]."""
 
     def test_confidence_clamped_above_100(self):
-        from core.domains.game_ip.nodes.analysts import analyst_node
         from core.state import AnalysisResult
+        from plugins.game_ip.nodes.analysts import analyst_node
 
         # Use model_construct to bypass Pydantic validation (simulates raw LLM output)
         over_result = AnalysisResult.model_construct(
@@ -425,7 +425,7 @@ class TestAnalystConfidenceClamping:
             "errors": [],
         }
 
-        with patch("core.domains.game_ip.nodes.analysts._run_analyst", return_value=over_result):
+        with patch("plugins.game_ip.nodes.analysts._run_analyst", return_value=over_result):
             result = analyst_node(state)
 
         analyses = result["analyses"]
@@ -433,8 +433,8 @@ class TestAnalystConfidenceClamping:
         assert analyses[0].confidence == 100.0
 
     def test_confidence_clamped_below_0(self):
-        from core.domains.game_ip.nodes.analysts import analyst_node
         from core.state import AnalysisResult
+        from plugins.game_ip.nodes.analysts import analyst_node
 
         # Use model_construct to bypass Pydantic validation (simulates raw LLM output)
         under_result = AnalysisResult.model_construct(
@@ -458,7 +458,7 @@ class TestAnalystConfidenceClamping:
             "errors": [],
         }
 
-        with patch("core.domains.game_ip.nodes.analysts._run_analyst", return_value=under_result):
+        with patch("plugins.game_ip.nodes.analysts._run_analyst", return_value=under_result):
             result = analyst_node(state)
 
         analyses = result["analyses"]
@@ -466,8 +466,8 @@ class TestAnalystConfidenceClamping:
         assert analyses[0].confidence == 0.0
 
     def test_confidence_normal_not_clamped(self):
-        from core.domains.game_ip.nodes.analysts import analyst_node
         from core.state import AnalysisResult
+        from plugins.game_ip.nodes.analysts import analyst_node
 
         normal_result = AnalysisResult(
             analyst_type="game_mechanics",
@@ -490,7 +490,7 @@ class TestAnalystConfidenceClamping:
             "errors": [],
         }
 
-        with patch("core.domains.game_ip.nodes.analysts._run_analyst", return_value=normal_result):
+        with patch("plugins.game_ip.nodes.analysts._run_analyst", return_value=normal_result):
             result = analyst_node(state)
 
         assert result["analyses"][0].confidence == 85.0
@@ -506,8 +506,8 @@ class TestScoringCompositeIndependence:
 
     def test_growth_score_uses_axes_not_composite(self):
         """_calc_growth_score should derive trend from axes, not composite_score."""
-        from core.domains.game_ip.nodes.scoring import _calc_growth_score
         from core.state import EvaluatorResult
+        from plugins.game_ip.nodes.scoring import _calc_growth_score
 
         evaluations = {
             "hidden_value": EvaluatorResult(
@@ -534,8 +534,8 @@ class TestScoringCompositeIndependence:
 
     def test_growth_score_no_community_momentum(self):
         """Without community_momentum evaluator, trend defaults to 50.0."""
-        from core.domains.game_ip.nodes.scoring import _calc_growth_score
         from core.state import EvaluatorResult
+        from plugins.game_ip.nodes.scoring import _calc_growth_score
 
         evaluations = {
             "hidden_value": EvaluatorResult(
@@ -553,8 +553,8 @@ class TestScoringCompositeIndependence:
 
     def test_growth_score_with_precomputed_momentum(self):
         """Pre-computed momentum should be used instead of recalculating."""
-        from core.domains.game_ip.nodes.scoring import _calc_growth_score
         from core.state import EvaluatorResult
+        from plugins.game_ip.nodes.scoring import _calc_growth_score
 
         evaluations = {
             "hidden_value": EvaluatorResult(
@@ -587,8 +587,8 @@ class TestSynthesizerBoundaryLogging:
     """Decision Tree boundary crossing should produce a warning log."""
 
     def test_boundary_crossing_logged(self, caplog: Any):
-        from core.domains.game_ip.nodes.synthesizer import _extract_def_scores
         from core.state import EvaluatorResult
+        from plugins.game_ip.nodes.synthesizer import _extract_def_scores
 
         evaluations = {
             "hidden_value": EvaluatorResult(
@@ -599,7 +599,7 @@ class TestSynthesizerBoundaryLogging:
             ),
         }
 
-        with caplog.at_level(logging.WARNING, logger="core.domains.game_ip.nodes.synthesizer"):
+        with caplog.at_level(logging.WARNING, logger="plugins.game_ip.nodes.synthesizer"):
             d, e, f = _extract_def_scores(evaluations)
 
         # 2.5 rounds to 2 → crosses from <3 to... no, stays <3.
@@ -611,8 +611,8 @@ class TestSynthesizerBoundaryLogging:
 
     def test_boundary_crossing_at_2_point_5(self, caplog: Any):
         """2.5 → round(2.5) = 2 in Python (banker's rounding). No boundary cross."""
-        from core.domains.game_ip.nodes.synthesizer import _extract_def_scores
         from core.state import EvaluatorResult
+        from plugins.game_ip.nodes.synthesizer import _extract_def_scores
 
         evaluations = {
             "hidden_value": EvaluatorResult(
@@ -623,7 +623,7 @@ class TestSynthesizerBoundaryLogging:
             ),
         }
 
-        with caplog.at_level(logging.WARNING, logger="core.domains.game_ip.nodes.synthesizer"):
+        with caplog.at_level(logging.WARNING, logger="plugins.game_ip.nodes.synthesizer"):
             d, e, f = _extract_def_scores(evaluations)
 
         # 2.6 rounds to 3 → crosses boundary (raw < 3 but rounded >= 3)
@@ -632,8 +632,8 @@ class TestSynthesizerBoundaryLogging:
 
     def test_no_boundary_crossing_clear_scores(self, caplog: Any):
         """Scores clearly above/below 3 should not warn."""
-        from core.domains.game_ip.nodes.synthesizer import _extract_def_scores
         from core.state import EvaluatorResult
+        from plugins.game_ip.nodes.synthesizer import _extract_def_scores
 
         evaluations = {
             "hidden_value": EvaluatorResult(
@@ -644,7 +644,7 @@ class TestSynthesizerBoundaryLogging:
             ),
         }
 
-        with caplog.at_level(logging.WARNING, logger="core.domains.game_ip.nodes.synthesizer"):
+        with caplog.at_level(logging.WARNING, logger="plugins.game_ip.nodes.synthesizer"):
             d, e, f = _extract_def_scores(evaluations)
 
         assert d == 4
@@ -653,7 +653,7 @@ class TestSynthesizerBoundaryLogging:
         assert not any("DT boundary shift" in msg for msg in caplog.messages)
 
     def test_no_hidden_value_returns_defaults(self):
-        from core.domains.game_ip.nodes.synthesizer import _extract_def_scores
+        from plugins.game_ip.nodes.synthesizer import _extract_def_scores
 
         d, e, f = _extract_def_scores({})
         assert (d, e, f) == (3, 3, 3)

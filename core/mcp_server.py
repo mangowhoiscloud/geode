@@ -33,7 +33,7 @@ def create_mcp_server() -> Any:
     @mcp.tool(description=_TOOL_DESCRIPTIONS["analyze_ip"])
     def analyze_ip(ip_name: str, dry_run: bool = False) -> dict[str, Any]:
         """Run GEODE analysis pipeline on an IP."""
-        from core.domains.game_ip.fixtures import FIXTURE_MAP
+        from plugins.game_ip.fixtures import FIXTURE_MAP
 
         key = ip_name.lower().strip()
         if key not in FIXTURE_MAP:
@@ -107,7 +107,7 @@ def create_mcp_server() -> Any:
     @mcp.tool(description=_TOOL_DESCRIPTIONS["get_ip_signals"])
     def get_ip_signals(ip_name: str) -> dict[str, Any]:
         """Get community signals for an IP."""
-        from core.domains.game_ip.fixtures import FIXTURE_MAP, load_fixture
+        from plugins.game_ip.fixtures import FIXTURE_MAP, load_fixture
 
         key = ip_name.lower().strip()
         if key not in FIXTURE_MAP:
@@ -123,7 +123,7 @@ def create_mcp_server() -> Any:
     @mcp.tool(description=_TOOL_DESCRIPTIONS["list_fixtures"])
     def list_fixtures() -> dict[str, Any]:
         """List all available IP fixtures."""
-        from core.domains.game_ip.fixtures import FIXTURE_MAP
+        from plugins.game_ip.fixtures import FIXTURE_MAP
 
         return {
             "count": len(FIXTURE_MAP),
@@ -160,7 +160,7 @@ def create_mcp_server() -> Any:
     @mcp.resource("geode://fixtures")
     def fixtures_resource() -> str:
         """List all available IP fixtures."""
-        from core.domains.game_ip.fixtures import FIXTURE_MAP
+        from plugins.game_ip.fixtures import FIXTURE_MAP
 
         return json.dumps({"count": len(FIXTURE_MAP), "ips": sorted(FIXTURE_MAP.keys())})
 
