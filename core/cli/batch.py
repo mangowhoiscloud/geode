@@ -7,12 +7,12 @@ import statistics
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+from plugins.game_ip.fixtures import FIXTURE_MAP
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from core.config import settings
-from core.domains.game_ip.fixtures import FIXTURE_MAP
 
 log = logging.getLogger(__name__)
 console = Console()
@@ -45,7 +45,7 @@ def select_ips(
     candidates = sorted(FIXTURE_MAP.keys())
 
     if genre:
-        from core.domains.game_ip.fixtures import load_fixture
+        from plugins.game_ip.fixtures import load_fixture
 
         filtered: list[str] = []
         for ip_key in candidates:

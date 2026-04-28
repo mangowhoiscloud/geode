@@ -8,11 +8,11 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.63.0
+- **Version**: 0.64.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 235
+- **Modules**: 223 core + 13 plugins = 236
 - **Tests**: 4360+ (+5 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -30,7 +30,7 @@ uv run geode "summarize the latest AI research trends"
 uv run geode "compare React vs Vue for a new project"
 uv run geode "schedule daily standup reminder at 9am"
 
-# Game IP Domain Plugin (dry-run, no LLM)
+# Game IP Domain Plugin (dry-run, no LLM) — plugin lives at plugins/game_ip/
 uv run geode analyze "Cowboy Bebop" --dry-run
 
 # Game IP Domain Plugin (full run, requires API keys)
@@ -47,7 +47,11 @@ uv run geode analyze "Cowboy Bebop" --verbose
 
 ## Project Structure
 
-Code is organized in 4-layer stack under `core/`. Check module count with `find core/ -name "*.py" | wc -l`.
+Production code splits into two top-level Python packages:
+- `core/` — general-purpose autonomous agent runtime. 4-layer stack. Domain-agnostic.
+- `plugins/` — domain-specific extensions. v0.64.0 contains `plugins/game_ip/` (originally `core/domains/game_ip/`); future research/ops domains land here as separate sub-packages. Wired through `core/domains/loader.py` registry.
+
+Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.
 Key entry points: `core/cli/agentic_loop.py`(AgenticLoop), `core/graph.py`(StateGraph), `core/runtime.py`(bootstrap).
 
 ## Development
@@ -56,11 +60,11 @@ Key entry points: `core/cli/agentic_loop.py`(AgenticLoop), `core/graph.py`(State
 # Test
 uv run python -m pytest tests/ -q
 
-# Lint
-uv run ruff check core/ tests/
+# Lint (core + plugins both gated)
+uv run ruff check core/ tests/ plugins/
 
-# Type check
-uv run mypy core/
+# Type check (core + plugins both gated)
+uv run mypy core/ plugins/
 ```
 
 ### Expected Test Results
@@ -188,9 +192,9 @@ Record on Progress Board then allocate Worktree. On completion: `git push` → `
 Code changes → repeat 3 quality gates. Fix on failure.
 
 ```bash
-uv run ruff check core/ tests/      # Lint: 0 errors
-uv run mypy core/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"   # Test: 3900+ pass
+uv run ruff check core/ tests/ plugins/      # Lint: 0 errors
+uv run mypy core/ plugins/                    # Type: 0 errors
+uv run pytest tests/ -m "not live"            # Test: 3900+ pass
 ```
 
 #### 4. Verify (Implementation GAP Audit)
@@ -306,8 +310,8 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 | Gate | Command | Criteria |
 |------|---------|----------|
-| Lint | `uv run ruff check core/ tests/` | 0 errors |
-| Type | `uv run mypy core/` | 0 errors |
+| Lint | `uv run ruff check core/ tests/ plugins/` | 0 errors |
+| Type | `uv run mypy core/ plugins/` | 0 errors |
 | Test | `uv run pytest tests/ -m "not live"` | 3900+ pass |
 | E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
 

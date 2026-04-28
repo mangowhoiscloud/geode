@@ -453,7 +453,7 @@ class TestDegradedScoringPenalty:
             ),
         }
 
-        from core.domains.game_ip.nodes.scoring import _calc_analyst_confidence
+        from plugins.game_ip.nodes.scoring import _calc_analyst_confidence
 
         base_confidence = _calc_analyst_confidence(analyses)
 
@@ -557,7 +557,7 @@ class TestEvaluatorPartialRetry:
             "_tool_definitions": [],
         }
 
-        from core.domains.game_ip.nodes.evaluators import make_evaluator_sends
+        from plugins.game_ip.nodes.evaluators import make_evaluator_sends
 
         sends = make_evaluator_sends(state)
         # quality_judge was non-degraded → skipped. hidden_value was degraded → re-run.
@@ -586,7 +586,7 @@ class TestEvaluatorPartialRetry:
             "_tool_definitions": [],
         }
 
-        from core.domains.game_ip.nodes.evaluators import make_evaluator_sends
+        from plugins.game_ip.nodes.evaluators import make_evaluator_sends
 
         sends = make_evaluator_sends(state)
         assert len(sends) == 3  # all evaluators

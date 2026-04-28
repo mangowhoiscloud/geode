@@ -10,8 +10,6 @@ import logging
 from typing import Any
 
 import numpy as np
-
-from core.domains.game_ip.fixtures import load_fixture
 from core.domains.port import get_domain_or_none
 from core.state import (
     AnalysisResult,
@@ -20,6 +18,8 @@ from core.state import (
     PSMResult,
 )
 from core.tools.registry import get_tool_executor
+
+from plugins.game_ip.fixtures import load_fixture
 
 log = logging.getLogger(__name__)
 
@@ -337,7 +337,7 @@ def _calc_final_score(
         weights = domain.get_scoring_weights()
         base_m, scale_m = domain.get_confidence_multiplier_params()
     else:
-        from core.domains.game_ip.scoring_constants import (
+        from plugins.game_ip.scoring_constants import (
             CONFIDENCE_BASE_FACTOR,
             CONFIDENCE_SCALE_FACTOR,
             DEFAULT_WEIGHTS,
@@ -412,7 +412,7 @@ def _determine_tier(score: float) -> str:
                 return tier_name
         return domain.get_tier_fallback()
     # Fallback: hardcoded game IP thresholds
-    from core.domains.game_ip.scoring_constants import TIER_FALLBACK, TIER_THRESHOLDS
+    from plugins.game_ip.scoring_constants import TIER_FALLBACK, TIER_THRESHOLDS
 
     for threshold, tier_name in TIER_THRESHOLDS:
         if score >= threshold:

@@ -185,7 +185,7 @@ def show_help() -> None:
 
 def cmd_list() -> None:
     """List available IP fixtures."""
-    from core.domains.game_ip.fixtures import FIXTURE_MAP as _FIXTURE_MAP
+    from plugins.game_ip.fixtures import FIXTURE_MAP as _FIXTURE_MAP
 
     console.print()
     console.print("  [header]Available IPs[/header]")
@@ -863,7 +863,7 @@ def cmd_generate(args: str) -> None:
     /generate 10      → generate 10 IPs
     /generate 3 mecha → generate 3 IPs of specific genre
     """
-    from core.domains.game_ip.fixtures.generator import GENRE_PARAMS, generate_batch
+    from plugins.game_ip.fixtures.generator import GENRE_PARAMS, generate_batch
 
     parts = args.strip().split() if args.strip() else []
 

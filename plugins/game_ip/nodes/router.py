@@ -12,8 +12,9 @@ import uuid
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
-from core.domains.game_ip.fixtures import load_fixture
 from core.state import GeodeState
+
+from plugins.game_ip.fixtures import load_fixture
 
 if TYPE_CHECKING:
     from core.memory.context import ContextAssembler

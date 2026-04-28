@@ -400,7 +400,7 @@ def _handle_command(
         if readiness:
             mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
             console.print(f"  Mode: [bold]{mode}[/bold]")
-        from core.domains.game_ip.fixtures import FIXTURE_MAP as _FM
+        from plugins.game_ip.fixtures import FIXTURE_MAP as _FM
 
         console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
 
@@ -1222,7 +1222,7 @@ def doctor(
 @app.command(name="list")
 def list_ips() -> None:
     """List available IP fixtures."""
-    from core.domains.game_ip.fixtures import FIXTURE_MAP as _FIXTURE_MAP
+    from plugins.game_ip.fixtures import FIXTURE_MAP as _FIXTURE_MAP
 
     console.print("[header]Available IPs:[/header]")
     for name in _FIXTURE_MAP:

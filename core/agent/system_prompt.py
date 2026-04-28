@@ -62,7 +62,7 @@ def build_system_prompt(model: str = "") -> str:
     dynamic (date, model card, memory, user context) sections.  Anthropic
     adapter splits at this boundary to maximize prompt cache hits.
     """
-    from core.domains.game_ip.fixtures import FIXTURE_MAP, load_fixture
+    from plugins.game_ip.fixtures import FIXTURE_MAP, load_fixture
 
     name_map = get_ip_name_map()
     ip_count = len(name_map)

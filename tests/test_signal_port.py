@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.domains.game_ip.nodes.signals import set_signal_adapter, signals_node
 from core.mcp.signal_adapter import (
     FixtureSignalAdapter,
     LiveSignalAdapter,
@@ -12,6 +11,7 @@ from core.mcp.signal_adapter import (
 )
 from core.mcp.signal_port import SignalEnrichmentPort
 from core.state import GeodeState
+from plugins.game_ip.nodes.signals import set_signal_adapter, signals_node
 
 
 class TestSignalEnrichmentPort:

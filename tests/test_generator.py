@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.domains.game_ip.fixtures.generator import (
+from plugins.game_ip.fixtures.generator import (
     GENRE_PARAMS,
     generate_batch,
     generate_ip,

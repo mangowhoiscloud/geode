@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from core.domains.game_ip.nodes.synthesizer import _build_tool_augmented_synthesis, synthesizer_node
 from core.llm.client import ToolCallRecord, ToolUseResult
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
 from core.tools.registry import set_tool_executor
+from plugins.game_ip.nodes.synthesizer import _build_tool_augmented_synthesis, synthesizer_node
 
 
 def _make_state(*, dry_run: bool = False, with_tools: bool = False) -> GeodeState:
@@ -120,10 +120,10 @@ class TestSynthesizerNodeToolPath:
         # Mock both get_llm_tool (raises) and standard path
         with (
             patch(
-                "core.domains.game_ip.nodes.synthesizer.get_llm_tool",
+                "plugins.game_ip.nodes.synthesizer.get_llm_tool",
                 side_effect=RuntimeError("not injected"),
             ),
-            patch("core.domains.game_ip.nodes.synthesizer._build_llm_synthesis") as mock_std,
+            patch("plugins.game_ip.nodes.synthesizer._build_llm_synthesis") as mock_std,
         ):
             from core.state import SynthesisResult
 

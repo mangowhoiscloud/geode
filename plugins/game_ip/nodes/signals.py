@@ -19,9 +19,10 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
-from core.domains.game_ip.fixtures import load_fixture
 from core.mcp.signal_port import SignalEnrichmentPort
 from core.state import GeodeState
+
+from plugins.game_ip.fixtures import load_fixture
 
 log = logging.getLogger(__name__)
 

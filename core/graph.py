@@ -44,14 +44,14 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from plugins.game_ip.nodes.analysts import analyst_node, make_analyst_sends
+from plugins.game_ip.nodes.evaluators import evaluator_node, make_evaluator_sends
+from plugins.game_ip.nodes.router import route_after_router, router_node
+from plugins.game_ip.nodes.scoring import scoring_node
+from plugins.game_ip.nodes.signals import signals_node
+from plugins.game_ip.nodes.synthesizer import synthesizer_node
 
 from core.config import settings
-from core.domains.game_ip.nodes.analysts import analyst_node, make_analyst_sends
-from core.domains.game_ip.nodes.evaluators import evaluator_node, make_evaluator_sends
-from core.domains.game_ip.nodes.router import route_after_router, router_node
-from core.domains.game_ip.nodes.scoring import scoring_node
-from core.domains.game_ip.nodes.signals import signals_node
-from core.domains.game_ip.nodes.synthesizer import synthesizer_node
 from core.hooks import HookEvent, HookSystem
 from core.orchestration.bootstrap import BootstrapManager
 from core.state import (
