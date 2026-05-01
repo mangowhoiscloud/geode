@@ -28,6 +28,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.65.0] — 2026-05-02
+
 ### Fixed
 - **`manage_login` verdict reporting collapses healthy PAYG profiles to `provider_mismatch`.** The verdict-aggregation loop in `core/cli/tool_handlers.py:handle_manage_login` keyed `verdict_index[(name, profile.provider)]` while iterating `evaluate_eligibility(prov)` once per unique provider in the store. Each iteration evaluates *every* profile, returning a `PROVIDER_MISMATCH` verdict for profiles whose provider != prov; those mismatch verdicts share the same dict key as the real verdict and the last-iterated provider's write wins. Set iteration order is hash-dependent, so on a typical multi-provider store (e.g. `openai-codex`, `openai`, `anthropic`) every profile except the one whose provider iterates last surfaces as `eligible=False / reason=provider_mismatch` to both the LLM (via the `manage_login` tool result) and the `/login` dashboard — even though the underlying credential is healthy and `resolve_routing` would happily use it via the equivalence-class fallback. Fix: skip cross-provider iterations (`if v.reason is ProfileRejectReason.PROVIDER_MISMATCH: continue`) so each profile's verdict comes from its *own* provider's evaluation, mirroring the same filter already applied in `core/auth/credential_breadcrumb.format`. Regression test: `tests/test_manage_login_tool.py::TestVerdictPerOwnProvider` registers three profiles across three providers and asserts none are reported as `provider_mismatch`. (`core/cli/tool_handlers.py`, `tests/test_manage_login_tool.py`)
 
