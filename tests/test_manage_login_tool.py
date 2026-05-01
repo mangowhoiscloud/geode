@@ -98,3 +98,50 @@ class TestRouting:
 
         bound = [p for p in result["profiles"] if p["plan_id"] == "glm-coding-lite"]
         assert bound, "set-key did not bind a profile to the plan"
+
+
+class TestVerdictPerOwnProvider:
+    """Regression — every profile must surface the verdict against its OWN
+    provider, not a stale ``provider_mismatch`` from a sibling-provider
+    iteration. Pre-fix the ``verdict_index`` dict-key collided across
+    providers and the last-iterated provider's mismatch verdict overwrote
+    the real one, so a healthy PAYG profile showed as ``eligible=False /
+    provider_mismatch`` to the LLM and the dashboard.
+    """
+
+    def test_multi_provider_profiles_keep_real_verdicts(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
+
+        from core.auth.profiles import AuthProfile, CredentialType
+        from core.lifecycle.container import ensure_profile_store
+
+        store = ensure_profile_store()
+        # Three healthy profiles, one per provider — none should be reported
+        # as ``provider_mismatch`` because each is being evaluated against
+        # its own provider.
+        for name, provider in (
+            ("openai-codex:user", "openai-codex"),
+            ("openai:work", "openai"),
+            ("anthropic:work", "anthropic"),
+        ):
+            store.add(
+                AuthProfile(
+                    name=name,
+                    provider=provider,
+                    credential_type=CredentialType.API_KEY,
+                    key="sk-xx",
+                )
+            )
+        try:
+            result = _handler()(subcommand="status")
+            assert result["status"] == "ok"
+            for p in result["profiles"]:
+                if p["name"] in {"openai-codex:user", "openai:work", "anthropic:work"}:
+                    assert p["eligible"] is True, (
+                        f"{p['name']} should be eligible against its own provider — "
+                        f"got reason={p['reason']!r} detail={p['reason_detail']!r}"
+                    )
+                    assert p["reason"] != "provider_mismatch"
+        finally:
+            for name in ("openai-codex:user", "openai:work", "anthropic:work"):
+                store.remove(name)

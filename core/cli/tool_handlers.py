@@ -913,9 +913,24 @@ def _build_system_handlers(
             # verdict per the profile's own provider. This lets the LLM see
             # *why* a credential is unusable (cooldown / expired / disabled
             # / missing key) without needing a second tool call.
+            #
+            # Skip cross-provider iterations: ``evaluate_eligibility(prov)``
+            # returns a PROVIDER_MISMATCH verdict for every profile whose
+            # provider != prov, but those are noise here — we want each
+            # profile's verdict against its OWN provider. Without this
+            # filter the dict-key ``(name, profile.provider)`` collides
+            # across iterations and the last-iterated provider's mismatch
+            # verdict overwrites the real one, so a healthy PAYG profile
+            # surfaces as ``eligible=False / provider_mismatch`` to the
+            # LLM and the dashboard. Mirrors the same filter applied in
+            # ``credential_breadcrumb.format``.
+            from core.auth.profiles import ProfileRejectReason
+
             verdict_index: dict[tuple[str, str], tuple[bool, str, str]] = {}
             for prov in {p.provider for p in store.list_all()}:
                 for v in store.evaluate_eligibility(prov):
+                    if v.reason is ProfileRejectReason.PROVIDER_MISMATCH:
+                        continue
                     verdict_index[(v.profile_name, v.provider)] = (
                         v.eligible,
                         v.reason_code,
