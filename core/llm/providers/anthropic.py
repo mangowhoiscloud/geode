@@ -166,6 +166,70 @@ def system_with_cache(system: str) -> list[TextBlockParam]:
     ]
 
 
+# Anthropic allows up to 4 cache_control breakpoints per request.  The agentic
+# adapter already uses 1-2 on the system block (STATIC/DYNAMIC split).  Keep 3
+# slots for the messages array — Hermes "system_and_3" strategy.
+MAX_MESSAGE_CACHE_BREAKPOINTS = 3
+
+
+def apply_messages_cache_control(
+    messages: list[dict[str, Any]],
+    *,
+    n_breakpoints: int = MAX_MESSAGE_CACHE_BREAKPOINTS,
+) -> list[dict[str, Any]]:
+    """Return a copy of *messages* with ephemeral cache_control on the last
+    *n_breakpoints* non-system messages' final content block.
+
+    Mirrors Hermes ``apply_anthropic_cache_control`` (system_and_3) and
+    OpenClaw ``applyAnthropicCacheControlToMessages``.  Used by the agentic
+    adapter to extend prompt caching from the system block to the rolling
+    history window, reducing cost in long multi-turn loops.
+
+    The function is non-mutating: returns a new list with shallow copies of
+    the targeted messages and their last block.  String-content messages are
+    materialised into a single text block before the marker is attached.
+
+    Args:
+        messages: Anthropic-format messages list (role + content).
+        n_breakpoints: Max number of trailing non-system messages to mark.
+            Default 3 (Anthropic's 4-breakpoint cap minus 1 for system).
+
+    Returns:
+        New messages list ready for ``messages.create``.
+    """
+    if not messages or n_breakpoints <= 0:
+        return list(messages)
+
+    out: list[dict[str, Any]] = list(messages)
+    targets = [
+        i for i, m in enumerate(out) if m.get("role") != "system"
+    ][-n_breakpoints:]
+
+    for i in targets:
+        msg = dict(out[i])
+        content = msg.get("content")
+        if isinstance(content, str):
+            msg["content"] = [
+                {
+                    "type": "text",
+                    "text": content,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        elif isinstance(content, list) and content:
+            new_content = list(content)
+            last_block = dict(new_content[-1])
+            last_block["cache_control"] = {"type": "ephemeral"}
+            new_content[-1] = last_block
+            msg["content"] = new_content
+        else:
+            # Empty or unexpected content — skip silently.
+            continue
+        out[i] = msg
+
+    return out
+
+
 def get_circuit_breaker() -> CircuitBreaker:
     """Return the module-level Anthropic circuit breaker."""
     return _circuit_breaker
@@ -432,10 +496,16 @@ class ClaudeAgenticAdapter:
                     }
                 ]
 
+            # Rolling messages-level cache breakpoints (Hermes system_and_3).
+            # Combined with the system block above, this fills up to 4 of
+            # Anthropic's cache_control slots and caches the long history
+            # window in multi-turn agentic loops.
+            cached_messages = apply_messages_cache_control(messages)
+
             create_kwargs: dict[str, Any] = {
                 "model": m,
                 "system": sys_blocks,
-                "messages": messages,
+                "messages": cached_messages,
                 "tools": api_tools,
                 "tool_choice": tool_choice,
                 "max_tokens": call_max_tokens,
