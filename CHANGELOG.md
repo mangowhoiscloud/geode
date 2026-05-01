@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Messages-level cache_control breakpoints in Anthropic agentic adapter (Hermes `system_and_3` parity).** New `apply_messages_cache_control(messages, n_breakpoints=3)` helper in `core/llm/providers/anthropic.py` adds `cache_control: {"type": "ephemeral"}` to the last 3 non-system messages' final content block, filling Anthropic's remaining cache-control slots after the existing system block (STATIC + DYNAMIC split). Combined cap is 4 breakpoints — 1 on the system block, up to 3 on rolling history. Reduces input-token cost in long multi-turn agentic loops where the message history would otherwise be re-billed every turn. Non-mutating (returns new list with shallow-copied targeted messages); handles both `str` and `list[block]` content shapes. Wired in `ClaudeAgenticAdapter.agentic_call._do_call` immediately before `messages.create`. New test module `tests/test_anthropic_messages_cache.py` (19 cases): empty/short/long lists, system skip, str→block conversion, list-block last-only marking, idempotency, parametrized n_breakpoints bound. `MAX_MESSAGE_CACHE_BREAKPOINTS = 3` exported. (`core/llm/providers/anthropic.py`, `tests/test_anthropic_messages_cache.py`)
+
 ## [0.64.0] — 2026-04-29
 
 ### Changed
