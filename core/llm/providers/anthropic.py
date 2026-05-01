@@ -201,9 +201,7 @@ def apply_messages_cache_control(
         return list(messages)
 
     out: list[dict[str, Any]] = list(messages)
-    targets = [
-        i for i, m in enumerate(out) if m.get("role") != "system"
-    ][-n_breakpoints:]
+    targets = [i for i, m in enumerate(out) if m.get("role") != "system"][-n_breakpoints:]
 
     for i in targets:
         msg = dict(out[i])

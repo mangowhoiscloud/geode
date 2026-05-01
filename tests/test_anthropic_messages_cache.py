@@ -114,9 +114,7 @@ class TestApplyMessagesCacheControl:
         assert out[0]["content"][0].get("cache_control") == {"type": "ephemeral"}
 
     def test_custom_breakpoints(self):
-        msgs = [
-            {"role": "user", "content": f"m{i}"} for i in range(5)
-        ]
+        msgs = [{"role": "user", "content": f"m{i}"} for i in range(5)]
         out = apply_messages_cache_control(msgs, n_breakpoints=1)
         # Only the last one should be marked
         for i in range(4):
@@ -162,7 +160,6 @@ def test_n_breakpoints_bound(n: int):
     marked = sum(
         1
         for m in out
-        if isinstance(m["content"], list)
-        and m["content"] and m["content"][-1].get("cache_control")
+        if isinstance(m["content"], list) and m["content"] and m["content"][-1].get("cache_control")
     )
     assert marked == min(n, 20)
