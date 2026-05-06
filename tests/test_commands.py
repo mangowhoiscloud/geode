@@ -16,7 +16,6 @@ from core.cli.commands import (
     _mask_key,
     _set_cost_budget,
     _upsert_env,
-    cmd_batch,
     cmd_cost,
     cmd_key,
     cmd_model,
@@ -25,6 +24,7 @@ from core.cli.commands import (
     resolve_action,
 )
 from core.config import ANTHROPIC_BUDGET, ANTHROPIC_PRIMARY, OPENAI_PRIMARY
+from plugins.game_ip.cli.commands import cmd_batch
 
 
 class TestCommandMap:

@@ -175,6 +175,41 @@ class DomainPort(Protocol):
         """
         ...
 
+    # --- CLI extension hooks (v2, optional, step 4) ---
+    #
+    # The three methods below were introduced in step 4 of the
+    # domain-free-core refactor to remove the IP-specific halves of
+    # ``core/cli/commands.py`` and ``core/cli/tool_handlers.py``. Like
+    # the step-3 hooks they are *optional* — domains that do not extend
+    # the slash-command surface or contribute pipeline-shaped tools may
+    # leave them unimplemented and call sites in ``core/`` fall back to
+    # safe defaults via ``getattr(domain, '<name>', None)``.
+
+    def get_rerunnable_nodes(self) -> set[str]:
+        """Return pipeline node names that ``/rerun_node`` will accept.
+
+        Default: empty set (no rerunnable nodes for non-pipeline domains).
+        """
+        ...
+
+    def register_slash_commands(self, command_map: dict[str, str]) -> None:
+        """Merge domain-specific slash command entries into ``command_map``.
+
+        Default: no-op. Implementations should call
+        ``command_map.update({...})`` with their own ``"/cmd" -> "action"``
+        entries; the generic ``COMMAND_MAP`` is mutated in place.
+        """
+        ...
+
+    def register_tool_handlers(self, handlers: dict[str, Any]) -> None:
+        """Merge domain-specific tool handler entries into ``handlers``.
+
+        Default: no-op. Implementations should call
+        ``handlers.update({...})`` with their own ``"tool_name" -> callable``
+        entries; the generic dispatcher dict is mutated in place.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # contextvars injection (same pattern as LLMClientPort)

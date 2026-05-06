@@ -54,12 +54,16 @@ class GeodeBootstrap:
 
             _set_readiness(self.readiness)
 
-        # Domain adapter
+        # Domain adapter (+ slash command registry extension)
         try:
+            from core.cli.commands import install_domain_commands
             from core.domains.loader import load_domain_adapter
-            from core.domains.port import set_domain
+            from core.domains.port import get_domain_or_none, set_domain
 
             set_domain(load_domain_adapter("game_ip"))
+            domain = get_domain_or_none()
+            if domain is not None:
+                install_domain_commands(domain)
         except Exception:
             log.debug("Domain propagation skipped", exc_info=True)
 
@@ -118,6 +122,24 @@ def setup_contextvars(*, load_env: bool = False) -> None:
         set_domain(load_domain_adapter("game_ip"))
     except Exception:
         log.debug("Domain adapter skipped", exc_info=True)
+
+    # 1.5 Domain-extension wiring (slash commands + tool handlers).
+    #     Step 4 (domain-free-core): replaces the IP-specific halves of
+    #     ``core/cli/commands.py`` and ``core/cli/tool_handlers.py`` with
+    #     a registry-extension pattern (DomainPort v2 ``register_*`` hooks).
+    try:
+        from core.cli.commands import install_domain_commands
+        from core.domains.port import get_domain_or_none
+
+        domain = get_domain_or_none()
+        if domain is not None:
+            install_domain_commands(domain)
+            # Tool handlers register lazily inside ``_build_tool_handlers``
+            # because they need the per-call readiness/mcp/skill_registry
+            # closure context. The ``install_domain_tool_handlers`` helper
+            # runs at handler-build time (see core/cli/tool_handlers.py).
+    except Exception:
+        log.debug("Domain command/handler registration skipped", exc_info=True)
 
     # 2. Memory contextvars
     try:
