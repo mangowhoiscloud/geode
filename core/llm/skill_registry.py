@@ -116,7 +116,7 @@ class SkillRegistry:
         return [
             s
             for s in self._skills
-            if s.node == node and (s.type == role_type or s.type == "*") and s.role == role
+            if s.node == node and (s.type in (role_type, "*")) and s.role == role
         ]
 
     # -- Internal -----------------------------------------------------------

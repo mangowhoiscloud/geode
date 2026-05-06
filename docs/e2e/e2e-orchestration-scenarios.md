@@ -222,7 +222,7 @@ IsolationResult.output = "not valid json {{"
 Expected:
   - json.loads raises JSONDecodeError
   - Fallback: SubResult.output = {"raw": "not valid json {{"}
-  - success = True (isolation succeeded, output just unparseable)
+  - success = True (isolation succeeded, output just unparsable)
 ```
 
 ### 3-7. Timeout Path
