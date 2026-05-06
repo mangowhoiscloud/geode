@@ -181,10 +181,6 @@ def maybe_traceable(
     return _identity
 
 
-# Backward compatibility alias (deprecated — use maybe_traceable)
-_maybe_traceable = maybe_traceable
-
-
 # ---------------------------------------------------------------------------
 # Token usage recording helpers
 # ---------------------------------------------------------------------------

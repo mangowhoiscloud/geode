@@ -7,7 +7,7 @@ Memory hierarchy injected into the system prompt (G1-G3):
   G1: GEODE.md  — Agent identity (Core Principles + CANNOT + Defaults, ~20 lines)
   G2: .geode/MEMORY.md — Project meta-index (architecture, pipelines, key files)
   G3: .geode/LEARNING.md — Agent learning (patterns, corrections, domain knowledge)
-  G4: .geode/memory/PROJECT.md — Runtime insights + rules (existing _build_memory_context)
+  G4: .geode/memory/PROJECT.md — Runtime insights + rules
 
 Extracted from ``nl_router.py`` so that the AgenticLoop can use the system
 prompt without depending on the NL Router module.
@@ -279,35 +279,6 @@ def _build_user_context() -> str:
         return ""
 
 
-def _build_memory_context() -> str:
-    """Build memory context string from the 4-tier memory hierarchy.
-
-    G1 (identity) is now injected in the STATIC section of build_system_prompt()
-    for prompt cache optimization.  This function assembles G2-G4 only.
-
-    Each section is capped at ``_MAX_SECTION_LINES`` lines.
-    Missing files are silently skipped (graceful degradation).
-    """
-    parts: list[str] = []
-
-    # --- G2: Project Memory Index (.geode/MEMORY.md) ---
-    geode_memory_ctx = _build_geode_memory_context()
-    if geode_memory_ctx:
-        parts.append(geode_memory_ctx)
-
-    # --- G3: Agent Learning (.geode/LEARNING.md) ---
-    learning_ctx = _build_learning_context()
-    if learning_ctx:
-        parts.append(learning_ctx)
-
-    # --- G4: Runtime Project Memory (.geode/memory/PROJECT.md) ---
-    project_ctx = _build_project_memory_context()
-    if project_ctx:
-        parts.append(project_ctx)
-
-    return "\n\n".join(parts)
-
-
 def _build_identity_context() -> str:
     """G1: Extract core identity from GEODE.md (Core Principles + CANNOT + Defaults).
 
@@ -416,8 +387,7 @@ def _build_learning_context() -> str:
 def _build_project_memory_context() -> str:
     """G4: Build runtime project memory (insights + rules) from ProjectMemory.
 
-    This is the original _build_memory_context logic, now isolated as G4.
-    Note: G4 needs full rule details (name + paths), so it calls
+    G4 needs full rule details (name + paths), so it calls
     ``mem.list_rules()`` directly rather than ``get_active_rule_names()``.
     """
     try:

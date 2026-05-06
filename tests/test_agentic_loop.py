@@ -678,7 +678,7 @@ class TestSubAgentOrchestration:
 
 
 class TestAgenticLoopTracing:
-    """Tests for _maybe_traceable integration in AgenticLoop."""
+    """Tests for maybe_traceable integration in AgenticLoop."""
 
     def test_run_has_traceable_attribute(self) -> None:
         """Verify that run() method exists and is callable (tracing is a decorator)."""
@@ -695,7 +695,7 @@ class TestAgenticLoopTracing:
         assert callable(loop._call_llm)
 
     def test_tracing_passthrough_without_langsmith(self) -> None:
-        """Without LANGCHAIN_TRACING_V2/API_KEY, _maybe_traceable is a no-op."""
+        """Without LANGCHAIN_TRACING_V2/API_KEY, maybe_traceable is a no-op."""
         context = ConversationContext(max_turns=5)
         executor = ToolExecutor()
         loop = AgenticLoop(context, executor, quiet=True)

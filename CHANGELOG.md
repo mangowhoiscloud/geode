@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+- **Dead code excised post-v0.66.0 audit (3 sites).** `core/llm/router.py` `_maybe_traceable = maybe_traceable` backward-compat alias deleted (zero call-sites; only docstring/comment mentions in two test files updated to use `maybe_traceable`). `core/agent/system_prompt.py` `_build_memory_context()` deleted (~28 LOC; superseded by inlined G2-G4 calls in `build_system_prompt`, no external or internal caller; one stale docstring reference in `_build_project_memory_context` cleaned). `core/cli/pipeline_executor.py:_render_streaming_evaluator` and `_render_streaming_analyst` now call `plugins.game_ip.scoring_constants.score_style` instead of duplicating the threshold-styled-string ladder inline (the analyst path rescales 0-5 → 0-100 with `score * 20` so both renderers share the 80/60-tier styler). Findings sourced from the post-release dead/duplicate/zombie code scan; sub-agent flagged 0 critical, 2 moderate, 3 minor — all 3 minor + 1 moderate addressed here. (`core/llm/router.py`, `core/agent/system_prompt.py`, `core/cli/pipeline_executor.py`, `tests/conftest.py`, `tests/test_agentic_loop.py`)
+
 ## [0.66.0] — 2026-05-06
 
 > **Domain-free core refactor — steps 1-3 of 8.** First wave of the architectural pivot
