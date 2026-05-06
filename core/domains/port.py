@@ -210,6 +210,31 @@ class DomainPort(Protocol):
         """
         ...
 
+    # --- MCP server extension hook (v2, optional, step 6) ---
+    #
+    # Introduced in step 6 to remove the IP-specific MCP tools from
+    # ``core/mcp_server.py``.  Like the other v2 hooks it is *optional* —
+    # domains without an MCP surface (or whose surface is exposed
+    # differently) may leave it unimplemented, and the call site in
+    # ``core/mcp_server.py:create_mcp_server`` falls back to a no-op via
+    # ``getattr(domain, 'register_mcp_tools', None)``.
+
+    def register_mcp_tools(self, server: Any) -> None:
+        """Register domain-specific MCP tools and resources on ``server``.
+
+        The plugin uses FastMCP decorators (``@server.tool()``,
+        ``@server.resource()``) to attach its tools/resources at
+        server-creation time. ``server`` is a
+        ``mcp.server.fastmcp.FastMCP`` instance.
+
+        Default: no-op. Implementations should call
+        ``@server.tool(...)`` / ``@server.resource(...)`` to attach
+        their MCP surface; the generic core tools (``query_memory``,
+        ``get_health``, ``geode://soul``) are already registered by the
+        time this method runs.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # contextvars injection (same pattern as LLMClientPort)
