@@ -97,6 +97,9 @@ class GameIPDomain:
     def get_evaluator_axes(self) -> dict[str, dict[str, Any]]:
         return dict(self._axes_data["evaluator_axes"])
 
+    def get_prospect_evaluator_axes(self) -> dict[str, dict[str, Any]]:
+        return dict(self._axes_data.get("prospect_evaluator_axes", {}))
+
     def get_valid_axes_map(self) -> dict[str, set[str]]:
         result: dict[str, set[str]] = {}
         for eval_type, spec in self._axes_data["evaluator_axes"].items():
