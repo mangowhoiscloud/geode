@@ -28,6 +28,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.67.0] — 2026-05-06
+
+> **Domain-free core refactor — steps 4-6 of 8.** Second wave of the
+> architectural pivot documented in `docs/architecture/domain-free-core-audit.md`
+> (v0.66.0 covered steps 1-3). This release moves the largest concentration
+> of game-IP-specific code out of `core/`: CLI commands + tool_handlers
+> (step 4), the entire tools cluster (step 5: analysis.py whole-file move +
+> signal_tools.py 3-way split + tool_schemas.json retirement), and the MCP
+> server plugin-registration contract (step 6). Five new `DomainPort` v2
+> hooks (`get_rerunnable_nodes`, `register_slash_commands`,
+> `register_tool_handlers`, `register_mcp_tools`) follow the
+> `naming-conventions.md` verb taxonomy. Two new core utility modules
+> (`core/mcp/utils.py`, `core/tools/web_search.py`) re-establish the
+> generic infrastructure that step-5's split surfaced. Two new TID251
+> banned-api entries with educational breadcrumbs. **Steps 7-8 remain**
+> (state.py + reports.py + panels.py extraction; graph.py topology + the
+> REODE-fork unblock). E2E anchor `geode analyze "Cowboy Bebop" --dry-run`
+> unchanged at A (68.4) across all 3 step PRs (#885, #886, #887).
+
 ### Architecture
 - **Domain-free core, step 6 of 8 (`docs/architecture/domain-free-core-audit.md`).** MCP server plugin-registration contract — `core/mcp_server.py` shrinks from a hardcoded 6-tool registration body (~190 LOC) to a generic shell (~105 LOC) that registers only the two domain-agnostic tools (`query_memory`, `get_health`) plus the `geode://soul` resource and then delegates to `domain.register_mcp_tools(server)` for plugin-contributed tools. The four IP-specific MCP tools (`analyze_ip`, `quick_score`, `get_ip_signals`, `list_fixtures`) and the `geode://fixtures` resource that previously lived in `core/mcp_server.py` moved to new `plugins/game_ip/mcp/tools.py` (~155 LOC; sits alongside the step-2 `signal_adapter.py` inside the existing `plugins/game_ip/mcp/` subpackage). The plugin's tool body is wrapped in a `register_game_ip_mcp_tools(server)` function that the new `GameIPDomain.register_mcp_tools` hook calls; the function uses `cast("FastMCP", server)` under a `TYPE_CHECKING` guard so mypy resolves the FastMCP decorator types without importing the optional `mcp` package eagerly. New optional `DomainPort` v2 method declared in `core/domains/port.py` with a `...` body and matching the step-3/4 hook taxonomy from `docs/architecture/naming-conventions.md` §2 (the `register_*` verb is reserved exactly for this kind of "subscribe a handler to a registry" surface — REST POST analogue): `register_mcp_tools(server)`. Call site in `core/mcp_server.py:create_mcp_server` uses the same `getattr(domain, "register_mcp_tools", None) + callable(...)` shape as the step-3 hooks so a future domain that omits the method silently falls back to a no-op; failures during plugin registration are caught and logged at debug level so a broken plugin can't take the server down (the two generic tools above stay functional regardless). JSON registry split (Option B per the step-6 plan): `core/tools/mcp_tools.json` shrinks from 6 entries to the 2 generic descriptions; the 4 plugin-specific descriptions move to new `plugins/game_ip/mcp/mcp_tools.json` loaded directly by `plugins/game_ip/mcp/tools.py` at import time. Per-plugin JSON keeps the description colocated with the code that consumes it, mirroring step 5's `plugins/game_ip/tools/tool_schemas.json` precedent. The plugin's `mcp/__init__.py` docstring grew a one-line index of the two now-existing modules (`signal_adapter.py` from step 2, `tools.py` from step 6). No TID251 ban entries this step — `core/mcp_server.py` still exists (just lighter), so a module-level relocation message is wrong; this matches the step-4 reasoning where symbol relocations *inside* still-existing modules don't trip TID251. The retired-from-core JSON file is data, not a Python module, so it's not TID251 territory either. Test updates: `tests/test_mcp_server.py` retargeted — the `len(_TOOL_DESCRIPTIONS) == 6` invariant becomes `== 2` for core (with a separate assertion that the 4 plugin entries live in `plugins.game_ip.mcp.tools._TOOL_DESCRIPTIONS`); a new test confirms `GameIPDomain.register_mcp_tools` is callable. Quality gates green: ruff/ruff-format/mypy/deptry/codespell clean, mypy source-file count 247 → 248 (+1 plugin module), 4388 tests pass (+2 new test cases), E2E anchor `geode analyze "Cowboy Bebop" --dry-run` unchanged at A (68.4) undermarketed. (`core/mcp_server.py`, `core/domains/port.py`, `core/tools/mcp_tools.json`, `plugins/game_ip/mcp/{tools,mcp_tools.json,__init__}.py`, `plugins/game_ip/adapter.py`, `tests/test_mcp_server.py`)
 
