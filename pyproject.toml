@@ -13,6 +13,7 @@ dependencies = [
     "langgraph>=1.1.0",
     "langgraph-checkpoint>=4.0.1",
     "langgraph-checkpoint-sqlite>=3.0.0",
+    "langsmith>=0.4.0",
     "numpy>=2.2.0",
     "openai>=2.26.0",
     "openai-agents>=0.13.0",
@@ -20,6 +21,7 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.0",
     "rich>=14.0.0",
     "simple-term-menu>=1.6.0",
     "typer>=0.15.0",
@@ -51,6 +53,8 @@ markers = [
 [dependency-groups]
 dev = [
     "bandit>=1.8.0",
+    "codespell>=2.3.0",
+    "deptry>=0.25.0",
     "import-linter>=2.0",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
@@ -146,10 +150,28 @@ ignore_imports = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["core", "tests"]
+src = ["core", "plugins", "tests"]
+extend-exclude = [
+    ".geode",        # runtime config + skill scripts (not part of codebase)
+    ".claude",       # Claude Code session artifacts
+    "experimental",  # opt-in prototypes — own pyproject testpaths
+    "scripts",       # one-off CI / migration utilities
+]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "N", "C4", "RUF"]
+# Rule families:
+#   E/F/W   pycodestyle + pyflakes baseline
+#   I       isort
+#   UP      pyupgrade — pin to py312 idioms
+#   B       flake8-bugbear — common gotchas
+#   SIM     flake8-simplify
+#   S       flake8-bandit subset (overlaps bandit; keep both for dual coverage)
+#   N       pep8-naming
+#   C4      flake8-comprehensions
+#   C901    mccabe cyclomatic complexity (per-function)
+#   PLR     pylint refactor (max-args/branches/returns/statements)
+#   RUF     ruff-specific
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "N", "C4", "C901", "PLR", "RUF"]
 ignore = [
     "S101",   # assert — used extensively in tests and fixture validation
     "S311",   # non-cryptographic random — intentional in data generator
@@ -160,15 +182,73 @@ ignore = [
     "RUF003", # ambiguous unicode char in comment
     "RUF012", # mutable class default — Pydantic models handle this
     "RUF059", # unused unpacked variable — LangGraph stream event destructuring
+    # PLR rule subset — informational rather than actionable for the current codebase:
+    "PLR2004", # magic-value comparison — too noisy on score thresholds, status codes
+    "PLR0904", # too-many-public-methods — incompatible with Pydantic / Typer command classes
+    "PLR0911", # too-many-return-statements — flagged separately when it matters
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S105", "S106", "S310", "B017", "E501"]
+"tests/**/*.py" = ["S101", "S105", "S106", "S310", "B017", "E501", "PLR0915", "PLR0912", "PLR0913"]
 "core/cli/bash_tool.py" = ["S602"]  # shell=True is intentional for agentic bash tool
+
+# Complexity ratchets — thresholds set to current worst offender (day-1 failures = 0).
+# Ratchet down per release as step 4-8 of the domain-free-core refactor extracts god methods.
+# See docs/architecture/domain-free-core-audit.md §6 for the planned reductions.
+[tool.ruff.lint.mccabe]
+max-complexity = 62
+
+[tool.ruff.lint.pylint]
+max-args = 18         # Worst: 18 (e.g. lifecycle bootstraps). Target: 8.
+max-branches = 68     # Worst: 68. Target: 15.
+max-returns = 18      # Worst: 18 (PLR0911 silenced project-wide; this kept for ratchet visibility).
+max-statements = 273  # Worst: 273 (god method in cli/__init__.py). Target: 60.
 
 [tool.bandit]
 exclude_dirs = ["tests"]
 skips = ["B101", "B105", "B110", "B311", "B404", "B603", "B607"]
+
+# deptry — dependency drift detection (unused/missing/transitive imports vs pyproject.toml).
+# Run via `uv run deptry .` — see CI lint job.
+[tool.deptry]
+extend_exclude = [
+    "tests",
+    "experimental",
+    ".claude",
+    ".geode",
+    "scripts",
+]
+known_first_party = ["core", "plugins"]
+
+[tool.deptry.per_rule_ignores]
+# DEP002 — declared as dep but not imported anywhere by deptry's static scan.
+# All entries below are confirmed-needed:
+#   langgraph-checkpoint{,-sqlite}: namespace packages (langgraph.checkpoint.*),
+#       deptry's ImportFinder can't link the namespace import back to the
+#       distribution name reliably.
+#   openai-agents: kept for Responses-API runtime path even when no static
+#       import exists in core/ today; removing it would break the optional
+#       agents harness when re-enabled. Re-evaluate if/when that surface
+#       is fully retired.
+#   Pillow: imported as `PIL` from core/tools/computer_use.py (desktop extra).
+DEP002 = [
+    "langgraph-checkpoint",
+    "langgraph-checkpoint-sqlite",
+    "openai-agents",
+    "Pillow",
+]
+
+[tool.deptry.package_module_name_map]
+# Pip name → top-level importable name. Pillow exposes PIL; pyyaml exposes yaml.
+Pillow = "PIL"
+pyyaml = "yaml"
+
+# codespell — typo detection in identifiers/strings/comments. Run via pre-commit.
+[tool.codespell]
+skip = "*.lock,uv.lock,*.svg,*.json,plugins/game_ip/fixtures/*,plugins/game_ip/config/*,docs/architecture/domain-free-core-audit.md,CHANGELOG.md,.geode/*,.claude/*"
+ignore-words-list = "statics,ot,ans,nd,thi,ist,ines,recuse,cant,blockd,Anser,socio-economic"
+check-filenames = ""
+check-hidden = ""
 
 [tool.coverage.run]
 source = ["core"]

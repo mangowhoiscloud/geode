@@ -126,15 +126,14 @@ def drain_scheduler_queue(
                         global_lane.manual_release(lane_key)
                         session_lane.manual_release(lane_key)
                     log.warning("Scheduler job %s dispatch failed", job_id, exc_info=True)
-            else:
-                # Non-isolated: inject into main session (REPL only)
-                if main_loop is not None:
-                    if on_main_run:
-                        on_main_run(job_id)
-                    try:
-                        main_loop.run(prompt)
-                    except Exception:
-                        log.warning("Scheduler job %s main-loop failed", job_id, exc_info=True)
+            # Non-isolated: inject into main session (REPL only)
+            elif main_loop is not None:
+                if on_main_run:
+                    on_main_run(job_id)
+                try:
+                    main_loop.run(prompt)
+                except Exception:
+                    log.warning("Scheduler job %s main-loop failed", job_id, exc_info=True)
     except _q.Empty:
         pass
     return count

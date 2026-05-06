@@ -94,6 +94,6 @@ class GoogleCalendarAdapter(BaseCalendarAdapter):
                     )
                 )
             except Exception as exc:
-                log.debug("Skipping unparseable Google Calendar event: %s", exc)
+                log.debug("Skipping unparsable Google Calendar event: %s", exc)
         events.sort(key=lambda e: e.start)
         return events

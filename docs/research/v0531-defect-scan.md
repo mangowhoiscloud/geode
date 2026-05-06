@@ -210,4 +210,3 @@ if "credit balance" in msg.lower() or "billing" in msg.lower():
 4. **MODEL_PROFILES provider label (D4):**
    - Change commands.py:66 from `"openai"` to `"openai-codex"` in gpt-5.5 ModelProfile
    - Document why: gpt-5.5 is OAuth-only per config.py:408-413
-

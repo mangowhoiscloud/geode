@@ -25,9 +25,14 @@ build/
 
 # SQLite checkpoints
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 
 # Checkpoint DB
 geode_checkpoints.db
+geode_checkpoints.db-shm
+geode_checkpoints.db-wal
 
 # Coverage
 .coverage
