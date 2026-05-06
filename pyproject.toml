@@ -170,8 +170,9 @@ extend-exclude = [
 #   C4      flake8-comprehensions
 #   C901    mccabe cyclomatic complexity (per-function)
 #   PLR     pylint refactor (max-args/branches/returns/statements)
+#   TID     flake8-tidy-imports — banned APIs (TID251), relative imports (TID252)
 #   RUF     ruff-specific
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "N", "C4", "C901", "PLR", "RUF"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "N", "C4", "C901", "PLR", "TID", "RUF"]
 ignore = [
     "S101",   # assert — used extensively in tests and fixture validation
     "S311",   # non-cryptographic random — intentional in data generator
@@ -203,6 +204,20 @@ max-args = 18         # Worst: 18 (e.g. lifecycle bootstraps). Target: 8.
 max-branches = 68     # Worst: 68. Target: 15.
 max-returns = 18      # Worst: 18 (PLR0911 silenced project-wide; this kept for ratchet visibility).
 max-statements = 273  # Worst: 273 (god method in cli/__init__.py). Target: 60.
+
+# TID251 — banned imports with educational error messages (LangGraph pattern).
+# Symbol-level guardrail complementary to import-linter (which is module-level
+# layer enforcement). Use for transitional moves, deprecated aliases, and
+# specific anti-pattern symbols outside import-linter's contract scope.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# v0.66.0 step-2 file relocations. These paths don't exist on disk after the
+# move (no backwards-compat shim), so a stale reference would raise
+# ModuleNotFoundError at runtime. TID251 catches the same mistake at lint
+# time with a friendlier breadcrumb pointing at the new home.
+"core.cli.batch".msg = "Moved to plugins.game_ip.cli.batch (v0.66.0 step 2 of domain-free-core refactor)."
+"core.cli.ip_names".msg = "Moved to plugins.game_ip.cli.ip_names (v0.66.0 step 2)."
+"core.cli.search".msg = "Moved to plugins.game_ip.cli.search (v0.66.0 step 2)."
+"core.mcp.signal_adapter".msg = "Moved to plugins.game_ip.mcp.signal_adapter (v0.66.0 step 2)."
 
 [tool.bandit]
 exclude_dirs = ["tests"]
