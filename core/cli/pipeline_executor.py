@@ -12,6 +12,8 @@ import re as _re
 import shutil
 from typing import Any
 
+from plugins.game_ip.scoring_constants import score_style
+
 from core.config import settings
 from core.runtime import GeodeRuntime
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
@@ -282,12 +284,11 @@ def _execute_pipeline(
 
 def _render_streaming_analyst(analysis: AnalysisResult) -> None:
     """Render a single analyst result row immediately in streaming mode."""
-    score_style = (
-        "bold green" if analysis.score >= 4.0 else "yellow" if analysis.score >= 3.0 else "red"
-    )
+    # Analyst scale is 0-5, not 0-100; rescale 4.0/3.0 → 80/60 for shared styler.
+    style = score_style(analysis.score * 20)
     console.print(
         f"  [label]{analysis.analyst_type.capitalize():14s}[/label] "
-        f"[{score_style}]{analysis.score:.1f}[/{score_style}]  "
+        f"[{style}]{analysis.score:.1f}[/{style}]  "
         f"{analysis.key_finding}"
     )
 
@@ -302,11 +303,11 @@ def _render_streaming_evaluator(key: str, ev: EvaluatorResult) -> None:
     }
     label = labels.get(key, key)
     score = ev.composite_score
-    score_style = "bold green" if score >= 80 else "yellow" if score >= 60 else "red"
+    style = score_style(score)
     rationale_snippet = ev.rationale.split(".")[0] + "." if ev.rationale else ""
     console.print(
         f"  [label]{label:14s}[/label] "
-        f"[{score_style}]{score:.0f}/100[/{score_style}]  "
+        f"[{style}]{score:.0f}/100[/{style}]  "
         f"{rationale_snippet}"
     )
 
