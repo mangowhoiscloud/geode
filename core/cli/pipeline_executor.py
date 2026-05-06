@@ -306,9 +306,7 @@ def _render_streaming_evaluator(key: str, ev: EvaluatorResult) -> None:
     style = score_style(score)
     rationale_snippet = ev.rationale.split(".")[0] + "." if ev.rationale else ""
     console.print(
-        f"  [label]{label:14s}[/label] "
-        f"[{style}]{score:.0f}/100[/{style}]  "
-        f"{rationale_snippet}"
+        f"  [label]{label:14s}[/label] [{style}]{score:.0f}/100[/{style}]  {rationale_snippet}"
     )
 
 
