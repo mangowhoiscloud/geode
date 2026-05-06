@@ -59,6 +59,13 @@ class DomainPort(Protocol):
         """Return evaluator_type → axes config (with descriptions, ranges)."""
         ...
 
+    def get_prospect_evaluator_axes(self) -> dict[str, dict[str, Any]]:
+        """Return prospect_evaluator_type → axes config.
+
+        Domains without a prospect-evaluation track may return an empty dict.
+        """
+        ...
+
     def get_valid_axes_map(self) -> dict[str, set[str]]:
         """Return evaluator_type → set of valid axis key names."""
         ...

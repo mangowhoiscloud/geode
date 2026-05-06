@@ -28,6 +28,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Architecture
+- **Domain-free core, step 1 of 8 (`docs/architecture/domain-free-core-audit.md`).** Eager IP-YAML load lifted out of `core/llm/prompts/axes.py` so `core/` can be imported without `plugins/game_ip/` present (REODE-fork prerequisite). The 14-axis rubric data now lives in `plugins/game_ip/axes.py`; `core/llm/prompts/axes.py` re-exports those constants when the plugin is installed and falls back to empty dicts otherwise (preserves existing GEODE callers; pin hashes unchanged). Domain registry decoupled: `core/domains/loader.py:_BUILTIN_DOMAINS` no longer seeds `game_ip`; the loader gains a 2-pass discovery (registry → convention `import plugins.<name>` → re-check) and `plugins/game_ip/__init__.py` self-registers via `register_domain(...)` at import time. New `DomainPort.get_prospect_evaluator_axes()` v2 method exposes the prospect-track axes that previously lived only as a module-level `PROSPECT_EVALUATOR_AXES` constant. Six new tests in `tests/test_domain_port_step1.py` cover loader 2-pass, plugin self-registration, and the new method. (`core/llm/prompts/axes.py`, `core/domains/loader.py`, `core/domains/port.py`, `plugins/game_ip/axes.py`, `plugins/game_ip/__init__.py`, `plugins/game_ip/adapter.py`, `tests/test_domain_port_step1.py`)
+
 ## [0.65.0] — 2026-05-02
 
 ### Fixed
