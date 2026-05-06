@@ -209,12 +209,17 @@ max-statements = 273  # Worst: 273 (god method in cli/__init__.py). Target: 60.
 # Symbol-level guardrail complementary to import-linter (which is module-level
 # layer enforcement). Use for transitional moves, deprecated aliases, and
 # specific anti-pattern symbols outside import-linter's contract scope.
+#
+# Convention: keep the .msg short and uniform — `Moved to <new.path> (v<X.Y.Z> step <N>).`
+# The "domain-free-core refactor" context is documented in CHANGELOG and
+# docs/architecture/domain-free-core-audit.md; the ban message should be
+# scannable, not explanatory.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 # v0.66.0 step-2 file relocations. These paths don't exist on disk after the
 # move (no backwards-compat shim), so a stale reference would raise
 # ModuleNotFoundError at runtime. TID251 catches the same mistake at lint
 # time with a friendlier breadcrumb pointing at the new home.
-"core.cli.batch".msg = "Moved to plugins.game_ip.cli.batch (v0.66.0 step 2 of domain-free-core refactor)."
+"core.cli.batch".msg = "Moved to plugins.game_ip.cli.batch (v0.66.0 step 2)."
 "core.cli.ip_names".msg = "Moved to plugins.game_ip.cli.ip_names (v0.66.0 step 2)."
 "core.cli.search".msg = "Moved to plugins.game_ip.cli.search (v0.66.0 step 2)."
 "core.mcp.signal_adapter".msg = "Moved to plugins.game_ip.mcp.signal_adapter (v0.66.0 step 2)."
@@ -261,7 +266,7 @@ pyyaml = "yaml"
 # codespell — typo detection in identifiers/strings/comments. Run via pre-commit.
 [tool.codespell]
 skip = "*.lock,uv.lock,*.svg,*.json,plugins/game_ip/fixtures/*,plugins/game_ip/config/*,docs/architecture/domain-free-core-audit.md,CHANGELOG.md,.geode/*,.claude/*"
-ignore-words-list = "statics,ot,ans,nd,thi,ist,ines,recuse,cant,blockd,Anser,socio-economic"
+ignore-words-list = "statics,ot,ans,nd,thi,ist,ines,recuse,cant,blockd,Anser,socio-economic,wit"
 check-filenames = ""
 check-hidden = ""
 
