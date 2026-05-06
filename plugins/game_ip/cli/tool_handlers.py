@@ -24,10 +24,10 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 GAME_IP_DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
-    "youtube_search": ("core.tools.signal_tools", "YouTubeSearchTool"),
-    "reddit_sentiment": ("core.tools.signal_tools", "RedditSentimentTool"),
-    "steam_info": ("core.tools.signal_tools", "SteamInfoTool"),
-    "google_trends": ("core.tools.signal_tools", "GoogleTrendsTool"),
+    "youtube_search": ("plugins.game_ip.tools.signal_tools", "YouTubeSearchTool"),
+    "reddit_sentiment": ("plugins.game_ip.tools.signal_tools", "RedditSentimentTool"),
+    "steam_info": ("plugins.game_ip.tools.signal_tools", "SteamInfoTool"),
+    "google_trends": ("plugins.game_ip.tools.signal_tools", "GoogleTrendsTool"),
 }
 
 

@@ -63,21 +63,6 @@
     },
     "required": ["ip_name"]
   },
-  "WebSearchTool": {
-    "type": "object",
-    "properties": {
-      "query": {
-        "type": "string",
-        "description": "Search query (e.g., 'Berserk game adaptation news 2026')."
-      },
-      "max_results": {
-        "type": "integer",
-        "description": "Maximum number of results to return (default: 5)."
-      }
-    },
-    "required": ["query"],
-    "additionalProperties": false
-  },
   "RunAnalystTool": {
     "type": "object",
     "properties": {
