@@ -14,44 +14,25 @@ log = logging.getLogger(__name__)
 
 
 def build_signal_adapter() -> None:
-    """Build and inject CompositeSignalAdapter with MCP-backed signal sources.
+    """Wire the active domain's signal adapter, if it has one.
 
-    Chains MCP signal adapters into CompositeSignalAdapter,
-    then injects into signals_node via contextvars. If no MCP servers
-    are configured or available, the adapter will report is_available()=False
-    and signals_node falls back to fixtures.
+    Step 3 (domain-free-core): the actual MCP/Steam wiring previously
+    inlined here was relocated to ``plugins/game_ip/wiring.py`` and is
+    now reachable via ``DomainPort.build_signal_adapter``. Domains with
+    no signal sources (most future domains) simply omit the method, in
+    which case this becomes a no-op.
     """
-    from plugins.game_ip.nodes.signals import set_signal_adapter
+    from core.domains.port import get_domain_or_none
 
-    from core.mcp.composite_signal import CompositeSignalAdapter
-    from core.mcp.manager import get_mcp_manager
-    from core.mcp.steam_adapter import SteamMCPSignalAdapter
-
-    manager = get_mcp_manager()
-    server_count = manager.load_config()
-
-    if server_count == 0:
-        log.debug("No MCP servers configured — signal adapter skipped (fixture fallback)")
-        set_signal_adapter(None)
+    domain = get_domain_or_none()
+    builder = getattr(domain, "build_signal_adapter", None) if domain else None
+    if not callable(builder):
+        log.debug("No domain signal adapter; skipping")
         return
-
-    # Build individual MCP signal adapters
-    adapters: list[SteamMCPSignalAdapter] = []
-
-    steam_adapter = SteamMCPSignalAdapter(manager=manager, server_name="steam")
-    adapters.append(steam_adapter)
-
-    composite = CompositeSignalAdapter(adapters)  # type: ignore[arg-type]
-
-    if composite.is_available():
-        log.info(
-            "Signal liveification enabled: %d MCP adapters wired",
-            len(adapters),
-        )
-    else:
-        log.debug("MCP servers configured but none available — fixture fallback active")
-
-    set_signal_adapter(composite)
+    try:
+        builder()
+    except Exception:
+        log.debug("Domain build_signal_adapter failed", exc_info=True)
 
 
 def _load_mcp_manager_for_plugin(
