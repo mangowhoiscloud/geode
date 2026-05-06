@@ -7,9 +7,10 @@ class TestMCPServerCreation:
     def test_tool_descriptions_defined(self) -> None:
         from core.mcp_server import _TOOL_DESCRIPTIONS
 
-        assert "analyze_ip" in _TOOL_DESCRIPTIONS
-        assert "list_fixtures" in _TOOL_DESCRIPTIONS
-        assert len(_TOOL_DESCRIPTIONS) == 6
+        assert "query_memory" in _TOOL_DESCRIPTIONS
+        assert "get_health" in _TOOL_DESCRIPTIONS
+        # Step 6: only the two core-generic descriptions stay in core/.
+        assert len(_TOOL_DESCRIPTIONS) == 2
 
     def test_create_server_requires_mcp_package(self) -> None:
         from core.mcp_server import create_mcp_server
@@ -21,17 +22,13 @@ class TestMCPServerCreation:
 
         assert callable(main)
 
-    def test_all_six_tool_names_present(self) -> None:
+    def test_core_tool_names_present(self) -> None:
         from core.mcp_server import _TOOL_DESCRIPTIONS
 
-        expected = {
-            "analyze_ip",
-            "quick_score",
-            "get_ip_signals",
-            "list_fixtures",
-            "query_memory",
-            "get_health",
-        }
+        # Step 6: core retains only domain-agnostic tools. The four
+        # plugin-bound entries (analyze_ip, quick_score, get_ip_signals,
+        # list_fixtures) moved to plugins/game_ip/mcp/mcp_tools.json.
+        expected = {"query_memory", "get_health"}
         assert set(_TOOL_DESCRIPTIONS.keys()) == expected
 
     def test_descriptions_are_nonempty_strings(self) -> None:
@@ -40,6 +37,24 @@ class TestMCPServerCreation:
         for name, desc in _TOOL_DESCRIPTIONS.items():
             assert isinstance(desc, str), f"{name} description not a string"
             assert len(desc) > 10, f"{name} description too short"
+
+    def test_plugin_tool_descriptions_split_to_plugin(self) -> None:
+        """The four IP-specific MCP tools live with the plugin after step 6."""
+        from plugins.game_ip.mcp import tools as plugin_tools
+
+        plugin_descs = plugin_tools._TOOL_DESCRIPTIONS
+        expected = {"analyze_ip", "quick_score", "get_ip_signals", "list_fixtures"}
+        assert set(plugin_descs.keys()) == expected
+        for name, desc in plugin_descs.items():
+            assert isinstance(desc, str), f"{name} description not a string"
+            assert len(desc) > 10, f"{name} description too short"
+
+    def test_register_mcp_tools_hook_exists_on_domain(self) -> None:
+        """GameIPDomain implements the v2 ``register_mcp_tools`` hook."""
+        from plugins.game_ip.adapter import GameIPDomain
+
+        domain = GameIPDomain()
+        assert callable(getattr(domain, "register_mcp_tools", None))
 
 
 class TestMCPToolFunctions:

@@ -242,3 +242,14 @@ class GameIPDomain:
         from plugins.game_ip.cli.tool_handlers import build_game_ip_handlers
 
         handlers.update(build_game_ip_handlers())
+
+    # --- MCP server extension hook (DomainPort v2, step 6) ---
+
+    def register_mcp_tools(self, server: Any) -> None:
+        """Attach the game-IP MCP tools (analyze_ip, quick_score,
+        get_ip_signals, list_fixtures) and the ``geode://fixtures``
+        resource to ``server``.
+        """
+        from plugins.game_ip.mcp.tools import register_game_ip_mcp_tools
+
+        register_game_ip_mcp_tools(server)

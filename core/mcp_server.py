@@ -1,4 +1,13 @@
-"""GEODE MCP Server — expose analysis pipeline as MCP tools and resources."""
+"""GEODE MCP Server — expose generic GEODE tools and let the active domain
+plugin register its own tools/resources via :meth:`DomainPort.register_mcp_tools`.
+
+Step 6 of the domain-free-core refactor moved the IP-specific tools
+(``analyze_ip``, ``quick_score``, ``get_ip_signals``, ``list_fixtures``,
+``geode://fixtures``) out to ``plugins/game_ip/mcp/tools.py``. This module
+keeps the FastMCP server shell, the two domain-agnostic tools
+(``query_memory``, ``get_health``), the ``geode://soul`` resource, and the
+``main()`` stdio entry point.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +18,9 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-# Load MCP tool descriptions from centralized JSON
+# Load core-generic MCP tool descriptions from centralized JSON.
+# Plugin-specific descriptions live alongside their plugin module
+# (e.g. plugins/game_ip/mcp/mcp_tools.json) since step 6.
 _MCP_TOOLS_PATH = Path(__file__).resolve().parent / "tools" / "mcp_tools.json"
 with _MCP_TOOLS_PATH.open(encoding="utf-8") as _f:
     _TOOL_DESCRIPTIONS: dict[str, str] = json.load(_f)
@@ -18,7 +29,11 @@ with _MCP_TOOLS_PATH.open(encoding="utf-8") as _f:
 def create_mcp_server() -> Any:
     """Create and configure the GEODE MCP server.
 
-    Returns a FastMCP Server instance with tools and resources registered.
+    Returns a FastMCP Server instance with the generic core tools/resources
+    registered. The active domain plugin (if any) gets a chance to register
+    its own tools/resources via ``domain.register_mcp_tools(server)`` before
+    the server is returned.
+
     Requires the ``mcp`` package to be installed.
     """
     try:
@@ -29,106 +44,6 @@ def create_mcp_server() -> Any:
         ) from None
 
     mcp = FastMCP("geode-analysis")
-
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["analyze_ip"])
-    def analyze_ip(ip_name: str, dry_run: bool = False) -> dict[str, Any]:
-        """Run GEODE analysis pipeline on an IP."""
-        from plugins.game_ip.fixtures import FIXTURE_MAP
-
-        key = ip_name.lower().strip()
-        if key not in FIXTURE_MAP:
-            return {"error": f"IP '{ip_name}' not found. Use list_fixtures to see available IPs."}
-
-        try:
-            from core.runtime import GeodeRuntime
-
-            runtime = GeodeRuntime.create(ip_name)
-            graph = runtime.compile_graph()
-
-            from core.config import settings
-
-            initial_state: dict[str, Any] = {
-                "ip_name": ip_name,
-                "pipeline_mode": "full_pipeline",
-                "dry_run": dry_run,
-                "verbose": False,
-                "analyses": [],
-                "evaluations": {},
-                "errors": [],
-                # Ensemble config injection (L5 nodes read from state, not settings)
-                "_ensemble_mode": settings.ensemble_mode,
-                "_secondary_analysts": settings.secondary_analysts,
-            }
-
-            if not dry_run:
-                tool_injection = runtime.get_tool_state_injection(mode="full_pipeline")
-                initial_state.update(tool_injection)
-
-            result = graph.invoke(initial_state, config=runtime.thread_config)  # type: ignore[call-overload]
-
-            # Extract key results
-            output: dict[str, Any] = {
-                "ip_name": ip_name,
-                "tier": result.get("tier", "?"),
-                "final_score": result.get("final_score", 0),
-                "dry_run": dry_run,
-            }
-
-            # B2: propagate pipeline errors to caller
-            pipeline_errors = result.get("errors", [])
-            if pipeline_errors:
-                output["errors"] = pipeline_errors
-
-            synthesis = result.get("synthesis")
-            if synthesis:
-                output["cause"] = synthesis.undervaluation_cause
-                output["action"] = synthesis.action_type
-                output["narrative"] = synthesis.value_narrative
-                output["target_segment"] = synthesis.target_segment
-
-            analyses = result.get("analyses", [])
-            output["analysts"] = [
-                {"type": a.analyst_type, "score": a.score, "finding": a.key_finding}
-                for a in analyses
-            ]
-
-            runtime.shutdown()
-            return output
-        except Exception as exc:
-            log.error("MCP analyze_ip failed: %s", exc)
-            return {"error": str(exc)}
-
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["quick_score"])
-    def quick_score(ip_name: str) -> dict[str, Any]:
-        """Run scoring-only mode for fast estimation."""
-        result: dict[str, Any] = analyze_ip(ip_name, dry_run=True)
-        return result
-
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["get_ip_signals"])
-    def get_ip_signals(ip_name: str) -> dict[str, Any]:
-        """Get community signals for an IP."""
-        from plugins.game_ip.fixtures import FIXTURE_MAP, load_fixture
-
-        key = ip_name.lower().strip()
-        if key not in FIXTURE_MAP:
-            return {"error": f"IP '{ip_name}' not found."}
-
-        fixture = load_fixture(ip_name)
-        return {
-            "ip_name": ip_name,
-            "signals": fixture.get("signals", {}),
-            "source": "fixture",
-        }
-
-    @mcp.tool(description=_TOOL_DESCRIPTIONS["list_fixtures"])
-    def list_fixtures() -> dict[str, Any]:
-        """List all available IP fixtures."""
-        from plugins.game_ip.fixtures import FIXTURE_MAP
-
-        return {
-            "count": len(FIXTURE_MAP),
-            "ips": sorted(FIXTURE_MAP.keys()),
-        }
 
     # Shared ProjectMemory instance (created once per server lifetime)
     _project_memory: Any = None
@@ -156,14 +71,6 @@ def create_mcp_server() -> Any:
             "openai_configured": bool(settings.openai_api_key),
         }
 
-    # Resources
-    @mcp.resource("geode://fixtures")
-    def fixtures_resource() -> str:
-        """List all available IP fixtures."""
-        from plugins.game_ip.fixtures import FIXTURE_MAP
-
-        return json.dumps({"count": len(FIXTURE_MAP), "ips": sorted(FIXTURE_MAP.keys())})
-
     @mcp.resource("geode://soul")
     def soul_resource() -> str:
         """Get SOUL.md content."""
@@ -172,6 +79,21 @@ def create_mcp_server() -> Any:
         if DEFAULT_SOUL_PATH.exists():
             return DEFAULT_SOUL_PATH.read_text(encoding="utf-8")
         return ""
+
+    # Domain-plugin extension point — let the active domain (if any)
+    # register its own MCP tools/resources on the server. Failures are
+    # logged at debug level so a broken plugin doesn't take the server
+    # down (the generic tools above stay functional regardless).
+    from core.domains.port import get_domain_or_none
+
+    domain = get_domain_or_none()
+    if domain is not None:
+        register = getattr(domain, "register_mcp_tools", None)
+        if callable(register):
+            try:
+                register(mcp)
+            except Exception:
+                log.debug("Domain MCP tool registration skipped", exc_info=True)
 
     return mcp
 
