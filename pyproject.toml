@@ -223,6 +223,10 @@ max-statements = 273  # Worst: 273 (god method in cli/__init__.py). Target: 60.
 "core.cli.ip_names".msg = "Moved to plugins.game_ip.cli.ip_names (v0.66.0 step 2)."
 "core.cli.search".msg = "Moved to plugins.game_ip.cli.search (v0.66.0 step 2)."
 "core.mcp.signal_adapter".msg = "Moved to plugins.game_ip.mcp.signal_adapter (v0.66.0 step 2)."
+# v0.66.2 step-5 tools cluster split. analysis.py whole-file move;
+# signal_tools.py fully retired with symbols dispersed across three destinations.
+"core.tools.analysis".msg = "Moved to plugins.game_ip.tools.analysis (v0.66.2 step 5)."
+"core.tools.signal_tools".msg = "Moved: IP signals → plugins.game_ip.tools.signal_tools, MCP helpers → core.mcp.utils, WebSearchTool → core.tools.web_search (v0.66.2 step 5)."
 
 [tool.bandit]
 exclude_dirs = ["tests"]

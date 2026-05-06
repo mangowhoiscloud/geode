@@ -12,14 +12,14 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.tools.signal_tools import (
+from core.mcp.utils import parse_mcp_content as _parse_mcp_content
+from core.mcp.utils import try_mcp_signal as _try_mcp_signal
+from plugins.game_ip.tools.signal_tools import (
     GoogleTrendsTool,
     RedditSentimentTool,
     SteamInfoTool,
     TwitchStatsTool,
     YouTubeSearchTool,
-    _parse_mcp_content,
-    _try_mcp_signal,
 )
 
 # Patch target: lazy import inside _try_mcp_signal
