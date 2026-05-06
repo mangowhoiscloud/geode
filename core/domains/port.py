@@ -59,6 +59,13 @@ class DomainPort(Protocol):
         """Return evaluator_type → axes config (with descriptions, ranges)."""
         ...
 
+    def get_prospect_evaluator_axes(self) -> dict[str, dict[str, Any]]:
+        """Return prospect_evaluator_type → axes config.
+
+        Domains without a prospect-evaluation track may return an empty dict.
+        """
+        ...
+
     def get_valid_axes_map(self) -> dict[str, set[str]]:
         """Return evaluator_type → set of valid axis key names."""
         ...
@@ -115,6 +122,57 @@ class DomainPort(Protocol):
 
     def get_fixture_path(self) -> str | None:
         """Return path to fixtures directory, or None if no fixtures."""
+        ...
+
+    # --- Lifecycle hooks (v2, optional) ---
+    #
+    # The four methods below were introduced in step 3 of the
+    # domain-free-core refactor to remove the last direct
+    # ``from plugins.game_ip...`` imports inside ``core/lifecycle/`` and
+    # ``core/agent/system_prompt.py``.  They are *optional*: domains
+    # that have no signal layer or no system-prompt customization may
+    # leave the methods unimplemented, in which case call sites in
+    # ``core/`` fall back to a no-op via ``getattr(domain, '<name>',
+    # None)``.  The Protocol declares them with ``...`` bodies so type
+    # checkers still enforce the signature when an implementation is
+    # provided; ``GameIPDomain`` implements all four.
+    #
+    # Convention for callers in core/:
+    #     fn = getattr(domain, "wire_context_assembler", None)
+    #     if callable(fn):
+    #         fn(assembler)
+
+    def wire_context_assembler(self, assembler: Any) -> None:
+        """Inject a ContextAssembler into the domain's pipeline nodes.
+
+        Optional: domains whose nodes don't bridge to L2 memory may omit.
+        Default behavior at call sites: skip silently.
+        """
+        ...
+
+    def build_task_graph(self, memory: Any, subject_id: str) -> Any:
+        """Build the domain's TaskGraph for the given subject.
+
+        Optional: domains without a task-graph topology may omit.
+        Default behavior at call sites: skip and return None.
+        """
+        ...
+
+    def build_signal_adapter(self) -> Any:
+        """Build and inject the domain's signal adapter.
+
+        Optional: domains without external signal sources may omit.
+        Default behavior at call sites: skip silently.
+        """
+        ...
+
+    def compose_static_prefix(self, model: str) -> str:
+        """Return the domain-specific static prefix for the system prompt.
+
+        Optional: domains without prompt customization may omit. Default
+        behavior at call sites: emit a generic GEODE prefix without
+        domain-specific substitutions (no ``{ip_examples}``).
+        """
         ...
 
 

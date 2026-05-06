@@ -24,7 +24,7 @@ from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.run_log import RunLog, RunLogEntry
 from core.orchestration.stuck_detection import StuckDetector
 from core.orchestration.task_bridge import TaskGraphHookBridge
-from core.orchestration.task_system import TaskGraph, create_geode_task_graph
+from core.orchestration.task_system import TaskGraph
 
 log = logging.getLogger(__name__)
 
@@ -524,10 +524,19 @@ def build_memory(
         project_root=Path("."),
     )
 
-    # Wire ContextAssembler into router node (L2 -> L3 bridge)
-    from plugins.game_ip.nodes.router import set_context_assembler
+    # Wire ContextAssembler into the active domain's pipeline nodes
+    # (L2 -> L3 bridge). Routed through DomainPort.wire_context_assembler
+    # so core/ does not import plugin modules directly. If no domain is
+    # set, or the domain doesn't implement the hook, skip silently.
+    from core.domains.port import get_domain_or_none
 
-    set_context_assembler(context_assembler)
+    _domain = get_domain_or_none()
+    _wire = getattr(_domain, "wire_context_assembler", None) if _domain else None
+    if callable(_wire):
+        try:
+            _wire(context_assembler)
+        except Exception:
+            log.debug("Domain wire_context_assembler failed", exc_info=True)
 
     # Wire memory into memory tools via contextvars (P1 memory autonomy)
     from core.tools.memory_tools import set_memory_hooks, set_org_memory, set_project_memory
@@ -635,9 +644,30 @@ def build_task_graph(
     hooks: HookSystem,
     ip_name: str,
 ) -> tuple[TaskGraph, TaskGraphHookBridge]:
-    """Build TaskGraph and wire the hook bridge for status tracking."""
+    """Build TaskGraph and wire the hook bridge for status tracking.
+
+    Routes through ``DomainPort.build_task_graph`` so the topology is
+    domain-defined (game_ip currently maps the 7-node analyst pipeline).
+    Falls back to an empty TaskGraph if no domain is registered or the
+    active domain doesn't implement the hook — the bridge stays wired
+    so PIPELINE_END / STATUS hooks are still observed, just with no
+    per-task transitions.
+    """
+    from core.domains.port import get_domain_or_none
+
     prefix = ip_name.lower().replace(" ", "_")
-    graph = create_geode_task_graph(ip_name)
+    domain = get_domain_or_none()
+    builder = getattr(domain, "build_task_graph", None) if domain else None
+
+    graph: TaskGraph | None = None
+    if callable(builder):
+        try:
+            graph = builder(None, ip_name)
+        except Exception:
+            log.debug("Domain build_task_graph failed; using empty TaskGraph", exc_info=True)
+    if graph is None:
+        graph = TaskGraph()
+
     bridge = TaskGraphHookBridge(graph, ip_prefix=prefix)
     bridge.register(hooks)
     return graph, bridge

@@ -97,6 +97,9 @@ class GameIPDomain:
     def get_evaluator_axes(self) -> dict[str, dict[str, Any]]:
         return dict(self._axes_data["evaluator_axes"])
 
+    def get_prospect_evaluator_axes(self) -> dict[str, dict[str, Any]]:
+        return dict(self._axes_data.get("prospect_evaluator_axes", {}))
+
     def get_valid_axes_map(self) -> dict[str, set[str]]:
         result: dict[str, set[str]] = {}
         for eval_type, spec in self._axes_data["evaluator_axes"].items():
@@ -180,3 +183,38 @@ class GameIPDomain:
         if _FIXTURES_DIR.exists():
             return str(_FIXTURES_DIR)
         return None
+
+    # --- Lifecycle hooks (DomainPort v2, step 3) ---
+    #
+    # All four methods lazy-import their plugin-side dependencies to
+    # avoid pulling in the full pipeline at adapter construction time.
+
+    def wire_context_assembler(self, assembler: Any) -> None:
+        """Inject ``ContextAssembler`` into the game-IP router node."""
+        from plugins.game_ip.wiring import wire_context_assembler
+
+        wire_context_assembler(assembler)
+
+    def build_task_graph(self, memory: Any, subject_id: str) -> Any:
+        """Build the game-IP TaskGraph for ``subject_id`` (IP name).
+
+        ``memory`` is accepted for forward compatibility (future domains
+        may need session memory to size the graph) but currently unused
+        — the game-IP topology is fixed.
+        """
+        from plugins.game_ip.wiring import build_task_graph
+
+        return build_task_graph(subject_id)
+
+    def build_signal_adapter(self) -> Any:
+        """Wire the game-IP signal adapter (Steam MCP + fixture fallback)."""
+        from plugins.game_ip.wiring import build_signal_adapter
+
+        build_signal_adapter()
+        return None
+
+    def compose_static_prefix(self, model: str) -> str:
+        """Return the game-IP-flavored ``ROUTER_SYSTEM`` prefix."""
+        from plugins.game_ip.prompt import compose_static_prefix
+
+        return compose_static_prefix(model)

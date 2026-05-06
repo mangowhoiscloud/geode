@@ -18,7 +18,6 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from core.cli.ip_names import get_ip_name_map
 from core.llm.prompts import ROUTER_SYSTEM
 from core.paths import get_project_root
 
@@ -34,54 +33,44 @@ _SYSTEM_PROMPT_TEMPLATE = ROUTER_SYSTEM
 # Content AFTER changes per turn (memory, date, model card) → no cache.
 PROMPT_CACHE_BOUNDARY = "__GEODE_PROMPT_CACHE_BOUNDARY__"
 
-# Well-known IPs to include as examples (recognizable across languages)
-_NOTABLE_IPS = {
-    "berserk",
-    "cowboy bebop",
-    "ghost in shell",
-    "hollow knight",
-    "disco elysium",
-    "hades",
-    "celeste",
-    "cult of the lamb",
-    "dead cells",
-    "slay the spire",
-    "vampire survivors",
-    "factorio",
-    "stardew valley",
-    "cuphead",
-    "balatro",
-    "rimworld",
-}
+
+def _generic_static_prefix() -> str:
+    """Domain-less fallback prefix.
+
+    ``ROUTER_SYSTEM`` contains ``{ip_count}`` / ``{ip_examples}``
+    placeholders that only the game-IP domain knows how to fill in. When
+    no domain is loaded (or the active domain doesn't customize the
+    prompt), substitute neutral values so ``str.format`` doesn't raise
+    and the agent still receives the rest of the router template.
+    """
+    return _SYSTEM_PROMPT_TEMPLATE.format(ip_count=0, ip_examples="none loaded")
 
 
 def build_system_prompt(model: str = "") -> str:
-    """Build system prompt with model card, IP examples, and memory context.
+    """Build system prompt with model card, domain prefix, and memory context.
 
-    Inserts PROMPT_CACHE_BOUNDARY between static (template + identity) and
-    dynamic (date, model card, memory, user context) sections.  Anthropic
-    adapter splits at this boundary to maximize prompt cache hits.
+    Inserts PROMPT_CACHE_BOUNDARY between static (domain prefix +
+    identity) and dynamic (date, model card, memory, user context)
+    sections. Anthropic adapter splits at this boundary to maximize
+    prompt cache hits.
+
+    The domain-specific portion of the static prefix (e.g. game-IP
+    examples) is delegated to ``DomainPort.compose_static_prefix`` so
+    this module stays plugin-free.
     """
-    from plugins.game_ip.fixtures import FIXTURE_MAP, load_fixture
+    from core.domains.port import get_domain_or_none
 
-    name_map = get_ip_name_map()
-    ip_count = len(name_map)
-
-    # Prefer notable IPs as examples, then fill with others
-    examples: list[str] = []
-    for fk in _NOTABLE_IPS:
-        if fk in FIXTURE_MAP:
-            try:
-                canonical = load_fixture(fk)["ip_info"]["ip_name"]
-                examples.append(canonical)
-            except Exception:
-                examples.append(fk.title())
-
-    # ── STATIC section (stable across turns → cache hit) ──
-    static = _SYSTEM_PROMPT_TEMPLATE.format(
-        ip_count=ip_count,
-        ip_examples=", ".join(sorted(examples)),
-    )
+    domain = get_domain_or_none()
+    composer = getattr(domain, "compose_static_prefix", None) if domain else None
+    static = ""
+    if callable(composer):
+        try:
+            static = composer(model)
+        except Exception:
+            log.debug("Domain compose_static_prefix failed; using generic prefix", exc_info=True)
+            static = ""
+    if not static:
+        static = _generic_static_prefix()
 
     # G1: Agent identity (from GEODE.md — stable per session)
     identity_ctx = _build_identity_context()

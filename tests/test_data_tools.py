@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from core.tools.base import Tool
-from core.tools.data_tools import CortexAnalystTool, CortexSearchTool, QueryMonoLakeTool
+from core.tools.data_tools import CortexAnalystTool, CortexSearchTool
 from core.tools.registry import ToolRegistry
+from plugins.game_ip.tools.data_tools import QueryMonoLakeTool
 
 
 class TestQueryMonoLakeTool:

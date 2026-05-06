@@ -513,9 +513,8 @@ def _resolve_ip_name(ip_name: str) -> str | None:
     3. Substring: fixture key is contained in input
     4. Substring: input is contained in fixture key
     """
+    from plugins.game_ip.cli.ip_names import get_ip_name_map
     from plugins.game_ip.fixtures import FIXTURE_MAP
-
-    from core.cli.ip_names import get_ip_name_map
 
     key = ip_name.lower().strip()
 
