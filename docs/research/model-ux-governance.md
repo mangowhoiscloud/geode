@@ -486,7 +486,7 @@ v0.52.5 incident (provider-switch session):
     ⚠ GLM Coding Plan quota exhausted
       Plan: glm-coding-lite (80 prompts/5h)
       Used: 80/80 · Resets in 2h 14m
-      
+
     Options:
       1. Wait for reset (resets at 17:42 KST)
       2. Switch to PAYG: /login set-key glm <api-key>
@@ -541,4 +541,3 @@ v0.53.0 (major release):
 v0.53.1 (polish):
   └─ Phase 3 polish + X2 (system prompt assertion 결정)
 ```
-

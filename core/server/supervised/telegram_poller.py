@@ -58,8 +58,7 @@ class TelegramPoller(BasePoller):
             updates = result.get("result", result.get("updates", []))
             for update in updates:
                 update_id = update.get("update_id", 0)
-                if update_id > self._last_update_id:
-                    self._last_update_id = update_id
+                self._last_update_id = max(self._last_update_id, update_id)
 
                 message = update.get("message", {})
                 if not message:

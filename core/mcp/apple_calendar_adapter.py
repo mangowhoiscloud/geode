@@ -88,6 +88,6 @@ class AppleCalendarAdapter(BaseCalendarAdapter):
                     )
                 )
             except Exception as exc:
-                log.debug("Skipping unparseable CalDAV event: %s", exc)
+                log.debug("Skipping unparsable CalDAV event: %s", exc)
         events.sort(key=lambda e: e.start)
         return events

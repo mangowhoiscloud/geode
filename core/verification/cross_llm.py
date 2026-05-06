@@ -148,8 +148,8 @@ def run_cross_llm_check(
             if digit:
                 secondary_score = max(1, min(5, int(digit[0])))
             else:
-                secondary_score = None  # Mark as unparseable
-                log.warning("Secondary LLM response unparseable, excluding from agreement")
+                secondary_score = None  # Mark as unparsable
+                log.warning("Secondary LLM response unparsable, excluding from agreement")
 
             # Blend secondary re-score into agreement only when parseable
             if secondary_score is not None:
@@ -279,10 +279,10 @@ def run_dual_adapter_check(
             secondary_agreement = max(1, min(5, secondary_agreement))
         else:
             secondary_agreement = None
-            log.warning("Dual-adapter secondary response unparseable, marking degraded")
+            log.warning("Dual-adapter secondary response unparsable, marking degraded")
 
         # Combine: base agreement (70%) + secondary cross-check (30%)
-        # Skip blending when secondary is unparseable
+        # Skip blending when secondary is unparsable
         if secondary_agreement is not None:
             secondary_normalized = secondary_agreement / 5.0
             combined = 0.7 * base_result["cross_llm_agreement"] + 0.3 * secondary_normalized
@@ -310,8 +310,8 @@ def run_dual_adapter_check(
                 "passed": passed,
             }
         else:
-            # Degraded: secondary unparseable, use base result only
-            log.warning("Dual-adapter degraded: secondary unparseable, using base agreement only")
+            # Degraded: secondary unparsable, use base result only
+            log.warning("Dual-adapter degraded: secondary unparsable, using base agreement only")
             return {
                 **base_result,
                 "models_compared": _derive_model_names(

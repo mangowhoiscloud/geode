@@ -1333,7 +1333,7 @@ def cmd_cost(args: str) -> None:
         return
 
     # --- daily ---
-    if sub == "daily" or sub == "today":
+    if sub in {"daily", "today"}:
         daily = store.get_daily_summary()
         console.print()
         console.print(f"  [header]Daily Cost — {daily['date']}[/header]")

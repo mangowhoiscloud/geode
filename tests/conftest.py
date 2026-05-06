@@ -1,7 +1,7 @@
 """pytest configuration — load .env before any module imports.
 
 This ensures LANGCHAIN_* environment variables are in os.environ
-BEFORE @_maybe_traceable decorators are evaluated at import time.
+BEFORE @maybe_traceable decorators are evaluated at import time.
 
 LangSmith tracing is disabled by default during tests to avoid
 burning monthly trace quota. Live tests (``-m live``) that need

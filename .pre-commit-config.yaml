@@ -16,6 +16,13 @@ repos:
         name: ruff format
         types_or: [python, pyi]
 
+  # codespell — typo detection in identifiers/strings/comments
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.3.0
+    hooks:
+      - id: codespell
+        additional_dependencies: [tomli]
+
   # Standard pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -36,7 +43,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy type check
-        entry: uv run --frozen mypy --no-incremental core/
+        entry: uv run --frozen mypy --no-incremental core/ plugins/
         language: system
         pass_filenames: false
         types: [python]
@@ -44,6 +51,13 @@ repos:
       - id: bandit
         name: bandit security
         entry: uv run --frozen bandit -r core/ -c pyproject.toml --quiet
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      - id: deptry
+        name: deptry dependency drift
+        entry: uv run --frozen deptry .
         language: system
         pass_filenames: false
         types: [python]
