@@ -105,28 +105,14 @@ COMMAND_MAP: dict[str, str] = {
     "/exit": "quit",
     "/q": "quit",
     "/help": "help",
-    "/list": "list",
     "/verbose": "verbose",
-    "/analyze": "analyze",
-    "/a": "analyze",
-    "/run": "run",
-    "/r": "run",
-    "/search": "search",
-    "/s": "search",
     "/key": "key",
     "/model": "model",
     "/auth": "auth",
-    "/generate": "generate",
-    "/gen": "generate",
-    "/report": "report",
-    "/rpt": "report",
-    "/batch": "batch",
-    "/b": "batch",
     "/schedule": "schedule",
     "/sched": "schedule",
     "/trigger": "trigger",
     "/status": "status",
-    "/compare": "compare",
     "/mcp": "mcp",
     "/skills": "skills",
     "/skill": "skill_invoke",
@@ -144,14 +130,26 @@ COMMAND_MAP: dict[str, str] = {
 }
 
 
+def install_domain_commands(domain: _Any) -> None:
+    """Merge a domain's slash commands into the generic ``COMMAND_MAP``.
+
+    Domains implement ``DomainPort.register_slash_commands(command_map)``
+    (v2, optional). When absent, this is a no-op.
+    """
+    register = getattr(domain, "register_slash_commands", None)
+    if callable(register):
+        register(COMMAND_MAP)
+
+
 def show_help() -> None:
-    """Show interactive mode help."""
+    """Show interactive mode help.
+
+    Renders the generic command list, then asks the active domain (if
+    any) to append its own slash-command help fragment via the optional
+    ``DomainPort.render_help_fragment()`` hook.
+    """
     console.print()
     console.print("  [header]Commands[/header]")
-    console.print("  [label]/analyze[/label] <IP name>  — Analyze an IP (dry-run)")
-    console.print("  [label]/run[/label] <IP name>      — Analyze with real LLM")
-    console.print("  [label]/search[/label] <query>     — Search IPs by keyword")
-    console.print("  [label]/list[/label]               — Show available IPs")
     console.print("  [label]/verbose[/label]            — Toggle verbose mode")
     console.print("  [label]/login[/label]              — Plans + credentials dashboard (unified)")
     console.print("  [label]/login add[/label]          — Interactive plan/key wizard")
@@ -159,14 +157,10 @@ def show_help() -> None:
     console.print("  [label]/key[/label] <value>        — Quick PAYG API key (legacy alias)")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
     console.print("  [label]/auth[/label]               — Auth profile rotator (legacy)")
-    console.print("  [label]/generate[/label] [count]   — Generate synthetic demo data")
-    console.print("  [label]/report[/label] <IP> [fmt]  — Generate report (md/html/json)")
-    console.print("  [label]/batch[/label] <IP1> <IP2>  — Batch analyze multiple IPs")
     console.print("  [label]/schedule[/label]           — Manage scheduled automations")
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
     console.print("  [label]/status[/label]             — Show system status")
     console.print("  [label]/cost[/label]               — LLM cost dashboard")
-    console.print("  [label]/compare[/label] <A> <B>    — Compare two IPs")
     console.print("  [label]/mcp[/label]                — MCP server status/tools/add")
     console.print("  [label]/skills[/label]             — List/add/reload skills")
     console.print("  [label]/skill[/label] <name> [args] — Invoke a skill")
@@ -178,19 +172,20 @@ def show_help() -> None:
     console.print("  [label]/clear[/label]              — Clear conversation history")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
-    console.print()
-    console.print("  [muted]Or just type naturally: 'Berserk', '다크 판타지 게임 찾아줘'[/muted]")
-    console.print()
 
+    # Domain-specific help fragment (game-IP slashes etc.) appended below.
+    try:
+        from core.domains.port import get_domain_or_none
 
-def cmd_list() -> None:
-    """List available IP fixtures."""
-    from plugins.game_ip.fixtures import FIXTURE_MAP as _FIXTURE_MAP
-
+        domain = get_domain_or_none()
+        if domain is not None:
+            render_fragment = getattr(domain, "render_help_fragment", None)
+            if callable(render_fragment):
+                render_fragment()
+    except Exception:
+        log.debug("Domain help fragment skipped", exc_info=True)
     console.print()
-    console.print("  [header]Available IPs[/header]")
-    for name in _FIXTURE_MAP:
-        console.print(f"    [value]{name.title()}[/value]")
+    console.print("  [muted]Or just type naturally to interact with the agent.[/muted]")
     console.print()
 
 
@@ -854,104 +849,6 @@ def _get_profile_store() -> ProfileStore:
     from core.lifecycle.container import ensure_profile_store
 
     return ensure_profile_store()
-
-
-def cmd_generate(args: str) -> None:
-    """Handle /generate command — create synthetic demo data.
-
-    /generate         → generate 5 IPs
-    /generate 10      → generate 10 IPs
-    /generate 3 mecha → generate 3 IPs of specific genre
-    """
-    from plugins.game_ip.fixtures.generator import GENRE_PARAMS, generate_batch
-
-    parts = args.strip().split() if args.strip() else []
-
-    count = 5
-    genre = None
-
-    if len(parts) >= 1 and parts[0].isdigit():
-        count = int(parts[0])
-        count = max(1, min(20, count))
-    if len(parts) >= 2:
-        genre = parts[1].lower()
-        if genre not in GENRE_PARAMS:
-            console.print(f"  [warning]Unknown genre: {genre}[/warning]")
-            console.print(f"  [muted]Available: {', '.join(GENRE_PARAMS.keys())}[/muted]")
-            console.print()
-            return
-
-    ips = generate_batch(count, genre=genre, seed=42)
-
-    console.print()
-    console.print(f"  [header]Generated {len(ips)} Synthetic IPs[/header]")
-    for ip in ips:
-        tier = ip.data["expected_results"]["tier"]
-        score = ip.data["expected_results"]["final_score"]
-        tier_style = {"S": "tier_s", "A": "tier_a", "B": "tier_b", "C": "tier_c"}.get(tier, "bold")
-        console.print(
-            f"    [{tier_style}]{tier}[/{tier_style}] {score:5.1f}  "
-            f"[value]{ip.ip_name:<20}[/value] {ip.genre} / {ip.media_type}"
-        )
-    console.print()
-
-
-def cmd_batch(
-    args: str,
-    *,
-    run_fn: _Any = None,
-    dry_run: bool = False,
-    verbose: bool = False,
-) -> list[_Any]:
-    """Handle /batch command — analyze multiple IPs in sequence.
-
-    /batch Balatro Hades Celeste
-    /batch Balatro,Hades,Celeste
-    """
-    if not args.strip():
-        console.print("  [warning]Usage: /batch <IP1> <IP2> ... or <IP1>,<IP2>,...[/warning]")
-        return []
-
-    # Parse IP names (comma or space separated)
-    raw = args.strip()
-    if "," in raw:
-        ip_names = [n.strip() for n in raw.split(",") if n.strip()]
-    else:
-        ip_names = [n.strip() for n in raw.split() if n.strip()]
-
-    if not ip_names:
-        console.print("  [warning]No IP names provided.[/warning]")
-        return []
-
-    console.print()
-    console.print(f"  [header]Batch Analysis — {len(ip_names)} IPs[/header]")
-    mode = "[muted]dry-run[/muted]" if dry_run else "[success]live[/success]"
-    console.print(f"  Mode: {mode}")
-    console.print()
-
-    results: list[_Any] = []
-    for i, ip_name in enumerate(ip_names, 1):
-        console.print(f"  [{i}/{len(ip_names)}] [value]{ip_name}[/value]")
-        if run_fn is not None:
-            try:
-                with console.status(
-                    f"  [cyan]Analyzing {ip_name}...[/cyan]",
-                    spinner="dots",
-                    spinner_style="cyan",
-                ):
-                    result = run_fn(ip_name, dry_run=dry_run, verbose=verbose)
-                results.append(result)
-            except Exception as exc:
-                console.show_cursor(True)
-                console.print(f"  [error]Failed: {exc}[/error]")
-                results.append(None)
-        else:
-            results.append(None)
-
-    console.print()
-    console.print(f"  [success]Batch complete: {len(results)}/{len(ip_names)} processed[/success]")
-    console.print()
-    return results
 
 
 from core.cli.cmd_schedule import cmd_schedule as cmd_schedule  # noqa: E402

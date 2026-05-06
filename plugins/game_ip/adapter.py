@@ -218,3 +218,27 @@ class GameIPDomain:
         from plugins.game_ip.prompt import compose_static_prefix
 
         return compose_static_prefix(model)
+
+    # --- CLI extension hooks (DomainPort v2, step 4) ---
+
+    def get_rerunnable_nodes(self) -> set[str]:
+        """Pipeline nodes that ``/rerun_node`` is allowed to re-invoke."""
+        return {"scoring", "verification", "synthesizer"}
+
+    def register_slash_commands(self, command_map: dict[str, str]) -> None:
+        """Merge the game-IP slash entries into the generic ``COMMAND_MAP``."""
+        from plugins.game_ip.cli.commands import GAME_IP_SLASHES
+
+        command_map.update(GAME_IP_SLASHES)
+
+    def render_help_fragment(self) -> None:
+        """Append the game-IP slash block to ``/help`` output."""
+        from plugins.game_ip.cli.commands import render_help_fragment
+
+        render_help_fragment()
+
+    def register_tool_handlers(self, handlers: dict[str, Any]) -> None:
+        """Merge the game-IP tool handlers (analysis + signals + generate_data)."""
+        from plugins.game_ip.cli.tool_handlers import build_game_ip_handlers
+
+        handlers.update(build_game_ip_handlers())
