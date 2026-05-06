@@ -191,6 +191,109 @@ uv run pytest tests/agent/ -v
 uv run pytest tests/agent/test_loop_e2e.py -m live
 ```
 
+## Benchmark Methodology
+
+> **References**: Meta-Harness ([2603.28052v1](https://arxiv.org/html/2603.28052v1)) for the methodology backbone; MLE-bench ([2410.07095](https://arxiv.org/abs/2410.07095)), RE-Bench ([2411.15114](https://arxiv.org/abs/2411.15114)), AIDE ([2502.13138](https://arxiv.org/abs/2502.13138)), Snell test-time compute ([2408.03314](https://arxiv.org/abs/2408.03314)) for adjacent precedent.
+>
+> Each phase ships its own measurement deliverable. Single-metric reporting is **explicitly disallowed** — every claim must show a Pareto trade-off.
+
+### B1. Multi-objective Pareto reporting (no single-metric claims)
+
+Meta-Harness's "**Pareto frontier of accuracy and context cost**" is the standard. For every phase capability we report at minimum:
+
+| Axis | Unit | Phase relevance |
+|------|------|-----------------|
+| **Success rate** | % task completion | A1, A3, A8 |
+| **Context cost** | total prompt + output tokens / task | A1, A4, A6, A7 |
+| **Wall-clock latency** | P50 / P95 seconds / task | A2, A6, A7 |
+| **Tool calls** | count / task | A2, A5 |
+| **Iterations to resolution** | distribution (P50, P90) | A3, A4 |
+| **$ cost** | USD / task at list price | A6, A7 |
+
+Required artifact: a Pareto **scatter plot** (success rate × context cost) with prior baseline + new variant labelled. Reject any phase claim that improves one axis while silently regressing another.
+
+### B2. Layered task suite (search / eval split + OOD)
+
+Following Meta-Harness ("250 search set + 200 IMO-level held-out") and MLE-bench's Kaggle 75-task selection, GEODE benchmark fixture splits:
+
+| Tier | Task count | Source | Use |
+|------|-----------:|--------|-----|
+| **Search (in-distribution)** | 10 | curated agentic tasks (file ops, web fetch, multi-step reasoning) | iteration / hyper-tuning during phase development |
+| **Held-out (in-distribution)** | 10 | structurally similar but disjoint | final phase claim |
+| **OOD** | 10 | adversarial / underspecified / long-horizon | regression detection |
+
+Hard rule: **never tune on held-out or OOD**. Carry-over from prior phase must be re-evaluated on the same suite — no metric movement allowed without explanation.
+
+### B3. Baseline comparison structure
+
+Meta-Harness's two-track comparison (hand-crafted harnesses vs program-search) maps to:
+
+| Baseline track | What it is | Why it's the baseline |
+|----------------|------------|----------------------|
+| **B0 — Pre-phase GEODE** | Current `AgenticLoop` at the prior version tag | Direct ratchet — must improve or hold |
+| **B1 — ReAct-only ablation** | A1 / A3 disabled, plain ReAct loop | Isolates the capability's contribution |
+| **B2 — Frontier reference** | Claude Code subagent verify pattern (A3) / TodoWrite plan (A1) replayed manually on the same fixture | Establishes ceiling |
+| **B3 — autoresearch-style** | Wall-clock budget + greedy ratchet on the same fixture | autoresearch P3+P4 parity check |
+
+Each phase report **must table all four baselines**. A phase that beats B0 but trails B2 by >20% is logged as "improvement, not parity."
+
+### B4. Trajectory storage (causal-reasoning-ready)
+
+Meta-Harness: *"the proposer has access to all prior candidates (source code, execution traces, scores)"*. Compression to summary lost diagnostic info (38.7 vs 50.0).
+
+Implementation hook (Phase 1+ deliverable):
+- **`core/agent/trace.py`** — every step writes `{step_id, plan_snapshot, action, observation, verify_verdict, tokens, latency_ms}` to `runs/<task_id>/trace.jsonl`
+- Reflexion's failure memory (A4) reads from this trace, **not** from a summarized window
+- Full trace is the canonical source for the Pareto plot above
+
+### B5. Failure-mode taxonomy (mandatory)
+
+Every benchmark run produces a per-task verdict in one of:
+
+| Code | Meaning | Action signal |
+|------|---------|---------------|
+| `OK` | task succeeded under budget | none |
+| `BUDGET_EXCEEDED` | hit `max_iter` / wall-clock / token cap | tighten plan or relax budget |
+| `VERIFY_REJECTED` | A3 verdict failed, no recovery | examine plan.expected vs observation gap |
+| `LOOP_DETECTED` | `ConvergenceDetector` 3-strikes break | plan diversity issue |
+| `TOOL_FAILURE` | external tool error after retries | error_recovery escalation gap |
+| `HALLUCINATION` | verifier caught fabricated tool result | verifier strengthening needed |
+| `INCORRECT` | finished, output wrong | plan / verify both miss |
+
+**Per-class counts must appear in every phase PR's Verification section.** Trends across phases reveal which capability addresses which failure class.
+
+### B6. Reporting format (per phase PR)
+
+Mandatory artifacts attached to each phase PR:
+
+1. **`docs/runs/v0.X.Y-bench.md`** — benchmark report
+2. **Pareto scatter** (success × context cost) — checked-in PNG / SVG
+3. **Per-baseline table** — B0/B1/B2/B3 × 6 axes
+4. **Per-task verdict matrix** — task × verdict code
+5. **Failure-mode delta** — counts vs. prior phase
+6. **Sample trajectories** — at least 1 OK, 1 failure, hand-annotated
+
+A phase PR without artifacts 1, 3, 4 cannot merge to develop. Items 2, 5, 6 are required for PRs that touch >100 LOC.
+
+### B7. Statistical hygiene
+
+- **3-sample average** for stochastic metrics (Meta-Harness's `pass@1` convention).
+- **Seed pinning**: every benchmark run records the seed; comparisons across phases use matched seeds.
+- **No retroactive task removal**: a fixture task only leaves the suite via an explicit retirement PR with rationale.
+- **Contamination check**: when a fixture changes, prior baseline numbers are re-run, not back-ported.
+
+### B8. Phase-specific success criteria
+
+| Phase | Capability | Concrete success bar |
+|-------|------------|----------------------|
+| Phase 1 | A1 + A3 | ≥ +10% success rate **OR** ≥ −20% iterations-to-resolution on held-out, with no >5% context-cost regression |
+| Phase 2 | A4 + A7 | ≥ −15% iterations distribution P90 (Reflexion claim direction) **AND** wall-clock budget enforces stop within 5% of cap |
+| Phase 3 | A6 + A2 | ≥ −30% $ cost at no >5% success regression (model split) **AND** ≥ −20% tool calls / task (search) |
+| Phase 4 | A5 | skill reuse rate ≥ 30% on second-pass tasks (Voyager direction) |
+| Phase 5 | A8 | Pareto-dominates greedy on at least 1 of {success, context cost} on held-out — else **rejected** |
+
+Phases that don't hit their bar **stay open** rather than ship. No "soft success" merges.
+
 ## Frontier Research Summary
 
 | System | Related pattern | Adoption | Rationale |
@@ -224,3 +327,4 @@ uv run pytest tests/agent/test_loop_e2e.py -m live
 ## Status
 
 - 2026-05-06 — plan drafted, Phase 0 PR pending
+- 2026-05-06 — Benchmark Methodology section added (Meta-Harness [2603.28052v1](https://arxiv.org/html/2603.28052v1) + MLE-bench / RE-Bench / AIDE / Snell precedent). Implementation deferred — handled in another session.
