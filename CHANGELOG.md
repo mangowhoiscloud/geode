@@ -28,6 +28,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.66.1] — 2026-05-06
+
+> **Hygiene + static analysis ratchet.** Post-v0.66.0 cleanup wave: 3
+> dead-code sites excised, full static-analysis stack added
+> (ruff PLR/C901 + deptry + codespell + pre-commit), ruff TID family
+> enabled with a banned-api ledger for step-2 relocations, and naming
+> conventions codified as `docs/architecture/naming-conventions.md`.
+> No production-behavior change; CI gate strengthened from 4 tools to
+> 8 (ruff, ruff-format, mypy, bandit, import-linter, deptry, codespell,
+> 4 ratchet scripts). E2E anchor `geode analyze "Cowboy Bebop" --dry-run`
+> unchanged at A (68.4) across all 4 PRs (#878, #880, #881, #882).
+> CLAUDE.md `Key entry points` corrected from stale `core/cli/agentic_loop.py`
+> to `core/agent/loop.py` (renamed in v0.66.0).
+
 ### Documentation
 - **Naming conventions codified — RESTful resource orientation (`docs/architecture/naming-conventions.md`).** Audit of v0.66.0 step-1/2/3 artifacts surfaced an *implicit* rule that had been applied consistently but never written down: when a multi-file core subpackage gets domain-extracted, mirror the path inside the plugin (`core/cli/{batch,ip_names,search}.py` → `plugins/game_ip/cli/{...}`); when a single file or fragment gets extracted (or the artifact is a plugin-specific aggregation with no obvious single-file core counterpart), use a flat intent-named module at the plugin root (`plugins/game_ip/{adapter,axes,wiring,prompt,scoring_constants}.py`). The new doc also codifies the `DomainPort` method verb taxonomy (`get_*` / `list_*` / `wire_*` / `build_*` / `compose_*` / `register_*` mapped to GET/PUT/POST semantics), the TID251 `banned-api` message format (`"Moved to <new.path> (v<X.Y.Z> step <N>)."`), PR-title / branch-name / tool-class / hook-event conventions. No code change — captures rules already followed so future contributors and step-4-through-8 PRs apply them deliberately.
 

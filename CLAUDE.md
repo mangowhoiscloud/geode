@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.66.0
+- **Version**: 0.66.1
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -52,7 +52,7 @@ Production code splits into two top-level Python packages:
 - `plugins/` — domain-specific extensions. v0.64.0 contains `plugins/game_ip/` (originally `core/domains/game_ip/`); future research/ops domains land here as separate sub-packages. Wired through `core/domains/loader.py` registry.
 
 Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.
-Key entry points: `core/cli/agentic_loop.py`(AgenticLoop), `core/graph.py`(StateGraph), `core/runtime.py`(bootstrap).
+Key entry points: `core/agent/loop.py`(AgenticLoop), `core/graph.py`(StateGraph), `core/runtime.py`(bootstrap).
 
 ## Development
 
