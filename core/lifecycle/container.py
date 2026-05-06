@@ -95,7 +95,9 @@ def build_default_registry() -> ToolRegistry:
     registry.register(PSMCalculateTool())
     registry.register(ExplainScoreTool())
     # Data (3)
-    from core.tools.data_tools import CortexAnalystTool, CortexSearchTool, QueryMonoLakeTool
+    from plugins.game_ip.tools.data_tools import QueryMonoLakeTool
+
+    from core.tools.data_tools import CortexAnalystTool, CortexSearchTool
 
     registry.register(QueryMonoLakeTool())
     registry.register(CortexAnalystTool())

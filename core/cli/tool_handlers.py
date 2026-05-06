@@ -214,7 +214,7 @@ def _build_analysis_handlers(
         }
 
     def handle_batch_analyze(**kwargs: Any) -> dict[str, Any]:
-        from core.cli.batch import render_batch_table, run_batch
+        from plugins.game_ip.cli.batch import render_batch_table, run_batch
 
         top = kwargs.get("top", 20)
         genre = kwargs.get("genre")

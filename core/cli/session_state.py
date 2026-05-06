@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from core.cli.search import IPSearchEngine
+    from plugins.game_ip.cli.search import IPSearchEngine
+
     from core.cli.startup import ReadinessReport
 
 log = logging.getLogger(__name__)
@@ -122,7 +123,7 @@ _result_cache = _ResultCache()
 
 def _get_search_engine() -> IPSearchEngine:
     """Get or create the context-local IPSearchEngine."""
-    from core.cli.search import IPSearchEngine as _IPSearchEngine
+    from plugins.game_ip.cli.search import IPSearchEngine as _IPSearchEngine
 
     engine = _search_engine_ctx.get()
     if engine is None:

@@ -1,7 +1,7 @@
 """Tests for IP Search Engine — keyword-based search."""
 
 import pytest
-from core.cli.search import IPSearchEngine
+from plugins.game_ip.cli.search import IPSearchEngine
 
 
 @pytest.fixture

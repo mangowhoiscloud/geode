@@ -18,7 +18,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from core.cli.ip_names import get_ip_name_map
+from plugins.game_ip.cli.ip_names import get_ip_name_map
+
 from core.llm.prompts import ROUTER_SYSTEM
 from core.paths import get_project_root
 

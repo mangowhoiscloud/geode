@@ -7,12 +7,12 @@ import statistics
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from plugins.game_ip.fixtures import FIXTURE_MAP
+from core.config import settings
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from core.config import settings
+from plugins.game_ip.fixtures import FIXTURE_MAP
 
 log = logging.getLogger(__name__)
 console = Console()
