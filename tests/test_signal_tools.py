@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from core.tools.base import Tool
 from core.tools.registry import ToolRegistry
-from core.tools.signal_tools import (
+from plugins.game_ip.tools.signal_tools import (
     GoogleTrendsTool,
     RedditSentimentTool,
     SteamInfoTool,

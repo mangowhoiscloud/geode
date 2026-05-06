@@ -64,188 +64,31 @@ def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Handler group: Analysis
+# Domain handler bridge — domains contribute analysis/signal/etc. handlers
+# via ``DomainPort.register_tool_handlers``. Step 4 of domain-free-core
+# moved the IP-specific halves of this file (analysis + generate_data + 4
+# signal entries) into ``plugins/game_ip/cli/tool_handlers.py``; the
+# bridge function below merges them back in at dispatcher build time.
 # ---------------------------------------------------------------------------
 
 
-def _build_analysis_handlers(
-    verbose: bool,
-    force_dry: bool,
-    skill_registry: Any,
-) -> dict[str, Any]:
-    """Build analysis-related tool handlers."""
-    from core.cli import (
-        _generate_report,
-        _get_search_engine,
-        _render_search_results,
-        _run_analysis,
-    )
+def install_domain_tool_handlers(handlers: dict[str, Any]) -> None:
+    """Merge the active domain's tool handlers into ``handlers``.
 
-    def handle_list_ips(**_kwargs: Any) -> dict[str, Any]:
-        from plugins.game_ip.fixtures import FIXTURE_MAP as _FM
+    Domains implement ``DomainPort.register_tool_handlers(handlers)`` (v2,
+    optional). When absent or no domain is registered, this is a no-op.
+    """
+    try:
+        from core.domains.port import get_domain_or_none
 
-        from core.cli.commands import cmd_list
-
-        cmd_list()
-        names = [n.title() for n in _FM]
-        return {"status": "ok", "action": "list", "count": len(names), "ips": names}
-
-    def handle_analyze_ip(**kwargs: Any) -> dict[str, Any]:
-        ip_name = kwargs.get("ip_name", "")
-        if not ip_name:
-            return _clarify("analyze_ip", ["ip_name"], "어떤 IP를 분석할까요?")
-        dry_run = kwargs.get("dry_run", force_dry)
-        result = _run_analysis(ip_name, dry_run=dry_run, verbose=verbose)
-        # Pipeline cost/model notice for live runs (non-dry-run)
-        pipeline_notice: str | None = None
-        if not dry_run:
-            pipeline_notice = (
-                "이 분석은 claude-opus-4-6 (Primary) + gpt-5.4 (Cross-LLM)을 사용합니다. "
-                "예상: ~8 LLM 호출, ~$0.15, ~15초."
-            )
-        if result is None:
-            return {"error": f"Analysis failed for '{ip_name}'"}
-        # Extract analyst summaries for LLM context
-        analyses_summary = []
-        for a in result.get("analyses", []):
-            if hasattr(a, "model_dump"):
-                a = a.model_dump()
-            analyses_summary.append(
-                {
-                    "type": a.get("analyst_type", "?"),
-                    "score": a.get("score", 0),
-                    "finding": a.get("key_finding", ""),
-                }
-            )
-        synthesis = result.get("synthesis")
-        if synthesis is not None and hasattr(synthesis, "model_dump"):
-            synthesis = synthesis.model_dump()
-        out: dict[str, Any] = {
-            "status": "ok",
-            "action": "analyze",
-            "ip_name": result.get("ip_name", ip_name),
-            "tier": result.get("tier", "N/A"),
-            "score": round(result.get("final_score", 0), 1),
-            "cause": (
-                (synthesis or {}).get("cause", "unknown")
-                if isinstance(synthesis, dict)
-                else "unknown"
-            ),
-            "analyses": analyses_summary,
-        }
-        if pipeline_notice:
-            out["pipeline_notice"] = pipeline_notice
-        return out
-
-    def handle_search_ips(**kwargs: Any) -> dict[str, Any]:
-        query = kwargs.get("query", "")
-        if not query:
-            return _clarify("search_ips", ["query"], "무엇을 검색할까요?")
-        results = _get_search_engine().search(query)
-        _render_search_results(query, results)
-        return {
-            "status": "ok",
-            "action": "search",
-            "query": query,
-            "count": len(results),
-            "results": [{"name": r.ip_name, "score": r.score} for r in results],
-        }
-
-    def handle_compare_ips(**kwargs: Any) -> dict[str, Any]:
-        ip_a = kwargs.get("ip_a", "")
-        ip_b = kwargs.get("ip_b", "")
-        dry_run = kwargs.get("dry_run", force_dry)
-
-        # Clarification: both IPs required
-        if not ip_a or not ip_b:
-            missing = [k for k, v in {"ip_a": ip_a, "ip_b": ip_b}.items() if not v]
-            hint = "어떤 IP와 비교할까요?" if ip_a else "비교할 두 IP를 알려주세요."
-            return _clarify("compare_ips", missing, hint, provided={"ip_a": ip_a, "ip_b": ip_b})
-
-        console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
-        result_a = _run_analysis(ip_a, dry_run=dry_run, verbose=verbose)
-        result_b = _run_analysis(ip_b, dry_run=dry_run, verbose=verbose)
-
-        def _ip_summary(name: str, r: dict[str, Any] | None) -> dict[str, Any]:
-            if not r:
-                return {"name": name, "tier": "N/A", "score": 0}
-            return {
-                "name": name,
-                "tier": r.get("tier", "N/A"),
-                "score": round(r.get("final_score", 0), 1),
-            }
-
-        return {
-            "status": "ok",
-            "action": "compare",
-            "ip_a": _ip_summary(ip_a, result_a),
-            "ip_b": _ip_summary(ip_b, result_b),
-        }
-
-    def handle_generate_report(**kwargs: Any) -> dict[str, Any]:
-        ip_name = kwargs.get("ip_name", "")
-        if not ip_name:
-            return _clarify("generate_report", ["ip_name"], "어떤 IP의 리포트를 생성할까요?")
-        fmt = kwargs.get("format", "markdown")
-        if fmt == "md":
-            fmt = "markdown"
-        template = kwargs.get("template", "summary")
-        dry_run = kwargs.get("dry_run", force_dry)
-        report_result = _generate_report(
-            ip_name,
-            dry_run=dry_run,
-            verbose=verbose,
-            fmt=fmt,
-            template=template,
-            skill_registry=skill_registry,
-        )
-        if report_result is None:
-            return {"error": f"Report generation failed for '{ip_name}'"}
-        file_path, content = report_result
-        return {
-            "status": "ok",
-            "action": "report",
-            "ip_name": ip_name,
-            "format": fmt,
-            "template": template,
-            "file_path": file_path,
-            "content_preview": content[:500] if len(content) > 500 else content,
-            "content_length": len(content),
-        }
-
-    def handle_batch_analyze(**kwargs: Any) -> dict[str, Any]:
-        from plugins.game_ip.cli.batch import render_batch_table, run_batch
-
-        top = kwargs.get("top", 20)
-        genre = kwargs.get("genre")
-        dry_run = kwargs.get("dry_run", force_dry)
-        batch_results = run_batch(top=top, genre=genre, dry_run=dry_run)
-        render_batch_table(batch_results)
-        summary = []
-        for br in batch_results:
-            if br:
-                summary.append(
-                    {
-                        "ip_name": br.get("ip_name", "?"),
-                        "tier": br.get("tier", "?"),
-                        "score": round(br.get("final_score", 0), 1),
-                    }
-                )
-        return {
-            "status": "ok",
-            "action": "batch",
-            "count": len(batch_results),
-            "results": summary[:20],
-        }
-
-    return {
-        "list_ips": handle_list_ips,
-        "analyze_ip": handle_analyze_ip,
-        "search_ips": handle_search_ips,
-        "compare_ips": handle_compare_ips,
-        "generate_report": handle_generate_report,
-        "batch_analyze": handle_batch_analyze,
-    }
+        domain = get_domain_or_none()
+        if domain is None:
+            return
+        register = getattr(domain, "register_tool_handlers", None)
+        if callable(register):
+            register(handlers)
+    except Exception:
+        log.debug("Domain tool-handler registration skipped", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -719,7 +562,19 @@ def _build_hitl_handlers() -> dict[str, Any]:
         if not node_name or not ip_name:
             missing = [k for k, v in {"node_name": node_name, "ip_name": ip_name}.items() if not v]
             return _clarify("rerun_node", missing, "재실행할 노드와 IP를 알려주세요.")
-        allowed = {"scoring", "verification", "synthesizer"}
+        # Allowlist supplied by the active domain (DomainPort v2). Empty
+        # set ⇒ no rerunnable nodes for non-pipeline domains.
+        from core.domains.port import get_domain_or_none
+
+        allowed: set[str] = set()
+        domain = get_domain_or_none()
+        if domain is not None:
+            getter = getattr(domain, "get_rerunnable_nodes", None)
+            if callable(getter):
+                try:
+                    allowed = set(getter())
+                except Exception:
+                    log.debug("get_rerunnable_nodes() failed", exc_info=True)
         if node_name not in allowed:
             return {
                 "error": (f"Cannot rerun '{node_name}'. Allowed: {sorted(allowed)}"),
@@ -763,24 +618,28 @@ def _build_system_handlers(
 
     def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
         show_help()
-        commands = [
-            "/analyze <IP> -- Analyze an IP (dry-run)",
-            "/run <IP> -- Analyze with real LLM",
-            "/search <query> -- Search IPs by keyword",
-            "/list -- Show available IPs",
-            "/compare <A> <B> -- Compare two IPs",
-            "/report <IP> -- Generate analysis report",
-            "/batch -- Batch analyze multiple IPs",
-            "/status -- Show system status",
-            "/model -- Switch LLM model",
-            "/help -- Show help",
-        ]
+        # Generic command list — domain-specific entries flow through
+        # COMMAND_MAP (which the active domain extends via
+        # ``register_slash_commands`` at bootstrap). We surface the
+        # registered slashes so the LLM has the same view as ``/help``.
+        from core.cli.commands import COMMAND_MAP
+
+        commands = sorted(COMMAND_MAP.keys())
         return {"status": "ok", "action": "help", "commands": commands}
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
         from importlib.metadata import version as _pkg_version
 
-        from plugins.game_ip.fixtures import FIXTURE_MAP as _FM
+        from core.domains.port import get_domain_or_none
+
+        # Fixture count is domain-specific — sourced via DomainPort.
+        domain = get_domain_or_none()
+        fixture_count = 0
+        if domain is not None:
+            try:
+                fixture_count = len(domain.list_fixtures())
+            except Exception:
+                log.debug("Domain list_fixtures() failed", exc_info=True)
 
         geode_version = _pkg_version("geode")
         ant_ok = bool(settings.anthropic_api_key)
@@ -796,7 +655,7 @@ def _build_system_handlers(
         console.print(f"  Anthropic API: {ant_status}")
         console.print(f"  OpenAI API: {oai_status}")
         console.print(f"  Mode: [bold]{mode}[/bold]")
-        console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
+        console.print(f"  Fixtures: [bold]{fixture_count} IPs[/bold]")
 
         # MCP status
         mcp_status = (
@@ -826,7 +685,7 @@ def _build_system_handlers(
             "anthropic_configured": ant_ok,
             "openai_configured": oai_ok,
             "mode": mode,
-            "fixture_count": len(_FM),
+            "fixture_count": fixture_count,
             "mcp_status": mcp_status,
         }
 
@@ -994,21 +853,7 @@ def _build_system_handlers(
 def _build_execution_handlers() -> dict[str, Any]:
     """Build execution-related tool handlers."""
     from core.cli import _scheduler_service_ctx
-    from core.cli.commands import cmd_generate, cmd_trigger
-
-    def handle_generate_data(**kwargs: Any) -> dict[str, Any]:
-        count = kwargs.get("count", 5)
-        genre = kwargs.get("genre", "")
-        gen_args = str(count)
-        if genre:
-            gen_args += f" {genre}"
-        cmd_generate(gen_args)
-        return {
-            "status": "ok",
-            "action": "generate",
-            "count": count,
-            "genre": genre or "random",
-        }
+    from core.cli.commands import cmd_trigger
 
     def handle_schedule_job(**kwargs: Any) -> dict[str, Any]:
         sub_action = kwargs.get("sub_action", "") or "list"
@@ -1149,7 +994,6 @@ def _build_execution_handlers() -> dict[str, Any]:
         }
 
     return {
-        "generate_data": handle_generate_data,
         "schedule_job": handle_schedule_job,
         "trigger_event": handle_trigger_event,
     }
@@ -1160,7 +1004,11 @@ def _build_execution_handlers() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 # Maps tool name → (module_path, class_name) for lazy-import delegation.
-# Adding a new delegated tool requires only one line here.
+# Adding a new delegated tool requires only one line here. Domain-specific
+# signal scrapers (youtube_search, reddit_sentiment, steam_info,
+# google_trends) used to live here; step 4 of domain-free-core moved them
+# into ``plugins/game_ip/cli/tool_handlers.py`` where they're re-merged
+# via ``DomainPort.register_tool_handlers``.
 _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     # web / document / note
     "web_fetch": ("core.tools.web_tools", "WebFetchTool"),
@@ -1177,11 +1025,6 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     "profile_update": ("core.tools.profile_tools", "ProfileUpdateTool"),
     "profile_preference": ("core.tools.profile_tools", "ProfilePreferenceTool"),
     "profile_learn": ("core.tools.profile_tools", "ProfileLearnTool"),
-    # signals
-    "youtube_search": ("core.tools.signal_tools", "YouTubeSearchTool"),
-    "reddit_sentiment": ("core.tools.signal_tools", "RedditSentimentTool"),
-    "steam_info": ("core.tools.signal_tools", "SteamInfoTool"),
-    "google_trends": ("core.tools.signal_tools", "GoogleTrendsTool"),
 }
 
 
@@ -1360,7 +1203,6 @@ def _build_tool_handlers(
     force_dry = readiness.force_dry_run if readiness else True
 
     handlers: dict[str, Any] = {}
-    handlers.update(_build_analysis_handlers(verbose, force_dry, skill_registry))
     handlers.update(_build_memory_handlers())
     handlers.update(_build_plan_handlers(force_dry))
     handlers.update(_build_hitl_handlers())
@@ -1374,6 +1216,9 @@ def _build_tool_handlers(
     handlers.update(_build_task_handlers())
     handlers.update(_build_offload_handlers())
     handlers.update(_build_computer_use_handler())
+    # Domain-supplied handlers (analysis + signals + generate_data for
+    # game_ip; empty for non-pipeline domains).
+    install_domain_tool_handlers(handlers)
     return handlers
 
 

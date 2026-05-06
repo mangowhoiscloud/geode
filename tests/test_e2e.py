@@ -15,10 +15,10 @@ from core.graph import compile_graph
 from core.hooks import HookEvent, HookSystem
 from core.llm.router import LLMClientPort
 from core.state import GeodeState
-from core.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
 from core.tools.policy import PolicyChain, ToolPolicy
 from core.tools.registry import ToolRegistry
 from core.verification.cross_llm import run_dual_adapter_check
+from plugins.game_ip.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
 
 
 class TestFullPipelineDryRun:

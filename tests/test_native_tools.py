@@ -33,14 +33,14 @@ class TestAnthropicWebSearchVersion:
         assert "web_search_20250305" not in source
 
     def test_signal_tools_uses_20260209(self) -> None:
-        """WebSearchTool (signal) must use web_search_20260209."""
+        """WebSearchTool must use web_search_20260209."""
         import importlib
         import inspect
 
-        from core.tools import signal_tools
+        from core.tools import web_search
 
-        importlib.reload(signal_tools)
-        source = inspect.getsource(signal_tools.WebSearchTool)
+        importlib.reload(web_search)
+        source = inspect.getsource(web_search.WebSearchTool)
         assert "web_search_20260209" in source
         assert "web_search_20250305" not in source
 

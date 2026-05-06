@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from core.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
 from core.tools.base import Tool
 from core.tools.registry import ToolRegistry
+from plugins.game_ip.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
 
 
 class TestRunAnalystTool:

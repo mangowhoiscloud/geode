@@ -1,103 +1,36 @@
-"""Signal Collection Tools — external signal retrieval as LLM-callable tools.
+"""Game IP signal collection tools — external signal retrieval as LLM-callable tools.
 
-Layer 4 tools for external signal collection:
+Layer 4 tools for IP-keyed signal collection:
 - YouTubeSearchTool: YouTube engagement data (MCP -> fixture fallback)
 - RedditSentimentTool: Reddit community sentiment (MCP -> fixture fallback)
 - TwitchStatsTool: Twitch streaming statistics (MCP -> fixture fallback)
 - SteamInfoTool: Steam store/review data (MCP -> fixture fallback)
 - GoogleTrendsTool: Google Trends interest data (MCP -> fixture fallback)
-- WebSearchTool: Anthropic native web search for real-time signal enrichment
 
-Each tool tries MCP server first, then falls back to fixture data.
-The ``source`` field in results indicates data provenance.
+Each tool tries the corresponding MCP server first via the canonical
+``core.mcp.utils.try_mcp_signal`` helper, then falls back to fixture
+data. The ``source`` field in results indicates data provenance.
+
+The generic 3-provider WebSearchTool lives in ``core/tools/web_search.py``;
+the MCP-fallback infrastructure (``parse_mcp_content``, ``try_mcp_signal``)
+lives in ``core/mcp/utils.py``. Together they were extracted from the
+former ``core/tools/signal_tools.py`` during the v0.66.2 step-5 split.
 """
 
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
+from core.mcp.utils import try_mcp_signal
+
 from plugins.game_ip.fixtures import load_fixture
 
-from core.config import ANTHROPIC_PRIMARY
-
-log = logging.getLogger(__name__)
-
-# Load parameter schemas from centralized JSON
+# Load parameter schemas from centralized JSON (plugin-local)
 _SCHEMAS_PATH = Path(__file__).resolve().parent / "tool_schemas.json"
 with _SCHEMAS_PATH.open(encoding="utf-8") as _f:
     _TOOL_SCHEMAS: dict[str, dict[str, Any]] = json.load(_f)
-
-
-# ---------------------------------------------------------------------------
-# MCP helpers
-# ---------------------------------------------------------------------------
-
-
-def _parse_mcp_content(result: dict[str, Any]) -> dict[str, Any]:
-    """Extract structured data from MCP tool result.
-
-    MCP tools return ``content`` array with text/image blocks.
-    Tries to parse text content as JSON, falls back to raw text dict.
-    Some non-standard servers may return data keys directly.
-    """
-    content = result.get("content")
-    if not isinstance(content, list) or not content:
-        # Direct dict with data keys (non-standard) — return as-is
-        return result
-
-    texts: list[str] = []
-    for block in content:
-        if isinstance(block, dict) and block.get("type") == "text":
-            text = block.get("text", "")
-            # Try parsing as JSON first
-            try:
-                parsed = json.loads(text)
-                if isinstance(parsed, dict):
-                    return parsed
-            except (json.JSONDecodeError, TypeError):
-                pass
-            texts.append(text)
-
-    if texts:
-        return {"text": "\n".join(texts)}
-    return result
-
-
-def _try_mcp_signal(
-    server_name: str,
-    tool_name: str,
-    args: dict[str, Any],
-) -> dict[str, Any] | None:
-    """Try calling an MCP tool. Returns parsed result dict or None on failure.
-
-    Lazily imports MCPServerManager to avoid circular imports.
-    Never raises -- all errors are caught and logged.
-    """
-    try:
-        from core.mcp.manager import get_mcp_manager
-
-        manager = get_mcp_manager()
-        health = manager.check_health()
-        if not health.get(server_name, False):
-            return None
-
-        result = manager.call_tool(server_name, tool_name, args)
-        if "error" in result:
-            log.debug(
-                "MCP signal %s/%s error: %s",
-                server_name,
-                tool_name,
-                result["error"],
-            )
-            return None
-
-        return _parse_mcp_content(result)
-    except Exception as exc:
-        log.debug("MCP signal %s/%s failed: %s", server_name, tool_name, exc)
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +74,7 @@ class YouTubeSearchTool:
         ip_name: str = kwargs["ip_name"]
 
         # Tier 1: YouTube MCP server
-        mcp = _try_mcp_signal("youtube", "search_videos", {"query": ip_name})
+        mcp = try_mcp_signal("youtube", "search_videos", {"query": ip_name})
         if mcp is not None:
             return {
                 "result": {
@@ -191,7 +124,7 @@ class RedditSentimentTool:
         ip_name: str = kwargs["ip_name"]
 
         # Tier 1: Reddit MCP server
-        mcp = _try_mcp_signal("reddit", "search_posts", {"query": ip_name})
+        mcp = try_mcp_signal("reddit", "search_posts", {"query": ip_name})
         if mcp is not None:
             return {
                 "result": {
@@ -243,7 +176,7 @@ class TwitchStatsTool:
         ip_name: str = kwargs["ip_name"]
 
         # Tier 1: IGDB MCP server (Twitch/IGDB share Twitch API ecosystem)
-        mcp = _try_mcp_signal("igdb", "search_games", {"query": ip_name})
+        mcp = try_mcp_signal("igdb", "search_games", {"query": ip_name})
         if mcp is not None:
             return {
                 "result": {
@@ -294,7 +227,7 @@ class SteamInfoTool:
         ip_name: str = kwargs["ip_name"]
 
         # Tier 1: Steam MCP server (tool name confirmed: get_game_info)
-        mcp = _try_mcp_signal("steam", "get_game_info", {"query": ip_name})
+        mcp = try_mcp_signal("steam", "get_game_info", {"query": ip_name})
         if mcp is not None:
             return {
                 "result": {
@@ -367,7 +300,7 @@ class GoogleTrendsTool:
         region: str = kwargs.get("region", "global")
 
         # Tier 1: Google Trends MCP server
-        mcp = _try_mcp_signal(
+        mcp = try_mcp_signal(
             "google-trends",
             "get_interest_over_time",
             {"keyword": ip_name, "region": region},
@@ -399,173 +332,5 @@ class GoogleTrendsTool:
                 "trend_direction": "rising" if trends_index > 60 else "stable",
                 "related_queries": genre_keywords[:5] if genre_keywords else [],
                 "source": "google_trends_stub",
-            }
-        }
-
-
-class WebSearchTool:
-    """Tool for real-time web search via 3-provider native fallback.
-
-    Priority: Anthropic (Opus) → OpenAI (gpt-5.4) → GLM (glm-5).
-    Falls back to stub data when all providers are unavailable.
-    """
-
-    @property
-    def name(self) -> str:
-        return "web_search"
-
-    @property
-    def description(self) -> str:
-        return (
-            "Search the web for real-time information about an IP. "
-            "Useful for finding recent news, community discussions, "
-            "sales data, and market signals that may not be in fixtures."
-        )
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return _TOOL_SCHEMAS["WebSearchTool"]
-
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
-        query: str = kwargs["query"]
-        max_results: int = kwargs.get("max_results", 5)
-
-        result = self._anthropic_search(query, max_results)
-        if result:
-            return result
-
-        result = self._openai_search(query, max_results)
-        if result:
-            return result
-
-        result = self._glm_search(query, max_results)
-        if result:
-            return result
-
-        return self._stub_result(query, "all_providers_failed")
-
-    def _anthropic_search(self, query: str, max_results: int) -> dict[str, Any] | None:
-        try:
-            from core.config import settings
-            from core.llm.router import get_anthropic_client
-
-            if not settings.anthropic_api_key:
-                return None
-            client = get_anthropic_client()
-            response = client.messages.create(
-                model=ANTHROPIC_PRIMARY,
-                max_tokens=1024,
-                tools=[{"type": "web_search_20260209", "name": "web_search"}],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Search the web for: {query}. "
-                            f"Return up to {max_results} relevant results "
-                            "with titles, URLs, and brief summaries."
-                        ),
-                    }
-                ],
-                timeout=30.0,
-            )
-            text_parts: list[str] = []
-            for block in response.content:
-                if hasattr(block, "text"):
-                    text_parts.append(block.text)
-            return {
-                "result": {
-                    "query": query,
-                    "search_results": "\n".join(text_parts),
-                    "source": "anthropic_web_search",
-                }
-            }
-        except Exception:
-            log.debug("Anthropic web search failed for signal tool", exc_info=True)
-            return None
-
-    def _openai_search(self, query: str, max_results: int) -> dict[str, Any] | None:
-        try:
-            from core.config import OPENAI_PRIMARY, settings
-            from core.llm.providers.openai import _get_openai_client
-
-            if not settings.openai_api_key:
-                return None
-            client = _get_openai_client()
-            response = client.responses.create(
-                model=OPENAI_PRIMARY,
-                tools=[{"type": "web_search"}],
-                input=(
-                    f"Search the web for: {query}. "
-                    f"Return up to {max_results} relevant results "
-                    "with titles, URLs, and brief summaries."
-                ),
-            )
-            text_parts: list[str] = []
-            for item in response.output:
-                if getattr(item, "type", "") == "message":
-                    for sub in getattr(item, "content", []):
-                        if getattr(sub, "type", "") == "output_text":
-                            text = getattr(sub, "text", "")
-                            if text:
-                                text_parts.append(text)
-            if not text_parts:
-                return None
-            return {
-                "result": {
-                    "query": query,
-                    "search_results": "\n".join(text_parts),
-                    "source": "openai_web_search",
-                }
-            }
-        except Exception:
-            log.debug("OpenAI web search failed for signal tool", exc_info=True)
-            return None
-
-    def _glm_search(self, query: str, max_results: int) -> dict[str, Any] | None:
-        try:
-            from core.config import GLM_BASE_URL, GLM_PRIMARY, settings
-
-            if not settings.zai_api_key:
-                return None
-            import openai
-
-            client = openai.OpenAI(api_key=settings.zai_api_key, base_url=GLM_BASE_URL)
-            response = client.chat.completions.create(
-                model=GLM_PRIMARY,
-                tools=[{"type": "web_search", "web_search": {"enable": True}}],  # type: ignore[list-item]  # GLM native tool
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Search the web for: {query}. "
-                            f"Return up to {max_results} relevant results "
-                            "with titles, URLs, and brief summaries."
-                        ),
-                    }
-                ],
-                timeout=30.0,
-            )
-            choice = response.choices[0] if response.choices else None
-            if choice and choice.message.content:
-                return {
-                    "result": {
-                        "query": query,
-                        "search_results": choice.message.content,
-                        "source": "glm_web_search",
-                    }
-                }
-            return None
-        except Exception:
-            log.debug("GLM web search failed for signal tool", exc_info=True)
-            return None
-
-    @staticmethod
-    def _stub_result(query: str, reason: str) -> dict[str, Any]:
-        return {
-            "result": {
-                "query": query,
-                "search_results": f"Web search unavailable ({reason}). "
-                "Use fixture data or retry later.",
-                "source": "web_search_stub",
             }
         }

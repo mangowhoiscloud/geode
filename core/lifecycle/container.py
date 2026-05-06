@@ -15,7 +15,6 @@ from core.config import settings
 from core.llm.providers.openai import OpenAIAdapter
 from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.orchestration.lane_queue import LaneQueue
-from core.tools.analysis import ExplainScoreTool, PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
 from core.tools.policy import PolicyChain, ToolPolicy
 from core.tools.registry import ToolRegistry, ToolSearchTool
 
@@ -90,6 +89,13 @@ def build_default_registry() -> ToolRegistry:
     """Build ToolRegistry with all 21 tools registered."""
     registry = ToolRegistry()
     # Analysis (4)
+    from plugins.game_ip.tools.analysis import (
+        ExplainScoreTool,
+        PSMCalculateTool,
+        RunAnalystTool,
+        RunEvaluatorTool,
+    )
+
     registry.register(RunAnalystTool())
     registry.register(RunEvaluatorTool())
     registry.register(PSMCalculateTool())
@@ -102,15 +108,16 @@ def build_default_registry() -> ToolRegistry:
     registry.register(QueryMonoLakeTool())
     registry.register(CortexAnalystTool())
     registry.register(CortexSearchTool())
-    # Signals (5)
-    from core.tools.signal_tools import (
+    # Signals (5 IP-specific + 1 generic)
+    from plugins.game_ip.tools.signal_tools import (
         GoogleTrendsTool,
         RedditSentimentTool,
         SteamInfoTool,
         TwitchStatsTool,
-        WebSearchTool,
         YouTubeSearchTool,
     )
+
+    from core.tools.web_search import WebSearchTool
 
     registry.register(YouTubeSearchTool())
     registry.register(RedditSentimentTool())

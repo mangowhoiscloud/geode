@@ -20,11 +20,8 @@ from core import __version__
 from core.cli.commands import (
     cmd_apply,
     cmd_auth,
-    cmd_batch,
     cmd_context,
-    cmd_generate,
     cmd_key,
-    cmd_list,
     cmd_login,
     cmd_mcp,
     cmd_model,
@@ -306,6 +303,8 @@ def _handle_command(
 
         cmd_cost(args)
     elif action == "list":
+        from plugins.game_ip.cli.commands import cmd_list
+
         cmd_list()
     elif action == "verbose":
         verbose = not verbose
@@ -347,6 +346,8 @@ def _handle_command(
     elif action == "auth":
         cmd_auth(args)
     elif action == "generate":
+        from plugins.game_ip.cli.commands import cmd_generate
+
         cmd_generate(args)
     elif action == "report":
         if not args:
@@ -370,6 +371,8 @@ def _handle_command(
                 skill_registry=skill_registry,
             )
     elif action == "batch":
+        from plugins.game_ip.cli.commands import cmd_batch
+
         readiness = _get_readiness()
         force_dry = readiness.force_dry_run if readiness else True
         dry_flag, args = parse_dry_run_flag(args)
@@ -400,9 +403,11 @@ def _handle_command(
         if readiness:
             mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
             console.print(f"  Mode: [bold]{mode}[/bold]")
-        from plugins.game_ip.fixtures import FIXTURE_MAP as _FM
+        from core.domains.port import get_domain_or_none
 
-        console.print(f"  Fixtures: [bold]{len(_FM)} IPs[/bold]")
+        domain = get_domain_or_none()
+        fixture_count = len(domain.list_fixtures()) if domain is not None else 0
+        console.print(f"  Fixtures: [bold]{fixture_count} IPs[/bold]")
 
         # MCP status section
         _mcp_st = mcp_manager.get_status() if mcp_manager is not None else {"active": []}

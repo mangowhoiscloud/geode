@@ -13,12 +13,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from core.state import PSMResult
+
 from plugins.game_ip.fixtures import load_fixture
 from plugins.game_ip.nodes.analysts import ANALYST_TYPES, get_dry_run_result
 
-from core.state import PSMResult
-
-# Load parameter schemas from centralized JSON
+# Load parameter schemas from centralized JSON (plugin-local)
 _SCHEMAS_PATH = Path(__file__).resolve().parent / "tool_schemas.json"
 with _SCHEMAS_PATH.open(encoding="utf-8") as _f:
     _TOOL_SCHEMAS: dict[str, dict[str, Any]] = json.load(_f)
