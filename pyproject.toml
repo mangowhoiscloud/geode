@@ -99,7 +99,6 @@ ignore_imports = [
     "core.agent.approval -> core.cli",
     "core.agent.tool_executor -> core.cli.bash_tool",
     "core.agent.tool_executor -> core.cli.redaction",
-    "core.agent.system_prompt -> core.cli.ip_names",
     "core.agent.worker -> core.cli.tool_handlers",
 ]
 
@@ -119,7 +118,6 @@ ignore_imports = [
     "core.server.supervised.services -> core.cli.bootstrap",
     "core.lifecycle.bootstrap -> core.cli.startup",
     "core.memory.context -> core.cli.project_detect",
-    "core.agent.system_prompt -> core.cli.ip_names",
     "core.agent.worker -> core.cli.tool_handlers",
     "core.agent.loop -> core.cli.session_checkpoint",
     "core.agent.loop -> core.cli.transcript",

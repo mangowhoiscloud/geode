@@ -1237,7 +1237,7 @@ def batch(
     dry_run: bool = typer.Option(False, "--dry-run/--live", help="Use dry-run mode"),
 ) -> None:
     """Run batch analysis on multiple IPs."""
-    from core.cli.batch import render_batch_table, run_batch
+    from plugins.game_ip.cli.batch import render_batch_table, run_batch
 
     results = run_batch(top=top, genre=genre, concurrency=concurrency, dry_run=dry_run)
     if results:
