@@ -37,6 +37,26 @@ if TYPE_CHECKING:
 
 DEFAULT_SOCKET_PATH = Path.home() / ".geode" / "cli.sock"
 
+# Thread-local terminal capability advertised by the connected thin CLI.
+# v0.84.0 — populated when the daemon receives a ``client_capability``
+# message. Read by ``_run_prompt_streaming`` to construct the per-thread
+# Rich Console with the client's actual TTY-ness and width, so ANSI /
+# spinner output is suppressed when the thin CLI's stdout is not a TTY.
+_client_capability_local = threading.local()
+
+
+def _get_client_capability() -> tuple[bool, int]:
+    """Return ``(is_tty, width)`` for the current handler thread.
+
+    Defaults to ``(True, 120)`` for backward compatibility with thin
+    clients that don't send a ``client_capability`` message.
+    """
+    is_tty = bool(getattr(_client_capability_local, "is_tty", True))
+    width = int(getattr(_client_capability_local, "width", 120))
+    if width <= 0:
+        width = 120
+    return is_tty, width
+
 
 class _StreamingWriter:
     """File-like object that relays console writes to a client socket.
@@ -391,6 +411,22 @@ class CLIPoller:
         if msg_type == "resume":
             return self._handle_resume(msg, loop, conversation)
 
+        # v0.84.0 — thin CLI advertises terminal capability so the daemon
+        # can suppress ANSI / spinner output when stdout is not a TTY.
+        if msg_type == "client_capability":
+            is_tty = bool(msg.get("is_tty", True))
+            width_raw = msg.get("width", 120)
+            try:
+                width = int(width_raw)
+            except (TypeError, ValueError):
+                width = 120
+            if width <= 0:
+                width = 120
+            _client_capability_local.is_tty = is_tty
+            _client_capability_local.width = width
+            log.debug("client_capability: is_tty=%s width=%d", is_tty, width)
+            return {"type": "ack"}
+
         # Stale approval_response from a timed-out request — silently drop
         if msg_type == "approval_response":
             log.debug("Dropping stale approval_response: %s", msg.get("decision"))
@@ -430,7 +466,8 @@ class CLIPoller:
         # Thread-local console: all console.print() in this thread → client socket
         writer = _StreamingWriter(client) if client else None
         if writer:
-            set_thread_console(make_session_console(writer))
+            is_tty, width = _get_client_capability()
+            set_thread_console(make_session_console(writer, force_terminal=is_tty, width=width))
             _ipc_writer_local.writer = writer
 
         try:

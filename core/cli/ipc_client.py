@@ -120,7 +120,15 @@ class IPCClient:
         self.session_id: str = ""
 
     def connect(self) -> bool:
-        """Connect to serve. Returns True on success."""
+        """Connect to serve. Returns True on success.
+
+        Right after the session greeting is received, sends a
+        ``client_capability`` message describing the thin CLI's actual
+        terminal state (TTY-ness, width). The daemon uses these values
+        when constructing the per-thread Rich Console so that ANSI
+        escape sequences and spinner frames are suppressed when the
+        thin CLI's stdout is not a terminal (heredoc, pipe, CI).
+        """
         try:
             self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._sock.connect(str(self._socket_path))
@@ -129,11 +137,48 @@ class IPCClient:
             if msg and msg.get("type") == "session":
                 self.session_id = msg.get("session_id", "")
                 log.info("Connected to serve (session=%s)", self.session_id)
+            # Send terminal capability so the daemon knows whether to
+            # emit ANSI / spinner output (v0.84.0). The daemon replies
+            # with an ``ack`` which we drain here so subsequent
+            # one-shot reads (``send_command`` / ``request_resume``)
+            # see their actual response, not the stale ack.
+            self._send_client_capability()
+            ack = self._recv()
+            if ack and ack.get("type") != "ack":
+                log.debug("Unexpected response to client_capability: %s", ack)
             return True
         except (ConnectionRefusedError, OSError) as exc:
             log.debug("IPC connect failed: %s", exc)
             self._sock = None
             return False
+
+    def _send_client_capability(self) -> None:
+        """Send terminal capability to the daemon.
+
+        Reports ``is_tty`` (both stdin and stdout are terminals) and
+        ``width`` (terminal columns, falling back to 120). The daemon
+        ignores unknown fields, so old daemons stay compatible.
+        """
+        import shutil
+        import sys
+
+        try:
+            is_tty = bool(sys.stdin.isatty() and sys.stdout.isatty())
+        except (ValueError, OSError):
+            is_tty = False
+        try:
+            width = int(shutil.get_terminal_size().columns)
+        except (ValueError, OSError):
+            width = 120
+        if width <= 0:
+            width = 120
+        self._send(
+            {
+                "type": "client_capability",
+                "is_tty": is_tty,
+                "width": width,
+            }
+        )
 
     def close(self) -> None:
         """Disconnect from serve."""
