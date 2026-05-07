@@ -20,10 +20,13 @@ import json
 import logging
 import subprocess  # nosec B404
 import sys
-from pathlib import Path
 from typing import Any, TypedDict
 
-from core.auth.credential_cache import CredentialCache, refresh_managed_token
+from core.auth.credential_cache import (
+    CredentialCache,
+    read_json_credentials_file,
+    refresh_managed_token,
+)
 
 log = logging.getLogger(__name__)
 
@@ -84,13 +87,8 @@ def _read_from_keychain() -> dict[str, Any] | None:
 
 def _read_from_file() -> dict[str, Any] | None:
     """Read claudeAiOauth from ~/.claude/.credentials.json."""
-    cred_path = Path.home() / _CREDENTIALS_RELATIVE_PATH
-    try:
-        raw = cred_path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-        return data.get("claudeAiOauth") if isinstance(data, dict) else None
-    except (OSError, json.JSONDecodeError):
-        return None
+    data = read_json_credentials_file(_CREDENTIALS_RELATIVE_PATH)
+    return data.get("claudeAiOauth") if data is not None else None
 
 
 # -- Parser --
