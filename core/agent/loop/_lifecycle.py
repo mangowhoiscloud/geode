@@ -27,7 +27,7 @@ def save_checkpoint(loop: AgenticLoop, user_input: str, round_idx: int = 0) -> N
     if loop._checkpoint is None or not loop._session_id:
         return
     try:
-        from core.cli.session_checkpoint import SessionState
+        from core.runtime_state.session_checkpoint import SessionState
 
         state = SessionState(
             session_id=loop._session_id,

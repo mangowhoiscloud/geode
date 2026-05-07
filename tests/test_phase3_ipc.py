@@ -354,7 +354,7 @@ class TestCLIChannelIntegration:
 
         try:
             # Save a checkpoint first
-            from core.cli.session_checkpoint import SessionCheckpoint, SessionState
+            from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
 
             cp = SessionCheckpoint()
             state = SessionState(
@@ -399,7 +399,7 @@ class TestCLIChannelIntegration:
         time.sleep(0.1)
 
         try:
-            from core.cli.session_checkpoint import SessionCheckpoint, SessionState
+            from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
 
             cp = SessionCheckpoint()
             cp.save(

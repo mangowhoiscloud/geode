@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 from core.agent.conversation import ConversationContext
 from core.cli.commands import cmd_resume, resolve_action
-from core.cli.session_checkpoint import SessionCheckpoint, SessionState
+from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
 
 
 class TestResumeCommandMap:
@@ -36,7 +36,7 @@ class TestCmdResume:
         session_dir: Path,
     ) -> None:
         """Redirect SessionCheckpoint default dir to tmp."""
-        import core.cli.session_checkpoint as cp_mod
+        import core.runtime_state.session_checkpoint as cp_mod
 
         monkeypatch.setattr(cp_mod, "DEFAULT_SESSION_DIR", session_dir)
 
@@ -107,7 +107,7 @@ class TestCheckpointSaveFromAgenticLoop:
         monkeypatch: pytest.MonkeyPatch,
         session_dir: Path,
     ) -> None:
-        import core.cli.session_checkpoint as cp_mod
+        import core.runtime_state.session_checkpoint as cp_mod
 
         monkeypatch.setattr(cp_mod, "DEFAULT_SESSION_DIR", session_dir)
 
