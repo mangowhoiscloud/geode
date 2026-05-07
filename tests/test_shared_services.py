@@ -49,14 +49,17 @@ class TestSharedServicesCreateSession:
 
     @pytest.fixture()
     def services(self) -> SharedServices:
-        """Minimal SharedServices with mocked hook_system."""
+        """Minimal SharedServices with mocked hook_system.
+
+        v0.82.0 — `_model` / `_provider` fields removed; `create_session()`
+        reads ``settings.model`` directly so a long-running daemon
+        honours ``/model`` switches across IPC sessions.
+        """
         return SharedServices(
             mcp_manager=MagicMock(),
             skill_registry=MagicMock(),
             hook_system=MagicMock(),
             tool_handlers={"test_tool": lambda **kw: {"ok": True}},
-            _model="claude-sonnet-4-6",
-            _provider="anthropic",
             _cost_budget=5.0,
         )
 
@@ -149,9 +152,20 @@ class TestBuildSharedServices:
         services = build_shared_services()
         assert len(services.tool_handlers) > 0
 
-    def test_model_resolved(self) -> None:
+    def test_model_resolved_per_session(self) -> None:
+        """v0.82.0 — `SharedServices` no longer freezes `_model` at boot.
+
+        `create_session()` reads ``settings.model`` directly so a
+        long-running daemon honours user-driven `/model` switches.
+        Verify that the freshly constructed AgenticLoop carries the
+        live ``settings.model`` rather than a stale boot-time value.
+        """
+        from core.config import settings
+        from core.server.supervised.services import SessionMode
+
         services = build_shared_services()
-        assert services._model != ""
+        _, loop = services.create_session(SessionMode.DAEMON)
+        assert loop.model == settings.model
 
     def test_no_agentic_ref_attribute(self) -> None:
         """SharedServices should not have agentic_ref (removed in system-hardening)."""
@@ -169,8 +183,6 @@ class TestSchedulerREPLIsolation:
             skill_registry=MagicMock(),
             hook_system=MagicMock(),
             tool_handlers={"test_tool": lambda **kw: {"ok": True}},
-            _model="claude-sonnet-4-6",
-            _provider="anthropic",
             _cost_budget=5.0,
         )
 
