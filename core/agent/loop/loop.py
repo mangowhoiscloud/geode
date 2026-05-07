@@ -14,149 +14,44 @@ Supports:
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import logging
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
 from core.agent.error_recovery import ErrorRecoveryStrategy
-from core.agent.sub_agent import SubAgentResult, drain_announced_results
-from core.agent.system_prompt import build_system_prompt as _build_system_prompt
 from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
 )
 from core.config import (
     ANTHROPIC_PRIMARY,
-    _resolve_provider,
 )
 from core.hooks import HookEvent, HookSystem
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
-from core.llm.prompts import AGENTIC_SUFFIX
 from core.llm.router import (
     maybe_traceable,
     resolve_agentic_adapter,
 )
-from core.tools.base import load_all_tool_definitions
 from core.ui.agentic_ui import OperationLogger
 from core.ui.status import TextSpinner
+
+from . import _announce, _context, _decomposition, _lifecycle, _model_switching, _response
+
+# Re-exported for backward-compat module-attribute access
+# (some tests/utilities reach into ``core.agent.loop.MAX_TOOL_RESULT_TOKENS``)
+from ._helpers import (
+    AGENTIC_TOOLS,
+    MAX_TOOL_RESULT_TOKENS,  # noqa: F401
+    TOOL_LAZY_LOAD_THRESHOLD,
+    get_agentic_tools,
+)
+from .models import AgenticResult, _context_exhausted_message, _ContextExhaustedError
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
-
-# Load base tool definitions from centralized JSON (SOT: core/tools/base.py)
-_BASE_TOOLS: list[dict[str, Any]] = load_all_tool_definitions()
-
-# Backward-compatible alias
-AGENTIC_TOOLS: list[dict[str, Any]] = _BASE_TOOLS
-
-
-def get_agentic_tools(
-    registry: ToolRegistry | None = None,
-    *,
-    mcp_tools: list[dict[str, Any]] | None = None,
-) -> list[dict[str, Any]]:
-    """Return tool definitions with unified deferred loading for native + MCP tools.
-
-    Merges base tools, registry extras, and MCP tools into a single list.
-    When the combined count exceeds the defer threshold (10), deferred loading
-    activates: core tools stay loaded, the rest are deferred via tool_search.
-
-    Args:
-        registry: Optional ToolRegistry with additional native tools.
-        mcp_tools: Optional MCP tool definitions to include.
-    """
-    tools = list(_BASE_TOOLS)
-    existing_names = {t["name"] for t in tools}
-    if registry:
-        for tool_def in registry.to_anthropic_tools():
-            if tool_def["name"] not in existing_names:
-                existing_names.add(tool_def["name"])
-                tools.append(tool_def)
-    # Merge MCP tools into the unified list (dedup across servers)
-    if mcp_tools:
-        existing_names = {t["name"] for t in tools}
-        for mcp_tool in mcp_tools:
-            name = mcp_tool.get("name")
-            if name and name not in existing_names:
-                existing_names.add(name)
-                tools.append(mcp_tool)
-    return tools
-
-
-# ---------------------------------------------------------------------------
-# Token guard — optional tool result truncation (P2-A)
-# Default: unlimited (0). Frontier consensus: compression > hard cap.
-# Server-side clear_tool_uses handles context accumulation.
-# Set GEODE_MAX_TOOL_RESULT_TOKENS to a positive value to re-enable.
-# ---------------------------------------------------------------------------
-MAX_TOOL_RESULT_TOKENS = 0  # backward-compat alias; canonical: settings.max_tool_result_tokens
-TOOL_LAZY_LOAD_THRESHOLD = 50  # Above this count, skip MCP lazy loading
-
-
-class _ContextExhaustedError(Exception):
-    """Raised when context remains critical after pruning — unrecoverable."""
-
-
-_EXHAUSTED_FALLBACK = (
-    "Context window exhausted. "
-    "This conversation has been automatically reset — "
-    "please start a new thread or send a new message to continue."
-)
-
-_EXHAUSTED_SYSTEM = (
-    "The conversation context has been exhausted and automatically reset. "
-    "Reply ONLY with a short notice (1-2 sentences) in the SAME language as the user's message. "
-    "Tell them the conversation was reset and they should start a new thread or send a new message."
-)
-
-
-def _context_exhausted_message(user_input: str) -> str:
-    """Generate context-exhausted message in the user's language via lightweight LLM call."""
-    try:
-        import anthropic
-
-        from core.config import ANTHROPIC_BUDGET, settings
-
-        if not settings.anthropic_api_key:
-            return _EXHAUSTED_FALLBACK
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        resp = client.messages.create(
-            model=ANTHROPIC_BUDGET,
-            max_tokens=150,
-            system=_EXHAUSTED_SYSTEM,
-            messages=[{"role": "user", "content": user_input[:200]}],
-        )
-        block = resp.content[0] if resp.content else None
-        text = block.text if block and hasattr(block, "text") else ""
-        return text or _EXHAUSTED_FALLBACK
-    except Exception:
-        log.debug("Exhausted message LLM call failed, using fallback", exc_info=True)
-        return _EXHAUSTED_FALLBACK
-
-
-@dataclass
-class AgenticResult:
-    """Result of an agentic loop execution."""
-
-    text: str
-    tool_calls: list[dict[str, Any]] = field(default_factory=list)
-    rounds: int = 0
-    error: str | None = None
-    # "natural" | "forced_text" | "max_rounds" | "time_budget_expired"
-    # | "llm_error" | "context_exhausted" | "cost_budget_exceeded"
-    termination_reason: str = "unknown"
-    summary: str = ""  # Tier 1 compact action summary (auto-generated)
-    reasoning_metrics: dict[str, object] | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize to dict, omitting None-valued fields."""
-        return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
 
 
 class AgenticLoop:
@@ -281,67 +176,21 @@ class AgenticLoop:
         except Exception:
             log.warning("SessionCheckpoint init failed", exc_info=True)
 
+    # ------------------------------------------------------------------
+    # Lifecycle / metrics — delegate to ``_lifecycle``
+    # ------------------------------------------------------------------
+
     def _save_checkpoint(self, user_input: str, round_idx: int = 0) -> None:
-        """Persist session checkpoint for resume (per-turn, Claude Code pattern)."""
-        if self._checkpoint is None or not self._session_id:
-            return
-        try:
-            from core.cli.session_checkpoint import SessionState
-
-            state = SessionState(
-                session_id=self._session_id,
-                round_idx=round_idx,
-                model=self.model,
-                provider=self._provider,
-                status="active",
-                messages=self.context.messages,
-                tool_log=self._tool_processor.tool_log,
-                user_input=user_input,
-            )
-            self._checkpoint.save(state)
-
-            from core.ui.agentic_ui import emit_checkpoint_saved
-
-            emit_checkpoint_saved(self._session_id, round_idx)
-        except Exception:
-            log.debug("Checkpoint save failed", exc_info=True)
+        """Delegates to :func:`_lifecycle.save_checkpoint`."""
+        return _lifecycle.save_checkpoint(self, user_input, round_idx)
 
     def mark_session_completed(self) -> None:
-        """Mark the current session as completed (called on clean REPL exit)."""
-        # Clean up announce queue to prevent orphan accumulation
-        if self._parent_session_key:
-            from core.agent.sub_agent import cleanup_announce_queue
-
-            cleanup_announce_queue(self._parent_session_key)
-        if self._checkpoint is None or not self._session_id:
-            return
-        try:
-            self._checkpoint.mark_completed(self._session_id)
-        except Exception:
-            log.debug("Checkpoint mark_completed failed", exc_info=True)
+        """Delegates to :func:`_lifecycle.mark_session_completed`."""
+        return _lifecycle.mark_session_completed(self)
 
     def _record_transcript_end(self, result: Any) -> None:
-        """Record session end + assistant message to transcript."""
-        if self._transcript is None:
-            return
-        try:
-            text = getattr(result, "text", "") or ""
-            if text:
-                self._transcript.record_assistant_message(text)
-            rounds = getattr(result, "rounds", 0)
-
-            # Read accumulated cost from TokenTracker (was missing → always $0)
-            total_cost = 0.0
-            try:
-                from core.llm.token_tracker import get_tracker
-
-                total_cost = get_tracker().accumulator.total_cost_usd
-            except Exception:
-                log.debug("Could not read session cost from TokenTracker")
-
-            self._transcript.record_session_end(rounds=rounds, total_cost=total_cost)
-        except Exception:
-            log.debug("Transcript end recording failed", exc_info=True)
+        """Delegates to :func:`_lifecycle.record_transcript_end`."""
+        return _lifecycle.record_transcript_end(self, result)
 
     def _finalize_and_return(
         self,
@@ -349,158 +198,57 @@ class AgenticLoop:
         user_input: str,
         round_idx: int,
     ) -> AgenticResult:
-        """Log result, record transcript end, save checkpoint, and return (DRY)."""
-        log.info(
-            "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
-            result.termination_reason,
-            result.rounds,
-            self.max_rounds,
-            len(result.tool_calls),
-        )
-
-        # Reasoning metrics (DTR-inspired observability)
-        metrics = self._build_reasoning_metrics(result)
-        result.reasoning_metrics = metrics.to_dict()
-
-        self._record_transcript_end(result)
-        self._save_checkpoint(user_input, round_idx=round_idx)
-        if self._hooks:
-            self._hooks.trigger(
-                HookEvent.SESSION_END,
-                {
-                    "model": self.model,
-                    "provider": self._provider,
-                    "session_id": self._session_id,
-                    "termination_reason": result.termination_reason,
-                    "rounds": result.rounds,
-                    "tool_count": len(result.tool_calls),
-                    "error": result.error,
-                },
-            )
-            self._hooks.trigger(
-                HookEvent.TURN_COMPLETE,
-                {
-                    "user_input": user_input,
-                    "text": result.text[:500] if result.text else "",
-                    "rounds": result.rounds,
-                    "tool_calls": [tc.get("name", "") for tc in result.tool_calls],
-                    "termination_reason": result.termination_reason,
-                },
-            )
-            self._hooks.trigger(
-                HookEvent.REASONING_METRICS,
-                result.reasoning_metrics,
-            )
-        return result
+        """Delegates to :func:`_lifecycle.finalize_and_return`."""
+        return _lifecycle.finalize_and_return(self, result, user_input, round_idx)
 
     def _build_reasoning_metrics(self, result: AgenticResult) -> Any:
-        """Collect reasoning efficiency metrics for this turn."""
-        from core.agent.reasoning_metrics import ReasoningMetrics
+        """Delegates to :func:`_lifecycle.build_reasoning_metrics`."""
+        return _lifecycle.build_reasoning_metrics(self, result)
 
-        try:
-            from core.llm.token_tracker import get_tracker
+    def _emit_quota_panel(self, exc: BillingError) -> None:
+        """Delegates to :func:`_lifecycle.emit_quota_panel`."""
+        return _lifecycle.emit_quota_panel(self, exc)
 
-            tracker = get_tracker()
-            acc = tracker.accumulator
-            thinking_tok = int(acc.total_thinking_tokens)
-            output_tok = int(acc.total_output_tokens)
-            cost = float(acc.total_cost_usd)
-        except Exception:
-            thinking_tok = 0
-            output_tok = 0
-            cost = 0.0
+    def _inject_credential_breadcrumb(self) -> None:
+        """Delegates to :func:`_lifecycle.inject_credential_breadcrumb`."""
+        return _lifecycle.inject_credential_breadcrumb(self)
 
-        metrics = ReasoningMetrics(
-            total_rounds=result.rounds,
-            thinking_tokens=thinking_tok,
-            output_tokens=output_tok,
-            tool_calls_total=len(result.tool_calls),
-            empty_rounds=self._total_empty_rounds,
-            cost_usd=cost,
-            overthinking_detected=self._consecutive_text_only_rounds >= 2,
-        )
-        metrics.compute_derived()
-        return metrics
+    # ------------------------------------------------------------------
+    # Tool list refresh — delegate to ``_response``
+    # ------------------------------------------------------------------
 
     def refresh_tools(self) -> int:
-        """Reload MCP tools into the tool list without reconstructing the loop.
+        """Delegates to :func:`_response.refresh_tools`."""
+        return _response.refresh_tools(self)
 
-        Called after install_mcp_server to make new tools available immediately.
-        Rebuilds the unified tool list with deferred loading applied.
-        Returns number of newly added tools.
-        """
-        if self._mcp_manager is None:
-            return 0
-        old_count = len(self._tools)
-        mcp_tool_list = self._mcp_manager.get_all_tools()
-        self._tools = get_agentic_tools(self._tool_registry, mcp_tools=mcp_tool_list)
-        new_count = len(self._tools)
-        return max(0, new_count - old_count)
+    # ------------------------------------------------------------------
+    # Model switching / escalation — delegate to ``_model_switching``
+    # ------------------------------------------------------------------
 
     def _sync_model_from_settings(self) -> bool:
-        """Check if settings.model diverged and apply the change safely.
+        """Drift sync: consult ``_drift_target_is_healthy`` before ``self.update_model``.
 
-        Called at the top of each agentic round — between LLM calls, never
-        mid-call.  This replaces the old pattern of calling update_model()
-        from inside a tool handler, which swapped the adapter while the
-        current round was still processing tool results.
-
-        v0.52.2 — refuse the drift if the target provider has no eligible
-        profile. Prior shape would silently overwrite the loop's chosen
-        model with a stale settings value pointing at an exhausted
-        provider (e.g. just-registered Codex Plus → drift back to GLM
-        without quota → 5×4=20 retry storm). Pattern from OpenClaw
-        ``evaluate_eligibility`` + ``_LAST_VERDICTS`` cached health view.
-
-        Returns True if the model was changed (caller should rebuild
-        system_prompt), False otherwise.
+        v0.52.2 contract — when ``settings.model`` diverges from
+        ``loop.model``, the helper first verifies the target provider has
+        an eligible profile (via ``_drift_target_is_healthy``) and only
+        then calls ``self.update_model``. Refusing unhealthy targets
+        prevents the v0.51-incident regression where stale settings
+        silently overwrote the loop's chosen model.
+        Delegates to :func:`_model_switching.sync_model_from_settings`.
         """
-        try:
-            from core.config import settings
-
-            if settings.model == self.model:
-                return False
-            if not self._drift_target_is_healthy(settings.model):
-                log.warning(
-                    "Model drift refused: target=%s has no eligible profile — "
-                    "keeping loop=%s. Run `/login use <plan>` to enable target.",
-                    settings.model,
-                    self.model,
-                )
-                return False
-            log.info(
-                "Model drift detected: loop=%s settings=%s — syncing",
-                self.model,
-                settings.model,
-            )
-            self.update_model(settings.model)
-            return True
-        except Exception:
-            log.debug("Model drift check failed", exc_info=True)
-        return False
+        return _model_switching.sync_model_from_settings(self)
 
     def _drift_target_is_healthy(self, target_model: str) -> bool:
-        """Return False if no profile in target_model's provider can serve a call.
+        """Health check: ``_resolve_provider`` → ``rotator.resolve`` lookup.
 
-        Uses ProfileRotator.resolve to mirror the actual selection path the
-        next LLM call would take. None ⇒ all profiles missing/cooled-down/
-        disabled. We refuse the drift rather than silently swap to a model
-        the next call cannot fulfil.
+        Resolves ``target_model`` to its provider via ``_resolve_provider``
+        and asks ``ProfileRotator.resolve`` whether any eligible profile
+        could serve the next call. The query mirrors the actual selection
+        path used by the LLM call so the answer matches what the next
+        call would pick. Delegates to
+        :func:`_model_switching.drift_target_is_healthy`.
         """
-        try:
-            target_provider = _resolve_provider(target_model)
-            from core.lifecycle.container import get_profile_rotator
-
-            rotator = get_profile_rotator()
-            if rotator is None:
-                # Rotator not initialised yet (early bootstrap) — accept drift.
-                return True
-            return rotator.resolve(target_provider) is not None
-        except Exception:
-            log.debug("Drift health check failed for %s", target_model, exc_info=True)
-            # On any introspection failure, accept the drift to avoid
-            # blocking legitimate user-initiated /model switches.
-            return True
+        return _model_switching.drift_target_is_healthy(self, target_model)
 
     def update_model(
         self,
@@ -508,176 +256,45 @@ class AgenticLoop:
         provider: str | None = None,
         reason: str = "user_switch",
     ) -> None:
-        """Update model and provider without reconstructing the loop.
-
-        Resolves a fresh adapter when the provider changes. Within the
-        same provider, the adapter is reused (it owns its own client).
-        Also syncs the SessionMeter so status lines show the correct model.
-
-        v0.52.5 — sets ``self._prompt_dirty = True`` whenever the model
-        changes so the run-loop rebuilds the system prompt before the
-        next LLM call. Prior to v0.52.5 the prompt was only rebuilt
-        when ``_sync_model_from_settings()`` returned True; escalation
-        paths (``_try_model_escalation``, ``_try_cross_provider_escalation``)
-        called ``update_model`` directly + persisted via
-        ``_persist_escalated_model``, so the *next* sync detected no
-        drift and the prompt stayed stale (model card pointed at the
-        old model). Cosmetic in most cases, schema-wrong when a fresh
-        provider needs a fresh prompt template.
-        """
-        old_model = self.model
-        new_provider = provider or _resolve_provider(model)
-        if new_provider != self._provider:
-            self._provider = new_provider
-            self._adapter = resolve_agentic_adapter(new_provider)
-        self.model = model
-        self._tool_processor._model = model
-        if old_model != model:
-            self._prompt_dirty = True
-
-        # Sync SessionMeter so "Worked for" status line shows the correct model
-        from core.ui.agentic_ui import update_session_model
-
-        update_session_model(model)
-        log.info("AgenticLoop model updated: %s (provider=%s)", model, self._provider)
-
-        # Fire MODEL_SWITCHED hook + IPC event for observability
-        if old_model != model:
-            from core.ui.agentic_ui import emit_model_switched
-
-            emit_model_switched(old_model, model, reason)
-            if self._hooks:
-                from core.hooks import HookEvent
-
-                self._hooks.trigger(
-                    HookEvent.MODEL_SWITCHED,
-                    {
-                        "from_model": old_model,
-                        "to_model": model,
-                        "reason": reason,
-                    },
-                )
-
-            # Inject model-switch breadcrumb so the new model knows the switch
-            # happened (Claude Code SDK pattern: createModelSwitchBreadcrumbs).
-            if not self.context.is_empty:
-                # v0.52.8 — strip stale "Understood. I am now <prev>" acks
-                # left by earlier model switches in the same session. Without
-                # this, the new model reads "I am gpt-5.4-mini" assistant
-                # messages and asserts the wrong identity (production
-                # incident 2026-04-27 — gpt-5.5 answered "I am gpt-5.4-mini").
-                self._purge_stale_model_switch_acks()
-                self.context.add_user_message(
-                    f"[system] Model switched: {old_model} -> {model}. "
-                    "You are now the new model. Do not reference the previous "
-                    "model's responses as current state."
-                )
-                self.context.add_assistant_message(f"Understood. I am now {model}.")
-
-        # Proactively adapt context for the new model's context window
-        self._adapt_context_for_model(model)
-
-    def _emit_quota_panel(self, exc: BillingError) -> None:
-        """v0.53.0 — emit structured quota_exhausted IPC event with Plan
-        context, falling back to legacy billing_error if context absent.
-
-        Pre-v0.53.0 BillingError surfaced as a single-line message and
-        cross-provider auto-failover masked the issue by silently
-        swapping providers (cost surprise + behavior drift). The new
-        flow stops the loop and renders a multi-line panel
-        (header + reset-time + 3 actionable options).
-        """
-        from core.ui.agentic_ui import emit_billing_error, emit_quota_exhausted
-
-        if exc.provider:
-            emit_quota_exhausted(
-                provider=exc.provider,
-                plan_id=exc.plan_id,
-                plan_display_name=exc.plan_display_name,
-                upgrade_url=exc.upgrade_url,
-                resets_in_seconds=exc.resets_in_seconds,
-                message=str(exc),
-            )
-        else:
-            emit_billing_error(str(exc))
+        """Delegates to :func:`_model_switching.update_model`."""
+        return _model_switching.update_model(self, model, provider, reason)
 
     def _purge_stale_model_switch_acks(self) -> None:
-        """Remove prior ``Understood. I am now <prev_model>.`` assistant acks.
-
-        v0.52.8 — added after a production incident where gpt-5.5 (post
-        ``/model`` switch from gpt-5.4-mini) silently inherited the prior
-        model's identity from a lingering history message. The OpenAI
-        gpt-5.5 system card explicitly says it should identify as
-        "GPT-5.5", so the bug was not model behaviour — it was our
-        breadcrumb pollution. Each model switch should leave **only one**
-        active "I am now <model>" ack at any time.
-
-        Conservative: only matches the exact ``Understood. I am now ``
-        prefix we ourselves emit; never touches user content. Mutates
-        ``self.context.messages`` in place.
-        """
-        msgs = self.context.messages
-        prefix = "Understood. I am now "
-        kept: list[Any] = []
-        for msg in msgs:
-            if msg.get("role") != "assistant":
-                kept.append(msg)
-                continue
-            content = msg.get("content", "")
-            if isinstance(content, str) and content.startswith(prefix):
-                continue
-            kept.append(msg)
-        msgs.clear()
-        msgs.extend(kept)
+        """Delegates to :func:`_model_switching.purge_stale_model_switch_acks`."""
+        return _model_switching.purge_stale_model_switch_acks(self)
 
     def _adapt_context_for_model(self, target_model: str) -> None:
-        """Proactively adapt conversation context when switching to a smaller model.
+        """Delegates to :func:`_model_switching.adapt_context_for_model`."""
+        return _model_switching.adapt_context_for_model(self, target_model)
 
-        Hybrid approach (Research 방안 E):
-        Phase 1: Summarize large tool_result blocks (most effective)
-        Phase 2: Token-aware adaptive pruning
-        Phase 3: Log warning if still over budget (minimal mode)
+    def _try_model_escalation(self) -> bool:
+        """Same-provider escalation only (v0.53.0 — no cross-provider auto-swap).
+
+        Once the current adapter's chain exhausts, the loop surfaces the
+        quota exhaustion to user via the ``BillingError`` panel; callers
+        must not reintroduce cross-provider iteration through fallbacks.
+        Delegates to :func:`_model_switching.try_model_escalation`.
         """
-        from core.orchestration.context_monitor import (
-            adaptive_prune,
-            check_context,
-            summarize_tool_results,
-        )
+        return _model_switching.try_model_escalation(self)
 
-        if self.context.is_empty:
-            return
+    @staticmethod
+    def _persist_escalated_model(model: str) -> None:
+        """Delegates to :func:`_model_switching.persist_escalated_model`."""
+        return _model_switching.persist_escalated_model(model)
 
-        metrics = check_context(self.context.messages, target_model)
-        if not metrics.is_warning:
-            return  # Under 80% — no adaptation needed
+    def _try_cross_provider_escalation(self) -> bool:
+        """Disabled in v0.53.0 — early ``return False`` (no auto-swap).
 
-        original_tokens = metrics.estimated_tokens
-        log.info(
-            "Context adaptation: %.0f%% (%d/%d tokens) for %s",
-            metrics.usage_pct,
-            metrics.estimated_tokens,
-            metrics.context_window,
-            target_model,
-        )
+        Cross-provider auto-failover was removed in v0.53.0 because it
+        masked quota exhaustion with cost surprise and behaviour drift.
+        Delegates to :func:`_model_switching.try_cross_provider_escalation`,
+        which is a no-op that returns ``False``.
+        """
+        return _model_switching.try_cross_provider_escalation(self)
 
-        # Phase 1: Summarize large tool results (preserves conversation structure)
-        summarize_tool_results(self.context.messages, metrics.context_window)
-
-        # Phase 2: Token-aware pruning if still over budget
-        metrics = check_context(self.context.messages, target_model)
-        if metrics.is_critical:
-            pruned = adaptive_prune(self.context.messages, metrics.context_window)
-            self.context.messages = pruned
-
-        # Phase 3: Final check — log result
-        metrics = check_context(self.context.messages, target_model)
-        log.info(
-            "Context adapted: %d → %d tokens (%.0f%% of %s window)",
-            original_tokens,
-            metrics.estimated_tokens,
-            metrics.usage_pct,
-            target_model,
-        )
+    # ------------------------------------------------------------------
+    # Run loop entry points
+    # ------------------------------------------------------------------
 
     def run(self, user_input: str) -> AgenticResult:
         """Sync wrapper — delegates to ``arun()`` via ``asyncio.run()``."""
@@ -1329,150 +946,62 @@ class AgenticLoop:
         )
         return self._finalize_and_return(result, user_input, round_idx)
 
-    def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:
-        """Replace context messages with the full messages list.
+    # ------------------------------------------------------------------
+    # Context window — delegate to ``_context``
+    # ------------------------------------------------------------------
 
-        During the agentic loop, intermediate tool-use messages are appended
-        only to the local ``messages`` list.  This method syncs them back to
-        ``self.context`` so the next user turn sees the full history.
-        """
-        self.context.messages = list(messages)
+    def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:
+        """Delegates to :func:`_context.sync_messages_to_context`."""
+        return _context.sync_messages_to_context(self, messages)
 
     def _notify_context_event(
         self, event_type: str, *, original_count: int, new_count: int
     ) -> None:
-        """Notify user of context compression. Delegates to ContextWindowManager."""
-        self._ctx_mgr._notify_context_event(
-            event_type, original_count=original_count, new_count=new_count
+        """Delegates to :func:`_context.notify_context_event`."""
+        return _context.notify_context_event(
+            self, event_type, original_count=original_count, new_count=new_count
         )
 
     def _maybe_prune_messages(self, messages: list[dict[str, Any]]) -> None:
-        """Prune old messages. Delegates to ContextWindowManager."""
-        self._ctx_mgr.maybe_prune_messages(messages)
+        """Delegates to :func:`_context.maybe_prune_messages`."""
+        return _context.maybe_prune_messages(self, messages)
 
     def _check_context_overflow(self, system: str, messages: list[dict[str, Any]]) -> None:
-        """Check context window usage. Delegates to ContextWindowManager."""
-        self._ctx_mgr.check_context_overflow(system, messages, self.model, self._provider)
+        """Delegates to :func:`_context.check_context_overflow`."""
+        return _context.check_context_overflow(self, system, messages)
 
     def _aggressive_context_recovery(self, system: str, messages: list[dict[str, Any]]) -> int:
-        """Last-resort context recovery. Delegates to ContextWindowManager."""
-        return self._ctx_mgr.aggressive_context_recovery(
-            system, messages, self.model, self._provider
-        )
+        """Delegates to :func:`_context.aggressive_context_recovery`."""
+        return _context.aggressive_context_recovery(self, system, messages)
 
     @staticmethod
     def _repair_messages(messages: list[dict[str, Any]]) -> None:
-        """Remove orphaned tool_result messages. Delegates to ContextWindowManager."""
-        from core.agent.context_manager import ContextWindowManager
-
-        ContextWindowManager.repair_messages(messages)
+        """Delegates to :func:`_context.repair_messages`."""
+        return _context.repair_messages(messages)
 
     def _build_system_prompt(self) -> str:
-        """Build the system prompt with skill context and agentic suffix."""
-        base = _build_system_prompt(model=self.model)
-        # Inject skill context into placeholder
-        skill_ctx = ""
-        if self._skill_registry is not None:
-            skill_ctx = self._skill_registry.get_context_block()
-        base = base.replace("{skill_context}", skill_ctx or "No skills loaded.")
-        prompt = base + "\n" + AGENTIC_SUFFIX
-        if self._system_suffix:
-            prompt += "\n\n" + self._system_suffix
-        return prompt
+        """Delegates to :func:`_context.build_system_prompt`."""
+        return _context.build_system_prompt(self)
+
+    # ------------------------------------------------------------------
+    # Goal decomposition — delegate to ``_decomposition``
+    # ------------------------------------------------------------------
 
     def _try_decompose(self, user_input: str) -> str | None:
-        """Attempt to decompose a compound user request into sub-goals.
+        """Delegates to :func:`_decomposition.try_decompose`."""
+        return _decomposition.try_decompose(self, user_input)
 
-        Returns a system prompt suffix describing the execution plan,
-        or None if the request is simple (single tool call).
-
-        Uses GoalDecomposer with ANTHROPIC_BUDGET (Haiku) for low-cost
-        decomposition. Only triggered when compound indicators are present
-        in the user input.
-        """
-        if not self._enable_goal_decomposition:
-            return None
-
-        try:
-            from core.orchestration.goal_decomposer import GoalDecomposer
-
-            if self._goal_decomposer is None:
-                self._goal_decomposer = GoalDecomposer(
-                    tool_definitions=self._tools,
-                )
-
-            result = self._goal_decomposer.decompose(
-                user_input,
-                tool_definitions=self._tools,
-            )
-
-            if result is None:
-                return None
-
-            # Build execution plan hint for the system prompt
-            lines = [
-                "## Goal Decomposition Plan",
-                "",
-                f"The user's request has been decomposed into {len(result.goals)} sub-goals.",
-                "Execute them in dependency order. For each step, call the specified tool.",
-                "If a step depends on a previous step's output, use the result from that step.",
-                "",
-            ]
-            for goal in result.goals:
-                deps = ""
-                if goal.depends_on:
-                    deps = f" (depends on: {', '.join(goal.depends_on)})"
-                args_str = ""
-                if goal.tool_args:
-                    args_str = ", ".join(f"{k}={v!r}" for k, v in goal.tool_args.items())
-                lines.append(
-                    f"- **{goal.id}**: {goal.description} → `{goal.tool_name}({args_str})`{deps}"
-                )
-
-            if result.reasoning:
-                lines.append("")
-                lines.append(f"Reasoning: {result.reasoning}")
-
-            plan_text = "\n".join(lines)
-
-            # Emit structured event for thin client
-            from core.ui.agentic_ui import emit_goal_decomposition
-
-            emit_goal_decomposition([g.description for g in result.goals])
-            log.info(
-                "GoalDecomposer: injecting %d-step plan into system prompt",
-                len(result.goals),
-            )
-            return plan_text
-
-        except Exception:
-            log.debug("Goal decomposition skipped", exc_info=True)
-            return None
+    # ------------------------------------------------------------------
+    # Sub-agent announce queue — delegate to ``_announce``
+    # ------------------------------------------------------------------
 
     def _check_announced_results(self, messages: list[dict[str, Any]]) -> int:
-        """Poll for sub-agent announced results and inject into conversation.
+        """Delegates to :func:`_announce.check_announced_results`."""
+        return _announce.check_announced_results(self, messages)
 
-        Drains the announce queue for this parent session and adds each
-        completed sub-agent's summary as a system event message.
-
-        OpenClaw Spawn+Announce pattern: parent polls at each round start.
-        """
-        if not self._parent_session_key:
-            return 0
-        announced: list[SubAgentResult] = drain_announced_results(self._parent_session_key)
-        if not announced:
-            return 0
-        for result in announced:
-            status_label = "completed" if result.success else "failed"
-            content = (
-                f"Sub-agent {status_label}: task_id={result.task_id}, summary={result.summary}"
-            )
-            if result.error_message:
-                content += f", error={result.error_message}"
-            self.context.add_system_event("subagent_completed", content)
-            messages.append({"role": "user", "content": f"[system:subagent_completed] {content}"})
-            log.debug("Injected announce for task_id=%s", result.task_id)
-        return len(announced)
+    # ------------------------------------------------------------------
+    # LLM call (stays in this file — tightly coupled to ``arun`` body)
+    # ------------------------------------------------------------------
 
     @maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     async def _call_llm(
@@ -1568,187 +1097,40 @@ class AgenticLoop:
 
         return response
 
+    # ------------------------------------------------------------------
+    # Response handling — delegate to ``_response``
+    # ------------------------------------------------------------------
+
     def _extract_text(self, response: Any) -> str:
-        """Extract text content from response blocks."""
-        parts: list[str] = []
-        for block in response.content:
-            if block.type == "text":
-                parts.append(block.text)
-        return "\n".join(parts).strip()
+        """Delegates to :func:`_response.extract_text`."""
+        return _response.extract_text(self, response)
 
     def _serialize_content(self, content: list[Any]) -> list[dict[str, Any]]:
-        """Serialize content blocks to plain dicts for message history."""
-        serialized: list[dict[str, Any]] = []
-        for block in content:
-            if block.type == "text":
-                serialized.append({"type": "text", "text": block.text})
-            elif block.type == "tool_use":
-                serialized.append(
-                    {
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input,
-                    }
-                )
-        return serialized
+        """Delegates to :func:`_response.serialize_content`."""
+        return _response.serialize_content(self, content)
 
     def _track_usage(self, response: Any) -> None:
-        """Track token usage for cost monitoring."""
-        if not response.usage:
-            return
-        try:
-            from core.llm.token_tracker import get_tracker
-            from core.ui.agentic_ui import render_tokens
-
-            in_tok = response.usage.input_tokens
-            out_tok = response.usage.output_tokens
-            think_tok = getattr(response.usage, "thinking_tokens", 0) or 0
-            tracker = get_tracker()
-            usage = tracker.record(
-                self.model,
-                in_tok,
-                out_tok,
-                thinking_tokens=think_tok,
-            )
-            if not self._quiet:
-                render_tokens(self.model, in_tok, out_tok, cost_usd=usage.cost_usd)
-            log.info(
-                "LLM call: model=%s in=%d out=%d think=%d cost=$%.4f",
-                self.model,
-                in_tok,
-                out_tok,
-                think_tok,
-                usage.cost_usd,
-            )
-
-            # Hook: COST_WARNING / COST_LIMIT_EXCEEDED
-            if self._hooks:
-                from core.config import settings
-
-                cost_limit = getattr(settings, "cost_limit_usd", 0.0)
-                if cost_limit > 0:
-                    total_cost = tracker.accumulator.total_cost_usd
-                    pct = total_cost / cost_limit
-                    if pct >= 1.0:
-                        self._hooks.trigger(
-                            HookEvent.COST_LIMIT_EXCEEDED,
-                            {"total_cost_usd": total_cost, "limit_usd": cost_limit},
-                        )
-                    elif pct >= 0.8:
-                        self._hooks.trigger(
-                            HookEvent.COST_WARNING,
-                            {"total_cost_usd": total_cost, "limit_usd": cost_limit, "pct": pct},
-                        )
-        except Exception:
-            log.debug("Failed to track usage", exc_info=True)
-
-    # ---------------------------------------------------------------------------
-    # Feature 3/4: Model escalation on consecutive LLM failures
-    # ---------------------------------------------------------------------------
-
-    def _try_model_escalation(self) -> bool:
-        """Attempt to escalate to a higher/fallback model after consecutive failures.
-
-        First tries the next model in the current adapter's fallback chain.
-        If exhausted, tries cross-provider escalation via CROSS_PROVIDER_FALLBACK.
-        Returns True if escalation succeeded, False if at end of all chains.
-
-        Also syncs ``settings.model`` so that ``_sync_model_from_settings()``
-        does not revert the escalation on the next round.
-        """
-        current = self.model
-        chain = self._adapter.fallback_chain
-
-        # Find current model in chain, try next
-        if current in chain:
-            idx = chain.index(current)
-            if idx + 1 < len(chain):
-                next_model = chain[idx + 1]
-                log.warning(
-                    "Model escalation: %s -> %s (same provider: %s)",
-                    current,
-                    next_model,
-                    self._provider,
-                )
-                self.update_model(next_model, self._provider, reason="failure_escalation")
-                self._persist_escalated_model(next_model)
-                return True
-
-        # v0.53.0 — Cross-provider escalation REMOVED. When the current
-        # provider's chain is exhausted, surface to user via
-        # quota_exhausted IPC event (handled by BillingError caller path).
-        # No silent provider swap — the user picks the next provider via
-        # /model. Cross-provider info hint (B5 breadcrumb) still surfaces
-        # available alternatives in the next round's LLM context.
-        from_provider = self._provider
-        log.warning(
-            "Provider %s chain exhausted at model=%s — surfacing to user "
-            "(cross-provider auto-swap removed in v0.53.0)",
-            from_provider,
-            current,
-        )
-        return False
-
-    @staticmethod
-    def _persist_escalated_model(model: str) -> None:
-        """Sync escalated model to settings so _sync_model_from_settings() won't revert."""
-        try:
-            from core.config import settings
-
-            settings.model = model
-        except Exception:
-            log.debug("Failed to persist escalated model to settings", exc_info=True)
-
-    def _try_cross_provider_escalation(self) -> bool:
-        """Disabled in v0.53.0 — cross-provider auto-failover removed.
-
-        Per the v0.53.0 governance redesign: silent provider switch on
-        auth/quota error creates cost surprise + model behavior drift.
-        Quota exhaustion now emits a ``quota_exhausted`` IPC event so
-        the user can decide whether to switch providers, refresh the
-        token, or wait for quota reset. The cross-provider breadcrumb
-        (B5, v0.52.3) still surfaces *available* alternatives to the
-        LLM as information — but the system will not auto-swap.
-        """
-        log.info(
-            "Cross-provider escalation disabled (v0.53.0) — surfacing quota "
-            "exhaustion to user instead of silent swap"
-        )
-        return False
-
-    def _inject_credential_breadcrumb(self) -> None:
-        """Append an LLM-readable credential note after auth failure (v0.51.0).
-
-        The next agentic round sees a structured rejection breakdown so
-        the model can self-recover (call ``manage_login``) or surface a
-        meaningful message to the user instead of a generic 'LLM call
-        failed' line.
-        """
-        try:
-            from core.auth.credential_breadcrumb import format as fmt_breadcrumb
-            from core.auth.rotation import get_last_eligibility_verdicts
-
-            verdicts = get_last_eligibility_verdicts(self._provider)
-            note = fmt_breadcrumb(
-                verdicts,
-                attempted_provider=self._provider,
-                attempted_model=self.model,
-            )
-            if note and not self.context.is_empty:
-                self.context.add_user_message(note)
-        except Exception:
-            log.debug("credential breadcrumb injection failed", exc_info=True)
-
-    # ---------------------------------------------------------------------------
-    # Feature 5: Backpressure on tool failures
-    # Feature 6: Convergence detection (stuck loop)
-    # ---------------------------------------------------------------------------
+        """Delegates to :func:`_response.track_usage`."""
+        return _response.track_usage(self, response)
 
     def _update_tool_error_tracking(self, tool_results: list[dict[str, Any]]) -> None:
-        """Update tool error tracking. Delegates to ConvergenceDetector."""
-        self._convergence.update_tool_error_tracking(tool_results, self._tool_processor.tool_log)
+        """Delegates to :func:`_response.update_tool_error_tracking`."""
+        return _response.update_tool_error_tracking(self, tool_results)
 
     def _check_convergence_break(self) -> bool:
-        """Check for stuck loop. Delegates to ConvergenceDetector."""
-        return self._convergence.check_convergence_break()
+        """Delegates to :func:`_response.check_convergence_break`."""
+        return _response.check_convergence_break(self)
+
+
+# ---------------------------------------------------------------------------
+# Re-exports for ``from core.agent.loop.loop import …`` backward compat
+# ---------------------------------------------------------------------------
+
+__all__ = [
+    "AGENTIC_TOOLS",
+    "AgenticLoop",
+    "AgenticResult",
+    "_ContextExhaustedError",
+    "_context_exhausted_message",
+    "get_agentic_tools",
+]

@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.74.0"
+version = "0.75.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -97,9 +97,11 @@ forbidden_modules = ["core.cli", "core.server"]
 # transcript, redaction, ip_names, bash_tool, commands) 를 import. v0.53 에서
 # server/runtime_state/ 또는 utils/ 로 이동 예정.
 ignore_imports = [
-    "core.agent.loop -> core.cli.commands",
-    "core.agent.loop -> core.cli.session_checkpoint",
-    "core.agent.loop -> core.cli.transcript",
+    # Tier 3 #7 — loop.py was split into core/agent/loop/ package
+    "core.agent.loop.loop -> core.cli.commands",
+    "core.agent.loop.loop -> core.cli.session_checkpoint",
+    "core.agent.loop.loop -> core.cli.transcript",
+    "core.agent.loop._lifecycle -> core.cli.session_checkpoint",
     "core.agent.approval -> core.cli",
     "core.agent.tool_executor.executor -> core.cli.bash_tool",
     "core.agent.tool_executor.executor -> core.cli.redaction",
@@ -123,8 +125,11 @@ ignore_imports = [
     "core.lifecycle.bootstrap -> core.cli.startup",
     "core.memory.context -> core.cli.project_detect",
     "core.agent.worker -> core.cli.tool_handlers",
-    "core.agent.loop -> core.cli.session_checkpoint",
-    "core.agent.loop -> core.cli.transcript",
+    # Tier 3 #7 — loop.py was split into core/agent/loop/ package
+    "core.agent.loop.loop -> core.cli.session_checkpoint",
+    "core.agent.loop.loop -> core.cli.transcript",
+    "core.agent.loop.loop -> core.cli.commands",
+    "core.agent.loop._lifecycle -> core.cli.session_checkpoint",
     "core.agent.tool_executor.executor -> core.cli.redaction",
     "core.agent.tool_executor.executor -> core.cli.bash_tool",
     "core.agent.approval -> core.cli",
@@ -132,7 +137,6 @@ ignore_imports = [
     "core.server.ipc_server.poller -> core.cli.session_state",
     "core.server.ipc_server.poller -> core.cli.startup",
     "core.server.ipc_server.poller -> core.cli.session_checkpoint",
-    "core.agent.loop -> core.cli.commands",
 ]
 
 [[tool.importlinter.contracts]]
