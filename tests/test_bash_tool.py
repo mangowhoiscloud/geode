@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from core.cli.bash_tool import BASH_TOOL_DEFINITION, BashResult, BashTool
+from core.agent.bash_tool import BASH_TOOL_DEFINITION, BashResult, BashTool
 
 
 class TestBashToolValidation:
@@ -137,13 +137,13 @@ class TestBashResourceLimits:
 
     def test_set_resource_limits_importable(self) -> None:
         """_set_resource_limits should be importable as a callable."""
-        from core.cli.bash_tool import _set_resource_limits
+        from core.agent.bash_tool import _set_resource_limits
 
         assert callable(_set_resource_limits)
 
     def test_resource_limit_constants(self) -> None:
         """Verify resource limit constants are reasonable."""
-        from core.cli.bash_tool import (
+        from core.agent.bash_tool import (
             _BASH_CPU_LIMIT_S,
             _BASH_FSIZE_LIMIT_B,
             _BASH_NPROC_LIMIT,

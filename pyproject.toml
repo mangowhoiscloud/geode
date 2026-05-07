@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.78.0"
+version = "0.79.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -103,7 +103,6 @@ ignore_imports = [
     "core.agent.loop.loop -> core.cli.transcript",
     "core.agent.loop._lifecycle -> core.cli.session_checkpoint",
     "core.agent.approval -> core.cli",
-    "core.agent.tool_executor.executor -> core.cli.bash_tool",
     "core.agent.worker -> core.cli.tool_handlers",
 ]
 
@@ -129,7 +128,6 @@ ignore_imports = [
     "core.agent.loop.loop -> core.cli.transcript",
     "core.agent.loop.loop -> core.cli.commands",
     "core.agent.loop._lifecycle -> core.cli.session_checkpoint",
-    "core.agent.tool_executor.executor -> core.cli.bash_tool",
     "core.agent.approval -> core.cli",
     "core.server.ipc_server.poller -> core.cli",
     "core.server.ipc_server.poller -> core.cli.session_state",
@@ -193,7 +191,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S105", "S106", "S310", "B017", "E501", "PLR0915", "PLR0912", "PLR0913"]
-"core/cli/bash_tool.py" = ["S602"]  # shell=True is intentional for agentic bash tool
+"core/agent/bash_tool.py" = ["S602"]  # shell=True is intentional for agentic bash tool
 
 # Complexity ratchets — thresholds set to current worst offender (day-1 failures = 0).
 # Ratchet down per release as step 4-8 of the domain-free-core refactor extracts god methods.
