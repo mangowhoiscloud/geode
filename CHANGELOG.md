@@ -28,6 +28,29 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.78.0] — 2026-05-08
+
+> **Dependency cleanup A1 — `core/cli/redaction.py` → `core/utils/redaction.py`.**
+> First of 5 PRs in the new cycle that resolves the 33-entry `import-linter`
+> `ignore_imports` backlog accumulated since v0.52. This single 34-LOC API-key
+> redaction module had been imported from inside `core/agent/tool_executor/`
+> and `core/cli/bash_tool.py` — a cross-layer reference (agent layer reaching
+> into CLI utilities) that v0.52's pyproject comment had marked as "v0.53로
+> 이동 예정" but stayed deferred for 25 minor versions. Move it to its proper
+> home `core/utils/` (single-responsibility utility, no CLI dependencies).
+> Three caller files updated (`core/agent/tool_executor/executor.py`,
+> `core/cli/bash_tool.py`, `tests/test_redaction.py`); 2 `ignore_imports`
+> entries removed from `pyproject.toml` (`core.agent.tool_executor.executor
+> -> core.cli.redaction` in both the `[Agent stays pure]` and `[Server may
+> host agent but never CLI]` contracts). E2E `geode analyze "Cowboy Bebop"
+> --dry-run` unchanged at A (68.4); full pytest 4344 passed (parity with
+> v0.77.0). 33 → 31 ignore_imports remaining. Five-PR plan: A1 redaction
+> (this), A2 bash_tool, A3 project_detect, A4 session_checkpoint+transcript
+> → core/runtime_state/, A5 startup → core/lifecycle/.
+
+### Architecture
+- **`core/cli/redaction.py` (34 LOC) → `core/utils/redaction.py` (34 LOC).** `redact_secrets()` strips API key patterns (Anthropic `sk-ant-*`, OpenAI `sk-proj-*`, ZhipuAI `hex.token`, GitHub PAT/OAuth, Slack tokens) from text before LLM context injection. The module has no CLI dependencies — it's a pure regex-based utility — and was misplaced in `core/cli/` purely because the original consumer (BashTool) lived there. Moving to `core/utils/` (alongside `atomic_io.py`, `language.py`) puts it in the correct architectural layer. Caller updates: `core/agent/tool_executor/executor.py:407` (`from core.utils.redaction import redact_secrets`), `core/cli/bash_tool.py:145` (same — bash_tool itself will move in A2), `tests/test_redaction.py:5` (same). `pyproject.toml` `[tool.importlinter.contracts]`: 2 entries removed (`core.agent.tool_executor.executor -> core.cli.redaction` from both the `Agent stays pure` and `Server may host agent but never CLI` contracts). 33 → 31 ignore_imports remaining. (`core/utils/redaction.py` *new*, `core/cli/redaction.py` *deleted*, `core/agent/tool_executor/executor.py`, `core/cli/bash_tool.py`, `tests/test_redaction.py`, `pyproject.toml`)
+
 ## [0.77.0] — 2026-05-08
 
 > **Codebase audit Tier 3 — God Object split #완성: `core/cli/__init__.py`.

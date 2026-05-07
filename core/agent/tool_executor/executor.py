@@ -404,7 +404,7 @@ class ToolExecutor:
             result: dict[str, Any] = self._mcp_manager.call_tool(server, tool_name, tool_input)
 
         # Sandbox hardening: redact secrets from MCP tool results
-        from core.cli.redaction import redact_secrets
+        from core.utils.redaction import redact_secrets
 
         for key in ("stdout", "stderr", "output", "content", "text", "result"):
             if key in result and isinstance(result[key], str):

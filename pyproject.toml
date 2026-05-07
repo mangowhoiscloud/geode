@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.77.0"
+version = "0.78.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -104,7 +104,6 @@ ignore_imports = [
     "core.agent.loop._lifecycle -> core.cli.session_checkpoint",
     "core.agent.approval -> core.cli",
     "core.agent.tool_executor.executor -> core.cli.bash_tool",
-    "core.agent.tool_executor.executor -> core.cli.redaction",
     "core.agent.worker -> core.cli.tool_handlers",
 ]
 
@@ -130,7 +129,6 @@ ignore_imports = [
     "core.agent.loop.loop -> core.cli.transcript",
     "core.agent.loop.loop -> core.cli.commands",
     "core.agent.loop._lifecycle -> core.cli.session_checkpoint",
-    "core.agent.tool_executor.executor -> core.cli.redaction",
     "core.agent.tool_executor.executor -> core.cli.bash_tool",
     "core.agent.approval -> core.cli",
     "core.server.ipc_server.poller -> core.cli",

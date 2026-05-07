@@ -142,7 +142,7 @@ class BashTool:
         Applies secret redaction to stdout/stderr before returning
         to prevent API keys from leaking into LLM context.
         """
-        from core.cli.redaction import redact_secrets
+        from core.utils.redaction import redact_secrets
 
         if result.blocked:
             return {"error": result.error, "blocked": True}
