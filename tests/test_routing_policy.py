@@ -36,6 +36,7 @@ from core.auth.plan_registry import resolve_routing
 from core.auth.plans import PLAN_KIND_PRIORITY, Plan, PlanKind
 from core.auth.profiles import AuthProfile, CredentialType
 from core.llm.registry import equivalent_providers
+from core.llm.router import calls as _calls_mod
 
 # ---------------------------------------------------------------------------
 # Contract 0 — equivalence map + kind priority sanity
@@ -214,20 +215,34 @@ def test_router_route_provider_helper_exists() -> None:
     in every call_llm* entry. Pre-v0.52.4 the call sites used the static
     ``_resolve_provider`` directly, which bypassed PlanRegistry entirely.
     """
-    src = inspect.getsource(_router_mod)
-    assert "def _route_provider(" in src, (
+    import importlib
+    import pkgutil
+
+    # _route_provider is defined in the leaf sub-module ``_route.py``.
+    from core.llm.router.calls import _route as _route_mod
+
+    route_src = inspect.getsource(_route_mod)
+    assert "def _route_provider(" in route_src, (
         "_route_provider helper missing — without it the policy is invisible to actual LLM calls."
     )
+
+    # Each call_llm* entry lives in its own leaf sub-module. Aggregate their
+    # sources so the call-site count stays meaningful after the package split.
+    aggregated_src = ""
+    for mod_info in pkgutil.iter_modules(_calls_mod.__path__, prefix="core.llm.router.calls."):
+        mod = importlib.import_module(mod_info.name)
+        aggregated_src += inspect.getsource(mod)
+
     # All 4 call sites must use the new helper.
-    assert src.count("_route_provider(target_model)") >= 4, (
+    assert aggregated_src.count("_route_provider(target_model)") >= 4, (
         f"expected ≥4 call sites using _route_provider; got "
-        f"{src.count('_route_provider(target_model)')}. "
+        f"{aggregated_src.count('_route_provider(target_model)')}. "
         "Some call_llm* path still uses the static _resolve_provider."
     )
     # And the static helper must NOT be called directly with target_model
     # in a router function body (the only allowed direct uses are inside
     # _route_provider's own fallback path).
-    static_calls = src.count("_resolve_provider(target_model)")
+    static_calls = aggregated_src.count("_resolve_provider(target_model)")
     assert static_calls == 0, (
         f"{static_calls} call sites still use _resolve_provider(target_model) "
         f"directly — should go through _route_provider for plan-awareness"
@@ -241,7 +256,7 @@ def test_route_provider_falls_back_when_resolve_routing_returns_none(
     must fall back to the static ``_resolve_provider`` so legacy env-var
     users (no /login add) still route correctly."""
     monkeypatch.setattr("core.auth.plan_registry.resolve_routing", lambda _model: None)
-    monkeypatch.setattr("core.llm.router._resolve_provider", lambda _m: "anthropic")
+    monkeypatch.setattr("core.llm.router.calls._route._resolve_provider", lambda _m: "anthropic")
     assert _router_mod._route_provider("claude-opus-4-7") == "anthropic"
 
 
