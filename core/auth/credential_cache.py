@@ -7,6 +7,7 @@ This module extracts that shared infrastructure.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -14,6 +15,20 @@ from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+
+def read_json_credentials_file(relative_path: str) -> dict[str, Any] | None:
+    """Read & json-parse a credentials file under ``$HOME/<relative_path>``.
+
+    Returns the parsed dict, or ``None`` if the file is missing, unreadable,
+    invalid JSON, or not a JSON object. Callers extract the field they need.
+    """
+    try:
+        raw = (Path.home() / relative_path).read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
 
 _DEFAULT_TTL_S = 900  # 15 min (OpenClaw EXTERNAL_CLI_SYNC_TTL_MS)
 

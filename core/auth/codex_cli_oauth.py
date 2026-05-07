@@ -15,10 +15,13 @@ from __future__ import annotations
 import json
 import logging
 import time
-from pathlib import Path
 from typing import Any, TypedDict
 
-from core.auth.credential_cache import CredentialCache, refresh_managed_token
+from core.auth.credential_cache import (
+    CredentialCache,
+    read_json_credentials_file,
+    refresh_managed_token,
+)
 
 log = logging.getLogger(__name__)
 
@@ -62,15 +65,8 @@ def _decode_jwt_expiry(token: str) -> float | None:
 
 def _read_from_file() -> dict[str, Any] | None:
     """Read tokens from ~/.codex/auth.json."""
-    auth_path = Path.home() / _CODEX_AUTH_PATH
-    try:
-        raw = auth_path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-        if isinstance(data, dict) and "tokens" in data:
-            return data
-    except (OSError, json.JSONDecodeError):
-        pass
-    return None
+    data = read_json_credentials_file(_CODEX_AUTH_PATH)
+    return data if data is not None and "tokens" in data else None
 
 
 def _parse_codex_credentials(data: dict[str, Any]) -> CodexCliCredentials | None:

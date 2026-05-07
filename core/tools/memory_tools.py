@@ -16,6 +16,7 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
+from core.hooks.utils import fire_hook
 from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
 from core.memory.project import ProjectMemory
@@ -61,16 +62,8 @@ def set_memory_hooks(hooks: Any) -> None:
 
 
 def _fire_hook(event_name: str, data: dict[str, Any]) -> None:
-    """Fire a hook event if HookSystem is available. No-op otherwise."""
-    hooks = _hooks_ctx.get()
-    if hooks is None:
-        return
-    try:
-        from core.hooks import HookEvent
-
-        hooks.trigger(HookEvent(event_name), data)
-    except Exception:
-        log.debug("Hook fire failed for %s", event_name, exc_info=True)
+    """Fire a hook event using the ContextVar-bound HookSystem (or no-op)."""
+    fire_hook(_hooks_ctx.get(), event_name, data)
 
 
 def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePort:
