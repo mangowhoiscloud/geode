@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.76.0"
+version = "0.77.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -80,10 +80,10 @@ forbidden_modules = ["core.server", "core.channels"]
 # daemon entry 가 cli/ 의 일부로 남아있음. v0.53 에서 server/entrypoint.py
 # 로 분리하면 이들 ignore 제거.
 ignore_imports = [
-    "core.cli -> core.server.supervised.services",
-    "core.cli -> core.server.supervised.webhook_handler",
-    "core.cli -> core.server.ipc_server.poller",
-    "core.cli -> core.channels.binding",
+    "core.cli.typer_serve -> core.server.supervised.services",
+    "core.cli.typer_serve -> core.server.supervised.webhook_handler",
+    "core.cli.typer_serve -> core.server.ipc_server.poller",
+    "core.cli.typer_serve -> core.channels.binding",
     "core.cli.scheduler_drain -> core.server.supervised.services",
     "core.lifecycle.adapters -> core.channels.binding",
 ]
