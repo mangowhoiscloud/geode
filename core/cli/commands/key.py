@@ -175,8 +175,8 @@ def _persist_auth_state() -> None:
 def _check_provider_key(selected: ModelProfile) -> None:
     """Warn if the provider's API key is not set for the selected model."""
     from core.cli import commands as _pkg
-    from core.cli.startup import _is_placeholder
     from core.config import settings
+    from core.lifecycle.startup import _is_placeholder
 
     provider_key_map: dict[str, tuple[str, str]] = {
         "Anthropic": (settings.anthropic_api_key, "ANTHROPIC_API_KEY"),

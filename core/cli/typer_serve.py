@@ -15,7 +15,7 @@ from typing import Any
 import typer
 
 from core.cli.session_state import _scheduler_service_ctx, _set_readiness
-from core.cli.startup import check_readiness
+from core.lifecycle.startup import check_readiness
 from core.ui.console import console
 
 log = logging.getLogger(__name__)

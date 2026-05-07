@@ -19,7 +19,8 @@ def _build_system_handlers(
     """Build system management tool handlers."""
     from core.cli import _set_readiness
     from core.cli.commands import cmd_auth, cmd_key, cmd_model, show_help
-    from core.cli.startup import check_readiness, render_readiness
+    from core.cli.onboarding import render_readiness
+    from core.lifecycle.startup import check_readiness
 
     def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
         show_help()

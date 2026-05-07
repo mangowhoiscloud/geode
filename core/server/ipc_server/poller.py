@@ -615,7 +615,7 @@ class CLIPoller:
         try:
             from core.cli import _set_readiness
             from core.cli.session_state import _scheduler_service_ctx
-            from core.cli.startup import check_readiness
+            from core.lifecycle.startup import check_readiness
 
             _set_readiness(check_readiness())
 

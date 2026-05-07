@@ -28,6 +28,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.86.0] — 2026-05-08
+
+> **A5b — `cli/startup.py` 책임 분리: `lifecycle/startup.py` + `cli/onboarding.py`.**
+> v0.82.0 OAuth 점검에서 발견했으나 단일 mv로 풀리지 않아 폐기됐던 결함의
+> 진짜 해결. v0.85.0 (A5a)이 `cli/_helpers`의 IO/key utility를 `utils`로
+> 추출해 의존성 blocker를 제거한 뒤, 이번 PR에서 `cli/startup.py` (520L)
+> 자체를 책임별로 두 모듈로 갈라냄. lifecycle 부분 (data inspection +
+> readiness data classes + file IO) 은 `core/lifecycle/startup.py`
+> (287L)으로, interactive 부분 (console.input wizard, slash command
+> dispatch, console.print display) 은 `core/cli/onboarding.py` (272L)
+> 로 분리. 함수 본문 byte-identical, 호출자 15+ 사이트가 책임에 따라
+> import를 분기. **2개 ignore_imports 영구 제거**:
+> `core.lifecycle.bootstrap → core.cli.startup` (이젠 lifecycle →
+> lifecycle internal), `core.server.ipc_server.poller → core.cli.startup`
+> (이젠 server → lifecycle, contract에서 허용). 22 → 19 (-2 from this
+> PR + 1 무관). E2E `geode analyze "Cowboy Bebop" --dry-run` unchanged
+> at A (68.4); pytest 4345 passed.
+
+### Changed
+- **`core/cli/startup.py` (520L) split into `core/lifecycle/startup.py` (287L) + `core/cli/onboarding.py` (272L).** Function placement by responsibility (interactive vs data):
+  - **Lifecycle (9 functions + 2 dataclasses)**: `auto_generate_env`, `_is_placeholder`, `_has_any_llm_key`, `detect_subscription_oauth`, `Capability`, `ReadinessReport`, `check_readiness`, `setup_project_memory`, `setup_user_profile` — all pure data inspection / file IO with no `console.input` calls.
+  - **CLI/onboarding (6 functions)**: `env_setup_wizard`, `_wizard_subscription_path`, `_wizard_api_key_path`, `detect_api_key`, `key_registration_gate`, `render_readiness` — all `console.input` wizards or `console.print` display, plus `key_registration_gate`'s `cmd_login` / `cmd_key` slash dispatch.
+  - The `_KEY_PATTERNS` constant lives with `detect_api_key` in `cli/onboarding.py` since that function is its only consumer.
+  - 15+ caller sites updated. Single-name imports route to one module; multi-name imports (e.g. `from core.cli.startup import check_readiness, render_readiness` in `dispatcher.py`, `tool_handlers/system.py`) split into two `from … import …` lines, one per layer.
+  - Test patches (especially `tests/test_startup.py:80+`, `tests/test_agentic_loop.py:357-373`, `tests/test_e2e_live_llm.py:48,536-538`) re-point `core.cli.startup.{settings,console,detect_subscription_oauth,log,_upsert_env}` to `core.cli.onboarding.*` (wizard module) or `core.lifecycle.startup.*` (data path) per the function whose state they patch.
+- **`pyproject.toml` `[tool.importlinter.contracts]` — 2 entries removed.** `core.lifecycle.bootstrap → core.cli.startup` from the `Server may host agent but never CLI` contract: now `lifecycle.bootstrap → lifecycle.startup`, internal lifecycle import. `core.server.ipc_server.poller → core.cli.startup` from the same contract: now `server.poller → lifecycle.startup`, allowed because that contract only forbids `core.cli`. ignore_imports total drops from 22 → 19. (`core/cli/startup.py` *deleted*, `core/lifecycle/startup.py` *new*, `core/cli/onboarding.py` *new*, 11 caller files, 5 test files, `pyproject.toml`)
+
 ## [0.85.0] — 2026-05-08
 
 > **A5a — `cli/_helpers` IO/key utilities → `core/utils/env_io.py`.** First

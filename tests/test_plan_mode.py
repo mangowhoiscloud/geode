@@ -354,7 +354,7 @@ class TestHandleCreatePlanAutoExecute:
     def _setup_readiness(self) -> None:
         """Ensure readiness is set so handler builders work."""
         from core.cli import _set_readiness
-        from core.cli.startup import ReadinessReport
+        from core.lifecycle.startup import ReadinessReport
 
         readiness = ReadinessReport()
         readiness.force_dry_run = True
@@ -480,7 +480,7 @@ class TestPlanCacheInvariants:
     @pytest.fixture(autouse=True)
     def _setup_readiness(self, tmp_path: Any, monkeypatch: Any) -> None:
         from core.cli import _set_readiness
-        from core.cli.startup import ReadinessReport
+        from core.lifecycle.startup import ReadinessReport
 
         readiness = ReadinessReport()
         readiness.force_dry_run = True
