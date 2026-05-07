@@ -28,6 +28,36 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.77.0] — 2026-05-08
+
+> **Codebase audit Tier 3 — God Object split #완성: `core/cli/__init__.py`.
+> 9-of-9 Tier 3 splits complete.** The 1,889-LOC CLI Typer entrypoint
+> (the `geode.cli:app` module that registers all 12 Typer commands +
+> the `_thin_interactive_loop` REPL + the dispatcher) is now a slim
+> 395-LOC orchestration layer with the helpers extracted to 8 sibling
+> modules within `core/cli/`. Unlike previous splits which created
+> sub-packages, this is a package-level `__init__.py`, so the helpers
+> moved to **sibling files** (`core/cli/welcome.py`,
+> `core/cli/dispatcher.py`, `core/cli/prompt_session.py`,
+> `core/cli/interactive_loop.py`, `core/cli/typer_commands.py`,
+> `core/cli/typer_serve.py`, `core/cli/typer_init.py`,
+> `core/cli/search_render.py`) — preserving the `from core.cli import X`
+> import surface that 90 external sites depend on. Largest single file
+> post-split is `typer_commands.py` at 336 LOC — **a 79% reduction
+> from the 1,889-LOC original**. The Typer `app` and the 3 functions
+> that source-introspection tests pin (`_show_commentary`,
+> `_handle_memory_action`, `_thin_interactive_loop`) stay in
+> `__init__.py` to preserve `tests/test_commentary.py`'s
+> `@patch("core.cli.console")` and `tests/test_signal_reload.py`'s
+> `inspect.getsource(core.cli)` invariants. E2E `geode analyze
+> "Cowboy Bebop" --dry-run` unchanged at A (68.4); full pytest 4344
+> passed (parity with v0.76.0). **Tier 3 complete: 9 splits, 0
+> regressions, 0 E2E drift, average -60% reduction across all 9
+> God Objects.**
+
+### Architecture
+- **`core/cli/__init__.py` (1,889 LOC) → `core/cli/__init__.py` (395 LOC) + 8 sibling modules in `core/cli/` (1,669 LOC).** Mechanical split with sibling-module pattern (instead of sub-package — `__init__.py` IS the package). Sibling sizes: `welcome.py` 122 (`_render_welcome_brand`, `_render_readiness_compact`, `_suppress_noisy_warnings`, `_welcome_screen`), `search_render.py` 32 (`_render_search_results`), `dispatcher.py` 292 (`_handle_command` 254-LOC dispatcher + minor helpers), `prompt_session.py` 192 (`_build_prompt_session`, `_force_select_event_loop`, `_get_prompt_session`, `_drain_stdin`, `_read_multiline_input`, `_restore_terminal`, `_sigint_handler`), `interactive_loop.py` 112 (`_render_ipc_response`, `_drain_scheduler_queue`), `typer_commands.py` 336 (the 9 small Typer commands: `analyze`, `report`, `search`, `version`, `about`, `setup`, `doctor`, `list_ips`, `batch`, `history`), `typer_init.py` 249 (the `init` Typer command — 213 LOC body), `typer_serve.py` 334 (the `serve` Typer command + `_build_runtime_for_serve` + `_ensure_gitignore_entry`). Thin `__init__.py` 395 LOC keeps: imports + `_hooks_ctx` module-level state + `_fire_hook` 1-line delegator + Typer `app` registration via `app.command()(func)` calls + the 3 source-introspection-pinned functions (`_show_commentary` 14L, `_handle_memory_action` 6L, `_thin_interactive_loop` 183L) + re-exports of all helpers for backward compat. Preserves `from core.cli import X` for 90 external sites by re-exporting every helper via `from core.cli.X import Y as Y` aliases. The `_thin_interactive_loop` stays here because it's both large (183 LOC) and tightly coupled to the Typer `app` lifecycle; moving it would require either inlining its 254-LOC dispatcher call (too tight) or carrying state through a parameter that mirrors current module-level access. Companion `pyproject.toml` change: `import-linter` ignore rules in both `[tool.importlinter.contracts]` blocks updated for the leaf-path rename — 4 entries `core.cli -> core.{server,channels}.X` became `core.cli.typer_serve -> core.{server,channels}.X` since the `serve` command moved into a sibling module. Net +175 LOC overhead from per-module docstrings, deferred-import patterns, and re-export plumbing — accepted for the SRP win (largest file shrinks from 1,889 → 336 LOC, **82% drop in non-introspection-pinned helpers**; pinned helpers in `__init__.py` constitute the structural floor). (`core/cli/{__init__,welcome,search_render,dispatcher,prompt_session,interactive_loop,typer_commands,typer_init,typer_serve}.py`, `pyproject.toml`)
+
 ## [0.76.0] — 2026-05-08
 
 > **Codebase audit Tier 3 — God Object split #8: `core/cli/commands.py`.**
