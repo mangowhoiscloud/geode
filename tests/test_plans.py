@@ -107,7 +107,7 @@ class TestPlanUsage:
 class TestResolveRouting:
     def test_falls_back_to_payg_when_no_plan_registered(self) -> None:
         # Reset state for a clean test
-        from core.lifecycle.container import build_auth
+        from core.wiring.container import build_auth
 
         reset_plan_registry()
         store, _, _ = build_auth()
@@ -128,7 +128,7 @@ class TestResolveRouting:
         assert target.plan.kind == PlanKind.PAYG
 
     def test_explicit_plan_routing_takes_precedence(self) -> None:
-        from core.lifecycle.container import build_auth
+        from core.wiring.container import build_auth
 
         reset_plan_registry()
         store, _, _ = build_auth()

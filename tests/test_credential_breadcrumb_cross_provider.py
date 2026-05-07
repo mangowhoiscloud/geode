@@ -48,7 +48,7 @@ def test_alt_provider_listed_when_active_exhausted(monkeypatch) -> None:
     Breadcrumb must surface ``cross-provider:`` line with the codex profile.
     """
     from core.auth.profiles import ProfileStore
-    from core.lifecycle import container as _infra
+    from core.wiring import container as _infra
 
     store = ProfileStore()
     store.add(
@@ -80,7 +80,7 @@ def test_no_cross_provider_line_when_no_alternatives(monkeypatch) -> None:
     """If no other provider has eligible profiles, no cross-provider line
     (avoid telling LLM to try things that won't work)."""
     from core.auth.profiles import ProfileStore
-    from core.lifecycle import container as _infra
+    from core.wiring import container as _infra
 
     store = ProfileStore()  # empty store
     monkeypatch.setattr(_infra, "_profile_store", store)
@@ -97,7 +97,7 @@ def test_no_cross_provider_line_when_no_alternatives(monkeypatch) -> None:
 def test_alt_provider_skips_attempted_provider(monkeypatch) -> None:
     """The exhausted provider must not appear in its own alternatives list."""
     from core.auth.profiles import ProfileStore
-    from core.lifecycle import container as _infra
+    from core.wiring import container as _infra
 
     store = ProfileStore()
     store.add(

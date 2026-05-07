@@ -18,7 +18,7 @@ from core.cli.commands import cmd_login
 
 
 def _reset_state() -> None:
-    from core.lifecycle import container as infra
+    from core.wiring import container as infra
 
     infra._profile_store = None
     infra._profile_rotator = None
@@ -59,7 +59,7 @@ class TestSetKeyAndUse:
         plan = default_plan_for_payg("openai", "")
         registry.add(plan)
         cmd_login(f"set-key {plan.id} sk-fresh-key-1234567890")
-        from core.lifecycle.container import ensure_profile_store
+        from core.wiring.container import ensure_profile_store
 
         store = ensure_profile_store()
         bound = [p for p in store.list_all() if p.plan_id == plan.id]

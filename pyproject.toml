@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.86.0"
+version = "0.87.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -85,7 +85,7 @@ ignore_imports = [
     "core.cli.typer_serve -> core.server.ipc_server.poller",
     "core.cli.typer_serve -> core.channels.binding",
     "core.cli.scheduler_drain -> core.server.supervised.services",
-    "core.lifecycle.adapters -> core.channels.binding",
+    "core.wiring.adapters -> core.channels.binding",
 ]
 
 [[tool.importlinter.contracts]]
@@ -109,7 +109,7 @@ type = "forbidden"
 source_modules = ["core.server"]
 forbidden_modules = ["core.cli"]
 # v0.52 phase 6 — server/supervised/services.py (구 gateway/shared_services) 가
-# 여전히 cli/{commands,session_state,tool_handlers} + lifecycle/bootstrap 을 통해
+# 여전히 cli/{commands,session_state,tool_handlers} + wiring/bootstrap 을 통해
 # cli/startup 을 import. v0.53 에서 daemon-side handler 를 server/ipc_server/handlers/
 # 로 옮기면서 정리.
 ignore_imports = [
@@ -190,7 +190,7 @@ ignore = [
 max-complexity = 62
 
 [tool.ruff.lint.pylint]
-max-args = 18         # Worst: 18 (e.g. lifecycle bootstraps). Target: 8.
+max-args = 18         # Worst: 18 (e.g. wiring bootstraps). Target: 8.
 max-branches = 68     # Worst: 68. Target: 15.
 max-returns = 18      # Worst: 18 (PLR0911 silenced project-wide; this kept for ratchet visibility).
 max-statements = 273  # Worst: 273 (god method in cli/__init__.py). Target: 60.

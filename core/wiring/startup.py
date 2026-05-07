@@ -126,7 +126,7 @@ def detect_subscription_oauth() -> str | None:
     # may need to seed an empty store right after detection.
     try:
         from core.auth.profiles import AuthProfile, CredentialType
-        from core.lifecycle.container import ensure_profile_store
+        from core.wiring.container import ensure_profile_store
 
         store = ensure_profile_store()
         existing = next(

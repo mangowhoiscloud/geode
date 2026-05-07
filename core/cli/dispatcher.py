@@ -33,8 +33,8 @@ from core.cli.session_state import (
     _scheduler_service_ctx,
 )
 from core.config import settings
-from core.lifecycle.startup import check_readiness
 from core.ui.console import console
+from core.wiring.startup import check_readiness
 
 
 def _handle_command(

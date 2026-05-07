@@ -145,7 +145,7 @@ def resolve_routing(model: str) -> RoutingTarget | None:
     Returns None when no usable credential exists.
     """
     from core.config import _resolve_provider
-    from core.lifecycle.container import get_profile_rotator, get_profile_store
+    from core.wiring.container import get_profile_rotator, get_profile_store
 
     registry = get_plan_registry()
     store = get_profile_store()

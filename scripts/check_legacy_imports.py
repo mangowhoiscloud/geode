@@ -34,8 +34,8 @@ LEGACY_PATTERNS: list[tuple[str, str]] = [
     (r"from core\.gateway\.shared_services\b", "core.server.supervised.services"),
     (r"from core\.gateway\.webhook_handler\b", "core.server.supervised.webhook_handler"),
     # v0.52 phase 1 — runtime_wiring → lifecycle, infra → container
-    (r"from core\.runtime_wiring\b", "core.lifecycle"),
-    (r"import core\.runtime_wiring\b", "core.lifecycle"),
+    (r"from core\.runtime_wiring\b", "core.wiring"),
+    (r"import core\.runtime_wiring\b", "core.wiring"),
     # v0.52 phase 5 — automation/ cron 부분이 scheduler/ 로 분리
     (r"from core\.automation\.scheduler\b", "core.scheduler.scheduler"),
     (r"from core\.automation\.triggers\b", "core.scheduler.triggers"),

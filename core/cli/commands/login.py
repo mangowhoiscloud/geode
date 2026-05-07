@@ -98,7 +98,7 @@ def cmd_login(args: str) -> None:
         try:
             from core.auth.auth_toml import auth_toml_path, load_auth_toml
             from core.auth.plan_registry import get_plan_registry
-            from core.lifecycle.container import ensure_profile_store
+            from core.wiring.container import ensure_profile_store
 
             registry = get_plan_registry()
             store = ensure_profile_store()
@@ -172,7 +172,7 @@ def _login_show_status() -> None:
     from core.auth.plan_registry import get_plan_registry
     from core.auth.profiles import CredentialType
     from core.cli import commands as _pkg
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     store = ensure_profile_store()
     registry = get_plan_registry()
@@ -309,7 +309,7 @@ def _login_add_interactive(_args: str) -> None:
     )
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     if not sys.stdin.isatty():
         _pkg.console.print(
@@ -512,7 +512,7 @@ def _login_set_key(rest: str) -> None:
 
     from core.auth.plan_registry import get_plan_registry
     from core.auth.profiles import AuthProfile, CredentialType
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     registry = get_plan_registry()
     plan = registry.get(plan_id)
@@ -588,7 +588,7 @@ def _login_remove(rest: str) -> None:
         _pkg.console.print("  [warning]Usage: /login remove <plan-id>[/warning]\n")
         return
     from core.auth.plan_registry import get_plan_registry
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     registry = get_plan_registry()
     if not registry.remove(plan_id):

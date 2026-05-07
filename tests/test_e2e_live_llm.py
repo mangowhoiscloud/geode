@@ -45,7 +45,7 @@ def _make_loop(
         _build_tool_handlers,
         _set_readiness,
     )
-    from core.lifecycle.startup import check_readiness
+    from core.wiring.startup import check_readiness
 
     readiness = check_readiness()
     if not force_dry_run:

@@ -28,6 +28,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.87.0] — 2026-05-08
+
+> **`core/lifecycle/` → `core/wiring/` rename — `startup` 흡수 후에도 모호하던 폴더 이름을 의도가 명확한 이름으로 교체.**
+> v0.52에서 `core/runtime_wiring/`을 `core/lifecycle/`로 옮긴 뒤 4개의 builder
+> 모듈(bootstrap, container, adapters, automation)이 들어왔고, v0.86.0(A5b)
+> 에서 `cli/startup.py`까지 흡수했음에도 "lifecycle"이라는 이름은 여전히
+> daemon lifecycle / session lifecycle / hook lifecycle 같은 이질적 의미와
+> 충돌. 그 모듈들이 실제로 하는 일은 *application 의 object graph 를 wire 한다*
+> 이므로 `wiring/`이 더 직접적. 패키지 본체 5 파일을 `git mv`로 옮긴 뒤
+> 151 caller site (15개 cli/, 23개 tests/, 그 밖에 auth/, llm/, server/,
+> agent/loop/) 의 `core.lifecycle.*` import를 `core.wiring.*`로 일괄 교체,
+> `pyproject.toml`의 import-linter ignore_imports 1건 + descriptive comment
+> 2건도 동기. 동작·테스트·import 그래프 변화 0; cosmetic rename. E2E
+> `geode analyze "Cowboy Bebop" --dry-run` unchanged at A (68.4); pytest
+> 4345 passed (baseline 동일).
+
+### Changed
+- **`core/lifecycle/` → `core/wiring/` (5 files renamed via `git mv`).** `__init__.py` (re-exports `get_plugin_status`), `bootstrap.py` (760L, 14 builders: hooks, memory, session, config_watcher, task, prompt, plugin_registry, tool_offload, run_log, stuck_detector, …), `container.py` (390L, 10 builders: profile_store, policy_chain, lane_queue, tool_registry, auth, LLM adapters, …), `adapters.py` (295L, 8 builders: MCP signal/notification/calendar adapters, gateway, plugins), `automation.py` (335L, build_automation + wire_automation_hooks). Rename history preserved by `git mv`; `git log --follow` continues to work.
+- **151 caller sites updated** — `core.lifecycle.*` → `core.wiring.*` across `core/runtime.py` (8 sites incl. docstring), `core/cli/{welcome,dispatcher,bootstrap,session_state,onboarding,typer_commands,typer_serve,doctor_bootstrap,tool_handlers/system}.py`, `core/cli/commands/{login,key,_state}.py`, `core/auth/{credential_breadcrumb,plan_registry,auth_toml,oauth_login}.py`, `core/llm/{credentials,fallback}.py`, `core/llm/providers/codex.py`, `core/agent/loop/_model_switching.py`, `core/server/supervised/services.py`, `core/server/ipc_server/poller.py`, plus 23 test files and `tests/_live_audit_runner.py`. Function bodies untouched.
+- **`pyproject.toml`** — ignore_imports: `core.lifecycle.adapters → core.channels.binding` → `core.wiring.adapters → core.channels.binding`. Descriptive comments at lines 112 (`lifecycle/bootstrap` → `wiring/bootstrap`) and 193 (`lifecycle bootstraps` → `wiring bootstraps`) synced. `scripts/check_legacy_imports.py` legacy-import migration target updated `runtime_wiring → wiring` to reflect the latest module name.
+
 ## [0.86.0] — 2026-05-08
 
 > **A5b — `cli/startup.py` 책임 분리: `lifecycle/startup.py` + `cli/onboarding.py`.**

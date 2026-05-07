@@ -128,7 +128,7 @@ def _suggest_alternative_providers(*, exclude: str) -> str:
     so the answer matches what the next LLM call would actually see.
     """
     try:
-        from core.lifecycle.container import get_profile_store
+        from core.wiring.container import get_profile_store
     except Exception:
         return ""
     store = get_profile_store()

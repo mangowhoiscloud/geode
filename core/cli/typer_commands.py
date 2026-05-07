@@ -101,7 +101,7 @@ def about() -> None:
 
     # Auth profiles (mask all keys)
     try:
-        from core.lifecycle.container import ensure_profile_store
+        from core.wiring.container import ensure_profile_store
 
         store = ensure_profile_store()
         profiles = [p for p in store.list_all() if p.key]
@@ -162,7 +162,7 @@ def setup(
     credentials and start over.
     """
     from core.cli.onboarding import env_setup_wizard
-    from core.lifecycle.startup import _has_any_llm_key, detect_subscription_oauth
+    from core.wiring.startup import _has_any_llm_key, detect_subscription_oauth
 
     if reset:
         env_path = Path("~/.geode/.env").expanduser()

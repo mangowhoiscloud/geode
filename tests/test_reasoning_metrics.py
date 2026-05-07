@@ -49,7 +49,7 @@ class TestAuditLoggerKeyContract:
     def test_audit_logger_keys_present_in_to_dict(self) -> None:
         import inspect
 
-        from core.lifecycle import bootstrap
+        from core.wiring import bootstrap
 
         # Pull the audit-logger spec table by source inspection — the table
         # is defined inside _register_default_plugins as a local list, so we
