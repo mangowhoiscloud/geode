@@ -147,16 +147,30 @@ def reset_thread_console() -> None:
     _ConsoleProxy._local.__dict__.pop("console", None)
 
 
-def make_session_console(file: Any) -> Console:
+def make_session_console(
+    file: Any,
+    *,
+    force_terminal: bool = True,
+    width: int = 120,
+) -> Console:
     """Create a session-scoped Console writing to *file*.
 
-    Returns a fully configured Console with the GEODE theme, forced
-    ANSI output, and truecolor — suitable for IPC streaming writers.
+    Returns a fully configured Console with the GEODE theme — suitable
+    for IPC streaming writers.
+
+    v0.84.0 — ``force_terminal`` and ``width`` are now propagated from
+    the thin CLI via the ``client_capability`` IPC message. When the
+    thin client's stdout is not a TTY (heredoc, pipe, CI), the daemon
+    constructs the per-thread Console with ``force_terminal=False`` so
+    Rich emits plain text instead of ANSI cursor-up / spinner braille
+    frames. The truecolor color-system override is still applied when
+    ANSI output is requested, mirroring the previous behavior.
     """
     from rich.color import ColorSystem
 
-    c = Console(theme=GEODE_THEME, file=file, force_terminal=True, width=120)
-    c._color_system = ColorSystem.TRUECOLOR
+    c = Console(theme=GEODE_THEME, file=file, force_terminal=force_terminal, width=width)
+    if force_terminal:
+        c._color_system = ColorSystem.TRUECOLOR
     return c
 
 
