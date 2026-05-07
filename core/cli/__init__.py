@@ -72,6 +72,7 @@ from core.cli.tool_handlers import (
 )
 from core.config import settings
 from core.hooks import HookEvent, HookSystem
+from core.hooks.utils import fire_hook
 from core.llm.commentary import (
     generate_commentary,
 )
@@ -85,13 +86,8 @@ _hooks_ctx: HookSystem | None = None
 
 
 def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
-    """Fire a hook event if HookSystem is available in context."""
-    hooks = _hooks_ctx
-    if hooks is not None:
-        try:
-            hooks.trigger(event, data)
-        except Exception:
-            log.debug("Failed to fire hook %s", event, exc_info=True)
+    """Fire a hook event if HookSystem is wired (or no-op)."""
+    fire_hook(_hooks_ctx, event, data)
 
 
 def _drain_scheduler_queue(

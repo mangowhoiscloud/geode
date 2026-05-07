@@ -27,6 +27,7 @@ from core.config import (
     is_model_allowed,
     settings,
 )
+from core.hooks.utils import fire_hook
 from core.llm.adapters import CROSS_PROVIDER_FALLBACK as CROSS_PROVIDER_FALLBACK
 from core.llm.adapters import AgenticLLMPort as AgenticLLMPort
 from core.llm.adapters import ClaudeAdapter as ClaudeAdapter
@@ -124,18 +125,8 @@ def set_router_hooks(hooks: Any) -> None:
 
 
 def _fire_hook(event_name: str, data: dict[str, Any]) -> None:
-    """Fire a hook event if HookSystem is available. Graceful degradation on failure."""
-    hooks = _hooks_ctx
-    if hooks is None:
-        return
-    try:
-        from core.hooks import HookEvent
-
-        event = HookEvent(event_name)
-        hooks.trigger(event, data)
-    except Exception:
-        # Hook failures must never break LLM calls
-        log.debug("Hook trigger failed for %s", event_name, exc_info=True)
+    """Fire a hook event if HookSystem is wired (or no-op)."""
+    fire_hook(_hooks_ctx, event_name, data)
 
 
 # Suppress langsmith/langchain rate-limit log spam (429 errors when quota exceeded)

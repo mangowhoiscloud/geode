@@ -28,6 +28,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.68.0] — 2026-05-07
+
+> **Codebase audit cleanup — Tier 1 + Tier 2.** Two-tier sweep driven by
+> the `codebase-audit` skill. Tier 1 removes three orphan modules whose
+> only consumers were their own tests: `core/orchestration/planner.py`
+> (NL-router-era `Planner` class — zero non-test callers since #39f7812e),
+> `core/skills/plugins.py` (`PluginManager` / `LoggingPlugin` parallel
+> system that was superseded by `core/skills/skills.py:SkillRegistry` —
+> zero non-test callers), and `core/auth/errors.py` (`AuthError` was
+> never `raise`d nor caught in production — only mentioned in three
+> doc-comments). Tier 2 deduplicates two near-identical helpers that had
+> drifted into 4× and 2× copies: `_fire_hook` (memory_tools / llm.router /
+> llm.provider_dispatch / cli.__init__) collapses onto a new
+> `core/hooks/utils.py:fire_hook`, and the oauth file readers
+> (`claude_code_oauth._read_from_file` / `codex_cli_oauth._read_from_file`)
+> share a new `core/auth/credential_cache.py:read_json_credentials_file`
+> helper. Net `-1,083` lines removed (Tier 1) plus `~50` lines collapsed
+> (Tier 2). E2E anchor `geode analyze "Cowboy Bebop" --dry-run` unchanged
+> at A (68.4).
+
+### Removed
+- **`core/orchestration/planner.py` (326 LOC) + `tests/test_planner.py` (133 LOC).** The `Planner` class plus its `Route`, `RouteProfile`, `PlannerDecision`, `_CacheEntry`, `_PlannerStats` companions were a leftover from the NL-router era (last touched in commit `39f7812e`); zero non-test callers across `core/`, `plugins/`, `tests/`, `scripts/`, `experimental/`. The verb "Route" is still used in unrelated places (`core/orchestration/task_system.py`, `plugins/game_ip/nodes/router.py`) but those define their own routing primitives — no shared symbols. (`core/orchestration/planner.py`, `tests/test_planner.py`)
+- **`core/skills/plugins.py` (260 LOC) + `tests/test_plugins.py` (233 LOC).** Parallel `Plugin` / `PluginState` / `PluginMetadata` / `LoggingPlugin` / `PluginManager` system superseded by `core/skills/skills.py:SkillRegistry` (the live skill registry imported from `core/cli/bootstrap.py`, `core/lifecycle/bootstrap.py`, `core/llm/skill_registry.py`, etc.). Zero non-test callers for any of the five symbols. (`core/skills/plugins.py`, `tests/test_plugins.py`)
+- **`core/auth/errors.py` (83 LOC) + `tests/test_auth_errors.py` (48 LOC).** `AuthError`, `AuthErrorCode`, `ERROR_HINTS`, `format_auth_error` had no production raise/except sites — only three doc-comments referenced "auth errors" generically. The auth rotation path uses different error-handling primitives (see `core/auth/rotation.py`). (`core/auth/errors.py`, `tests/test_auth_errors.py`)
+
+### Changed
+- **`_fire_hook` 4-copy → 1 helper.** `core/tools/memory_tools.py`, `core/llm/router.py`, `core/llm/provider_dispatch.py`, and `core/cli/__init__.py` each carried their own `_fire_hook(event, data)` body — three of them byte-identical, the fourth differing only in accepting a `HookEvent` enum directly. All four now delegate to a new `core/hooks/utils.py:fire_hook(hooks, event, data)` that handles both `str` and `HookEvent` inputs and the same graceful-degradation contract (no-op on `None` hooks, DEBUG-log + swallow on handler exception). The per-module `_fire_hook` wrappers shrink to a 1-line delegation that supplies the right `_hooks_ctx` source (ContextVar `.get()` for memory_tools, module-global for the other three). (`core/hooks/utils.py` *new*, `core/tools/memory_tools.py`, `core/llm/{router,provider_dispatch}.py`, `core/cli/__init__.py`)
+- **OAuth `_read_from_file` 2-copy → shared JSON reader.** `core/auth/claude_code_oauth.py` and `core/auth/codex_cli_oauth.py` each had their own `read text → json.loads → isinstance dict check → narrow extraction` ladder. The IO + JSON-parse + dict-check half is now `core/auth/credential_cache.py:read_json_credentials_file(relative_path)`; each oauth caller keeps only its provider-specific extraction (`data.get("claudeAiOauth")` for Claude Code, `data if "tokens" in data else None` for Codex CLI). Removes a redundant `from pathlib import Path` and a now-unused `import json` reference from each caller. (`core/auth/credential_cache.py`, `core/auth/{claude_code_oauth,codex_cli_oauth}.py`)
+
 ## [0.67.0] — 2026-05-06
 
 > **Domain-free core refactor — steps 4-6 of 8.** Second wave of the
