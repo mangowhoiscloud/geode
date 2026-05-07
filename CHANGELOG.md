@@ -28,6 +28,38 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.84.0] — 2026-05-08
+
+> **OAuth point-check trilogy completion — IPC TTY capability propagation.**
+> Third and final fix in the OAuth-OpenAI live-test inspection. v0.82.0
+> fixed the *actual LLM call routing* (frozen `SharedServices._model`).
+> v0.83.0 fixed the *footer model display* (`init_session_meter` hard
+> default). v0.84.0 fixes the *output noise* — when the thin CLI's
+> stdout/stdin is not a terminal (heredoc, pipe, CI), the daemon was
+> still emitting Rich braille spinner frames `⠴⠦⠧⠇⠏⠋⠙⠹⠸⠼` and ANSI
+> cursor sequences into the socket because `make_session_console`
+> hard-coded `force_terminal=True`. Per-turn output got polluted with
+> 200+ spinner frames. The thin CLI just wrote the bytes to stdout
+> as-is. Fix: thin CLI sends a `client_capability` message right
+> after `connect()` carrying its own `is_tty` (= `stdin.isatty() and
+> stdout.isatty()`) and `width` (`shutil.get_terminal_size().columns`).
+> The daemon stores this in a thread-local; the per-thread Console
+> built for that IPC handler thread inherits the client's TTY state
+> and width. `_tool_spinner` also got a second non-TTY guard for
+> direct (non-IPC) REPL piping to a file. Backward compatible: old
+> thin clients that don't send the message keep the previous behavior
+> (`is_tty=True, width=120`). E2E `geode analyze "Cowboy Bebop"
+> --dry-run` unchanged at A (68.4); pytest **4345 passed** (+1 new
+> IPC test asserting the daemon-side Console mirrors a non-TTY
+> client's state).
+
+### Fixed
+- **`core/cli/ipc_client.py` — send `client_capability` on connect.** New helper `_send_client_capability()` runs after the session greeting is read in `connect()`. Reads `sys.stdin.isatty() and sys.stdout.isatty()` for `is_tty` and `shutil.get_terminal_size().columns` (clamped) for `width`. Sends `{"type": "client_capability", "is_tty": ..., "width": ...}` and drains the daemon's `ack` so subsequent one-shot commands (`send_command`, `request_resume`) see their actual response, not the stale capability ack. (`core/cli/ipc_client.py` +47L)
+- **`core/server/ipc_server/poller.py` — accept and apply `client_capability`.** New module-level `_client_capability_local` `threading.local()` with a `_get_client_capability()` accessor that defaults to `(is_tty=True, width=120)` for backward compat. New `client_capability` message handler in `_process_message`. `_run_prompt_streaming` reads the stored capability at session-start and passes it through to `make_session_console(writer, force_terminal=is_tty, width=width)`. (`core/server/ipc_server/poller.py` +39L)
+- **`core/ui/console.py:make_session_console` — accept `force_terminal` + `width` kwargs.** Both have backward-compatible defaults (`True`, `120`). Truecolor color system is only forced when `force_terminal=True` so non-TTY sessions don't get the ANSI escape soup either. (`core/ui/console.py` +24/-6L)
+- **`core/agent/tool_executor/_spinner.py:_tool_spinner` — non-TTY guard for direct REPL piping.** The IPC-mode early-return is unchanged. Added a second guard that checks `_pkg.console.is_terminal` after the IPC check so a *local* REPL piped to a file or running under CI also skips the spinner instead of emitting braille frames + cursor controls. (`core/agent/tool_executor/_spinner.py` +14L)
+- **`tests/test_phase3_ipc.py` — new test `test_client_capability_non_tty_disables_ansi`.** Patches `sys.stdin.isatty`/`sys.stdout.isatty` to return False and `shutil.get_terminal_size` to return `(80, 24)`, connects via `IPCClient`, then asserts the daemon-side per-thread Rich Console has `is_terminal == False` and `width == 80`. (`tests/test_phase3_ipc.py` +62L, +1 test → 4345 total passing)
+
 ## [0.83.0] — 2026-05-08
 
 > **Footer model display follow-up to v0.82.0.** v0.82.0 fixed the

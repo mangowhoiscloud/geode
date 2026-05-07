@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -458,6 +459,67 @@ class TestCLIChannelIntegration:
             result = client.request_resume(session_id="s-nonexistent")
             assert result["type"] == "resume_error"
 
+            client.close()
+        finally:
+            poller.stop()
+
+    def test_client_capability_non_tty_disables_ansi(self) -> None:
+        """v0.84.0 — non-TTY client capability propagates to daemon-side Console.
+
+        When the thin CLI advertises ``is_tty=False`` at connect time,
+        the daemon's per-thread Rich Console for that session must be
+        constructed with ``force_terminal=False`` so spinners and ANSI
+        cursor-control codes don't pollute the client's stdout.
+        """
+        from unittest.mock import patch
+
+        from core.cli.ipc_client import IPCClient
+        from core.server.ipc_server.poller import CLIPoller
+        from core.ui.console import _ConsoleProxy
+
+        sock_path = _test_sock()
+        mock_services = MagicMock()
+
+        mock_result = MagicMock()
+        mock_result.text = "ok"
+        mock_result.rounds = 1
+        mock_result.tool_calls = []
+        mock_result.termination_reason = "natural"
+        mock_result.summary = ""
+
+        captured: dict[str, Any] = {}
+
+        def capture_console(prompt: str) -> Any:
+            console_at_runtime = getattr(_ConsoleProxy._local, "console", None)
+            captured["is_terminal"] = console_at_runtime.is_terminal if console_at_runtime else None
+            captured["width"] = console_at_runtime.width if console_at_runtime else None
+            return mock_result
+
+        mock_loop = MagicMock()
+        mock_loop.run.side_effect = capture_console
+        mock_loop.model = "test-model"
+        mock_services.create_session.return_value = (MagicMock(), mock_loop)
+        mock_services.lane_queue = None  # bypass lane queue
+
+        poller = CLIPoller(mock_services, socket_path=sock_path)
+        poller.start()
+        time.sleep(0.1)
+
+        try:
+            client = IPCClient(socket_path=sock_path)
+            # Patch isatty/terminal-size so capability reports non-TTY
+            with (
+                patch("sys.stdin.isatty", return_value=False),
+                patch("sys.stdout.isatty", return_value=False),
+                patch("shutil.get_terminal_size") as size_mock,
+            ):
+                size_mock.return_value = type("S", (), {"columns": 80, "lines": 24})()
+                assert client.connect()
+            time.sleep(0.05)  # let daemon process client_capability
+
+            client.send_prompt("hello")
+            assert captured.get("is_terminal") is False
+            assert captured.get("width") == 80
             client.close()
         finally:
             poller.stop()
