@@ -285,7 +285,7 @@ class TestCallLLMParsed:
         mock_client = MagicMock()
         mock_client.messages.parse.return_value = mock_response
 
-        with patch("core.llm.router.get_anthropic_client", return_value=mock_client):
+        with patch("core.llm.router.calls.parsed.get_anthropic_client", return_value=mock_client):
             result = call_llm_parsed(
                 system="test system",
                 user="test user",
@@ -314,7 +314,7 @@ class TestCallLLMParsed:
         mock_client.messages.parse.return_value = mock_response
 
         with (
-            patch("core.llm.router.get_anthropic_client", return_value=mock_client),
+            patch("core.llm.router.calls.parsed.get_anthropic_client", return_value=mock_client),
             pytest.raises(ValueError, match="LLM returned no structured output"),
         ):
             call_llm_parsed(
@@ -343,7 +343,7 @@ class TestCallLLMParsed:
         mock_client = MagicMock()
         mock_client.messages.parse.return_value = mock_response
 
-        with patch("core.llm.router.get_anthropic_client", return_value=mock_client):
+        with patch("core.llm.router.calls.parsed.get_anthropic_client", return_value=mock_client):
             result = call_llm_parsed(
                 system="test",
                 user="test",
@@ -362,7 +362,7 @@ class TestMaybeTraceable:
     def test_returns_identity_when_disabled(self):
         from core.llm.client import maybe_traceable
 
-        with patch("core.llm.router.is_langsmith_enabled", return_value=False):
+        with patch("core.llm.router.tracing.is_langsmith_enabled", return_value=False):
             decorator = maybe_traceable(run_type="llm", name="test")
 
             # Should be identity — decorating a function returns same function
@@ -376,7 +376,7 @@ class TestMaybeTraceable:
 
         mock_traceable = MagicMock(return_value=lambda fn: fn)
         with (
-            patch("core.llm.router.is_langsmith_enabled", return_value=True),
+            patch("core.llm.router.tracing.is_langsmith_enabled", return_value=True),
             patch.dict("sys.modules", {"langsmith": MagicMock(traceable=mock_traceable)}),
         ):
             maybe_traceable(run_type="chain", name="test_fn")
@@ -385,7 +385,7 @@ class TestMaybeTraceable:
         from core.llm.client import maybe_traceable
 
         with (
-            patch("core.llm.router.is_langsmith_enabled", return_value=True),
+            patch("core.llm.router.tracing.is_langsmith_enabled", return_value=True),
             patch.dict("sys.modules", {"langsmith": None}),
         ):
             decorator = maybe_traceable(run_type="llm")
@@ -455,7 +455,7 @@ class TestProviderRouting:
             cache_read_input_tokens=0,
         )
 
-        with patch("core.llm.router.get_anthropic_client") as mock_get:
+        with patch("core.llm.router.calls.parsed.get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.parse.return_value = mock_response
             mock_get.return_value = mock_client
@@ -490,7 +490,9 @@ class TestProviderRouting:
         mock_glm_client = MagicMock()
         mock_glm_client.beta.chat.completions.parse.return_value = mock_response
 
-        with patch("core.llm.router._get_provider_client", return_value=mock_glm_client):
+        with patch(
+            "core.llm.router.calls.parsed._get_provider_client", return_value=mock_glm_client
+        ):
             from core.llm.client import call_llm_parsed
 
             result = call_llm_parsed(
@@ -521,7 +523,9 @@ class TestProviderRouting:
         mock_openai_client = MagicMock()
         mock_openai_client.beta.chat.completions.parse.return_value = mock_response
 
-        with patch("core.llm.router._get_provider_client", return_value=mock_openai_client):
+        with patch(
+            "core.llm.router.calls.parsed._get_provider_client", return_value=mock_openai_client
+        ):
             from core.llm.client import call_llm_parsed
 
             result = call_llm_parsed(
@@ -546,7 +550,7 @@ class TestProviderRouting:
         mock_glm_client = MagicMock()
         mock_glm_client.chat.completions.create.return_value = mock_response
 
-        with patch("core.llm.router._get_provider_client", return_value=mock_glm_client):
+        with patch("core.llm.router.calls.text._get_provider_client", return_value=mock_glm_client):
             from core.llm.client import call_llm
 
             result = call_llm("system", "user", model="glm-5")
@@ -568,7 +572,7 @@ class TestProviderRouting:
             cache_read_input_tokens=0,
         )
 
-        with patch("core.llm.router.get_anthropic_client") as mock_get:
+        with patch("core.llm.router.calls.text.get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_response
             mock_get.return_value = mock_client

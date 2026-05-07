@@ -142,7 +142,7 @@ class TestClaudeAdapterToolUse:
     model via GEODE_MODEL env var).
     """
 
-    @patch("core.llm.router.get_anthropic_client")
+    @patch("core.llm.router.calls.tools.get_anthropic_client")
     def test_no_tool_use(self, mock_get_client: MagicMock):
         """When model doesn't request tools, returns text immediately."""
         mock_client = MagicMock()
@@ -165,7 +165,7 @@ class TestClaudeAdapterToolUse:
         assert result.tool_calls == []
         assert result.rounds == 1
 
-    @patch("core.llm.router.get_anthropic_client")
+    @patch("core.llm.router.calls.tools.get_anthropic_client")
     def test_single_tool_call(self, mock_get_client: MagicMock):
         """Model calls one tool, then returns text."""
         mock_client = MagicMock()
@@ -199,7 +199,7 @@ class TestClaudeAdapterToolUse:
         assert result.rounds == 2
         assert len(executor_calls) == 1
 
-    @patch("core.llm.router.get_anthropic_client")
+    @patch("core.llm.router.calls.tools.get_anthropic_client")
     def test_tool_executor_error(self, mock_get_client: MagicMock):
         """Tool execution errors are captured, not raised."""
         mock_client = MagicMock()
@@ -227,7 +227,7 @@ class TestClaudeAdapterToolUse:
         assert len(result.tool_calls) == 1
         assert "error" in result.tool_calls[0].tool_result
 
-    @patch("core.llm.router.get_anthropic_client")
+    @patch("core.llm.router.calls.tools.get_anthropic_client")
     def test_max_rounds_enforced(self, mock_get_client: MagicMock):
         """After max_tool_rounds, loop stops."""
         mock_client = MagicMock()

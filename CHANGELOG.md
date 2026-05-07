@@ -28,6 +28,36 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.74.0] — 2026-05-07
+
+> **Codebase audit Tier 3 — God Object split #6: `core/llm/router.py`.**
+> The 1,046-LOC LLM transport module (the central dispatcher behind every
+> Anthropic / OpenAI / GLM / Codex call) is now a 14-file two-level
+> package: `core/llm/router/` (top level: re-exports, hooks, tracing,
+> usage, models, DI) plus `core/llm/router/calls/` (sub-package: each
+> `call_llm*` entry point in its own file). The 7 transport functions
+> that account for 64% of the original LOC (`call_llm`, `call_llm_parsed`,
+> `call_llm_json`, `call_llm_with_tools`, `call_llm_streaming`,
+> `call_with_failover`, `_route_provider`) each get their own leaf
+> module. Largest single file post-split is `tools.py` at 228 LOC —
+> **a 78% reduction from the 1,046-LOC original**. **Behavior unchanged**:
+> every function body is byte-identical. **Test coupling resolved**:
+> 17 `@patch("core.llm.router.X")` sites and 1 `monkeypatch.setattr`
+> site that previously coupled tests to the monolithic module are
+> migrated to leaf paths (`core.llm.router.calls.text.X` /
+> `.parsed.X` / `.json.X` / `.tools.X` / `.streaming.X` / `._route.X`)
+> in 4 test files; the `inspect.getsource(_router_mod)` invariant test
+> in `test_routing_policy.py` is rewritten to walk
+> `pkgutil.iter_modules` over the `calls` sub-package and aggregate
+> sources, so the 4-callsite invariant on `_route_provider(target_model)`
+> is now verified across the union of leaf modules. E2E `geode analyze
+> "Cowboy Bebop" --dry-run` unchanged at A (68.4); full pytest 4344
+> passed (parity with v0.73.0). Three Tier-3 God Objects remain
+> (`commands.py`, `cli/__init__.py`, `agent/loop.py`).
+
+### Architecture
+- **`core/llm/router.py` (1,046 LOC) → `core/llm/router/` (top level: 6 files, 450 LOC) + `core/llm/router/calls/` (sub-package: 8 files, 913 LOC).** Two-level mechanical split by call concern; preserves every function body, ContextVar instances, and the test-monkeypatch surface (with leaf-path migration). Top-level package files: `__init__.py` 169 (pure re-export of ~50 names: 9 adapter aliases + 7 errors + 5 fallback names + 4 provider_dispatch names + 9 anthropic provider names + 8 token_tracker names + sub-module callables), `_hooks.py` 37 (`_hooks_ctx`, `set_router_hooks`, `_fire_hook`), `tracing.py` 45 (`is_langsmith_enabled`, `maybe_traceable`), `_usage.py` 74 (`_record_response_usage`, `_record_openai_usage`), `models.py` 33 (`ToolCallRecord`, `ToolUseResult` dataclasses), `_di.py` 92 (5 ContextVars + 6 accessors). Sub-package `calls/` files: `__init__.py` 28 (re-exports), `_route.py` 40 (`_route_provider`), `_failover.py` 143 (`call_with_failover`), `text.py` 129 (`call_llm`), `parsed.py` 140 (`call_llm_parsed`), `json.py` 68 (`call_llm_json`), `tools.py` 228 (`call_llm_with_tools` — largest leaf), `streaming.py` 137 (`call_llm_streaming`). The package's `__init__.py` re-exports everything previously imported from the flat module so the 41 external import sites need no changes (most do package-level lazy imports via `from core.llm.router import call_llm` inside method bodies). Test files updated for leaf paths: `tests/test_failover.py` (8 `@patch` sites: `get_anthropic_client` × 2 → `calls.text`, `call_llm` × 6 → `calls.json` since `call_llm_json` lives in `json.py` and imports from `text.py`), `tests/test_tool_use.py` (4 `@patch` sites: `get_anthropic_client` → `calls.tools`), `tests/test_llm_client.py` (11 `@patch` sites: `get_anthropic_client` → `calls.{parsed,text}`, `_get_provider_client` → `calls.{parsed,text}`, `is_langsmith_enabled` → `tracing`), `tests/test_routing_policy.py` (`monkeypatch.setattr` → `calls._route._resolve_provider`; `inspect.getsource` rewritten to use `pkgutil.iter_modules` walk). Patches that work via `__init__.py` re-export and required no changes: `test_claude_adapter.py` (4), `test_goal_decomposer.py` (5), `test_native_tools.py` (1), `test_anthropic_sampling_params.py` (1), `test_agentic_loop.py` (2). Net +317 LOC overhead from per-module docstrings and re-export plumbing — accepted for the SRP win (largest file shrinks from 1,046 → 228 LOC, 78% drop). (`core/llm/router/{__init__,_hooks,tracing,_usage,models,_di}.py`, `core/llm/router/calls/{__init__,_route,_failover,text,parsed,json,tools,streaming}.py`, `tests/test_{failover,tool_use,llm_client,routing_policy}.py`)
+
 ## [0.73.0] — 2026-05-07
 
 > **Codebase audit Tier 3 — God Object split #5: `core/ui/agentic_ui.py`.**
