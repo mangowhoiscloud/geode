@@ -102,11 +102,20 @@ def init_session_meter(model: str = "") -> SessionMeter:
     own ``SessionMeter`` instance via ``threading.local``, preventing
     cross-session contamination of model names, elapsed times, and
     token counters.
+
+    v0.83.0 — when ``model`` is omitted, fall back to the live
+    ``settings.model`` (which `_apply_model` mutates on `/model`
+    switches) instead of the hard-coded ``ANTHROPIC_PRIMARY``. The old
+    shape always defaulted to anthropic, so callers like ``poller.py``
+    that did ``init_session_meter()`` left the per-turn footer
+    hard-stuck on ``claude-opus-4-7`` even after the user switched to
+    ``gpt-5.5``. Pairs with v0.82.0 which fixed the *actual* call
+    routing — this fixes the *displayed* model so the footer matches.
     """
     if not model:
-        from core.config import ANTHROPIC_PRIMARY
+        from core.config import ANTHROPIC_PRIMARY, settings
 
-        model = ANTHROPIC_PRIMARY
+        model = settings.model or ANTHROPIC_PRIMARY
     meter = SessionMeter(model=model)
     _meter_local.meter = meter
     return meter
