@@ -289,7 +289,7 @@ class ContextAssembler:
         if not self._project_root:
             return
         try:
-            from core.cli.project_detect import (
+            from core.utils.project_detect import (
                 detect_project_type,
                 get_harness_summary,
             )

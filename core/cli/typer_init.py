@@ -47,14 +47,14 @@ def init(
     """
     import json
 
-    from core.cli.project_detect import (
+    from core.memory.project import ProjectMemory
+    from core.memory.user_profile import FileBasedUserProfile
+    from core.utils.project_detect import (
         detect_project_type,
         generate_config_toml,
         generate_hooks,
         generate_settings_json_hooks,
     )
-    from core.memory.project import ProjectMemory
-    from core.memory.user_profile import FileBasedUserProfile
 
     project_mem = ProjectMemory(Path("."))
     user_profile = FileBasedUserProfile()
