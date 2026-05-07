@@ -28,6 +28,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.80.0] — 2026-05-08
+
+> **Dependency cleanup A3 — `core/cli/project_detect.py` → `core/utils/project_detect.py`.**
+> Third of 5 PRs in the dependency cycle. The 377-LOC project type +
+> harness directory detector (auto-detects npm/yarn/pnpm/bun, python-uv,
+> python-pip, rust, go, java-maven, java-gradle, plus the 10 known AI
+> harness directories `.claude/`/`.cursor/`/`.windsurf/`/`.copilot/`/
+> `.openclaw/`/`.codeium/`/`.aider/`/`.codex/`/`.geode/`/`.devin/`) is
+> a pure path-inspection utility — no CLI dependencies. Its location
+> in `core/cli/` was a v0.40.0 era artifact (introduced when the
+> `init` command was the only consumer). Today it has 4 callers
+> spanning 3 different layers, including the cross-layer violation
+> `core.memory.context -> core.cli.project_detect`. Move to
+> `core/utils/`. The 4 caller files updated; 1 `ignore_imports` entry
+> removed (`core.memory.context -> core.cli.project_detect`).
+> 29 → 28 ignore_imports remaining. E2E `geode analyze "Cowboy Bebop"
+> --dry-run` unchanged at A (68.4); full pytest 4344 passed.
+
+### Architecture
+- **`core/cli/project_detect.py` (377 LOC) → `core/utils/project_detect.py` (377 LOC).** Pure path-inspection utility — `detect_project_type()`, `get_harness_summary()`, `KNOWN_HARNESSES` registry, plus the dataclasses for the detection output. No CLI imports in either direction. Moving to `core/utils/` (alongside `redaction.py`, `atomic_io.py`, `language.py`) puts it in the correct architectural layer for shared utilities. Caller updates: `core/memory/context.py:292` (lazy import — was a layer violation logged in import-linter), `core/cli/welcome.py:33` (eager import inside the CLI welcome screen — same package, just different sub-module), `core/cli/typer_init.py:50` (eager import in the `init` Typer command — same package), `tests/test_project_detect.py:7` (test file). One ruff `I001` import-sort fix auto-applied. `pyproject.toml`: 1 `ignore_imports` entry removed (`core.memory.context -> core.cli.project_detect` from the `Server may host agent but never CLI` contract). 29 → 28 ignore_imports remaining. (`core/utils/project_detect.py` *new*, `core/cli/project_detect.py` *deleted*, `core/memory/context.py`, `core/cli/welcome.py`, `core/cli/typer_init.py`, `tests/test_project_detect.py`, `pyproject.toml`)
+
 ## [0.79.0] — 2026-05-08
 
 > **Dependency cleanup A2 — `core/cli/bash_tool.py` → `core/agent/bash_tool.py`.**
