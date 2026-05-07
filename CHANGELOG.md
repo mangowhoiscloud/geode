@@ -28,6 +28,41 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.82.0] — 2026-05-08
+
+> **Critical fix — `SharedServices` no longer freezes the active LLM
+> model at daemon boot.** Discovered while live-testing OAuth-OpenAI
+> codex routing. Symptom (extremely subtle, silently swaps providers):
+> after a long-running daemon was started under `GEODE_MODEL=claude-opus-4-7`,
+> a subsequent user `/model gpt-5.5` correctly mutated `settings.model`
+> + `.env` and the prompt header rendered `gpt-5.5 · autonomous
+> execution agent`, **but every actual LLM call still routed to
+> `claude-opus-4-7`** — `serve.log` confirmed `Session started:
+> model=claude-opus-4-7` for sessions opened after the switch. The
+> turn footer printed `claude-opus-4-7` (correctly reflecting the
+> real model), and `/model gpt-5.5` reported `Already using GPT-5.5`
+> from the daemon-side handler, both contradicting the prompt header.
+> Net effect: a user expecting OAuth-borrowed Codex Plus (free, hosted
+> at `chatgpt.com/backend-api/codex`) silently paid Anthropic API for
+> Opus 4.7 calls, with their prompts also flowing to Anthropic instead
+> of OpenAI/ChatGPT. Root cause: `SharedServices` cached `_model` and
+> `_provider` as dataclass fields populated once in
+> `build_shared_services()` from boot-time `settings.model`. Each new
+> `create_session()` passed `self._model` to the freshly built
+> `AgenticLoop`, so the boot-time value won every time. The drift-sync
+> path (`_sync_model_from_settings()`) only triggers when an active
+> loop runs another round — useless for new sessions in the same
+> daemon. **Fix**: remove `_model` / `_provider` dataclass fields;
+> `create_session()` now reads `settings.model` directly and resolves
+> the provider per call. The 4 `SharedServices(...)` test fixtures
+> drop those kwargs; `test_model_resolved` becomes
+> `test_model_resolved_per_session` asserting `loop.model ==
+> settings.model` after `create_session`. E2E `geode analyze "Cowboy
+> Bebop" --dry-run` unchanged at A (68.4); full pytest 4344 passed.
+
+### Fixed
+- **`core/server/supervised/services.py` — drop boot-frozen `_model` / `_provider` fields.** `SharedServices` previously held `_model: str = ""` and `_provider: str = "anthropic"` populated once at `build_shared_services()` from `settings.model`. `create_session()` passed those frozen values into every new `AgenticLoop`. After a `/model` switch, the daemon's `settings.model` changed but `self._model` was untouched, so the next session was built with the boot-time model — including its provider — even though the prompt header read the live `settings.model`. The drift-sync path doesn't run for fresh sessions, only for in-flight loops. The fix is a single change in `create_session()`: read `settings.model` and call `_resolve_provider(settings.model)` inline at the `AgenticLoop(...)` construction site, and delete the two dataclass fields plus the `_model=`, `_provider=` kwargs at `build_shared_services()`'s `SharedServices(...)` return. Tests updated: `tests/test_shared_services.py` drops `_model="claude-sonnet-4-6"` / `_provider="anthropic"` from both `services` fixtures (lines 53-60 and 167-175); `test_model_resolved` is rewritten as `test_model_resolved_per_session` to assert that a freshly built `loop.model` matches the live `settings.model` after `create_session(SessionMode.DAEMON)` — the new invariant. (`core/server/supervised/services.py`, `tests/test_shared_services.py`)
+
 ## [0.81.0] — 2026-05-08
 
 > **Dependency cleanup A4 — `core/cli/{session_checkpoint,transcript}.py` → `core/runtime_state/`.**
