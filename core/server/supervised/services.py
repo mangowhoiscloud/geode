@@ -105,9 +105,17 @@ class SharedServices:
     lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     tool_handlers: dict[str, Any] = field(default_factory=dict)
 
-    # Resolved once at bootstrap
-    _model: str = ""
-    _provider: str = "anthropic"
+    # v0.82.0 — Model + provider resolved fresh per session, NOT frozen at
+    # bootstrap. The previous shape (`_model: str = ""` cached at
+    # `SharedServices.create()` from `_settings.model`) caused a critical
+    # user-facing bug: a long-running daemon would honour `/model gpt-5.5`
+    # in `cmd_model` (mutates `settings.model` + .env), but every new
+    # IPC session still received the boot-time model via `self._model`.
+    # User saw "Already using GPT-5.5" in the prompt header but every
+    # LLM call still routed to `claude-opus-4-7` — silently using a
+    # different provider (paid Anthropic API instead of OAuth-borrowed
+    # Codex Plus). `create_session()` now reads `settings.model` directly
+    # so each session reflects the latest user intent.
     _cost_budget: float = 0.0
 
     # --- public API -----------------------------------------------------------
@@ -172,14 +180,20 @@ class SharedServices:
             hooks=self.hook_system,
             approval_callback=approval_cb,
         )
+        # v0.82.0 — read settings.model FRESH per session so /model command
+        # mutations propagate to every new AgenticLoop. Previously the
+        # boot-time `self._model` was used and `/model gpt-5.5` was
+        # silently ignored by every subsequent session.
+        from core.config import _resolve_provider, settings
+
         loop = AgenticLoop(
             conversation,
             executor,
             max_rounds=max_rounds,
             time_budget_s=time_budget,
             cost_budget=self._cost_budget,
-            model=self._model,
-            provider=self._provider,
+            model=settings.model,
+            provider=_resolve_provider(settings.model),
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
             hooks=self.hook_system,
@@ -241,7 +255,6 @@ def build_shared_services(
     (per-thread, no shared mutable ref).  If *hook_system* is None, a default
     HookSystem is built via ``build_hooks()``.
     """
-    from core.config import _resolve_provider
     from core.config import settings as _settings
 
     # Build hooks if not provided
@@ -293,7 +306,5 @@ def build_shared_services(
         hook_system=hook_system,
         lane_queue=lane_queue,
         tool_handlers=tool_handlers,
-        _model=_settings.model,
-        _provider=_resolve_provider(_settings.model),
         _cost_budget=cost_budget,
     )
