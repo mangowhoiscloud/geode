@@ -28,6 +28,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.83.0] — 2026-05-08
+
+> **Footer model display follow-up to v0.82.0.** v0.82.0 fixed the
+> *actual LLM call routing* (frozen `SharedServices._model` was
+> overriding `/model` switches), but the per-turn footer
+> (`✢ Worked for Xs · model · ↓in ↑out · $cost`) still hard-coded
+> `claude-opus-4-7` whenever a session started without an explicit
+> model argument. Root cause: `init_session_meter(model="")` defaulted
+> to `ANTHROPIC_PRIMARY` instead of `settings.model`, and the only
+> caller (`core/server/ipc_server/poller.py:305`) calls it with no
+> arguments. Now defaults to `settings.model or ANTHROPIC_PRIMARY` so
+> what the user sees in the footer matches the live user-selected
+> model. E2E `geode analyze "Cowboy Bebop" --dry-run` unchanged at
+> A (68.4); full pytest 4344 passed.
+
+### Fixed
+- **`core/ui/agentic_ui/_state.py:init_session_meter` — default to live `settings.model`.** When the optional `model` argument is empty, fall back to `settings.model` (the value `_apply_model` mutates on `/model` switches) before falling back to `ANTHROPIC_PRIMARY` as a final safety net. Pairs with v0.82.0's `SharedServices` fix: that change made the *actual* LLM call route to the live model, this change makes the *displayed* model in the per-turn footer match. The single caller (`core/server/ipc_server/poller.py:305`) already passes no argument, so this fix lights up automatically — no caller changes needed. (`core/ui/agentic_ui/_state.py`)
+
 ## [0.82.0] — 2026-05-08
 
 > **Critical fix — `SharedServices` no longer freezes the active LLM
