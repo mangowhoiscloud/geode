@@ -284,6 +284,18 @@ branch = true
 omit = [
     "core/ui/*",
     "core/cli/__init__.py",
+    # Tier 3 #완성 (v0.77.0) — cli/__init__.py 가 sibling 파일로 분할되며,
+    # 원본이 omit 대상이었으므로 sibling 파일들도 동일 처리.
+    # 이들은 Typer 명령 + 인터랙티브 REPL 코드로 unit test가 아닌
+    # E2E (geode analyze) + integration 테스트에서 exercise됨.
+    "core/cli/welcome.py",
+    "core/cli/search_render.py",
+    "core/cli/dispatcher.py",
+    "core/cli/prompt_session.py",
+    "core/cli/interactive_loop.py",
+    "core/cli/typer_commands.py",
+    "core/cli/typer_init.py",
+    "core/cli/typer_serve.py",
     "core/cli/commands.py",
     "core/mcp_server.py",
     "core/tools/web_tools.py",
