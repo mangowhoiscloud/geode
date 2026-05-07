@@ -28,6 +28,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.81.0] — 2026-05-08
+
+> **Dependency cleanup A4 — `core/cli/{session_checkpoint,transcript}.py` → `core/runtime_state/`.**
+> Fourth of 5 PRs. Two cross-layer state primitives — `SessionCheckpoint`
+> (239 LOC, atomic JSON store for resume/checkpoint) and `SessionTranscript`
+> (314 LOC, conversation log + cleanup) — get a new dedicated package
+> `core/runtime_state/` because they're consumed by all three layers
+> (cli, agent, server). Putting them in `core/cli/` was the original
+> v0.40-era artifact that v0.52's pyproject comment had explicitly
+> flagged: *"server/runtime_state/ 또는 utils/ 로 이동 예정"*. Today, 14
+> caller sites span 5 different layers. New package
+> `core/runtime_state/` (1 init + 2 modules). 6 `ignore_imports`
+> entries removed (`core.agent.loop.{loop,_lifecycle}` × 2 +
+> `core.server.ipc_server.poller` for `session_checkpoint`/`transcript`
+> in both contracts). 28 → 22 ignore_imports remaining (single biggest
+> reduction in the cycle). E2E `geode analyze "Cowboy Bebop" --dry-run`
+> unchanged at A (68.4); full pytest 4344 passed.
+
+### Architecture
+- **`core/cli/{session_checkpoint,transcript}.py` → `core/runtime_state/{session_checkpoint,transcript}.py` (553 LOC total).** New package `core/runtime_state/` (`__init__.py` 11L docstring) houses cross-layer session state primitives. `session_checkpoint.py` (239 LOC) = `SessionState` + `SessionCheckpoint` atomic-write JSON store backing `/resume`. `transcript.py` (314 LOC) = `SessionTranscript` conversation logger + `cleanup_old_transcripts` retention helper. Caller updates: `core/server/ipc_server/poller.py:526`, `core/agent/loop/_lifecycle.py:30`, `core/agent/loop/loop.py:129,173`, `core/cli/commands/session.py:22,34`, `core/cli/cmd_lifecycle.py:612`, `tests/conftest.py:30,31`, `tests/test_session_checkpoint.py:7`, `tests/test_phase3_ipc.py:357,402`, `tests/test_session_manager.py:129`, `tests/test_session_resume.py:11,39,110`, `tests/test_session_transcript.py:10`, `tests/test_transcript.py:8` — 14 sites across `core/`, `tests/`. `pyproject.toml` `ignore_imports` removed: `core.agent.loop.loop -> core.cli.session_checkpoint`, `core.agent.loop.loop -> core.cli.transcript`, `core.agent.loop._lifecycle -> core.cli.session_checkpoint` (Agent contract); same three + `core.server.ipc_server.poller -> core.cli.session_checkpoint` (Server contract). 28 → 22 ignore_imports remaining — biggest single drop in the cycle (-6 entries from one PR). (`core/runtime_state/__init__.py` *new*, `core/runtime_state/session_checkpoint.py` *new*, `core/runtime_state/transcript.py` *new*, `core/cli/session_checkpoint.py` *deleted*, `core/cli/transcript.py` *deleted*, 14 caller files, `pyproject.toml`)
+
 ## [0.80.0] — 2026-05-08
 
 > **Dependency cleanup A3 — `core/cli/project_detect.py` → `core/utils/project_detect.py`.**

@@ -523,7 +523,7 @@ class CLIPoller:
     ) -> dict[str, Any]:
         """Load a session checkpoint and restore conversation context."""
         try:
-            from core.cli.session_checkpoint import SessionCheckpoint
+            from core.runtime_state.session_checkpoint import SessionCheckpoint
 
             cp = SessionCheckpoint()
 
