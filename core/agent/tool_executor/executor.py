@@ -32,6 +32,7 @@ def _tool_spinner(label: str) -> Any:
 
     return _pkg._tool_spinner(label)
 
+
 # Everything else is STANDARD — executes without special gates
 
 

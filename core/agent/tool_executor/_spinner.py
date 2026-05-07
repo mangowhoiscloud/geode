@@ -27,9 +27,7 @@ def _tool_spinner(label: str) -> Iterator[None]:
     # `core.agent.tool_executor.console` affect this code path.
     from core.agent import tool_executor as _pkg
 
-    status = _pkg.console.status(
-        f"  [dim]✢ {label}[/dim]", spinner="dots", spinner_style="cyan"
-    )
+    status = _pkg.console.status(f"  [dim]✢ {label}[/dim]", spinner="dots", spinner_style="cyan")
     status.start()
     try:
         yield
