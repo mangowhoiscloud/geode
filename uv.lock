@@ -458,7 +458,7 @@ wheels = [
 
 [[package]]
 name = "geode"
-version = "0.81.0"
+version = "0.82.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
