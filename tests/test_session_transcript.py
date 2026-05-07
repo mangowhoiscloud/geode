@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 import pytest
-from core.cli.transcript import SessionTranscript, cleanup_old_transcripts
+from core.runtime_state.transcript import SessionTranscript, cleanup_old_transcripts
 
 
 @pytest.fixture()

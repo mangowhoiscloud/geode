@@ -126,7 +126,7 @@ class TestSessionCheckpointIntegration:
     """SessionCheckpoint.save() syncs to SQLite index."""
 
     def test_save_creates_index_entry(self, tmp_path: Path) -> None:
-        from core.cli.session_checkpoint import SessionCheckpoint, SessionState
+        from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
 
         cp = SessionCheckpoint(session_dir=tmp_path / "session")
         state = SessionState(

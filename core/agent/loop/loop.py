@@ -126,7 +126,7 @@ class AgenticLoop:
         try:
             import uuid as _uuid
 
-            from core.cli.transcript import SessionTranscript
+            from core.runtime_state.transcript import SessionTranscript
 
             self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
             self._transcript = SessionTranscript(self._session_id)
@@ -170,7 +170,7 @@ class AgenticLoop:
         # C3 checkpoint: full message persistence for /resume (Claude Code pattern)
         self._checkpoint: Any | None = None
         try:
-            from core.cli.session_checkpoint import SessionCheckpoint
+            from core.runtime_state.session_checkpoint import SessionCheckpoint
 
             self._checkpoint = SessionCheckpoint()
         except Exception:
