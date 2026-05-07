@@ -354,9 +354,9 @@ class TestAgenticLoop:
         """Test key_registration_gate returns None on /quit."""
         from unittest.mock import patch as _patch
 
-        from core.cli.startup import key_registration_gate
+        from core.cli.onboarding import key_registration_gate
 
-        with _patch("core.cli.startup.console") as mock_console:
+        with _patch("core.cli.onboarding.console") as mock_console:
             mock_console.input.return_value = "/quit"
             result = key_registration_gate()
             assert result is None
@@ -365,12 +365,12 @@ class TestAgenticLoop:
         """Test key_registration_gate accepts pasted API key."""
         from unittest.mock import patch as _patch
 
-        from core.cli.startup import key_registration_gate
+        from core.cli.onboarding import key_registration_gate
 
         with (
-            _patch("core.cli.startup.console") as mock_console,
-            _patch("core.cli.startup._upsert_env"),
-            _patch("core.cli.startup.settings") as mock_settings,
+            _patch("core.cli.onboarding.console") as mock_console,
+            _patch("core.cli.onboarding._upsert_env"),
+            _patch("core.cli.onboarding.settings") as mock_settings,
         ):
             mock_settings.anthropic_api_key = ""
             mock_settings.openai_api_key = ""

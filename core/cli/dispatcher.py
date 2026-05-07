@@ -23,6 +23,7 @@ from core.cli.commands import (
     resolve_action,
     show_help,
 )
+from core.cli.onboarding import render_readiness
 from core.cli.pipeline_executor import _run_analysis
 from core.cli.report_renderer import _generate_report, _parse_report_args
 from core.cli.search_render import _render_search_results
@@ -31,8 +32,8 @@ from core.cli.session_state import (
     _get_search_engine,
     _scheduler_service_ctx,
 )
-from core.cli.startup import check_readiness, render_readiness
 from core.config import settings
+from core.lifecycle.startup import check_readiness
 from core.ui.console import console
 
 
