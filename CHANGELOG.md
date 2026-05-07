@@ -28,6 +28,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.69.0] — 2026-05-07
+
+> **Codebase audit Tier 3 — God Object split #1: `core/cli/tool_handlers.py`.**
+> The 1,472-LOC monolith with 14 `_build_*_handlers()` factory functions
+> in a single file is now a 15-module package
+> (`core/cli/tool_handlers/`). Each handler group lives in its own file
+> (memory, plan, hitl, system, execution, delegated, mcp, context, task,
+> notification, calendar, offload, computer_use) plus shared utilities
+> (`_helpers.py`: `_clarify`, `_safe_delegate`,
+> `install_domain_tool_handlers`) and the package `__init__.py` that
+> hosts the public aggregator (`_build_tool_handlers`) and the
+> module-level `PlanStore` singleton (`_PLAN_STORE` / `_get_plan_store`).
+> Largest single file post-split is `plan.py` at 296 LOC. **No public API
+> changes** — the seven external import sites (4 in `core/`, 3 in tests)
+> resolve to the same symbols via package re-exports; the
+> `monkeypatch.setattr(th, "_PLAN_STORE", ...)` test fixture in
+> `test_plan_mode.py` still works because the singleton lives at the
+> package root. E2E `geode analyze "Cowboy Bebop" --dry-run` unchanged
+> at A (68.4). Eight Tier-3 God Objects remain (`commands.py`,
+> `cli/__init__.py`, `agent/loop.py`, `scheduler/scheduler.py`,
+> `ui/agentic_ui.py`, `skills/reports.py`, `agent/tool_executor.py`,
+> `llm/router.py`) — each will land as its own PR.
+
+### Architecture
+- **`core/cli/tool_handlers.py` (1,472 LOC) → `core/cli/tool_handlers/` (15 files, 1,540 LOC).** Mechanical split by handler group; preserves every section header, comment, and behavior from the original. Sub-module sizes: `__init__.py` 148, `_helpers.py` 57, `memory.py` 74, `plan.py` 296, `hitl.py` 120, `system.py` 250, `execution.py` 159, `delegated.py` 54, `mcp.py` 51, `context.py` 78, `task.py` 149, `notification.py` 19, `calendar.py` 33, `offload.py` 25, `computer_use.py` 27. The package's `__init__.py` re-exports the 19 names previously imported from the flat module (`_build_tool_handlers`, `_build_*_handlers` × 13, `_DELEGATED_TOOLS`, `_PLAN_STORE`, `_get_plan_store`, `_clarify`, `_safe_delegate`, `_make_delegate_handler`, `install_domain_tool_handlers`) so the seven external import sites need no changes. The `_PLAN_STORE` singleton intentionally stays at the package level — `_build_plan_handlers` in `plan.py` calls `_get_plan_store()` via lazy `from core.cli.tool_handlers import _get_plan_store` to avoid the import cycle while keeping the monkeypatch surface (`th._PLAN_STORE`) intact for `tests/test_plan_mode.py`. Net +68 LOC overhead from per-module docstrings, imports, and package boilerplate — accepted for the SRP win (largest file shrinks from 1,472 → 296 LOC, ≈80% drop). (`core/cli/tool_handlers/__init__.py`, `core/cli/tool_handlers/_helpers.py`, `core/cli/tool_handlers/{memory,plan,hitl,system,execution,delegated,mcp,context,task,notification,calendar,offload,computer_use}.py`)
+
 ## [0.68.0] — 2026-05-07
 
 > **Codebase audit cleanup — Tier 1 + Tier 2.** Two-tier sweep driven by
