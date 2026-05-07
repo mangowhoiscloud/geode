@@ -28,6 +28,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.71.0] — 2026-05-07
+
+> **Codebase audit Tier 3 — God Object split #3: `core/skills/reports.py`.**
+> The 1,156-LOC report-generation module with the `ReportGenerator` class
+> plus 33 module-level formatter functions in a single file is now a
+> 12-module package (`core/skills/reports/`). Each report concern lives
+> in its own file: enums + tier helpers + gauge geometry (`models`),
+> subscores/synthesis/analyses (`scoring`), evaluator field extraction +
+> table (`evaluators`), PSM + scoring breakdown (`psm`), BiasBuster
+> (`biasbuster`), signals (`signals`), analyst reasoning
+> (`analyst_reasoning`), cross-LLM (`cross_llm`), rights risk
+> (`rights_risk`), decision tree (`decision_tree`), and the
+> `ReportGenerator` class (`generator`). The `templates/` subdirectory
+> moved with the package to `core/skills/reports/templates/` so
+> `Path(__file__).parent / "templates"` keeps resolving correctly.
+> **No public API changes** — `core/cli/report_renderer.py` and
+> `tests/test_reports.py` import the same 12 symbols through the package
+> re-exports unchanged. Largest single file post-split is `generator.py`
+> at 336 LOC. E2E `geode analyze "Cowboy Bebop" --dry-run` unchanged at
+> A (68.4); full pytest 4344 passed (parity with v0.70.0). Six Tier-3
+> God Objects remain (`commands.py`, `cli/__init__.py`,
+> `agent/loop.py`, `ui/agentic_ui.py`, `agent/tool_executor.py`,
+> `llm/router.py`).
+
+### Architecture
+- **`core/skills/reports.py` (1,156 LOC) → `core/skills/reports/` (12 files, 1,317 LOC).** Mechanical split by report concern; preserves every formatter body, the `_TIER_CONFIG` / `_SUBSCORE_BARS` constants, and the `Path(__file__).parent / "templates"` resolution semantics. Sub-module sizes: `__init__.py` 46, `models.py` 107 (`ReportFormat` + `ReportTemplate` Enums + `_TEMPLATES_DIR` + `_load_template` + `_TIER_CONFIG` + `_SUBSCORE_BARS` + `_tier_class` + `_get_tier_config` + `_GAUGE_RADIUS` + `_GAUGE_CIRCUMFERENCE` + `_gauge_offset`), `scoring.py` 150 (subscores/synthesis/analyses html+md), `evaluators.py` 86 (eval field extraction + table), `psm.py` 158 (PSM + scoring breakdown), `biasbuster.py` 72, `signals.py` 94, `analyst_reasoning.py` 71, `cross_llm.py` 60, `rights_risk.py` 62, `decision_tree.py` 75, `generator.py` 336 (`ReportGenerator` class — the central orchestrator, intentionally kept whole). The package's `__init__.py` re-exports the 12 symbols previously imported from the flat module (`ReportFormat`, `ReportGenerator`, `ReportTemplate`, plus 8 `_format_*` formatters: `_format_analyst_reasoning_html/md`, `_format_cross_llm_html/md`, `_format_decision_tree_html/md`, `_format_rights_risk_html/md`) so `core/cli/report_renderer.py:18` and `tests/test_reports.py:9` (the only two external consumers) need no changes. The `templates/` directory was moved via `git mv core/skills/templates core/skills/reports/templates` (rename history preserved). One `.gitignore` adjustment: lines 78-81 add a scoped negation `!core/skills/reports/` + `!core/skills/reports/**` so the new package source is committable while preserving the original `reports/` ignore rule for agent-generated user reports. Net +161 LOC overhead from per-module docstrings and import boilerplate — accepted for the SRP win (largest file shrinks from 1,156 → 336 LOC, 71% drop). (`core/skills/reports/{__init__,models,scoring,evaluators,psm,biasbuster,signals,analyst_reasoning,cross_llm,rights_risk,decision_tree,generator}.py`, `core/skills/reports/templates/{report.html,report_summary.md,report_detailed.md}` *renamed*, `.gitignore`)
+
 ## [0.70.0] — 2026-05-07
 
 > **Codebase audit Tier 3 — God Object split #2: `core/scheduler/scheduler.py`.**
