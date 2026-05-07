@@ -28,6 +28,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.79.0] — 2026-05-08
+
+> **Dependency cleanup A2 — `core/cli/bash_tool.py` → `core/agent/bash_tool.py`.**
+> Second of 5 PRs in the dependency cycle. The 162-LOC HITL-gated shell
+> execution tool was misplaced in `core/cli/` despite being agent-internal
+> — only the agentic loop's `ToolExecutor` ever instantiates it. Moving
+> to `core/agent/` puts it at the correct layer. 2 `ignore_imports`
+> entries removed; the `S602 shell=True` per-file-ignore path renamed.
+> 31 → 29 ignore_imports remaining. E2E unchanged at A (68.4); full
+> pytest 4344 passed.
+
+### Architecture
+- **`core/cli/bash_tool.py` (162 LOC) → `core/agent/bash_tool.py` (162 LOC).** `BashTool` provides HITL-gated shell execution with sandbox hardening (`preexec_fn` with `resource.setrlimit` for CPU/FSIZE/NPROC caps) + secret redaction on stdout/stderr. Instantiated only by `core/agent/tool_executor/executor.py:_execute_bash` — lives entirely within the agentic loop's tool surface (the CLI never invokes BashTool directly; it goes through `ToolExecutor`). Caller updates: `core/agent/tool_executor/executor.py:20`, `tests/test_bash_tool.py:8,140,146` (3 imports), `tests/test_redaction.py:80,93,106` (3 lazy imports). `pyproject.toml`: 2 `ignore_imports` entries removed (`core.agent.tool_executor.executor -> core.cli.bash_tool` from both `Agent stays pure` + `Server may host agent but never CLI` contracts), 1 `[tool.ruff.lint.per-file-ignores]` entry renamed (`core/cli/bash_tool.py` → `core/agent/bash_tool.py` for the S602 `shell=True` allowance). 31 → 29 ignore_imports remaining. (`core/agent/bash_tool.py` *new*, `core/cli/bash_tool.py` *deleted*, `core/agent/tool_executor/executor.py`, `tests/test_bash_tool.py`, `tests/test_redaction.py`, `pyproject.toml`)
+
 ## [0.78.0] — 2026-05-08
 
 > **Dependency cleanup A1 — `core/cli/redaction.py` → `core/utils/redaction.py`.**
