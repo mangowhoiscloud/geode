@@ -76,6 +76,13 @@ geode_checkpoints.db-wal
 # Temporary artifacts
 tmp/
 reports/
+# Allow the source package at core/skills/reports/ (split from reports.py in v0.71.0).
+# Only un-ignore source files + templates — let __pycache__/*.pyc stay ignored
+# via Python's standard glob below.
+!core/skills/reports/
+!core/skills/reports/*.py
+!core/skills/reports/templates/
+!core/skills/reports/templates/*
 *.png
 *.html
 !docs/**/*.html
