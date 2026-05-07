@@ -76,7 +76,7 @@ def _apply_model(selected: ModelProfile, *, effort: str | None = None) -> None:
     # happens to survive — wiping .env would lose the choice silently.
     # 3-codebase consensus (Hermes/Codex/Claude Code all persist picker
     # choices to durable config).
-    from core.cli._helpers import upsert_config_toml
+    from core.utils.env_io import upsert_config_toml
 
     if not same_model:
         settings.model = selected.id

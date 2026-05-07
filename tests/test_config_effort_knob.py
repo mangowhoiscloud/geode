@@ -15,7 +15,7 @@ import inspect
 import tomllib
 from pathlib import Path
 
-from core.cli._helpers import upsert_config_toml
+from core.utils.env_io import upsert_config_toml
 
 
 class TestUpsertConfigToml:

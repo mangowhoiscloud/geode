@@ -15,11 +15,11 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from core.cli._helpers import mask_key as _mask_key
-from core.cli._helpers import upsert_env as _upsert_env
 from core.config import settings
 from core.memory.project import ProjectMemory
 from core.ui.console import console
+from core.utils.env_io import mask_key as _mask_key
+from core.utils.env_io import upsert_env as _upsert_env
 
 log = logging.getLogger(__name__)
 
@@ -281,7 +281,7 @@ def detect_api_key(text: str) -> tuple[str, str, str] | None:
     Returns (provider, env_var, key_value) if detected, else None.
     Only matches single-token inputs (no spaces except leading/trailing).
     """
-    from core.cli._helpers import is_glm_key
+    from core.utils.env_io import is_glm_key
 
     stripped = text.strip()
     if " " in stripped or "\n" in stripped:

@@ -28,6 +28,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.85.0] — 2026-05-08
+
+> **A5a — `cli/_helpers` IO/key utilities → `core/utils/env_io.py`.** First
+> of two PRs that resume the v0.82.0-deferred A5 work (move `cli/startup.py`
+> out of the CLI layer). The blocker was that `startup.py` imports
+> `mask_key`, `upsert_env`, `is_glm_key` from `cli/_helpers` — moving
+> startup alone created `lifecycle.startup → cli._helpers` violations.
+> This PR extracts the four IO/key utilities (`mask_key`, `upsert_env`,
+> `upsert_config_toml`, `is_glm_key`) to `core/utils/env_io.py` because
+> they have no CLI semantics — they read/write `.env`,
+> `.geode/config.toml`, and detect API key shapes. `parse_dry_run_flag`
+> stays in `core/cli/_helpers.py` because it parses CLI argument
+> strings, which is genuinely a CLI concern. After this PR,
+> `cli/_helpers.py` shrinks from 113 LOC to 21 LOC. Five caller files
+> updated. E2E `geode analyze "Cowboy Bebop" --dry-run` unchanged at
+> A (68.4); pytest 4345 passed.
+
+### Changed
+- **`core/cli/_helpers.py` (113 LOC → 21 LOC) split into `core/utils/env_io.py` + `core/cli/_helpers.py`.** Four utilities move to `core/utils/env_io.py` (107 LOC): `mask_key(key)` (display masking, no CLI dep), `upsert_env(var_name, value)` (writes `.env` + syncs `os.environ`, no CLI dep), `upsert_config_toml(section, key, value)` (writes `.geode/config.toml`, no CLI dep), `is_glm_key(value)` (regex-based ZhipuAI key detection, no CLI dep). `parse_dry_run_flag(args)` stays in `core/cli/_helpers.py` because it parses CLI argument strings — CLI-layer concern. Caller updates (5 files): `core/cli/startup.py:18-19,284`, `core/cli/commands/__init__.py:46-48`, `core/cli/commands/model.py:79`, `tests/test_config_effort_knob.py:18` switch their imports from `core.cli._helpers` to `core.utils.env_io`. `core/cli/dispatcher.py:48` keeps its `parse_dry_run_flag` import unchanged. No `ignore_imports` change yet — those happen in A5b when `cli/startup.py` itself moves to `core/lifecycle/startup.py`. (`core/utils/env_io.py` *new*, `core/cli/_helpers.py`, `core/cli/startup.py`, `core/cli/commands/__init__.py`, `core/cli/commands/model.py`, `tests/test_config_effort_knob.py`)
+
 ## [0.84.0] — 2026-05-08
 
 > **OAuth point-check trilogy completion — IPC TTY capability propagation.**
