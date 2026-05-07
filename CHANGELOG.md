@@ -28,6 +28,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.73.0] — 2026-05-07
+
+> **Codebase audit Tier 3 — God Object split #5: `core/ui/agentic_ui.py`.**
+> The 1,160-LOC UI rendering module with 59 functions + 2 classes
+> (`SessionMeter`, `OperationLogger`) + 28 `emit_*` event functions in
+> a single file is now a 6-module package (`core/ui/agentic_ui/`). Each
+> UI concern lives in its own file: thread-local pipeline IP / session
+> meter state (`_state`), the `OperationLogger` class
+> (`_operation_logger`), inline render functions (`render`), turn
+> summary + lifecycle markers (`summary`), and the 28 event emitters
+> (`events`). **No public API changes** — all 21 external consumers
+> import via `from core.ui.agentic_ui import …` and resolve to the
+> same symbols through the package re-exports unchanged. Largest
+> single file post-split is `events.py` at 544 LOC. The
+> `_turn_snapshot` mutable module-level state lives canonically in
+> `__init__.py` so test fixtures (`mod._turn_snapshot = None`) keep
+> working. The `console` test-monkeypatch surface
+> (`@patch("core.ui.agentic_ui.console")`) flows through via the
+> `from core.ui import agentic_ui as _pkg; _pkg.console.print(...)`
+> indirection in sub-modules. E2E `geode analyze "Cowboy Bebop"
+> --dry-run` unchanged at A (68.4); full pytest 4344 passed (parity
+> with v0.72.0). Four Tier-3 God Objects remain (`commands.py`,
+> `cli/__init__.py`, `agent/loop.py`, `llm/router.py`).
+
+### Architecture
+- **`core/ui/agentic_ui.py` (1,160 LOC) → `core/ui/agentic_ui/` (6 files, 1,424 LOC).** Mechanical split by UI concern; preserves every function body, the `_meter_local`/`_pipeline_ip_local`/`_ipc_writer_local` `threading.local()` instances, the module-level `_turn_snapshot` state, and the test-monkeypatch surface for `console` and `_turn_snapshot`. Sub-module sizes: `__init__.py` 171 (re-exports + `_turn_snapshot` canonical home), `_state.py` 124 (`SessionMeter` class + `init_session_meter`/`update_session_model`/`get_session_meter` accessors + `set_pipeline_ip`/`_get_pipeline_ip` + the 3 `threading.local()` instances), `_operation_logger.py` 195 (`OperationLogger` class), `render.py` 256 (12 inline render functions), `summary.py` 134 (`render_turn_summary`, `render_action_summary`, `mark_turn_start`), `events.py` 544 (28 `emit_*` functions for budget/retry/oauth/quota/pipeline events). The package's `__init__.py` re-exports the 56 names previously imported by external callers (the 2 classes, the 12 render functions, the 28 emit functions, the state accessors, and `console`/`_turn_snapshot`/`_meter_local`/`_pipeline_ip_local`/`_ipc_writer_local`/`_fmt_tokens` for test monkeypatching) so the 21 external import sites need no changes. No companion changes outside the package — no `import-linter` rules referenced `agentic_ui`, `.gitignore` untouched. Net +264 LOC overhead from per-module docstrings and re-export plumbing — accepted for the SRP win (largest file shrinks from 1,160 → 544 LOC, 53% drop). (`core/ui/agentic_ui/{__init__,_state,_operation_logger,render,summary,events}.py`)
+
 ## [0.72.0] — 2026-05-07
 
 > **Codebase audit Tier 3 — God Object split #4: `core/agent/tool_executor.py`.**
