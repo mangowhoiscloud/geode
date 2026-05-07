@@ -12,12 +12,12 @@ if TYPE_CHECKING:
     from core.hooks import HookSystem
 
 from core.agent.approval import _write_denial_with_fallback
+from core.agent.bash_tool import BashTool
 from core.agent.safety import (
     DANGEROUS_TOOLS,
     EXPENSIVE_TOOLS,
     WRITE_TOOLS,
 )
-from core.cli.bash_tool import BashTool
 
 log = logging.getLogger(__name__)
 
