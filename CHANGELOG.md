@@ -28,6 +28,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.76.0] — 2026-05-08
+
+> **Codebase audit Tier 3 — God Object split #8: `core/cli/commands.py`.**
+> The 2,441-LOC CLI slash-command router (the user-facing entry point
+> behind every `/key`, `/model`, `/auth`, `/login`, `/cost`, `/skills`,
+> `/mcp`, `/compact`, `/clear`, `/resume`, `/apply`, `/context`,
+> `/tasks`, `/trigger` invocation) is now a 13-file package
+> (`core/cli/commands/`). Each command family lives in its own
+> sub-module. The `_state.py` module owns the shared state — `COMMAND_MAP`
+> dict, `MODEL_PROFILES` registry, `_conversation_ctx` ContextVar,
+> `install_domain_commands` plugin merge hook, `show_help`, and
+> `resolve_action` slash-to-action resolver. Largest single file
+> post-split is `login.py` at 655 LOC (the cohesive `/login` subsystem
+> with 9 helpers). **No public API changes** — all 53 names previously
+> imported by external callers (29 import sites across `core/`,
+> `plugins/`, `tests/`) work unchanged via the package `__init__.py`
+> re-exports. The plugin-side `from core.cli.commands import
+> COMMAND_MAP; COMMAND_MAP.update(GAME_IP_SLASHES)` mutation continues
+> to work because the re-export is a reference (same dict object).
+> E2E `geode analyze "Cowboy Bebop" --dry-run` unchanged at A (68.4);
+> full pytest 4344 passed (parity with v0.75.0). One Tier-3 God Object
+> remains (`cli/__init__.py`).
+
+### Architecture
+- **`core/cli/commands.py` (2,441 LOC) → `core/cli/commands/` (13 files, 2,831 LOC).** Mechanical split by command family; preserves every function body byte-identical and the test-monkeypatch surface for the 28 `core.cli.commands.X` patches across the test suite. Sub-module sizes: `__init__.py` 148 (re-exports — `__all__` lists 53 names), `_state.py` 201 (`ModelProfile` dataclass + `MODEL_PROFILES` list + `_MODEL_INDEX` + `_conversation_ctx` ContextVar + `set_conversation_context`/`get_conversation_context` + `COMMAND_MAP` + `install_domain_commands` + `show_help` + `resolve_action` + `_get_profile_store`), `key.py` 211 (`cmd_key` + `_seed_payg_plan_from_key` + `_persist_auth_state` + `_check_provider_key`), `model.py` 204 (`_apply_model` + `_interactive_model_picker` + `cmd_model`), `auth.py` 316 (`_auth_login_status` + `_sync_oauth_profile_after_login` + `cmd_auth` + `_auth_add_interactive`), `mcp.py` 114 (`cmd_mcp` + `_mcp_add`), `skills.py` 200 (`cmd_skills` + `cmd_skill_invoke` + `_skills_add`), `cost.py` 230 (`cmd_cost` + `_budget_bar` + `_get_cost_budget` + `_set_cost_budget`), `session.py` 418 (`cmd_resume` + `cmd_apply` + `cmd_context` + `cmd_compact` + `cmd_clear`), `tasks.py` 84 (`cmd_tasks`), `trigger.py` 50 (`cmd_trigger`), `login.py` 655 (`cmd_login` + 9 `_login_*` helpers — the largest leaf, intentionally kept whole as a cohesive `/login` subsystem). The package's `__init__.py` re-exports the 53 public names previously imported by external callers (`COMMAND_MAP`, `MODEL_PROFILES`, `ModelProfile`, all 16 `cmd_*` functions, `set_conversation_context`/`get_conversation_context`, `resolve_action`, `show_help`, `install_domain_commands`, plus 22 private helpers and constants tests reference) so the 29 external import sites need no changes. The plugin's `COMMAND_MAP.update(GAME_IP_SLASHES)` continues to mutate the canonical dict (re-export is a reference, same object). Test-monkeypatch surface preserved via deferred `from core.cli import commands as _pkg` lookup inside each function — sub-modules call `_pkg.console.print(...)`, `_pkg._upsert_env(...)`, `_pkg._get_cost_budget(...)`, etc. so `@patch("core.cli.commands.X")` patches propagate through the package namespace at call time (mirroring the established `core/ui/agentic_ui` and `core/agent/tool_executor` patterns from prior splits). No `pyproject.toml` import-linter changes required (rules reference `core.cli.commands` as a leaf path which still resolves to the new package). Net +390 LOC overhead from per-module docstrings, deferred-import boilerplate, and re-export plumbing — accepted for the SRP win (largest file shrinks from 2,441 → 655 LOC, **73% drop** — the largest absolute reduction in the Tier 3 series). (`core/cli/commands/{__init__,_state,key,model,auth,mcp,skills,cost,session,tasks,trigger,login}.py`)
+
 ## [0.75.0] — 2026-05-07
 
 > **Codebase audit Tier 3 — God Object split #7: `core/agent/loop.py`.**
