@@ -161,11 +161,8 @@ def setup(
     prompting for API keys. Use ``--reset`` to clear existing
     credentials and start over.
     """
-    from core.cli.startup import (
-        _has_any_llm_key,
-        detect_subscription_oauth,
-        env_setup_wizard,
-    )
+    from core.cli.onboarding import env_setup_wizard
+    from core.lifecycle.startup import _has_any_llm_key, detect_subscription_oauth
 
     if reset:
         env_path = Path("~/.geode/.env").expanduser()

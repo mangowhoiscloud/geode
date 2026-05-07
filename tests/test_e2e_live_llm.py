@@ -45,7 +45,7 @@ def _make_loop(
         _build_tool_handlers,
         _set_readiness,
     )
-    from core.cli.startup import check_readiness
+    from core.lifecycle.startup import check_readiness
 
     readiness = check_readiness()
     if not force_dry_run:
@@ -533,8 +533,8 @@ class TestKeyRegistrationGateLive:
         """Key gate returns None on /quit."""
         from unittest.mock import patch
 
-        from core.cli.startup import key_registration_gate
+        from core.cli.onboarding import key_registration_gate
 
-        with patch("core.cli.startup.console") as mock_console:
+        with patch("core.cli.onboarding.console") as mock_console:
             mock_console.input.return_value = "/quit"
             assert key_registration_gate() is None

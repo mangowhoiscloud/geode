@@ -5,15 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from core.cli.startup import (
+from core.cli.onboarding import detect_api_key, env_setup_wizard
+from core.config import ANTHROPIC_PRIMARY, GLM_PRIMARY, OPENAI_PRIMARY
+from core.lifecycle.startup import (
     Capability,
     ReadinessReport,
     check_readiness,
-    detect_api_key,
-    env_setup_wizard,
     setup_project_memory,
 )
-from core.config import ANTHROPIC_PRIMARY, GLM_PRIMARY, OPENAI_PRIMARY
 
 
 def _no_keys_mock(mock_settings):
@@ -61,7 +60,7 @@ class TestReadinessReport:
 
 class TestCheckReadiness:
     def test_without_api_key(self, tmp_path: Path):
-        with patch("core.cli.startup.settings") as mock_settings:
+        with patch("core.lifecycle.startup.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             report = check_readiness(tmp_path)
 
@@ -73,7 +72,7 @@ class TestCheckReadiness:
         assert llm_cap.available is False
 
     def test_with_anthropic_key(self, tmp_path: Path):
-        with patch("core.cli.startup.settings") as mock_settings:
+        with patch("core.lifecycle.startup.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             mock_settings.anthropic_api_key = "sk-ant-real-key-here"
             report = check_readiness(tmp_path)
@@ -86,7 +85,7 @@ class TestCheckReadiness:
 
     def test_with_openai_key_only(self, tmp_path: Path):
         """ANY provider key unblocks — OpenAI alone should suffice."""
-        with patch("core.cli.startup.settings") as mock_settings:
+        with patch("core.lifecycle.startup.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             mock_settings.openai_api_key = "sk-proj-real-key-here"
             report = check_readiness(tmp_path)
@@ -96,7 +95,7 @@ class TestCheckReadiness:
 
     def test_with_glm_key_only(self, tmp_path: Path):
         """ANY provider key unblocks — GLM alone should suffice."""
-        with patch("core.cli.startup.settings") as mock_settings:
+        with patch("core.lifecycle.startup.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             mock_settings.zai_api_key = "abc12345.def67890"
             report = check_readiness(tmp_path)
@@ -105,7 +104,7 @@ class TestCheckReadiness:
         assert report.blocked is False
 
     def test_placeholder_key_treated_as_missing(self, tmp_path: Path):
-        with patch("core.cli.startup.settings") as mock_settings:
+        with patch("core.lifecycle.startup.settings") as mock_settings:
             mock_settings.anthropic_api_key = "sk-ant-..."
             mock_settings.openai_api_key = "sk-..."
             mock_settings.zai_api_key = "..."
@@ -115,7 +114,7 @@ class TestCheckReadiness:
         assert report.force_dry_run is True
 
     def test_env_file_check(self, tmp_path: Path):
-        with patch("core.cli.startup.settings") as mock_settings:
+        with patch("core.lifecycle.startup.settings") as mock_settings:
             _no_keys_mock(mock_settings)
 
             # No .env, no .env.example
@@ -136,7 +135,7 @@ class TestCheckReadiness:
             assert report.has_env_file is True
 
     def test_project_memory_check(self, tmp_path: Path):
-        with patch("core.cli.startup.settings") as mock_settings:
+        with patch("core.lifecycle.startup.settings") as mock_settings:
             _no_keys_mock(mock_settings)
 
             # No .geode/memory/PROJECT.md → unavailable
@@ -155,7 +154,7 @@ class TestCheckReadiness:
             assert mem_cap.available is True
 
     def test_always_available_capabilities(self, tmp_path: Path):
-        with patch("core.cli.startup.settings") as mock_settings:
+        with patch("core.lifecycle.startup.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             report = check_readiness(tmp_path)
 
@@ -216,8 +215,8 @@ class TestEnvSetupWizard:
     def test_wizard_skips_on_enter_after_choosing_path_b(self, tmp_path):
         """User picks Path B then presses Enter for every key → no keys set."""
         with (
-            patch("core.cli.startup.console") as mock_console,
-            patch("core.cli.startup.settings") as mock_settings,
+            patch("core.cli.onboarding.console") as mock_console,
+            patch("core.cli.onboarding.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = ["2", "", "", ""]
@@ -227,9 +226,9 @@ class TestEnvSetupWizard:
     def test_wizard_sets_key_via_path_b(self, tmp_path):
         """User picks Path B and enters an Anthropic key."""
         with (
-            patch("core.cli.startup.console") as mock_console,
-            patch("core.cli.startup._upsert_env"),
-            patch("core.cli.startup.settings") as mock_settings,
+            patch("core.cli.onboarding.console") as mock_console,
+            patch("core.cli.onboarding._upsert_env"),
+            patch("core.cli.onboarding.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = [
@@ -244,8 +243,8 @@ class TestEnvSetupWizard:
     def test_wizard_handles_ctrl_c(self, tmp_path):
         """Ctrl+C at the menu prompt gracefully stops."""
         with (
-            patch("core.cli.startup.console") as mock_console,
-            patch("core.cli.startup.settings") as mock_settings,
+            patch("core.cli.onboarding.console") as mock_console,
+            patch("core.cli.onboarding.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = KeyboardInterrupt
@@ -255,9 +254,9 @@ class TestEnvSetupWizard:
     def test_wizard_path_a_subscription(self, tmp_path):
         """Path A — user chose subscription; OAuth detected on probe."""
         with (
-            patch("core.cli.startup.console") as mock_console,
-            patch("core.cli.startup.detect_subscription_oauth", return_value="openai-codex"),
-            patch("core.cli.startup.settings") as mock_settings,
+            patch("core.cli.onboarding.console") as mock_console,
+            patch("core.cli.onboarding.detect_subscription_oauth", return_value="openai-codex"),
+            patch("core.cli.onboarding.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = ["1", ""]  # menu, then Enter on prompt
@@ -267,9 +266,9 @@ class TestEnvSetupWizard:
     def test_wizard_path_a_no_oauth_found(self, tmp_path):
         """Path A — user chose subscription but no token at ~/.codex/auth.json."""
         with (
-            patch("core.cli.startup.console") as mock_console,
-            patch("core.cli.startup.detect_subscription_oauth", return_value=None),
-            patch("core.cli.startup.settings") as mock_settings,
+            patch("core.cli.onboarding.console") as mock_console,
+            patch("core.cli.onboarding.detect_subscription_oauth", return_value=None),
+            patch("core.cli.onboarding.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = ["1", ""]
@@ -280,8 +279,8 @@ class TestEnvSetupWizard:
         """Path C — user chose skip (dry-run). Returns True so wizard
         won't re-prompt on next launch."""
         with (
-            patch("core.cli.startup.console") as mock_console,
-            patch("core.cli.startup.settings") as mock_settings,
+            patch("core.cli.onboarding.console") as mock_console,
+            patch("core.cli.onboarding.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = ["3"]
@@ -294,12 +293,12 @@ class TestDetectSubscriptionOAuth:
 
     def test_no_credentials_returns_none(self):
         with patch("core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None):
-            from core.cli.startup import detect_subscription_oauth
+            from core.lifecycle.startup import detect_subscription_oauth
 
             assert detect_subscription_oauth() is None
 
     def test_returns_provider_id_on_success(self):
-        from core.cli.startup import detect_subscription_oauth
+        from core.lifecycle.startup import detect_subscription_oauth
 
         fake_creds = {"access_token": "tok-abc", "refresh_token": "rt", "expires_at": 9999999999.0}
         with (
@@ -307,7 +306,7 @@ class TestDetectSubscriptionOAuth:
                 "core.auth.codex_cli_oauth.read_codex_cli_credentials",
                 return_value=fake_creds,
             ),
-            patch("core.cli.startup.log"),
+            patch("core.lifecycle.startup.log"),
         ):
             result = detect_subscription_oauth()
         assert result == "openai-codex"
@@ -317,7 +316,7 @@ class TestDetectSubscriptionOAuth:
             "core.auth.codex_cli_oauth.read_codex_cli_credentials",
             side_effect=OSError("nope"),
         ):
-            from core.cli.startup import detect_subscription_oauth
+            from core.lifecycle.startup import detect_subscription_oauth
 
             assert detect_subscription_oauth() is None
 
@@ -326,12 +325,12 @@ class TestIsPlaceholder:
     """Test _is_placeholder helper."""
 
     def test_ellipsis_exact(self):
-        from core.cli.startup import _is_placeholder
+        from core.lifecycle.startup import _is_placeholder
 
         assert _is_placeholder("...") is True
 
     def test_prefixed_ellipsis(self):
-        from core.cli.startup import _is_placeholder
+        from core.lifecycle.startup import _is_placeholder
 
         assert _is_placeholder("sk-ant-...") is True
         assert _is_placeholder("sk-...") is True
@@ -339,7 +338,7 @@ class TestIsPlaceholder:
         assert _is_placeholder("BSA...") is True
 
     def test_real_value_not_placeholder(self):
-        from core.cli.startup import _is_placeholder
+        from core.lifecycle.startup import _is_placeholder
 
         assert _is_placeholder("sk-ant-api03-realkey123456789") is False
         assert _is_placeholder("") is False
@@ -347,7 +346,7 @@ class TestIsPlaceholder:
         assert _is_placeholder("true") is False
 
     def test_trailing_dots_not_three(self):
-        from core.cli.startup import _is_placeholder
+        from core.lifecycle.startup import _is_placeholder
 
         # Only exactly "..." at end counts
         assert _is_placeholder("value..") is False
@@ -358,7 +357,7 @@ class TestAutoGenerateEnv:
     """Test auto_generate_env function."""
 
     def test_creates_env_from_example(self, tmp_path: Path):
-        from core.cli.startup import auto_generate_env
+        from core.lifecycle.startup import auto_generate_env
 
         example = tmp_path / ".env.example"
         example.write_text("ANTHROPIC_API_KEY=sk-ant-...\nDEBUG=true\n")
@@ -377,7 +376,7 @@ class TestAutoGenerateEnv:
 
     def test_env_file_permissions(self, tmp_path: Path):
         """P0-1: .env must have 0o600 permissions (owner read/write only)."""
-        from core.cli.startup import auto_generate_env
+        from core.lifecycle.startup import auto_generate_env
 
         example = tmp_path / ".env.example"
         example.write_text("KEY=sk-ant-...\n")
@@ -389,7 +388,7 @@ class TestAutoGenerateEnv:
 
     def test_atomic_write_no_partial(self, tmp_path: Path):
         """P0-2: .env should not exist as .tmp after successful write."""
-        from core.cli.startup import auto_generate_env
+        from core.lifecycle.startup import auto_generate_env
 
         example = tmp_path / ".env.example"
         example.write_text("KEY=value\n")
@@ -399,7 +398,7 @@ class TestAutoGenerateEnv:
         assert (tmp_path / ".env").exists()
 
     def test_skips_existing_env(self, tmp_path: Path):
-        from core.cli.startup import auto_generate_env
+        from core.lifecycle.startup import auto_generate_env
 
         example = tmp_path / ".env.example"
         example.write_text("KEY=sk-...\n")
@@ -412,7 +411,7 @@ class TestAutoGenerateEnv:
         assert env.read_text() == "KEY=my-real-key\n"
 
     def test_no_example_file(self, tmp_path: Path):
-        from core.cli.startup import auto_generate_env
+        from core.lifecycle.startup import auto_generate_env
 
         # Neither .env nor .env.example exist
         result = auto_generate_env(tmp_path)
@@ -420,7 +419,7 @@ class TestAutoGenerateEnv:
         assert not (tmp_path / ".env").exists()
 
     def test_replaces_placeholders(self, tmp_path: Path):
-        from core.cli.startup import auto_generate_env
+        from core.lifecycle.startup import auto_generate_env
 
         example = tmp_path / ".env.example"
         example.write_text(
@@ -449,7 +448,7 @@ class TestAutoGenerateEnv:
         assert "GEODE_MODEL=claude-opus-4-6" in content
 
     def test_preserves_comments(self, tmp_path: Path):
-        from core.cli.startup import auto_generate_env
+        from core.lifecycle.startup import auto_generate_env
 
         example = tmp_path / ".env.example"
         example.write_text(
@@ -596,7 +595,7 @@ class TestSetupUserProfileWarning:
         """setup_user_profile() should log.warning on failure, not log.debug."""
         from unittest.mock import MagicMock
 
-        from core.cli.startup import setup_user_profile
+        from core.lifecycle.startup import setup_user_profile
 
         mock_profile = MagicMock()
         mock_profile.ensure_structure.side_effect = RuntimeError("boom")
@@ -606,7 +605,7 @@ class TestSetupUserProfileWarning:
                 "core.memory.user_profile.FileBasedUserProfile",
                 return_value=mock_profile,
             ),
-            patch("core.cli.startup.log") as mock_log,
+            patch("core.lifecycle.startup.log") as mock_log,
         ):
             result = setup_user_profile()
             assert result is False
@@ -616,7 +615,7 @@ class TestSetupUserProfileWarning:
     def test_returns_false_on_failure(self):
         from unittest.mock import MagicMock
 
-        from core.cli.startup import setup_user_profile
+        from core.lifecycle.startup import setup_user_profile
 
         mock_profile = MagicMock()
         mock_profile.ensure_structure.side_effect = OSError("denied")
@@ -639,7 +638,7 @@ class TestReadinessProfileStatus:
         mock_profile_instance.exists.return_value = True
 
         with (
-            patch("core.cli.startup.settings") as mock_settings,
+            patch("core.lifecycle.startup.settings") as mock_settings,
             patch(
                 "core.memory.user_profile.FileBasedUserProfile",
                 return_value=mock_profile_instance,
@@ -660,7 +659,7 @@ class TestReadinessProfileStatus:
         mock_profile_instance.exists.return_value = False
 
         with (
-            patch("core.cli.startup.settings") as mock_settings,
+            patch("core.lifecycle.startup.settings") as mock_settings,
             patch(
                 "core.memory.user_profile.FileBasedUserProfile",
                 return_value=mock_profile_instance,
@@ -677,7 +676,7 @@ class TestReadinessProfileStatus:
     def test_profile_load_exception_handled(self, tmp_path: Path):
         """If FileBasedUserProfile raises, profile shows as unavailable."""
         with (
-            patch("core.cli.startup.settings") as mock_settings,
+            patch("core.lifecycle.startup.settings") as mock_settings,
             patch(
                 "core.memory.user_profile.FileBasedUserProfile",
                 side_effect=RuntimeError("broken"),
