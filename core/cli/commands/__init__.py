@@ -39,17 +39,17 @@ mirroring the pattern used by ``core/ui/agentic_ui``.
 
 from __future__ import annotations
 
+# Bridge module for /schedule (a separate file at core/cli/cmd_schedule.py)
+from core.cli.cmd_schedule import cmd_schedule as cmd_schedule
+from core.ui.console import console as console
+
 # Helpers + Rich console must be addressable at the package level so
 # monkeypatched test references (``patch("core.cli.commands.console")``,
 # ``patch("core.cli.commands._upsert_env")``, etc.) hit the same object
 # the submodules consume through the deferred ``_pkg.X`` lookup.
-from core.cli._helpers import is_glm_key as _is_glm_key
-from core.cli._helpers import mask_key as _mask_key
-from core.cli._helpers import upsert_env as _upsert_env
-
-# Bridge module for /schedule (a separate file at core/cli/cmd_schedule.py)
-from core.cli.cmd_schedule import cmd_schedule as cmd_schedule
-from core.ui.console import console as console
+from core.utils.env_io import is_glm_key as _is_glm_key
+from core.utils.env_io import mask_key as _mask_key
+from core.utils.env_io import upsert_env as _upsert_env
 
 from ._state import (
     _MODEL_INDEX,
