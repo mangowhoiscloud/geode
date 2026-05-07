@@ -28,6 +28,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.70.0] — 2026-05-07
+
+> **Codebase audit Tier 3 — God Object split #2: `core/scheduler/scheduler.py`.**
+> The 1,208-LOC scheduler module with 7 classes + 14 module-level helpers
+> in a single file is now a 9-module package
+> (`core/scheduler/scheduler/`). Each concern lives in its own file
+> (`models`, `serialization`, `run_log`, `lock`, `jitter`, `timezone`,
+> `service`, `factory`) plus the package `__init__.py` that re-exports
+> all 24 names previously imported by 11 external consumer files. **No
+> public API changes** — `from core.scheduler.scheduler import …`
+> resolves through the package re-exports unchanged. Largest single
+> file post-split is `service.py` at 708 LOC (the `SchedulerService`
+> class itself, intentionally kept whole). E2E `geode analyze "Cowboy
+> Bebop" --dry-run` unchanged at A (68.4); full pytest 4344 passed
+> (parity with v0.69.0). Seven Tier-3 God Objects remain (`commands.py`,
+> `cli/__init__.py`, `agent/loop.py`, `ui/agentic_ui.py`,
+> `skills/reports.py`, `agent/tool_executor.py`, `llm/router.py`).
+
+### Architecture
+- **`core/scheduler/scheduler.py` (1,208 LOC) → `core/scheduler/scheduler/` (9 files, 1,330 LOC).** Mechanical split by concern; preserves every comment, docstring, and behavior from the original. Sub-module sizes: `__init__.py` 81, `models.py` 93 (`ScheduleKind` Enum + `Schedule`/`ActiveHours`/`ScheduledJob` dataclasses + 6 module-level constants + `OnJobFired` type alias), `serialization.py` 81 (`_job_to_dict`, `_job_from_dict`), `run_log.py` 93 (`JobRunLog`), `lock.py` 135 (`SchedulerLock` + `_is_pid_alive` helper — kept together because `_try_reclaim` calls it), `jitter.py` 38 (`_compute_jitter_frac`, `_jittered_next_run`), `timezone.py` 59 (`_parse_hhmm`, `_now_minutes`, `_cron_tuple_for_tz`), `service.py` 708 (`SchedulerService` — the central engine, intentionally kept whole), `factory.py` 42 (`create_scheduler`). The package's `__init__.py` re-exports the 24 names previously imported by external callers so the 11 external import sites (`core/lifecycle/automation.py`, `core/scheduler/nl_scheduler.py`, `core/cli/__init__.py`, plus 8 test files including `test_scheduler{,_lock,_jitter,_missed,_serve,_integration}.py`, `test_phase2_hardening.py`, `test_nl_scheduler.py`) need no changes. Net +122 LOC overhead from per-module docstrings and import boilerplate — accepted for the SRP win (largest file shrinks from 1,208 → 708 LOC, 41% drop; the 660-LOC `SchedulerService` class is now isolated from the supporting types and helpers it depends on, making its surface area readable). (`core/scheduler/scheduler/{__init__,models,serialization,run_log,lock,jitter,timezone,service,factory}.py`)
+
 ## [0.69.0] — 2026-05-07
 
 > **Codebase audit Tier 3 — God Object split #1: `core/cli/tool_handlers.py`.**
