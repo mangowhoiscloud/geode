@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.cli.redaction import redact_secrets
+from core.utils.redaction import redact_secrets
 
 
 class TestRedactSecrets:
