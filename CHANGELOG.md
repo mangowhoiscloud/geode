@@ -28,6 +28,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.72.0] — 2026-05-07
+
+> **Codebase audit Tier 3 — God Object split #4: `core/agent/tool_executor.py`.**
+> The 1,047-LOC tool execution module with `ToolExecutor` (380 LOC) +
+> `ToolCallProcessor` (540 LOC) + 4 module-level helpers + 1 spinner
+> contextmanager in a single file is now a 5-module package
+> (`core/agent/tool_executor/`). Each concern lives in its own file:
+> spinner contextmanager (`_spinner`), tool-result helpers (`_helpers`),
+> the safety-gated `ToolExecutor` (`executor`), and the multi-block
+> `ToolCallProcessor` (`processor`). **No public API changes** — all
+> 25 external consumers (5 in `core/`, 19 in `tests/`, 1 in `scripts/`)
+> import via `from core.agent.tool_executor import …` and resolve to
+> the same symbols through the package re-exports unchanged. Largest
+> single file post-split is `processor.py` at 568 LOC. The
+> `import-linter` ignore rules in `pyproject.toml` lines 104-105 and
+> 128-129 (`core.agent.tool_executor → core.cli.{bash_tool,redaction}`)
+> got their paths renamed to the new `core.agent.tool_executor.executor`
+> leaf — a mechanical companion change since import-linter reports edge
+> at the leaf module path. E2E `geode analyze "Cowboy Bebop" --dry-run`
+> unchanged at A (68.4); full pytest 4344 passed (parity with v0.71.0).
+> Five Tier-3 God Objects remain (`commands.py`, `cli/__init__.py`,
+> `agent/loop.py`, `ui/agentic_ui.py`, `llm/router.py`).
+
+### Architecture
+- **`core/agent/tool_executor.py` (1,047 LOC) → `core/agent/tool_executor/` (5 files, 1,123 LOC).** Mechanical split by concern; preserves every method body, the module-level constants (`AUTO_APPROVED_MCP_SERVERS`, `DANGEROUS_TOOLS`, `EXPENSIVE_TOOLS`, `SAFE_BASH_PREFIXES`, `SAFE_TOOLS`, `WRITE_TOOLS`), and the test-monkeypatching surface. Sub-module sizes: `__init__.py` 42 (re-exports), `_spinner.py` 37 (`_tool_spinner` contextmanager — lazily looks up `core.agent.tool_executor.console` so test patches on the package-level attribute keep flowing through), `_helpers.py` 60 (`_compute_model_tool_limit`, `_guard_tool_result`), `executor.py` 416 (`ToolExecutor` class + `_write_denial_with_fallback` + a thin shim `_tool_spinner(label)` that lazily resolves the package-level spinner so `tests/test_tool_executor_spinner.py:monkeypatch` keeps working), `processor.py` 568 (`ToolCallProcessor` class — the multi-block tool-call serialiser, intentionally kept whole). The package's `__init__.py` re-exports the 13 names previously imported by external callers (`ToolExecutor`, `ToolCallProcessor`, `_tool_spinner`, `_compute_model_tool_limit`, `_guard_tool_result`, `_write_denial_with_fallback`, `console`, plus 6 module-level constants) so the 25 external import sites need no changes. The 4-line `pyproject.toml` rename is the only file outside the package touched: `core.agent.tool_executor → core.cli.{bash_tool,redaction}` ignore rules become `core.agent.tool_executor.executor → core.cli.{bash_tool,redaction}` (both `[tool.importlinter.contracts]` blocks at lines 104-105 and 128-129). Net +76 LOC overhead from per-module docstrings and re-export plumbing — accepted for the SRP win (largest file shrinks from 1,047 → 568 LOC, 46% drop). (`core/agent/tool_executor/{__init__,_spinner,_helpers,executor,processor}.py`, `pyproject.toml`)
+
 ## [0.71.0] — 2026-05-07
 
 > **Codebase audit Tier 3 — God Object split #3: `core/skills/reports.py`.**
