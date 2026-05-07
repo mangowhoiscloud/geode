@@ -30,6 +30,7 @@ def read_json_credentials_file(relative_path: str) -> dict[str, Any] | None:
         return None
     return data if isinstance(data, dict) else None
 
+
 _DEFAULT_TTL_S = 900  # 15 min (OpenClaw EXTERNAL_CLI_SYNC_TTL_MS)
 
 
