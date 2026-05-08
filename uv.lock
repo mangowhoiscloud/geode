@@ -458,7 +458,7 @@ wheels = [
 
 [[package]]
 name = "geode"
-version = "0.88.5"
+version = "0.89.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -467,7 +467,6 @@ dependencies = [
     { name = "langgraph" },
     { name = "langgraph-checkpoint" },
     { name = "langgraph-checkpoint-sqlite" },
-    { name = "langsmith" },
     { name = "markdownify" },
     { name = "numpy" },
     { name = "openai" },
@@ -513,7 +512,6 @@ requires-dist = [
     { name = "langgraph", specifier = ">=1.1.0" },
     { name = "langgraph-checkpoint", specifier = ">=4.0.1" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.0" },
-    { name = "langsmith", specifier = ">=0.4.0" },
     { name = "markdownify", specifier = ">=0.14.1" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "numpy", specifier = ">=2.2.0" },

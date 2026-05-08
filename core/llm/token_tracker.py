@@ -1,4 +1,4 @@
-"""Unified token tracking — local cost calculation + optional LangSmith injection.
+"""Unified token tracking — local cost calculation + hook lifecycle emission.
 
 Single-injection pattern: call ``get_tracker().record(...)`` once per LLM call.
 Replaces the previous triple-call pattern::
@@ -19,7 +19,6 @@ Pricing verified 2026-03-14 against:
 from __future__ import annotations
 
 import logging
-import os
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
@@ -268,7 +267,7 @@ class TokenTracker:
         cache_read_tokens: int = 0,
         thinking_tokens: int = 0,
     ) -> LLMUsage:
-        """Record one LLM call: cost → accumulator → optional LangSmith."""
+        """Record one LLM call: cost → accumulator → persistent store."""
         cost = self.calculate_cost(
             model,
             input_tokens,
@@ -285,7 +284,6 @@ class TokenTracker:
             cost_usd=cost,
         )
         self._accumulator.record(usage)
-        self._inject_langsmith(model, input_tokens, output_tokens, cost)
         self._persist_usage(model, input_tokens, output_tokens, cost)
         return usage
 
@@ -353,40 +351,6 @@ class TokenTracker:
         """Context window usage % for a specific input token count."""
         max_ctx = MODEL_CONTEXT_WINDOW.get(model, 200_000)
         return min(input_tokens / max_ctx * 100, 100.0)
-
-    # -- LangSmith (optional, fire-and-forget) -----------------------------
-
-    @staticmethod
-    def _inject_langsmith(
-        model: str,
-        input_tokens: int,
-        output_tokens: int,
-        cost_usd: float,
-    ) -> None:
-        """Inject metrics into current LangSmith RunTree (no-op if disabled)."""
-        try:
-            tracing = os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true"
-            api_key = os.environ.get("LANGCHAIN_API_KEY") or os.environ.get(
-                "LANGSMITH_API_KEY",
-            )
-            if not (tracing and api_key):
-                return
-            from langsmith.run_helpers import get_current_run_tree
-
-            run_tree = get_current_run_tree()
-            if run_tree is None:
-                return
-            if not hasattr(run_tree, "extra") or run_tree.extra is None:
-                run_tree.extra = {}
-            run_tree.extra["metrics"] = {
-                "model": model,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-                "cost_usd": cost_usd,
-            }
-        except Exception:
-            log.debug("LangSmith injection skipped", exc_info=True)
 
     # -- Persistent usage store (fire-and-forget) ---------------------------
 
@@ -471,5 +435,5 @@ def track_token_usage(
     input_tokens: int,
     output_tokens: int,
 ) -> None:
-    """Backward-compatible: full record() (accumulator + LangSmith)."""
+    """Backward-compatible: full record() (accumulator + persistent store)."""
     get_tracker().record(model, input_tokens, output_tokens)

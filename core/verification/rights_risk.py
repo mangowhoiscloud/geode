@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.llm.router import maybe_traceable
 from core.state import LicenseInfo as LicenseInfo
 from core.state import RightsRiskResult as RightsRiskResult
 from core.state import RightsStatus as RightsStatus
@@ -77,7 +76,6 @@ _FIXTURE_RIGHTS: dict[str, dict[str, Any]] = {
 }
 
 
-@maybe_traceable(run_type="chain", name="check_rights_risk")  # type: ignore[untyped-decorator]
 def check_rights_risk(ip_name: str, ip_info: dict[str, Any] | None = None) -> RightsRiskResult:
     """Assess IP rights and licensing risk.
 

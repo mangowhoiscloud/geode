@@ -240,7 +240,7 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
                 "memory_get), Steam data (steam_info), and community sentiment "
                 "(reddit_sentiment). Use them to ground your evaluation."
             )
-            result = call_llm_with_tools(
+            tool_result = call_llm_with_tools(
                 enhanced_system,
                 user,
                 tools=tool_defs,
@@ -249,8 +249,8 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
                 max_tool_rounds=2,
                 model=get_node_model("evaluator"),
             )
-            if result.text:
-                data = json.loads(result.text)
+            if tool_result.text:
+                data = json.loads(tool_result.text)
                 eval_result = EvaluatorResult(**data)
                 if eval_result.evaluator_type != evaluator_type:
                     eval_result = eval_result.model_copy(update={"evaluator_type": evaluator_type})

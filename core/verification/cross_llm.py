@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 
 from core.llm.prompts import CROSS_LLM_DUAL_VERIFY, CROSS_LLM_RESCORE, CROSS_LLM_SYSTEM
-from core.llm.router import LLMClientPort, maybe_traceable
+from core.llm.router import LLMClientPort
 from core.state import AnalysisResult, GeodeState
 from core.verification.stats import calculate_krippendorff_alpha
 
@@ -78,7 +78,6 @@ def _calc_agreement(scores: list[float], scale_max_var: float = _MAX_VARIANCE) -
     return max(0.0, min(1.0, agreement))
 
 
-@maybe_traceable(run_type="chain", name="run_cross_llm_check")  # type: ignore[untyped-decorator]
 def run_cross_llm_check(
     state: GeodeState,
     *,

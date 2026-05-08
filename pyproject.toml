@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.88.5"
+version = "0.89.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -13,7 +13,6 @@ dependencies = [
     "langgraph>=1.1.0",
     "langgraph-checkpoint>=4.0.1",
     "langgraph-checkpoint-sqlite>=3.0.0",
-    "langsmith>=0.4.0",
     "numpy>=2.2.0",
     "openai>=2.26.0",
     "openai-agents>=0.13.0",

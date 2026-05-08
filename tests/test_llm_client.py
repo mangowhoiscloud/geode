@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from unittest.mock import MagicMock, patch
 
@@ -14,9 +13,7 @@ from core.llm.client import (
     LLMUsageAccumulator,
     calculate_cost,
     get_usage_accumulator,
-    is_langsmith_enabled,
     reset_usage_accumulator,
-    track_token_usage,
 )
 
 
@@ -168,99 +165,6 @@ class TestUsageAccumulatorContext:
 
 
 # ---------------------------------------------------------------------------
-# is_langsmith_enabled
-# ---------------------------------------------------------------------------
-
-
-class TestIsLangsmithEnabled:
-    def test_disabled_by_default(self):
-        env = {"LANGCHAIN_TRACING_V2": "", "LANGCHAIN_API_KEY": ""}
-        with patch.dict(os.environ, env, clear=False):
-            os.environ.pop("LANGCHAIN_TRACING_V2", None)
-            os.environ.pop("LANGCHAIN_API_KEY", None)
-            os.environ.pop("LANGSMITH_API_KEY", None)
-            assert is_langsmith_enabled() is False
-
-    def test_enabled_with_both(self):
-        env = {"LANGCHAIN_TRACING_V2": "true", "LANGCHAIN_API_KEY": "lsv2_test"}
-        with patch.dict(os.environ, env, clear=False):
-            assert is_langsmith_enabled() is True
-
-    def test_disabled_without_key(self):
-        env = {"LANGCHAIN_TRACING_V2": "true"}
-        with patch.dict(os.environ, env, clear=False):
-            os.environ.pop("LANGCHAIN_API_KEY", None)
-            os.environ.pop("LANGSMITH_API_KEY", None)
-            assert is_langsmith_enabled() is False
-
-    def test_disabled_without_tracing_flag(self):
-        env = {"LANGCHAIN_TRACING_V2": "false", "LANGCHAIN_API_KEY": "lsv2_test"}
-        with patch.dict(os.environ, env, clear=False):
-            assert is_langsmith_enabled() is False
-
-
-# ---------------------------------------------------------------------------
-# track_token_usage
-# ---------------------------------------------------------------------------
-
-
-class TestTrackTokenUsage:
-    def test_noop_when_disabled(self):
-        with patch.dict("os.environ", {"LANGCHAIN_TRACING_V2": "false"}, clear=False):
-            track_token_usage("opus", 100, 50)
-
-    def test_records_when_enabled(self):
-        """Verify _inject_langsmith writes metrics to RunTree."""
-        from core.llm.token_tracker import TokenTracker
-
-        mock_run_tree = MagicMock()
-        mock_run_tree.extra = {}
-        with (
-            patch.dict(
-                "os.environ",
-                {"LANGCHAIN_TRACING_V2": "true", "LANGCHAIN_API_KEY": "lsv2_test"},
-                clear=False,
-            ),
-            patch(
-                "langsmith.run_helpers.get_current_run_tree",
-                return_value=mock_run_tree,
-            ),
-        ):
-            TokenTracker._inject_langsmith(ANTHROPIC_PRIMARY, 1000, 500, 0.03)
-        assert "metrics" in mock_run_tree.extra
-        assert mock_run_tree.extra["metrics"]["input_tokens"] == 1000
-        assert mock_run_tree.extra["metrics"]["output_tokens"] == 500
-
-    def test_handles_no_run_tree(self):
-        from core.llm.token_tracker import TokenTracker
-
-        with (
-            patch.dict(
-                "os.environ",
-                {"LANGCHAIN_TRACING_V2": "true", "LANGCHAIN_API_KEY": "lsv2_test"},
-                clear=False,
-            ),
-            patch("langsmith.run_helpers.get_current_run_tree", return_value=None),
-        ):
-            # Should not raise when run_tree is None
-            TokenTracker._inject_langsmith("opus", 100, 50, 0.01)
-
-    def test_handles_import_error(self):
-        from core.llm.token_tracker import TokenTracker
-
-        with (
-            patch.dict(
-                "os.environ",
-                {"LANGCHAIN_TRACING_V2": "true", "LANGCHAIN_API_KEY": "lsv2_test"},
-                clear=False,
-            ),
-            patch.dict("sys.modules", {"langsmith.run_helpers": None}),
-        ):
-            # Should not raise when langsmith is unavailable
-            TokenTracker._inject_langsmith("opus", 100, 50, 0.01)
-
-
-# ---------------------------------------------------------------------------
 # call_llm_parsed (mocked)
 # ---------------------------------------------------------------------------
 
@@ -354,49 +258,6 @@ class TestCallLLMParsed:
 
 
 # ---------------------------------------------------------------------------
-# maybe_traceable
-# ---------------------------------------------------------------------------
-
-
-class TestMaybeTraceable:
-    def test_returns_identity_when_disabled(self):
-        from core.llm.client import maybe_traceable
-
-        with patch("core.llm.router.tracing.is_langsmith_enabled", return_value=False):
-            decorator = maybe_traceable(run_type="llm", name="test")
-
-            # Should be identity — decorating a function returns same function
-            def dummy() -> str:
-                return "ok"
-
-            assert decorator(dummy) is dummy
-
-    def test_returns_traceable_when_enabled(self):
-        from core.llm.client import maybe_traceable
-
-        mock_traceable = MagicMock(return_value=lambda fn: fn)
-        with (
-            patch("core.llm.router.tracing.is_langsmith_enabled", return_value=True),
-            patch.dict("sys.modules", {"langsmith": MagicMock(traceable=mock_traceable)}),
-        ):
-            maybe_traceable(run_type="chain", name="test_fn")
-
-    def test_falls_back_on_import_error(self):
-        from core.llm.client import maybe_traceable
-
-        with (
-            patch("core.llm.router.tracing.is_langsmith_enabled", return_value=True),
-            patch.dict("sys.modules", {"langsmith": None}),
-        ):
-            decorator = maybe_traceable(run_type="llm")
-
-            def dummy() -> str:
-                return "ok"
-
-            assert decorator(dummy) is dummy
-
-
-# ---------------------------------------------------------------------------
 # LLMUsage edge cases
 # ---------------------------------------------------------------------------
 
@@ -423,17 +284,6 @@ class TestLLMUsageEdgeCases:
             cost = calculate_cost(model_name, 1000, 1000)
             # Free-tier models (e.g. glm-4.7-flash) have $0 pricing
             assert cost >= 0, f"Cost should be non-negative for {model_name}"
-
-    def test_langsmith_legacy_key(self):
-        env = {"LANGCHAIN_TRACING_V2": "true", "LANGSMITH_API_KEY": "legacy_key"}
-        with patch.dict(os.environ, env, clear=False):
-            os.environ.pop("LANGCHAIN_API_KEY", None)
-            assert is_langsmith_enabled() is True
-
-
-# ---------------------------------------------------------------------------
-# Provider-aware routing tests
-# ---------------------------------------------------------------------------
 
 
 class TestProviderRouting:
