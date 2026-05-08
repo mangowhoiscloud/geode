@@ -28,6 +28,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Architecture
+
+- **`core.config` 모듈을 패키지로 분리, pydantic_settings 트리 lazy 화**
+  (cold-start 회수 토대). 기존 `core/config.py` (567 lines) 를 `core/config/`
+  패키지로 변환:
+  - `core/config/_settings.py` (NEW) — `Settings(BaseSettings)` 클래스만 격리
+    하여 pydantic / pydantic_settings 풀 import 트리 (~150 ms cumulative,
+    144 modules) 가 첫 settings 인스턴스 요청 시점까지 미뤄지도록 함.
+  - `core/config/__init__.py` — 상수 (`*_PRIMARY`, `*_BASE_URL` 등),
+    TOML 로직, `ModelPolicy`, `RoutingConfig`, `_resolve_provider` 만 유지.
+    `settings` / `Settings` 는 PEP 562 `__getattr__` 로 lazy 해석.
+- 측정: `import core.config` 단독 cold = **189 ms → 34 ms (−82 %)**;
+  modules **308 → 164**; pydantic_settings 가 sys.modules 에 들어가지
+  않음 (`settings` 첫 access 시점에만 로드). 단독으로 cold-start path
+  전체 회수는 작음 (240 → 226 ms) — `from core.config import settings`
+  를 함수-로컬로 옮기는 callsite 변환이 다음 단계에서 핵심 회수를 만듦.
+
 ## [0.89.0] — 2026-05-09
 
 > **Removed — LangSmith 의존 100 % 제거.  관측성은 hook system + RunLog 로 일원화.**
