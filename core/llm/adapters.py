@@ -307,6 +307,11 @@ class ClaudeAdapter:
     ) -> T:
         from core.llm.router import call_llm_parsed
 
+        # ``call_llm_parsed`` is wrapped by ``@maybe_traceable`` (LangSmith
+        # decorator with ``untyped-decorator`` ignore upstream), so mypy
+        # sees the return as ``Any`` regardless of the underlying ``-> T``
+        # signature.  The ignore is anchored to the decorator limitation,
+        # not the value flow.
         return call_llm_parsed(  # type: ignore[no-any-return]
             system,
             user,
@@ -327,6 +332,8 @@ class ClaudeAdapter:
     ) -> Iterator[str]:
         from core.llm.router import call_llm_streaming
 
+        # See note on ``call_llm_parsed`` above — ``@maybe_traceable``
+        # erases the ``-> Iterator[str]`` return type.
         return call_llm_streaming(  # type: ignore[no-any-return]
             system, user, model=model, max_tokens=max_tokens, temperature=temperature
         )

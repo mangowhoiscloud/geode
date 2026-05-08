@@ -21,7 +21,7 @@ import logging
 import tomllib
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from core.skills._frontmatter import _FRONTMATTER_RE
 from core.utils.atomic_io import atomic_write_text
@@ -433,7 +433,7 @@ Write your bio, background, or any context you want GEODE to remember here.
             return {}
         try:
             raw = prefs_path.read_text(encoding="utf-8")
-            return json.loads(raw)  # type: ignore[no-any-return]
+            return cast(dict[str, Any], json.loads(raw))
         except (json.JSONDecodeError, OSError) as e:
             log.warning("Failed to load preferences from %s: %s", prefs_path, e)
             return {}

@@ -28,6 +28,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.88.3] — 2026-05-09
+
+> **Hardening — `# type: ignore[no-any-return]` 6 건 제거 (B2 mini-batch).**
+> 8 개 `[no-any-return]` ignore 중 6 개를 `cast()` 패턴으로 정리.  나머지
+> 2 개는 ``@maybe_traceable`` (LangSmith) 데코레이터의 type erasure 가
+> 원인이라 root-cause 가 외부 SDK 에 있어, 이 PR 에서는 anchor 코멘트만
+> 갱신하고 ignore 유지(향후 LangSmith 타입 stub 개선 후 일괄 제거).
+>
+> 정리 대상 — 모두 SDK 반환값(`json.loads(...) → Any`,
+> `choice.message.parsed → BaseModel | None`)을 함수의 명시적 반환 타입
+> (`list[dict[str, Any]]`, `dict[str, Any]`, TypeVar `T`)으로 변환하는
+> 곳.  `cast()` 는 무코스트 hint, 런타임 동작 변경 0.
+
+### Changed
+- **`core/tools/base.py`** — `load_all_tool_definitions()` 의 `json.loads(...)` 반환값을 `cast(list[dict[str, Any]], ...)` 로 명시.
+- **`core/memory/vault.py`** — `JobApplicationVault._load()` 의 `json.loads(...)` 반환값을 `cast(list[dict[str, Any]], ...)` 로 명시.
+- **`core/memory/user_profile.py`** — `_load_preferences()` 의 `json.loads(raw)` 반환값을 `cast(dict[str, Any], ...)` 로 명시.
+- **`core/verification/calibration.py`** — `load_golden_set()` 의 `json.loads(...)` 반환값을 `cast(dict[str, Any], ...)` 로 명시.
+- **`core/llm/router/calls/parsed.py`** — OpenAI 구조화 출력 `choice.message.parsed` 를 `cast(T, ...)` 로 명시 (TypeVar `T` bound BaseModel).
+- **`core/llm/providers/openai.py`** — 동일 패턴(`OpenAIAdapter.generate_parsed` 의 `cast(T, ...)`).
+- **`core/llm/adapters.py`** — 두 곳(`generate_parsed`, `generate_stream`)의 ignore 는 root-cause 가 ``@maybe_traceable`` 의 untyped-decorator 임을 명시하는 anchor 코멘트로 갱신; LangSmith 타입 stub 개선 후 제거 예정.
+
+### Hardening Metrics
+- `# type: ignore` 총합: 69 → **63** (−6, −8.7 %)
+- `[no-any-return]` 카테고리: 8 → 2 (남은 2 는 LangSmith decorator 한계)
+- pytest 4346 passed (변동 없음); ruff/mypy clean; E2E A (68.4) 동일.
+
 ## [0.88.2] — 2026-05-09
 
 > **Cleanup — httpx 모듈-레벨 lazy loading (B1/v0.88.1 패턴 일관성).**

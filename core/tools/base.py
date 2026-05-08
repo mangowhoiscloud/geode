@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
 # Valid values for tool metadata fields.
 VALID_CATEGORIES = frozenset(
@@ -185,7 +185,7 @@ def load_all_tool_definitions() -> list[dict[str, Any]]:
     Other modules should import this instead of independently reading
     the JSON file to avoid path duplication.
     """
-    return json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+    return cast(list[dict[str, Any]], json.loads(_TOOLS_JSON_PATH.read_text(encoding="utf-8")))
 
 
 def load_tool_definition(name: str) -> dict[str, Any]:

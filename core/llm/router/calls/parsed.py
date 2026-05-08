@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -80,7 +80,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
                             "Verify the prompt constrains the response format "
                             "and the Pydantic model matches the schema."
                         )
-                    return choice.message.parsed  # type: ignore[no-any-return]
+                    return cast(T, choice.message.parsed)
 
                 result: T = _retry_provider_aware(_do_call_openai, model=m, provider=p)
             else:

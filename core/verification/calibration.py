@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -79,7 +79,7 @@ def load_golden_set(path: Path | None = None) -> dict[str, Any]:
     gs_path = path or _GOLDEN_SET_PATH
     if not gs_path.exists():
         raise FileNotFoundError(f"Golden set not found: {gs_path}")
-    return json.loads(gs_path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+    return cast(dict[str, Any], json.loads(gs_path.read_text(encoding="utf-8")))
 
 
 # ---------------------------------------------------------------------------
