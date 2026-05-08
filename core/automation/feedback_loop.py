@@ -17,12 +17,17 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from core.automation.correlation import CorrelationAnalyzer
 from core.automation.drift import CUSUMDetector
 from core.automation.expert_panel import ExpertPanel
 from core.automation.model_registry import ModelRegistry
 
 if TYPE_CHECKING:
+    # v0.88.1 — CorrelationAnalyzer pulls numpy (~31 ms) at module
+    # load. Function bodies that instantiate it already use a
+    # local import (see ``__init__`` factory below); type annotations
+    # become strings via ``from __future__ import annotations``, so
+    # the eager top-level import was pure import-time tax.
+    from core.automation.correlation import CorrelationAnalyzer
     from core.hooks import HookSystem
 
 log = logging.getLogger(__name__)

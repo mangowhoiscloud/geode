@@ -31,12 +31,21 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
+    # v0.88.1 — CorrelationAnalyzer pulls numpy (~31 ms) at module
+    # load. ``runtime.py`` only references it as a dataclass field
+    # type annotation (``correlation_analyzer: CorrelationAnalyzer | None``);
+    # ``from __future__ import annotations`` makes the annotation a
+    # string at runtime, so no real import is needed unless the
+    # caller actually instantiates the analyzer.  Wiring builders
+    # (``core.wiring.automation``) and ``feedback_loop`` keep their
+    # own eager imports — those modules only load when automation
+    # actually runs, well after CLI cold-start.
+    from core.automation.correlation import CorrelationAnalyzer
     from core.llm.prompt_assembler import PromptAssembler
 
 from core.auth.cooldown import CooldownTracker
 from core.auth.profiles import ProfileStore
 from core.auth.rotation import ProfileRotator
-from core.automation.correlation import CorrelationAnalyzer
 from core.automation.drift import CUSUMDetector
 from core.automation.expert_panel import ExpertPanel
 from core.automation.feedback_loop import FeedbackLoop

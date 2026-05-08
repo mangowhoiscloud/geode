@@ -28,6 +28,40 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.88.1] — 2026-05-09
+
+> **Performance — numpy + correlation analyzer 모듈-레벨 lazy loading.**
+> v0.88.0 가 anthropic SDK 248 ms 를 잘라낸 직후, 남은 콜드 스타트의
+> 다음 큰 덩어리는 **numpy** 였다.  `core.automation.correlation` 과
+> `core.verification.stats` 가 module-level `import numpy as np` 로
+> SDK 를 끌어와, 단순히 `import core.runtime` 만으로도 numpy 트리
+> (~31 ms) 가 매번 로드.  `core.automation.expert_panel` 도 같은
+> 패턴으로 직접 `import numpy as np`.
+>
+> 이번 PR 은 **3 곳의 numpy 모듈-레벨 import → 함수-로컬 + TYPE_CHECKING**
+> 으로 옮겨, numpy 를 실제로 사용하는 함수가 처음 호출될 때까지 로드를
+> 미룬다.  `core.runtime` 의 `CorrelationAnalyzer` 어노테이션도
+> `TYPE_CHECKING` 블록으로 이동(B1 의 `LLMClientPort` 와 동일 패턴).
+>
+> **측정 (warm cache, 10-run sorted, median of 5th–6th):**
+> - Before (v0.88.0 main): 314–441 ms (median 356 ms)
+> - After  (v0.88.1):     259–367 ms (median 282 ms)
+> - **Δ: −74 ms / −21 %**
+>
+> 검증: `import core.runtime` 후 `'numpy' in sys.modules == False`.
+> 첫 ``ExpertPanel.compute_consensus`` / ``CorrelationAnalyzer.spearman``
+> / ``calculate_krippendorff_alpha`` 호출이 일어나면 그 시점에 numpy 1
+> 회 로드. pytest 4346 passed (변동 없음); E2E A (68.4) 동일.
+
+### Changed
+- **`core/runtime.py`** — `from core.automation.correlation import CorrelationAnalyzer` (line 39) 를 `TYPE_CHECKING` 블록으로 이동.  `correlation_analyzer: CorrelationAnalyzer | None = None` 데이터클래스 어노테이션은 `from __future__ import annotations` 로 인해 런타임 string 이라 실제 import 불필요.  B1 의 `LLMClientPort` 패턴 재사용.
+- **`core/automation/feedback_loop.py`** — module-level `from core.automation.correlation import CorrelationAnalyzer` 를 `TYPE_CHECKING` 블록으로 이동.  `__init__` factory(line 142, 148) 는 이미 함수-로컬 import 사용 중이라 추가 변경 없음.  Type annotation(line 159) 은 string.
+- **`core/automation/expert_panel.py`** — top-level `import numpy as np` 제거.  `_compute_aggregate` 함수 본체 첫 줄에 `import numpy as np` 추가.  사용처는 그 함수의 3 줄(``np.array`` / ``np.std`` / ``np.mean``) 뿐이라 단일 함수-로컬 import 로 충분.
+- **`core/verification/stats.py`** — top-level `import numpy as np` 제거.  `calculate_krippendorff_alpha` 함수 첫 줄에 `import numpy as np` 추가.  Krippendorff alpha 계산 외에는 numpy 사용처 없음.
+
+### Performance
+- **CLI 콜드 스타트 −74 ms / −21 %** (warm cache, 10-run median).  numpy 를 안 만지는 invocation(`geode about`, `geode doctor`, `geode --help`, `geode version` 등)은 numpy 트리를 영원히 로드하지 않을 수 있게 됨.  v0.88.0 (anthropic lazy) 와 합쳐 콜드 스타트 누적 절약 ~258 ms / ~58 %.
+
 ## [0.88.0] — 2026-05-08
 
 > **Performance — anthropic SDK module-level lazy loading.**
