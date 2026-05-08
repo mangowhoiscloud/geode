@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from core.utils.atomic_io import atomic_write_text
 
@@ -335,7 +335,7 @@ class ApplicationTracker:
         if not self._path.exists():
             return []
         try:
-            return json.loads(self._path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+            return cast(list[dict[str, Any]], json.loads(self._path.read_text(encoding="utf-8")))
         except (json.JSONDecodeError, OSError):
             return []
 

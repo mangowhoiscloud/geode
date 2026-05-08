@@ -11,7 +11,7 @@ import re
 import threading
 import time
 from collections.abc import Callable, Iterator
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -196,7 +196,7 @@ class OpenAIAdapter:
             choice = response.choices[0]
             if choice.message.parsed is None:
                 raise ValueError("OpenAI returned null parsed output")
-            return choice.message.parsed  # type: ignore[no-any-return]
+            return cast(T, choice.message.parsed)
 
         result: T = self._retry_with_backoff(_do_call, model=target)
         return result
