@@ -10,8 +10,6 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
-import httpx
-
 from core.config import ANTHROPIC_FALLBACK_CHAIN, is_model_allowed, settings
 from core.llm.fallback import (
     CircuitBreaker,
@@ -21,6 +19,7 @@ from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
 if TYPE_CHECKING:
     import anthropic
+    import httpx
     from anthropic.types import TextBlockParam
 
     # v0.88.0 — declare the lazy module-level tuples so mypy / IDEs see a
@@ -71,6 +70,8 @@ log = logging.getLogger(__name__)
 
 def _build_httpx_timeout() -> httpx.Timeout:
     """Build httpx Timeout from settings."""
+    import httpx
+
     return httpx.Timeout(
         connect=settings.llm_connect_timeout,
         read=settings.llm_read_timeout,
@@ -81,6 +82,8 @@ def _build_httpx_timeout() -> httpx.Timeout:
 
 def _build_httpx_limits() -> httpx.Limits:
     """Build httpx connection pool Limits from settings."""
+    import httpx
+
     return httpx.Limits(
         max_connections=settings.llm_max_connections,
         max_keepalive_connections=settings.llm_max_keepalive_connections,
@@ -126,6 +129,7 @@ def get_anthropic_client() -> anthropic.Anthropic:
     app-level retry logic in ``_retry_with_backoff()``.
     """
     import anthropic
+    import httpx
 
     global _sync_client
     if _sync_client is not None:
@@ -156,6 +160,7 @@ def get_async_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnt
         api_key: Optional API key override. If None, uses settings.
     """
     import anthropic
+    import httpx
 
     global _async_client
     if _async_client is not None:
