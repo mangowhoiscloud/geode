@@ -80,9 +80,7 @@ class BaseCalendarAdapter:
         time_max = (end or now + timedelta(days=7)).isoformat()
         try:
             args = self._build_list_args(time_min, time_max, max_results, calendar_name)
-            result = self._manager.call_tool(
-                self._server_name, "list_events", args
-            )
+            result = self._manager.call_tool(self._server_name, "list_events", args)
             if "error" in result:
                 log.warning("%s list_events error: %s", self._source.title(), result["error"])
                 return []
@@ -105,9 +103,7 @@ class BaseCalendarAdapter:
             raise RuntimeError(f"{self._source.title()} MCP server not available")
         assert self._manager is not None
         args = self._build_create_args(title, start, end, description, location, calendar_name)
-        result = self._manager.call_tool(
-            self._server_name, "create_event", args
-        )
+        result = self._manager.call_tool(self._server_name, "create_event", args)
         if "error" in result:
             raise RuntimeError(f"{self._source.title()} create_event failed: {result['error']}")
         return CalendarEvent(
@@ -127,9 +123,7 @@ class BaseCalendarAdapter:
             return []
         assert self._manager is not None
         try:
-            result = self._manager.call_tool(
-                self._server_name, "list_calendars", {}
-            )
+            result = self._manager.call_tool(self._server_name, "list_calendars", {})
             return self._extract_calendar_names(result)
         except Exception:
             return []
