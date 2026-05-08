@@ -67,13 +67,18 @@ class SlackPoller(BasePoller):
         """
         import json as _json
 
+        # ``_poll_once`` (caller) gates this method behind
+        # ``_check_mcp_health`` which already guarantees ``_mcp is not None``;
+        # the assert localises that invariant for mypy.
+        assert self._mcp is not None
+
         try:
             args: dict[str, Any] = {"channel_id": channel_id, "limit": 5}
             oldest = self._last_ts.get(channel_id)
             if oldest:
                 args["oldest"] = oldest
 
-            result = self._mcp.call_tool("slack", "slack_get_channel_history", args)  # type: ignore[union-attr]
+            result = self._mcp.call_tool("slack", "slack_get_channel_history", args)
 
             # MCP returns {"content": [{"text": "{\"ok\":true,\"messages\":[...]}"}]}
             parsed = result

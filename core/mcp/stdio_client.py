@@ -154,7 +154,11 @@ class StdioMCPClient:
         if self._process is not None:
             pid = self._pid
             try:
-                self._process.stdin.close()  # type: ignore[union-attr]
+                # subprocess.Popen.stdin is Optional[IO[bytes]] (None when
+                # ``stdin`` was not piped); only close if we actually own a
+                # writable handle.
+                if self._process.stdin is not None:
+                    self._process.stdin.close()
                 self._process.terminate()
                 self._process.wait(timeout=_CLOSE_TIMEOUT_S)
                 log.debug("MCP subprocess terminated gracefully (PID %s)", pid)
