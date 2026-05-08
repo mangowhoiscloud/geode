@@ -51,13 +51,17 @@ class DiscordPoller(BasePoller):
 
     def _poll_channel(self, channel_id: str) -> None:
         """Poll a single Discord channel for new messages."""
+        # ``_poll_once`` (caller) gates this method behind
+        # ``_check_mcp_health`` which already guarantees ``_mcp is not None``.
+        assert self._mcp is not None
+
         try:
             args: dict[str, Any] = {"channel_id": channel_id, "limit": 5}
             after = self._last_id.get(channel_id)
             if after:
                 args["after"] = after
 
-            result = self._mcp.call_tool("discord", "get_messages", args)  # type: ignore[union-attr]
+            result = self._mcp.call_tool("discord", "get_messages", args)
             if "error" in result:
                 return
 

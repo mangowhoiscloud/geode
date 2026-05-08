@@ -45,13 +45,16 @@ class TelegramPoller(BasePoller):
     def _poll_once(self) -> None:
         if not self._check_mcp_health():
             return
+        # ``_check_mcp_health`` returned True ⇒ ``_mcp is not None``;
+        # localise the invariant for mypy.
+        assert self._mcp is not None
 
         try:
             args: dict[str, Any] = {"limit": 10}
             if self._last_update_id:
                 args["offset"] = self._last_update_id + 1
 
-            result = self._mcp.call_tool("telegram", "get_updates", args)  # type: ignore[union-attr]
+            result = self._mcp.call_tool("telegram", "get_updates", args)
             if "error" in result:
                 return
 

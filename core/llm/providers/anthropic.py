@@ -467,6 +467,11 @@ class ClaudeAgenticAdapter:
         failover_models = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
 
         async def _do_call(m: str) -> Any:
+            # ``self._client`` is initialised right before this nested
+            # function in the outer scope (line 448-449); the assert
+            # localises the invariant for mypy across the closure.
+            assert self._client is not None
+
             # Server-side context management only for models that support it.
             # Haiku 4.5 rejects the compact beta → 400 misclassified as overflow.
             extra_h: dict[str, str] = {}
@@ -575,7 +580,7 @@ class ClaudeAgenticAdapter:
             if extra_b:
                 create_kwargs["extra_body"] = extra_b
 
-            return await self._client.messages.create(**create_kwargs)  # type: ignore[union-attr]
+            return await self._client.messages.create(**create_kwargs)
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)
