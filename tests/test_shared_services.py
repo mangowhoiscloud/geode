@@ -167,6 +167,34 @@ class TestBuildSharedServices:
         _, loop = services.create_session(SessionMode.DAEMON)
         assert loop.model == settings.model
 
+    def test_model_switch_propagates_across_sessions(self) -> None:
+        """v0.82.0 staleness regression — mid-flight `settings.model`
+        mutation must reach the next session.
+
+        Initial single-session check (``test_model_resolved_per_session``)
+        only proves boot-time consistency. The original v0.82.0 bug
+        survived that check because the cached ``_model`` field happened
+        to match ``settings.model`` at boot — divergence only emerged
+        after ``cmd_model`` mutated ``settings.model`` mid-flight. This
+        test reproduces that scenario without invoking the LLM.
+        """
+        from core.config import ANTHROPIC_PRIMARY, OPENAI_PRIMARY, settings
+        from core.server.supervised.services import SessionMode
+
+        services = build_shared_services()
+        original = settings.model
+        try:
+            settings.model = ANTHROPIC_PRIMARY
+            _, loop_a = services.create_session(SessionMode.DAEMON)
+            assert loop_a.model == ANTHROPIC_PRIMARY
+
+            settings.model = OPENAI_PRIMARY
+            _, loop_b = services.create_session(SessionMode.DAEMON)
+            assert loop_b.model == OPENAI_PRIMARY
+            assert loop_a.model == ANTHROPIC_PRIMARY
+        finally:
+            settings.model = original
+
     def test_no_agentic_ref_attribute(self) -> None:
         """SharedServices should not have agentic_ref (removed in system-hardening)."""
         services = build_shared_services()
