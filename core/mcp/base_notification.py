@@ -73,13 +73,14 @@ class BaseNotificationAdapter:
             return NotificationResult(
                 success=False, channel=ch, error=f"{ch.title()} MCP server not available"
             )
+        assert self._manager is not None
         try:
             args: dict[str, Any] = {self._recipient_key: recipient, self._message_key: message}
             for key in self._forward_keys:
                 if key in kwargs:
                     args[key] = kwargs[key]
 
-            raw = self._manager.call_tool(  # type: ignore[union-attr]
+            raw = self._manager.call_tool(
                 self._server_name,
                 self._tool_name,
                 args,

@@ -28,6 +28,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.88.4] — 2026-05-09
+
+> **Hardening — `# type: ignore[union-attr]` 10 건 전부 제거 (B2 batch-2).**
+> 10 개 사이트 모두 ``Optional[X]`` 타입 attribute 접근 — 호출 측에서
+> 이미 None 가드 (`is_available()`, `_check_mcp_health`) 를 통과한 invariant
+> 을 mypy 가 spread 하지 못해 발생.  `assert ... is not None` 로 invariant
+> 을 localise 해 ignore 제거 + 런타임 안전성 ↑ (None dereference 발생 시
+> 명시적 AssertionError 로 즉시 발견).
+>
+> v0.88.3 (no-any-return) 에 이은 B2 두 번째 배치.  외부 SDK 의존이
+> 아닌, 우리 코드의 invariant 를 명시화하면 깔끔히 잡히는 카테고리.
+
+### Changed
+- **`core/server/supervised/{slack,discord,telegram}_poller.py`** — 3 개 poller 모두 `_poll_channel` / `_poll_once` 가 `_check_mcp_health` 통과 후 호출되는 invariant 를 `assert self._mcp is not None` 로 localise.
+- **`core/mcp/base_calendar.py`** — 4 개 메서드(`delete_event`, `list_events`, `create_event`, `list_calendars`) 모두 `is_available()` 가드 직후에 `assert self._manager is not None` 추가.
+- **`core/mcp/base_notification.py`** — `send` 의 동일 패턴.
+- **`core/mcp/stdio_client.py`** — `subprocess.Popen.stdin: Optional[IO[bytes]]` 의 None 가능성을 `if self._process.stdin is not None:` 로 처리 (assert 가 아니라 가드 — stdin 미파이프 시 silently skip).
+- **`core/llm/providers/anthropic.py`** — `ClaudeAgenticAdapter.agentic_call` 의 nested `_do_call` closure 에서 `self._client` invariant 를 assert 로 명시 (closure 가 outer scope 의 None 체크를 mypy 입장에서 못 봄).
+
+### Hardening Metrics
+- `# type: ignore` 총합: 63 → **53** (−10, −15.9 %)
+- `[union-attr]` 카테고리: **10 → 0** (완전 소멸)
+- pytest 4346 passed (변동 없음); ruff/mypy clean (332 source files); E2E A (68.4) 동일.
+
 ## [0.88.3] — 2026-05-09
 
 > **Hardening — `# type: ignore[no-any-return]` 6 건 제거 (B2 mini-batch).**
