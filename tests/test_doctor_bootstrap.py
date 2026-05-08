@@ -107,7 +107,7 @@ class TestCheckProfileStore:
 
         empty_store = MagicMock()
         empty_store.list_all.return_value = []
-        with patch("core.lifecycle.container.ensure_profile_store", return_value=empty_store):
+        with patch("core.wiring.container.ensure_profile_store", return_value=empty_store):
             result = _check_profile_store()
         assert result.ok is False
         assert "geode setup" in result.fix
@@ -118,7 +118,7 @@ class TestCheckProfileStore:
         profile = MagicMock(provider="openai-codex", key="tok-abc")
         store = MagicMock()
         store.list_all.return_value = [profile]
-        with patch("core.lifecycle.container.ensure_profile_store", return_value=store):
+        with patch("core.wiring.container.ensure_profile_store", return_value=store):
             result = _check_profile_store()
         assert result.ok is True
         assert "openai-codex" in result.detail

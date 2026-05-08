@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from plugins.game_ip.cli.search import IPSearchEngine
 
-    from core.lifecycle.startup import ReadinessReport
+    from core.wiring.startup import ReadinessReport
 
 log = logging.getLogger(__name__)
 

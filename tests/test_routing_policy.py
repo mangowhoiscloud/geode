@@ -82,8 +82,8 @@ def _seed_two_plans(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Pl
     monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
     from core.auth import plan_registry as _pr
     from core.auth.plan_registry import get_plan_registry
-    from core.lifecycle import container as _infra
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring import container as _infra
+    from core.wiring.container import ensure_profile_store
 
     _infra._profile_store = None
     _pr._plan_registry = None

@@ -21,10 +21,10 @@ import logging
 import re
 
 from core.config import settings
-from core.lifecycle.startup import ReadinessReport, _has_any_llm_key, detect_subscription_oauth
 from core.ui.console import console
 from core.utils.env_io import mask_key as _mask_key
 from core.utils.env_io import upsert_env as _upsert_env
+from core.wiring.startup import ReadinessReport, _has_any_llm_key, detect_subscription_oauth
 
 log = logging.getLogger(__name__)
 

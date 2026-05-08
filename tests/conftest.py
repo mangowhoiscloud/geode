@@ -48,7 +48,7 @@ os.environ.setdefault("GEODE_AUTH_TOML", _test_auth_toml)
 @pytest.fixture(autouse=True)
 def _reset_auth_singletons():
     from core.auth import plan_registry as _pr
-    from core.lifecycle import container as _infra
+    from core.wiring import container as _infra
 
     _infra._profile_store = None
     _infra._profile_rotator = None

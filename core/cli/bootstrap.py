@@ -187,7 +187,7 @@ def bootstrap_geode(
 
     # 3. Readiness
     from core.cli import _set_readiness
-    from core.lifecycle.startup import check_readiness
+    from core.wiring.startup import check_readiness
 
     readiness = check_readiness()
     _set_readiness(readiness)

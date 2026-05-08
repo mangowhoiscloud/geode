@@ -89,7 +89,7 @@ def test_drift_refused_when_rotator_returns_none(monkeypatch) -> None:
     fake_rotator = MagicMock()
     fake_rotator.resolve.return_value = None  # no eligible profile
 
-    monkeypatch.setattr("core.lifecycle.container.get_profile_rotator", lambda: fake_rotator)
+    monkeypatch.setattr("core.wiring.container.get_profile_rotator", lambda: fake_rotator)
     monkeypatch.setattr("core.agent.loop._resolve_provider", lambda m: "glm")
 
     fake_settings = MagicMock(model="glm-4.7-flash")
@@ -107,7 +107,7 @@ def test_drift_accepted_when_rotator_returns_profile(monkeypatch) -> None:
     fake_rotator = MagicMock()
     fake_rotator.resolve.return_value = MagicMock(name="profile")
 
-    monkeypatch.setattr("core.lifecycle.container.get_profile_rotator", lambda: fake_rotator)
+    monkeypatch.setattr("core.wiring.container.get_profile_rotator", lambda: fake_rotator)
     monkeypatch.setattr("core.agent.loop._resolve_provider", lambda m: "glm")
 
     fake_settings = MagicMock(model="glm-4.7-flash")
@@ -124,7 +124,7 @@ def test_drift_accepted_when_rotator_not_initialised(monkeypatch) -> None:
     """
     stub = _make_loop_stub("glm-5.1")
 
-    monkeypatch.setattr("core.lifecycle.container.get_profile_rotator", lambda: None)
+    monkeypatch.setattr("core.wiring.container.get_profile_rotator", lambda: None)
     monkeypatch.setattr("core.agent.loop._resolve_provider", lambda m: "glm")
 
     fake_settings = MagicMock(model="glm-4.7-flash")
@@ -140,7 +140,7 @@ def test_drift_no_op_when_models_match(monkeypatch) -> None:
     stub = _make_loop_stub("glm-5.1")
     fake_rotator = MagicMock()
 
-    monkeypatch.setattr("core.lifecycle.container.get_profile_rotator", lambda: fake_rotator)
+    monkeypatch.setattr("core.wiring.container.get_profile_rotator", lambda: fake_rotator)
 
     fake_settings = MagicMock(model="glm-5.1")
     with patch("core.config.settings", fake_settings):

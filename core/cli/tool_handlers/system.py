@@ -20,7 +20,7 @@ def _build_system_handlers(
     from core.cli import _set_readiness
     from core.cli.commands import cmd_auth, cmd_key, cmd_model, show_help
     from core.cli.onboarding import render_readiness
-    from core.lifecycle.startup import check_readiness
+    from core.wiring.startup import check_readiness
 
     def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
         show_help()
@@ -155,7 +155,7 @@ def _build_system_handlers(
 
         try:
             from core.auth.plan_registry import get_plan_registry
-            from core.lifecycle.container import ensure_profile_store
+            from core.wiring.container import ensure_profile_store
 
             store = ensure_profile_store()
             registry = get_plan_registry()

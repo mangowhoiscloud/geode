@@ -41,7 +41,7 @@ def _try_oauth_refresh(provider_label: str) -> bool:
     Returns True if a token was refreshed and clients were reset.
     """
     try:
-        from core.lifecycle.container import get_profile_rotator
+        from core.wiring.container import get_profile_rotator
 
         rotator = get_profile_rotator()
         if not rotator:

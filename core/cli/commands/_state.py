@@ -191,7 +191,7 @@ def _get_profile_store() -> ProfileStore:
     added through `/auth add` were invisible to the LLM dispatch layer.
     Both layers now read from `runtime_wiring.infra` directly.
     """
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     return ensure_profile_store()
 

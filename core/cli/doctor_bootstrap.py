@@ -115,7 +115,7 @@ def _check_codex_oauth() -> CheckResult:
 def _check_profile_store() -> CheckResult:
     """Confirm at least one usable profile is registered."""
     try:
-        from core.lifecycle.container import ensure_profile_store
+        from core.wiring.container import ensure_profile_store
 
         store = ensure_profile_store()
         profiles = [p for p in store.list_all() if p.key]
