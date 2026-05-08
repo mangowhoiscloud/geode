@@ -199,9 +199,7 @@ _LAZY_ERROR_NAMES = frozenset(
 # while module load avoids the pydantic_settings tree.  Each access pays a
 # single attribute lookup against ``core.llm.fallback``, which itself
 # resolves the value lazily from ``core.config.settings``.
-_LAZY_FALLBACK_CONSTANTS = frozenset(
-    {"MAX_RETRIES", "RETRY_BASE_DELAY", "RETRY_MAX_DELAY"}
-)
+_LAZY_FALLBACK_CONSTANTS = frozenset({"MAX_RETRIES", "RETRY_BASE_DELAY", "RETRY_MAX_DELAY"})
 
 
 def __getattr__(name: str) -> Any:

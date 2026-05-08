@@ -30,6 +30,7 @@ def __getattr__(name: str) -> Any:
         return _settings
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
 # v0.88.0 — anthropic SDK is module-level lazy.  ``import anthropic`` and
 # the cross-module ``RETRYABLE_ERRORS`` / ``get_anthropic_client`` pulls
 # happen lazily inside the dispatch table lambdas / helper functions

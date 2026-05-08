@@ -738,7 +738,6 @@ def build_tool_offload(
     if settings.tool_offload_threshold <= 0:
         return None
 
-
     store = ToolResultOffloadStore(
         session_id=session_id,
         threshold=settings.tool_offload_threshold,
