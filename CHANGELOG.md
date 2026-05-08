@@ -28,6 +28,43 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.88.2] — 2026-05-09
+
+> **Cleanup — httpx 모듈-레벨 lazy loading (B1/v0.88.1 패턴 일관성).**
+> v0.88.0 (anthropic) + v0.88.1 (numpy/correlation) 을 거치고도 남아있던
+> 마지막 module-level 무거운 SDK 는 **httpx** 였다.
+> `core/llm/providers/anthropic.py:13` 과 `core/llm/providers/openai.py:371`
+> 두 곳에서 `import httpx` 가 module-level 에 남아 있어 `core.runtime`
+> 한 번 import 만으로 httpx 트리(~92 ms importtime cumulative) 를 끌어왔다.
+>
+> **솔직한 측정 결과**: importtime cumulative 92 ms 와 달리 wall-clock
+> 변화는 노이즈에 묻힌다(10-run median: develop 310 ms vs httpx-lazy
+> 322 ms — 차이 무의미).  httpx 의 의존(asyncio, ssl, certifi) 일부가
+> 다른 path 로도 로드되고, 일부는 병렬 import 로 wall-clock 영향이 적기
+> 때문.  그럼에도 본 PR 의 가치는 **코드 일관성 + 사용 패턴 보장**:
+>
+> 1. **동일 lazy 패턴의 일관 적용** — anthropic/numpy 가 lazy 인데 httpx
+>    만 eager 인 비대칭 제거.  v0.88.0/v0.88.1 의 PEP 562 + function-local
+>    import 패턴을 마지막 SDK 까지 이어서 적용.
+> 2. **사용 안 하는 사용자 보호** — Codex Plus only / GLM only 셋업은
+>    HTTP 클라이언트가 필요 없음에도 httpx 를 영원히 sys.modules 에
+>    들고 있었다.  본 PR 후 `'httpx' in sys.modules == False` 보장
+>    (`import core.runtime` 직후 시점).
+> 3. **module-level eager import 의 마지막 잔류 제거** — 이후 cold-start
+>    추가 절약은 `core.config` (pydantic settings) 같은 구조적 작업이
+>    필요하며, SDK lazy 이슈는 이 PR 로 닫힘.
+>
+> 검증: `import core.runtime` 후 `'httpx' in sys.modules == False`.  pytest
+> 4346 passed (변동 없음); ruff/mypy clean; E2E A (68.4) 동일.
+
+### Changed
+- **`core/llm/providers/anthropic.py`** — top-level `import httpx` 제거 → `TYPE_CHECKING` 블록으로 이동.  `_build_httpx_timeout` / `_build_httpx_limits` / `get_anthropic_client` / `get_async_anthropic_client` 4 함수에 함수-로컬 `import httpx` 추가.  Type annotation(`-> httpx.Timeout`, `-> httpx.Limits`)은 `from __future__ import annotations` 로 string.
+- **`core/llm/providers/openai.py`** — top-level `import httpx  # noqa: E402` 제거.  유일한 사용처(`_get_client` 의 lock-protected lazy-init 블록)에 함수-로컬 `import httpx` 추가.
+
+### Performance
+- 콜드 스타트 wall-clock 측정 가능한 변화 없음 (10-run median: 310 ms → 322 ms, noise band).  importtime cumulative 92 ms 절약은 SDK 의 의존 graph 가 다른 path 로도 일부 로드되어 wall-clock 으로 그대로 환원되지 않음.  그러나 **httpx 미사용 셋업은 SDK 를 영원히 안 로드**하게 됨 (sys.modules 검증).
+- 누적 (B1 + v0.88.1 + v0.88.2): 콜드 스타트 절약 ~−258 ms / ~−58 % (v0.88.0 main 대비).
+
 ## [0.88.1] — 2026-05-09
 
 > **Performance — numpy + correlation analyzer 모듈-레벨 lazy loading.**

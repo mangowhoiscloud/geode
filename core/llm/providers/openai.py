@@ -368,7 +368,10 @@ class OpenAIAdapter:
 
 import asyncio  # noqa: E402
 
-import httpx  # noqa: E402
+# v0.88.2 — httpx (~92 ms cumulative importtime) deferred to function
+# scope.  The single usage in ``_get_client`` already runs inside a
+# lock-protected lazy-init block, so a function-local ``import httpx``
+# is the natural extension of the existing pattern.
 
 # OpenAI native hosted tools (Responses API)
 _OPENAI_NATIVE_TOOLS: list[dict[str, Any]] = [
@@ -447,6 +450,7 @@ class OpenAIAgenticAdapter:
         if self._client is None:
             with self._client_lock:
                 if self._client is None:
+                    import httpx
                     import openai as _openai
 
                     http_client = httpx.Client(
