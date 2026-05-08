@@ -28,6 +28,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.88.5] — 2026-05-09
+
+> **Hardening — `core/graph.py` `# type: ignore[call-overload]` 9 건 제거
+> (B2 batch-3).**  9 개 langgraph `add_node()` 호출의 ignore 모두 제거.
+> 원인: 우리 `_node()` wrapper 의 반환 타입 `Callable[[GeodeState], dict[str, Any]]`
+> 이 langgraph 의 `_Node[NodeInputT_contra]` Protocol 과 mypy 입장에서
+> 자동 매칭되지 않음 (mypy 가 generic Callable 을 Protocol member 로
+> 자동 coerce 하지 않음).  Solution: ``_node`` 의 반환을 langgraph 의
+> ``_Node[GeodeState]`` Protocol 로 명시 + 반환값을 `cast()` 로 localise.
+> 9 개 ignore → 0, mypy 가 `add_node` overload 를 깨끗이 resolve.
+
+### Changed
+- **`core/graph.py:_node`** — return 타입 `Callable[[GeodeState], dict[str, Any]]` → `_Node[GeodeState]` (langgraph internal Protocol).  내부에서 `cast(_Node[GeodeState], _make_hooked_node(...))` / `cast(_Node[GeodeState], fn)` 로 wrapped/raw fn 모두 Protocol 로 localise.  Runtime 동작 변화 0 (langgraph 는 dict-shape return 을 그대로 받음).
+- **9 개 `add_node` 호출 (line 514–522)** — `# type: ignore[call-overload]` 제거.  `router`, `signals`, `analyst`, `evaluator`, `scoring`, `skip_check`, `verification`, `synthesizer`, `gather` 9 노드 모두.
+
+### Hardening Metrics
+- `# type: ignore` 총합: 53 → **44** (active count, −9, −17 %)
+- `[call-overload]` 카테고리: 13 → 4 (graph.py 9 → 0; tracing/tools/pipeline_executor 4 잔존 — root-cause 다른 SDK 한계)
+- pytest 4346 passed (변동 없음); ruff/mypy clean (332 source files); E2E A (68.4) 동일.
+
 ## [0.88.4] — 2026-05-09
 
 > **Hardening — `# type: ignore[union-attr]` 10 건 전부 제거 (B2 batch-2).**

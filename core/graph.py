@@ -34,7 +34,7 @@ import sqlite3
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from core.llm.prompt_assembler import PromptAssembler
@@ -485,32 +485,46 @@ def build_graph(
     """
     graph = StateGraph(GeodeState)
 
-    # Optionally wrap nodes with hook triggers
+    # Optionally wrap nodes with hook triggers.
+    #
+    # v0.88.5 — return type uses langgraph's ``_Node`` Protocol so the 9
+    # downstream ``add_node`` call sites can drop their
+    # ``# type: ignore[call-overload]`` markers.  ``cast`` localises the
+    # ``Callable[[GeodeState], dict[str, Any]] → _Node[GeodeState]``
+    # structural cast (mypy refuses to auto-coerce generic ``Callable``
+    # into a Protocol member without an explicit hint).  Runtime is
+    # unchanged — langgraph already accepts the dict-returning shape.
+    from langgraph.graph._node import _Node as _LangGraphNode
+
     def _node(
         fn: Callable[[GeodeState], dict[str, Any]],
         name: str,
-    ) -> Callable[[GeodeState], dict[str, Any]]:
+    ) -> _LangGraphNode[GeodeState]:
         if hooks is not None:
-            return _make_hooked_node(
-                fn,
-                name,
-                hooks,
-                bootstrap_mgr,
-                prompt_assembler,
-                node_scope_policy,
+            return cast(
+                _LangGraphNode[GeodeState],
+                _make_hooked_node(
+                    fn,
+                    name,
+                    hooks,
+                    bootstrap_mgr,
+                    prompt_assembler,
+                    node_scope_policy,
+                ),
             )
-        return fn
+        return cast(_LangGraphNode[GeodeState], fn)
 
-    # Add nodes (type: ignore needed — LangGraph type stubs don't match runtime)
-    graph.add_node("router", _node(router_node, "router"))  # type: ignore[call-overload]
-    graph.add_node("signals", _node(signals_node, "signals"))  # type: ignore[call-overload]
-    graph.add_node("analyst", _node(analyst_node, "analyst"))  # type: ignore[call-overload]
-    graph.add_node("evaluator", _node(evaluator_node, "evaluator"))  # type: ignore[call-overload]
-    graph.add_node("scoring", _node(scoring_node, "scoring"))  # type: ignore[call-overload]
-    graph.add_node("skip_check", _node(_skip_check_node, "skip_check"))  # type: ignore[call-overload]
-    graph.add_node("verification", _node(_verification_node, "verification"))  # type: ignore[call-overload]
-    graph.add_node("synthesizer", _node(synthesizer_node, "synthesizer"))  # type: ignore[call-overload]
-    graph.add_node("gather", _node(_gather_node, "gather"))  # type: ignore[call-overload]
+    # ``_node`` returns ``_LangGraphNode[GeodeState]`` (cast inside),
+    # so mypy resolves ``add_node`` overloads cleanly without ignore.
+    graph.add_node("router", _node(router_node, "router"))
+    graph.add_node("signals", _node(signals_node, "signals"))
+    graph.add_node("analyst", _node(analyst_node, "analyst"))
+    graph.add_node("evaluator", _node(evaluator_node, "evaluator"))
+    graph.add_node("scoring", _node(scoring_node, "scoring"))
+    graph.add_node("skip_check", _node(_skip_check_node, "skip_check"))
+    graph.add_node("verification", _node(_verification_node, "verification"))
+    graph.add_node("synthesizer", _node(synthesizer_node, "synthesizer"))
+    graph.add_node("gather", _node(_gather_node, "gather"))
 
     # Edges: START → router
     graph.add_edge(START, "router")
