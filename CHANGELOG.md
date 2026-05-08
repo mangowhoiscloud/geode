@@ -28,6 +28,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.87.1] — 2026-05-08
+
+> **Hardening — v0.82.0 staleness 인시던트의 재발 방지용 단위 테스트 추가.**
+> v0.82.0에서 `SharedServices`의 frozen `_model` 필드를 제거해 `cmd_model`
+> 변경이 다음 IPC 세션에 즉시 반영되도록 고쳤지만, 기존 단위 테스트
+> `test_model_resolved_per_session`은 boot-time 일관성만 검사할 뿐
+> mid-flight `settings.model` 변경 → 다음 세션 fresh-read 시나리오를
+> 직접 재현하지 않았다. 이번 패치는 정확히 그 staleness 시나리오를 LLM
+> 호출 없이 강제(ANTHROPIC_PRIMARY ↔ OPENAI_PRIMARY 교체)해 v0.82.0
+> 인시던트의 provider 교차(Anthropic API ↔ Codex Plus OAuth) 패턴까지
+> 회귀로 영구 잠근다. 동작·스키마 변경 0; tests/ 전용 변경. pytest
+> 4346 passed (4345→4346); E2E `geode analyze "Cowboy Bebop" --dry-run`
+> A (68.4) unchanged.
+
+### Added
+- **`tests/test_shared_services.py::test_model_switch_propagates_across_sessions`** — v0.82.0 회귀 잠금. `settings.model`을 `ANTHROPIC_PRIMARY`로 설정 후 `create_session(DAEMON)` → `loop_a.model == ANTHROPIC_PRIMARY` 확인. 그 직후 `settings.model = OPENAI_PRIMARY`로 변경하고 `create_session(DAEMON)` → `loop_b.model == OPENAI_PRIMARY`까지 검증해 `SharedServices`가 매 세션마다 `settings.model`을 fresh-read 함을 증명. 두 세션 인스턴스가 독립적인지 (`loop_a.model`은 첫 시점 값 유지) 도 함께 어서트.
+
 ## [0.87.0] — 2026-05-08
 
 > **`core/lifecycle/` → `core/wiring/` rename — `startup` 흡수 후에도 모호하던 폴더 이름을 의도가 명확한 이름으로 교체.**
