@@ -32,7 +32,6 @@ from core.cli.session_state import (
     _get_search_engine,
     _scheduler_service_ctx,
 )
-from core.config import settings
 from core.ui.console import console
 from core.wiring.startup import check_readiness
 
@@ -152,6 +151,8 @@ def _handle_command(
     elif action == "trigger":
         cmd_trigger(args)
     elif action == "status":
+        from core.config import settings
+
         console.print()
         console.print("  [header]GEODE System Status[/header]")
         console.print(f"  Model: [bold]{settings.model}[/bold]")

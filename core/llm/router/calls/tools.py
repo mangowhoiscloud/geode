@@ -7,7 +7,6 @@ import logging
 import time
 from typing import Any
 
-from core.config import settings
 from core.llm.provider_dispatch import (
     _cross_provider_dispatch,
     _get_provider_client,
@@ -44,6 +43,8 @@ def call_llm_with_tools(
 
     Supports cross-provider fallback when enabled.
     """
+    from core.config import settings
+
     target_model = model or settings.model
     provider = _route_provider(target_model)
 

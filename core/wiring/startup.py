@@ -22,11 +22,24 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from core.config import settings
 from core.memory.project import ProjectMemory
 
 log = logging.getLogger(__name__)
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562 lazy ``settings`` alias.
+
+    Tests historically patch ``core.wiring.startup.settings``; preserve that
+    surface without paying the pydantic_settings cost at module import.
+    """
+    if name == "settings":
+        from core.config import settings as _settings
+
+        return _settings
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def auto_generate_env(project_root: Path | None = None) -> bool:
@@ -83,6 +96,8 @@ def _is_placeholder(value: str) -> bool:
 
 def _has_any_llm_key() -> bool:
     """Check if ANY LLM provider API key is configured."""
+    from core.config import settings
+
     if settings.anthropic_api_key and not _is_placeholder(settings.anthropic_api_key):
         return True
     if settings.openai_api_key and not _is_placeholder(settings.openai_api_key):

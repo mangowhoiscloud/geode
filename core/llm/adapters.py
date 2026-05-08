@@ -14,7 +14,6 @@ from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel
 
-from core.config import settings
 from core.llm.agentic_response import AgenticResponse
 
 log = logging.getLogger(__name__)
@@ -261,6 +260,8 @@ class ClaudeAdapter:
     @property
     def model_name(self) -> str:
         """Return the default model name for cross-LLM verification."""
+        from core.config import settings
+
         return settings.model
 
     def generate(

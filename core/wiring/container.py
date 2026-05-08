@@ -11,7 +11,6 @@ from typing import Any
 from core.auth.cooldown import CooldownTracker
 from core.auth.profiles import ProfileStore
 from core.auth.rotation import ProfileRotator
-from core.config import settings
 from core.llm.providers.openai import OpenAIAdapter
 from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.orchestration.lane_queue import LaneQueue
@@ -19,6 +18,16 @@ from core.tools.policy import PolicyChain, ToolPolicy
 from core.tools.registry import ToolRegistry, ToolSearchTool
 
 log = logging.getLogger(__name__)
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562 lazy ``settings`` alias for legacy patch sites."""
+    if name == "settings":
+        from core.config import settings as _settings
+
+        return _settings
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # ---------------------------------------------------------------------------
 # Default configuration
@@ -274,6 +283,7 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
         return _profile_store, _profile_rotator, CooldownTracker()
 
     from core.auth.profiles import AuthProfile, CredentialType
+    from core.config import settings
 
     profile_store = ProfileStore()
 
@@ -371,6 +381,7 @@ def build_llm_adapters(
     policy_chain: PolicyChain,
 ) -> tuple[LLMClientPort, LLMClientPort | None]:
     """Build LLM adapters and inject callables into contextvars."""
+    from core.config import settings
     from core.llm.router import set_llm_callable
 
     llm_adapter: LLMClientPort = ClaudeAdapter()

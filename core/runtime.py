@@ -52,7 +52,6 @@ from core.automation.feedback_loop import FeedbackLoop
 from core.automation.model_registry import ModelRegistry
 from core.automation.outcome_tracking import OutcomeTracker
 from core.automation.snapshot import SnapshotManager
-from core.config import settings
 from core.domains.loader import load_domain_adapter
 from core.domains.port import set_domain
 from core.hooks import HookSystem
@@ -442,6 +441,8 @@ class GeodeRuntime:
         Returns None for empty strings so the MemorySaver fallback
         in compile_graph kicks in.
         """
+        from core.config import settings
+
         db = settings.checkpoint_db
         return db if db and db.strip() else None
 
@@ -461,6 +462,7 @@ class GeodeRuntime:
         if self._compiled_graph is not None:
             return self._compiled_graph
 
+        from core.config import settings
         from core.graph import compile_graph
 
         # Subagents use MemorySaver for thread safety (G7 fix)

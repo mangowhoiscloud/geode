@@ -665,7 +665,7 @@ class TestBuildAuthZAI:
     def test_zai_profile_registered(self):
         from unittest.mock import patch
 
-        with patch("core.wiring.container.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             mock_settings.openai_api_key = ""
             mock_settings.zai_api_key = "test-zai-key"
@@ -683,7 +683,7 @@ class TestBuildAuthZAI:
     def test_zai_profile_not_registered_when_empty(self):
         from unittest.mock import patch
 
-        with patch("core.wiring.container.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             mock_settings.openai_api_key = ""
             mock_settings.zai_api_key = ""
