@@ -6,8 +6,6 @@ import logging
 import time
 from collections.abc import Iterator
 
-from core.config import settings
-from core.llm.fallback import MAX_RETRIES, RETRY_BASE_DELAY, RETRY_MAX_DELAY
 from core.llm.providers.anthropic import (
     FALLBACK_MODELS,
     get_anthropic_client,
@@ -36,6 +34,8 @@ def call_llm_streaming(
     temperature: float = 0.3,
 ) -> Iterator[str]:
     """Streaming Claude call with failover. Yields text deltas."""
+    from core.config import settings
+    from core.llm.fallback import MAX_RETRIES, RETRY_BASE_DELAY, RETRY_MAX_DELAY
     from core.llm.providers.anthropic import (
         RETRYABLE_ERRORS as _RETRYABLE_ERRORS,
     )

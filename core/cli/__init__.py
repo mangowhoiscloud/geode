@@ -89,7 +89,6 @@ from core.cli.welcome import _render_readiness_compact as _render_readiness_comp
 from core.cli.welcome import _render_welcome_brand as _render_welcome_brand
 from core.cli.welcome import _suppress_noisy_warnings as _suppress_noisy_warnings
 from core.cli.welcome import _welcome_screen as _welcome_screen
-from core.config import settings
 from core.hooks import HookEvent, HookSystem
 from core.hooks.utils import fire_hook
 from core.llm.commentary import generate_commentary
@@ -113,6 +112,8 @@ def _show_commentary(
     """Generate and display LLM commentary after tool call results."""
     if is_offline:
         return
+    from core.config import settings
+
     with GeodeStatus("Generating response...", model=settings.model) as status:
         text = generate_commentary(user_query=user_text, action=action, context=context)
         status.stop("response" if text else "response (skipped)")

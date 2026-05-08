@@ -14,7 +14,6 @@ from typing import Any
 
 from plugins.game_ip.scoring_constants import score_style
 
-from core.config import settings
 from core.runtime import GeodeRuntime
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
 from core.ui.console import console
@@ -574,6 +573,7 @@ def _run_analysis(
     ip_name = resolved
 
     # Tag pipeline events with IP name (thread-safe, for future parallel UI)
+    from core.config import settings
     from core.ui.agentic_ui import set_pipeline_ip
 
     set_pipeline_ip(ip_name)
@@ -664,6 +664,7 @@ def _build_initial_state(
     runtime: GeodeRuntime,
 ) -> GeodeState:
     """Build initial pipeline state for batch mode."""
+    from core.config import settings
     from core.memory.session_key import build_session_key
 
     session_id = build_session_key(ip_name, "pipeline")

@@ -17,10 +17,19 @@ from core.config import (
     GLM_FALLBACK_CHAIN,
     OPENAI_FALLBACK_CHAIN,
     is_model_allowed,
-    settings,
 )
 from core.hooks.utils import fire_hook
 from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562 lazy ``settings`` alias for legacy patch sites."""
+    if name == "settings":
+        from core.config import settings as _settings
+
+        return _settings
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # v0.88.0 — anthropic SDK is module-level lazy.  ``import anthropic`` and
 # the cross-module ``RETRYABLE_ERRORS`` / ``get_anthropic_client`` pulls
@@ -223,6 +232,8 @@ def _cross_provider_dispatch(  # noqa: UP047 — PEP695 syntax requires Python 3
     provider chain is exhausted, iterates through ``llm_cross_provider_order``
     trying each remaining provider's primary model.
     """
+    from core.config import settings
+
     providers: list[tuple[str, str]] = [(primary_provider, primary_model)]
     if settings.llm_cross_provider_failover:
         for p in settings.llm_cross_provider_order:

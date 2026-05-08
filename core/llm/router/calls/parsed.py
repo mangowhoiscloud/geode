@@ -8,7 +8,6 @@ from typing import TypeVar, cast
 
 from pydantic import BaseModel
 
-from core.config import settings
 from core.llm.provider_dispatch import (
     _cross_provider_dispatch,
     _get_provider_client,
@@ -44,6 +43,8 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
 
     Supports cross-provider fallback when enabled.
     """
+    from core.config import settings
+
     target_model = model or settings.model
     provider = _route_provider(target_model)
 

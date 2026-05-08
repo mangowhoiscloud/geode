@@ -45,6 +45,39 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   전체 회수는 작음 (240 → 226 ms) — `from core.config import settings`
   를 함수-로컬로 옮기는 callsite 변환이 다음 단계에서 핵심 회수를 만듦.
 
+- **`from core.config import settings` 의 cold-start path callsite 19 곳을
+  함수-로컬 import 로 이전** (단계 1 의 PEP 562 lazy 후속). 변환 대상:
+  - 4-Layer wiring: `core/wiring/{bootstrap,automation,container,startup}.py`
+  - LLM 라우터/제공자: `core/runtime.py`, `core/graph.py`,
+    `core/llm/{adapters,fallback,provider_dispatch}.py`,
+    `core/llm/router/calls/{tools,streaming,text,parsed,_failover}.py`,
+    `core/llm/providers/{anthropic,openai,glm}.py`
+  - CLI thin client: `core/cli/{__init__,dispatcher,pipeline_executor,onboarding,
+    welcome,report_renderer}.py`, `core/cli/tool_handlers/system.py`
+  - 도메인 플러그인: `plugins/game_ip/cli/batch.py`
+- `core/llm/fallback.py` 의 module-level `MAX_RETRIES` / `RETRY_BASE_DELAY` /
+  `RETRY_MAX_DELAY` (settings 즉시 평가) 도 PEP 562 `__getattr__` 로 lazy
+  해석. `retry_with_backoff_generic` 함수 default 도 None 으로 바꾸고
+  body 에서 settings 에서 해석 — module load 시점 settings 트리거 차단.
+- `core/llm/router/__init__.py` 의 `MAX_RETRIES` 등 re-export 는 PEP 562
+  fallback constants lazy 분기로 이전 (외부 `from core.llm.router import
+  MAX_RETRIES` 호환 유지).
+- 5 모듈 (`wiring/{startup,container}`, `cli/onboarding`,
+  `llm/provider_dispatch`, `llm/providers/anthropic`) 에 module-level
+  `__getattr__` 의 `settings` lazy alias 를 추가해 legacy patch 사이트
+  (`patch("core.X.settings")`) 호환 유지.
+- 영향 테스트 (`patch("core.X.settings")` 24 사이트) 는 `core.config.settings`
+  단일 patch 로 통일. settings 가 singleton 이라 동등.
+
+- **측정 (cold-start, `import core.runtime`)**:
+  - v0.89.0 baseline: **240 ms** (single run, clean cache)
+  - 단계 1 (`config` 패키지 분리) 단독: 226 ms (−14 ms / −6 %)
+  - 단계 1+2 합산 (이 PR): **128 ms cold (first run) / 80–110 ms warm
+    (median ≈ 88 ms)** — 누적 −112 ms / **−46 %**
+  - `pydantic_settings` / `core.config._settings` 가 더 이상 cold-start 의
+    `sys.modules` 에 들어가지 않음 (첫 settings access 시점까지 미뤄짐).
+  - modules count: 382 → 341 (−41 modules) on cold-start path.
+
 ## [0.89.0] — 2026-05-09
 
 > **Removed — LangSmith 의존 100 % 제거.  관측성은 hook system + RunLog 로 일원화.**

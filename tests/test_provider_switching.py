@@ -186,8 +186,18 @@ def _register_glm_payg() -> Plan:
 @pytest.fixture
 def isolated_auth(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Reset singletons + redirect auth.toml to a tmp path so plan
-    registrations don't leak across tests."""
+    registrations don't leak across tests.
+
+    Also clears ``settings.*_api_key`` so other tests that exercise
+    ``cmd_key`` (test_commands.py) cannot leak a non-empty key into
+    ``build_auth`` and seed an unexpected ``anthropic:default`` profile.
+    """
+    from core.config import settings
+
     monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "openai_api_key", "")
+    monkeypatch.setattr(settings, "zai_api_key", "")
     _reset_singletons()
     yield
     _reset_singletons()

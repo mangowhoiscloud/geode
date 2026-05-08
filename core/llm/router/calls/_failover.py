@@ -13,7 +13,6 @@ import time
 from typing import Any
 
 from core.config import is_model_allowed
-from core.llm.fallback import MAX_RETRIES, RETRY_BASE_DELAY, RETRY_MAX_DELAY
 from core.llm.router._hooks import _fire_hook
 
 # v0.88.0 — RETRYABLE_ERRORS / NON_RETRYABLE_ERRORS are lazy-resolved
@@ -59,6 +58,7 @@ async def call_with_failover(
     # v0.88.0 — defer anthropic SDK load until first failover.  Module-level
     # tuple imports used to pull 248 ms anthropic graph at startup via
     # ``providers.anthropic.__getattr__``.
+    from core.llm.fallback import MAX_RETRIES, RETRY_BASE_DELAY, RETRY_MAX_DELAY
     from core.llm.providers.anthropic import (
         NON_RETRYABLE_ERRORS as _NON_RETRYABLE_ERRORS,
     )

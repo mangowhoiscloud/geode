@@ -106,7 +106,7 @@ class TestCrossProviderDispatch:
             calls.append((p, m))
             return "ok"
 
-        with patch("core.llm.provider_dispatch.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             mock_settings.llm_cross_provider_failover = False
             result = _cross_provider_dispatch("anthropic", "claude-opus-4-6", _dispatch, "test")
 
@@ -127,7 +127,7 @@ class TestCrossProviderDispatch:
             return "fallback_ok"
 
         with (
-            patch("core.llm.provider_dispatch.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
             patch("core.llm.provider_dispatch._get_fallback_chain") as mock_chain,
             patch("core.llm.provider_dispatch._fire_hook"),
         ):
@@ -150,7 +150,7 @@ class TestCrossProviderDispatch:
             raise RuntimeError(f"{p} down")
 
         with (
-            patch("core.llm.provider_dispatch.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
             patch("core.llm.provider_dispatch._get_fallback_chain", return_value=["m1"]),
             patch("core.llm.provider_dispatch._fire_hook"),
             pytest.raises(RuntimeError, match="glm down"),
@@ -744,6 +744,9 @@ class TestCostRatioGuard:
 
         mock_settings = MagicMock()
         mock_settings.llm_max_fallback_cost_ratio = 2.0
+        mock_settings.llm_max_retries = 1
+        mock_settings.llm_retry_base_delay = 0.0
+        mock_settings.llm_retry_max_delay = 0.0
         mock_pricing = {
             "cheap": ModelPrice(input=1e-6, output=5e-6),
             "expensive": ModelPrice(input=10e-6, output=50e-6),

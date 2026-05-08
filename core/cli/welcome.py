@@ -10,7 +10,6 @@ from pathlib import Path
 from core import __version__
 from core.cli.onboarding import env_setup_wizard
 from core.cli.session_state import _set_readiness
-from core.config import settings
 from core.ui.console import console
 from core.wiring.startup import (
     ReadinessReport,
@@ -23,6 +22,7 @@ from core.wiring.startup import (
 
 def _render_welcome_brand() -> None:
     """Render animated Claude Code-style branding with axolotl mascot."""
+    from core.config import settings
     from core.ui.mascot import play_mascot_animation
 
     cwd = str(Path.cwd())

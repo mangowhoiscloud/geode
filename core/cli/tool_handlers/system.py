@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.config import settings
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
@@ -36,6 +35,7 @@ def _build_system_handlers(
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
         from importlib.metadata import version as _pkg_version
 
+        from core.config import settings
         from core.domains.port import get_domain_or_none
 
         # Fixture count is domain-specific — sourced via DomainPort.
@@ -96,6 +96,8 @@ def _build_system_handlers(
         }
 
     def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
+        from core.config import settings
+
         model_hint = kwargs.get("model_hint", "")
         # Only update settings — do NOT call loop.update_model() here.
         # The AgenticLoop checks for model drift at the start of each round
@@ -110,6 +112,8 @@ def _build_system_handlers(
         }
 
     def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
+        from core.config import settings
+
         key_value = kwargs.get("key_value", "")
         changed = cmd_key(key_value)
         if changed:

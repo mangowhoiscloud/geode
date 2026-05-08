@@ -10,7 +10,7 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
-from core.config import ANTHROPIC_FALLBACK_CHAIN, is_model_allowed, settings
+from core.config import ANTHROPIC_FALLBACK_CHAIN, is_model_allowed
 from core.llm.fallback import (
     CircuitBreaker,
     retry_with_backoff_generic,
@@ -57,6 +57,13 @@ def __getattr__(name: str) -> Any:
 
         globals()[name] = TextBlockParam
         return TextBlockParam
+    if name == "settings":
+        # Preserve legacy patch surface (tests monkeypatch
+        # ``core.llm.providers.anthropic.settings``) without paying the
+        # pydantic_settings cost at module import.
+        from core.config import settings as _settings
+
+        return _settings
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -72,6 +79,8 @@ def _build_httpx_timeout() -> httpx.Timeout:
     """Build httpx Timeout from settings."""
     import httpx
 
+    from core.config import settings
+
     return httpx.Timeout(
         connect=settings.llm_connect_timeout,
         read=settings.llm_read_timeout,
@@ -83,6 +92,8 @@ def _build_httpx_timeout() -> httpx.Timeout:
 def _build_httpx_limits() -> httpx.Limits:
     """Build httpx connection pool Limits from settings."""
     import httpx
+
+    from core.config import settings
 
     return httpx.Limits(
         max_connections=settings.llm_max_connections,
@@ -115,6 +126,7 @@ FALLBACK_MODELS = ANTHROPIC_FALLBACK_CHAIN
 
 def _resolve_anthropic_key() -> str:
     """Resolve Anthropic API key from ProfileRotator (OAuth preferred) or settings."""
+    from core.config import settings
     from core.llm.credentials import resolve_provider_key
 
     return resolve_provider_key("anthropic", settings.anthropic_api_key)
@@ -389,6 +401,8 @@ _COMPUTER_USE_TOOL: dict[str, Any] = {
 
 def is_computer_use_enabled() -> bool:
     """Check if computer-use is enabled (requires pyautogui + opt-in)."""
+    from core.config import settings
+
     if not getattr(settings, "computer_use_enabled", False):
         return False
     try:
@@ -435,6 +449,7 @@ class ClaudeAgenticAdapter:
         thinking_budget: int = 0,
         effort: str = "high",
     ) -> Any | None:
+        from core.config import settings
         from core.llm.agentic_response import normalize_anthropic
         from core.llm.errors import LLMBadRequestError, UserCancelledError
         from core.llm.router import call_with_failover

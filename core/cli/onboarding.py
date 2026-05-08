@@ -19,14 +19,23 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
-from core.config import settings
 from core.ui.console import console
 from core.utils.env_io import mask_key as _mask_key
 from core.utils.env_io import upsert_env as _upsert_env
 from core.wiring.startup import ReadinessReport, _has_any_llm_key, detect_subscription_oauth
 
 log = logging.getLogger(__name__)
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562 lazy ``settings`` alias for legacy patch sites."""
+    if name == "settings":
+        from core.config import settings as _settings
+
+        return _settings
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +115,8 @@ def _wizard_subscription_path() -> bool:
 
 def _wizard_api_key_path() -> bool:
     """Path B — paste API keys for any of the three providers."""
+    from core.config import settings
+
     any_set = False
     providers = [
         (
@@ -189,6 +200,8 @@ def detect_api_key(text: str) -> tuple[str, str, str] | None:
 def key_registration_gate() -> str | None:
     """Block until user provides API key or quits. Returns key or None."""
     from rich.panel import Panel
+
+    from core.config import settings
 
     console.print(
         Panel(

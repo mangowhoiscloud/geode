@@ -7,7 +7,6 @@ import statistics
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from core.config import settings
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
@@ -69,6 +68,7 @@ def _run_analysis_standalone(ip_name: str, *, dry_run: bool = False) -> dict[str
 
     This is thread-safe: each call creates its own GeodeRuntime.
     """
+    from core.config import settings
     from core.runtime import GeodeRuntime
 
     key = ip_name.lower().strip()
