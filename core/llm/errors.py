@@ -6,9 +6,86 @@ so that no consumer needs to import provider SDKs directly.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import anthropic
+if TYPE_CHECKING:
+    # v0.88.0 — these names resolve through ``__getattr__`` below on first use;
+    # the static SDK reference table lives in ``_ANTHROPIC_ALIAS_MAP``.  The
+    # TYPE_CHECKING re-exports give mypy / IDEs a static view of the public
+    # surface (``from core.llm.errors import LLMRateLimitError``) without
+    # re-introducing the eager ``import anthropic``.  These names never
+    # execute at runtime — runtime lookups go through ``__getattr__``.
+    from anthropic import (
+        APIConnectionError as LLMConnectionError,
+    )
+    from anthropic import (
+        APIStatusError as LLMAPIStatusError,
+    )
+    from anthropic import (
+        APITimeoutError as LLMTimeoutError,
+    )
+    from anthropic import (
+        AuthenticationError as LLMAuthenticationError,
+    )
+    from anthropic import (
+        BadRequestError as LLMBadRequestError,
+    )
+    from anthropic import (
+        InternalServerError as LLMInternalServerError,
+    )
+    from anthropic import (
+        RateLimitError as LLMRateLimitError,
+    )
+
+# v0.88.0 — explicit ``__all__`` re-export list.  Mypy's
+# ``--no-implicit-reexport`` rule otherwise fails on
+# ``from core.llm.errors import LLMRateLimitError`` because the alias is
+# bound only inside ``TYPE_CHECKING`` + ``__getattr__``.  Listing the
+# names here promises the module *will* expose them, giving mypy a green
+# light without re-introducing the eager ``import anthropic``.
+__all__ = [
+    "BillingError",
+    "LLMAPIStatusError",
+    "LLMAuthenticationError",
+    "LLMBadRequestError",
+    "LLMConnectionError",
+    "LLMInternalServerError",
+    "LLMRateLimitError",
+    "LLMTimeoutError",
+    "UserCancelledError",
+    "classify_llm_error",
+    "extract_billing_message",
+    "is_billing_fatal",
+    "is_request_fatal",
+]
+
+# v0.88.0 — anthropic SDK is module-level lazy.  Importing this module no
+# longer pulls 248 ms of ``anthropic`` graph at startup; the seven
+# ``LLM*Error`` aliases below are resolved on first attribute access via
+# the module-level ``__getattr__`` hook (PEP 562).  Cold-start path (CLI
+# ``geode about`` / ``geode doctor``) never imports anthropic; it loads
+# only when the agentic loop or fallback classifier touches an alias.
+_ANTHROPIC_ALIAS_MAP: dict[str, str] = {
+    "LLMTimeoutError": "APITimeoutError",
+    "LLMConnectionError": "APIConnectionError",
+    "LLMRateLimitError": "RateLimitError",
+    "LLMAuthenticationError": "AuthenticationError",
+    "LLMBadRequestError": "BadRequestError",
+    "LLMAPIStatusError": "APIStatusError",
+    "LLMInternalServerError": "InternalServerError",
+}
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562 module-level lazy attribute — resolves anthropic aliases on demand."""
+    if name in _ANTHROPIC_ALIAS_MAP:
+        import anthropic
+
+        cls = getattr(anthropic, _ANTHROPIC_ALIAS_MAP[name])
+        globals()[name] = cls  # cache for future lookups
+        return cls
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # v0.52.2 — billing-fatal error codes by provider SDK shape.
 # Retrying these wastes 40s per call (5 attempts × exponential backoff)
@@ -109,16 +186,9 @@ class BillingError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# LLM error type aliases — re-exported so CLI layer does NOT import anthropic
-# directly.  Keeps the Port/Adapter boundary clean.
+# LLM error type aliases — see TYPE_CHECKING block at top of module for
+# the static surface; ``__getattr__`` resolves the names lazily at runtime.
 # ---------------------------------------------------------------------------
-LLMTimeoutError = anthropic.APITimeoutError
-LLMConnectionError = anthropic.APIConnectionError
-LLMRateLimitError = anthropic.RateLimitError
-LLMAuthenticationError = anthropic.AuthenticationError
-LLMBadRequestError = anthropic.BadRequestError
-LLMAPIStatusError = anthropic.APIStatusError
-LLMInternalServerError = anthropic.InternalServerError
 
 
 # ---------------------------------------------------------------------------
@@ -180,17 +250,22 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
     # --- Anthropic SDK errors ---
     if isinstance(exc, BillingError):
         return _ERROR_CLASSIFICATION["billing"]
-    if isinstance(exc, LLMRateLimitError):
+    # v0.88.0 — fetch the lazy aliases via the module-level ``__getattr__``
+    # at first use so this function still works when ``classify_llm_error``
+    # runs as the first anthropic-touching code in the process.
+    import anthropic
+
+    if isinstance(exc, anthropic.RateLimitError):
         return _ERROR_CLASSIFICATION["rate_limit"]
-    if isinstance(exc, LLMTimeoutError):
+    if isinstance(exc, anthropic.APITimeoutError):
         return _ERROR_CLASSIFICATION["timeout"]
-    if isinstance(exc, LLMConnectionError):
+    if isinstance(exc, anthropic.APIConnectionError):
         return _ERROR_CLASSIFICATION["connection"]
-    if isinstance(exc, LLMAuthenticationError):
+    if isinstance(exc, anthropic.AuthenticationError):
         return _ERROR_CLASSIFICATION["auth"]
-    if isinstance(exc, LLMInternalServerError):
+    if isinstance(exc, anthropic.InternalServerError):
         return _ERROR_CLASSIFICATION["server"]
-    if isinstance(exc, LLMBadRequestError):
+    if isinstance(exc, anthropic.BadRequestError):
         msg = str(exc).lower()
         if "token" in msg or "context" in msg or "prompt exceeds" in msg or "max length" in msg:
             return _ERROR_CLASSIFICATION["context_overflow"]

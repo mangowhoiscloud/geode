@@ -15,6 +15,35 @@ internals that one call function uses to dispatch to another.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # v0.88.0 — re-exports preserved through the lazy ``__getattr__`` at the
+    # end of this module.  ``from core.llm.router import LLMRateLimitError``
+    # keeps working without paying the 248 ms anthropic load at module
+    # import — only IDE / mypy use this branch.
+    from core.llm.errors import (
+        LLMAPIStatusError as LLMAPIStatusError,
+    )
+    from core.llm.errors import (
+        LLMAuthenticationError as LLMAuthenticationError,
+    )
+    from core.llm.errors import (
+        LLMBadRequestError as LLMBadRequestError,
+    )
+    from core.llm.errors import (
+        LLMConnectionError as LLMConnectionError,
+    )
+    from core.llm.errors import (
+        LLMInternalServerError as LLMInternalServerError,
+    )
+    from core.llm.errors import (
+        LLMRateLimitError as LLMRateLimitError,
+    )
+    from core.llm.errors import (
+        LLMTimeoutError as LLMTimeoutError,
+    )
+
 # Re-export the resolver fallback for backwards compatibility — legacy uses of
 # ``monkeypatch.setattr("core.llm.router._resolve_provider", ...)`` still find a
 # name on the package. ``calls._route_provider`` calls the leaf binding from
@@ -29,27 +58,19 @@ from core.llm.adapters import LLMParsedCallable as LLMParsedCallable
 from core.llm.adapters import LLMTextCallable as LLMTextCallable
 from core.llm.adapters import LLMToolCallable as LLMToolCallable
 from core.llm.adapters import resolve_agentic_adapter as resolve_agentic_adapter
-from core.llm.errors import (
-    LLMAPIStatusError as LLMAPIStatusError,
-)
-from core.llm.errors import (
-    LLMAuthenticationError as LLMAuthenticationError,
-)
-from core.llm.errors import (
-    LLMBadRequestError as LLMBadRequestError,
-)
-from core.llm.errors import (
-    LLMConnectionError as LLMConnectionError,
-)
-from core.llm.errors import (
-    LLMInternalServerError as LLMInternalServerError,
-)
-from core.llm.errors import (
-    LLMRateLimitError as LLMRateLimitError,
-)
-from core.llm.errors import (
-    LLMTimeoutError as LLMTimeoutError,
-)
+
+# v0.88.0 — LLM*Error re-exports (LLMAPIStatusError, LLMAuthenticationError,
+# LLMBadRequestError, LLMConnectionError, LLMInternalServerError,
+# LLMRateLimitError, LLMTimeoutError) used to live here as eager
+# ``from core.llm.errors import X as X`` lines.  Each one ran
+# ``core.llm.errors.__getattr__`` at module load and pulled the 248 ms
+# anthropic SDK graph into the cold-start path, even though nothing in
+# the codebase imports these names from ``core.llm.router`` (verified
+# 2026-05-08 grep — only ``LLMClientPort`` / ``LLM*Callable`` /
+# ``LLMUsageAccumulator`` are pulled from this package).  Public API
+# preserved via the module-level ``__getattr__`` hook below: any future
+# ``from core.llm.router import LLMRateLimitError`` still resolves on
+# demand, deferring the SDK load until first access.
 from core.llm.fallback import MAX_RETRIES as MAX_RETRIES
 from core.llm.fallback import RETRY_BASE_DELAY as RETRY_BASE_DELAY
 from core.llm.fallback import RETRY_MAX_DELAY as RETRY_MAX_DELAY
@@ -167,3 +188,30 @@ from .tracing import (
 from .tracing import (
     maybe_traceable as maybe_traceable,
 )
+
+# v0.88.0 — module-level ``__getattr__`` for lazy LLM*Error re-exports.
+# Placed after all eager imports so ruff E402 stays happy.  The
+# ``_LAZY_ERROR_NAMES`` set is the runtime mirror of the TYPE_CHECKING
+# block at the top of the file.
+_LAZY_ERROR_NAMES = frozenset(
+    {
+        "LLMAPIStatusError",
+        "LLMAuthenticationError",
+        "LLMBadRequestError",
+        "LLMConnectionError",
+        "LLMInternalServerError",
+        "LLMRateLimitError",
+        "LLMTimeoutError",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562 hook — resolve lazy LLM*Error re-exports on first access."""
+    if name in _LAZY_ERROR_NAMES:
+        from core.llm import errors
+
+        cls = getattr(errors, name)
+        globals()[name] = cls
+        return cls
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
