@@ -30,7 +30,6 @@ from core.hooks import HookEvent, HookSystem
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
 from core.llm.router import (
-    maybe_traceable,
     resolve_agentic_adapter,
 )
 from core.ui.agentic_ui import OperationLogger
@@ -301,7 +300,6 @@ class AgenticLoop:
         result: AgenticResult = asyncio.run(self.arun(user_input))
         return result
 
-    @maybe_traceable(run_type="chain", name="AgenticLoop.run")  # type: ignore[untyped-decorator]
     async def arun(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_processor.reset()
@@ -1003,7 +1001,6 @@ class AgenticLoop:
     # LLM call (stays in this file — tightly coupled to ``arun`` body)
     # ------------------------------------------------------------------
 
-    @maybe_traceable(run_type="llm", name="AgenticLoop._call_llm")  # type: ignore[untyped-decorator]
     async def _call_llm(
         self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
     ) -> AgenticResponse | None:

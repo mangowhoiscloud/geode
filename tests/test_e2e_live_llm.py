@@ -1,4 +1,4 @@
-"""Live E2E tests — real LLM API calls with LangSmith tracing.
+"""Live E2E tests — real LLM API calls with hook-based observability.
 
 These tests call the actual Anthropic API. They are marked with @pytest.mark.live
 and excluded from the default test suite. Run explicitly with:
@@ -145,22 +145,23 @@ class TestAgenticLoopLive:
 
 
 # ===========================================================================
-# §4  LangSmith Tracing
+# §4  Tracing infrastructure (local accumulator)
 # ===========================================================================
 
 
-class TestLangSmithTracingLive:
-    """Scenario 4-2: verify tracing infrastructure works.
+class TestTracingInfrastructureLive:
+    """Scenario 4-2: verify the local token accumulator records LLM usage.
 
-    Uses local LLMUsageAccumulator instead of remote LangSmith API to avoid
-    rate limit (429) failures when monthly quota is exceeded.
+    LangSmith was removed in v0.89.0; observability now flows through the
+    hook system (LLM_CALL_START/END events) and the local
+    ``LLMUsageAccumulator``.  This test verifies that pipeline runs still
+    populate the accumulator end-to-end.
     """
 
     def test_4_2_traces_recorded(self) -> None:
         """4-2. Tracing infrastructure — local accumulator records token usage."""
         from core.llm.client import (
             get_usage_accumulator,
-            is_langsmith_enabled,
             reset_usage_accumulator,
         )
 
@@ -177,17 +178,9 @@ class TestLangSmithTracingLive:
         assert acc.total_output_tokens > 0, "No output tokens recorded"
         assert acc.total_cost_usd > 0, "No cost recorded"
 
-        # Verify tracing gate is correctly configured
         summary = acc.to_dict()
         assert summary["call_count"] >= 1
         assert "total_cost_usd" in summary
-
-        # If LangSmith is enabled, verify decorator is active (no remote call)
-        if is_langsmith_enabled():
-            from core.llm.client import maybe_traceable
-
-            decorator = maybe_traceable(name="test_check")
-            assert callable(decorator)
 
 
 # ===========================================================================
@@ -200,57 +193,49 @@ class TestFullPipelineLive:
 
     def test_5_1_single_ip_analysis(self) -> None:
         """5-1. Full pipeline for Berserk.
-
-        Disables LangSmith tracing to avoid 429 rate limit interference.
         Tracing correctness is verified separately in test_4_2 via local accumulator.
         """
         from core.llm.client import get_usage_accumulator, reset_usage_accumulator
         from core.runtime import GeodeRuntime
         from core.state import GeodeState
 
-        # Disable LangSmith to prevent 429 rate limit from interfering
-        old_tracing = os.environ.pop("LANGCHAIN_TRACING_V2", None)
         reset_usage_accumulator()
 
-        try:
-            runtime = GeodeRuntime.create("Berserk")
+        runtime = GeodeRuntime.create("Berserk")
 
-            initial_state: GeodeState = {
-                "ip_name": "berserk",
-                "pipeline_mode": "full_pipeline",
-                "session_id": "test:berserk:live",
-                "dry_run": False,
-                "verbose": False,
-                "skip_verification": False,
-                "analyses": [],
-                "errors": [],
-                "iteration": 1,
-                "max_iterations": 3,
-            }
+        initial_state: GeodeState = {
+            "ip_name": "berserk",
+            "pipeline_mode": "full_pipeline",
+            "session_id": "test:berserk:live",
+            "dry_run": False,
+            "verbose": False,
+            "skip_verification": False,
+            "analyses": [],
+            "errors": [],
+            "iteration": 1,
+            "max_iterations": 3,
+        }
 
-            graph = runtime.compile_graph()
-            config = runtime.thread_config
-            final_state: dict = dict(initial_state)
+        graph = runtime.compile_graph()
+        config = runtime.thread_config
+        final_state: dict = dict(initial_state)
 
-            for event in graph.stream(initial_state, config=config):  # type: ignore[arg-type]
-                for node_name, output in event.items():
-                    if node_name != "__end__":
-                        final_state.update(output)
+        for event in graph.stream(initial_state, config=config):  # type: ignore[arg-type]
+            for node_name, output in event.items():
+                if node_name != "__end__":
+                    final_state.update(output)
 
-            assert final_state.get("tier") in ("S", "A", "B", "C"), (
-                f"Invalid tier: {final_state.get('tier')}"
-            )
-            assert final_state.get("final_score", 0) > 0
-            analyses = final_state.get("analyses", [])
-            assert len(analyses) == 4, f"Expected 4 analysts, got {len(analyses)}"
-            assert final_state.get("synthesis") is not None
+        assert final_state.get("tier") in ("S", "A", "B", "C"), (
+            f"Invalid tier: {final_state.get('tier')}"
+        )
+        assert final_state.get("final_score", 0) > 0
+        analyses = final_state.get("analyses", [])
+        assert len(analyses) == 4, f"Expected 4 analysts, got {len(analyses)}"
+        assert final_state.get("synthesis") is not None
 
-            # Verify token usage recorded locally (no remote dependency)
-            acc = get_usage_accumulator()
-            assert len(acc.calls) > 0, "Pipeline made no LLM calls"
-        finally:
-            if old_tracing is not None:
-                os.environ["LANGCHAIN_TRACING_V2"] = old_tracing
+        # Verify token usage recorded locally (no remote dependency)
+        acc = get_usage_accumulator()
+        assert len(acc.calls) > 0, "Pipeline made no LLM calls"
 
     def test_5_2_multi_ip_smoke(self) -> None:
         """5-2. Multi-IP smoke — all 3 fixture IPs."""

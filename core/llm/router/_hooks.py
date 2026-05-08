@@ -30,8 +30,3 @@ def set_router_hooks(hooks: Any) -> None:
 def _fire_hook(event_name: str, data: dict[str, Any]) -> None:
     """Fire a hook event if HookSystem is wired (or no-op)."""
     fire_hook(_hooks_ctx, event_name, data)
-
-
-# Suppress langsmith/langchain rate-limit log spam (429 errors when quota exceeded)
-logging.getLogger("langsmith").setLevel(logging.ERROR)
-logging.getLogger("langchain").setLevel(logging.ERROR)

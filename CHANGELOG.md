@@ -28,6 +28,52 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.89.0] — 2026-05-09
+
+> **Removed — LangSmith 의존 100 % 제거.  관측성은 hook system + RunLog 로 일원화.**
+>
+> v0.89.0 은 GEODE 의 외부 관측성 SDK 의존(LangSmith) 을 통째로 떼어낸다.
+> 18 production files + 57 test references + 1 dependency + 4 docs 가
+> 영향 받았고, **자체 hook system 이 LangSmith 를 100 % 대체** (gap 0):
+>
+> | LangSmith 데코레이션 | 대체 hook 이벤트 |
+> |---------------------|------------------|
+> | `@maybe_traceable("llm")` (call_llm 5 family) | `LLM_CALL_START` / `LLM_CALL_END` |
+> | `@maybe_traceable("chain")` (AgenticLoop.run) | `TURN_COMPLETE` |
+> | `@maybe_traceable("chain")` (verification 4 family) | `VERIFICATION_PASS` / `VERIFICATION_FAIL` |
+> | LangSmith UI (trace 조회) | RunLog (P50, ALL 58 events → `~/.geode/runs/<session>.jsonl`) |
+> | LangSmith run_tree.extra metric 주입 | hook-llm-lifecycle (P55) — LLM_CALL latency/cost 집계 |
+>
+> 외부 SDK 의 type stub 한계로 박혀 있던 `# type: ignore[untyped-decorator]`
+> **11 건 모두 자동 소멸**.  type:ignore 활성 카운트 44 → 30 (−14, −31 %).
+> 누적 (B2 batch-1/2/3 + LangSmith 제거): 69 → 30 (−56 %).
+>
+> Bonus: `langsmith>=0.4.0` 가 우리 deps 에서 빠짐 (langgraph 가 transitive
+> 로 들고 있어 sys.modules 에는 남지만, **우리 코드는 절대 import 안 함**).
+
+### Removed
+- **`core/llm/router/tracing.py`** (46 LOC) — LangSmith wrapper 모듈 삭제 (`is_langsmith_enabled`, `maybe_traceable`).
+- **`@maybe_traceable` 15 + 사이트** — `core/llm/router/calls/{text,json,parsed,streaming,tools}.py`, `core/agent/loop/loop.py` (2x), `core/verification/{biasbuster,guardrails,cross_llm,rights_risk}.py` 모두 데코레이터 제거.  hook 이벤트는 그대로 fire (LLM_CALL_*/VERIFICATION_*).
+- **`LLMUsageAccumulator._inject_langsmith`** — token_tracker 의 LangSmith RunTree 메트릭 주입 메서드 삭제.  hook-llm-lifecycle (P55) 이 동일 역할 수행.
+- **`pyproject.toml` `langsmith>=0.4.0`** dep 라인 제거.
+- **`tests/`** — `TestIsLangsmithEnabled`, `TestMaybeTraceable`, `TestAgenticLoopTracing`, `TestLangSmithTracingLive` (test_e2e_live_llm), `_inject_langsmith` 관련 3 개 케이스 삭제.  conftest.py 의 `LANGCHAIN_TRACING_V2=false` 강제 setdefault 제거 (hook 시스템은 별도 setup 불필요).
+- **`# type: ignore[untyped-decorator]` 11 건** — `@maybe_traceable` 제거에 따라 자동 소멸.
+
+### Changed
+- **`core/llm/token_tracker.py`** — module docstring `optional LangSmith injection` → `hook lifecycle emission`.  `record()` docstring 도 동일 갱신.  관측성 책임이 hook system 으로 이전됨을 명시.
+- **`core/llm/router/_hooks.py`** — `logging.getLogger("langsmith").setLevel(ERROR)` / `langchain` 동일 라인 삭제 (suppress 대상 자체가 사라짐).
+- **`core/llm/adapters.py`** — `generate_parsed` / `generate_stream` 의 v0.88.3 anchor `# type: ignore[no-any-return]` 제거 (root-cause LangSmith decorator 가 이제 없음).
+- **`plugins/game_ip/nodes/{analysts,evaluators}.py`** — `result = call_llm_with_tools(...)` 의 변수명을 `tool_result` 로 분리.  LangSmith decorator 가 이전에는 반환 타입을 Any 로 erase 했기 때문에 가려져 있던 type assignment 충돌이 mypy 에 노출됨 (ToolUseResult ↔ AnalysisResult/EvaluatorResult 분리).
+- **`docs/setup{,.ko}.md`** — Observability env vars 섹션의 `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY` 행 제거.  내장 hook + RunLog 자동 활성 안내로 대체.
+
+### Hardening Metrics
+- `# type: ignore` 활성 카운트: 44 → **30** (−14, −31 %).  세션 누적 69 → 30 (−56 %).
+- `[untyped-decorator]` 카테고리: 11 → **0** (완전 소멸).
+- pytest: 4346 → **4330** (−16, LangSmith-only 테스트 삭제분).  실패 0.
+- mypy: 332 → 331 source files (tracing.py 삭제), 0 errors.
+- E2E `geode analyze "Cowboy Bebop" --dry-run` A (68.4) unchanged.
+- `langsmith` 우리 deps 에서 제거 (langgraph transitive 로만 잔존).
+
 ## [0.88.5] — 2026-05-09
 
 > **Hardening — `core/graph.py` `# type: ignore[call-overload]` 9 건 제거

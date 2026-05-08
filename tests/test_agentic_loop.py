@@ -439,8 +439,7 @@ class TestAgenticLoop:
         mock_response = MagicMock()
         mock_response.usage = MagicMock(input_tokens=500, output_tokens=200)
 
-        with patch("core.llm.router.is_langsmith_enabled", return_value=False):
-            loop._track_usage(mock_response)
+        loop._track_usage(mock_response)
 
         acc = get_usage_accumulator()
         assert acc.total_input_tokens == 500
@@ -670,61 +669,6 @@ class TestSubAgentOrchestration:
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler)
         assert manager.hooks is None
-
-
-# ---------------------------------------------------------------------------
-# AgenticLoop — Tracing integration tests
-# ---------------------------------------------------------------------------
-
-
-class TestAgenticLoopTracing:
-    """Tests for maybe_traceable integration in AgenticLoop."""
-
-    def test_run_has_traceable_attribute(self) -> None:
-        """Verify that run() method exists and is callable (tracing is a decorator)."""
-        context = ConversationContext(max_turns=5)
-        executor = ToolExecutor()
-        loop = AgenticLoop(context, executor, quiet=True)
-        assert callable(loop.run)
-
-    def test_call_llm_has_traceable_attribute(self) -> None:
-        """Verify that _call_llm() method exists and is callable."""
-        context = ConversationContext(max_turns=5)
-        executor = ToolExecutor()
-        loop = AgenticLoop(context, executor, quiet=True)
-        assert callable(loop._call_llm)
-
-    def test_tracing_passthrough_without_langsmith(self) -> None:
-        """Without LANGCHAIN_TRACING_V2/API_KEY, maybe_traceable is a no-op."""
-        context = ConversationContext(max_turns=5)
-        executor = ToolExecutor()
-        loop = AgenticLoop(context, executor, quiet=True)
-
-        # run() should still work normally
-        mock_response = MagicMock()
-        mock_response.stop_reason = "end_turn"
-        mock_response.usage = MagicMock()
-        mock_response.usage.input_tokens = 50
-        mock_response.usage.output_tokens = 25
-
-        text_block = MagicMock()
-        text_block.type = "text"
-        text_block.text = "Hello"
-        mock_response.content = [text_block]
-
-        with (
-            patch.object(loop, "_call_llm", return_value=mock_response),
-            patch.object(loop, "_track_usage"),
-        ):
-            result = loop.run("test")
-
-        assert result.text == "Hello"
-        assert result.error is None
-
-
-# ---------------------------------------------------------------------------
-# Coverage gap tests
-# ---------------------------------------------------------------------------
 
 
 class TestAgenticLoopEdgeCases:

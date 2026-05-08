@@ -132,7 +132,7 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     if tool_defs and tool_executor is not None:
         try:
             enhanced_system = system + "\n\n" + ANALYST_TOOLS_SUFFIX
-            result = call_llm_with_tools(
+            tool_result = call_llm_with_tools(
                 enhanced_system,
                 user,
                 tools=tool_defs,
@@ -141,8 +141,8 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
                 max_tool_rounds=2,
                 model=get_node_model("analyst"),
             )
-            if result.text:
-                data = json.loads(result.text)
+            if tool_result.text:
+                data = json.loads(tool_result.text)
                 analysis = AnalysisResult(**data)
                 if analysis.analyst_type != analyst_type:
                     analysis = analysis.model_copy(update={"analyst_type": analyst_type})

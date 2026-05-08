@@ -278,8 +278,7 @@ geode serve [-p 3.0]                   # Headless daemon
 | `GEODE_CONFIDENCE_THRESHOLD` | `0.7` | Confidence gate |
 | `GEODE_MAX_ITERATIONS` | `5` | 최대 재분석 반복 횟수 |
 | **Observability** | | |
-| `LANGCHAIN_TRACING_V2` | `false` | LangSmith tracing |
-| `LANGCHAIN_API_KEY` | | LangSmith API key |
+| _(별도 env 없음 — 내장 hook + RunLog)_ | | LLM_CALL_START/END 이벤트가 `~/.geode/runs/<session>.jsonl` 로 자동 기록 |
 
 ---
 
