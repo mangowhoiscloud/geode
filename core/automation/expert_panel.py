@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-import numpy as np
-
+# v0.88.1 — numpy (~31 ms cold-start) is deferred to the single
+# function that uses it (``_compute_aggregate``).  Top-level
+# ``import numpy as np`` was forcing the eager load through
+# ``core.runtime`` even when no expert-panel call ever ran.
 from core.verification.stats import calculate_krippendorff_alpha
 
 log = logging.getLogger(__name__)
@@ -211,6 +213,9 @@ class ExpertPanel:
         self._stats.consensus_computed += 1
         if not ratings:
             return {"mean_score": 0.0, "weighted_score": 0.0, "n_raters": 0, "spread": 0.0}
+
+        # v0.88.1 — numpy deferred to first consensus computation.
+        import numpy as np
 
         scores = [r.score for r in ratings]
         arr = np.array(scores, dtype=np.float64)
