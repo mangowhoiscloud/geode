@@ -14,13 +14,13 @@ from typing import Any
 
 from core.config import is_model_allowed
 from core.llm.fallback import MAX_RETRIES, RETRY_BASE_DELAY, RETRY_MAX_DELAY
-from core.llm.providers.anthropic import (
-    NON_RETRYABLE_ERRORS as _NON_RETRYABLE_ERRORS,
-)
-from core.llm.providers.anthropic import (
-    RETRYABLE_ERRORS as _RETRYABLE_ERRORS,
-)
 from core.llm.router._hooks import _fire_hook
+
+# v0.88.0 — RETRYABLE_ERRORS / NON_RETRYABLE_ERRORS are lazy-resolved
+# inside ``call_with_failover`` so the cold-start path through
+# ``core.llm.router.calls._failover`` no longer triggers the 248 ms
+# anthropic SDK import.  The ``providers.anthropic.__getattr__`` lookup
+# is paid once on first failover dispatch, well after CLI bootstrap.
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +55,16 @@ async def call_with_failover(
         returns ``(None, None)``.
     """
     import asyncio as _asyncio
+
+    # v0.88.0 — defer anthropic SDK load until first failover.  Module-level
+    # tuple imports used to pull 248 ms anthropic graph at startup via
+    # ``providers.anthropic.__getattr__``.
+    from core.llm.providers.anthropic import (
+        NON_RETRYABLE_ERRORS as _NON_RETRYABLE_ERRORS,
+    )
+    from core.llm.providers.anthropic import (
+        RETRYABLE_ERRORS as _RETRYABLE_ERRORS,
+    )
 
     _max_retries = max_retries if max_retries is not None else MAX_RETRIES
     _base_delay = retry_base_delay if retry_base_delay is not None else RETRY_BASE_DELAY

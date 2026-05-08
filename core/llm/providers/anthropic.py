@@ -8,11 +8,9 @@ from __future__ import annotations
 import contextlib
 import logging
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import anthropic
 import httpx
-from anthropic.types import TextBlockParam
 
 from core.config import ANTHROPIC_FALLBACK_CHAIN, is_model_allowed, settings
 from core.llm.fallback import (
@@ -20,6 +18,48 @@ from core.llm.fallback import (
     retry_with_backoff_generic,
 )
 from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+
+if TYPE_CHECKING:
+    import anthropic
+    from anthropic.types import TextBlockParam
+
+    # v0.88.0 — declare the lazy module-level tuples so mypy / IDEs see a
+    # concrete type for ``except RETRYABLE_ERRORS:`` etc.  Runtime values
+    # come from ``__getattr__`` below.  Use ``Exception`` (not
+    # ``BaseException``) to match the ``retry_with_backoff_generic``
+    # signature + ``except`` blocks in failover/streaming.
+    RETRYABLE_ERRORS: tuple[type[Exception], ...]
+    NON_RETRYABLE_ERRORS: tuple[type[Exception], ...]
+
+# v0.88.0 — anthropic SDK is module-level lazy.  Eager top-level
+# ``import anthropic`` + ``from anthropic.types import TextBlockParam``
+# pulled 248 ms of SDK graph at startup even when no Anthropic call ever
+# fired (cold-start path: ``geode about`` / ``doctor``).  Module-level
+# tuples ``RETRYABLE_ERRORS`` / ``NON_RETRYABLE_ERRORS`` and any direct
+# ``anthropic.X`` references inside function bodies now resolve through
+# the PEP 562 ``__getattr__`` hook below; type annotations use the
+# ``TYPE_CHECKING`` block above so mypy still sees them.
+_ANTHROPIC_LAZY_TUPLES: dict[str, tuple[str, ...]] = {
+    "RETRYABLE_ERRORS": ("RateLimitError", "APIConnectionError", "InternalServerError"),
+    "NON_RETRYABLE_ERRORS": ("AuthenticationError", "BadRequestError"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562 module attribute hook — resolve anthropic-derived names lazily."""
+    if name in _ANTHROPIC_LAZY_TUPLES:
+        import anthropic
+
+        value = tuple(getattr(anthropic, n) for n in _ANTHROPIC_LAZY_TUPLES[name])
+        globals()[name] = value
+        return value
+    if name == "TextBlockParam":
+        from anthropic.types import TextBlockParam
+
+        globals()[name] = TextBlockParam
+        return TextBlockParam
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 log = logging.getLogger(__name__)
 
@@ -60,15 +100,11 @@ _async_client_lock = threading.Lock()
 # Circuit breaker for Anthropic API calls
 _circuit_breaker = CircuitBreaker()
 
-# Retryable error types
-RETRYABLE_ERRORS = (
-    anthropic.RateLimitError,
-    anthropic.APIConnectionError,
-    anthropic.InternalServerError,
-)
-
-# Non-retryable errors
-NON_RETRYABLE_ERRORS = (anthropic.AuthenticationError, anthropic.BadRequestError)
+# v0.88.0 — RETRYABLE_ERRORS / NON_RETRYABLE_ERRORS resolve through the
+# module-level ``__getattr__`` hook (defined above) on first use.  Their
+# concrete tuples used to live here as eager module-level expressions
+# (``RETRYABLE_ERRORS = (anthropic.RateLimitError, …)``), which forced
+# the anthropic SDK import at module load.
 
 # Fallback models
 FALLBACK_MODELS = ANTHROPIC_FALLBACK_CHAIN
@@ -89,6 +125,8 @@ def get_anthropic_client() -> anthropic.Anthropic:
     SDK-level retries are disabled (max_retries=0) to avoid conflict with
     app-level retry logic in ``_retry_with_backoff()``.
     """
+    import anthropic
+
     global _sync_client
     if _sync_client is not None:
         return _sync_client
@@ -117,6 +155,8 @@ def get_async_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnt
     Args:
         api_key: Optional API key override. If None, uses settings.
     """
+    import anthropic
+
     global _async_client
     if _async_client is not None:
         return _async_client
@@ -157,8 +197,10 @@ def system_with_cache(system: str) -> list[TextBlockParam]:
     system prompt (e.g., 4 analysts or 3 evaluators) get cache hits and
     reduced latency/cost.
     """
+    from anthropic.types import TextBlockParam as _TextBlockParam
+
     return [
-        TextBlockParam(
+        _TextBlockParam(
             type="text",
             text=system,
             cache_control={"type": "ephemeral"},
@@ -243,6 +285,8 @@ def retry_with_backoff(
 
     Delegates to ``retry_with_backoff_generic`` with Anthropic-specific config.
     """
+    import anthropic
+
     from core.llm.fallback import MAX_RETRIES as _DEFAULT_MAX_RETRIES
 
     _max_retries = max_retries if max_retries is not None else _DEFAULT_MAX_RETRIES
@@ -252,12 +296,19 @@ def retry_with_backoff(
     if not models_to_try:
         raise RuntimeError(f"All models blocked by policy: {candidates}")
 
+    # v0.88.0 — same-module ``__getattr__`` is bypassed for unqualified
+    # references, so we resolve ``RETRYABLE_ERRORS`` via direct attribute
+    # lookup on the module object (which DOES go through ``__getattr__``).
+    import sys
+
+    _retryable_errors = sys.modules[__name__].RETRYABLE_ERRORS
+
     return retry_with_backoff_generic(
         fn,
         model=models_to_try[0],
         fallback_models=models_to_try[1:],
         circuit_breaker=_circuit_breaker,
-        retryable_errors=RETRYABLE_ERRORS,
+        retryable_errors=_retryable_errors,
         bad_request_error=anthropic.BadRequestError,
         billing_message=(
             "Anthropic API credit balance too low. "
