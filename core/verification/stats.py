@@ -5,7 +5,10 @@ Pure math functions with no infrastructure or config dependencies.
 
 from __future__ import annotations
 
-import numpy as np
+# v0.88.1 — numpy (~31 ms cold-start) deferred to the single function
+# that uses it.  Top-level ``import numpy as np`` was forcing the
+# eager load through every importer of this module
+# (e.g. ``core.automation.expert_panel`` at CLI bootstrap).
 
 
 def calculate_krippendorff_alpha(
@@ -31,6 +34,8 @@ def calculate_krippendorff_alpha(
     Returns:
         Alpha coefficient (-1.0 to 1.0). 1.0 = perfect agreement.
     """
+    import numpy as np
+
     n_raters = len(ratings_matrix)
     if n_raters < 2:
         return 0.0
