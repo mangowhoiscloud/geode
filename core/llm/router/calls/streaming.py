@@ -21,14 +21,12 @@ from core.llm.providers.anthropic import (
 # cold-start path does not pull anthropic at module import.
 from core.llm.router._hooks import _fire_hook
 from core.llm.router._usage import _record_response_usage
-from core.llm.router.tracing import maybe_traceable
 
 from ._route import _route_provider
 
 log = logging.getLogger(__name__)
 
 
-@maybe_traceable(run_type="llm", name="call_llm_streaming")  # type: ignore[untyped-decorator]
 def call_llm_streaming(
     system: str,
     user: str,

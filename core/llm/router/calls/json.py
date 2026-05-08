@@ -11,14 +11,11 @@ import logging
 import re
 from typing import Any
 
-from core.llm.router.tracing import maybe_traceable
-
 from .text import call_llm
 
 log = logging.getLogger(__name__)
 
 
-@maybe_traceable(run_type="llm", name="call_llm_json")  # type: ignore[untyped-decorator]
 def call_llm_json(
     system: str,
     user: str,

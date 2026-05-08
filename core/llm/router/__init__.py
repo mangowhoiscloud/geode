@@ -1,7 +1,6 @@
 """LLM Router — provider-aware dispatching for all LLM calls.
 
 Replaces the monolithic client.py. Routes to the correct provider SDK
-based on model name. Owns ContextVar DI definitions and LangSmith tracing.
 
 Data types (ToolCallRecord, ToolUseResult) and re-exports from
 token_tracker are kept here for backward compatibility.
@@ -181,12 +180,6 @@ from .models import (
 )
 from .models import (
     ToolUseResult as ToolUseResult,
-)
-from .tracing import (
-    is_langsmith_enabled as is_langsmith_enabled,
-)
-from .tracing import (
-    maybe_traceable as maybe_traceable,
 )
 
 # v0.88.0 — module-level ``__getattr__`` for lazy LLM*Error re-exports.

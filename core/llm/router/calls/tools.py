@@ -22,7 +22,6 @@ from core.llm.providers.anthropic import (
 from core.llm.router._hooks import _fire_hook
 from core.llm.router._usage import _record_response_usage
 from core.llm.router.models import ToolCallRecord, ToolUseResult
-from core.llm.router.tracing import maybe_traceable
 from core.llm.token_tracker import LLMUsage
 
 from ._route import _route_provider
@@ -30,7 +29,6 @@ from ._route import _route_provider
 log = logging.getLogger(__name__)
 
 
-@maybe_traceable(run_type="chain", name="call_llm_with_tools")  # type: ignore[untyped-decorator]
 def call_llm_with_tools(
     system: str,
     user: str,

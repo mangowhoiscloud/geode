@@ -6,7 +6,6 @@ from typing import Any
 
 import numpy as np
 
-from core.llm.router import maybe_traceable
 from core.state import AnalysisResult, EvaluatorResult, GeodeState, GuardrailResult
 
 
@@ -162,7 +161,6 @@ def _g4_consistency(state: GeodeState) -> tuple[bool, str]:
     return not errors, "; ".join(errors) or "Consistency OK"
 
 
-@maybe_traceable(run_type="chain", name="run_guardrails")  # type: ignore[untyped-decorator]
 def run_guardrails(
     state: GeodeState,
     *,

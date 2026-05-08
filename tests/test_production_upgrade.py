@@ -5,13 +5,11 @@ Covers:
 - Phase 2: NodeScopePolicy, tool injection paths
 - Phase 3: Partial retry (make_analyst_sends skips good results)
 - Phase 4: TaskGraph.is_blocked / has_failed_dependency
-- Phase 5: LangSmith conditional activation
 """
 
 from __future__ import annotations
 
-import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from core.state import AnalysisResult
 from plugins.game_ip.nodes.scoring import _calc_analyst_confidence
@@ -348,26 +346,6 @@ class TestStuckDetectorHooks:
         assert "test:node" in stuck
         # on_stuck callback should have triggered PIPELINE_ERROR
         assert hooks.trigger.called
-
-
-# ---------------------------------------------------------------------------
-# Phase 5: LangSmith Conditional Activation
-# ---------------------------------------------------------------------------
-
-
-class TestLangSmithConditional:
-    def test_no_api_key_returns_identity(self):
-        from core.llm.client import maybe_traceable
-
-        with patch.dict(os.environ, {}, clear=True):
-            # No LANGCHAIN_TRACING_V2 or API key → passthrough
-            decorator = maybe_traceable(run_type="llm", name="test")
-
-            def dummy():
-                return 42
-
-            result = decorator(dummy)
-            assert result is dummy  # Identity — no wrapping
 
 
 # ---------------------------------------------------------------------------
