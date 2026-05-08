@@ -54,7 +54,7 @@ from core.auth.profiles import AuthProfile, CredentialType
 
 def _reset_singletons() -> None:
     from core.auth import plan_registry as _pr
-    from core.lifecycle import container as _infra
+    from core.wiring import container as _infra
 
     _infra._profile_store = None
     _infra._profile_rotator = None
@@ -63,7 +63,7 @@ def _reset_singletons() -> None:
 
 def _register_codex_oauth() -> Plan:
     from core.auth.plan_registry import get_plan_registry
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     plan = Plan(
         id="openai-codex-geode",
@@ -88,7 +88,7 @@ def _register_codex_oauth() -> Plan:
 
 def _register_openai_payg() -> Plan:
     from core.auth.plan_registry import get_plan_registry
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     plan = Plan(
         id="openai-payg",
@@ -112,7 +112,7 @@ def _register_openai_payg() -> Plan:
 
 def _register_anthropic_payg() -> Plan:
     from core.auth.plan_registry import get_plan_registry
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     plan = Plan(
         id="anthropic-payg",
@@ -137,7 +137,7 @@ def _register_anthropic_payg() -> Plan:
 
 def _register_glm_coding() -> Plan:
     from core.auth.plan_registry import get_plan_registry
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     plan = Plan(
         id="glm-coding-lite",
@@ -161,7 +161,7 @@ def _register_glm_coding() -> Plan:
 
 def _register_glm_payg() -> Plan:
     from core.auth.plan_registry import get_plan_registry
-    from core.lifecycle.container import ensure_profile_store
+    from core.wiring.container import ensure_profile_store
 
     plan = Plan(
         id="glm-payg",

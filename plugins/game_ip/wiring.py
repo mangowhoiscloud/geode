@@ -27,7 +27,7 @@ def build_signal_adapter() -> None:
     configured or available, the adapter reports ``is_available()=False``
     and ``signals_node`` falls back to fixtures.
 
-    Relocated from ``core.lifecycle.adapters.build_signal_adapter`` in
+    Relocated from ``core.wiring.adapters.build_signal_adapter`` in
     step 3 because it is plugin-specific (Steam adapter, ``signals_node``
     setter live under ``plugins/game_ip/``).
     """

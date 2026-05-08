@@ -11,14 +11,14 @@ from core import __version__
 from core.cli.onboarding import env_setup_wizard
 from core.cli.session_state import _set_readiness
 from core.config import settings
-from core.lifecycle.startup import (
+from core.ui.console import console
+from core.wiring.startup import (
     ReadinessReport,
     auto_generate_env,
     check_readiness,
     setup_project_memory,
     setup_user_profile,
 )
-from core.ui.console import console
 
 
 def _render_welcome_brand() -> None:
@@ -86,7 +86,7 @@ def _welcome_screen() -> None:
     # ``~/.codex/auth.json`` and skips the wizard entirely. Anthropic OAuth
     # is intentionally excluded (Anthropic ToS prohibits third-party
     # reuse — see ``core/lifecycle/container.py:271``).
-    from core.lifecycle.startup import _has_any_llm_key, detect_subscription_oauth
+    from core.wiring.startup import _has_any_llm_key, detect_subscription_oauth
 
     if not _has_any_llm_key():
         oauth_provider = detect_subscription_oauth()

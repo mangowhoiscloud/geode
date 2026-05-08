@@ -259,7 +259,7 @@ def build_shared_services(
 
     # Build hooks if not provided
     if hook_system is None:
-        from core.lifecycle.bootstrap import build_hooks
+        from core.wiring.bootstrap import build_hooks
 
         hook_system, _run_log, _stuck, _metrics = build_hooks(
             session_key=f"geode-{uuid.uuid4().hex[:8]}",
@@ -269,7 +269,7 @@ def build_shared_services(
         )
 
     # P0: Tool result offloading
-    from core.lifecycle.bootstrap import build_tool_offload
+    from core.wiring.bootstrap import build_tool_offload
 
     build_tool_offload(
         session_id=f"geode-{uuid.uuid4().hex[:8]}",
@@ -296,7 +296,7 @@ def build_shared_services(
 
     # Build unified LaneQueue if not provided
     if lane_queue is None:
-        from core.lifecycle.container import build_default_lanes
+        from core.wiring.container import build_default_lanes
 
         lane_queue = build_default_lanes()
 

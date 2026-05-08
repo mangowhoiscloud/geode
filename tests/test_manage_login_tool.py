@@ -113,7 +113,7 @@ class TestVerdictPerOwnProvider:
         monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
 
         from core.auth.profiles import AuthProfile, CredentialType
-        from core.lifecycle.container import ensure_profile_store
+        from core.wiring.container import ensure_profile_store
 
         store = ensure_profile_store()
         # Three healthy profiles, one per provider — none should be reported

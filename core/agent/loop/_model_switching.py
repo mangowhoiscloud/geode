@@ -85,7 +85,7 @@ def drift_target_is_healthy(loop: AgenticLoop, target_model: str) -> bool:
     """
     try:
         target_provider = _resolve_provider(target_model)
-        from core.lifecycle.container import get_profile_rotator
+        from core.wiring.container import get_profile_rotator
 
         rotator = get_profile_rotator()
         if rotator is None:

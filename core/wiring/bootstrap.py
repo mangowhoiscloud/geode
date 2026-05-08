@@ -718,7 +718,7 @@ def build_skill_registry() -> Any:
 
 def build_readiness() -> Any:
     """Check API key availability for all configured providers."""
-    from core.lifecycle.startup import check_readiness
+    from core.wiring.startup import check_readiness
 
     return check_readiness()
 

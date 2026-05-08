@@ -91,7 +91,7 @@ def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
         from core.auth.plan_registry import get_plan_registry
         from core.auth.plans import Plan, PlanKind
         from core.auth.profiles import AuthProfile, CredentialType
-        from core.lifecycle.container import ensure_profile_store
+        from core.wiring.container import ensure_profile_store
     except Exception:  # pragma: no cover — import-time defensive
         log.debug("auth.toml persistence skipped — Plan modules unavailable")
         return
@@ -169,7 +169,7 @@ def _load_auth_store() -> dict[str, Any]:
     # like get_auth_status().
     try:
         from core.auth.plan_registry import get_plan_registry
-        from core.lifecycle.container import ensure_profile_store
+        from core.wiring.container import ensure_profile_store
     except Exception:  # pragma: no cover
         return {"version": 1, "providers": {}}
 

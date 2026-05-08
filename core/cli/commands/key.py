@@ -133,7 +133,7 @@ def _seed_payg_plan_from_key(provider: str, key: str) -> None:
         from core.auth.plan_registry import get_plan_registry
         from core.auth.plans import default_plan_for_payg
         from core.auth.profiles import AuthProfile, CredentialType
-        from core.lifecycle.container import ensure_profile_store
+        from core.wiring.container import ensure_profile_store
 
         registry = get_plan_registry()
         plan = registry.get(f"{provider}-payg") or default_plan_for_payg(provider, key)
@@ -176,7 +176,7 @@ def _check_provider_key(selected: ModelProfile) -> None:
     """Warn if the provider's API key is not set for the selected model."""
     from core.cli import commands as _pkg
     from core.config import settings
-    from core.lifecycle.startup import _is_placeholder
+    from core.wiring.startup import _is_placeholder
 
     provider_key_map: dict[str, tuple[str, str]] = {
         "Anthropic": (settings.anthropic_api_key, "ANTHROPIC_API_KEY"),

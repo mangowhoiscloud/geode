@@ -41,7 +41,7 @@ def resolve_provider_key(provider: str, settings_fallback: str) -> str:
         Resolved API key string.
     """
     try:
-        from core.lifecycle.container import get_profile_rotator
+        from core.wiring.container import get_profile_rotator
 
         rotator = get_profile_rotator()
         if rotator:
@@ -64,7 +64,7 @@ def notify_llm_success(provider: str) -> None:
     if profile is None:
         return
     try:
-        from core.lifecycle.container import get_profile_rotator
+        from core.wiring.container import get_profile_rotator
 
         rotator = get_profile_rotator()
         if rotator:
@@ -82,8 +82,8 @@ def notify_llm_failure(provider: str, exc: Exception) -> None:
     if profile is None:
         return
     try:
-        from core.lifecycle.container import get_profile_rotator
         from core.llm.fallback import _is_auth_error
+        from core.wiring.container import get_profile_rotator
 
         rotator = get_profile_rotator()
         if rotator:

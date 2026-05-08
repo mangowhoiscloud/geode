@@ -33,7 +33,7 @@ from core.auth.plan_registry import get_plan_registry
 from core.auth.plans import Plan, PlanKind
 from core.auth.profiles import AuthProfile, CredentialType
 from core.cli.commands import cmd_login
-from core.lifecycle.container import ensure_profile_store
+from core.wiring.container import ensure_profile_store
 
 # ---------------------------------------------------------------------------
 # Contract 1 — CLI dispatch sends refresh signal after THIN auth commands
@@ -108,7 +108,7 @@ def test_cmd_login_refresh_reloads_auth_toml(
 
     # Step 2 — daemon-side singletons start fresh (mimic restart)
     from core.auth import plan_registry as _pr
-    from core.lifecycle import container as _infra
+    from core.wiring import container as _infra
 
     _infra._profile_store = None
     _pr._plan_registry = None
@@ -204,7 +204,7 @@ def test_cmd_login_refresh_emits_observability_log(
 
     # Reset singletons so the reload actually merges new entries.
     from core.auth import plan_registry as _pr
-    from core.lifecycle import container as _infra
+    from core.wiring import container as _infra
 
     _infra._profile_store = None
     _pr._plan_registry = None

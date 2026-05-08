@@ -66,7 +66,7 @@ def _resolve_codex_token() -> str:
     would do nothing for users who don't also run Codex CLI.
     """
     try:
-        from core.lifecycle.container import get_profile_store
+        from core.wiring.container import get_profile_store
 
         store = get_profile_store()
         if store is not None:

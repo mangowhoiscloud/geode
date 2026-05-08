@@ -249,10 +249,10 @@ class TestHookRegistration:
         from unittest.mock import patch
 
         with (
-            patch("core.lifecycle.bootstrap.RunLog"),
-            patch("core.lifecycle.bootstrap.StuckDetector"),
+            patch("core.wiring.bootstrap.RunLog"),
+            patch("core.wiring.bootstrap.StuckDetector"),
         ):
-            from core.lifecycle.bootstrap import build_hooks
+            from core.wiring.bootstrap import build_hooks
 
             hooks, _, _, _ = build_hooks(
                 session_key="test",
