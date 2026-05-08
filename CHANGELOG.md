@@ -28,6 +28,41 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.88.0] — 2026-05-08
+
+> **Performance — anthropic SDK module-level lazy loading.**
+> CLI 콜드 스타트 경로(`geode about` / `geode doctor` / `geode --help`)는
+> 그동안 `core.runtime` import 한 번만으로 **anthropic SDK 248 ms 그래프
+> 전체**를 끌어왔다. anthropic을 한 번도 호출하지 않는 user 도(예: Codex
+> Plus 단독, GLM 단독)도 매 invocation 마다 이 비용을 지불해 왔으며,
+> `python -X importtime -c "import core.runtime"` 으로 측정 시 anthropic
+> 트리(`anthropic.types.*`, `httpx.*`, `anyio.*`)가 cumulative 248 ms 를
+> 차지. 이번 PR 은 anthropic 을 **PEP 562 모듈-레벨 `__getattr__`** 로
+> defer 해, 진짜로 anthropic 을 만지는 코드(에이전틱 호출, 에러 분류,
+> failover) 가 처음 실행될 때까지 SDK 로드를 미룬다.
+>
+> **측정 (warm cache, `import core.runtime`):**
+> - Before (main): 354–386 ms (median ~370 ms)
+> - After (B1):   183–190 ms (median ~186 ms)
+> - **Δ: −184 ms / −49 %** (3-run median)
+>
+> 검증: `import core.runtime` 후 `'anthropic' in sys.modules` 가 `False`.
+> 첫 ``classify_llm_error`` / failover dispatch / agentic 호출이 일어나면
+> 그 시점에 `__getattr__` 이 anthropic 을 1 회 로드.  pytest 4346 passed
+> (변동 없음); E2E `geode analyze "Cowboy Bebop" --dry-run` A (68.4) 동일.
+
+### Changed
+- **`core/llm/errors.py`** — top-level `import anthropic` 제거.  7 개 `LLM*Error` 별칭(`LLMTimeoutError`, `LLMConnectionError`, `LLMRateLimitError`, `LLMAuthenticationError`, `LLMBadRequestError`, `LLMAPIStatusError`, `LLMInternalServerError`)은 module-level `__getattr__` 으로 lazy 해석.  `_ANTHROPIC_ALIAS_MAP` 로 anthropic SDK 의 실제 클래스 이름을 추적; 첫 접근 시 `globals()` 에 캐시.  `__all__` 추가로 mypy `--no-implicit-reexport` 통과.  `classify_llm_error` 는 함수-로컬 `import anthropic` 후 `anthropic.RateLimitError` 등 SDK 클래스를 직접 참조 (in-module 레퍼런스는 `__getattr__` 을 거치지 않으므로).
+- **`core/llm/provider_dispatch.py`** — 모듈-레벨 `import anthropic` 제거.  Dispatch table 의 `_anthropic_retryable` / `_anthropic_bad_request` / `_anthropic_get_client` 헬퍼 도입(기존 `_openai_retryable` / `_openai_bad_request` 의 anthropic 카운터파트).  Lambda capture 가 아닌 함수 레퍼런스로 dispatch table 등록 → 정의가 모듈 import 시점에 이루어지지 않음.
+- **`core/llm/providers/anthropic.py`** — top-level `import anthropic` + `from anthropic.types import TextBlockParam` 제거.  `RETRYABLE_ERRORS` / `NON_RETRYABLE_ERRORS` / `TextBlockParam` 은 `__getattr__` 로 lazy.  Type annotation 은 `TYPE_CHECKING` 블록에 보존(IDE / mypy 정적 surface 유지).  Function 본체에서 anthropic SDK 를 만지는 부분(`get_anthropic_client`, `get_async_anthropic_client`, `system_with_cache`, `retry_with_backoff`)은 함수-로컬 `import anthropic`.  자기 모듈 내부에서 lazy 이름을 참조해야 하는 `retry_with_backoff` 는 `sys.modules[__name__].RETRYABLE_ERRORS` 로 PEP 562 우회.
+- **`core/llm/router/__init__.py`** — `from core.llm.errors import LLM*Error as LLM*Error` 7 개 eager 재-export 제거(파일 위치 1 곳, 240 ms 절약 핵심).  Public API 는 모듈-레벨 `__getattr__` 으로 보존(`from core.llm.router import LLMRateLimitError` 가 첫 접근 시 lazy 해석).  TYPE_CHECKING 블록은 mypy 정적 view 유지용.
+- **`core/llm/client.py`** — router/__init__.py 와 동일 패턴(LLM*Error 7 개를 lazy `__getattr__` 로 전환).
+- **`core/llm/router/calls/_failover.py`** — module-level `from core.llm.providers.anthropic import RETRYABLE_ERRORS, NON_RETRYABLE_ERRORS` 를 `call_with_failover` 함수 본체 안으로 이동.  Cold-start path 에서 `providers.anthropic.__getattr__` 호출 차단.
+- **`core/llm/router/calls/streaming.py`** — `RETRYABLE_ERRORS` import 를 `call_llm_streaming` 함수-로컬로 이동.  같은 이유.
+
+### Performance
+- **CLI 콜드 스타트 −184 ms / −49 %** (warm cache, 3-run median).  `import core.runtime` 후 `'anthropic' in sys.modules == False`.  Anthropic 을 안 쓰는 셋업(Codex Plus only, GLM only)은 anthropic SDK 를 영원히 로드하지 않을 수 있게 됨.
+
 ## [0.87.1] — 2026-05-08
 
 > **Hardening — v0.82.0 staleness 인시던트의 재발 방지용 단위 테스트 추가.**

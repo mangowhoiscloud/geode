@@ -14,28 +14,37 @@ Prefer importing from the specific modules directly.
 
 from __future__ import annotations
 
-# Re-export from errors
-from core.llm.errors import (
-    LLMAPIStatusError as LLMAPIStatusError,
-)
-from core.llm.errors import (
-    LLMAuthenticationError as LLMAuthenticationError,
-)
-from core.llm.errors import (
-    LLMBadRequestError as LLMBadRequestError,
-)
-from core.llm.errors import (
-    LLMConnectionError as LLMConnectionError,
-)
-from core.llm.errors import (
-    LLMInternalServerError as LLMInternalServerError,
-)
-from core.llm.errors import (
-    LLMRateLimitError as LLMRateLimitError,
-)
-from core.llm.errors import (
-    LLMTimeoutError as LLMTimeoutError,
-)
+from typing import TYPE_CHECKING, Any
+
+# v0.88.0 — LLM*Error re-exports lazy-resolved through ``__getattr__`` at
+# the bottom of this module to keep the cold-start path off the 248 ms
+# anthropic SDK graph.  Same pattern as ``core.llm.router`` (sister
+# re-export module).  TYPE_CHECKING block below preserves IDE / mypy
+# visibility without paying the runtime ``from core.llm.errors import …``
+# cost — those imports go through ``errors.__getattr__`` which loads
+# anthropic.
+if TYPE_CHECKING:
+    from core.llm.errors import (
+        LLMAPIStatusError as LLMAPIStatusError,
+    )
+    from core.llm.errors import (
+        LLMAuthenticationError as LLMAuthenticationError,
+    )
+    from core.llm.errors import (
+        LLMBadRequestError as LLMBadRequestError,
+    )
+    from core.llm.errors import (
+        LLMConnectionError as LLMConnectionError,
+    )
+    from core.llm.errors import (
+        LLMInternalServerError as LLMInternalServerError,
+    )
+    from core.llm.errors import (
+        LLMRateLimitError as LLMRateLimitError,
+    )
+    from core.llm.errors import (
+        LLMTimeoutError as LLMTimeoutError,
+    )
 
 # Re-export from fallback
 from core.llm.fallback import (
@@ -133,3 +142,30 @@ from core.llm.router import (
 from core.llm.router import (
     track_token_usage as track_token_usage,
 )
+
+# v0.88.0 — module-level ``__getattr__`` for lazy LLM*Error re-exports.
+# Placed after all eager imports so ruff E402 stays happy.  The
+# ``_LAZY_ERROR_NAMES`` set is the runtime mirror of the TYPE_CHECKING
+# block at the top of the file.
+_LAZY_ERROR_NAMES = frozenset(
+    {
+        "LLMAPIStatusError",
+        "LLMAuthenticationError",
+        "LLMBadRequestError",
+        "LLMConnectionError",
+        "LLMInternalServerError",
+        "LLMRateLimitError",
+        "LLMTimeoutError",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562 hook — resolve lazy LLM*Error re-exports on first access."""
+    if name in _LAZY_ERROR_NAMES:
+        from core.llm import errors
+
+        cls = getattr(errors, name)
+        globals()[name] = cls
+        return cls
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

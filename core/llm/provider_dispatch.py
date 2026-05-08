@@ -12,8 +12,6 @@ import time
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-import anthropic
-
 from core.config import (
     ANTHROPIC_FALLBACK_CHAIN,
     GLM_FALLBACK_CHAIN,
@@ -23,12 +21,13 @@ from core.config import (
 )
 from core.hooks.utils import fire_hook
 from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
-from core.llm.providers.anthropic import (
-    RETRYABLE_ERRORS as _RETRYABLE_ERRORS,
-)
-from core.llm.providers.anthropic import (
-    get_anthropic_client,
-)
+
+# v0.88.0 — anthropic SDK is module-level lazy.  ``import anthropic`` and
+# the cross-module ``RETRYABLE_ERRORS`` / ``get_anthropic_client`` pulls
+# happen lazily inside the dispatch table lambdas / helper functions
+# below, mirroring the existing ``_openai_retryable`` /
+# ``_openai_bad_request`` pattern.  Cold-start path no longer pulls the
+# 248 ms anthropic graph through this module.
 
 log = logging.getLogger(__name__)
 
@@ -72,13 +71,40 @@ def _openai_bad_request() -> type[Exception]:
     return openai.BadRequestError
 
 
+def _anthropic_retryable() -> tuple[type[Exception], ...]:
+    """v0.88.0 — defer anthropic SDK + provider module load until first call.
+
+    Mirrors ``_openai_retryable``.  The lambda-only previous shape
+    captured ``_RETRYABLE_ERRORS`` from ``core.llm.providers.anthropic``
+    at module load, eagerly pulling 248 ms of anthropic.* into the
+    cold-start path even when no Anthropic call ever runs.
+    """
+    from core.llm.providers.anthropic import RETRYABLE_ERRORS
+
+    return RETRYABLE_ERRORS
+
+
+def _anthropic_bad_request() -> type[Exception]:
+    """v0.88.0 — lazy counterpart to ``_openai_bad_request``."""
+    import anthropic
+
+    return anthropic.BadRequestError
+
+
+def _anthropic_get_client() -> Any:
+    """v0.88.0 — defer ``get_anthropic_client`` import until first call."""
+    from core.llm.providers.anthropic import get_anthropic_client
+
+    return get_anthropic_client()
+
+
 # Lazy dispatch table — callables to avoid import-time side effects
 _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
     "anthropic": {
-        "get_client": lambda: get_anthropic_client(),
+        "get_client": _anthropic_get_client,
         "fallback_chain": lambda: list(ANTHROPIC_FALLBACK_CHAIN),
-        "retryable_errors": lambda: _RETRYABLE_ERRORS,
-        "bad_request_error": lambda: anthropic.BadRequestError,
+        "retryable_errors": _anthropic_retryable,
+        "bad_request_error": _anthropic_bad_request,
         "circuit_breaker": lambda: __import__(
             "core.llm.providers.anthropic", fromlist=["get_circuit_breaker"]
         ).get_circuit_breaker(),
