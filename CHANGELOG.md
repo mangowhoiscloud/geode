@@ -28,6 +28,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`core/llm/providers/codex.py` + `core/llm/providers/glm.py` —
+  `agentic_call` dual-record 제거.**
+  - Provider layer 의 `get_tracker().record(...)` 호출 제거. 동일 응답이
+    agent loop 의 ``_track_usage`` (`core/agent/loop/_response.track_usage`)
+    에서도 record 되어 모든 codex / glm agentic 호출이
+    `~/.geode/usage/*.jsonl` 에 이중 기록되고 있었음.
+  - Production usage trace 영향 측정 (2026-05-09 ~ 05-10):
+    - `gpt-5.5`: **50.5 %** paired duplicates
+    - `gpt-5.3-codex`: **64 %** paired duplicates
+  - Single-record rule 명문화: `agentic_call` 경로는 agent loop 의
+    `_track_usage` 가 유일 writer. Provider `LLMClientPort.generate*`
+    (cross-LLM verification — `generate`, `generate_parsed`,
+    `generate_stream`, `generate_with_tools`) 경로는 loop 가 응답을 보지
+    않으므로 자체 `record()` 유지.
+  - `tests/test_native_tools.py::test_glm_agentic_call_defers_record_to_agent_loop`
+    가 `GlmAgenticAdapter` + `CodexAgenticAdapter` 둘 다에 대해
+    "agentic_call source must NOT contain `get_tracker`" 를 보장
+    (regression guard).
+
 ### Added
 
 - **`pyproject.toml` `[project.entry-points.inspect_ai]` 추가 (P3-b-1).**

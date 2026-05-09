@@ -371,17 +371,12 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
 
         _codex_circuit_breaker.record_success()
 
-        # Track token usage at the provider layer for the per-provider
-        # cost ledger. The agentic loop's _track_usage runs separately on
-        # the normalized AgenticResponse below; both paths read the same
-        # underlying response.usage so the numbers match.
-        if hasattr(response, "usage") and response.usage:
-            from core.llm.token_tracker import get_tracker
-
-            actual_model = used_model or model
-            in_tok = response.usage.input_tokens or 0
-            out_tok = response.usage.output_tokens or 0
-            get_tracker().record(actual_model, in_tok, out_tok)
+        # Token usage is recorded once by the agentic loop's ``_track_usage``
+        # on the normalized AgenticResponse below — recording here as well
+        # double-counted every codex call into ``~/.geode/usage/*.jsonl``
+        # (gpt-5.5: 50.5 % paired duplicates, gpt-5.3-codex: 64 %).  The
+        # agent loop reads the same ``response.usage`` so the numbers
+        # match without the second persist write.
 
         if used_model and used_model != model:
             log.warning("Model failover: %s -> %s", model, used_model)

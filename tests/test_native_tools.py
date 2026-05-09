@@ -228,15 +228,33 @@ class TestGlmNativeWebSearch:
         # And it should be different from the parent
         assert GlmAgenticAdapter.agentic_call is not OpenAIAgenticAdapter.agentic_call
 
-    def test_glm_agentic_call_tracks_cost(self) -> None:
-        """GlmAgenticAdapter.agentic_call must call get_tracker().record()."""
+    def test_glm_agentic_call_defers_record_to_agent_loop(self) -> None:
+        """GlmAgenticAdapter.agentic_call must NOT call ``get_tracker().record()``.
+
+        The agent loop's ``_track_usage`` records on the normalized
+        ``AgenticResponse`` returned below — recording at the provider
+        layer too caused every GLM / Codex / OpenAI agentic call to
+        double-count into ``~/.geode/usage/*.jsonl`` (gpt-5.5 saw
+        50.5 % paired duplicates, gpt-5.3-codex 64 %).  Single-record
+        rule: the agent loop is the sole writer for ``agentic_call``
+        invocations; provider ``LLMClientPort.generate*`` paths
+        (cross-LLM verification) keep their own record() because the
+        loop never sees those responses.
+        """
         import inspect
 
+        from core.llm.providers.codex import CodexAgenticAdapter
         from core.llm.providers.glm import GlmAgenticAdapter
 
-        source = inspect.getsource(GlmAgenticAdapter.agentic_call)
-        assert "get_tracker" in source, "GLM agentic_call must call get_tracker().record()"
-        assert ".record(" in source, "GLM agentic_call must record token usage"
+        for adapter_cls, name in (
+            (GlmAgenticAdapter, "GLM"),
+            (CodexAgenticAdapter, "Codex"),
+        ):
+            source = inspect.getsource(adapter_cls.agentic_call)
+            assert "get_tracker" not in source, (
+                f"{name} agentic_call must defer record() to agent loop's "
+                f"_track_usage to avoid double-counting"
+            )
 
     def test_glm_cost_is_nonzero(self) -> None:
         """GLM models with non-free pricing must produce non-zero cost."""
