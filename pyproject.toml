@@ -32,10 +32,26 @@ geode = "core.cli:app"
 [project.optional-dependencies]
 mcp = ["mcp>=1.0.0"]
 desktop = ["pyautogui>=0.9.54", "Pillow>=10.0.0"]
+# Petri × GEODE alignment audit (PoC, P2-a). Opt-in via `uv sync --extra audit`.
+# Pinned to inspect_petri main commit because v3.0 has no release tag yet
+# (latest tagged release is v2.0.0 from 2026-01-22; v3.0.x lives on main).
+# Lazy-imported in plugins/petri_audit/ so cold-start is unaffected when not
+# installed. See docs/plans/eval-petri-integration.md.
+audit = [
+    "inspect-ai>=0.3.211",
+    "inspect-petri @ git+https://github.com/meridianlabs-ai/inspect_petri@6d9b9e1dbc19bcc06544aca982427cfb37357ffc",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+# Allow `@ git+https://...` direct references — required by the [audit]
+# optional-dependency that pins inspect-petri to a main-branch commit
+# (Petri 3.0 has no PyPI release yet). Confined to optional extras so
+# default `uv sync` is unaffected.
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["core", "plugins"]
@@ -310,5 +326,16 @@ module = [
     "langchain_core.*",
     "simple_term_menu.*",
     "mcp.*",
+    # Petri × GEODE [audit] optional extra. Only present when
+    # `uv sync --extra audit` is run; default sync skips them.
+    "inspect_ai.*",
+    "inspect_petri.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# inspect_ai's `@agent(name=...)` decorator has no stubs, so mypy treats
+# anything it wraps as untyped. Confine the relaxation to petri_audit
+# modules that legitimately consume the external decorator.
+module = ["plugins.petri_audit.*"]
+disallow_untyped_decorators = false
