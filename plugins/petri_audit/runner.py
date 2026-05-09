@@ -252,8 +252,7 @@ def run_audit(
 
     if shutil.which("inspect") is None:
         notes.append(
-            "`inspect` CLI not found on PATH — install the [audit] extra: "
-            "`uv sync --extra audit`."
+            "`inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`."
         )
         return AuditReport(
             command=cmd,

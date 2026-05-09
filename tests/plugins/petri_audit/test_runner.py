@@ -144,9 +144,7 @@ def test_confirm_or_abort_yes_flag_skips_prompt() -> None:
 
 
 def test_confirm_or_abort_y_response_consents(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "core.ui.console.console.input", lambda _prompt: "y", raising=False
-    )
+    monkeypatch.setattr("core.ui.console.console.input", lambda _prompt: "y", raising=False)
     assert confirm_or_abort("$0.10", yes=False) is True
 
 
