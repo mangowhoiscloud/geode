@@ -28,6 +28,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Architecture
+
+- **`core.runtime` cold-start path 추가 lazy 화 (pydantic / asyncio / importlib.metadata).**
+  v0.89.1 의 settings lazy 회수 위에서, `core.runtime` 트리에 남아 있던
+  세 무거운 import 를 추가로 cold-start 에서 제거:
+  - `core/llm/adapters.py`, `core/llm/providers/openai.py`,
+    `core/llm/router/calls/parsed.py` 의 `from pydantic import BaseModel`
+    top-level → `if TYPE_CHECKING:` 블록 + `TypeVar(..., bound="BaseModel")`
+    forward-reference. pydantic 풀 트리 (~100 ms cumulative) cold-start
+    에서 빠짐.
+  - `core/llm/providers/openai.py` 의 mid-module `import asyncio` →
+    `_async_call` 메소드 진입부 함수-로컬. asyncio + email.message /
+    email.utils (~13 ms cumulative) cold-start 에서 빠짐.
+  - `core/__init__.py` 의 `from importlib.metadata import ...` (eager
+    `__version__` resolve) → PEP 562 `__getattr__` lazy. importlib.metadata
+    + email tree (~70 ms cumulative) cold-start 에서 빠짐. `__version__`
+    첫 access 시점에 한 번만 resolve + cache.
+- 측정 (`import core.runtime`):
+  - v0.89.1 baseline: 80-110 ms warm (median ≈ 88 ms), 341 modules
+  - 이 PR: **54-94 ms warm (median ≈ 70 ms)**, **201 modules** = warm
+    median **−18 ms / −20 %**, modules **−140 vs v0.89.0 baseline 341**.
+  - v0.89.0 → v0.89.2 누적: cold first-run 240 → ~85 ms = **−65 % cumulative**.
+  - `pydantic` / `pydantic_core` / `pydantic_settings` / `importlib.metadata`
+    / `email.message` 모두 cold-start `sys.modules` 에서 빠짐.
+
 ## [0.89.1] — 2026-05-09
 
 > **Cold-start −46 % via `core.config` lazy + 19 callsite 함수-로컬 import.**
