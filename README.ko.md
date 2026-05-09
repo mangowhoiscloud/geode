@@ -171,6 +171,55 @@ geode setup --reset   # ~/.geode/.env 지우고 wizard 재실행
 
 ---
 
+### 업데이트
+
+최신 코드를 pull 한 뒤 의존성 sync + editable 바이너리 재설치 — 이러면 `geode` 명령이 새 소스를 가리킵니다.
+
+```bash
+git pull                              # geode/ 디렉토리 안에서
+uv sync                               # 의존성 업데이트
+uv tool install -e . --force          # `geode` 콘솔 스크립트 재빌드
+```
+
+`geode serve` 데몬이 떠 있다면 재시작해서 새 코드를 로드하세요:
+
+```bash
+pgrep -f "geode serve" | xargs -r kill   # 데몬 정지
+geode serve &                            # 백그라운드 재시작
+geode version                            # 새 버전 확인
+```
+
+---
+
+### 삭제
+
+`geode` 콘솔 스크립트와 전용 환경을 제거합니다. `geode/` 소스 폴더, `~/.geode/` 설정 디렉토리, `~/.local/share/geode/` 실행 로그는 그대로 남기 — 완전히 지우려면 별도로 삭제하세요.
+
+```bash
+# 1) 데몬 정지 (geode serve 안 띄웠다면 skip)
+pgrep -f "geode serve" | xargs -r kill
+
+# 2) 콘솔 스크립트 + 도구 환경 제거
+uv tool uninstall geode
+
+# 3) (선택) 설정 + 실행 로그 wipe
+rm -rf ~/.geode                                 # 설정: .env, ~/.geode/config.toml, snapshots
+rm -rf ~/.local/share/geode                     # 실행 로그 (~/.geode/runs 와 중복 경로)
+
+# 4) (선택) 소스 clone 도 제거
+rm -rf path/to/geode
+```
+
+제거 확인:
+
+```bash
+which geode               # 출력 없어야 함
+uv tool list | grep geode # 출력 없어야 함
+pgrep -f "geode serve"    # 출력 없어야 함
+```
+
+---
+
 ### Optional — Slack / Discord / Telegram 연결
 
 터미널에서 GEODE 가 동작한 뒤에는, 이미 쓰는 메신저 채널에서도 답하게 할 수 있습니다:
