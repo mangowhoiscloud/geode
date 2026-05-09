@@ -11,9 +11,7 @@ import re
 import threading
 import time
 from collections.abc import Callable, Iterator
-from typing import Any, TypeVar, cast
-
-from pydantic import BaseModel
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
 from core.llm.fallback import (
@@ -22,7 +20,13 @@ from core.llm.fallback import (
 )
 from core.llm.token_tracker import LLMUsage, get_tracker
 
-T = TypeVar("T", bound=BaseModel)
+if TYPE_CHECKING:
+    # Pydantic is a heavy import (~100 ms cumulative). The ``BaseModel``
+    # bound is only consumed by mypy so a forward-reference string keeps
+    # runtime free of the pydantic tree.
+    from pydantic import BaseModel
+
+T = TypeVar("T", bound="BaseModel")
 
 log = logging.getLogger(__name__)
 
@@ -367,7 +371,9 @@ class OpenAIAdapter:
 # OpenAIAgenticAdapter — OpenAI-compatible LLM adapter for agentic loop
 # ---------------------------------------------------------------------------
 
-import asyncio  # noqa: E402
+# asyncio (~13 ms cumulative including email.message) deferred to function
+# scope; the single ``await asyncio.to_thread(...)`` lives inside an
+# async method so a function-local import has no cost.
 
 # v0.88.2 — httpx (~92 ms cumulative importtime) deferred to function
 # scope.  The single usage in ``_get_client`` already runs inside a
@@ -552,6 +558,8 @@ class OpenAIAgenticAdapter:
                 oai_effort = _EFFORT_MAP.get(effort, "medium")
                 create_kwargs["reasoning"] = {"effort": oai_effort, "summary": "auto"}
                 create_kwargs["include"] = ["reasoning.encrypted_content"]
+            import asyncio
+
             return await asyncio.to_thread(client.responses.create, **create_kwargs)
 
         try:

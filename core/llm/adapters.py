@@ -10,11 +10,17 @@ from __future__ import annotations
 import importlib
 import logging
 from collections.abc import Callable, Iterator
-from typing import Any, Protocol, TypeVar, runtime_checkable
-
-from pydantic import BaseModel
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 from core.llm.agentic_response import AgenticResponse
+
+if TYPE_CHECKING:
+    # Pydantic is a heavy import (~100 ms cumulative). Push it behind
+    # ``TYPE_CHECKING`` so module load no longer pulls the full pydantic
+    # graph into the cold-start path; ``TypeVar`` ``bound=`` accepts a
+    # forward-reference string at runtime so the annotation still type-
+    # checks under mypy.
+    from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +28,7 @@ log = logging.getLogger(__name__)
 # LLMClientPort — Protocol interface for LLM provider adapters
 # ---------------------------------------------------------------------------
 
-T2 = TypeVar("T2", bound=BaseModel)
+T2 = TypeVar("T2", bound="BaseModel")
 
 
 @runtime_checkable
@@ -247,7 +253,7 @@ def resolve_agentic_adapter(provider: str) -> AgenticLLMPort:
 # ClaudeAdapter — thin wrapper that delegates to router functions
 # ---------------------------------------------------------------------------
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T", bound="BaseModel")
 
 
 class ClaudeAdapter:
