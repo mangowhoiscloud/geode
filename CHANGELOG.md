@@ -30,35 +30,43 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **`plugins/petri_audit/` skeleton (P1 + P2-a) — Petri × GEODE alignment
-  audit plugin (PoC, factory + scaffold).**
+- **`plugins/petri_audit/` 골격 (P1 + P2-a + P2-b) — Petri × GEODE
+  alignment audit plugin (PoC).**
   - 외부 평가 도구 [Petri](https://github.com/meridianlabs-ai/inspect_petri)
-    (Anthropic Alignment Science 발 · 현재 `meridianlabs-ai` 호스팅) 를 GEODE 에
-    통합하기 위한 PoC. P1+P2-a 까지는 디렉토리 + Custom Target factory +
-    lazy-import scaffold 만 도입하고, 실제 AgenticLoop wiring 과 라이브
-    audit run 은 P2-b / P3 로 분할한다.
+    (Anthropic Alignment Science 발 · `meridianlabs-ai` 호스팅) 의 GEODE
+    통합 PoC. 라이브 audit run 과 `AgenticLoop` bootstrap 은 P3 로 미루고,
+    P1+P2-a+P2-b 까지는 디렉토리 + factory + 메시지 변환 + runner injection
+    seam 만 도입한다.
   - `[project.optional-dependencies] audit` extra 신설 —
     `inspect-ai>=0.3.211` + `inspect-petri @ git+...@6d9b9e1` (Petri main 3.0
-    은 release tag 가 아직 없어 SHA pin). 동반: `tool.hatch.metadata.
+    은 release tag 부재로 SHA pin). 동반: `tool.hatch.metadata.
     allow-direct-references = true`. opt-in: `uv sync --extra audit`.
   - `plugins/petri_audit/__init__.py`: namespace docstring 만; `register_domain`
-    미호출 (감사 도구는 GEODE 의 runtime domain 이 아니므로 `geode analyze`
+    미호출 (감사 도구는 GEODE runtime domain 이 아니므로 `geode analyze`
     흐름 비노출).
-  - `plugins/petri_audit/targets/geode_target.py`: `make_geode_target_agent()`
-    factory — Petri 3.0.4 의 `execute(state, context, metadata) -> AgentState`
-    시그니처에 맞춰 ``@agent("geode")`` 로 래핑. `inspect_ai` / `inspect_petri`
-    는 factory 내부에서 lazy import → default `uv sync` (extra 없이) 에서
-    cold-start 영향 0. `_run_geode_loop()` 는 P2-a stub (NotImplementedError) —
-    실 wiring P2-b.
-  - `plugins/petri_audit/adapter.py`: `GeodeAuditAdapter.turn` stub.
-  - `tests/plugins/petri_audit/test_skeleton.py`: 6 smoke test (package import /
-    extra-less module import / factory ImportError when extra missing /
-    `_run_geode_loop` P2-a stub / adapter stub / domain 미등록 검증).
-  - mypy 설정: `inspect_ai.*` / `inspect_petri.*` `ignore_missing_imports`
-    추가 + `plugins.petri_audit.*` 모듈에 `disallow_untyped_decorators = false`
-    (외부 `@agent` decorator 가 untyped 이기 때문).
-  - cold-start 회귀 0: `import core.runtime` 27–55 ms (baseline 78 ms 이하).
-  - 라이브 audit run / `_run_geode_loop` 실 구현 / 비용 측정은 후속 phase.
+  - `plugins/petri_audit/targets/geode_target.py`:
+    - `make_geode_target_agent(*, cache, runner)` factory — Petri 3.0.4 의
+      `execute(state, context, metadata) -> AgentState` 시그니처.
+      `inspect_ai` / `inspect_petri` 는 factory 내부에서 lazy import →
+      default `uv sync` (extra 없이) 에서 cold-start 영향 0.
+    - `_to_geode_messages()`: `inspect_ai` ChatMessage → GEODE
+      `ConversationContext` 변환 (duck typing — system / user / assistant /
+      tool 4 role; tool 은 Anthropic convention 대로 user-role tool_result
+      block 으로).
+    - `_run_geode_loop(messages, runner=None)`: outer audit-loop 의 inner
+      generate. runner 미지정 시 default runner.
+    - `_default_geode_runner()`: P3 stub (NotImplementedError) — 라이브
+      `AgenticLoop` bootstrap 은 첫 P3 audit run 과 함께.
+  - `tests/plugins/petri_audit/test_skeleton.py`: 10 smoke + conversion
+    test (package import / extra-less module import / factory ImportError
+    when extra missing / default runner stub / domain 미등록 / 4 role
+    변환 / unknown role 거부 / text 누락 처리 / runner 주입 호출 /
+    runner 누락 시 fallback).
+  - mypy: `inspect_ai.*` / `inspect_petri.*` `ignore_missing_imports`
+    + `plugins.petri_audit.*` 모듈에 `disallow_untyped_decorators = false`
+    (외부 `@agent` decorator untyped).
+  - cold-start `import core.runtime`: 27–37 ms (baseline 78 ms 이하 유지).
+  - 라이브 audit run / 실 bootstrap / 비용 측정은 P3.
   - Plan: `docs/plans/eval-petri-integration.md`.
 
 ## [0.89.3] — 2026-05-09
