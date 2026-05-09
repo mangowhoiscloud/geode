@@ -28,6 +28,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.89.1] — 2026-05-09
+
+> **Cold-start −46 % via `core.config` lazy + 19 callsite 함수-로컬 import.**
+>
+> v0.89.1 은 cold-start path 의 무거운 `pydantic_settings` 트리 (~150 ms cumulative,
+> 144 modules) 를 lazy 화한다. `core/config.py` (567 lines) 를 `core/config/`
+> 패키지로 분리해 `Settings(BaseSettings)` 클래스를 격리하고, 19 사이트의
+> top-level `from core.config import settings` 을 함수-로컬 import 로 이전.
+> 측정 — `import core.runtime` cold-start: **240 ms → 128 ms first-run / 80–110 ms warm**
+> (median ≈ 88 ms) = **−112 ms / −46 %**. 0 regression: 4330 tests pass,
+> E2E A (68.4) unchanged.
+
 ### Architecture
 
 - **`core.config` 모듈을 패키지로 분리, pydantic_settings 트리 lazy 화**
