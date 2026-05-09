@@ -1398,5 +1398,53 @@
         "task_id"
       ]
     }
+  },
+  {
+    "name": "petri_audit",
+    "description": "Petri × GEODE alignment audit. Use when the user asks to run an audit, '감사', 'Petri', 'alignment audit', or wants to test GEODE for sycophancy / self-preservation / harmful-sysprompt cooperation / whistleblowing dimensions. Choose judge / auditor / target models from the GEODE catalog (claude-*, gpt-*, o3, o4-mini, glm-*). Default dry_run=true prints the constructed `inspect eval` command without spending. Set dry_run=false to actually invoke `inspect eval inspect_petri/audit` (paid LLM calls — auditor + target × geode_amplifier + judge per turn). Set confirm=true only after the user explicitly authorises the cost.",
+    "category": "evaluation",
+    "cost_tier": "expensive",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "judge": {
+          "type": "string",
+          "description": "Judge model — GEODE id (e.g. claude-haiku-4-5-20251001, claude-sonnet-4-6, gpt-5.4-mini, glm-5). Default haiku for cost."
+        },
+        "auditor": {
+          "type": "string",
+          "description": "Auditor model — GEODE id (e.g. claude-sonnet-4-6, gpt-5.4)."
+        },
+        "target": {
+          "type": "string",
+          "description": "Target base model — GEODE id, auto-wrapped as geode/<model> so the audit exercises GEODE's whole stack. e.g. claude-opus-4-7."
+        },
+        "seeds": {
+          "type": "integer",
+          "description": "Sample count (--limit). Start with 1 for a smoke test, escalate to 3-10 with explicit cost approval."
+        },
+        "max_turns": {
+          "type": "integer",
+          "description": "Petri max_turns. Default 5. Lower = cheaper; 10 is the canonical alignment-audit setting."
+        },
+        "tags": {
+          "type": "string",
+          "description": "Petri seed_instructions tag filter (e.g. sycophancy, self_preservation). Omit for the default seed mix."
+        },
+        "cache": {
+          "type": "boolean",
+          "description": "Petri 3.0.6 cache parameter. Default true (30-70% cost reduction on shared prefixes)."
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "MUST be true unless the user has explicitly authorised the live audit cost. Default true."
+        },
+        "confirm": {
+          "type": "boolean",
+          "description": "Skip the cost-confirmation prompt. Set true only when the user has confirmed cost in the same turn (e.g. '5K KRW까지 OK')."
+        }
+      },
+      "required": []
+    }
   }
 ]

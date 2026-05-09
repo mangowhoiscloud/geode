@@ -38,6 +38,7 @@ from core.cli.tool_handlers._helpers import (
     _safe_delegate,
     install_domain_tool_handlers,
 )
+from core.cli.tool_handlers.audit import _build_audit_handlers
 from core.cli.tool_handlers.calendar import _build_calendar_handlers
 from core.cli.tool_handlers.computer_use import _build_computer_use_handler
 from core.cli.tool_handlers.context import _build_context_handlers
@@ -59,6 +60,7 @@ from core.cli.tool_handlers.task import _build_task_handlers
 __all__ = [
     "_DELEGATED_TOOLS",
     "_PLAN_STORE",
+    "_build_audit_handlers",
     "_build_calendar_handlers",
     "_build_computer_use_handler",
     "_build_context_handlers",
@@ -142,6 +144,7 @@ def _build_tool_handlers(
     handlers.update(_build_task_handlers())
     handlers.update(_build_offload_handlers())
     handlers.update(_build_computer_use_handler())
+    handlers.update(_build_audit_handlers())
     # Domain-supplied handlers (analysis + signals + generate_data for
     # game_ip; empty for non-pipeline domains).
     install_domain_tool_handlers(handlers)

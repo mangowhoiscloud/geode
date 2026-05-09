@@ -250,6 +250,10 @@ def _handle_command(
         from core.cli.commands import cmd_tasks
 
         cmd_tasks(args)
+    elif action == "audit":
+        from plugins.petri_audit.cli_audit import cmd_audit_slash
+
+        cmd_audit_slash(args)
     elif action == "stop":
         # v0.63.0 — Hermes-style daemon shutdown (`hermes stop`).
         # Args: ``/stop --force`` for SIGKILL, optional ``--timeout=N``.

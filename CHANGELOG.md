@@ -51,6 +51,39 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Petri audit 3-way trigger + judge/auditor/target 모델 선택 (P3-b-2 prep).**
+  - `plugins/petri_audit/runner.py` — 단일 진입 함수 `run_audit(...)` 가
+    `inspect eval inspect_petri/audit` subprocess 를 호출. dry-run /
+    live / confirm / cost-estimate / `inspect` 부재 감지 가드를 한 자리에.
+  - `plugins/petri_audit/models.py` — GEODE catalog (`MODEL_PRICING`)
+    → `inspect_ai` `provider/model` 매핑. `claude-* → anthropic/...`,
+    `gpt-*/o3/o4-mini → openai/...`, `glm-* → geode/...` (우리 등록한
+    `GeodeModelAPI` 통해 routing). `/` 가 포함되면 raw passthrough.
+    target 은 항상 `geode/<base>` 로 wrap (audit 의 본질이 GEODE-as-a-
+    system 평가이므로).
+  - **3 진입점**:
+    - Typer `geode audit --judge sonnet-4-6 --auditor opus-4-7 --target
+      claude-opus-4-7 --seeds N --max-turns M --tags <tag> [--live]
+      [--yes]` (default `--dry-run`).
+    - Slash `/audit ...` (REPL THIN — `argparse` 기반 동일 인자 체계,
+      `core/cli/routing.py` `COMMAND_REGISTRY`, `core/cli/commands/_state.py
+      :COMMAND_MAP` 양쪽 등록).
+    - Tool `petri_audit` (`core/tools/definitions.json` +
+      `core/cli/tool_handlers/audit.py`) — 자연어 → `AgenticLoop` 자동
+      라우팅. `core/agent/safety.py:EXPENSIVE_TOOLS` 등록으로 live 호출
+      시 HITL `confirm_cost` 게이트 자동 발동.
+  - Cost estimate: per-turn 토큰 가정 (auditor 2K/0.8K, target 1.5K/0.6K
+    × `geode_amplifier=5`, judge 4K/0.2K × 0.5/turn) × `seeds × max_turns`,
+    `MODEL_PRICING` 단가 적용. USD + KRW (1 USD = 1,400 KRW 고정) 동시
+    표시. unknown model → NaN → "unavailable" sentinel.
+  - 라이브 첫 audit run (P3-b-2) 은 본 PR 범위 밖 — 사용자 비용 승인 후
+    별도 세션. 본 PR 자체는 default `dry_run=True` 라 머지만으로는 비용
+    발생 X.
+  - `tests/plugins/petri_audit/` 4 신규 파일 (`test_models`,
+    `test_runner`, `test_cli_audit`, `test_tool_handler`) — 매핑 / cost
+    estimate / build_command / dry-run / subprocess mock / abort /
+    EXPENSIVE_TOOLS 등록 / definitions.json 동기화 24+ 케이스.
+
 - **`pyproject.toml` `[project.entry-points.inspect_ai]` 추가 (P3-b-1).**
   - `geode_audit = "plugins.petri_audit"` — `inspect_ai` 의 entry-point
     discovery (`importlib.metadata.entry_points(group="inspect_ai")` +
