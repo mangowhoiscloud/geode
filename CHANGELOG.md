@@ -28,6 +28,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.89.2] — 2026-05-09
+
+> **Cold-start 추가 −20 % (warm median 88 → 70 ms) via pydantic / asyncio / importlib.metadata lazy.**
+>
+> v0.89.2 는 v0.89.1 의 settings lazy 위에 `core.runtime` 트리에 잔존했던
+> 무거운 import 셋을 추가로 cold-start 에서 제거한다. `pydantic` (BaseModel
+> TypeVar bound) 3 사이트, `asyncio` + `email.message` mid-module, `core/__init__.py`
+> 의 eager `__version__` resolve 모두 lazy 화. cold-start `import core.runtime`:
+> **88 ms → 70 ms median (warm), 341 → 201 modules (−140 vs v0.89.0)**.
+> v0.89.0 → v0.89.2 누적: cold first-run **240 → ~85 ms = −65 %**.
+
 ### Architecture
 
 - **`core.runtime` cold-start path 추가 lazy 화 (pydantic / asyncio / importlib.metadata).**
