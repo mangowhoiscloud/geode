@@ -171,6 +171,55 @@ geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 
 ---
 
+### Updating
+
+Pull the latest code, sync dependencies, then re-install the editable binary so `geode` resolves to the new source:
+
+```bash
+git pull                              # from inside the geode/ directory
+uv sync                               # update dependencies
+uv tool install -e . --force          # rebuild the `geode` console-script
+```
+
+If `geode serve` was running, restart it so the daemon loads the new code:
+
+```bash
+pgrep -f "geode serve" | xargs -r kill   # stop the running daemon
+geode serve &                            # restart in the background
+geode version                            # confirm the new version
+```
+
+---
+
+### Uninstalling
+
+Removes the `geode` console-script and its tool environment. The `geode/` source folder, `~/.geode/` config directory, and `~/.local/share/geode/` runtime data are kept — delete them separately if you want a clean wipe.
+
+```bash
+# 1) Stop the daemon (skip if you never ran `geode serve`)
+pgrep -f "geode serve" | xargs -r kill
+
+# 2) Remove the console-script + tool environment
+uv tool uninstall geode
+
+# 3) (optional) wipe config + runtime data
+rm -rf ~/.geode                                 # config: .env, ~/.geode/config.toml, snapshots
+rm -rf ~/.local/share/geode                     # runtime: run logs (~/.geode/runs duplicate path)
+
+# 4) (optional) drop the source clone
+rm -rf path/to/geode
+```
+
+Verify the removal:
+
+```bash
+which geode               # should print nothing
+uv tool list | grep geode # should print nothing
+pgrep -f "geode serve"    # should print nothing
+```
+
+---
+
 ### Optional — Hook into Slack / Discord / Telegram
 
 Once GEODE works in your terminal, you can let it answer on the messaging channels you already use:
