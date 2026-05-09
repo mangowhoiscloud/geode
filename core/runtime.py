@@ -31,43 +31,43 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
-    # v0.88.1 — CorrelationAnalyzer pulls numpy (~31 ms) at module
-    # load. ``runtime.py`` only references it as a dataclass field
-    # type annotation (``correlation_analyzer: CorrelationAnalyzer | None``);
-    # ``from __future__ import annotations`` makes the annotation a
-    # string at runtime, so no real import is needed unless the
-    # caller actually instantiates the analyzer.  Wiring builders
-    # (``core.wiring.automation``) and ``feedback_loop`` keep their
-    # own eager imports — those modules only load when automation
-    # actually runs, well after CLI cold-start.
+    # ``from __future__ import annotations`` defers evaluation of all
+    # type annotations to strings, so the classes referenced only in
+    # field / variable annotations below do not need to be imported at
+    # runtime.  Pushing them into ``TYPE_CHECKING`` removes their entire
+    # module trees (numpy via ``correlation``, the L4.5 automation graph,
+    # the L2 memory graph, scheduler.triggers, langgraph hot-reload,
+    # task system) from the cold-start path.  Each tree is loaded lazily
+    # by the wiring builders (``core.wiring.{bootstrap,automation}``)
+    # only when the matching component actually fires.
     from core.automation.correlation import CorrelationAnalyzer
+    from core.automation.drift import CUSUMDetector
+    from core.automation.expert_panel import ExpertPanel
+    from core.automation.feedback_loop import FeedbackLoop
+    from core.automation.model_registry import ModelRegistry
+    from core.automation.outcome_tracking import OutcomeTracker
+    from core.automation.snapshot import SnapshotManager
     from core.llm.prompt_assembler import PromptAssembler
+    from core.memory.context import ContextAssembler
+    from core.memory.organization import MonoLakeOrganizationMemory
+    from core.memory.project import ProjectMemory
+    from core.orchestration.hot_reload import ConfigWatcher
+    from core.orchestration.task_bridge import TaskGraphHookBridge
+    from core.orchestration.task_system import TaskGraph
+    from core.scheduler.triggers import TriggerManager
 
 from core.auth.cooldown import CooldownTracker
 from core.auth.profiles import ProfileStore
 from core.auth.rotation import ProfileRotator
-from core.automation.drift import CUSUMDetector
-from core.automation.expert_panel import ExpertPanel
-from core.automation.feedback_loop import FeedbackLoop
-from core.automation.model_registry import ModelRegistry
-from core.automation.outcome_tracking import OutcomeTracker
-from core.automation.snapshot import SnapshotManager
 from core.domains.loader import load_domain_adapter
 from core.domains.port import set_domain
 from core.hooks import HookSystem
 from core.llm.router import LLMClientPort
-from core.memory.context import ContextAssembler
-from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
-from core.memory.project import ProjectMemory
 from core.memory.session_key import build_session_key, build_thread_config
-from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog
 from core.orchestration.stuck_detection import StuckDetector
-from core.orchestration.task_bridge import TaskGraphHookBridge
-from core.orchestration.task_system import TaskGraph
-from core.scheduler.triggers import TriggerManager
 from core.tools.policy import NodeScopePolicy, PolicyChain
 from core.tools.registry import ToolRegistry
 from core.wiring.bootstrap import (  # noqa: F401  — backward compat
