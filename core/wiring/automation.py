@@ -16,7 +16,6 @@ from core.automation.feedback_loop import FeedbackLoop
 from core.automation.model_registry import ModelRegistry
 from core.automation.outcome_tracking import OutcomeTracker
 from core.automation.snapshot import SnapshotManager
-from core.config import settings
 from core.hooks import HookEvent, HookSystem
 from core.memory.project import ProjectMemory
 from core.scheduler.triggers import TriggerManager, TriggerType
@@ -35,6 +34,8 @@ def build_automation(
 
     Returns a dict of component name -> instance for passing to the constructor.
     """
+    from core.config import settings
+
     # Drift detector (CUSUM)
     drift_detector = CUSUMDetector()
 

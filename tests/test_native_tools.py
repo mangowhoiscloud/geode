@@ -139,7 +139,7 @@ class TestAnthropicNativeToolInjection:
         mock_response.model = "claude-opus-4-6"
 
         with (
-            patch("core.llm.providers.anthropic.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
             patch("core.llm.router.call_with_failover") as mock_failover,
         ):
             mock_settings.anthropic_api_key = "test-key"

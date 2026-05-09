@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from core.llm.prompt_assembler import PromptAssembler
 
-from core.config import settings
 from core.hooks import HookEvent, HookSystem
 from core.memory.context import ContextAssembler
 from core.memory.organization import MonoLakeOrganizationMemory
@@ -161,6 +160,7 @@ def build_hooks(
 
     # Notification hook plugin (events -> external messaging)
     def _reg_notification() -> None:
+        from core.config import settings
         from core.hooks.plugins.notification_hook.hook import (
             register_notification_hooks,
         )
@@ -483,6 +483,7 @@ def build_memory(
     hooks: Any = None,
 ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler, FileBasedUserProfile]:
     """Build L2 memory components: project, org, context assembler, user profile."""
+    from core.config import settings
     from core.paths import ensure_directories
 
     ensure_directories()
@@ -555,6 +556,8 @@ def build_memory(
 
 def build_session_store(*, session_ttl: float) -> SessionStorePort:
     """Build session store — InMemory default, HybridSessionStore if URLs configured."""
+    from core.config import settings
+
     session_storage_dir: Path | None = None
     if settings.session_storage_dir:
         session_storage_dir = Path(settings.session_storage_dir)
@@ -585,7 +588,7 @@ def build_config_watcher(*, hooks: HookSystem | None = None) -> ConfigWatcher:
 
     def _on_config_change(path: Path, mtime: float) -> None:
         log.info("Config file changed: %s — reloading settings", path)
-        from core.config import Settings
+        from core.config import Settings, settings
 
         new_settings = Settings()
 
@@ -729,10 +732,11 @@ def build_tool_offload(
     hooks: HookSystem | None = None,
 ) -> Any:
     """Build P0 tool result offload store and wire cleanup on SESSION_END."""
+    from core.config import settings
+    from core.orchestration.tool_offload import ToolResultOffloadStore, set_offload_store
+
     if settings.tool_offload_threshold <= 0:
         return None
-
-    from core.orchestration.tool_offload import ToolResultOffloadStore, set_offload_store
 
     store = ToolResultOffloadStore(
         session_id=session_id,

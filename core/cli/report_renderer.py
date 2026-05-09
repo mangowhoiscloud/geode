@@ -13,7 +13,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.config import settings
 from core.paths import get_project_root
 from core.skills.reports import ReportFormat, ReportGenerator, ReportTemplate
 from core.ui.console import console
@@ -223,6 +222,8 @@ def _generate_report(
     # Skill-enhanced narrative (skip in dry-run to avoid LLM call)
     enhanced_narrative = ""
     if skill_registry is not None and not dry_run:
+        from core.config import settings
+
         with GeodeStatus("Generating expert analysis...", model=settings.model) as st:
             enhanced_narrative = _build_skill_narrative(report_dict, skill_registry)
             st.stop("expert analysis" if enhanced_narrative else "expert analysis (skipped)")

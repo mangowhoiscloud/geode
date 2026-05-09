@@ -12,7 +12,7 @@ import logging
 import threading
 from typing import Any
 
-from core.config import GLM_BASE_URL, GLM_FALLBACK_CHAIN, GLM_PRIMARY, settings
+from core.config import GLM_BASE_URL, GLM_FALLBACK_CHAIN, GLM_PRIMARY
 from core.llm.fallback import CircuitBreaker
 
 log = logging.getLogger(__name__)
@@ -38,6 +38,8 @@ def _resolve_glm_endpoint() -> tuple[str, str]:
     calls the coding endpoint). Falls back to settings.zai_api_key +
     GLM_BASE_URL for legacy .env-only setups.
     """
+    from core.config import settings
+
     try:
         from core.auth.plan_registry import resolve_routing
 

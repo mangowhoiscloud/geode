@@ -51,7 +51,6 @@ from plugins.game_ip.nodes.scoring import scoring_node
 from plugins.game_ip.nodes.signals import signals_node
 from plugins.game_ip.nodes.synthesizer import synthesizer_node
 
-from core.config import settings
 from core.hooks import HookEvent, HookSystem
 from core.orchestration.bootstrap import BootstrapManager
 from core.state import (
@@ -374,6 +373,8 @@ def _verification_node(state: GeodeState) -> dict[str, Any]:
             ),
             "biasbuster": BiasBusterResult(explanation="Skipped"),
         }
+    from core.config import settings
+
     guardrails = run_guardrails(state, signal_data=state.get("signals"))
     biasbuster = run_biasbuster(state)
     cross_llm = run_cross_llm_check(state, agreement_threshold=settings.agreement_threshold)
@@ -765,6 +766,8 @@ def invoke_with_timeout(
     import contextvars
 
     if timeout_s == 0.0:
+        from core.config import settings
+
         timeout_s = settings.pipeline_timeout_s
     if timeout_s <= 0:
         return graph.invoke(state, config=config)

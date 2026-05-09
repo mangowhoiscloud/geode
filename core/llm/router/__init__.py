@@ -70,9 +70,6 @@ from core.llm.adapters import resolve_agentic_adapter as resolve_agentic_adapter
 # preserved via the module-level ``__getattr__`` hook below: any future
 # ``from core.llm.router import LLMRateLimitError`` still resolves on
 # demand, deferring the SDK load until first access.
-from core.llm.fallback import MAX_RETRIES as MAX_RETRIES
-from core.llm.fallback import RETRY_BASE_DELAY as RETRY_BASE_DELAY
-from core.llm.fallback import RETRY_MAX_DELAY as RETRY_MAX_DELAY
 from core.llm.fallback import CircuitBreaker as CircuitBreaker
 from core.llm.fallback import retry_with_backoff_generic as retry_with_backoff_generic
 from core.llm.provider_dispatch import _cross_provider_dispatch as _cross_provider_dispatch
@@ -197,14 +194,24 @@ _LAZY_ERROR_NAMES = frozenset(
         "LLMTimeoutError",
     }
 )
+# Backward-compat retry constants — preserved here so existing tests and
+# legacy callers (``from core.llm.router import MAX_RETRIES``) keep working
+# while module load avoids the pydantic_settings tree.  Each access pays a
+# single attribute lookup against ``core.llm.fallback``, which itself
+# resolves the value lazily from ``core.config.settings``.
+_LAZY_FALLBACK_CONSTANTS = frozenset({"MAX_RETRIES", "RETRY_BASE_DELAY", "RETRY_MAX_DELAY"})
 
 
 def __getattr__(name: str) -> Any:
-    """PEP 562 hook — resolve lazy LLM*Error re-exports on first access."""
+    """PEP 562 hook — resolve lazy LLM*Error re-exports + fallback constants."""
     if name in _LAZY_ERROR_NAMES:
         from core.llm import errors
 
         cls = getattr(errors, name)
         globals()[name] = cls
         return cls
+    if name in _LAZY_FALLBACK_CONSTANTS:
+        from core.llm import fallback
+
+        return getattr(fallback, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

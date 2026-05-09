@@ -44,7 +44,7 @@ def _run_agentic_call(model: str) -> dict[str, Any]:
         return await do_call(models[0]), models[0]
 
     with (
-        patch("core.llm.providers.anthropic.settings") as mock_settings,
+        patch("core.config.settings") as mock_settings,
         patch("core.llm.router.call_with_failover", side_effect=fake_failover),
     ):
         mock_settings.anthropic_api_key = "test-key"

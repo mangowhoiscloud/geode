@@ -15,7 +15,7 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel
 
-from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY, settings
+from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
 from core.llm.fallback import (
     CircuitBreaker,
     retry_with_backoff_generic,
@@ -47,6 +47,7 @@ _openai_circuit_breaker = CircuitBreaker()
 
 def _resolve_openai_key() -> str:
     """Resolve OpenAI API key from ProfileRotator (OAuth preferred) or settings."""
+    from core.config import settings
     from core.llm.credentials import resolve_provider_key
 
     return resolve_provider_key("openai", settings.openai_api_key)
@@ -437,6 +438,8 @@ class OpenAIAgenticAdapter:
 
     def _resolve_config(self, model: str) -> tuple[str, str | None]:
         """Return (api_key, base_url) for this provider. Override in subclasses."""
+        from core.config import settings
+
         return settings.openai_api_key, None
 
     def _ensure_client(self, model: str) -> Any:

@@ -60,7 +60,7 @@ class TestReadinessReport:
 
 class TestCheckReadiness:
     def test_without_api_key(self, tmp_path: Path):
-        with patch("core.wiring.startup.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             report = check_readiness(tmp_path)
 
@@ -72,7 +72,7 @@ class TestCheckReadiness:
         assert llm_cap.available is False
 
     def test_with_anthropic_key(self, tmp_path: Path):
-        with patch("core.wiring.startup.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             mock_settings.anthropic_api_key = "sk-ant-real-key-here"
             report = check_readiness(tmp_path)
@@ -85,7 +85,7 @@ class TestCheckReadiness:
 
     def test_with_openai_key_only(self, tmp_path: Path):
         """ANY provider key unblocks — OpenAI alone should suffice."""
-        with patch("core.wiring.startup.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             mock_settings.openai_api_key = "sk-proj-real-key-here"
             report = check_readiness(tmp_path)
@@ -95,7 +95,7 @@ class TestCheckReadiness:
 
     def test_with_glm_key_only(self, tmp_path: Path):
         """ANY provider key unblocks — GLM alone should suffice."""
-        with patch("core.wiring.startup.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             mock_settings.zai_api_key = "abc12345.def67890"
             report = check_readiness(tmp_path)
@@ -104,7 +104,7 @@ class TestCheckReadiness:
         assert report.blocked is False
 
     def test_placeholder_key_treated_as_missing(self, tmp_path: Path):
-        with patch("core.wiring.startup.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = "sk-ant-..."
             mock_settings.openai_api_key = "sk-..."
             mock_settings.zai_api_key = "..."
@@ -114,7 +114,7 @@ class TestCheckReadiness:
         assert report.force_dry_run is True
 
     def test_env_file_check(self, tmp_path: Path):
-        with patch("core.wiring.startup.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             _no_keys_mock(mock_settings)
 
             # No .env, no .env.example
@@ -135,7 +135,7 @@ class TestCheckReadiness:
             assert report.has_env_file is True
 
     def test_project_memory_check(self, tmp_path: Path):
-        with patch("core.wiring.startup.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             _no_keys_mock(mock_settings)
 
             # No .geode/memory/PROJECT.md → unavailable
@@ -154,7 +154,7 @@ class TestCheckReadiness:
             assert mem_cap.available is True
 
     def test_always_available_capabilities(self, tmp_path: Path):
-        with patch("core.wiring.startup.settings") as mock_settings:
+        with patch("core.config.settings") as mock_settings:
             _no_keys_mock(mock_settings)
             report = check_readiness(tmp_path)
 
@@ -216,7 +216,7 @@ class TestEnvSetupWizard:
         """User picks Path B then presses Enter for every key → no keys set."""
         with (
             patch("core.cli.onboarding.console") as mock_console,
-            patch("core.cli.onboarding.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = ["2", "", "", ""]
@@ -228,7 +228,7 @@ class TestEnvSetupWizard:
         with (
             patch("core.cli.onboarding.console") as mock_console,
             patch("core.cli.onboarding._upsert_env"),
-            patch("core.cli.onboarding.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = [
@@ -244,7 +244,7 @@ class TestEnvSetupWizard:
         """Ctrl+C at the menu prompt gracefully stops."""
         with (
             patch("core.cli.onboarding.console") as mock_console,
-            patch("core.cli.onboarding.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = KeyboardInterrupt
@@ -256,7 +256,7 @@ class TestEnvSetupWizard:
         with (
             patch("core.cli.onboarding.console") as mock_console,
             patch("core.cli.onboarding.detect_subscription_oauth", return_value="openai-codex"),
-            patch("core.cli.onboarding.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = ["1", ""]  # menu, then Enter on prompt
@@ -268,7 +268,7 @@ class TestEnvSetupWizard:
         with (
             patch("core.cli.onboarding.console") as mock_console,
             patch("core.cli.onboarding.detect_subscription_oauth", return_value=None),
-            patch("core.cli.onboarding.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = ["1", ""]
@@ -280,7 +280,7 @@ class TestEnvSetupWizard:
         won't re-prompt on next launch."""
         with (
             patch("core.cli.onboarding.console") as mock_console,
-            patch("core.cli.onboarding.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
             mock_console.input.side_effect = ["3"]
@@ -544,7 +544,7 @@ class TestGlmClient:
         with (
             _p.dict("sys.modules", {"openai": mock_openai_mod}),
             _p("core.llm.providers.glm._glm_client", None),
-            _p("core.llm.providers.glm.settings") as ms,
+            _p("core.config.settings") as ms,
         ):
             ms.zai_api_key = "test-key"
             from core.llm.providers.glm import _get_glm_client
@@ -638,7 +638,7 @@ class TestReadinessProfileStatus:
         mock_profile_instance.exists.return_value = True
 
         with (
-            patch("core.wiring.startup.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
             patch(
                 "core.memory.user_profile.FileBasedUserProfile",
                 return_value=mock_profile_instance,
@@ -659,7 +659,7 @@ class TestReadinessProfileStatus:
         mock_profile_instance.exists.return_value = False
 
         with (
-            patch("core.wiring.startup.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
             patch(
                 "core.memory.user_profile.FileBasedUserProfile",
                 return_value=mock_profile_instance,
@@ -676,7 +676,7 @@ class TestReadinessProfileStatus:
     def test_profile_load_exception_handled(self, tmp_path: Path):
         """If FileBasedUserProfile raises, profile shows as unavailable."""
         with (
-            patch("core.wiring.startup.settings") as mock_settings,
+            patch("core.config.settings") as mock_settings,
             patch(
                 "core.memory.user_profile.FileBasedUserProfile",
                 side_effect=RuntimeError("broken"),

@@ -9,16 +9,31 @@ import logging
 import random
 import threading
 import time
-from typing import Any
-
-from core.config import settings
+from typing import TYPE_CHECKING, Any
 
 log = logging.getLogger(__name__)
 
-# Failover configuration — sourced from settings with backward-compat defaults
-MAX_RETRIES = settings.llm_max_retries
-RETRY_BASE_DELAY = settings.llm_retry_base_delay
-RETRY_MAX_DELAY = settings.llm_retry_max_delay
+if TYPE_CHECKING:
+    # Module-level retry constants are exposed as ``MAX_RETRIES`` etc. for
+    # backward compatibility (5+ external import sites). The values are
+    # actually resolved lazily via ``__getattr__`` so module load no longer
+    # forces a Settings instance — and therefore the heavy pydantic_settings
+    # tree — into the cold-start path.
+    MAX_RETRIES: int
+    RETRY_BASE_DELAY: float
+    RETRY_MAX_DELAY: float
+
+
+def __getattr__(name: str) -> Any:
+    if name in ("MAX_RETRIES", "RETRY_BASE_DELAY", "RETRY_MAX_DELAY"):
+        from core.config import settings
+
+        if name == "MAX_RETRIES":
+            return settings.llm_max_retries
+        if name == "RETRY_BASE_DELAY":
+            return settings.llm_retry_base_delay
+        return settings.llm_retry_max_delay
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _is_auth_error(exc: Exception) -> bool:
@@ -181,9 +196,9 @@ def retry_with_backoff_generic(
     retryable_errors: tuple[type[Exception], ...],
     bad_request_error: type[Exception] | None = None,
     billing_message: str = "API billing/credit error.",
-    max_retries: int = MAX_RETRIES,
-    retry_base_delay: float = RETRY_BASE_DELAY,
-    retry_max_delay: float = RETRY_MAX_DELAY,
+    max_retries: int | None = None,
+    retry_base_delay: float | None = None,
+    retry_max_delay: float | None = None,
     provider_label: str = "LLM",
     on_retry: Any | None = None,
 ) -> Any:
@@ -219,9 +234,18 @@ def retry_with_backoff_generic(
 
     models_to_try = [model] + [m for m in fallback_models if m != model]
 
-    # C2: filter out fallback models that exceed cost ratio limit
+    # Resolve None defaults from settings (function defaults stay lazy so the
+    # cold-start path doesn't pull pydantic_settings).
     from core.config import settings as _cfg
 
+    if max_retries is None:
+        max_retries = _cfg.llm_max_retries
+    if retry_base_delay is None:
+        retry_base_delay = _cfg.llm_retry_base_delay
+    if retry_max_delay is None:
+        retry_max_delay = _cfg.llm_retry_max_delay
+
+    # C2: filter out fallback models that exceed cost ratio limit
     if _cfg.llm_max_fallback_cost_ratio > 0 and len(models_to_try) > 1:
         from core.llm.token_tracker import MODEL_PRICING
 
