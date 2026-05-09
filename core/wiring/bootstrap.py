@@ -10,22 +10,47 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    # Type-only references — kept out of cold-start via PEP 563 string
+    # annotations (``from __future__ import annotations``).  Each class
+    # is imported lazily inside its build_* function below; this block
+    # exists solely so mypy / IDEs can resolve the annotations.
     from core.llm.prompt_assembler import PromptAssembler
+    from core.memory.context import ContextAssembler
+    from core.memory.organization import MonoLakeOrganizationMemory
+    from core.memory.port import SessionStorePort
+    from core.memory.project import ProjectMemory
+    from core.memory.user_profile import FileBasedUserProfile
+    from core.orchestration.hot_reload import ConfigWatcher
+    from core.orchestration.run_log import RunLog
+    from core.orchestration.stuck_detection import StuckDetector
+    from core.orchestration.task_bridge import TaskGraphHookBridge
+    from core.orchestration.task_system import TaskGraph
 
 from core.hooks import HookEvent, HookSystem
-from core.memory.context import ContextAssembler
-from core.memory.organization import MonoLakeOrganizationMemory
-from core.memory.port import SessionStorePort
-from core.memory.project import ProjectMemory
-from core.memory.session import InMemorySessionStore
-from core.memory.user_profile import FileBasedUserProfile
-from core.orchestration.hot_reload import ConfigWatcher
-from core.orchestration.run_log import RunLog, RunLogEntry
-from core.orchestration.stuck_detection import StuckDetector
-from core.orchestration.task_bridge import TaskGraphHookBridge
-from core.orchestration.task_system import TaskGraph
 
 log = logging.getLogger(__name__)
+
+
+# Module-level PEP 562 alias for legacy ``patch("core.wiring.bootstrap.X")``
+# sites (test_hooks / test_auto_learn / test_profile_wiring).  The classes
+# themselves live in their own modules and are imported lazily inside the
+# build_* functions; resolving them only on attribute access means cold-start
+# never pays for the orchestration / memory / hot-reload trees.
+def __getattr__(name: str) -> Any:
+    if name == "RunLog":
+        from core.orchestration.run_log import RunLog as _RunLog
+
+        return _RunLog
+    if name == "StuckDetector":
+        from core.orchestration.stuck_detection import StuckDetector as _StuckDetector
+
+        return _StuckDetector
+    if name == "RunLogEntry":
+        from core.orchestration.run_log import RunLogEntry as _RunLogEntry
+
+        return _RunLogEntry
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # ---------------------------------------------------------------------------
 # Default configuration (re-exported from runtime.py constants)
@@ -44,6 +69,7 @@ def _make_run_log_handler(
     run_id: str,
 ) -> tuple[str, Any]:
     """Create a hook handler that writes events to RunLog."""
+    from core.orchestration.run_log import RunLogEntry
 
     def _log_event(event: HookEvent, data: dict[str, Any]) -> None:
         entry = RunLogEntry(
@@ -130,6 +156,9 @@ def build_hooks(
     stuck_timeout_s: float,
 ) -> tuple[HookSystem, RunLog, StuckDetector, Any]:
     """Build HookSystem with RunLog, StuckDetector, and SessionMetrics."""
+    from core.orchestration.run_log import RunLog
+    from core.orchestration.stuck_detection import StuckDetector
+
     hooks: HookSystem = HookSystem()
 
     # Run log + hook handler
@@ -484,6 +513,10 @@ def build_memory(
 ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler, FileBasedUserProfile]:
     """Build L2 memory components: project, org, context assembler, user profile."""
     from core.config import settings
+    from core.memory.context import ContextAssembler
+    from core.memory.organization import MonoLakeOrganizationMemory
+    from core.memory.project import ProjectMemory
+    from core.memory.user_profile import FileBasedUserProfile
     from core.paths import ensure_directories
 
     ensure_directories()
@@ -557,6 +590,7 @@ def build_memory(
 def build_session_store(*, session_ttl: float) -> SessionStorePort:
     """Build session store — InMemory default, HybridSessionStore if URLs configured."""
     from core.config import settings
+    from core.memory.session import InMemorySessionStore
 
     session_storage_dir: Path | None = None
     if settings.session_storage_dir:
@@ -581,6 +615,8 @@ def build_session_store(*, session_ttl: float) -> SessionStorePort:
 
 def build_config_watcher(*, hooks: HookSystem | None = None) -> ConfigWatcher:
     """Build ConfigWatcher and register .env hot-reload handler if .env exists."""
+    from core.orchestration.hot_reload import ConfigWatcher
+
     config_watcher = ConfigWatcher(debounce_ms=CONFIG_WATCHER_DEBOUNCE_MS)
     env_path = Path(".env")
     if not env_path.exists():
@@ -657,6 +693,8 @@ def build_task_graph(
     per-task transitions.
     """
     from core.domains.port import get_domain_or_none
+    from core.orchestration.task_bridge import TaskGraphHookBridge
+    from core.orchestration.task_system import TaskGraph
 
     prefix = ip_name.lower().replace(" ", "_")
     domain = get_domain_or_none()
