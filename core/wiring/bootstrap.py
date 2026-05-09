@@ -51,6 +51,7 @@ def __getattr__(name: str) -> Any:
         return _RunLogEntry
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
 # ---------------------------------------------------------------------------
 # Default configuration (re-exported from runtime.py constants)
 # ---------------------------------------------------------------------------
