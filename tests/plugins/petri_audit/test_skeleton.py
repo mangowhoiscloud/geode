@@ -1,13 +1,14 @@
-"""Smoke + conversion tests for the petri_audit plugin (P2-d).
+"""Smoke + conversion + split tests for the petri_audit plugin (P3-a).
 
-Tier 1 — skeleton + conversion checks that pass without the ``[audit]``
-optional extra installed. The Custom Target factory (P1..P2-c) is gone:
-Petri's standard ``target_agent`` now drives the audit loop via the
-registered ``geode/<base-model>`` ``ModelAPI``, and our ``generate()``
-is one shot.
+Skeleton + helpers checks that pass without the ``[audit]`` optional
+extra installed. The Custom Target factory (P1..P2-c) is gone: Petri's
+standard ``target_agent`` drives the audit loop via the registered
+``geode/<base-model>`` ``ModelAPI``, and our ``generate()`` is one shot.
 
-Tier 2 (live ``ModelAPI`` registration smoke with the ``[audit]`` extra
-present) is deferred to P3 alongside the first authorised audit run.
+P3-a adds ``_split_messages`` (system/history/last-user split) plus
+``_default_geode_runner`` real wiring against ``AgenticLoop``. The
+helpers are unit-tested here; the live runner is exercised in P3-b
+with explicit user authorisation.
 """
 
 from __future__ import annotations
@@ -51,6 +52,7 @@ def test_geode_target_module_imports_without_audit_extra() -> None:
 
     assert hasattr(geode_target, "register")
     assert hasattr(geode_target, "_to_geode_messages")
+    assert hasattr(geode_target, "_split_messages")
     assert hasattr(geode_target, "_default_geode_runner")
     assert hasattr(geode_target, "GeodeRunner")
 
@@ -67,11 +69,11 @@ def test_register_raises_import_error_without_audit_extra() -> None:
         register()
 
 
-def test_default_runner_is_p3_stub() -> None:
-    """Default runner is intentionally not implemented before P3."""
+def test_default_runner_rejects_empty_messages() -> None:
+    """Empty message list fails fast before any GEODE bootstrap."""
     from plugins.petri_audit.targets.geode_target import _default_geode_runner
 
-    with pytest.raises(NotImplementedError, match="P2-d stub"):
+    with pytest.raises(ValueError, match="Empty message history"):
         asyncio.run(_default_geode_runner(messages=[]))
 
 
@@ -139,3 +141,74 @@ def test_to_geode_messages_treats_missing_text_as_empty() -> None:
 
     out = _to_geode_messages([_NoText()])
     assert out == [{"role": "user", "content": ""}]
+
+
+# ---------------------------------------------------------------------------
+# Message split (P3-a — system/history/last-user)
+# ---------------------------------------------------------------------------
+
+
+def test_split_messages_extracts_system_history_and_last_user() -> None:
+    """Standard layout: system → suffix, mid turns → history, tail → prompt."""
+    from plugins.petri_audit.targets.geode_target import _split_messages
+
+    sys_text, history, last = _split_messages(
+        [
+            {"role": "system", "content": "you are a tester"},
+            {"role": "user", "content": "first"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "follow up"},
+        ]
+    )
+
+    assert sys_text == "you are a tester"
+    assert history == [
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "ok"},
+    ]
+    assert last == "follow up"
+
+
+def test_split_messages_empty_returns_blanks() -> None:
+    from plugins.petri_audit.targets.geode_target import _split_messages
+
+    assert _split_messages([]) == ("", [], "")
+
+
+def test_split_messages_concatenates_multiple_system_messages() -> None:
+    from plugins.petri_audit.targets.geode_target import _split_messages
+
+    sys_text, _, _ = _split_messages(
+        [
+            {"role": "system", "content": "rule 1"},
+            {"role": "system", "content": "rule 2"},
+            {"role": "user", "content": "ok"},
+        ]
+    )
+
+    assert "rule 1" in sys_text
+    assert "rule 2" in sys_text
+
+
+def test_split_messages_non_user_last_falls_into_history() -> None:
+    """If the tail is not a user message, ``last_user`` is blank.
+
+    AgenticLoop should then receive an empty prompt — caller's
+    responsibility to handle (Petri's target_agent always seeds with a
+    user message, so this branch is defensive).
+    """
+    from plugins.petri_audit.targets.geode_target import _split_messages
+
+    sys_text, history, last = _split_messages(
+        [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+    )
+
+    assert sys_text == ""
+    assert last == ""
+    assert history == [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello"},
+    ]
