@@ -1,0 +1,74 @@
+name: Install Smoke Test
+
+# Cross-OS install / update / uninstall regression gate.  Runs the same
+# four phases a new contributor would hit on a fresh machine:
+#
+#   1. INSTALL   — `uv sync` + `uv tool install -e . --force`
+#   2. VERSION   — `geode version` matches pyproject.toml
+#   3. UPDATE    — `uv tool install -e . --force` is idempotent
+#   4. UNINSTALL — `uv tool uninstall geode` leaves no residue
+#
+# A failure here means the README setup steps no longer work on a clean
+# machine — block the merge and fix the install path before shipping.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install-smoke:
+    name: ${{ matrix.os }} — install / update / uninstall
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --quiet
+
+      - name: 1) INSTALL — uv tool install -e .
+        run: |
+          uv tool install -e . --force
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: 2) VERSION — geode version matches pyproject.toml
+        run: |
+          expected=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          actual_full=$(geode version)
+          actual=$(printf '%s' "$actual_full" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "expected=$expected"
+          echo "actual=$actual ($actual_full)"
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::version mismatch — pyproject.toml=$expected vs CLI=$actual"
+            exit 1
+          fi
+
+      - name: 3) UPDATE — re-install is idempotent
+        run: |
+          uv tool install -e . --force
+          geode version
+
+      - name: 4) UNINSTALL — uv tool uninstall geode
+        run: |
+          uv tool uninstall geode
+          if command -v geode >/dev/null 2>&1; then
+            echo "::error::geode binary still on PATH after uninstall: $(command -v geode)"
+            exit 1
+          fi
+          if uv tool list | grep -q '^geode\b'; then
+            echo "::error::uv tool list still contains geode after uninstall"
+            uv tool list
+            exit 1
+          fi
+          echo "uninstall verified — no residue"
