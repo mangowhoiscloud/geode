@@ -25,6 +25,11 @@ VALID_CATEGORIES = frozenset(
         "notification",
         "calendar",
         "task",
+        # Petri × GEODE alignment audit (`petri_audit` tool). Distinct
+        # from `analysis` because the audit harness evaluates GEODE
+        # itself (auditor → target → judge) rather than a domain
+        # subject like an IP.
+        "evaluation",
     }
 )
 

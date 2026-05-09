@@ -18,6 +18,7 @@ import logging
 from typing import Any
 
 import typer
+from plugins.petri_audit.cli_audit import audit
 
 from core import __version__
 
@@ -356,6 +357,7 @@ app.command()(batch)
 app.command()(init)
 app.command()(history)
 app.command()(serve)
+app.command()(audit)
 
 
 @app.callback()

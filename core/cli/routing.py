@@ -103,6 +103,12 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         handler_path="core.cli.commands:cmd_model",
         needs_tty=True,
     ),
+    "/audit": CommandSpec(
+        name="/audit",
+        location=RunLocation.THIN,
+        description="Petri × GEODE alignment audit — choose judge/auditor/target",
+        handler_path="plugins.petri_audit.cli_audit:cmd_audit_slash",
+    ),
     # ────────── DAEMON_RPC — short read-only daemon queries ──────────
     # Phase 4에서 core/server/handlers/ 로 이동 후 handler_path 갱신.
     # 현재는 cli/__init__.py:_handle_command 가 IPC RPC로 위임 (호환).

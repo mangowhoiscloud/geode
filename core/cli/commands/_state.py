@@ -122,6 +122,7 @@ COMMAND_MAP: dict[str, str] = {
     "/tasks": "tasks",
     "/task": "tasks",
     "/t": "tasks",
+    "/audit": "audit",
 }
 
 
