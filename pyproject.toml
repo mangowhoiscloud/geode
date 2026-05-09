@@ -29,6 +29,17 @@ dependencies = [
 [project.scripts]
 geode = "core.cli:app"
 
+# inspect_ai discovers third-party model providers via the `inspect_ai`
+# entry-point group (importlib.metadata). When the [audit] extra is
+# installed and `inspect eval` runs, inspect_ai loads each entry-point
+# in this group (`ep.load()`) — that import triggers our
+# `plugins/petri_audit/__init__.py:register()`, which registers
+# `GeodeModelAPI` so `--model-role target=geode/<base>` resolves.
+#
+# Reference: inspect_ai/_util/entrypoints.py:ensure_entry_points
+[project.entry-points.inspect_ai]
+geode_audit = "plugins.petri_audit"
+
 [project.optional-dependencies]
 mcp = ["mcp>=1.0.0"]
 desktop = ["pyautogui>=0.9.54", "Pillow>=10.0.0"]

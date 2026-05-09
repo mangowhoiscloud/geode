@@ -30,6 +30,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`pyproject.toml` `[project.entry-points.inspect_ai]` 추가 (P3-b-1).**
+  - `geode_audit = "plugins.petri_audit"` — `inspect_ai` 의 entry-point
+    discovery (`importlib.metadata.entry_points(group="inspect_ai")` +
+    `ep.load()` — `inspect_ai/_util/entrypoints.py:ensure_entry_points`)
+    가 `inspect eval` 실행 시 우리 plugin 을 자동 import → `register()`
+    자동 호출 → `GeodeModelAPI` 자동 등록.
+  - 결과: `--model-role target=geode/<base-model>` 만 지정하면 별도
+    명시 import 또는 wrapper 스크립트 없이 작동.
+
 - **`plugins/petri_audit/targets/geode_target.py` — `_default_geode_runner`
   실 구현 + `_split_messages` 헬퍼 (P3-a).**
   - `_split_messages(messages) -> (system_suffix, history, last_user)`:
