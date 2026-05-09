@@ -28,6 +28,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.89.3] — 2026-05-09
+
+> **Cold-start 추가 −53 % (warm median 70 → 33 ms) via type-only / late-binding lazy.**
+>
+> v0.89.3 는 v0.89.2 의 pydantic / asyncio / importlib.metadata lazy 위에서
+> `core.runtime` + `core.wiring.bootstrap` 의 14+11 개 type-only import 를
+> `TYPE_CHECKING` / 함수-로컬 lazy 로 추가 분리한다. cold-start
+> `import core.runtime`: **70 → 33 ms median (warm), 201 → 167 modules**.
+> v0.89.0 → v0.89.3 누적: cold first-run **240 → ~33 ms = −86 %**.
+
 ### Architecture
 
 - **`core.runtime` + `core.wiring.bootstrap` 의 type-only / late-binding
