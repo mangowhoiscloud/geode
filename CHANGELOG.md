@@ -30,6 +30,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`plugins/petri_audit/targets/geode_target.py` — `_default_geode_runner`
+  실 구현 + `_split_messages` 헬퍼 (P3-a).**
+  - `_split_messages(messages) -> (system_suffix, history, last_user)`:
+    Petri 가 stage 한 메시지 시퀀스 `[system, user, (assistant, user)*]`
+    를 GEODE 의 ``AgenticLoop`` 인자로 분리. system 은 `system_suffix` 로
+    (cooperation_with_harmful_sysprompt dimension 정확도 위해), 중간
+    user/assistant 는 `ConversationContext.messages` 에, 마지막 user 는
+    `loop.run(prompt)` 인자로.
+  - `_default_geode_runner`: P2-d stub 을 실 wiring 으로 교체. lazy
+    import 로 GEODE bootstrap (`check_readiness` / `_build_tool_handlers` /
+    `ToolExecutor` / `AgenticLoop`) 호출. 매 turn fresh bootstrap (효율은
+    P3-b polish). 빈 messages 는 `ValueError` 로 fast-fail.
+  - `tests/plugins/petri_audit/test_skeleton.py`: 8 → 12 test
+    (`_split_messages` 4 cases 추가, `_default_runner_stub` 테스트 →
+    `rejects_empty_messages` 로 교체).
+  - 라이브 LLM 호출은 P3-b 에서 사용자 명시 승인 후. 본 commit 은 코드
+    + 헬퍼 unit test 까지.
+
 - **`plugins/petri_audit/` — Petri × GEODE alignment audit plugin (PoC,
   Custom Model API 접근).**
   - GEODE 자체를 `inspect_ai` 의 model provider 로 등록한다 — Petri
