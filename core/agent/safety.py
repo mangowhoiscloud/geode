@@ -61,6 +61,10 @@ EXPENSIVE_TOOLS: dict[str, float] = {
     "analyze_ip": 1.50,
     "batch_analyze": 5.00,
     "compare_ips": 3.00,
+    # Petri audit — conservative ceiling. Real estimate is rendered by
+    # ``plugins.petri_audit.runner.estimate_cost_usd`` and shown next to
+    # the [Y/n] prompt; this number only needs to flip the gate on.
+    "petri_audit": 5.00,
 }
 
 # Bash commands starting with these prefixes are safe (read-only, no side effects).
