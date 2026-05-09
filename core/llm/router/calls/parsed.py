@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TypeVar, cast
-
-from pydantic import BaseModel
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from core.llm.provider_dispatch import (
     _cross_provider_dispatch,
@@ -27,7 +25,13 @@ from ._route import _route_provider
 
 log = logging.getLogger(__name__)
 
-T = TypeVar("T", bound=BaseModel)
+if TYPE_CHECKING:
+    # Pydantic is a heavy import (~100 ms cumulative). The ``BaseModel``
+    # bound is only consumed by mypy so a forward-reference string keeps
+    # runtime free of the pydantic tree.
+    from pydantic import BaseModel
+
+T = TypeVar("T", bound="BaseModel")
 
 
 def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
