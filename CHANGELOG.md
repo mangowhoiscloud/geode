@@ -28,6 +28,36 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Architecture
+
+- **`core.runtime` + `core.wiring.bootstrap` 의 type-only / late-binding
+  import 를 cold-start 에서 제거.**
+  - `core/runtime.py`: 14 개 클래스 (CUSUMDetector / ExpertPanel /
+    FeedbackLoop / ModelRegistry / OutcomeTracker / SnapshotManager /
+    ContextAssembler / MonoLakeOrganizationMemory / ProjectMemory /
+    ConfigWatcher / TaskGraphHookBridge / TaskGraph / TriggerManager /
+    CorrelationAnalyzer) 가 dataclass field annotation 으로만 쓰임
+    (`from __future__ import annotations` 로 string 평가) — top-level
+    import → `if TYPE_CHECKING:` 블록으로 이전.
+  - `core/wiring/bootstrap.py`: 동일 클래스들 (ContextAssembler /
+    MonoLake / ProjectMemory / FileBasedUserProfile / ConfigWatcher /
+    RunLog / RunLogEntry / StuckDetector / TaskGraph / TaskGraphHookBridge /
+    InMemorySessionStore) 도 함수-로컬 import 로 이전 + `TYPE_CHECKING`
+    type stub.  build_* 함수가 호출될 때만 instantiate.
+  - 5 모듈 (`config-lazy` PR 패턴) 의 module-level `settings` alias 와
+    동일하게 `bootstrap.py` 에 PEP 562 `__getattr__` 추가 (RunLog /
+    StuckDetector / RunLogEntry) — legacy `patch("core.wiring.bootstrap.X")`
+    테스트 사이트 호환 유지.
+- 측정 (`import core.runtime`):
+  - v0.89.2 baseline: 54-94 ms warm (median ≈ 70 ms), 201 modules
+  - 이 PR: **26-47 ms warm (median ≈ 33 ms), 167 modules** = warm
+    median **−37 ms / −53 %** vs v0.89.2.
+  - v0.89.0 → 이 PR 누적: cold first-run 240 → ~33 ms = **−86 %**.
+  - cold-start `sys.modules` 에서 추가로 빠짐: `core.memory.context`,
+    `core.memory.organization`, `core.memory.project`,
+    `core.automation.{drift,feedback_loop,model_registry,outcome_tracking,snapshot,expert_panel}`,
+    `core.scheduler.triggers`, `core.orchestration.{hot_reload,task_bridge,task_system,run_log,stuck_detection}`.
+
 ## [0.89.2] — 2026-05-09
 
 > **Cold-start 추가 −20 % (warm median 88 → 70 ms) via pydantic / asyncio / importlib.metadata lazy.**
