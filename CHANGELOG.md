@@ -28,6 +28,60 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`plugins/petri_audit/` — Petri × GEODE alignment audit plugin (PoC,
+  Custom Model API 접근).**
+  - GEODE 자체를 `inspect_ai` 의 model provider 로 등록한다 — Petri
+    표준 `target_agent` 가 GEODE 를 일반 LLM 처럼 호출, prefill / cache /
+    replayable / tool_calls 흐름은 `inspect_ai` 가 자동 처리. 이전
+    phase (P1..P2-b) 에서 작성했던 Custom Target factory 는 outer-loop
+    코드를 우리가 직접 짰으나 ModelAPI 접근에선 redundant 가 되어
+    P2-d 에서 제거.
+  - 외부 평가 도구 [Petri](https://github.com/meridianlabs-ai/inspect_petri)
+    (Anthropic Alignment Science 발 · `meridianlabs-ai` 호스팅) 의
+    GEODE 통합 PoC. 라이브 `AgenticLoop` bootstrap 과 audit run 은
+    P3 로 미룸.
+  - `[project.optional-dependencies] audit` extra 신설 —
+    `inspect-ai>=0.3.211` + `inspect-petri @ git+...@6d9b9e1` (Petri
+    main 3.0 은 release tag 부재로 SHA pin). 동반: `tool.hatch.metadata.
+    allow-direct-references = true`. opt-in: `uv sync --extra audit`.
+  - 모델 ID: `geode/<base-model>` 형식 (e.g. `geode/opus-4-7`,
+    `geode/sonnet-4-6`). `<base-model>` 은 GEODE 가 내부적으로 사용할
+    LLM 을 선택; 라이브 runner (P3) 가 해석.
+  - `plugins/petri_audit/__init__.py`: try/except 로 `register()` 호출
+    → `[audit]` extra 설치 시 ModelAPI 등록, 미설치 시 silently skip.
+    `register_domain` 미호출 (감사 도구는 runtime domain 이 아님 →
+    `geode analyze` 흐름 비노출).
+  - `plugins/petri_audit/targets/geode_target.py`:
+    - 모듈 top-level 에 `inspect_ai` 의존성 없음 → 헬퍼만 import 해도
+      cold-start 영향 0.
+    - `register()`: `inspect_ai` 를 lazy import + `@modelapi("geode")`
+      로 `GeodeModelAPI` 등록.
+    - `GeodeModelAPI.generate(input, tools, tool_choice, config)`:
+      `_to_geode_messages` 변환 → runner 호출 →
+      `ModelOutput.from_content` 반환. `tools` / `tool_choice` 는
+      의도적으로 무시 (`target_tools="none"` 사용 전제 — GEODE 자체
+      도구 시스템이 권위).
+    - `_to_geode_messages()`: 4 role 변환 (system / user / assistant /
+      tool — tool 은 Anthropic convention `[{"type": "tool_result", ...}]`).
+      duck typing 으로 `inspect_ai` 미설치 환경에서도 호출 가능.
+    - `_default_geode_runner()`: P3 stub (NotImplementedError).
+  - `tests/plugins/petri_audit/test_skeleton.py`: 8 smoke + conversion
+    test (package import / extra-less module import / `register()`
+    ImportError when extra missing / default runner P2-d stub /
+    domain 미등록 / 4 role 변환 / unknown role 거부 / text 누락 처리).
+  - mypy: `inspect_ai.*` / `inspect_petri.*` `ignore_missing_imports`
+    + `plugins.petri_audit.*` 모듈에 `disallow_untyped_decorators = false`
+    + `GeodeModelAPI(ModelAPI)` 한 줄 `# type: ignore[misc]` (외부 stub
+    부재로 ModelAPI 가 Any 로 해석).
+  - deptry: `inspect-petri` 를 `DEP002` ignore 에 추가 — `inspect_ai` 의
+    audit harness 가 `inspect_petri/audit` task 를 reference 로 로드
+    하지만 우리 코드가 직접 import 하지 않음.
+  - cold-start `import core.runtime`: 27–37 ms (baseline 78 ms 이하 유지).
+  - 라이브 audit run / 실 bootstrap / 비용 측정은 P3.
+  - Plan: `docs/plans/eval-petri-integration.md`.
+
 ## [0.89.3] — 2026-05-09
 
 > **Cold-start 추가 −53 % (warm median 70 → 33 ms) via type-only / late-binding lazy.**
