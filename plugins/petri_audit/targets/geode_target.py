@@ -152,13 +152,9 @@ def register() -> None:
             config: GenerateConfig | None = None,
             **model_args: Any,
         ) -> None:
-            super().__init__(
-                model_name, base_url, api_key, [], config or GenerateConfig()
-            )
+            super().__init__(model_name, base_url, api_key, [], config or GenerateConfig())
             runner = model_args.get("runner")
-            self._runner: GeodeRunner | None = (
-                runner if callable(runner) else None
-            )
+            self._runner: GeodeRunner | None = runner if callable(runner) else None
 
         async def generate(
             self,
@@ -174,14 +170,8 @@ def register() -> None:
             _ = tools, tool_choice, config
 
             geode_messages = _to_geode_messages(input)
-            runner = (
-                self._runner
-                if self._runner is not None
-                else _default_geode_runner
-            )
+            runner = self._runner if self._runner is not None else _default_geode_runner
             text = await runner(geode_messages)
-            return ModelOutput.from_content(
-                model=self.model_name, content=text
-            )
+            return ModelOutput.from_content(model=self.model_name, content=text)
 
     _ = GeodeModelAPI  # decorator return is unused at module level

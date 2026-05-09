@@ -30,8 +30,7 @@ try:
     _register()
 except ImportError:
     _logging.getLogger(__name__).debug(
-        "petri_audit ModelAPI registration deferred — "
-        "[audit] extra not installed",
+        "petri_audit ModelAPI registration deferred — [audit] extra not installed",
         exc_info=True,
     )
 
