@@ -28,6 +28,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`plugins/petri_audit/` skeleton (P1) — Petri × GEODE alignment audit
+  plugin (PoC, no-op stubs).**
+  - 외부 평가 도구 [Petri](https://github.com/meridianlabs-ai/inspect_petri)
+    (Anthropic Alignment Science · 현재 `meridianlabs-ai` 호스팅) 를 GEODE 에
+    통합하기 위한 첫 단계. P1 은 디렉토리 골격 + Custom Target stub 만
+    추가하고 `inspect-ai` / `inspect-petri` 의존성은 P2 로 미룬다.
+  - `plugins/petri_audit/__init__.py` — namespace docstring; `register_domain`
+    호출 없음 (감사 도구는 GEODE 의 runtime domain 이 아님).
+  - `plugins/petri_audit/targets/geode_target.py` — `GeodeTarget` stub.
+    Petri 3.0.4 의 `execute(state, context: TargetContext)` 시그니처에 맞춰
+    `NotImplementedError` 발생 (P2 에서 실제 구현).
+  - `plugins/petri_audit/adapter.py` — `GeodeAuditAdapter` stub. AgenticLoop
+    ↔ Petri TargetContext 어댑터 surface 만 선언.
+  - `tests/plugins/petri_audit/test_skeleton.py` — 4 개 smoke test:
+    package import / Target stub raise / Adapter stub raise /
+    audit plugin 이 domain registry 에 등록되지 않음 검증.
+  - 의존성 미추가 → cold-start 영향 0 (v0.89.x 최적화 보호).
+  - Plan: `docs/plans/eval-petri-integration.md`.
+
 ## [0.89.3] — 2026-05-09
 
 > **Cold-start 추가 −53 % (warm median 70 → 33 ms) via type-only / late-binding lazy.**
