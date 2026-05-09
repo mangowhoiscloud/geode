@@ -1,34 +1,41 @@
-"""GEODE Custom Target for Petri (P2-b: conversion + runner-injection seam).
+"""GEODE Custom Model API for Petri (P2-d).
 
-The factory ``make_geode_target_agent()`` returns an ``inspect_ai.Agent``
-when called, conforming to Petri 3.0.4's Custom Target protocol —
-``execute(state, context: TargetContext, metadata: dict) -> AgentState``.
+Registers GEODE as an ``inspect_ai`` model provider so any Petri (or
+other ``inspect_ai``) evaluation can target it via
+``--model-role target=geode/<base-model>``. The whole GEODE stack —
+agentic loop, tools, hooks, memory, scheduler — is exposed as a single
+``generate(messages, ...) -> ModelOutput`` interface.
 
-inspect_ai / inspect_petri imports are deferred to factory call time so
-this module is importable without the ``[audit]`` optional extra installed
-and the v0.89.x cold-start budget is preserved.
+Conceptually GEODE is "an LLM with tools and memory bolted on", so
+representing it as a model rather than as a custom target lets Petri's
+standard ``target_agent`` handle prefill / cache / replayable / tool_calls
+flow without us re-implementing the outer audit loop.
 
 Phasing:
-- P2-a: factory + outer audit-loop scaffold + lazy imports.
-- P2-b (this commit): ``_to_geode_messages`` real conversion +
-  ``GeodeRunner`` injection seam in ``_run_geode_loop``. Default runner
-  is still a stub — live AgenticLoop bootstrap lands in P3.
-- P3: ``_default_geode_runner`` real implementation + first authorised
-  live audit run (3 seeds × 10 turns × Haiku judge, ``< 5,000 KRW`` gate).
+- P1 / P2-a / P2-b / P2-c: Custom Target factory + scaffold (replaced).
+- P2-d (this commit): switch to Custom Model API. ``GeodeModelAPI``
+  registered with ``@modelapi(name="geode")`` via ``register()``.
+  Petri's standard ``target_agent`` drives the outer audit loop; our
+  ``generate()`` is one shot.
+- P3: ``_default_geode_runner`` real implementation against
+  ``core.agent.loop.loop:AgenticLoop`` + first authorised live audit run
+  (3 seeds × 10 turns × Haiku judge, ``< 5,000 KRW`` cost gate).
+
+Cold-start protection: the module-level surface (``_to_geode_messages``,
+``_default_geode_runner``, ``GeodeRunner``) has no ``inspect_ai``
+dependency, so this file is importable on a default ``uv sync``. The
+``inspect_ai`` import lives inside ``register()``, which is invoked from
+``plugins/petri_audit/__init__.py`` under a try/except — present-extra
+installs trigger registration, absent-extra installs silently skip.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from inspect_ai.agent import Agent
-    from inspect_ai.model import CachePolicy
-
-
-# Single-turn GEODE runner. Caller owns AgenticLoop bootstrap; we hand it
-# the converted GEODE-format message history and receive the assistant
+# Single-turn GEODE runner. Caller owns AgenticLoop bootstrap; we hand
+# it the converted GEODE-format message history and receive the assistant
 # text. Injection seam keeps unit tests free of a live LLM call.
 GeodeRunner = Callable[[list[dict[str, Any]]], Awaitable[str]]
 
@@ -37,8 +44,8 @@ def _to_geode_messages(messages: list[Any]) -> list[dict[str, Any]]:
     """Convert ``inspect_ai`` ChatMessages to GEODE ``ConversationContext`` form.
 
     Uses duck typing on ``role`` / ``text`` / ``tool_call_id`` so the helper
-    works without ``inspect_ai`` installed (unit-test friendliness). The
-    expected input is a sequence whose elements expose:
+    works without ``inspect_ai`` actually installed (unit-test friendliness).
+    The expected input is a sequence whose elements expose:
 
     - ``role: Literal["system", "user", "assistant", "tool"]``
     - ``text: str`` (or empty)
@@ -78,118 +85,103 @@ def _to_geode_messages(messages: list[Any]) -> list[dict[str, Any]]:
     return converted
 
 
-async def _run_geode_loop(
-    messages: list[Any],
-    *,
-    runner: GeodeRunner | None = None,
-) -> str:
-    """Drive one GEODE turn from a Petri conversation history.
-
-    Args:
-        messages: ``inspect_ai`` ChatMessage list from ``TargetContext``,
-            or any duck-typed equivalent.
-        runner: Single-turn GEODE runner. Defaults to
-            ``_default_geode_runner`` (P3 stub). Tests inject a mock to
-            cover the conversion + outer-loop interaction without spinning
-            up a real LLM.
-
-    Returns:
-        The assistant text from one GEODE turn.
-    """
-    geode_messages = _to_geode_messages(messages)
-    if runner is None:
-        runner = _default_geode_runner
-    return await runner(geode_messages)
-
-
 async def _default_geode_runner(messages: list[dict[str, Any]]) -> str:
     """Default GEODE runner — bootstrap + ``AgenticLoop`` one-shot.
 
-    Not implemented in P2-b: live ``AgenticLoop`` bootstrap pulls in
+    Not implemented in P2-d: live ``AgenticLoop`` bootstrap pulls in
     ``HookSystem``, ``ToolRegistry``, and provider credentials, all of
     which only make sense alongside the first authorised P3 audit run.
     """
     _ = messages  # silence unused-arg lint until P3 wires this up
     raise NotImplementedError(
-        "_default_geode_runner is a P2-b stub; live AgenticLoop bootstrap "
+        "_default_geode_runner is a P2-d stub; live AgenticLoop bootstrap "
         "lands in P3 with the first authorised audit run. "
         "See docs/plans/eval-petri-integration.md."
     )
 
 
-def make_geode_target_agent(
-    *,
-    cache: bool | CachePolicy = False,
-    runner: GeodeRunner | None = None,
-) -> Agent:
-    """Build a Petri-compatible target ``Agent`` backed by GEODE's AgenticLoop.
+def register() -> None:
+    """Register ``GeodeModelAPI`` with ``inspect_ai``.
 
-    Args:
-        cache: Forwarded to ``TargetContext.scoped_cache`` for trajectory-
-            scoped response caching (Petri 3.0.6).
-        runner: Optional single-turn GEODE runner. ``None`` selects the
-            P3-pending default. Tests pass a mock so the audit loop runs
-            end-to-end without a live LLM.
+    Imports ``inspect_ai`` lazily; raises ``ImportError`` if the
+    ``[audit]`` optional extra is not installed. ``plugins/petri_audit/
+    __init__.py`` wraps the call in try/except so the plugin remains
+    importable on the default ``uv sync``.
 
-    Returns:
-        An ``@agent``-decorated Inspect AI ``Agent`` callable.
+    Calling ``register()`` more than once is safe — ``inspect_ai``'s
+    registry replaces an existing entry of the same name.
 
-    Raises:
-        ImportError: If the ``[audit]`` optional extra is not installed.
+    Model name format: ``geode/<base-model>`` — e.g. ``geode/opus-4-7``,
+    ``geode/sonnet-4-6``. ``<base-model>`` selects the underlying LLM
+    GEODE will use internally; the live runner (P3) interprets it.
+
+    Tests can register a custom runner via the ``runner`` model arg:
+
+        from inspect_ai.model import get_model
+        model = get_model("geode/opus-4-7", runner=fake_runner)
     """
-    # Lazy imports — only triggered when the factory is invoked, so plain
-    # `import plugins.petri_audit.targets.geode_target` keeps working
-    # without the [audit] extra installed.
-    from inspect_ai.agent import AgentState, agent
-    from inspect_ai.model import ChatMessageAssistant, ModelOutput
-    from inspect_petri.target import (
-        TOOL_RESULT,
-        ExitSignal,
-        TargetContext,
+    from inspect_ai.model import (
+        ChatMessage,
+        GenerateConfig,
+        ModelAPI,
+        ModelOutput,
+        modelapi,
     )
+    from inspect_ai.tool import ToolChoice, ToolInfo
 
-    @agent(name="geode")
-    def _factory() -> Any:
-        async def execute(
-            state: AgentState,
-            context: TargetContext,
-            metadata: dict[str, Any],
-        ) -> AgentState:
-            # Mirrors inspect_petri.target._agent.target_agent's outer
-            # loop (resume → seed messages → generate → send_output →
-            # next user) but swaps Petri's `model.generate` for GEODE's
-            # AgenticLoop via _run_geode_loop. Tool simulation must be
-            # disabled at audit() level via target_tools="none" so GEODE's
-            # own tool registry remains authoritative.
-            try:
-                await context.wait_for_resume()
-                state.messages[:] = [
-                    await context.system_message(),
-                    await context.user_message(),
-                ]
+    @modelapi(name="geode")
+    class GeodeModelAPI(ModelAPI):  # type: ignore[misc]
+        """GEODE-as-a-Model — ``inspect_ai.ModelAPI`` adapter.
 
-                while True:
-                    output_text = await _run_geode_loop(
-                        state.messages, runner=runner
-                    )
+        Encapsulates GEODE's full agentic stack as a one-shot
+        ``generate(messages) -> ModelOutput`` so Petri's standard
+        ``target_agent`` (and any other ``inspect_ai`` evaluation
+        harness) can target GEODE the way it targets a regular LLM.
 
-                    assistant = ChatMessageAssistant(content=output_text)
-                    state.messages.append(assistant)
-                    state.output = ModelOutput.from_message(assistant)
+        ``# type: ignore[misc]`` on the subclass: ``inspect_ai`` ships
+        without type stubs, so ``ModelAPI`` resolves to ``Any`` under
+        ``ignore_missing_imports``; mypy flags ``Any`` subclassing
+        defensively. The ignore is scoped to that one defensive lint.
+        """
 
-                    # No tool-call surface in P2-b; auditor must drive
-                    # the next user turn explicitly.
-                    context.expect({TOOL_RESULT: set()})
-                    await context.send_output(state.output)
+        def __init__(
+            self,
+            model_name: str,
+            base_url: str | None = None,
+            api_key: str | None = None,
+            config: GenerateConfig | None = None,
+            **model_args: Any,
+        ) -> None:
+            super().__init__(
+                model_name, base_url, api_key, [], config or GenerateConfig()
+            )
+            runner = model_args.get("runner")
+            self._runner: GeodeRunner | None = (
+                runner if callable(runner) else None
+            )
 
-                    state.messages.append(await context.user_message())
-            except ExitSignal:
-                return state
+        async def generate(
+            self,
+            input: list[ChatMessage],
+            tools: list[ToolInfo],
+            tool_choice: ToolChoice,
+            config: GenerateConfig,
+        ) -> ModelOutput:
+            # GEODE owns its own tool registry. The ``tools`` and
+            # ``tool_choice`` arguments are intentionally ignored —
+            # callers should pass ``target_tools="none"`` to audit() so
+            # the auditor does not try to fabricate tool results.
+            _ = tools, tool_choice, config
 
-        return execute
+            geode_messages = _to_geode_messages(input)
+            runner = (
+                self._runner
+                if self._runner is not None
+                else _default_geode_runner
+            )
+            text = await runner(geode_messages)
+            return ModelOutput.from_content(
+                model=self.model_name, content=text
+            )
 
-    # `cache` will be wired into _default_geode_runner in P3 via
-    # context.scoped_cache. Held inert for now to keep the public
-    # signature stable.
-    _ = cache
-    return _factory()
+    _ = GeodeModelAPI  # decorator return is unused at module level

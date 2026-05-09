@@ -265,6 +265,11 @@ DEP002 = [
     "langgraph-checkpoint-sqlite",
     "openai-agents",
     "Pillow",
+    # `inspect-petri` is loaded via inspect_ai's evaluation harness
+    # (its `audit` task is referenced as `inspect_petri/audit` from the
+    # CLI), not by direct import in our code. The [audit] extra still
+    # needs to declare it so `uv sync --extra audit` installs it.
+    "inspect-petri",
 ]
 
 [tool.deptry.package_module_name_map]

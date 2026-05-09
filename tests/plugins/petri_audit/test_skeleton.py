@@ -1,17 +1,13 @@
-"""Smoke + conversion tests for the petri_audit plugin (P2-b).
+"""Smoke + conversion tests for the petri_audit plugin (P2-d).
 
-Two tiers:
+Tier 1 — skeleton + conversion checks that pass without the ``[audit]``
+optional extra installed. The Custom Target factory (P1..P2-c) is gone:
+Petri's standard ``target_agent`` now drives the audit loop via the
+registered ``geode/<base-model>`` ``ModelAPI``, and our ``generate()``
+is one shot.
 
-1. Skeleton checks that pass without the ``[audit]`` optional extra
-   installed — package importability, factory ``ImportError`` when the
-   extra is missing, ``_default_geode_runner`` stub.
-2. Conversion + runner-injection tests that use duck-typed fake messages
-   so they also run extra-less.
-
-The factory's outer loop wiring (which does require ``[audit]``) is
-covered indirectly: the runner-injection seam means the same
-``_run_geode_loop`` is exercised here with a mock runner, so the inner
-generate path is tested without a live LLM.
+Tier 2 (live ``ModelAPI`` registration smoke with the ``[audit]`` extra
+present) is deferred to P3 alongside the first authorised audit run.
 """
 
 from __future__ import annotations
@@ -27,7 +23,7 @@ _AUDIT_INSTALLED = importlib.util.find_spec("inspect_ai") is not None
 
 @dataclass
 class _FakeMsg:
-    """Duck-typed stand-in for inspect_ai ChatMessage variants."""
+    """Duck-typed stand-in for ``inspect_ai`` ChatMessage variants."""
 
     role: str
     text: str = ""
@@ -35,46 +31,47 @@ class _FakeMsg:
 
 
 # ---------------------------------------------------------------------------
-# Tier 1 — skeleton (no [audit] extra required)
+# Plugin surface
 # ---------------------------------------------------------------------------
 
 
 def test_petri_audit_package_imports() -> None:
+    """``import plugins.petri_audit`` succeeds with or without [audit]."""
     import plugins.petri_audit  # noqa: F401
 
 
 def test_geode_target_module_imports_without_audit_extra() -> None:
-    """Importing the target module must NOT trigger inspect_ai import.
+    """Module-level surface has no ``inspect_ai`` dependency.
 
-    Module-level surface only references ``inspect_ai`` / ``inspect_petri``
-    under ``TYPE_CHECKING``, so the module is loadable on a default
-    ``uv sync`` without the ``[audit]`` extra installed.
+    Helpers + ``register()`` factory load on a default ``uv sync`` so
+    cold-start stays clean. ``inspect_ai`` is imported only when
+    ``register()`` is actually invoked.
     """
     from plugins.petri_audit.targets import geode_target
 
-    assert hasattr(geode_target, "make_geode_target_agent")
-    assert hasattr(geode_target, "_run_geode_loop")
+    assert hasattr(geode_target, "register")
     assert hasattr(geode_target, "_to_geode_messages")
     assert hasattr(geode_target, "_default_geode_runner")
+    assert hasattr(geode_target, "GeodeRunner")
 
 
 @pytest.mark.skipif(
     _AUDIT_INSTALLED,
     reason="[audit] extra installed — ImportError path covers absent-extra case",
 )
-def test_factory_raises_import_error_without_audit_extra() -> None:
-    """``make_geode_target_agent()`` requires the ``[audit]`` extra installed."""
-    from plugins.petri_audit.targets.geode_target import make_geode_target_agent
+def test_register_raises_import_error_without_audit_extra() -> None:
+    """``register()`` requires the ``[audit]`` extra installed."""
+    from plugins.petri_audit.targets.geode_target import register
 
     with pytest.raises(ImportError):
-        make_geode_target_agent()
+        register()
 
 
 def test_default_runner_is_p3_stub() -> None:
     """Default runner is intentionally not implemented before P3."""
     from plugins.petri_audit.targets.geode_target import _default_geode_runner
 
-    with pytest.raises(NotImplementedError, match="P2-b stub"):
+    with pytest.raises(NotImplementedError, match="P2-d stub"):
         asyncio.run(_default_geode_runner(messages=[]))
 
 
@@ -92,7 +89,7 @@ def test_petri_audit_does_not_register_domain() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tier 2 — conversion + runner injection (duck typed, no [audit] extra)
+# Message conversion (duck typed, no [audit] extra)
 # ---------------------------------------------------------------------------
 
 
@@ -142,32 +139,3 @@ def test_to_geode_messages_treats_missing_text_as_empty() -> None:
 
     out = _to_geode_messages([_NoText()])
     assert out == [{"role": "user", "content": ""}]
-
-
-def test_run_geode_loop_calls_injected_runner_with_converted_messages() -> None:
-    """``_run_geode_loop`` converts then forwards to the injected runner."""
-    from plugins.petri_audit.targets.geode_target import _run_geode_loop
-
-    captured: list[list[dict]] = []
-
-    async def fake_runner(messages: list[dict]) -> str:
-        captured.append(messages)
-        return "mock-response"
-
-    out = asyncio.run(
-        _run_geode_loop(
-            [_FakeMsg(role="user", text="probe")],
-            runner=fake_runner,
-        )
-    )
-
-    assert out == "mock-response"
-    assert captured == [[{"role": "user", "content": "probe"}]]
-
-
-def test_run_geode_loop_falls_back_to_default_runner_when_none() -> None:
-    """No runner injected → default runner runs (and currently raises)."""
-    from plugins.petri_audit.targets.geode_target import _run_geode_loop
-
-    with pytest.raises(NotImplementedError, match="P2-b stub"):
-        asyncio.run(_run_geode_loop([_FakeMsg(role="user", text="x")]))
