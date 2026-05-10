@@ -231,24 +231,52 @@ def test_geode_5axes_yaml_is_subset_of_inspect_petri_36() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_estimate_cost_uses_model_pricing() -> None:
-    """Estimate scales linearly with seeds × max_turns."""
+def test_estimate_cost_scales_linearly_in_seeds() -> None:
+    """N4 invariant: doubling ``seeds`` doubles the estimate (judge +
+    auditor + target are all per-sample after calibration)."""
     one = estimate_cost_usd(
         judge="claude-haiku-4-5-20251001",
         auditor="claude-sonnet-4-6",
         target="claude-opus-4-7",
         seeds=1,
-        max_turns=1,
+        max_turns=10,
     )
-    ten = estimate_cost_usd(
+    two = estimate_cost_usd(
         judge="claude-haiku-4-5-20251001",
         auditor="claude-sonnet-4-6",
         target="claude-opus-4-7",
         seeds=2,
-        max_turns=5,
+        max_turns=10,
     )
     assert one > 0
-    assert ten == pytest.approx(one * 10)
+    assert two == pytest.approx(one * 2)
+
+
+def test_estimate_cost_max_turns_only_scales_per_turn_portion() -> None:
+    """N4 invariant: max_turns scales auditor + target (per-turn) but
+    not judge (per-sample). Pre-N4 the estimator multiplied judge by
+    max_turns × calls_per_turn, which over-estimated 5× — see N6-followup
+    audit's 38% landing zone."""
+    short = estimate_cost_usd(
+        judge="claude-haiku-4-5-20251001",
+        auditor="claude-sonnet-4-6",
+        target="claude-opus-4-7",
+        seeds=1,
+        max_turns=5,
+    )
+    long = estimate_cost_usd(
+        judge="claude-haiku-4-5-20251001",
+        auditor="claude-sonnet-4-6",
+        target="claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+    )
+    # Doubling max_turns must NOT double the cost — judge is fixed per
+    # sample, so the ratio sits between 1× (judge-dominant) and 2×
+    # (turn-dominant). Anywhere in that range proves the per-sample
+    # judge wiring is in place.
+    assert long > short
+    assert long < short * 2
 
 
 def test_estimate_cost_unknown_returns_nan() -> None:
@@ -405,8 +433,52 @@ def test_run_audit_user_declines(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_default_token_assumptions_are_conservative() -> None:
-    """Sanity: assumption fields in expected ranges so future tweaks don't silently break cost gate."""
+    """N4 calibration: per-turn vs per-sample fields must be > 0 so a
+    cost gate cannot accidentally read 0 and let a paid run through.
+
+    The exact values shift as more live runs accumulate (revisit on
+    every Phase-2x summary); the structural invariant is the only
+    thing this test pins.
+    """
     a = DEFAULT_TOKEN_ASSUMPTIONS
     assert a.geode_amplifier >= 1
-    assert a.judge_calls_per_turn >= 0
-    assert a.auditor_in > 0 and a.target_in > 0 and a.judge_in > 0
+    assert a.judge_calls_per_sample > 0
+    assert a.auditor_in_per_turn > 0 and a.target_in_per_turn > 0
+    assert a.judge_in_per_sample > 0
+    assert a.auditor_out_per_turn > 0 and a.target_out_per_turn > 0
+    assert a.judge_out_per_sample > 0
+
+
+def test_n4_estimator_lands_within_landing_zone_for_known_runs() -> None:
+    """N4 calibration target: live cost ÷ estimate ∈ [0.30, 1.50] for
+    the 9-sample aggregate gathered through 2026-05-11.
+
+    Historical landing zones (estimate / actual / ratio):
+
+    | Run | Estimate USD | Actual USD | Actual / Estimate |
+    |-----|-------------|------------|-------------------|
+    | N6-followup (1 sample, max_turns 10) | $1.44 | $0.55 | 0.38 |
+    | N7' first run (3 samples, max_turns 10) | ≈$3.99 | $0.49 | 0.12 |
+    | N7' boost (1 sample, max_turns 10, openai) | $0.82 | ~$0.05 | 0.06 |
+    | N8 (5 samples, max_turns 10, openai) | $4.09 | ~$0.24 | 0.06 |
+
+    Pre-N4 the ratios sat at 0.06-0.38 — extreme over-conservatism
+    driven by judge_calls_per_turn × max_turns (5×) plus geode_amplifier
+    (5×). Post-N4 we want the same runs to land in [0.3, 1.5].
+    Anchored on N6-followup (anthropic stack, single sample) because
+    it has the cleanest cost telemetry.
+    """
+    n6_estimate = estimate_cost_usd(
+        judge="claude-haiku-4-5-20251001",
+        auditor="claude-sonnet-4-6",
+        target="claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+    )
+    actual_n6 = 0.55
+    ratio = actual_n6 / n6_estimate
+    assert 0.30 <= ratio <= 1.50, (
+        f"N6-followup landing zone broken: actual ${actual_n6:.2f} / "
+        f"estimate ${n6_estimate:.2f} = {ratio:.2f}, want 0.30-1.50. "
+        "Re-tune TokenAssumptions or update the historical anchor."
+    )

@@ -48,19 +48,34 @@ USD_TO_KRW: int = 1_400
 class TokenAssumptions:
     """Per-turn token budget used by the cost estimator.
 
-    Calibrated to be conservative on the high side so a real audit
-    landing under the estimate is the common case. Values to revisit
-    after the first P3-b-2 live run produces actual numbers.
+    N4 calibration (2026-05-11) — N6-followup + N7' + N8 the 9-sample
+    aggregate (4 anthropic + 5 openai) shaped the new defaults:
+
+    | role | per-sample tokens (mean) | per-turn baseline |
+    |------|--------------------------|-------------------|
+    | auditor (sonnet/gpt-5.4-mini) | in≈3K, out≈1.5K | 0.3K / 0.15K × max_turns |
+    | target (opus / gpt-5.4) | 9 calls × max_turns | amplifier 1 (1 call/turn) |
+    | judge | in≈3K, out≈1.4K (1 call/sample) | judge_calls_per_sample |
+
+    Old defaults treated judge as ``calls_per_turn`` × max_turns which
+    over-estimated 5×: inspect-petri's ``audit_judge`` runs once per
+    sample on the full transcript. The new ``judge_calls_per_sample``
+    field encodes that. ``geode_amplifier`` was 5 (target × 5 sub-LLM
+    calls); the live runs show 1 call/turn × max_turns is closer.
+
+    Estimator landing zone after N4: live cost is 30-100% of estimate
+    (vs the pre-N4 8-38%). Still conservative on the high side so a
+    real run under the estimate stays the common case.
     """
 
-    auditor_in: int = 2_000
-    auditor_out: int = 800
-    target_in: int = 1_500
-    target_out: int = 600
-    judge_in: int = 4_000
-    judge_out: int = 200
-    geode_amplifier: int = 5
-    judge_calls_per_turn: float = 0.5
+    auditor_in_per_turn: int = 500
+    auditor_out_per_turn: int = 400
+    target_in_per_turn: int = 1_500
+    target_out_per_turn: int = 1_500
+    judge_in_per_sample: int = 6_000
+    judge_out_per_sample: int = 2_000
+    geode_amplifier: int = 1
+    judge_calls_per_sample: float = 1.0
 
 
 DEFAULT_TOKEN_ASSUMPTIONS = TokenAssumptions()
@@ -195,15 +210,22 @@ def estimate_cost_usd(
     if pa is None or pt is None or pj is None:
         return math.nan
 
-    auditor_cost = pa.input * assumptions.auditor_in + pa.output * assumptions.auditor_out
-    target_cost = (
-        pt.input * assumptions.target_in + pt.output * assumptions.target_out
-    ) * assumptions.geode_amplifier
-    judge_cost = assumptions.judge_calls_per_turn * (
-        pj.input * assumptions.judge_in + pj.output * assumptions.judge_out
+    # N4 calibration: auditor + target are per-turn, judge is per-sample.
+    # Pre-N4 estimator multiplied judge by max_turns × judge_calls_per_turn
+    # which over-estimated 5× (inspect-petri's audit_judge fires once per
+    # sample on the full transcript, not per turn).
+    auditor_per_turn = (
+        pa.input * assumptions.auditor_in_per_turn + pa.output * assumptions.auditor_out_per_turn
     )
-    per_turn = auditor_cost + target_cost + judge_cost
-    return seeds * max_turns * per_turn
+    target_per_turn = (
+        pt.input * assumptions.target_in_per_turn + pt.output * assumptions.target_out_per_turn
+    ) * assumptions.geode_amplifier
+    per_sample_turn_cost = (auditor_per_turn + target_per_turn) * max_turns
+    judge_per_sample = assumptions.judge_calls_per_sample * (
+        pj.input * assumptions.judge_in_per_sample + pj.output * assumptions.judge_out_per_sample
+    )
+    per_sample = per_sample_turn_cost + judge_per_sample
+    return seeds * per_sample
 
 
 def format_cost(estimated_usd: float) -> tuple[str, int]:
