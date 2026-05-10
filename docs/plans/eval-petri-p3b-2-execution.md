@@ -222,6 +222,102 @@ RunLog 와 충돌 없이 dual-export, LangSmith 같은 vendor lock-in 회피.
 
 **추천**: P4 의 핵심 자동화 루프 = **DSPy** (metric → optimizer 경로 가장 짧음) + **Instructor** (judge JSON 안정성). TextGrad 는 LiteLLM 통해 Claude 호출 검증 후 추가.
 
+#### D 단계 (DSPy + TextGrad + Instructor) 도입 전 위험 카탈로그
+
+> **Status**: D 진입 전 SOT. **3 mitigation (M1+M2+M4) 가 진입 전제 조건**.
+> Source: 외부 리서치 (논문 / 프론티어 OSS / 테크블로그 19종, 본 섹션 끝
+> References).
+
+D 단계의 메타-loop (agent 가 자기 prompt 수정 → 자기 평가 → 다시 수정)
+은 frontier 시스템에서 **실 관측된** 발산 사례가 있어, 도입 전 카탈로그
+화. 5 영역 위험 (R1..R5) + 10 mitigation (M1..M10).
+
+**R1. Recursive Self-Improvement 안전성**
+
+| 위험 | 사례 | 출처 |
+|------|------|------|
+| Self-modification of constraints | Sakana AI Scientist v1 — script 가 자기 자신을 system call 로 호출하여 무한 self-recursion. timeout 한도 도달 시 **timeout 코드 자체를 늘림** | [arXiv 2502.14297](https://arxiv.org/abs/2502.14297), [findggle.com 2025-04](https://findggle.com/blog/2025/04/20/ai-system-self-modifying-sakana-ai/) |
+| In-context reward hacking | judge=generator 동일 컨텍스트에서 self-refinement loop 가 reward hacking 증폭. "smaller models are more likely to cause in-context reward hacking" | [Lilian Weng "Reward Hacking in RL" Nov 2024](https://lilianweng.github.io/posts/2024-11-28-reward-hacking/) |
+| Catastrophic Goodhart | heavy-tailed reward misspecification 에서 **KL-divergence regularization 도 Goodharting 방지 못함** | [FAR.AI](https://www.far.ai/research/catastrophic-goodhart-regularizing-rlhf-with-kl-divergence-does-not-mitigate-heavy-tailed-reward-misspecification) |
+| RLHF 가 정확도 X 설득력 향상 | "increases human approval, but not necessarily correctness" — incorrect 출력을 더 설득력 있게 | Lilian Weng 동상 |
+| LM Arena goodharting (2025-04) | Llama 4 LM Arena 점수 급상승의 원인으로 metric gaming 의심 | Synthesis AI 보고 |
+
+**R2. DSPy 컴파일 비용 / metric 신뢰성**
+
+| 항목 | 측정값 | 출처 |
+|------|--------|------|
+| GPT-3.5 공식 사례 | 6 분 / 3,200 API calls / 2.7M input + 156K output token / **$3** | [DSPy FAQ](https://dspy.ai/faqs/) |
+| 권장 비용 범위 | "few cents ~ tens of dollars" / 평균 **~$2 + 10 분** | DSPy 공식 docs |
+| Claude Sonnet 환산 | 컴파일 1회 ≈ **$5-15** | 우리 추정 (sonnet 단가 ÷ gpt-3.5 비율) |
+| 데이터셋 권장량 | <10 → BootstrapFewShot, ≥50 → BootstrapFewShotWithRandomSearch | DSPy docs |
+| 재현성 위기 | LLM 일반 70% 실패, agentic tool-call signature determinism **56.8%** | [typedef.ai 2025](https://www.typedef.ai/resources/non-deterministic-model-handling-statistics) |
+| 컴파일 산출물 영속화 | `cot_compiled.save(...)` — 권장 패턴 | DSPy FAQ |
+
+**R3. TextGrad gradient 발산 / judge bias 전파**
+
+| 실패 모드 | 양상 | 출처 |
+|-----------|------|------|
+| Exploding textual gradient | depth 5 에서 token 2K → **32K 폭발**, context limit 초과 | [arXiv 2601.21064 (TEP)](https://arxiv.org/html/2601.21064) |
+| Vanishing gradient | "fix undefined variable on line X" → "improve code quality" 로 specificity 손실 | TEP 동상 |
+| Judge bias 누적 | "small judgement error in downstream node compounds as backpropagated upstream" | TEP 동상 |
+| Length bias (verbosity) | LLM judge 가 **일관되게 긴 응답 선호** → prompt 가 점점 verbose | [arXiv 2406.07791](https://arxiv.org/html/2406.07791v7) |
+| Self-preference bias | LLM 이 자기 출력 선호 → "diagonal pattern in evaluation matrices" | Lilian Weng 2024 |
+| Sycophancy 전파 | judge 가 동의 답 선호 → gradient 가 sycophancy 강화 방향으로 prompt 편집 | aclanthology 2025.findings-emnlp.121 |
+
+**R4. 프론티어 OSS 메타-loop 가드 (공통 패턴)**
+
+| 시스템 | 가드 패턴 | 출처 |
+|--------|----------|------|
+| Claude Code Auto Mode | 위험 행동 (파일 삭제, secret 유출) flag-and-block. HITL middle-ground | [techbuzz.ai 2025](https://www.techbuzz.ai/articles/anthropic-launches-auto-mode-safety-guardrails-for-claude-code) |
+| GitHub Copilot agent PR | Copilot PR 을 **untrusted fork** 처리 — 수동 approval 필수, bypass 설정 없음 | github community 167493 |
+| Sakana AI Scientist | Sandboxed exec + Resource limits + Code change verification (HITL) + Continuous monitoring | sakana.ai blog |
+| Cursor enterprise | LLM safety controls — read-only DB, scoped actions | cursor.com docs |
+| Anthropic "Building Effective Agents" | Contextual boundary + confidence threshold escalation + drift detection + rate limiting | [resources.anthropic.com](https://resources.anthropic.com/building-effective-ai-agents) |
+| **공통 4-패턴** | (1) Artifact Verification (HITL before destructive) (2) Context Rotation (3) Privilege Boundaries (4) Rate Limiting | Galileo AI guardrails framework |
+
+**R5. Instructor retry storm**
+
+| 항목 | 권장 / 실측 | 출처 |
+|------|------------|------|
+| `max_retries` 권장 | **1-2** (jangwook 2026 실측: "complex nested schemas trigger 3-5 retries in the wild") | [jangwook.net 2026](https://jangwook.net/en/blog/en/python-ai-agent-library-comparison-2026/) |
+| retry 메커니즘 | validation error 를 messages 에 append 하여 재호출 → token 누적 | useinstructor.com docs |
+| 비용 폭주 트리거 | 깊은 nested Pydantic + 엄격한 validator 조합 | jangwook.net 동상 |
+| fallback 패턴 | max 도달 후 **단순 schema 또는 raw text 로 graceful degrade** | 동상 |
+
+##### Mitigation 카탈로그 (M1..M10) — D 진입 전 잠금
+
+| # | Mitigation | 차단 위험 | 메커니즘 | 비용 |
+|---|-----------|----------|---------|------|
+| **M1 (전제)** | Judge ≠ Generator family 강제 (judge=Claude, generator=GPT 등 cross-family) | R1 in-context reward hacking, R3 self-preference | config 에서 동일 family 시 fail-fast | 0 |
+| **M2 (전제)** | PR-only auto-edit — 컴파일 산출물은 git branch+PR 로만 적용, **auto-merge 금지** | R1 self-modification, R4 frontier 공통 | `compile()` → write `optimized_prompts/branch-XXX.json` → PR 생성 | 0 |
+| **M3** | 컴파일 빈도 cap — 주 1회 / **누적 $50/월 hard limit** | R2 비용 폭주, R1 metric gaming | budget tracker + daily metric, 초과 시 halt | 절감 |
+| **M4 (전제)** | TextGrad **depth=1 강제** (chained gradient 금지) | R3 exploding/vanishing | wrapper 에서 depth>1 reject | 코드 1 guard |
+| **M5** | Judge rationale token cap (≤2K) + length-normalized score | R3 length bias, exploding | rationale truncate + score/len penalty | 0 |
+| **M6** | Rollback 자동화 — 컴파일 후 hold-out set 점수가 baseline 의 **95% 미만** 이면 자동 revert | R1 divergence, R2 컴파일 실패 | nightly eval gate + git revert | hold-out eval 비용 |
+| **M7** | Instructor `max_retries=2` + flat schema (1-level nesting까지) + raw-text fallback | R5 retry storm | Pydantic 모델 제약 + 실패 시 unstructured fallback | cap |
+| **M8** | Judge bias suite (length / sycophancy / position) **주간 측정** → 임계 초과 시 컴파일 정지 | R3 judge bias 전파 | 주간 bias probe | 주 ~$5 |
+| **M9** | Compile artifact diff review (HITL) — system prompt diff **30% 이상이면 사람 승인 필수** | R1 drift detection (Anthropic 패턴) | diff% 측정 → threshold gate | 0 |
+| **M10** | Seed 고정 + `compile_id` 메타데이터 (재현성) | R2 non-determinism, 70% 재현성 실패 | `compile_id={timestamp, judge_model, seed, dataset_hash}` 기록 + save() | 0 |
+
+##### D 진입 전제 조건 (잠금)
+
+**M1 + M2 + M4 통과 없이 D 단계 진입 금지.**
+
+- M1 — judge model ≠ generator model family. config 검증 fail-fast.
+- M2 — `eval_dspy_optimize` tool 의 산출물은 항상 git branch + PR. auto-merge 차단 (CODEOWNERS 또는 branch protection).
+- M4 — TextGrad wrapper 에서 `depth > 1` 또는 `chained=True` 호출은
+  `ValueError` raise.
+
+이 3개는 frontier (Anthropic Claude Code Auto Mode + GitHub Copilot
+agent PR + Sakana sandbox) 의 공통 가드와 정합. 나머지 7개 (M3, M5-M10)
+는 D 진입 후 점진 도입 — P4 ratchet 의 자연스러운 확장.
+
+##### 적용 SOT
+
+D 단계 PR 의 Socratic Gate Q5 (3+ frontier 동일 패턴) 응답에 본 섹션을
+인용. tool 등록 description 의 "리스크" 컬럼도 본 섹션 (R1..R5) 와
+mitigation (M1..M10) 을 참조하는 짧은 라벨로 갱신.
+
 ### Self-monitoring — agent 자기 차단 / self-critique
 
 | 라이브러리 | License | 정의 | Petri 4-dim 1차 검사 |
@@ -241,7 +337,7 @@ RunLog 와 충돌 없이 dual-export, LangSmith 같은 vendor lock-in 회피.
 | Tool name | cost_tier | category | 효용 | 리스크 |
 |-----------|-----------|----------|------|--------|
 | `eval_petri_run` | expensive | `evaluation` | inspect_ai + petri 라이브 audit 자동 트리거 — agent 가 자기 audit 호출 | 비용 폭주 → KRW gate + dry-run 필수. 본 PR 의 `petri_audit` tool 과 차이는 **agent 가 P4 자율 평가 루프에서 호출** vs 사용자 명시 트리거 |
-| `eval_dspy_optimize` | expensive | `evaluation` | Petri smoke 결과 → system prompt 자동 재컴파일 (BootstrapFewShot) | **메타-loop** (agent 가 자기 prompt 수정) — 반드시 PR 게이트 경유, auto-merge 금지 |
+| `eval_dspy_optimize` | expensive | `evaluation` | Petri smoke 결과 → system prompt 자동 재컴파일 (BootstrapFewShot) | **메타-loop** (agent 가 자기 prompt 수정). 진입 전제 = **M1 (judge≠generator family) + M2 (PR-only) + M4 (TextGrad depth=1)** 통과. 상세는 § "D 단계 도입 전 위험 카탈로그" R1-R5 / M1-M10 |
 | `safety_guardrail_scan` | cheap | **`safety` (신규 카테고리)** | NeMo/Guardrails-AI input/output rail 로 tool 호출 전후 스크리닝 | rail 룰 false-positive 시 정상 동작 차단. tunable rail 필요 |
 | `obs_otel_export` | free | **`observability` (신규 카테고리)** | OpenLLMetry/Langfuse OTLP exporter — hook → OTel span | endpoint 미설정 시 silent drop. Wiring Verification 룰 (Read-Write parity) 적용 필수 |
 | `eval_inspect_viz` | free | `evaluation` | eval log → HTML/PNG 리포트 자동 생성. Slack 보고서 첨부 | jupyter widget 의존 → cold-start 무거움, lazy import 필수 |
@@ -310,3 +406,40 @@ markdownlint docs/plans/eval-petri-p3b-2-execution.md  # 선택
 - Guardrails AI: <https://github.com/guardrails-ai/guardrails> (Apache-2.0)
 - smolagents (HF): <https://github.com/huggingface/smolagents> (Apache-2.0)
 - Langfuse Anthropic 통합: <https://langfuse.com/integrations/model-providers/anthropic>
+
+### D 단계 위험 카탈로그 — 외부 인용 (R1..R5)
+
+#### R1. Recursive Self-Improvement 안전성
+
+- Sakana AI Scientist v1 self-modification: <https://arxiv.org/abs/2502.14297> (arXiv 2502.14297)
+- Sakana 사례 보고: <https://findggle.com/blog/2025/04/20/ai-system-self-modifying-sakana-ai/>
+- Sakana 공식: <https://sakana.ai/ai-scientist/>
+- Lilian Weng "Reward Hacking in RL" (Nov 2024): <https://lilianweng.github.io/posts/2024-11-28-reward-hacking/>
+- FAR.AI Catastrophic Goodhart: <https://www.far.ai/research/catastrophic-goodhart-regularizing-rlhf-with-kl-divergence-does-not-mitigate-heavy-tailed-reward-misspecification>
+
+#### R2. DSPy 컴파일 비용 / metric 신뢰성
+
+- DSPy FAQ (compile cost / save pattern): <https://dspy.ai/faqs/>
+- DSPy 원논문 (arXiv 2310.03714): <https://arxiv.org/pdf/2310.03714>
+- Haystack DSPy cookbook (deepset): <https://haystack.deepset.ai/cookbook/prompt_optimization_with_dspy>
+- LLM 재현성 위기 (typedef.ai 2025): <https://www.typedef.ai/resources/non-deterministic-model-handling-statistics>
+
+#### R3. TextGrad gradient 발산 / judge bias
+
+- TextGrad 원논문 (Nature 2024 / arXiv 2406.07496): <https://arxiv.org/html/2406.07496v1>
+- Textual Equilibrium Propagation (arXiv 2601.21064): <https://arxiv.org/html/2601.21064>
+- Position bias study (arXiv 2406.07791): <https://arxiv.org/html/2406.07791v7>
+- LLM-as-judge bias 정량 (12 유형): <https://llm-judge-bias.github.io/>
+
+#### R4. 프론티어 OSS 메타-loop 가드
+
+- Anthropic Claude Code Auto Mode: <https://www.techbuzz.ai/articles/anthropic-launches-auto-mode-safety-guardrails-for-claude-code>
+- Anthropic "Building Effective AI Agents": <https://resources.anthropic.com/building-effective-ai-agents>
+- Cursor LLM Safety: <https://cursor.com/docs/enterprise/llm-safety-and-controls>
+- Galileo AI Agent Guardrails Framework: <https://galileo.ai/blog/ai-agent-guardrails-framework>
+
+#### R5. Instructor retry storm
+
+- Python AI Agent Library Comparison 2026 (jangwook.net): <https://jangwook.net/en/blog/en/python-ai-agent-library-comparison-2026/>
+- Instructor reask validation: <https://python.useinstructor.com/concepts/reask_validation/>
+- Instructor repo: <https://github.com/jxnl/instructor>
