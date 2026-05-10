@@ -65,6 +65,10 @@ EXPENSIVE_TOOLS: dict[str, float] = {
     # ``plugins.petri_audit.runner.estimate_cost_usd`` and shown next to
     # the [Y/n] prompt; this number only needs to flip the gate on.
     "petri_audit": 5.00,
+    # DSPy prompt re-compile (D 단계). Anchored to plan § R2 — Sonnet-class
+    # compile averages $5-15. Real estimate / budget cap lives in
+    # ``plugins.petri_audit.optimize`` (M3).
+    "eval_dspy_optimize": 12.00,
 }
 
 # Bash commands starting with these prefixes are safe (read-only, no side effects).
