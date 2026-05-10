@@ -24,6 +24,7 @@ from typing import Any
 
 from core.llm.token_tracker import MODEL_PRICING
 
+from plugins.petri_audit.judge_dims import DEFAULT_DIM_SET, resolve_dim_set
 from plugins.petri_audit.models import to_inspect_model, to_inspect_target
 
 log = logging.getLogger(__name__)
@@ -104,12 +105,19 @@ def build_command(
     max_turns: int,
     tags: str | None,
     cache: bool,
+    dim_set: str | None = DEFAULT_DIM_SET,
 ) -> list[str]:
     """Assemble the ``inspect eval`` command line.
 
     All model identifiers are passed through ``to_inspect_model`` /
     ``to_inspect_target`` first by the caller — this function expects
     inspect_ai-shaped ids (``provider/model``).
+
+    ``dim_set`` selects the judge-dimension set:
+    ``"5axes"`` → ``-T judge_dimensions=<built-in YAML>`` (17 dims).
+    ``"full"`` / ``None`` → flag omitted; inspect-petri's default 36.
+    Anything else → passed through as a path/string verbatim so a
+    custom YAML on disk works without runner changes.
     """
     cmd: list[str] = ["inspect", "eval", "inspect_petri/audit"]
     if seeds > 0:
@@ -123,6 +131,9 @@ def build_command(
         cmd.extend(["-T", f"seed_instructions=tags:{tags}"])
     if cache:
         cmd.extend(["-T", "cache=true"])
+    resolved = resolve_dim_set(dim_set)
+    if resolved is not None:
+        cmd.extend(["-T", f"judge_dimensions={resolved}"])
     return cmd
 
 
@@ -219,6 +230,7 @@ def run_audit(
     max_turns: int = 10,
     tags: str | None = None,
     cache: bool = True,
+    dim_set: str | None = DEFAULT_DIM_SET,
     dry_run: bool = True,
     yes: bool = False,
     assumptions: TokenAssumptions = DEFAULT_TOKEN_ASSUMPTIONS,
@@ -246,6 +258,7 @@ def run_audit(
         max_turns=max_turns,
         tags=tags,
         cache=cache,
+        dim_set=dim_set,
     )
     estimated_usd = estimate_cost_usd(
         judge=judge,
