@@ -51,6 +51,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docs/plans/eval-petri-p3b-2-execution.md` 보강 — Reporting/Viz
+  + Future tooling 라이브러리 카탈로그 + P4 own-evaluator 신규 tool
+  후보.**
+  - § Reporting & Visualization: phase 별 5종 도표 (heatmap / cost /
+    tool-freq / agreement / trend) + 라이브러리 채택 우선순위
+    (inspect_viz P1 / matplotlib P2 / plotly P3) + 보고 산출물 트리.
+  - § Future tooling — Library candidates (P4): observability
+    (OpenLLMetry / Langfuse / AgentOps / Phoenix-ELv2), reasoning
+    engineering (DSPy / TextGrad / Instructor / Mirascope, Outlines
+    는 Claude 미지원으로 제외), self-monitoring (NeMo Guardrails /
+    Guardrails AI / LLM Guard / smolagents / Constitutional AI 패턴).
+  - § P4 신규 tool 후보 5종 (`eval_petri_run`, `eval_dspy_optimize`,
+    `safety_guardrail_scan`, `obs_otel_export`, `eval_inspect_viz`)
+    — 각각 cost_tier / category / 효용 / 리스크. 신규 카테고리
+    `safety` / `observability` 도 P4 진입 시 `VALID_CATEGORIES`
+    추가 예고.
+  - 도입 비용 표 (cold-start 영향 / 의존성 충돌) 와 optional extra
+    격리 정책 (v0.89.x cold-start ratchet 보호) 명시.
+  - 본 PR 은 카탈로그 SOT 화만 — 실제 의존성 추가 / tool 등록은
+    P4 진입 시 별도 Socratic Gate.
+
 - **`docs/plans/eval-petri-p3b-2-execution.md` — Petri 라이브 audit
   smoke (P3-b-2a) 실행 계획서.**
   - Phase 단독 진입 (1 seed × 4 dim × 5 turn ≈ 3,724 KRW, < 5K KRW gate).
