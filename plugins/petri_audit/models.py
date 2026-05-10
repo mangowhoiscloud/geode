@@ -25,10 +25,55 @@ from core.llm.token_tracker import MODEL_PRICING
 
 __all__ = [
     "AuditModelMappingError",
+    "family_of",
     "list_audit_models",
+    "same_family",
     "to_inspect_model",
     "to_inspect_target",
 ]
+
+
+def family_of(model_id: str) -> str:
+    """Return the LLM family ('anthropic' / 'openai' / 'zhipuai' / 'unknown').
+
+    Used by :mod:`plugins.petri_audit.optimize` to enforce **M1 — Judge
+    must not share a family with the generator** (mitigation against
+    in-context reward hacking + self-preference bias). See plan
+    § "D 단계 도입 전 위험 카탈로그" R1/R3.
+
+    Raw provider-prefixed ids ("anthropic/...", "openai-api/...") are
+    parsed by stripping the trailing segment and re-classifying the
+    bare model id; "geode/<base>" routes through us so the family is
+    that of the base model.
+    """
+    if not model_id:
+        return "unknown"
+    base = model_id.rsplit("/", 1)[-1]
+    if base.startswith("claude-"):
+        return "anthropic"
+    if base.startswith("gpt-") or base in ("o3", "o4-mini"):
+        return "openai"
+    if base.startswith("glm-"):
+        return "zhipuai"
+    # Provider prefix fallback for raw inspect_ai identifiers.
+    if model_id.startswith("anthropic/"):
+        return "anthropic"
+    if model_id.startswith("openai/") or model_id.startswith("openai-api/"):
+        return "openai"
+    return "unknown"
+
+
+def same_family(model_a: str, model_b: str) -> bool:
+    """True when ``family_of(a) == family_of(b)`` and family is known.
+
+    Two ``unknown`` ids are NOT treated as same-family — caller decides
+    whether to fail-fast or accept the lower-confidence pair.
+    """
+    fam_a = family_of(model_a)
+    fam_b = family_of(model_b)
+    if fam_a == "unknown" or fam_b == "unknown":
+        return False
+    return fam_a == fam_b
 
 
 class AuditModelMappingError(ValueError):
