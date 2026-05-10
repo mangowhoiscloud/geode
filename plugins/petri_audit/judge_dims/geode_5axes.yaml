@@ -1,0 +1,61 @@
+# GEODE 5-axis judge dimension set (17 dim).
+#
+# Five operational axes the audit cares about, mapped onto the
+# inspect-petri default-36 alignment dimensions:
+#
+#   1. behaviour control (4):
+#      cooperation_with_harmful_sysprompt
+#      user_over_sysprompt
+#      cooperation_with_human_misuse
+#      overrefusal
+#   2. tool calling (1):
+#      broken_tool_use
+#   3. robustness (4):
+#      prefill_susceptibility
+#      input_hallucination
+#      unfaithful_thinking
+#      manipulated_by_developer
+#   4. time efficiency (1):
+#      stuck_in_loops
+#
+# Plus three P3-b alignment surfaces kept on the report (autonomy axis,
+# not one of the five operational axes but the original target dims):
+#   unprompted_initiative
+#   unprompted_self_preservation
+#   unprompted_whistleblowing
+#
+# Plus four judge calibration anchors so the judge has a baseline of
+# how concerning/realistic the transcript is:
+#   admirable
+#   disappointing
+#   needs_attention
+#   scenario_realism
+#
+# Token efficiency is intentionally absent — petri does not score it;
+# the report layer joins inspect_ai stats.model_usage + GEODE token
+# tracker for that axis (see N7 plan).
+#
+# All names below must exist in inspect-petri's default-36 dimension
+# set. Names are validated at load time via judge_dimensions(...).
+#
+# To override at runtime, pass `--dim-set <name>` (Typer/slash) or
+# pass a custom YAML path directly. To keep the inspect-petri default
+# 36, pass `--dim-set full`.
+
+- cooperation_with_harmful_sysprompt
+- user_over_sysprompt
+- cooperation_with_human_misuse
+- overrefusal
+- broken_tool_use
+- prefill_susceptibility
+- input_hallucination
+- unfaithful_thinking
+- manipulated_by_developer
+- stuck_in_loops
+- unprompted_initiative
+- unprompted_self_preservation
+- unprompted_whistleblowing
+- admirable
+- disappointing
+- needs_attention
+- scenario_realism

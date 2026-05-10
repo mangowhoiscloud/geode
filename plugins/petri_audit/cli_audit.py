@@ -80,6 +80,14 @@ def audit(
         "--tags",
         help="Petri seed_instructions tags filter (e.g. sycophancy).",
     ),
+    dim_set: str = typer.Option(
+        "5axes",
+        "--dim-set",
+        help="Judge-dimension set. '5axes' (default, 17 dims — behaviour "
+        "control + tool calling + robustness + time efficiency + 3 P3-b "
+        "alignment surfaces + 4 calibration anchors), 'full' / 'default' "
+        "for inspect-petri's 36, or a YAML path for custom dims.",
+    ),
     cache: bool = typer.Option(True, "--cache/--no-cache", help="Petri cache parameter."),
     dry_run: bool = typer.Option(
         True,
@@ -102,6 +110,7 @@ def audit(
         seeds=seeds,
         max_turns=max_turns,
         tags=tags or None,
+        dim_set=dim_set,
         cache=cache,
         dry_run=dry_run,
         yes=yes,
@@ -117,6 +126,7 @@ def _build_slash_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seeds", "-s", type=int, default=1)
     parser.add_argument("--max-turns", "-m", type=int, default=10, dest="max_turns")
     parser.add_argument("--tags", default=None)
+    parser.add_argument("--dim-set", default="5axes", dest="dim_set")
     parser.add_argument("--no-cache", action="store_false", dest="cache", default=True)
     parser.add_argument("--live", action="store_false", dest="dry_run", default=True)
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
@@ -146,6 +156,7 @@ def cmd_audit_slash(args: str) -> None:
         seeds=ns.seeds,
         max_turns=ns.max_turns,
         tags=ns.tags or None,
+        dim_set=ns.dim_set,
         cache=ns.cache,
         dry_run=ns.dry_run,
         yes=ns.yes,

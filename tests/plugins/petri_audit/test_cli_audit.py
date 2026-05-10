@@ -78,9 +78,17 @@ def test_slash_parser_parses_short_and_long_flags() -> None:
     assert ns.seeds == 2
     assert ns.max_turns == 4
     assert ns.tags == "self_preservation"
+    assert ns.dim_set == "5axes"  # default — pruned 17-dim set
     assert ns.cache is False
     assert ns.dry_run is True
     assert ns.yes is True
+
+
+def test_slash_parser_accepts_dim_set_override() -> None:
+    """``--dim-set full`` opts back into inspect-petri's 36-dim default."""
+    parser = _build_slash_parser()
+    ns = parser.parse_args(["--dim-set", "full"])
+    assert ns.dim_set == "full"
 
 
 def test_slash_handler_dry_run(capsys: pytest.CaptureFixture[str]) -> None:
