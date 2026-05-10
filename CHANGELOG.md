@@ -30,6 +30,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`plugins/petri_audit/targets/geode_target.py:_default_geode_runner`
+  asyncio nested-loop bug — `loop.run()` → `await loop.arun()` (N3 / C4).**
+  - inspect-petri 의 `target_agent` 가 async event loop 안에서
+    `GeodeModelAPI.generate(...)` 를 호출 → 우리 `_default_geode_runner`
+    (async) 가 `loop.run(last_user)` (= `asyncio.run(self.arun(...))`,
+    `core/agent/loop/loop.py:298-301`) 호출 → 항상 `RuntimeError:
+    asyncio.run() cannot be called from a running event loop` raise.
+  - inspect-petri 의 `replayable(generate, surface_errors=True)` 가
+    이 error 를 surface → auditor 가 모든 send_message 마다
+    `rollback_conversation` 으로 응답 → 38 dim 모두 baseline + GEODE
+    token tracker 0건. v2 (#988/#989) 의 "target metrics 미관측"
+    미스터리의 root cause.
+  - fix: `result = loop.run(last_user)` → `result = await loop.arun(
+    last_user)`. 직접 호출 재현 ($0.0002, claude-opus-4-6, in=3 out=6)
+    으로 LLM call + token tracker 갱신 둘 다 정상화 검증.
+  - regression guard: `tests/plugins/petri_audit/test_skeleton.py
+    ::test_default_runner_uses_async_arun_not_sync_run` — source 검사
+    로 sync `loop.run(...)` 재도입 차단.
+
 - **`core/llm/providers/codex.py` + `core/llm/providers/glm.py` —
   `agentic_call` dual-record 제거.**
   - Provider layer 의 `get_tracker().record(...)` 호출 제거. 동일 응답이
@@ -50,6 +69,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     (regression guard).
 
 ### Added
+
+- **`docs/audits/2026-05-10-petri-2a-n3-async-fix.md` (N3) — v2 target
+  metrics 0회의 C4 가설 confirmed + asyncio fix 보고서.**
+  - 가설 검증 매트릭스 (C1-C4) — C4 만 confirmed.
+  - 직접 호출 재현 결과 (RuntimeError before / `'pong'` + tracker 1건
+    after).
+  - 다음 단계 (N3a-followup): fix 후 1 sample 라이브 (~1,862 KRW)
+    로 target signal 첫 관측 시도. 사용자 cost 재승인 후 별도 세션.
 
 - **`docs/audits/2026-05-10-petri-2a-v2.md` (N2) — Phase-2a v2 라이브
   4-run 결과 (max_turns=10).**

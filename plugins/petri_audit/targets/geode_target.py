@@ -192,7 +192,14 @@ async def _default_geode_runner(messages: list[dict[str, Any]]) -> str:
         system_suffix=system_text,
     )
 
-    result = loop.run(last_user)
+    # ``loop.run()`` wraps ``asyncio.run(self.arun(...))`` which raises
+    # ``RuntimeError: asyncio.run() cannot be called from a running event
+    # loop`` whenever the caller is already inside one — and inspect-petri
+    # always invokes ``GeodeModelAPI.generate`` (async) inside the audit
+    # event loop. Calling the async ``arun`` directly avoids the nested
+    # loop and fixes the v2 N3 silent target-invocation failure
+    # (``docs/audits/2026-05-10-petri-2a-v2.md`` § C4).
+    result = await loop.arun(last_user)
     return result.text or ""
 
 
