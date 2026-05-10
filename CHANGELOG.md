@@ -51,6 +51,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docs/plans/eval-petri-p3b-2-execution.md` 보강 — D 단계 (DSPy +
+  TextGrad + Instructor) 도입 전 위험 카탈로그.**
+  - 5 위험 영역 (R1..R5):
+    - R1 Recursive Self-Improvement — Sakana AI Scientist v1 self-
+      modification (timeout 코드 자가 연장), in-context reward
+      hacking, Catastrophic Goodhart (KL regularization 도 막지 못함).
+    - R2 DSPy 컴파일 비용 — GPT-3.5 1회 = $3 / 6 분 / 2.7M token,
+      Claude Sonnet 환산 $5-15. 재현성 56.8%.
+    - R3 TextGrad 발산 — exploding gradient (depth 5 → 32K token),
+      length / self-preference / sycophancy bias 전파.
+    - R4 프론티어 OSS 가드 — Claude Code Auto Mode, GitHub Copilot
+      agent PR (untrusted-fork), Sakana sandbox, Cursor enterprise.
+      공통 4-패턴 (Artifact Verification + Context Rotation +
+      Privilege Boundaries + Rate Limiting).
+    - R5 Instructor retry storm — 권장 max_retries=2, complex nested
+      schema 가 3-5 retry 트리거.
+  - 10 mitigation (M1..M10), 그 중 3개 (M1+M2+M4) 가 **D 진입 전제
+    조건** 으로 잠금:
+    - M1 Judge ≠ Generator family 강제 (cross-family).
+    - M2 PR-only auto-edit (auto-merge 금지, branch protection /
+      CODEOWNERS).
+    - M4 TextGrad depth=1 강제 (chained gradient reject).
+  - 외부 인용 19개 (논문 / 프론티어 OSS / 테크블로그 / 정렬 연구) —
+    plan doc § "D 단계 위험 카탈로그 — 외부 인용" 에 R1..R5 별 분류.
+  - `eval_dspy_optimize` tool 후보 row 의 리스크 컬럼을 R1-R5 / M1-M10
+    참조로 갱신.
+  - 본 PR 자체는 plan SOT 화만. D 진입 시 M1+M2+M4 잠금을 코드/CI 로
+    실 enforce 하는 것은 별도 PR.
+
 - **P4 own-evaluator wiring — `[obs]` / `[viz]` extras + `obs_otel_export`
   / `eval_inspect_viz` tool + `core/observability/` + `plugins/
   petri_audit/viz.py`.**
