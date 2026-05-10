@@ -20,6 +20,7 @@ import math
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from core.llm.token_tracker import MODEL_PRICING
@@ -121,6 +122,12 @@ class AuditReport:
         }
 
 
+#: Allowed values for ``--target-tools``. Mirror inspect-petri's
+#: ``audit(target_tools=…)`` literal so a future inspect-petri version
+#: bump surfaces here as a typing error rather than a silent acceptance.
+TARGET_TOOLS_VALUES = ("synthetic", "fixed", "none")
+
+
 def build_command(
     *,
     judge: str,
@@ -132,6 +139,7 @@ def build_command(
     cache: bool,
     dim_set: str | None = DEFAULT_DIM_SET,
     seed_select: str | None = None,
+    target_tools: str = "none",
 ) -> list[str]:
     """Assemble the ``inspect eval`` command line.
 
@@ -142,16 +150,27 @@ def build_command(
     ``dim_set`` selects the judge-dimension set:
     ``"5axes"`` → ``-T judge_dimensions=<built-in YAML>`` (17 dims).
     ``"full"`` / ``None`` → flag omitted; inspect-petri's default 36.
-    Anything else → passed through as a path/string verbatim so a
-    custom YAML on disk works without runner changes.
+    Anything else → resolved to a path string. The path's existence is
+    checked at build time + the YAML's dim names are validated as a
+    subset of inspect-petri's default 36 (when [audit] extra is
+    installed) so a typo fails fast here instead of inside the audit.
 
     ``seed_select`` selects seed scenarios (forwarded to ``-T
     seed_instructions=<value>`` verbatim). Inspect-petri accepts
     ``id:<id>[,<id>...]`` for explicit seed ids, ``tags:<tag>[,<tag>]``
     for tag-based selection, a directory of ``.md`` files, or a
-    YAML/file path. Mutually exclusive with ``tags``: passing both
-    raises ``ValueError`` because inspect-petri only honours one
-    ``seed_instructions`` flag.
+    YAML/file path. Mutually exclusive with ``tags``. Path-shaped
+    values are checked for existence at build time; ``id:`` / ``tags:``
+    prefixes are passed through unchanged.
+
+    ``target_tools`` controls which tool-creation tools the auditor
+    receives. ``"synthetic"`` (inspect-petri default) gives the
+    auditor ``create_tool`` / ``remove_tool`` / ``send_tool_call_result``;
+    ``"fixed"`` only ``send_tool_call_result``; ``"none"`` (our
+    default) is conversation-only mode. Note: GEODE's audit target
+    owns its own tool registry, so ``synthetic``/``fixed`` lets the
+    auditor *fabricate* tool results — useful for capability dim
+    studies, harmful for behaviour-control comparisons.
     """
     if tags and seed_select:
         raise ValueError(
@@ -159,6 +178,16 @@ def build_command(
             "tags:<tag>) or ``seed_select`` (full id:/tags:/path form), "
             "not both — inspect-petri honours only one seed_instructions value."
         )
+    if target_tools not in TARGET_TOOLS_VALUES:
+        raise ValueError(
+            f"target_tools must be one of {TARGET_TOOLS_VALUES}, got {target_tools!r}. "
+            "See inspect-petri/_task/audit.py:audit() docstring."
+        )
+
+    resolved_dims = resolve_dim_set(dim_set)
+    _validate_dim_path(resolved_dims)
+    _validate_seed_select_path(seed_select)
+
     cmd: list[str] = ["inspect", "eval", "inspect_petri/audit"]
     if seeds > 0:
         cmd.extend(["--limit", str(seeds)])
@@ -166,17 +195,100 @@ def build_command(
     cmd.extend(["--model-role", f"target={target}"])
     cmd.extend(["--model-role", f"judge={judge}"])
     cmd.extend(["-T", f"max_turns={max_turns}"])
-    cmd.extend(["-T", "target_tools=none"])
+    cmd.extend(["-T", f"target_tools={target_tools}"])
     if seed_select:
         cmd.extend(["-T", f"seed_instructions={seed_select}"])
     elif tags:
         cmd.extend(["-T", f"seed_instructions=tags:{tags}"])
     if cache:
         cmd.extend(["-T", "cache=true"])
-    resolved = resolve_dim_set(dim_set)
-    if resolved is not None:
-        cmd.extend(["-T", f"judge_dimensions={resolved}"])
+    if resolved_dims is not None:
+        cmd.extend(["-T", f"judge_dimensions={resolved_dims}"])
     return cmd
+
+
+def _validate_dim_path(resolved: Any) -> None:
+    """Validate a resolved ``--dim-set`` value (path-like).
+
+    Raises ``ValueError`` when the path does not exist, ``FileNotFoundError``
+    semantics intentionally elevated to ValueError so the CLI surfaces
+    the same class of error for every kind of bad input. When the
+    [audit] extra is installed and the path is a YAML, also load the
+    file and check that every name is a subset of inspect-petri's
+    default 36 dim set (covers 결함 K).
+
+    ``None`` (= ``--dim-set full``) is a no-op. The built-in YAML path
+    (``geode_5axes.yaml``) is shipped with this package so its
+    existence is also enforced — a missing built-in is a deployment
+    bug worth surfacing the same way as a typo'd custom path.
+    """
+    if resolved is None:
+        return
+    p = Path(str(resolved))
+    if not p.exists():
+        raise ValueError(
+            f"--dim-set resolved to a path that does not exist: {p}. "
+            f"Check the path or use ``--dim-set full`` to fall back to "
+            f"inspect-petri's default 36 dim set."
+        )
+    # Best-effort subset validation when the [audit] extra is installed.
+    # Skipped on default ``uv sync`` so the runner module keeps loading
+    # without inspect_ai. Callers running an actual audit will already
+    # have the extra installed (the inspect CLI lives in it).
+    if p.suffix.lower() not in {".yaml", ".yml"}:
+        return
+    try:
+        from inspect_petri._judge.dimensions import load_dimensions
+    except ImportError:
+        return
+    try:
+        import yaml
+    except ImportError:  # pragma: no cover — yaml is a dep of [audit]
+        return
+    with p.open(encoding="utf-8") as f:
+        names = yaml.safe_load(f)
+    if not isinstance(names, list):
+        # Custom YAMLs may also list ``JudgeDimension`` dicts; we only
+        # validate the simple ``[<name>, <name>, ...]`` shape because
+        # the dict form is already a self-contained spec.
+        return
+    defaults = {d.name for d in load_dimensions()}
+    unknown = [n for n in names if isinstance(n, str) and n not in defaults]
+    if unknown:
+        raise ValueError(
+            f"--dim-set YAML at {p} contains unknown dimension(s): {unknown}. "
+            f"Allowed names are inspect-petri's default 36 (see "
+            f"inspect_petri/_judge/dimensions/*.md)."
+        )
+
+
+def _validate_seed_select_path(seed_select: str | None) -> None:
+    """Path-shaped ``--seed-select`` values must exist at build time.
+
+    ``id:<...>`` / ``tags:<...>`` are command strings, not paths — pass
+    through unchanged. Anything that looks like a filesystem path
+    (contains ``/`` or ends in ``.md``/``.yaml``/``.json``) is checked
+    for existence so a typo fails fast here.
+    """
+    if not seed_select:
+        return
+    if seed_select.startswith(("id:", "tags:")):
+        return
+    # Heuristic: looks like a path
+    path_extensions = (".md", ".yaml", ".yml", ".json", ".jsonl", ".csv")
+    looks_like_path = (
+        "/" in seed_select
+        or seed_select.startswith("~")
+        or any(seed_select.lower().endswith(ext) for ext in path_extensions)
+    )
+    if not looks_like_path:
+        return
+    p = Path(seed_select).expanduser()
+    if not p.exists():
+        raise ValueError(
+            f"--seed-select resolved to a path that does not exist: {p}. "
+            f"Use ``id:<seed-id>``, ``tags:<tag>``, or an existing dir/file."
+        )
 
 
 def estimate_cost_usd(
@@ -281,6 +393,7 @@ def run_audit(
     cache: bool = True,
     dim_set: str | None = DEFAULT_DIM_SET,
     seed_select: str | None = None,
+    target_tools: str = "none",
     dry_run: bool = True,
     yes: bool = False,
     auto_archive: bool = True,
@@ -311,6 +424,7 @@ def run_audit(
         cache=cache,
         dim_set=dim_set,
         seed_select=seed_select,
+        target_tools=target_tools,
     )
     estimated_usd = estimate_cost_usd(
         judge=judge,

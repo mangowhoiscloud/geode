@@ -1439,6 +1439,11 @@
           "type": "string",
           "description": "Judge-dimension set. '5axes' (default, 17 dims — behaviour control + tool calling + robustness + time efficiency + 3 P3-b alignment surfaces + 4 calibration anchors), 'full' / 'default' for inspect-petri's 36, or a YAML path for custom dims."
         },
+        "target_tools": {
+          "type": "string",
+          "enum": ["synthetic", "fixed", "none"],
+          "description": "Auditor's tool-creation tool set. 'none' (default — conversation-only mode, fits the 5-axis surface), 'fixed' (send_tool_call_result only, target has pre-registered tools), 'synthetic' (full set — auditor can fabricate tool results; inspect-petri default; useful for capability/broken_tool_use dim studies)."
+        },
         "cache": {
           "type": "boolean",
           "description": "Petri 3.0.6 cache parameter. Default true (30-70% cost reduction on shared prefixes)."
