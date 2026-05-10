@@ -5,19 +5,25 @@ Both ``geode audit`` (Typer subcommand registered from
 ``core/cli/routing.py``) call ``runner.run_audit`` and render the
 ``AuditReport`` through :func:`_render_report` so the two paths stay
 in lockstep on output.
+
+:func:`petri_archive` persists a finished ``logs/*.eval`` outside the
+worktree (``~/.geode/petri/logs/``) and writes a committable summary
+YAML so a routine ``git worktree remove`` no longer deletes the only
+copy of an audit's ground truth.
 """
 
 from __future__ import annotations
 
 import argparse
 import shlex
+from pathlib import Path
 
 import typer
 from core.ui.console import console
 
 from plugins.petri_audit.runner import AuditReport, format_cost, run_audit
 
-__all__ = ["audit", "cmd_audit_slash"]
+__all__ = ["audit", "cmd_audit_slash", "petri_archive"]
 
 
 def _render_report(report: AuditReport) -> None:
@@ -176,3 +182,68 @@ def cmd_audit_slash(args: str) -> None:
         yes=ns.yes,
     )
     _render_report(report)
+
+
+_EVAL_PATH_ARG = typer.Argument(
+    ...,
+    exists=True,
+    readable=True,
+    help="Path to a finished `logs/*.eval` produced by `geode audit --live`.",
+)
+_RAW_ARCHIVE_OPT = typer.Option(
+    None,
+    "--raw-archive-dir",
+    help="Where the raw .eval is copied. Default: `~/.geode/petri/logs/` "
+    "(out of git on purpose — PII / size).",
+)
+_SUMMARY_DIR_OPT = typer.Option(
+    None,
+    "--summary-dir",
+    help="Where the YAML metadata summary is written. Default: "
+    "`docs/audits/eval-logs/` (committable; cross-session compare).",
+)
+
+
+def petri_archive(
+    eval_path: Path = _EVAL_PATH_ARG,
+    raw_archive_dir: Path | None = _RAW_ARCHIVE_OPT,
+    summary_dir: Path | None = _SUMMARY_DIR_OPT,
+) -> None:
+    """Persist a petri eval log outside the worktree + write a YAML summary.
+
+    A finished `logs/*.eval` lives inside the active worktree by
+    default, so a routine `git worktree remove` after the merged PR
+    silently deletes the only copy. Run this command before cleaning
+    up a worktree (or call it from a post-audit hook) to put the raw
+    eval somewhere safe and emit a small, diffable YAML for the
+    surrounding audit report to reference.
+    """
+    from plugins.petri_audit.eval_archive import (
+        DEFAULT_RAW_ARCHIVE_DIR,
+        DEFAULT_SUMMARY_DIR,
+        archive_eval,
+    )
+
+    result = archive_eval(
+        eval_path,
+        raw_archive_dir=raw_archive_dir or DEFAULT_RAW_ARCHIVE_DIR,
+        summary_dir=summary_dir or DEFAULT_SUMMARY_DIR,
+    )
+
+    console.print()
+    console.print("  [header]Petri eval archive[/header]")
+    console.print(f"  raw:      [dim]{result.raw_path}[/dim]")
+    console.print(f"  summary:  [dim]{result.summary_path}[/dim]")
+    s = result.summary
+    console.print(f"  status:   {s.get('status')}")
+    console.print(f"  samples:  {s.get('samples')}")
+    findings = [
+        (item["id"], item["non_baseline_dims"])
+        for item in s.get("samples_summary", [])
+        if item.get("non_baseline_dims")
+    ]
+    if findings:
+        console.print("  non-baseline dims (per sample):")
+        for sample_id, dims in findings:
+            console.print(f"    {sample_id}: {dims}")
+    console.print()
