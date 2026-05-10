@@ -77,6 +77,38 @@ def test_default_runner_rejects_empty_messages() -> None:
         asyncio.run(_default_geode_runner(messages=[]))
 
 
+def test_default_runner_uses_async_arun_not_sync_run() -> None:
+    """N3 regression guard — must not call sync ``loop.run`` inside async runner.
+
+    inspect-petri invokes ``GeodeModelAPI.generate`` (async) inside its
+    own audit event loop. ``AgenticLoop.run`` is a sync wrapper that
+    calls ``asyncio.run(self.arun(...))``, which raises
+    ``RuntimeError: asyncio.run() cannot be called from a running event
+    loop``. v2 (#988/#989) silently failed every target invocation
+    because of this — see docs/audits/2026-05-10-petri-2a-v2.md § C4.
+
+    This test inspects the source so a future refactor doesn't
+    accidentally regress.
+    """
+    import inspect
+
+    from plugins.petri_audit.targets import geode_target
+
+    src = inspect.getsource(geode_target._default_geode_runner)
+    # Strip comments + docstrings before checking — those legitimately
+    # mention the old call form.
+    code_only = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith("#"))
+    assert "await loop.arun(" in code_only, (
+        "_default_geode_runner must `await loop.arun(...)` to avoid the "
+        "asyncio.run() nested-loop RuntimeError under inspect-petri."
+    )
+    assert "= loop.run(" not in code_only and "  loop.run(" not in code_only, (
+        "_default_geode_runner must NOT call sync `loop.run(...)` — "
+        "that path triggers asyncio.run() inside an already-running "
+        "event loop."
+    )
+
+
 def test_petri_audit_does_not_register_domain() -> None:
     """petri_audit is an external evaluator, not a GEODE domain.
 
