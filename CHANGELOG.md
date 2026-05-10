@@ -28,6 +28,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **petri eval log archiver — `geode petri-archive` + `~/.geode/petri/logs/`
+  + `docs/audits/eval-logs/` summary YAMLs.**
+  - 본 PR 이전 4 audit 의 raw `.eval` 이 worktree 내부 (`logs/*.eval`)
+    에만 있어 `git worktree remove` 시 분실 가능. `.gitignore` 정책 (PII /
+    size) 으로 git 에 직접 커밋도 부적절 — hybrid 접근으로 해결.
+  - 코드 — `plugins/petri_audit/eval_archive.py` 신규 (`extract_summary`,
+    `archive_eval`, `ArchiveResult`). `inspect_ai.log` 은 lazy import 라
+    [audit] extra 미설치 시도 import 가능.
+  - CLI — `geode petri-archive <eval-path>` (Typer command). 기본
+    `~/.geode/petri/logs/` 로 raw 복사 + `docs/audits/eval-logs/<date>-
+    <hash8>.summary.yaml` 로 metadata 추출. 둘 다 idempotent.
+  - 본 PR 시점 historical archive — N6-followup (2026-05-10) +
+    N7' first / boost / N8 (2026-05-10–11) = 4 summary YAML 커밋.
+    raw `.eval` 4개는 `~/.geode/petri/logs/` 에 OS-archive (총 ~570KB).
+  - 회귀 가드 — `tests/plugins/petri_audit/test_eval_archive.py` 8 테스트
+    (filename 형식, non-baseline dim 필터, raw copy + YAML write,
+    idempotency, missing source, Typer 등록).
+
 ### Changed
 
 - **N4 estimator calibration — petri_audit `TokenAssumptions` 5× over-conservative 보정.**
