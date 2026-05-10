@@ -25,9 +25,7 @@ def test_status_default_disabled() -> None:
 
 
 def test_resolve_endpoint_explicit_wins() -> None:
-    assert resolve_endpoint("https://otel.example/v1/traces") == (
-        "https://otel.example/v1/traces"
-    )
+    assert resolve_endpoint("https://otel.example/v1/traces") == ("https://otel.example/v1/traces")
 
 
 def test_resolve_endpoint_env_traceloop_first(monkeypatch: pytest.MonkeyPatch) -> None:

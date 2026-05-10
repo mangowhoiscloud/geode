@@ -249,9 +249,7 @@ def render_from_eval_log(
     helpers above.
     """
     if chart not in _CHART_TYPES:
-        raise VizError(
-            f"Unknown chart {chart!r}; expected one of {', '.join(_CHART_TYPES)}."
-        )
+        raise VizError(f"Unknown chart {chart!r}; expected one of {', '.join(_CHART_TYPES)}.")
 
     try:
         from inspect_ai.log import read_eval_log
@@ -272,9 +270,7 @@ def render_from_eval_log(
                 if isinstance(value, int | float):
                     scores.setdefault(dim_name, []).append(float(value))
         if not scores:
-            raise VizError(
-                f"No scored samples in {log_path!s}; nothing to plot."
-            )
+            raise VizError(f"No scored samples in {log_path!s}; nothing to plot.")
         return render_heatmap(scores, output_path)
 
     raise VizError(

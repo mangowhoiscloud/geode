@@ -30,9 +30,7 @@ def _build_observability_handlers() -> dict[str, Any]:
                 return {
                     "status": "error",
                     "tool": "obs_otel_export",
-                    "error": (
-                        f"Unknown action {action!r}; expected enable / disable / status."
-                    ),
+                    "error": (f"Unknown action {action!r}; expected enable / disable / status."),
                 }
         except OtelExportError as exc:
             return {"status": "error", "tool": "obs_otel_export", "error": str(exc)}

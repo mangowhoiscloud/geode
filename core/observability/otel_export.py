@@ -71,9 +71,7 @@ def resolve_endpoint(explicit: str | None = None) -> str | None:
     """Return the OTLP endpoint to use, or ``None`` when none is configured."""
     if explicit:
         return explicit
-    return os.environ.get("TRACELOOP_BASE_URL") or os.environ.get(
-        "OTEL_EXPORTER_OTLP_ENDPOINT"
-    )
+    return os.environ.get("TRACELOOP_BASE_URL") or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 
 def enable(
@@ -118,9 +116,7 @@ def enable(
         _state.endpoint = endpoint_resolved
         _state.app_name = app_name
         if endpoint_resolved is None:
-            _state.notes.append(
-                "no endpoint configured — Traceloop initialised in no-op mode"
-            )
+            _state.notes.append("no endpoint configured — Traceloop initialised in no-op mode")
         log.info(
             "OpenLLMetry OTel exporter enabled (app=%s, endpoint=%s)",
             app_name,
