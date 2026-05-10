@@ -1429,7 +1429,11 @@
         },
         "tags": {
           "type": "string",
-          "description": "Petri seed_instructions tag filter (e.g. sycophancy, self_preservation). Omit for the default seed mix."
+          "description": "Petri seed_instructions tag filter (e.g. sycophancy, self_preservation). Shortcut for seed_select=tags:<value>. Omit for the default seed mix."
+        },
+        "seed_select": {
+          "type": "string",
+          "description": "Petri seed_instructions selector — full inspect-petri form. 'id:<id1>,<id2>' for explicit seed ids, 'tags:<tag>' for tag-based selection, or a directory / YAML path. Mutually exclusive with `tags`."
         },
         "dim_set": {
           "type": "string",
