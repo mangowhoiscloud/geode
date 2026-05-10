@@ -28,6 +28,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **petri_audit estimator B 보정 — `cache_read_ratio` 반영.**
+  - 기존 estimator 가 `pa.input` 만 사용 (cache_read 무시) → anthropic /
+    openai 의 cache-heavy stack 에서 estimator over-estimate 의 큰 부분
+    을 차지. `MODEL_PRICING` 은 이미 `cache_read = input × 0.1` (90%
+    할인) 보유 (token_tracker.py:126).
+  - 새 필드 — `auditor_cache_read_ratio: float = 0.85`,
+    `target_cache_read_ratio: float = 0.0` (GEODE tracker 0 records 라
+    미관측, 보수적), `judge_cache_read_ratio: float = 0.45`. N6-followup
+    + N7' + N8 실측 (auditor cache_ratio 88-94%, judge 33-48%) 의
+    conservative side.
+  - 새 helper `_effective_in_price(price, ratio)` —
+    `(1-r) × input + r × cache_read`. ratio 무시 시 (cache_read=0 인
+    exotic provider) input 으로 fallback.
+  - 검증 — N6-followup ratio 1.04 ★ landing zone 안 (`actual $0.55 /
+    estimate $0.53`), N7' first 3 sample 0.31 ★, N8 (openai 5 sample,
+    cache 94%/48%) 는 0.13 — under-estimate side 지만 사용자 입장에선
+    over-budget 안 가는 conservative 방향.
+  - inspect-petri ``audit_judge`` 의 `cache=True` 옵션은 이미 우리
+    build_command 의 ``-T cache=true`` 통해 적용 중. 별도 옵션 노출
+    불필요 (M 은 scope 외).
+  - 회귀 가드 — `test_runner.py` 에 `test_estimator_cache_ratio_lowers_in_token_cost`
+    + `test_default_token_assumptions_are_conservative` 의 ratio 범위
+    검증 추가.
+
 ### Added
 
 - **petri_audit `--target-tools` 옵션 + build-time 검증 (E + K + N).**

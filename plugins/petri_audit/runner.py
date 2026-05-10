@@ -78,6 +78,18 @@ class TokenAssumptions:
     geode_amplifier: int = 1
     judge_calls_per_sample: float = 1.0
 
+    # B (cache cost reflection) — anthropic / openai 모두 cache_read 가
+    # 90% 할인 (`pa.cache_read = pa.input × 0.1` in
+    # core/llm/token_tracker.py:126). 이전 estimator 는 ``pa.input``
+    # 만 사용해 anthropic / openai 의 cache-heavy stack 에서 5-15× over.
+    #
+    # 본 비율은 N6-followup + N8 의 실측 (auditor cache_ratio 88-94%,
+    # judge 33-48%) 의 conservative side. 가능하면 estimator 가 over-
+    # estimate side 에 머물도록 ratio 를 실측보다 살짝 낮게 잡음.
+    auditor_cache_read_ratio: float = 0.85
+    target_cache_read_ratio: float = 0.0  # GEODE tracker 0 records 라 미관측, 보수적 0
+    judge_cache_read_ratio: float = 0.45
+
 
 DEFAULT_TOKEN_ASSUMPTIONS = TokenAssumptions()
 
@@ -336,18 +348,46 @@ def estimate_cost_usd(
     # Pre-N4 estimator multiplied judge by max_turns × judge_calls_per_turn
     # which over-estimated 5× (inspect-petri's audit_judge fires once per
     # sample on the full transcript, not per turn).
+    #
+    # B (cache cost reflection) — input tokens 의 일부가 prompt cache
+    # read (90% 할인) 로 청구된다는 사실을 반영. ``effective_in_price``
+    # = (1 - r) × full_input_price + r × cache_read_price 로 계산.
+    # ``r=0`` 은 기존 (pre-B) 행동.
+    auditor_eff_in = _effective_in_price(pa, assumptions.auditor_cache_read_ratio)
+    target_eff_in = _effective_in_price(pt, assumptions.target_cache_read_ratio)
+    judge_eff_in = _effective_in_price(pj, assumptions.judge_cache_read_ratio)
+
     auditor_per_turn = (
-        pa.input * assumptions.auditor_in_per_turn + pa.output * assumptions.auditor_out_per_turn
+        auditor_eff_in * assumptions.auditor_in_per_turn
+        + pa.output * assumptions.auditor_out_per_turn
     )
     target_per_turn = (
-        pt.input * assumptions.target_in_per_turn + pt.output * assumptions.target_out_per_turn
+        target_eff_in * assumptions.target_in_per_turn + pt.output * assumptions.target_out_per_turn
     ) * assumptions.geode_amplifier
     per_sample_turn_cost = (auditor_per_turn + target_per_turn) * max_turns
     judge_per_sample = assumptions.judge_calls_per_sample * (
-        pj.input * assumptions.judge_in_per_sample + pj.output * assumptions.judge_out_per_sample
+        judge_eff_in * assumptions.judge_in_per_sample
+        + pj.output * assumptions.judge_out_per_sample
     )
     per_sample = per_sample_turn_cost + judge_per_sample
     return seeds * per_sample
+
+
+def _effective_in_price(price: Any, cache_read_ratio: float) -> float:
+    """Blend full input price + cache_read price by the given ratio.
+
+    ``ModelPrice.cache_read`` is populated for both anthropic and
+    openai catalogue entries (see core/llm/token_tracker.py). When
+    ``cache_read = 0`` (rare — exotic provider), the function silently
+    falls back to ``input`` so the estimator does not zero-out the
+    auditor / judge cost.
+    """
+    cr = float(getattr(price, "cache_read", 0.0) or 0.0)
+    inp = float(price.input)
+    if cr <= 0.0:
+        return inp
+    ratio = max(0.0, min(1.0, cache_read_ratio))
+    return (1.0 - ratio) * inp + ratio * cr
 
 
 def format_cost(estimated_usd: float) -> tuple[str, int]:

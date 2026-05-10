@@ -570,6 +570,53 @@ def test_default_token_assumptions_are_conservative() -> None:
     assert a.judge_in_per_sample > 0
     assert a.auditor_out_per_turn > 0 and a.target_out_per_turn > 0
     assert a.judge_out_per_sample > 0
+    # B (cache cost reflection) — ratios must be in [0, 1] and the
+    # auditor / judge defaults reflect the live-run telemetry (cache-
+    # heavy on the auditor side, mid on the judge side).
+    assert 0.0 <= a.auditor_cache_read_ratio <= 1.0
+    assert 0.0 <= a.target_cache_read_ratio <= 1.0
+    assert 0.0 <= a.judge_cache_read_ratio <= 1.0
+
+
+def test_estimator_cache_ratio_lowers_in_token_cost() -> None:
+    """B contract: increasing cache_read_ratio must lower the
+    estimate (cache_read price ≈ input × 0.1). Pre-B estimator was
+    invariant to cache_ratio because the field did not exist."""
+    from dataclasses import replace
+
+    base = DEFAULT_TOKEN_ASSUMPTIONS
+    cold = replace(
+        base,
+        auditor_cache_read_ratio=0.0,
+        judge_cache_read_ratio=0.0,
+        target_cache_read_ratio=0.0,
+    )
+    warm = replace(
+        base,
+        auditor_cache_read_ratio=0.9,
+        judge_cache_read_ratio=0.9,
+        target_cache_read_ratio=0.0,  # target stays 0 — GEODE tracker not observed
+    )
+    cold_estimate = estimate_cost_usd(
+        judge="claude-haiku-4-5-20251001",
+        auditor="claude-sonnet-4-6",
+        target="claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+        assumptions=cold,
+    )
+    warm_estimate = estimate_cost_usd(
+        judge="claude-haiku-4-5-20251001",
+        auditor="claude-sonnet-4-6",
+        target="claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+        assumptions=warm,
+    )
+    assert warm_estimate < cold_estimate, (
+        f"warm cache estimate {warm_estimate:.4f} should be lower than "
+        f"cold {cold_estimate:.4f} — cache_read price is ≈ input × 0.1"
+    )
 
 
 def test_n4_estimator_lands_within_landing_zone_for_known_runs() -> None:
