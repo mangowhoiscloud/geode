@@ -181,10 +181,13 @@ def test_build_command_dim_set_passthrough_for_custom_path(tmp_path: Path) -> No
     """Unknown values are forwarded verbatim so a user can drop a YAML
     anywhere on disk and pass ``--dim-set /path/to/custom.yaml``.
 
-    Resolution / existence checking lives at inspect-petri's boundary
-    where the error message is most actionable.
+    Existence is verified at build_command (결함 E) — write the file
+    so the validator does not reject the test before we can assert
+    on the cmd shape. Subset validation (결함 K) is exercised by
+    ``test_build_command_rejects_dim_yaml_with_unknown_names``.
     """
     custom = tmp_path / "custom-dims.yaml"
+    custom.write_text("- admirable\n- disappointing\n", encoding="utf-8")
     cmd = build_command(
         judge="anthropic/claude-haiku-4-5-20251001",
         auditor="anthropic/claude-sonnet-4-6",
@@ -196,6 +199,126 @@ def test_build_command_dim_set_passthrough_for_custom_path(tmp_path: Path) -> No
         dim_set=str(custom),
     )
     assert f"judge_dimensions={custom}" in " ".join(cmd)
+
+
+def test_build_command_rejects_missing_dim_yaml(tmp_path: Path) -> None:
+    """결함 E — a typo'd ``--dim-set /tmp/typo.yaml`` must fail at
+    build time with a clear message instead of crashing inside the
+    inspect_ai subprocess minutes later."""
+    missing = tmp_path / "does-not-exist.yaml"
+    with pytest.raises(ValueError, match="does not exist"):
+        build_command(
+            judge="anthropic/claude-haiku-4-5-20251001",
+            auditor="anthropic/claude-sonnet-4-6",
+            target="geode/claude-opus-4-7",
+            seeds=1,
+            max_turns=10,
+            tags=None,
+            cache=True,
+            dim_set=str(missing),
+        )
+
+
+def test_build_command_rejects_dim_yaml_with_unknown_names(tmp_path: Path) -> None:
+    """결함 K — a custom dim YAML must list names that exist in
+    inspect-petri's default 36 dim set, otherwise
+    ``judge_dimensions(...)`` raises ``Unknown dimension`` at audit
+    start. Surface the error at build_command instead.
+    """
+    pytest.importorskip("inspect_petri")
+    custom = tmp_path / "bad-dims.yaml"
+    custom.write_text("- admirable\n- typo_dim_name\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown dimension"):
+        build_command(
+            judge="anthropic/claude-haiku-4-5-20251001",
+            auditor="anthropic/claude-sonnet-4-6",
+            target="geode/claude-opus-4-7",
+            seeds=1,
+            max_turns=10,
+            tags=None,
+            cache=True,
+            dim_set=str(custom),
+        )
+
+
+def test_build_command_rejects_missing_seed_path(tmp_path: Path) -> None:
+    """결함 E — seed_select 가 path 형식인데 file 없으면 fail-fast."""
+    missing = tmp_path / "missing-seeds"
+    with pytest.raises(ValueError, match="does not exist"):
+        build_command(
+            judge="anthropic/claude-haiku-4-5-20251001",
+            auditor="anthropic/claude-sonnet-4-6",
+            target="geode/claude-opus-4-7",
+            seeds=1,
+            max_turns=10,
+            tags=None,
+            cache=True,
+            seed_select=str(missing / "seeds.yaml"),
+        )
+
+
+def test_build_command_seed_select_id_form_passthrough_no_path_check(tmp_path: Path) -> None:
+    """``id:<...>`` is not a path — must NOT trigger path validation."""
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+        tags=None,
+        cache=True,
+        seed_select="id:helpful_only_bypass_constraints",
+    )
+    assert "seed_instructions=id:helpful_only_bypass_constraints" in " ".join(cmd)
+
+
+# ---------------------------------------------------------------------------
+# target_tools (N)
+# ---------------------------------------------------------------------------
+
+
+def test_build_command_target_tools_default_is_none() -> None:
+    """N4-followup default — conversation-only mode fits the 5-axis
+    surface. Live N7'/N8 used this implicitly (hard-coded ``none``)."""
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+        tags=None,
+        cache=True,
+    )
+    assert "target_tools=none" in " ".join(cmd)
+
+
+@pytest.mark.parametrize("value", ["synthetic", "fixed", "none"])
+def test_build_command_target_tools_accepts_inspect_petri_literals(value: str) -> None:
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+        tags=None,
+        cache=True,
+        target_tools=value,
+    )
+    assert f"target_tools={value}" in " ".join(cmd)
+
+
+def test_build_command_target_tools_rejects_unknown() -> None:
+    with pytest.raises(ValueError, match="target_tools must be one of"):
+        build_command(
+            judge="anthropic/claude-haiku-4-5-20251001",
+            auditor="anthropic/claude-sonnet-4-6",
+            target="geode/claude-opus-4-7",
+            seeds=1,
+            max_turns=10,
+            tags=None,
+            cache=True,
+            target_tools="bogus",
+        )
 
 
 def test_geode_5axes_yaml_is_subset_of_inspect_petri_36() -> None:
