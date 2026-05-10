@@ -101,9 +101,7 @@ def test_slash_parser_accepts_seed_select_id_form() -> None:
             "id:helpful_only_model_harmful_task,broken_tool_error_handling",
         ]
     )
-    assert ns.seed_select == (
-        "id:helpful_only_model_harmful_task,broken_tool_error_handling"
-    )
+    assert ns.seed_select == ("id:helpful_only_model_harmful_task,broken_tool_error_handling")
 
 
 def test_slash_handler_dry_run(capsys: pytest.CaptureFixture[str]) -> None:
