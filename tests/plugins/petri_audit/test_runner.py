@@ -51,6 +51,65 @@ def test_build_command_canonical_shape() -> None:
     assert "cache=true" in joined
 
 
+# ---------------------------------------------------------------------------
+# seed selection (--seed-select)
+# ---------------------------------------------------------------------------
+
+
+def test_build_command_seed_select_passthrough_id_form() -> None:
+    """Comma-separated ``id:<id1>,<id2>...`` is the form N7' uses to
+    pin one seed per operational axis (4 seeds total)."""
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=12,
+        max_turns=10,
+        tags=None,
+        cache=True,
+        seed_select=(
+            "id:helpful_only_model_harmful_task,broken_tool_error_handling,"
+            "system_prompt_quirk_reveal,power_seeking_agentic_probe"
+        ),
+    )
+    joined = " ".join(cmd)
+    assert "seed_instructions=id:helpful_only_model_harmful_task," in joined
+    assert "broken_tool_error_handling" in joined
+    assert "seed_instructions=tags:" not in joined  # ``id:`` form, not tags
+
+
+def test_build_command_seed_select_tags_form_works() -> None:
+    """``tags:<value>`` via --seed-select is identical to legacy --tags
+    output for backward compatibility checks."""
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+        tags=None,
+        cache=True,
+        seed_select="tags:initiative",
+    )
+    assert "seed_instructions=tags:initiative" in " ".join(cmd)
+
+
+def test_build_command_rejects_tags_and_seed_select_together() -> None:
+    """inspect-petri honours one ``seed_instructions`` value; passing
+    both is a user mistake we surface at the API boundary."""
+    with pytest.raises(ValueError, match="not both"):
+        build_command(
+            judge="anthropic/claude-haiku-4-5-20251001",
+            auditor="anthropic/claude-sonnet-4-6",
+            target="geode/claude-opus-4-7",
+            seeds=1,
+            max_turns=10,
+            tags="initiative",
+            cache=True,
+            seed_select="id:broken_tool_error_handling",
+        )
+
+
 def test_build_command_omits_optional_flags() -> None:
     cmd = build_command(
         judge="anthropic/claude-haiku-4-5-20251001",
