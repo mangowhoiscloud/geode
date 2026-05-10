@@ -1,10 +1,17 @@
-"""Tests for ConvergenceDetector — extracted from AgenticLoop."""
+"""Tests for ConvergenceDetector — extracted from AgenticLoop.
+
+v0.90.0 — auto-escalation removed. The detector no longer takes an
+``escalation_fn`` and no longer carries an ``escalated`` flag; 3
+consecutive identical errors break the loop immediately so the caller
+can surface a ``model_action_required`` diagnostic.
+"""
 
 from __future__ import annotations
 
 import json
 from typing import Any
 
+import pytest
 from core.agent.convergence import ConvergenceDetector
 
 
@@ -15,7 +22,9 @@ class TestConvergenceDetector:
         det = ConvergenceDetector()
         assert det.total_consecutive_tool_errors == 0
         assert det.recent_errors == []
-        assert det.convergence_escalated is False
+        # v0.90.0 — escalation flag removed from public surface
+        assert not hasattr(det, "convergence_escalated")
+        assert det.last_error_key is None
 
     # -- update_tool_error_tracking --
 
@@ -29,6 +38,7 @@ class TestConvergenceDetector:
         ]
         det.update_tool_error_tracking(results, tool_log)
         assert det.total_consecutive_tool_errors == 1
+        assert det.last_error_key is not None
 
     def test_success_resets_counter(self) -> None:
         det = ConvergenceDetector()
@@ -55,26 +65,16 @@ class TestConvergenceDetector:
         det.recent_errors = ["a:1", "a:1"]
         assert det.check_convergence_break() is False
 
-    def test_3_identical_triggers_escalation(self) -> None:
-        escalated = False
+    def test_3_identical_breaks_immediately(self) -> None:
+        """v0.90.0 — 3 identical errors break the loop on first detection.
 
-        def fake_escalate() -> bool:
-            nonlocal escalated
-            escalated = True
-            return True
-
-        det = ConvergenceDetector(escalation_fn=fake_escalate)
-        det.recent_errors = ["a:timeout", "a:timeout", "a:timeout"]
-        result = det.check_convergence_break()
-        assert result is False  # Escalation succeeded, don't break
-        assert escalated is True
-        assert det.convergence_escalated is True
-        assert det.recent_errors == []
-
-    def test_4_identical_after_escalation_breaks(self) -> None:
+        Pre-v0.90.0 the detector tried a model-escalation callback
+        first and only broke after a 4th identical error. With auto-
+        escalation removed there's no callback to attempt, so we break
+        right away and the AgenticLoop surfaces a diagnostic.
+        """
         det = ConvergenceDetector()
-        det.convergence_escalated = True
-        det.recent_errors = ["a:timeout"] * 4
+        det.recent_errors = ["a:timeout", "a:timeout", "a:timeout"]
         assert det.check_convergence_break() is True
 
     def test_mixed_errors_no_break(self) -> None:
@@ -82,10 +82,11 @@ class TestConvergenceDetector:
         det.recent_errors = ["a:1", "b:2", "a:1", "c:3"]
         assert det.check_convergence_break() is False
 
-    def test_escalation_failure_no_break_on_3(self) -> None:
-        """If escalation fails, 3 errors should NOT break (needs 4)."""
-        det = ConvergenceDetector(escalation_fn=lambda: False)
-        det.recent_errors = ["a:timeout", "a:timeout", "a:timeout"]
-        result = det.check_convergence_break()
-        assert result is False
-        assert det.convergence_escalated is True
+    def test_init_takes_no_arguments(self) -> None:
+        """v0.90.0 — escalation_fn parameter removed from __init__.
+
+        Constructing with ``escalation_fn=...`` should raise TypeError
+        so no caller silently re-introduces the auto-swap path.
+        """
+        with pytest.raises(TypeError):
+            ConvergenceDetector(escalation_fn=lambda: True)  # type: ignore[call-arg]

@@ -1,5 +1,10 @@
-"""v0.53.0 — fail-fast governance: cross-provider escalation REMOVED,
-quota exhaustion surfaces a plan-aware panel + stops the loop.
+"""v0.53.0 + v0.90.0 — fail-fast governance.
+
+v0.53.0 stubbed cross-provider auto-swap and made BillingError carry
+plan context. v0.90.0 finished the job by removing the dormant
+``_try_model_escalation`` / ``_try_cross_provider_escalation`` methods
+entirely; the agentic loop now surfaces a ``model_action_required``
+diagnostic so the user picks the next model via ``/model``.
 
 Pre-v0.53.0 behaviour (incident sources): when a provider's chain
 exhausted (billing/quota), GEODE silently swapped to the next
@@ -9,13 +14,12 @@ LLM identity drifted (different reasoning style + cost). User
 direction (2026-04-27): "API/구독 quota 초과 시 친절한 안내 + 시스템
 중지가 안정적".
 
-Three contracts pinned here:
+Four contracts pinned here:
 
-1. ``CROSS_PROVIDER_FALLBACK`` is empty for every provider — no
-   silent swap path remains. ``_try_cross_provider_escalation``
-   returns False unconditionally. ``_try_model_escalation``
-   exhausts the same-provider chain and returns False (no
-   provider hop).
+1. ``CROSS_PROVIDER_FALLBACK`` is empty for every provider, and the
+   loop has no escalation methods. v0.90.0 removed the residual
+   ``_try_model_escalation`` / ``_try_cross_provider_escalation``
+   methods so no caller can re-introduce auto-swap.
 
 2. ``BillingError`` carries plan context (provider / plan_id /
    plan_display_name / upgrade_url / resets_in_seconds) so the
@@ -25,6 +29,9 @@ Three contracts pinned here:
    which fires ``quota_exhausted`` IPC event when plan context
    present, falling back to legacy ``billing_error`` only when
    structured fields absent.
+
+4. ``quota_exhausted`` event is allowlisted + handled by the
+   thin-client renderer.
 """
 
 from __future__ import annotations
@@ -34,6 +41,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import core.agent.loop as _loop_mod
+import core.agent.loop._model_switching as _switching_mod
 import core.llm.adapters as _adapters_mod
 from core.llm.errors import BillingError
 
@@ -54,34 +62,29 @@ def test_cross_provider_fallback_map_is_empty_for_all_providers() -> None:
         )
 
 
-def test_try_cross_provider_escalation_returns_false() -> None:
-    """The escalation method must be a no-op returning False so callers
-    that previously relied on auto-recovery now propagate the original
-    error to the user."""
-    src = inspect.getsource(_loop_mod.AgenticLoop._try_cross_provider_escalation)
-    assert "return False" in src, (
-        "_try_cross_provider_escalation must early-return False — auto-swap is removed in v0.53.0"
-    )
-    assert "v0.53.0" in src, (
-        "method body must document the removal so future readers don't "
-        "re-introduce the cross-provider swap"
-    )
+def test_loop_has_no_escalation_methods() -> None:
+    """v0.90.0 — escalation methods on AgenticLoop are gone entirely.
+
+    Pre-v0.53.0 these auto-swapped models on quota/auth errors. v0.53.0
+    stubbed them to ``return False``. v0.90.0 removed them so no caller
+    can silently re-introduce auto-swap by patching the method back.
+    """
+    assert not hasattr(_loop_mod.AgenticLoop, "_try_model_escalation")
+    assert not hasattr(_loop_mod.AgenticLoop, "_try_cross_provider_escalation")
+    assert not hasattr(_loop_mod.AgenticLoop, "_persist_escalated_model")
 
 
-def test_try_model_escalation_does_not_call_cross_provider() -> None:
-    """Inside the same-provider escalation path, the cross-provider
-    fallback loop must be removed. Pre-fix: ``for fallback_provider,
-    fallback_model in fallbacks`` ran after the same-provider chain
-    exhausted."""
-    src = inspect.getsource(_loop_mod.AgenticLoop._try_model_escalation)
-    # The CROSS_PROVIDER_FALLBACK iteration is gone.
-    assert "for fallback_provider, fallback_model in fallbacks" not in src, (
-        "cross-provider for-loop still present in _try_model_escalation"
-    )
-    # Surfacing-to-user log is present.
-    assert "surfacing to user" in src or "v0.53.0" in src, (
-        "method must log that exhaustion now surfaces to user instead of auto-swapping providers"
-    )
+def test_model_switching_module_has_no_escalation_helpers() -> None:
+    """The underlying module-level helpers were removed too — only the
+    user-initiated ``update_model`` / drift sync paths and the
+    diagnostics-only ``fallback_chain_suggestions`` remain."""
+    assert not hasattr(_switching_mod, "try_model_escalation")
+    assert not hasattr(_switching_mod, "try_cross_provider_escalation")
+    assert not hasattr(_switching_mod, "persist_escalated_model")
+    # Sanity — the surviving helpers are still here.
+    assert hasattr(_switching_mod, "update_model")
+    assert hasattr(_switching_mod, "sync_model_from_settings")
+    assert hasattr(_switching_mod, "fallback_chain_suggestions")
 
 
 # ---------------------------------------------------------------------------

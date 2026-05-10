@@ -378,41 +378,23 @@ class TestManageContextHandler:
 
 
 # ---------------------------------------------------------------------------
-# TestEscalationCompact
+# v0.90.0 — Auto-escalation removed
 # ---------------------------------------------------------------------------
+# The previous ``TestEscalationCompact`` exercised
+# ``AgenticLoop._try_model_escalation`` directly. That method (and the
+# underlying ``_model_switching.try_model_escalation`` function) was
+# removed when auto-swap was retired in favour of the user-facing
+# ``model_action_required`` diagnostic. Compaction-before-retry is still
+# tested in ``tests/test_agentic_loop.py`` and the diagnostic itself is
+# tested in ``tests/test_no_auto_escalation.py``.
 
 
-class TestEscalationCompact:
-    def test_escalation_compacts_when_needed(self):
-        context = MagicMock()
-        context.messages = [_make_msg("user", "x" * 400_000)]
+class TestNoAutoEscalation:
+    """Pin the removal so a future caller can't reintroduce auto-swap."""
 
-        loop = MagicMock()
-        loop.model = "glm-5"
-        loop.context = context
-        loop._provider = "glm"
-        loop._adapter = MagicMock(fallback_chain=["glm-5", "glm-5-turbo", "glm-4.7-flash"])
-        loop.update_model = MagicMock()
-
+    def test_loop_has_no_escalation_methods(self) -> None:
         from core.agent.loop import AgenticLoop
 
-        result = AgenticLoop._try_model_escalation(loop)
-        assert result is True
-        loop.update_model.assert_called_once()
-
-    def test_escalation_no_compact_when_fits(self):
-        context = MagicMock()
-        context.messages = [_make_msg("user", "small")]
-
-        loop = MagicMock()
-        loop.model = "glm-5"
-        loop.context = context
-        loop._provider = "glm"
-        loop._adapter = MagicMock(fallback_chain=["glm-5", "glm-5-turbo"])
-        loop.update_model = MagicMock()
-
-        from core.agent.loop import AgenticLoop
-
-        result = AgenticLoop._try_model_escalation(loop)
-        assert result is True
-        loop.update_model.assert_called_once()
+        assert not hasattr(AgenticLoop, "_try_model_escalation")
+        assert not hasattr(AgenticLoop, "_try_cross_provider_escalation")
+        assert not hasattr(AgenticLoop, "_persist_escalated_model")

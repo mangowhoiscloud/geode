@@ -53,6 +53,7 @@ __all__ = [
     "LLMRateLimitError",
     "LLMTimeoutError",
     "UserCancelledError",
+    "build_model_action_message",
     "classify_llm_error",
     "extract_billing_message",
     "is_billing_fatal",
@@ -220,12 +221,28 @@ def _get_openai_error_types() -> tuple[type, ...]:
 # Severity levels: info < warning < error < critical
 _ERROR_CLASSIFICATION: dict[str, tuple[str, str, str]] = {
     # (error_type, severity, actionable_hint)
-    "rate_limit": ("rate_limit", "warning", "API rate limited. Auto-retrying with backoff."),
+    # Hints describe the *next user action* — auto-escalation was removed
+    # (loop exits with ``model_action_required`` and surfaces these to the
+    # user). Retryable transient errors say so; everything else points at
+    # ``/model`` or credentials.
+    "rate_limit": (
+        "rate_limit",
+        "warning",
+        "API rate limited. Switch to a different model with /model and re-run.",
+    ),
     "timeout": ("timeout", "warning", "Request timed out. Retrying with backoff."),
     "connection": ("connection", "warning", "Connection failed. Check network or retry."),
-    "auth": ("auth", "error", "API key invalid or expired. Check your API key."),
+    "auth": (
+        "auth",
+        "error",
+        "API key invalid or expired. Refresh credentials or switch provider with /model.",
+    ),
     "billing": ("billing", "critical", "Credit balance depleted. Add funds at provider console."),
-    "server": ("server", "warning", "Provider experiencing issues. Falling back to next model."),
+    "server": (
+        "server",
+        "warning",
+        "Provider experiencing issues. Retry, or switch model with /model.",
+    ),
     "context_overflow": (
         "context_overflow",
         "error",
@@ -363,6 +380,46 @@ def extract_billing_message(exc: Exception) -> str:
     if isinstance(err_obj, dict):
         msg = msg or err_obj.get("message", "")
     return str(msg) or str(exc)
+
+
+def build_model_action_message(
+    *,
+    error_type: str,
+    severity: str,
+    hint: str,
+    model: str,
+    provider: str | None,
+    attempts: int,
+    cost_so_far_usd: float | None = None,
+    suggested_models: list[str] | None = None,
+    detail: str | None = None,
+) -> str:
+    """Build a multi-line user-facing diagnostic for ``model_action_required``.
+
+    Replaces silent model auto-escalation. The agent loop calls this when an
+    LLM error survives the retry budget; the user reads it and decides
+    whether to switch model (``/model``), refresh credentials, or wait.
+
+    Format is deliberately structured (labelled lines) so both terminal users
+    and IPC consumers can parse the same payload.
+    """
+    lines: list[str] = []
+    severity_marker = {"critical": "✕", "error": "✕", "warning": "!"}.get(severity, "·")
+    lines.append(f"{severity_marker} {hint}")
+    lines.append("")
+    lines.append(f"  error_type : {error_type}")
+    lines.append(f"  severity   : {severity}")
+    lines.append(f"  model      : {model}{f' ({provider})' if provider else ''}")
+    lines.append(f"  attempts   : {attempts}")
+    if cost_so_far_usd is not None:
+        lines.append(f"  cost_so_far: ${cost_so_far_usd:.4f}")
+    if detail:
+        lines.append(f"  detail     : {detail}")
+    if suggested_models:
+        lines.append(f"  suggested  : {', '.join(suggested_models)}")
+    lines.append("")
+    lines.append("Next step: run `/model <id>` to switch, then resume your last request.")
+    return "\n".join(lines)
 
 
 def _extract_error_body(exc: Exception) -> dict[str, Any] | None:
