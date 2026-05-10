@@ -114,9 +114,31 @@ def extract_summary(eval_path: Path) -> dict[str, Any]:
         "task": getattr(log.eval, "task", None) or "inspect_petri/audit",
     }
 
+    # Eval-level wall-time. ``EvalStats.started_at`` / ``completed_at``
+    # are ISO8601 strings (or empty when the run cancelled before
+    # bootstrap). Extract both as-is; the duration is the readable
+    # signal a future Phase-2x report wants without re-deriving from
+    # per-sample timestamps.
+    eval_started = str(getattr(log.stats, "started_at", "") or "")
+    eval_completed = str(getattr(log.stats, "completed_at", "") or "")
+    if eval_started or eval_completed:
+        summary["timing"] = {
+            "started_at": eval_started,
+            "completed_at": eval_completed,
+            "duration_seconds": _duration_seconds(eval_started, eval_completed),
+        }
+
     model_roles = getattr(log.eval, "model_roles", None) or {}
     if model_roles:
-        summary["models"] = {role: str(m) for role, m in model_roles.items()}
+        # ``model_roles`` values are ``ModelConfig`` pydantic objects.
+        # ``str(m)`` falls back to the dataclass-style repr which dumps
+        # every nested ``GenerateConfig`` field as a giant inline blob —
+        # not what a summary YAML wants. Reach into ``.model`` so the
+        # output is the bare ``provider/name`` string the report-writer
+        # actually reads.
+        summary["models"] = {
+            role: getattr(m, "model", None) or str(m) for role, m in model_roles.items()
+        }
 
     stats = getattr(log.stats, "model_usage", {}) or {}
     summary["stats"] = {
@@ -140,15 +162,89 @@ def extract_summary(eval_path: Path) -> dict[str, Any]:
                 for k, vv in value.items():
                     if isinstance(vv, (int, float)) and vv != 1.0:
                         non_baseline[k] = int(vv) if float(vv).is_integer() else round(float(vv), 2)
-        samples_summary.append(
-            {
-                "id": s.id,
-                "scored": scored,
-                "non_baseline_dims": non_baseline,
+        sample_entry: dict[str, Any] = {
+            "id": s.id,
+            "scored": scored,
+            "non_baseline_dims": non_baseline,
+        }
+        # Time efficiency axis (결함 F) — sample-level wall-time +
+        # working-time + turn count. ``total_time`` and ``working_time``
+        # are floats in seconds; ``messages`` length is the number of
+        # ChatMessage entries (system + alternating user/assistant +
+        # tool), not turns directly, but it is the strongest proxy
+        # available without walking events.
+        total_time = getattr(s, "total_time", None)
+        working_time = getattr(s, "working_time", None)
+        if total_time is not None or working_time is not None:
+            sample_entry["timing"] = {
+                "total_time": float(total_time) if total_time is not None else None,
+                "working_time": float(working_time) if working_time is not None else None,
             }
-        )
+        msgs = getattr(s, "messages", None) or []
+        if msgs:
+            sample_entry["messages"] = len(msgs)
+        # Seed mapping (결함 L) — ``sample.input`` carries the seed
+        # name (or, in inspect-petri's id:-form bug we filed as 결함 R,
+        # the literal ``id:<name>`` string for the first item). Strip
+        # the ``id:`` prefix and keep the first 80 chars so a future
+        # report-generator can join on this value without re-walking
+        # the seed catalogue.
+        seed_id = _extract_seed_id(s)
+        if seed_id is not None:
+            sample_entry["seed_id"] = seed_id
+        samples_summary.append(sample_entry)
     summary["samples_summary"] = samples_summary
     return summary
+
+
+def _duration_seconds(started: str, completed: str) -> float | None:
+    """Parse two ISO8601 strings and return ``completed - started``
+    as a float-seconds value. Returns ``None`` when either side is
+    blank or unparseable so the YAML omits the field instead of
+    emitting a misleading 0.
+
+    Inspect uses Pydantic's ``BeforeValidator`` to normalise to UTC,
+    so the strings always end with ``+00:00`` or ``Z`` — we accept
+    either via ``fromisoformat``.
+    """
+    from datetime import datetime
+
+    if not started or not completed:
+        return None
+    try:
+        dt0 = datetime.fromisoformat(started.replace("Z", "+00:00"))
+        dt1 = datetime.fromisoformat(completed.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return round((dt1 - dt0).total_seconds(), 3)
+
+
+def _extract_seed_id(sample: Any) -> str | None:
+    """Best-effort seed-name recovery from an ``EvalSample``.
+
+    Petri's seed loading produces samples whose ``id`` is the seed
+    filename stem (e.g. ``system_prompt_quirk_reveal``). When the
+    caller passes ``seed_instructions=id:a,b,...`` via inspect_ai's
+    ``-T`` flag (결함 R), the first item leaks an ``id:`` prefix into
+    ``sample.input`` while ``sample.id`` becomes a 1-based integer.
+    We try ``sample.id`` first (string form), then fall back to the
+    first short token of ``sample.input`` with the prefix stripped.
+    """
+    sample_id = getattr(sample, "id", None)
+    if isinstance(sample_id, str) and sample_id and not sample_id.isdigit():
+        return sample_id
+    raw_input = getattr(sample, "input", None)
+    if not isinstance(raw_input, str):
+        return None
+    first_line = raw_input.strip().splitlines()[0] if raw_input.strip() else ""
+    if first_line.startswith("id:"):
+        first_line = first_line[3:]
+    # Heuristic — petri seed names are short (< 60 chars), all-lower
+    # snake_case. Anything outside that shape is a seed body, not a
+    # name; return None so the YAML omits ``seed_id``.
+    if 0 < len(first_line) < 60 and " " not in first_line and "_" in first_line:
+        return first_line
+    return None
 
 
 def _summary_filename(eval_path: Path) -> str:
@@ -204,7 +300,14 @@ def archive_eval(
     raw_target = raw_archive_dir / eval_path.name
     summary_target = summary_dir / _summary_filename(eval_path)
 
-    shutil.copy2(eval_path, raw_target)
+    # Idempotent re-archive: when the caller hands us an eval that
+    # already lives inside the archive dir (e.g. ``geode petri-archive
+    # ~/.geode/petri/logs/foo.eval`` for a re-extract after the
+    # extractor evolved), shutil.copy2 raises ``SameFileError``. Skip
+    # the copy in that case but still rewrite the summary YAML so the
+    # latest extractor runs.
+    if raw_target.resolve() != eval_path.resolve():
+        shutil.copy2(eval_path, raw_target)
     summary_target.write_text(
         yaml.safe_dump(summary, sort_keys=False, allow_unicode=True),
         encoding="utf-8",

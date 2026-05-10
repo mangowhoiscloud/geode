@@ -30,6 +30,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **petri eval archiver enrichment — F (wall-time/turns) + L (seed_id)
+  + H (auto-archive on live run).**
+  - F (시간 효율성 axis 측정 보강) — `eval_archive.extract_summary` 가
+    eval-level `timing.{started_at, completed_at, duration_seconds}` +
+    sample-level `timing.{total_time, working_time}` + `messages` 카운트
+    추출. inspect_ai 의 `EvalStats.started_at/completed_at` (ISO8601) +
+    `EvalSample.total_time/working_time` (float seconds) 가 공식 source.
+  - L (sample-seed 자동 매핑) — `_extract_seed_id()` 가 `sample.id`
+    문자열 형이거나 `sample.input` 첫 줄에서 seed name 추출. 결함 R
+    (`-T seed_instructions=id:a,b,c` 의 first-item leak) 도 prefix 제거로
+    처리.
+  - H (auto-archive on live run) — `run_audit` 의 live 분기 끝에서
+    `_extract_eval_log_path()` 가 inspect_ai 의 `Log: <path>.eval` 라인
+    파싱 후 `archive_eval` 자동 호출. 실패는 note 로 기록하고 audit
+    결과는 unaffected. `auto_archive=False` 로 opt-out 가능.
+  - `AuditReport` 에 `archived_raw` / `archived_summary` 필드 추가 +
+    `to_dict()` 도 갱신 — tool path 의 LLM-readable JSON 에 포함.
+  - 부수 발견 — `archive_eval` 가 src == dst 일 때 `SameFileError` 던지던
+    버그 수정. 같은 파일이면 cp skip + summary YAML 만 재작성 (in-place
+    re-archive 지원).
+  - 부수 발견 — `models` field 가 `ModelConfig.__str__` 의 verbose dump
+    로 들어가던 것 → `m.model` (bare `provider/name` string) 만 추출.
+  - 회귀 가드 — `test_eval_archive.py` 에 8 신규 테스트 (eval-level
+    timing, per-sample timing/messages/seed_id, id: prefix strip,
+    bare model string, in-place idempotency, `_extract_eval_log_path`
+    3 case).
+
+
+
 - **petri eval log archiver — `geode petri-archive` + `~/.geode/petri/logs/`
   + `docs/audits/eval-logs/` summary YAMLs.**
   - 본 PR 이전 4 audit 의 raw `.eval` 이 worktree 내부 (`logs/*.eval`)
