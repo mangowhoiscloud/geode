@@ -18,7 +18,7 @@ import logging
 from typing import Any
 
 import typer
-from plugins.petri_audit.cli_audit import audit
+from plugins.petri_audit.cli_audit import audit, petri_archive
 
 from core import __version__
 
@@ -358,6 +358,7 @@ app.command()(init)
 app.command()(history)
 app.command()(serve)
 app.command()(audit)
+app.command(name="petri-archive")(petri_archive)
 
 
 @app.callback()
