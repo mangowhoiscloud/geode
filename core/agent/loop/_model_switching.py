@@ -49,8 +49,16 @@ def sync_model_from_settings(loop: AgenticLoop) -> bool:
 
     Returns True if the model was changed (caller should rebuild
     system_prompt), False otherwise.
+
+    Callers may opt out of the drift sync entirely by constructing
+    :class:`AgenticLoop` with ``disable_settings_drift=True`` — the
+    petri_audit runner uses this so a user-selected ``--target`` is
+    not silently replaced by ``settings.model`` between rounds.
     """
     try:
+        if getattr(loop, "_disable_settings_drift", False):
+            return False
+
         from core.config import settings
 
         if settings.model == loop.model:

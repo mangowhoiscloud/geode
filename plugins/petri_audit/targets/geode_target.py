@@ -142,7 +142,11 @@ def _split_messages(
     return "\n\n".join(system_parts).strip(), history, last_user
 
 
-async def _default_geode_runner(messages: list[dict[str, Any]]) -> str:
+async def _default_geode_runner(
+    messages: list[dict[str, Any]],
+    *,
+    model: str | None = None,
+) -> str:
     """Default GEODE runner — bootstrap + ``AgenticLoop`` one-shot.
 
     Imports GEODE core lazily so the module-level surface stays free of
@@ -153,6 +157,19 @@ async def _default_geode_runner(messages: list[dict[str, Any]]) -> str:
     auditor's system message rides on ``AgenticLoop.system_suffix``,
     prior turns seed ``ConversationContext.messages``, and the final
     user message is the ``loop.run`` prompt.
+
+    **Model priority** (N6-followup):
+
+    - ``model`` argument set (= caller-explicit, e.g.
+      ``geode/claude-opus-4-7``) → that model is sticky for the lifetime
+      of the loop and ``AgenticLoop`` is constructed with
+      ``disable_settings_drift=True`` so a divergent ``settings.model``
+      never silently swaps it mid-audit.
+    - ``model=None`` (= caller did not pin a base; the registered
+      ``GeodeModelAPI`` is using the default sentinel) → ``AgenticLoop``
+      falls back to ``ANTHROPIC_PRIMARY`` and the regular drift sync
+      stays active so the user's GEODE ``settings.model`` (e.g.
+      whatever ``/model`` last selected) wins.
 
     Live LLM authorisation: this function will trigger live API calls
     when the bootstrapped readiness lacks ``force_dry_run``. Callers
@@ -185,11 +202,16 @@ async def _default_geode_runner(messages: list[dict[str, Any]]) -> str:
     # max_rounds=4 — per-turn tool-loop cap. Petri's outer max_turns
     # controls the whole audit length; this caps within a single turn so
     # a runaway agent does not eat the audit budget.
+    #
+    # ``disable_settings_drift`` is True iff the caller explicitly pinned
+    # a target model — see N6-followup priority docstring above.
     loop = AgenticLoop(
         ctx,
         executor,
         max_rounds=4,
         system_suffix=system_text,
+        model=model,
+        disable_settings_drift=(model is not None),
     )
 
     # ``loop.run()`` wraps ``asyncio.run(self.arun(...))`` which raises
@@ -273,8 +295,20 @@ def register() -> None:
             _ = tools, tool_choice, config
 
             geode_messages = _to_geode_messages(input)
-            runner = self._runner if self._runner is not None else _default_geode_runner
-            text = await runner(geode_messages)
+            if self._runner is not None:
+                # Custom runner (used by tests via the ``runner=`` model
+                # arg). Receives messages only — ``model_name`` is
+                # already on ``self`` for any introspection the test
+                # wants to do.
+                text = await self._runner(geode_messages)
+            else:
+                # N6-followup priority: pass the caller-pinned base
+                # model down to the runner. ``model_name`` is shaped
+                # ``geode/<base>``; the ``geode/default`` sentinel
+                # means "no caller pin — fall back to settings.model".
+                base = self.model_name.rsplit("/", 1)[-1]
+                runner_model: str | None = None if base == "default" else base
+                text = await _default_geode_runner(geode_messages, model=runner_model)
             return ModelOutput.from_content(model=self.model_name, content=text)
 
     _ = GeodeModelAPI  # decorator return is unused at module level

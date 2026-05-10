@@ -65,7 +65,7 @@ class AgenticLoop:
     WRAP_UP_HEADROOM = 2  # force text response N rounds before max
     _WRAP_UP_TIME_HEADROOM_S = 30.0  # force text 30s before time budget expires
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 — config knobs grow incrementally; refactor pending
         self,
         context: ConversationContext,
         tool_executor: ToolExecutor,
@@ -86,6 +86,7 @@ class AgenticLoop:
         parent_session_key: str = "",
         system_suffix: str = "",
         quiet: bool = False,
+        disable_settings_drift: bool = False,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -104,6 +105,12 @@ class AgenticLoop:
         self._loop_start_time: float = 0.0
         self.model = model or ANTHROPIC_PRIMARY
         self._provider = provider  # "anthropic", "openai", or "glm"
+        # When True, ``sync_model_from_settings`` becomes a no-op so the
+        # caller's chosen ``model`` is sticky for the lifetime of the
+        # loop. Used by the petri_audit runner so a user-selected
+        # ``--target`` is not silently replaced by the user's GEODE
+        # ``settings.model`` between rounds.
+        self._disable_settings_drift = disable_settings_drift
         # v0.52.5 — set by update_model() when model changes; consumed by
         # the run-loop to rebuild system_prompt before the next LLM call.
         self._prompt_dirty: bool = False
