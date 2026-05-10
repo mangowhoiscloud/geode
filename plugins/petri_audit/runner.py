@@ -99,6 +99,14 @@ class AuditReport:
     stderr: str = ""
     notes: list[str] = field(default_factory=list)
 
+    #: Where the live ``.eval`` was archived (raw + summary). Populated
+    #: when ``auto_archive=True`` and the inspect_ai run produced a
+    #: ``Log: …`` line. ``None`` for dry-run / aborted / archive failure
+    #: (failure is recorded as a note, never raised — archive is a
+    #: best-effort safety net, not a blocker for the audit result).
+    archived_raw: str | None = None
+    archived_summary: str | None = None
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "command": " ".join(self.command),
@@ -108,6 +116,8 @@ class AuditReport:
             "aborted": self.aborted,
             "returncode": self.returncode,
             "notes": self.notes,
+            "archived_raw": self.archived_raw,
+            "archived_summary": self.archived_summary,
         }
 
 
@@ -273,6 +283,7 @@ def run_audit(
     seed_select: str | None = None,
     dry_run: bool = True,
     yes: bool = False,
+    auto_archive: bool = True,
     assumptions: TokenAssumptions = DEFAULT_TOKEN_ASSUMPTIONS,
 ) -> AuditReport:
     """Run a Petri audit (or print the command in ``dry_run``).
@@ -355,6 +366,9 @@ def run_audit(
         capture_output=True,
         check=False,
     )
+    archived_raw, archived_summary = _maybe_auto_archive(
+        proc.stdout, proc.stderr, auto_archive=auto_archive, notes=notes
+    )
     return AuditReport(
         command=cmd,
         estimated_usd=estimated_usd,
@@ -364,4 +378,67 @@ def run_audit(
         stdout=proc.stdout,
         stderr=proc.stderr,
         notes=notes,
+        archived_raw=archived_raw,
+        archived_summary=archived_summary,
     )
+
+
+def _extract_eval_log_path(stdout: str, stderr: str) -> str | None:
+    """Find the ``Log: <path>`` line inspect_ai prints at end of run.
+
+    inspect_ai's CLI emits exactly one such line per task on stdout
+    (or stderr when ``capture_output`` is mixed). The line shape is::
+
+        Log: logs/<ISO-timestamp>_audit_<id>.eval
+
+    or sometimes prefixed with progress whitespace/colour codes. We
+    match on ``Log: `` followed by a non-blank token ending in
+    ``.eval``. Returns ``None`` when no such line is present (cancel /
+    error before the writer flushed).
+    """
+    import re
+
+    pattern = re.compile(r"Log:\s+(\S+\.eval)\b")
+    for stream in (stdout, stderr):
+        if not stream:
+            continue
+        m = pattern.search(stream)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _maybe_auto_archive(
+    stdout: str,
+    stderr: str,
+    *,
+    auto_archive: bool,
+    notes: list[str],
+) -> tuple[str | None, str | None]:
+    """Best-effort: copy raw eval to ``~/.geode/petri/logs/`` + write
+    YAML summary. Failure modes (no log line, archive_eval raised) are
+    recorded as notes — never raised — so the audit result itself is
+    unaffected by archive plumbing.
+
+    Returns ``(raw_path, summary_path)`` strings on success, two
+    ``None`` otherwise. Caller stores them on ``AuditReport``.
+    """
+    if not auto_archive:
+        return None, None
+    eval_path_str = _extract_eval_log_path(stdout, stderr)
+    if eval_path_str is None:
+        notes.append("auto-archive skipped: no `Log: …eval` line in subprocess output")
+        return None, None
+    try:
+        from plugins.petri_audit.eval_archive import archive_eval
+    except ImportError:  # pragma: no cover — [audit] extra always installed at this branch
+        notes.append("auto-archive skipped: [audit] extra not installed")
+        return None, None
+    try:
+        from pathlib import Path
+
+        result = archive_eval(Path(eval_path_str))
+    except Exception as exc:  # pragma: no cover — defensive: archive must not fail an audit
+        notes.append(f"auto-archive failed: {exc}")
+        return None, None
+    return str(result.raw_path), str(result.summary_path)
