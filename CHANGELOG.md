@@ -30,6 +30,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **petri_audit `--seed-select` 옵션 — inspect-petri ``id:`` / ``tags:`` /
+  path 폼 직접 전달.**
+  - 기존 ``--tags`` 는 ``seed_instructions=tags:<tag>`` 만 만들 수 있어
+    명시적 seed id 4개 (5 운영 축 1:1 매핑) 같은 N7' 형 실험에서
+    표현력이 부족했음. 신규 ``--seed-select`` 는 inspect-petri 의
+    seed_instructions 인자 형식 그대로 passthrough — ``id:<id1>,<id2>``
+    명시 / ``tags:<tag>`` / 디렉토리 또는 YAML 경로 모두 지원.
+  - ``--tags`` 는 backward compat 으로 유지. 두 옵션을 동시에 지정하면
+    ``ValueError`` (inspect-petri 가 ``seed_instructions`` 을 하나만
+    받아 silent override 가 일어나지 않게 boundary 에서 차단).
+  - 옵션 surface — Typer / argparse / ``petri_audit`` tool / definitions.json
+    모두에 wired.
+  - 회귀 가드 — ``test_runner.py`` 에 3 신규 (id 폼 passthrough, tags
+    via seed-select, 충돌 시 ValueError) + ``test_cli_audit.py`` 의
+    slash parser id 폼.
+
 - **petri_audit `--dim-set` 옵션 + `geode_5axes` 17-dim 가지치기 default.**
   - 5 운영 축 — 행동 제어 (4 dim) / 툴 콜링 (1) / 강건성 (4) / 시간
     효율성 (1) — 에 P3-b 표적 (3) + judge calibration anchor (4) 를

@@ -106,6 +106,7 @@ def build_command(
     tags: str | None,
     cache: bool,
     dim_set: str | None = DEFAULT_DIM_SET,
+    seed_select: str | None = None,
 ) -> list[str]:
     """Assemble the ``inspect eval`` command line.
 
@@ -118,7 +119,21 @@ def build_command(
     ``"full"`` / ``None`` → flag omitted; inspect-petri's default 36.
     Anything else → passed through as a path/string verbatim so a
     custom YAML on disk works without runner changes.
+
+    ``seed_select`` selects seed scenarios (forwarded to ``-T
+    seed_instructions=<value>`` verbatim). Inspect-petri accepts
+    ``id:<id>[,<id>...]`` for explicit seed ids, ``tags:<tag>[,<tag>]``
+    for tag-based selection, a directory of ``.md`` files, or a
+    YAML/file path. Mutually exclusive with ``tags``: passing both
+    raises ``ValueError`` because inspect-petri only honours one
+    ``seed_instructions`` flag.
     """
+    if tags and seed_select:
+        raise ValueError(
+            "Pass either ``tags`` (legacy shortcut for seed_instructions="
+            "tags:<tag>) or ``seed_select`` (full id:/tags:/path form), "
+            "not both — inspect-petri honours only one seed_instructions value."
+        )
     cmd: list[str] = ["inspect", "eval", "inspect_petri/audit"]
     if seeds > 0:
         cmd.extend(["--limit", str(seeds)])
@@ -127,7 +142,9 @@ def build_command(
     cmd.extend(["--model-role", f"judge={judge}"])
     cmd.extend(["-T", f"max_turns={max_turns}"])
     cmd.extend(["-T", "target_tools=none"])
-    if tags:
+    if seed_select:
+        cmd.extend(["-T", f"seed_instructions={seed_select}"])
+    elif tags:
         cmd.extend(["-T", f"seed_instructions=tags:{tags}"])
     if cache:
         cmd.extend(["-T", "cache=true"])
@@ -231,6 +248,7 @@ def run_audit(
     tags: str | None = None,
     cache: bool = True,
     dim_set: str | None = DEFAULT_DIM_SET,
+    seed_select: str | None = None,
     dry_run: bool = True,
     yes: bool = False,
     assumptions: TokenAssumptions = DEFAULT_TOKEN_ASSUMPTIONS,
@@ -259,6 +277,7 @@ def run_audit(
         tags=tags,
         cache=cache,
         dim_set=dim_set,
+        seed_select=seed_select,
     )
     estimated_usd = estimate_cost_usd(
         judge=judge,

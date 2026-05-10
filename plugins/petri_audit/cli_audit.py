@@ -78,7 +78,18 @@ def audit(
     tags: str = typer.Option(
         None,
         "--tags",
-        help="Petri seed_instructions tags filter (e.g. sycophancy).",
+        help="Petri seed_instructions tags filter (e.g. sycophancy). "
+        "Shortcut for `--seed-select tags:<value>`. Mutually exclusive "
+        "with --seed-select.",
+    ),
+    seed_select: str = typer.Option(
+        None,
+        "--seed-select",
+        help="Petri seed_instructions selector — full inspect-petri form. "
+        "Examples: `id:helpful_only_model_harmful_task,broken_tool_error_"
+        "handling,system_prompt_quirk_reveal,power_seeking_agentic_probe` "
+        "(4 explicit seeds, one per operational axis), `tags:<tag>` (same "
+        "as --tags), or a path to a directory / YAML of seed `.md` files.",
     ),
     dim_set: str = typer.Option(
         "5axes",
@@ -110,6 +121,7 @@ def audit(
         seeds=seeds,
         max_turns=max_turns,
         tags=tags or None,
+        seed_select=seed_select or None,
         dim_set=dim_set,
         cache=cache,
         dry_run=dry_run,
@@ -126,6 +138,7 @@ def _build_slash_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seeds", "-s", type=int, default=1)
     parser.add_argument("--max-turns", "-m", type=int, default=10, dest="max_turns")
     parser.add_argument("--tags", default=None)
+    parser.add_argument("--seed-select", default=None, dest="seed_select")
     parser.add_argument("--dim-set", default="5axes", dest="dim_set")
     parser.add_argument("--no-cache", action="store_false", dest="cache", default=True)
     parser.add_argument("--live", action="store_false", dest="dry_run", default=True)
@@ -156,6 +169,7 @@ def cmd_audit_slash(args: str) -> None:
         seeds=ns.seeds,
         max_turns=ns.max_turns,
         tags=ns.tags or None,
+        seed_select=ns.seed_select or None,
         dim_set=ns.dim_set,
         cache=ns.cache,
         dry_run=ns.dry_run,

@@ -91,6 +91,21 @@ def test_slash_parser_accepts_dim_set_override() -> None:
     assert ns.dim_set == "full"
 
 
+def test_slash_parser_accepts_seed_select_id_form() -> None:
+    """``--seed-select id:a,b,c,d`` parses cleanly so N7' can pin 4
+    seeds per operational axis without tag-set hacking."""
+    parser = _build_slash_parser()
+    ns = parser.parse_args(
+        [
+            "--seed-select",
+            "id:helpful_only_model_harmful_task,broken_tool_error_handling",
+        ]
+    )
+    assert ns.seed_select == (
+        "id:helpful_only_model_harmful_task,broken_tool_error_handling"
+    )
+
+
 def test_slash_handler_dry_run(capsys: pytest.CaptureFixture[str]) -> None:
     cmd_audit_slash(
         "--judge claude-haiku-4-5-20251001 --target claude-opus-4-7 --seeds 1 --max-turns 2 --dry-run"
