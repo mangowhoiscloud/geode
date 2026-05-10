@@ -9,6 +9,7 @@ P3-b-2 with explicit user authorisation.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -59,11 +60,111 @@ def test_build_command_omits_optional_flags() -> None:
         max_turns=5,
         tags=None,
         cache=False,
+        dim_set="full",
     )
     joined = " ".join(cmd)
     assert "--limit" not in joined  # seeds=0 → no limit
     assert "seed_instructions=tags" not in joined
     assert "cache=true" not in joined
+    assert "judge_dimensions" not in joined  # dim_set=full → flag omitted
+
+
+# ---------------------------------------------------------------------------
+# judge dimension set selection (--dim-set)
+# ---------------------------------------------------------------------------
+
+
+def test_build_command_default_dim_set_pins_geode_5axes_yaml() -> None:
+    """Default ``dim_set`` resolves to the bundled 17-dim YAML.
+
+    Any caller that does not pass ``--dim-set`` gets the pruned set
+    automatically — this is the contract the user asked for: 'core 9
+    + 표적 3 + 보정 5 = 17 dim' as the report surface.
+    """
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+        tags=None,
+        cache=True,
+    )
+    assert "-T" in cmd and any("judge_dimensions=" in part for part in cmd), (
+        "default dim_set must inject judge_dimensions; otherwise inspect-petri "
+        "falls back to its 36-dim set and the surface contract is broken"
+    )
+    flag = next(p for p in cmd if p.startswith("judge_dimensions="))
+    assert flag.endswith("geode_5axes.yaml")
+
+
+@pytest.mark.parametrize("alias", ["full", "default", "all", "FULL", "Default"])
+def test_build_command_dim_set_full_aliases_omit_judge_dimensions(alias: str) -> None:
+    """Explicit opt-out aliases drop the flag entirely (case-insensitive).
+
+    ``"full"`` is the documented escape hatch for users who want
+    inspect-petri's bundled 36 dims.
+    """
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+        tags=None,
+        cache=True,
+        dim_set=alias,
+    )
+    assert "judge_dimensions" not in " ".join(cmd)
+
+
+def test_build_command_dim_set_passthrough_for_custom_path(tmp_path: Path) -> None:
+    """Unknown values are forwarded verbatim so a user can drop a YAML
+    anywhere on disk and pass ``--dim-set /path/to/custom.yaml``.
+
+    Resolution / existence checking lives at inspect-petri's boundary
+    where the error message is most actionable.
+    """
+    custom = tmp_path / "custom-dims.yaml"
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=1,
+        max_turns=10,
+        tags=None,
+        cache=True,
+        dim_set=str(custom),
+    )
+    assert f"judge_dimensions={custom}" in " ".join(cmd)
+
+
+def test_geode_5axes_yaml_is_subset_of_inspect_petri_36() -> None:
+    """Every name in geode_5axes.yaml must exist in inspect-petri's
+    default 36-dim set, otherwise ``judge_dimensions(...)`` raises
+    ``ValueError: Unknown dimension`` at audit start.
+
+    Skipped when [audit] extra is absent — judge_dimensions is part of
+    the optional dependency.
+    """
+    judge_dims_mod = pytest.importorskip("inspect_petri._judge.dimensions")
+    import yaml
+    from plugins.petri_audit.judge_dims import BUILTIN_DIM_SETS
+
+    yaml_path = BUILTIN_DIM_SETS["5axes"]
+    with open(yaml_path) as f:
+        names = yaml.safe_load(f)
+    assert isinstance(names, list) and len(names) == 17, (
+        "5axes set is documented as 17 dims; if you intentionally widen it, "
+        "update CHANGELOG + the report surface contract"
+    )
+
+    defaults = {d.name for d in judge_dims_mod.load_dimensions()}
+    unknown = [n for n in names if n not in defaults]
+    assert not unknown, (
+        f"Unknown dimension(s) in geode_5axes.yaml: {unknown}. "
+        "inspect-petri rejects these at judge load time."
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -47,6 +47,7 @@ def _build_audit_handlers() -> dict[str, Any]:
         seeds = int(kwargs.get("seeds") or 1)
         max_turns = int(kwargs.get("max_turns") or 10)
         tags = kwargs.get("tags") or None
+        dim_set = kwargs.get("dim_set") or "5axes"
         cache = bool(kwargs.get("cache", True))
         dry_run = bool(kwargs.get("dry_run", True))
         confirm = bool(kwargs.get("confirm", False))
@@ -59,6 +60,7 @@ def _build_audit_handlers() -> dict[str, Any]:
                 seeds=seeds,
                 max_turns=max_turns,
                 tags=tags,
+                dim_set=dim_set,
                 cache=cache,
                 dry_run=dry_run,
                 # dry_run never spends — auto-skip the runner-level confirm.

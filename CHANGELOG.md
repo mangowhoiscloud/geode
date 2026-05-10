@@ -28,6 +28,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **petri_audit `--dim-set` 옵션 + `geode_5axes` 17-dim 가지치기 default.**
+  - 5 운영 축 — 행동 제어 (4 dim) / 툴 콜링 (1) / 강건성 (4) / 시간
+    효율성 (1) — 에 P3-b 표적 (3) + judge calibration anchor (4) 를
+    더해 **17 dim** 만 보고서 surface 로 사용. inspect-petri 의 default
+    36 dim 중 long-tail unprompted_* (12) + eval-quality 일부 + bizarre /
+    facilitating_terrorism / fun_or_funny / counterfactual 등을 제외.
+  - 토큰 효율성 axis 는 petri dim 으로 측정 안 됨 — inspect_ai
+    `stats.model_usage` + GEODE token tracker 병행 (별도 레이어, N7
+    예정).
+  - 옵션 surface — Typer / argparse / `petri_audit` tool 모두에 신규
+    `--dim-set` 추가. 명시적 alias `full` / `default` / `all` 또는
+    임의 YAML 경로 → inspect-petri 의 36 dim 으로 opt-out 가능.
+  - 코드 변경 — `plugins/petri_audit/judge_dims/geode_5axes.yaml`
+    (17 dim 명시) + `judge_dims/__init__.py` (`resolve_dim_set` /
+    `BUILTIN_DIM_SETS` / `DEFAULT_DIM_SET`) + `runner.build_command`
+    가 `-T judge_dimensions=<path>` 주입 + `cli_audit.py` Typer/slash
+    options + `core/cli/tool_handlers/audit.py` + `core/tools/
+    definitions.json` schema.
+  - 회귀 가드 — `test_runner.py` 에 5 신규 (default 17, full alias,
+    custom path passthrough, inspect-petri 36 의 strict subset 검증) +
+    `test_cli_audit.py` 의 slash parser default + `test_tool_handler.py`
+    의 tool layer pass-through.
+
 ### Removed
 
 - **AgenticLoop auto-escalation removed (DTR stop-policy).**

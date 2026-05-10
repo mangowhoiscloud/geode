@@ -72,8 +72,20 @@ def test_petri_audit_in_tool_definitions() -> None:
     assert audit_def["category"] == "evaluation"
     assert audit_def["cost_tier"] == "expensive"
     properties = audit_def["input_schema"]["properties"]
-    for required_field in ("judge", "auditor", "target", "dry_run"):
+    for required_field in ("judge", "auditor", "target", "dim_set", "dry_run"):
         assert required_field in properties
+
+
+def test_petri_audit_handler_passes_dim_set_to_runner() -> None:
+    """Tool layer forwards ``dim_set`` so the LLM-driven path has the
+    same surface contract as Typer/slash."""
+    handlers = _build_audit_handlers()
+    result = handlers["petri_audit"](dim_set="full", dry_run=True)
+    assert result["status"] == "ok"
+    assert "judge_dimensions" not in result["audit"]["command"], (
+        "dim_set='full' must omit -T judge_dimensions=… so inspect-petri "
+        "uses its bundled 36-dim default"
+    )
 
 
 def test_petri_audit_in_aggregate_tool_handlers() -> None:
