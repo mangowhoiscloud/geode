@@ -30,6 +30,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`.claude/skills/long-task-watcher/SKILL.md` — long-running task
+  watching patterns guide.**
+  - 본 PoC 의 N7' / N8 Monitor 타임아웃 사례 (`tail -F | grep` 의
+    stdout buffering 으로 매칭 라인 emit 못함 → Monitor 60min 후 timeout)
+    SOT 화 + 안정 패턴 정리.
+  - 권장 패턴 — task 짧으면 Bash 종료 알림 후 cat-and-grep / 길면
+    `stdbuf -oL tail -F` (brew coreutils 의존) / polling endpoint 는
+    `while-true + sleep + gh|curl`.
+  - Petri × GEODE 향 — `geode audit --live` 의 자동 archive (#1010)
+    덕분에 task 끝난 후 `report.archived_summary` 만 읽으면 모든
+    sample 의 dim/timing/seed_id 가 yaml 로 손에 들어옴 → 별도
+    Monitor pattern 일반적으로 불필요.
+  - CLAUDE.md 의 Custom Skills 표에 등록.
+
+
+
 - **petri eval archiver enrichment — F (wall-time/turns) + L (seed_id)
   + H (auto-archive on live run).**
   - F (시간 효율성 axis 측정 보강) — `eval_archive.extract_summary` 가
