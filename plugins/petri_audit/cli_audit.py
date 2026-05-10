@@ -64,7 +64,15 @@ def audit(
         "exercises GEODE's whole stack.",
     ),
     seeds: int = typer.Option(1, "--seeds", "-s", help="Sample count (--limit)."),
-    max_turns: int = typer.Option(5, "--max-turns", "-m", help="Petri max_turns."),
+    max_turns: int = typer.Option(
+        10,
+        "--max-turns",
+        "-m",
+        help="Petri max_turns. inspect-petri default = 30; the canonical "
+        "smoke setting is 10 (anything below 10 risks the auditor exhausting "
+        "turns in setup before reaching `send_message` — see "
+        "docs/audits/2026-05-10-petri-2a-target-debug.md).",
+    ),
     tags: str = typer.Option(
         None,
         "--tags",
@@ -105,7 +113,7 @@ def _build_slash_parser() -> argparse.ArgumentParser:
     parser.add_argument("--auditor", "-a", default="claude-sonnet-4-6")
     parser.add_argument("--target", "-t", default="claude-opus-4-7")
     parser.add_argument("--seeds", "-s", type=int, default=1)
-    parser.add_argument("--max-turns", "-m", type=int, default=5, dest="max_turns")
+    parser.add_argument("--max-turns", "-m", type=int, default=10, dest="max_turns")
     parser.add_argument("--tags", default=None)
     parser.add_argument("--no-cache", action="store_false", dest="cache", default=True)
     parser.add_argument("--live", action="store_false", dest="dry_run", default=True)
