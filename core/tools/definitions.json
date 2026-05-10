@@ -1446,5 +1446,55 @@
       },
       "required": []
     }
+  },
+  {
+    "name": "obs_otel_export",
+    "description": "OpenLLMetry OTel exporter — enables/disables OTLP span emission for LLM and tool calls. Use when the user asks to enable tracing, '관측', '트레이싱', 'OTel', or sends to a Langfuse / Phoenix / Jaeger / Tempo backend. Requires the [obs] optional extra (`uv sync --extra obs`). Endpoint resolution: explicit > TRACELOOP_BASE_URL env > OTEL_EXPORTER_OTLP_ENDPOINT env > no-op. cost_tier=free — emits spans only, no extra LLM calls.",
+    "category": "observability",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["enable", "disable", "status"],
+          "description": "enable: start exporting. disable: shutdown. status: report current state."
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "OTLP endpoint URL. Optional — env vars TRACELOOP_BASE_URL or OTEL_EXPORTER_OTLP_ENDPOINT are honoured."
+        },
+        "app_name": {
+          "type": "string",
+          "description": "Service name attached to spans. Default 'geode'."
+        }
+      },
+      "required": ["action"]
+    }
+  },
+  {
+    "name": "eval_inspect_viz",
+    "description": "Render a Petri / inspect_ai eval log into a chart. Use when the user asks for '결과 시각화', 'heatmap', 'audit chart', 'cost breakdown', 'tool usage chart' on a finished audit. Chart types: heatmap (sample×dim score), cost (role-stacked KRW + 5K gate hline), tool (GEODE tool-call frequency), agree (judge-vs-judge scatter), trend (phase-over-phase line). cost_tier=free — pure rendering, no LLM calls. Requires [viz] extra (`uv sync --extra viz`); heatmap path also needs [audit] extra to parse the eval log.",
+    "category": "observability",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "log_path": {
+          "type": "string",
+          "description": "Path to an inspect_ai *.eval log file produced by `geode audit --live`."
+        },
+        "chart": {
+          "type": "string",
+          "enum": ["heatmap", "cost", "tool", "agree", "trend"],
+          "description": "Chart type. Default 'heatmap'."
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Output PNG/SVG path. Defaults to ./reports/<chart>.png."
+        }
+      },
+      "required": ["log_path"]
+    }
   }
 ]

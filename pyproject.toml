@@ -52,6 +52,26 @@ audit = [
     "inspect-ai>=0.3.211",
     "inspect-petri @ git+https://github.com/meridianlabs-ai/inspect_petri@6d9b9e1dbc19bcc06544aca982427cfb37357ffc",
 ]
+# OpenLLMetry (Apache-2.0) — OTel-compatible LLM/agent tracing.
+# Lazy-imported in core/observability/ so default `uv sync` cold-start is
+# unaffected. Activated by the ``obs_otel_export`` tool only when an OTLP
+# endpoint is configured. See docs/plans/eval-petri-p3b-2-execution.md
+# § Future tooling — Observability.
+obs = [
+    "traceloop-sdk>=0.34.0",
+    "opentelemetry-instrumentation-anthropic>=0.39.0",
+]
+# Visualization for Petri audit results — matplotlib (PSF/BSD-3) for
+# static PNG/SVG, optional inspect_viz for inspect_ai-native heatmaps.
+# Lazy-imported in plugins/petri_audit/viz.py. See plan § Future tooling
+# — Reporting & Visualization.
+viz = [
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+    "plotly>=5.18.0",
+    "kaleido>=0.2.1",
+    "inspect-viz>=0.1.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -346,6 +366,14 @@ module = [
     # `uv sync --extra audit` is run; default sync skips them.
     "inspect_ai.*",
     "inspect_petri.*",
+    # P4 prep — [obs] / [viz] optional extras. Same opt-in pattern.
+    "traceloop.*",
+    "opentelemetry.*",
+    "matplotlib.*",
+    "seaborn.*",
+    "plotly.*",
+    "kaleido.*",
+    "inspect_viz.*",
 ]
 ignore_missing_imports = true
 
