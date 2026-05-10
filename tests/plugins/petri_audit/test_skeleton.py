@@ -16,6 +16,8 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 from dataclasses import dataclass
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -146,6 +148,94 @@ def test_default_runner_uses_async_arun_not_sync_run() -> None:
         "that path triggers asyncio.run() inside an already-running "
         "event loop."
     )
+
+
+def test_geode_target_runner_invokes_token_tracker_record() -> None:
+    """A (token tracker wiring guard) — `_default_geode_runner`
+    eventually triggers `_track_usage` → `tracker.record(...)` →
+    `~/.geode/usage/<YYYY-MM>.jsonl` append. N7'/N8 라이브에서 0
+    records 였던 결함 A 의 root-cause hypothesis 검증.
+
+    This is a *source-inspect* guard, not a runtime verification —
+    instantiating ``AgenticLoop`` requires a full GEODE bootstrap
+    (readiness, executor, handlers) that's much heavier than a pytest
+    unit test should attempt. The wiring chain we lock in:
+
+        _default_geode_runner
+          └── AgenticLoop.arun (loop.py:761 self._track_usage(response))
+                └── _response.track_usage (loop.py:1176)
+                      └── get_tracker().record (token_tracker.py:260)
+                            └── _persist_usage (token_tracker.py:358)
+                                  └── usage_store.record (~/.geode/usage/)
+
+    Each link below is verified by source-inspect so a future refactor
+    that breaks the chain (e.g. dropping ``_track_usage`` from the
+    successful-LLM-call branch in loop.py) fires a clear test failure.
+    """
+    import inspect
+
+    from core.agent.loop import _response
+    from core.agent.loop import loop as loop_mod
+    from core.llm import token_tracker
+    from plugins.petri_audit.targets import geode_target
+
+    # Link 1: runner → AgenticLoop.arun
+    runner_src = inspect.getsource(geode_target._default_geode_runner)
+    assert "AgenticLoop(" in runner_src
+    assert "await loop.arun(" in runner_src
+
+    # Link 2: AgenticLoop.arun → self._track_usage(response)
+    arun_src = inspect.getsource(loop_mod.AgenticLoop.arun)
+    assert "_track_usage(response)" in arun_src, (
+        "AgenticLoop.arun must call self._track_usage(response) on a "
+        "successful LLM response. Without it the petri audit's target "
+        "calls bypass the tracker."
+    )
+
+    # Link 3: _track_usage → _response.track_usage
+    inner_src = inspect.getsource(loop_mod.AgenticLoop._track_usage)
+    assert "_response.track_usage" in inner_src
+
+    # Link 4: _response.track_usage → tracker.record
+    track_src = inspect.getsource(_response.track_usage)
+    assert "tracker = get_tracker()" in track_src
+    assert "tracker.record(" in track_src
+
+    # Link 5: tracker.record → _persist_usage → usage_store
+    record_src = inspect.getsource(token_tracker.TokenTracker.record)
+    assert "_persist_usage" in record_src
+    persist_src = inspect.getsource(token_tracker.TokenTracker._persist_usage)
+    assert "get_usage_store()" in persist_src
+    assert ".record(" in persist_src
+
+
+def test_token_tracker_record_appends_to_geode_usage_jsonl(tmp_path: Path) -> None:
+    """A — explicit smoke that the usage_store path actually writes a
+    JSONL record when the tracker fires. Decouples the test from
+    ``Path.home()`` by injecting a temp dir."""
+    from core.llm.token_tracker import TokenTracker
+    from core.llm.usage_store import UsageStore
+
+    store = UsageStore(usage_dir=tmp_path)
+    tracker = (
+        TokenTracker(usage_store=store)
+        if "usage_store" in TokenTracker.__init__.__code__.co_varnames
+        else TokenTracker()
+    )
+    # ``TokenTracker._persist_usage`` is a staticmethod that reaches for
+    # ``get_usage_store()`` — patch the symbol so a fresh tracker writes
+    # to the temp dir without touching ``~/.geode``.
+    # ``_persist_usage`` does ``from core.llm.usage_store import get_usage_store``
+    # at call time, so patch the symbol on the source module — patching
+    # the importing module's namespace would miss the lazy import.
+    with patch("core.llm.usage_store.get_usage_store", return_value=store):
+        tracker.record("claude-haiku-4-5-20251001", input_tokens=10, output_tokens=5)
+
+    files = list(tmp_path.glob("*.jsonl"))
+    assert files, f"Expected JSONL in {tmp_path}, found {[p.name for p in tmp_path.iterdir()]}"
+    body = files[0].read_text(encoding="utf-8").strip()
+    assert "claude-haiku-4-5-20251001" in body
+    assert '"input_tokens": 10' in body or '"input": 10' in body or "10" in body
 
 
 def test_petri_audit_does_not_register_domain() -> None:
