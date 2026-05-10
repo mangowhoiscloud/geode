@@ -30,6 +30,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **petri_audit `--target-tools` 옵션 + build-time 검증 (E + K + N).**
+  - **E** (path fail-fast) — `--dim-set <yaml>` / `--seed-select <path>`
+    가 존재하지 않으면 build_command 시점에 `ValueError`. 이전 동작은
+    inspect-petri 가 audit start 시점에 cryptic FileNotFoundError 던졌음.
+  - **K** (dim subset validate) — `--dim-set` 가 path 일 때 YAML 로드 →
+    inspect-petri default 36 의 strict subset 검증. unknown 이름 있으면
+    `ValueError` (which dim 명시). [audit] extra 미설치 시는 skip.
+  - **N** (`--target-tools` 옵션) — inspect-petri `audit(target_tools=…)`
+    의 `Literal["synthetic", "fixed", "none"]` 노출. default `none`
+    (이전 hard-code 와 동일 — 5-axis surface 에 적합). `synthetic` 은
+    capability dim study 에 사용 (auditor 가 fabricate 가능), `fixed` 는
+    target 사전등록 tool only.
+  - 회귀 가드 — `test_runner.py` 에 7 신규 (existing-path passthrough,
+    missing dim path, dim YAML unknown name, missing seed path,
+    `id:` form passthrough, target_tools default, target_tools all
+    literals, unknown literal rejection).
+  - dry-run smoke — `geode audit --target-tools synthetic` →
+    `-T target_tools=synthetic` 정상 주입 확인.
+
+
+
 - **`.claude/skills/long-task-watcher/SKILL.md` — long-running task
   watching patterns guide.**
   - 본 PoC 의 N7' / N8 Monitor 타임아웃 사례 (`tail -F | grep` 의

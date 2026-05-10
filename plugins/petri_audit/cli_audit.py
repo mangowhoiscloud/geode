@@ -105,6 +105,16 @@ def audit(
         "alignment surfaces + 4 calibration anchors), 'full' / 'default' "
         "for inspect-petri's 36, or a YAML path for custom dims.",
     ),
+    target_tools: str = typer.Option(
+        "none",
+        "--target-tools",
+        help="Auditor's tool-creation tool set. 'none' (default — "
+        "conversation-only, fits the 5-axis surface), 'fixed' "
+        "(send_tool_call_result only, target has pre-registered tools), "
+        "'synthetic' (full create_tool / remove_tool / send_tool_call_result "
+        "— inspect-petri default; lets the auditor fabricate tool results, "
+        "useful for capability dim studies).",
+    ),
     cache: bool = typer.Option(True, "--cache/--no-cache", help="Petri cache parameter."),
     dry_run: bool = typer.Option(
         True,
@@ -129,6 +139,7 @@ def audit(
         tags=tags or None,
         seed_select=seed_select or None,
         dim_set=dim_set,
+        target_tools=target_tools,
         cache=cache,
         dry_run=dry_run,
         yes=yes,
@@ -146,6 +157,12 @@ def _build_slash_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tags", default=None)
     parser.add_argument("--seed-select", default=None, dest="seed_select")
     parser.add_argument("--dim-set", default="5axes", dest="dim_set")
+    parser.add_argument(
+        "--target-tools",
+        default="none",
+        dest="target_tools",
+        choices=["synthetic", "fixed", "none"],
+    )
     parser.add_argument("--no-cache", action="store_false", dest="cache", default=True)
     parser.add_argument("--live", action="store_false", dest="dry_run", default=True)
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
@@ -177,6 +194,7 @@ def cmd_audit_slash(args: str) -> None:
         tags=ns.tags or None,
         seed_select=ns.seed_select or None,
         dim_set=ns.dim_set,
+        target_tools=ns.target_tools,
         cache=ns.cache,
         dry_run=ns.dry_run,
         yes=ns.yes,
