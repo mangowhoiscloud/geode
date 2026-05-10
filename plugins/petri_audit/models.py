@@ -107,7 +107,7 @@ def to_inspect_model(geode_id: str) -> str:
     )
 
 
-def to_inspect_target(geode_id: str) -> str:
+def to_inspect_target(geode_id: str | None) -> str:
     """Map a GEODE model id to a ``geode/<model>`` target identifier.
 
     Auto-prefixes ``geode/`` unless the input already contains ``/`` (raw
@@ -115,9 +115,15 @@ def to_inspect_target(geode_id: str) -> str:
     registered ``GeodeModelAPI`` so the *whole* GEODE stack — agentic loop,
     tools, hooks, memory — is what gets evaluated; the user only picks the
     base LLM that GEODE will use internally for the run.
+
+    **N6-followup**: ``None`` / empty string returns the
+    ``geode/default`` sentinel, which ``GeodeModelAPI.generate`` reads
+    as "caller did not pin a base — let GEODE's regular drift sync
+    pick ``settings.model``". Pinned ids stay sticky for the audit's
+    lifetime.
     """
     if not geode_id:
-        raise AuditModelMappingError("Empty target model id")
+        return "geode/default"
     if "/" in geode_id:
         return geode_id
     return f"geode/{geode_id}"

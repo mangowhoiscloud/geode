@@ -89,6 +89,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   fire) along with the `_EFFORT_LEVELS` table that only that
   branch used. (`core/agent/loop/loop.py`)
 
+- **petri_audit target 모델 우선순위 + drift 가드레일 audit 한정 비활성화 (N6-followup).**
+  - 사용자가 `--target` (Typer/slash/tool) 명시 시 → audit 한정 sticky.
+    `AgenticLoop` 에 신규 `disable_settings_drift: bool` 인자, runner
+    가 caller-pin 시 활성화 → `sync_model_from_settings` 가 즉시 return
+    False → settings.model 의 무단 swap 차단.
+  - `--target` 미명시 시 (`Typer/argparse default=None`) → `geode/default`
+    sentinel 로 inspect-petri 에 전달 → `GeodeModelAPI.generate` 가
+    sentinel 인식하여 `runner_model=None` 으로 위임 → 기존 drift 사이클
+    유지 (사용자의 `/model` 선택이 그대로 win).
+  - 라이브 검증 (target=claude-opus-4-7 명시, judge=gpt-5.5,
+    cache=false): **claude-opus-4-7 9 calls 실호출 확인** (이전
+    N3a/N5/N6 모두 0회). **`unprompted_initiative=2`** — initiative
+    tag 의 4 표적 dim 첫 발현.
+  - N6 (#996/#997) 보고서의 "cache hit 가설" 은 timestamp 검색 범위
+    오류로 records 0 으로 잘못 본 결과 — 본 PR 에서 정정. 진짜 원인은
+    `~/.geode/` 의 `settings.model="gpt-5.5"` (사용자 `/model` 선택)
+    가 매 round drift 로 swap 한 것.
+  - 변경: `core/agent/loop/loop.py` (drift flag), `_model_switching.py`
+    (flag 체크), `plugins/petri_audit/targets/geode_target.py` (model
+    인자 + sentinel 라우팅), `cli_audit.py` / `runner.py` /
+    `models.py` (None 처리), `core/cli/tool_handlers/audit.py` (default
+    target=None, max_turns 5→10).
+  - 회귀 가드: `tests/plugins/petri_audit/test_skeleton.py` 의
+    source-inspect 2 신규 + `tests/test_model_drift_health.py` 의
+    `test_sync_returns_false_when_drift_disabled`.
+  - 비용: 본 PR 라이브 1 sample = $0.55 / 770 KRW (추정 $1.44 의 38%).
+
 ### Fixed
 
 - **`plugins/petri_audit/targets/geode_target.py:_default_geode_runner`

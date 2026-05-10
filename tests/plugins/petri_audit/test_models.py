@@ -67,9 +67,10 @@ def test_to_inspect_target_raw_passthrough() -> None:
     assert to_inspect_target("anthropic/claude-opus-4-7") == "anthropic/claude-opus-4-7"
 
 
-def test_to_inspect_target_empty_raises() -> None:
-    with pytest.raises(AuditModelMappingError):
-        to_inspect_target("")
+def test_to_inspect_target_none_returns_default_sentinel() -> None:
+    """N6-followup: None / empty → ``geode/default`` sentinel."""
+    assert to_inspect_target(None) == "geode/default"
+    assert to_inspect_target("") == "geode/default"
 
 
 # ---------------------------------------------------------------------------

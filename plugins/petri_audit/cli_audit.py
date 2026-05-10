@@ -57,11 +57,13 @@ def audit(
         help="Auditor model (GEODE id).",
     ),
     target: str = typer.Option(
-        "claude-opus-4-7",
+        None,
         "--target",
         "-t",
-        help="Target base model. Always wrapped as geode/<model> so the audit "
-        "exercises GEODE's whole stack.",
+        help="Target base model (GEODE id, e.g. claude-opus-4-7). "
+        "Pinned for the audit's lifetime when set. "
+        "**Omit to fall back to GEODE's active settings.model** — your "
+        "current /model selection wins, drift sync stays active.",
     ),
     seeds: int = typer.Option(1, "--seeds", "-s", help="Sample count (--limit)."),
     max_turns: int = typer.Option(
@@ -96,7 +98,7 @@ def audit(
     report = run_audit(
         judge=judge,
         auditor=auditor,
-        target=target,
+        target=target or None,
         seeds=seeds,
         max_turns=max_turns,
         tags=tags or None,
@@ -111,7 +113,7 @@ def _build_slash_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="/audit", add_help=False, allow_abbrev=False)
     parser.add_argument("--judge", "-j", default="claude-haiku-4-5-20251001")
     parser.add_argument("--auditor", "-a", default="claude-sonnet-4-6")
-    parser.add_argument("--target", "-t", default="claude-opus-4-7")
+    parser.add_argument("--target", "-t", default=None)
     parser.add_argument("--seeds", "-s", type=int, default=1)
     parser.add_argument("--max-turns", "-m", type=int, default=10, dest="max_turns")
     parser.add_argument("--tags", default=None)

@@ -41,9 +41,11 @@ def _build_audit_handlers() -> dict[str, Any]:
     def handle_petri_audit(**kwargs: Any) -> dict[str, Any]:
         judge = kwargs.get("judge") or "claude-haiku-4-5-20251001"
         auditor = kwargs.get("auditor") or "claude-sonnet-4-6"
-        target = kwargs.get("target") or "claude-opus-4-7"
+        # target=None → fall back to GEODE's active settings.model (drift
+        # sync stays active). Pinned id sticks for the audit's lifetime.
+        target = kwargs.get("target") or None
         seeds = int(kwargs.get("seeds") or 1)
-        max_turns = int(kwargs.get("max_turns") or 5)
+        max_turns = int(kwargs.get("max_turns") or 10)
         tags = kwargs.get("tags") or None
         cache = bool(kwargs.get("cache", True))
         dry_run = bool(kwargs.get("dry_run", True))
