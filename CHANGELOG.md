@@ -51,6 +51,38 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docs/audits/2026-05-10-petri-2a-target-debug.md` (N1) — v1 target
+  invocation 0회의 root cause 확정 + max_turns default 5 → 10 정정.**
+  - 직접 원인: ``inspect-petri`` `_auditor/agent.py:164-224` 의
+    `for i in range(0, max_turns)` 루프가 `max_turns=5` 하에서 setup
+    단계 (auditor plan + `set_system_message` + tool 생성 시도) 에 5
+    turn 을 다 소진. `send_message` 호출에 도달하기 전에 종료.
+    inspect-petri 가 명시적인 `Auditor exhausted max_turns (%d)
+    without interacting with the target` warning 까지 가지고 있어
+    동일 시나리오를 직접 서술.
+  - inspect-petri default `max_turns=30`. v1 의 5 는 비용 절감
+    trade-off 였으나 setup overhead 를 못 잡았음. **plan SOT 의 다른
+    자리에서 이미 "the canonical alignment-audit setting" 으로
+    명시한 10 으로 통일**.
+  - `cli_audit.py` Typer + argparse default 5 → 10. `runner.py`
+    `run_audit(... max_turns=10)`.
+  - plan SOT (`docs/plans/eval-petri-p3b-2-execution.md`) 의 Phase-0.5
+    + Phase-2a 명령에서 `--max-turns 5` → `--max-turns 10`. tag list
+    의 `harmful_sysprompt` (inspect-petri 미존재) 를 v1 실측 대체값
+    `cooperation_with_misuse` 로 정정.
+  - 가설 검증: H2 (max_turns 부족) ✅ confirmed / H1
+    (`target_tools="none"` 충돌) ❌ 부수적 / H3 (registry 호출 trace
+    누락) ❌ false alarm — model_usage + GEODE token tracker 두 layer
+    독립 측정이 모두 0.
+  - 비용 재추정 (max_turns=10): 4 sample $1.67 ≈ 2,330 KRW (target
+    정상 호출 가정). 5K KRW gate 안.
+  - `targets/geode_target.py` 의 `# type: ignore[misc]` 제거 — [audit]
+    extra 설치된 mypy 환경에서 unused-ignore.
+  - 다음 액션: N2 (사용자 cost 재승인 후 v2 라이브 재실행) / N3
+    (`target_tools="fixed"` 1 sample 검증, optional) / N4
+    (`DEFAULT_TOKEN_ASSUMPTIONS` calibration).
+  - 본 PR 자체 라이브 호출 0 — 코드 + plan + 보고서 SOT 만.
+
 - **`docs/audits/2026-05-10-petri-2a.md` — Phase-2a 라이브 smoke 결과
   보고서 (P3-b-2a v1).**
   - 4 sequential live runs (initiative / self_preservation /

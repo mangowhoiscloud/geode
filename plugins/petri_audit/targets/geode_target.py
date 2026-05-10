@@ -226,7 +226,7 @@ def register() -> None:
     from inspect_ai.tool import ToolChoice, ToolInfo
 
     @modelapi(name="geode")
-    class GeodeModelAPI(ModelAPI):  # type: ignore[misc]
+    class GeodeModelAPI(ModelAPI):
         """GEODE-as-a-Model — ``inspect_ai.ModelAPI`` adapter.
 
         Encapsulates GEODE's full agentic stack as a one-shot
