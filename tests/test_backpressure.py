@@ -142,38 +142,22 @@ class TestConvergenceDetection:
         loop._convergence.recent_errors = ["tool_a:timeout", "tool_a:timeout"]
         assert loop._check_convergence_break() is False
 
-    def test_check_convergence_3_identical_escalates(self) -> None:
-        """3 identical errors → model escalation, errors cleared, no break."""
+    def test_check_convergence_3_identical_breaks_immediately(self) -> None:
+        """v0.90.0 — 3 identical errors break the loop on first detection.
+
+        Pre-v0.90.0 the detector tried a model-escalation callback and
+        only broke after a 4th identical error. With auto-escalation
+        removed, the break happens immediately so the AgenticLoop can
+        surface a ``model_action_required`` diagnostic.
+        """
         loop = _make_loop()
         loop._convergence.recent_errors = ["tool_a:timeout", "tool_a:timeout", "tool_a:timeout"]
-        with patch.object(loop, "_try_model_escalation", return_value=True):
-            assert loop._check_convergence_break() is False
-        assert loop._convergence.convergence_escalated is True
-        assert loop._convergence.recent_errors == []  # Cleared after escalation
-
-    def test_check_convergence_4_identical_breaks_after_escalation(self) -> None:
-        """4 identical errors after escalation already tried → force break."""
-        loop = _make_loop()
-        loop._convergence.convergence_escalated = True  # Already escalated
-        loop._convergence.recent_errors = [
-            "tool_a:timeout",
-            "tool_a:timeout",
-            "tool_a:timeout",
-            "tool_a:timeout",
-        ]
         assert loop._check_convergence_break() is True
 
-    def test_check_convergence_5_identical_breaks_after_escalation(self) -> None:
-        """5+ identical errors after escalation already tried → force break."""
+    def test_check_convergence_5_identical_still_breaks(self) -> None:
+        """5+ identical errors still break (idempotent past the threshold)."""
         loop = _make_loop()
-        loop._convergence.convergence_escalated = True  # Already escalated
-        loop._convergence.recent_errors = [
-            "tool_a:timeout",
-            "tool_a:timeout",
-            "tool_a:timeout",
-            "tool_a:timeout",
-            "tool_a:timeout",
-        ]
+        loop._convergence.recent_errors = ["tool_a:timeout"] * 5
         assert loop._check_convergence_break() is True
 
     def test_check_convergence_mixed_errors_no_break(self) -> None:

@@ -28,15 +28,21 @@ class TestAgenticLoopEmitters:
         yield
         _ipc_writer_local.writer = None
 
-    def test_emit_model_escalation(self) -> None:
-        from core.ui.agentic_ui import emit_model_escalation
+    def test_emit_model_switch_required(self) -> None:
+        from core.ui.agentic_ui import emit_model_switch_required
 
-        emit_model_escalation("claude-opus-4-6", "claude-sonnet-4-6", 2)
+        emit_model_switch_required(
+            "claude-opus-4-6",
+            "rate_limit",
+            5,
+            ["claude-sonnet-4-6"],
+        )
         self.mock_writer.send_event.assert_called_once_with(
-            "model_escalation",
-            from_model="claude-opus-4-6",
-            to_model="claude-sonnet-4-6",
-            failures=2,
+            "model_switch_required",
+            model="claude-opus-4-6",
+            error_type="rate_limit",
+            attempts=5,
+            suggested_models=["claude-sonnet-4-6"],
         )
 
     def test_emit_cost_budget_exceeded(self) -> None:
@@ -219,11 +225,20 @@ class TestEventRendererV2:
         r._out = io.StringIO()
         return r
 
-    def test_model_escalation(self, renderer) -> None:
+    def test_model_switch_required(self, renderer) -> None:
         renderer.on_event(
-            {"type": "model_escalation", "from_model": "a", "to_model": "b", "failures": 2}
+            {
+                "type": "model_switch_required",
+                "model": "claude-opus-4-7",
+                "error_type": "rate_limit",
+                "attempts": 5,
+                "suggested_models": ["claude-sonnet-4-6"],
+            }
         )
-        assert "escalated" in renderer._out.getvalue().lower()
+        out = renderer._out.getvalue().lower()
+        assert "switch required" in out
+        assert "rate_limit" in out
+        assert "claude-sonnet-4-6" in out
 
     def test_cost_budget_exceeded(self, renderer) -> None:
         renderer.on_event({"type": "cost_budget_exceeded", "budget": 1.0, "actual": 1.5})
@@ -431,7 +446,7 @@ class TestIPCClientEventWhitelist:
             "subagent_complete",
             "session_cost",
             # V2
-            "model_escalation",
+            "model_switch_required",
             "cost_budget_exceeded",
             "time_budget_expired",
             "convergence_detected",

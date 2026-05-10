@@ -131,12 +131,18 @@ class TestCostBudgetAutoStop:
 
 
 # ---------------------------------------------------------------------------
-# 2. Runtime ratchet — escalate on convergence
+# 2. Convergence break — v0.90.0: 3 identical errors stop the loop
 # ---------------------------------------------------------------------------
 
 
-class TestConvergenceEscalation:
-    """Verify convergence detection tries model escalation before breaking."""
+class TestConvergenceBreak:
+    """Verify convergence detection breaks the loop without auto-escalation.
+
+    v0.90.0 — auto-escalation was removed. Three identical tool errors
+    now break the loop on first detection so the AgenticLoop can surface
+    a ``model_action_required`` diagnostic; the user picks the next
+    model with ``/model``.
+    """
 
     @pytest.fixture
     def context(self) -> ConversationContext:
@@ -147,86 +153,45 @@ class TestConvergenceEscalation:
         handler = MagicMock(return_value={"status": "ok"})
         return ToolExecutor(action_handlers={"web_search": handler})
 
-    def test_convergence_escalates_model_first(
+    def test_3_identical_errors_break(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """3 identical errors should trigger model escalation, not immediate break."""
-        loop = AgenticLoop(context, executor)
-
-        # Simulate 3 identical errors
-        loop._convergence.recent_errors = [
-            "web_search:timeout",
-            "web_search:timeout",
-            "web_search:timeout",
-        ]
-
-        with patch.object(loop, "_try_model_escalation", return_value=True) as mock_escalate:
-            result = loop._check_convergence_break()
-
-        assert result is False  # Should NOT break (escalation succeeded)
-        mock_escalate.assert_called_once()
-        assert loop._convergence.convergence_escalated is True
-        assert loop._convergence.recent_errors == []  # Cleared after escalation
-
-    def test_convergence_breaks_after_failed_escalation(
-        self, context: ConversationContext, executor: ToolExecutor
-    ) -> None:
-        """If escalation fails and 4 identical errors persist, should break."""
-        loop = AgenticLoop(context, executor)
-        loop._convergence.convergence_escalated = True  # Already tried escalation
-
-        # 4 identical errors post-escalation
-        loop._convergence.recent_errors = [
-            "web_search:timeout",
-            "web_search:timeout",
-            "web_search:timeout",
-            "web_search:timeout",
-        ]
-
-        result = loop._check_convergence_break()
-        assert result is True  # Should break now
-
-    def test_convergence_escalation_no_fallback(
-        self, context: ConversationContext, executor: ToolExecutor
-    ) -> None:
-        """If no fallback model is available, escalation returns False."""
+        """3 identical errors → break immediately (no auto-escalation)."""
         loop = AgenticLoop(context, executor)
         loop._convergence.recent_errors = [
             "web_search:timeout",
             "web_search:timeout",
             "web_search:timeout",
         ]
+        assert loop._check_convergence_break() is True
 
-        with patch.object(loop, "_try_model_escalation", return_value=False):
-            # First call: tries escalation, fails, then checks for 4+
-            result = loop._check_convergence_break()
-
-        # Only 3 errors, escalation failed — doesn't break yet (needs 4)
-        assert result is False
-        assert loop._convergence.convergence_escalated is True
-
-    def test_convergence_3_errors_post_escalation_warns_no_break(
+    def test_two_identical_errors_no_break(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """After escalation, 3 identical errors should warn but not break."""
+        """Fewer than 3 identical errors → loop continues."""
         loop = AgenticLoop(context, executor)
-        loop._convergence.convergence_escalated = True
+        loop._convergence.recent_errors = ["web_search:timeout", "web_search:timeout"]
+        assert loop._check_convergence_break() is False
 
+    def test_mixed_errors_no_break(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Different error keys → loop continues even past 3 errors."""
+        loop = AgenticLoop(context, executor)
         loop._convergence.recent_errors = [
             "web_search:timeout",
-            "web_search:timeout",
+            "fs:not_found",
             "web_search:timeout",
         ]
+        assert loop._check_convergence_break() is False
 
-        result = loop._check_convergence_break()
-        assert result is False  # Only warns, doesn't break (needs 4)
-
-    def test_convergence_flag_resets_on_new_loop(
+    def test_no_escalation_state_on_detector(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """_convergence_escalated should start as False."""
+        """v0.90.0 — the detector must not expose any auto-escalation state."""
         loop = AgenticLoop(context, executor)
-        assert loop._convergence.convergence_escalated is False
+        assert not hasattr(loop._convergence, "convergence_escalated")
+        assert not hasattr(loop._convergence, "_escalation_fn")
 
 
 # ---------------------------------------------------------------------------

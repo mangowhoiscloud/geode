@@ -113,14 +113,13 @@ def update_model(
 
     v0.52.5 — sets ``self._prompt_dirty = True`` whenever the model
     changes so the run-loop rebuilds the system prompt before the
-    next LLM call. Prior to v0.52.5 the prompt was only rebuilt
-    when ``_sync_model_from_settings()`` returned True; escalation
-    paths (``_try_model_escalation``, ``_try_cross_provider_escalation``)
-    called ``update_model`` directly + persisted via
-    ``_persist_escalated_model``, so the *next* sync detected no
-    drift and the prompt stayed stale (model card pointed at the
-    old model). Cosmetic in most cases, schema-wrong when a fresh
-    provider needs a fresh prompt template.
+    next LLM call. Without this, a sync that does not go through
+    ``_sync_model_from_settings()`` would leave the system prompt's
+    model card pinned to the previous model.
+
+    v0.90.0 — the only callers of ``update_model`` are now the
+    settings drift sync + the user-facing ``/model`` command;
+    auto-escalation paths were removed.
     """
     old_model = loop.model
     new_provider = provider or _resolve_provider(model)
@@ -255,73 +254,16 @@ def adapt_context_for_model(loop: AgenticLoop, target_model: str) -> None:
     )
 
 
-def try_model_escalation(loop: AgenticLoop) -> bool:
-    """Attempt to escalate to a higher/fallback model after consecutive failures.
+def fallback_chain_suggestions(loop: AgenticLoop) -> list[str]:
+    """Return remaining models in the current adapter's fallback chain.
 
-    First tries the next model in the current adapter's fallback chain.
-    If exhausted, tries cross-provider escalation via CROSS_PROVIDER_FALLBACK.
-    Returns True if escalation succeeded, False if at end of all chains.
-
-    Also syncs ``settings.model`` so that ``_sync_model_from_settings()``
-    does not revert the escalation on the next round.
+    Used by the loop to populate ``suggested_models`` in the
+    ``model_action_required`` diagnostic. The user picks one and runs
+    ``/model <id>``; we never auto-switch.
     """
     current = loop.model
-    chain = loop._adapter.fallback_chain
-
-    # Find current model in chain, try next
+    chain = list(getattr(loop._adapter, "fallback_chain", []) or [])
     if current in chain:
         idx = chain.index(current)
-        if idx + 1 < len(chain):
-            next_model = chain[idx + 1]
-            log.warning(
-                "Model escalation: %s -> %s (same provider: %s)",
-                current,
-                next_model,
-                loop._provider,
-            )
-            loop.update_model(next_model, loop._provider, reason="failure_escalation")
-            loop._persist_escalated_model(next_model)
-            return True
-
-    # v0.53.0 — Cross-provider escalation REMOVED. When the current
-    # provider's chain is exhausted, surface to user via
-    # quota_exhausted IPC event (handled by BillingError caller path).
-    # No silent provider swap — the user picks the next provider via
-    # /model. Cross-provider info hint (B5 breadcrumb) still surfaces
-    # available alternatives in the next round's LLM context.
-    from_provider = loop._provider
-    log.warning(
-        "Provider %s chain exhausted at model=%s — surfacing to user "
-        "(cross-provider auto-swap removed in v0.53.0)",
-        from_provider,
-        current,
-    )
-    return False
-
-
-def persist_escalated_model(model: str) -> None:
-    """Sync escalated model to settings so _sync_model_from_settings() won't revert."""
-    try:
-        from core.config import settings
-
-        settings.model = model
-    except Exception:
-        log.debug("Failed to persist escalated model to settings", exc_info=True)
-
-
-def try_cross_provider_escalation(loop: AgenticLoop) -> bool:
-    """Disabled in v0.53.0 — cross-provider auto-failover removed.
-
-    Per the v0.53.0 governance redesign: silent provider switch on
-    auth/quota error creates cost surprise + model behavior drift.
-    Quota exhaustion now emits a ``quota_exhausted`` IPC event so
-    the user can decide whether to switch providers, refresh the
-    token, or wait for quota reset. The cross-provider breadcrumb
-    (B5, v0.52.3) still surfaces *available* alternatives to the
-    LLM as information — but the system will not auto-swap.
-    """
-    log.info(
-        "Cross-provider escalation disabled (v0.53.0) — surfacing quota "
-        "exhaustion to user instead of silent swap"
-    )
-    return False
+        return chain[idx + 1 :]
+    return chain

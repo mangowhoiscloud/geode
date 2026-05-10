@@ -253,7 +253,13 @@ class TestAgenticLoop:
         assert result.termination_reason == "max_rounds"
 
     def test_run_llm_failure(self, context: ConversationContext, executor: ToolExecutor) -> None:
-        """Test graceful handling of LLM call failure (exhausts retry cap)."""
+        """LLM failures exhaust the retry cap and surface a model_action_required diagnostic.
+
+        v0.90.0 — pre-fix the loop tried ``_try_model_escalation`` to
+        silently swap models. That path is gone, so retries on the same
+        model run until ``_LLM_RETRY_CAP`` and exit with the structured
+        diagnostic instead of an opaque ``retry_exhausted`` reason.
+        """
         from unittest.mock import AsyncMock
 
         loop = AgenticLoop(context, executor, quiet=True)
@@ -261,13 +267,13 @@ class TestAgenticLoop:
         with (
             patch.object(loop, "_call_llm", return_value=None),
             patch.object(loop, "_aggressive_context_recovery", return_value=0),
-            patch.object(loop, "_try_model_escalation", return_value=False),
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             result = loop.run("test")
 
-        assert result.error == "llm_call_failed"
-        assert result.termination_reason == "retry_exhausted"
+        assert result.error == "model_action_required"
+        assert result.termination_reason == "model_action_required"
+        assert "/model" in result.text  # diagnostic points to user action
 
     def test_context_preserved(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test that conversation context is maintained across runs."""

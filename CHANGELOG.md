@@ -28,6 +28,67 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- **AgenticLoop auto-escalation removed (DTR stop-policy).**
+  Pre-v0.90.0 the loop tried to recover from `rate_limit` / `auth` /
+  `consecutive failure` errors by silently escalating to the next model
+  in the adapter's fallback chain (and historically to a different
+  provider). v0.53.0 already stubbed the cross-provider path; v0.90.0
+  finishes the job by **removing the residual escalation surface
+  entirely**:
+  - `core/agent/loop/loop.py` — `_try_model_escalation`,
+    `_try_cross_provider_escalation`, `_persist_escalated_model`,
+    `_ESCALATION_THRESHOLD` deleted. The four call sites
+    (convergence callback, auth error, rate_limit, retry-cap exhaustion)
+    now build a `model_action_required` diagnostic via
+    `_build_model_action_result(...)` and exit the loop.
+  - `core/agent/loop/_model_switching.py` —
+    `try_model_escalation`, `try_cross_provider_escalation`,
+    `persist_escalated_model` deleted. New
+    `fallback_chain_suggestions(loop)` exposes the remaining chain
+    *as suggestions only* for the diagnostic.
+  - `core/agent/convergence.py` — `ConvergenceDetector` no longer
+    accepts `escalation_fn` and no longer carries
+    `convergence_escalated`. 3 identical tool errors break the loop
+    immediately.
+  - `core/llm/errors.py` — new `build_model_action_message(...)`
+    helper renders a labelled diagnostic (error_type, severity,
+    model+provider, attempts, cost-so-far, suggested models, detail,
+    "/model" call-to-action). Hint table rewritten so messages
+    describe the next *user action*, not a phantom auto-retry.
+  - `core/ui/agentic_ui/events.py` — `emit_model_escalation`
+    renamed to `emit_model_switch_required` with new payload
+    (model / error_type / attempts / suggested_models).
+  - `AgenticResult.termination_reason` gains
+    `"model_action_required"` (LLM error survived the retry budget;
+    user must switch model) and `"user_clarification_needed"`
+    (overthinking detected; loop asks the user to narrow the
+    request rather than continuing or silently downgrading effort).
+  - Rationale: silent model swap masked cost surprise + identity
+    drift (production incidents 2026-04-27 / 2026-05-09); v0.53.0
+    governance principle was "no auto provider/model swap" but
+    the same-provider chain escalation outlived the cross-provider
+    removal. This change makes both paths uniform.
+
+### Changed
+
+- **Overthinking signal stops the loop instead of silently
+  downgrading effort.** Previously `>= 2` consecutive text-only
+  rounds with `out_tok > 2000` only logged a warning and reduced
+  `effort` / `max_tokens` for the next call. Now the loop exits
+  with `termination_reason="user_clarification_needed"` and asks
+  the user to narrow the request, including a 400-char excerpt of
+  the most recent reasoning. Magic `2000` was replaced with a
+  context-window-proportional threshold
+  (`max(1024, ctx_window // 100)` — 1% of the model's window with
+  a 1024-token floor; 200K ctx still resolves to 2000 for parity).
+  Mirrors the wrap-up (0.5%) and overthinking-budget (2%) ratios
+  used elsewhere in `_call_llm`. The dead effort-downgrade `elif`
+  branch in `_call_llm` was removed (loop exits before it can
+  fire) along with the `_EFFORT_LEVELS` table that only that
+  branch used. (`core/agent/loop/loop.py`)
+
 ### Fixed
 
 - **`plugins/petri_audit/targets/geode_target.py:_default_geode_runner`

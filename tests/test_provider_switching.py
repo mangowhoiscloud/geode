@@ -457,12 +457,16 @@ def test_update_model_swaps_adapter_on_provider_change(
 def test_update_model_marks_prompt_dirty_so_escalation_rebuilds(
     isolated_auth, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """v0.52.5 contract: update_model must set ``_prompt_dirty = True`` so
-    that escalation paths (which call update_model directly + persist via
-    _persist_escalated_model) cause the next round to rebuild the system
-    prompt. Pre-fix the prompt was rebuilt only when
-    ``_sync_model_from_settings()`` returned True; escalation made the
-    sync see no drift, so the model card stayed pinned to the failed model.
+    """v0.52.5 contract: update_model must set ``_prompt_dirty = True``.
+
+    Any caller that updates the model directly (user-initiated /model
+    switch, drift sync) must trigger a system_prompt rebuild on the
+    next round. Pre-fix the rebuild only happened when
+    ``_sync_model_from_settings()`` returned True, so direct
+    update_model() callers left the model card pinned to the previous
+    model. v0.90.0 removed the auto-escalation path that originally
+    motivated this guard, but the same invariant still protects the
+    user-initiated /model switch path.
     """
     from unittest.mock import MagicMock
 

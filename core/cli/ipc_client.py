@@ -252,7 +252,7 @@ class IPCClient:
                 "subagent_complete",
                 "session_cost",
                 # AgenticLoop state events
-                "model_escalation",
+                "model_switch_required",
                 "cost_budget_exceeded",
                 "time_budget_expired",
                 "convergence_detected",
