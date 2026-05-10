@@ -30,6 +30,12 @@ VALID_CATEGORIES = frozenset(
         # itself (auditor → target → judge) rather than a domain
         # subject like an IP.
         "evaluation",
+        # P4 own-evaluator preparation (B+C): OTel-based LLM/agent
+        # tracing surface (``obs_otel_export``) + audit log
+        # visualization (``eval_inspect_viz``). Distinct from
+        # ``evaluation`` because these tools wire instrumentation /
+        # rendering rather than score-producing audits themselves.
+        "observability",
     }
 )
 

@@ -52,6 +52,7 @@ from core.cli.tool_handlers.hitl import _build_hitl_handlers
 from core.cli.tool_handlers.mcp import _build_mcp_handler
 from core.cli.tool_handlers.memory import _build_memory_handlers
 from core.cli.tool_handlers.notification import _build_notification_handlers
+from core.cli.tool_handlers.observability import _build_observability_handlers
 from core.cli.tool_handlers.offload import _build_offload_handlers
 from core.cli.tool_handlers.plan import _build_plan_handlers
 from core.cli.tool_handlers.system import _build_system_handlers
@@ -70,6 +71,7 @@ __all__ = [
     "_build_mcp_handler",
     "_build_memory_handlers",
     "_build_notification_handlers",
+    "_build_observability_handlers",
     "_build_offload_handlers",
     "_build_plan_handlers",
     "_build_system_handlers",
@@ -145,6 +147,7 @@ def _build_tool_handlers(
     handlers.update(_build_offload_handlers())
     handlers.update(_build_computer_use_handler())
     handlers.update(_build_audit_handlers())
+    handlers.update(_build_observability_handlers())
     # Domain-supplied handlers (analysis + signals + generate_data for
     # game_ip; empty for non-pipeline domains).
     install_domain_tool_handlers(handlers)

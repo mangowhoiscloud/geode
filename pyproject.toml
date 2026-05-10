@@ -52,6 +52,27 @@ audit = [
     "inspect-ai>=0.3.211",
     "inspect-petri @ git+https://github.com/meridianlabs-ai/inspect_petri@6d9b9e1dbc19bcc06544aca982427cfb37357ffc",
 ]
+# OpenLLMetry (Apache-2.0) — OTel-compatible LLM/agent tracing.
+# Lazy-imported in core/observability/ so default `uv sync` cold-start is
+# unaffected. Activated by the ``obs_otel_export`` tool only when an OTLP
+# endpoint is configured. See docs/plans/eval-petri-p3b-2-execution.md
+# § Future tooling — Observability.
+obs = [
+    "traceloop-sdk>=0.34.0",
+    "opentelemetry-instrumentation-anthropic>=0.39.0",
+    # opentelemetry-api 는 traceloop-sdk 의 transitive 의존이지만
+    # core/observability/otel_export.py 가 직접 ``from opentelemetry
+    # import trace`` 하므로 deptry DEP001 회피 위해 명시.
+    "opentelemetry-api>=1.27.0",
+]
+# Visualization for Petri audit results — matplotlib (PSF/BSD-3) for
+# static PNG/SVG. Lazy-imported in plugins/petri_audit/viz.py. See plan
+# § Reporting & Visualization. seaborn / plotly / kaleido / inspect_viz
+# 는 P3-b-2b/c 진입 시 실 사용 코드 동반 별도 PR (P1=inspect_viz,
+# P3=plotly 인터랙티브).
+viz = [
+    "matplotlib>=3.8.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -281,12 +302,25 @@ DEP002 = [
     # CLI), not by direct import in our code. The [audit] extra still
     # needs to declare it so `uv sync --extra audit` installs it.
     "inspect-petri",
+    # `opentelemetry-instrumentation-anthropic` is activated transitively
+    # by Traceloop.init() at runtime (instrumented monkey-patch on the
+    # Anthropic SDK). No direct import in our code, but the [obs] extra
+    # must declare it so `uv sync --extra obs` installs the
+    # instrumentation alongside traceloop-sdk.
+    "opentelemetry-instrumentation-anthropic",
 ]
 
 [tool.deptry.package_module_name_map]
 # Pip name → top-level importable name. Pillow exposes PIL; pyyaml exposes yaml.
 Pillow = "PIL"
 pyyaml = "yaml"
+# traceloop-sdk's top-level import is `traceloop` (then `traceloop.sdk`).
+# Without this map deptry treats `from traceloop.sdk import ...` as a
+# missing dependency (DEP001).
+"traceloop-sdk" = "traceloop"
+# opentelemetry-api's top-level import is `opentelemetry` (then
+# `opentelemetry.trace`). Same DEP001 mismatch otherwise.
+"opentelemetry-api" = "opentelemetry"
 
 # codespell — typo detection in identifiers/strings/comments. Run via pre-commit.
 [tool.codespell]
@@ -346,6 +380,14 @@ module = [
     # `uv sync --extra audit` is run; default sync skips them.
     "inspect_ai.*",
     "inspect_petri.*",
+    # P4 prep — [obs] / [viz] optional extras. Same opt-in pattern.
+    "traceloop.*",
+    "opentelemetry.*",
+    "matplotlib.*",
+    "seaborn.*",
+    "plotly.*",
+    "kaleido.*",
+    "inspect_viz.*",
 ]
 ignore_missing_imports = true
 
