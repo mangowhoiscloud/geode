@@ -28,6 +28,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **결함 A 분석 — `docs/audits/2026-05-11-petri-tracker-A-analysis.md` +
+  source-inspect wiring 가드 2.**
+  - 본 PoC N7'/N8 라이브에서 `~/.geode/usage/2026-05.jsonl` 에
+    records 0 건 발생. 직전 archive 보강 (#1010) 의 결함 점검 우선순위
+    "상" 항목.
+  - source-inspect 결과 — `_default_geode_runner` → `AgenticLoop.arun`
+    → `self._track_usage` → `_response.track_usage` → `tracker.record`
+    → `_persist_usage` → `usage_store.record` 의 5 link 모두 정상.
+    wiring breakage 가 root cause 아님 → 라이브 검증 필요.
+  - 4 root-cause hypothesis 정리 — H1 (anthropic credit), H2 (subprocess
+    격리), H3 (bootstrap fail), H4 (response.usage shape).
+  - 회귀 가드 — `tests/plugins/petri_audit/test_skeleton.py` 에 2 신규
+    (Link 1-5 source-inspect + usage_store smoke `Path.home()` 우회).
+  - 라이브 검증 plan — anthropic credit 충전 + 사용자 cost 승인 후 별도
+    PR 에서 진행.
+
 ### Changed
 
 - **petri_audit estimator B 보정 — `cache_read_ratio` 반영.**
