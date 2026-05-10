@@ -318,13 +318,24 @@ class EventRenderer:
         self._out.write(f"  \033[{color}m{symbol} {hint}{suffix}\033[0m\n")
         self._out.flush()
 
-    def _handle_model_escalation(self, event: dict[str, Any]) -> None:
+    def _handle_model_switch_required(self, event: dict[str, Any]) -> None:
+        """Render the v0.90.0 model_switch_required event.
+
+        Replaces ``_handle_model_escalation`` (which surfaced the silent
+        auto-swap that no longer happens). The user picks the next model
+        manually with ``/model``.
+        """
         self._clear_activity_line()
-        frm = str(event.get("from_model", ""))
-        to = str(event.get("to_model", ""))
-        n = int(event.get("failures", 0))
+        model = str(event.get("model", ""))
+        error_type = str(event.get("error_type", "unknown"))
+        attempts = int(event.get("attempts", 0))
+        suggestions = event.get("suggested_models") or []
+        suffix = (
+            f" \u2014 try /model {' | '.join(suggestions)}" if suggestions else " \u2014 run /model"
+        )
         self._out.write(
-            f"  \033[1;33m\u26a1 Model escalated: {frm} \u2192 {to} (after {n} failures)\033[0m\n"
+            f"  \033[1;33m\u2715 Model switch required: {model} hit {error_type} "
+            f"after {attempts} attempts{suffix}\033[0m\n"
         )
         self._out.flush()
 

@@ -147,9 +147,10 @@ class AgenticLoop:
         self._enable_goal_decomposition = enable_goal_decomposition
         self._goal_decomposer: Any | None = None  # lazy init
 
-        # Feature 3: Model escalation on consecutive LLM failures
+        # LLM-call retry budget. v0.90.0 — auto-escalation removed; once
+        # the cap is hit the loop exits with ``model_action_required`` so
+        # the user picks a different model via ``/model``.
         self._consecutive_llm_failures: int = 0
-        self._ESCALATION_THRESHOLD: int = 2
         self._LLM_RETRY_CAP: int = 5  # max retries before giving up
 
         # Context window management (extracted — SRP)
@@ -157,11 +158,13 @@ class AgenticLoop:
 
         self._ctx_mgr = ContextWindowManager(hooks=hooks, quiet=quiet)
 
-        # Convergence detection + tool error tracking (extracted — SRP)
+        # Convergence detection + tool error tracking (extracted — SRP).
+        # v0.90.0 — ConvergenceDetector no longer takes an escalation_fn;
+        # 3 identical errors break the loop and the caller surfaces a
+        # ``model_action_required`` diagnostic.
         from core.agent.convergence import ConvergenceDetector
 
-        # Late-binding lambda so test patches on _try_model_escalation propagate
-        self._convergence = ConvergenceDetector(escalation_fn=lambda: self._try_model_escalation())
+        self._convergence = ConvergenceDetector()
 
         # Feature 8: Diversity forcing — prevent same tool 5x consecutively
         self._consecutive_tool_tracker: list[str] = []
@@ -211,6 +214,72 @@ class AgenticLoop:
     def _inject_credential_breadcrumb(self) -> None:
         """Delegates to :func:`_lifecycle.inject_credential_breadcrumb`."""
         return _lifecycle.inject_credential_breadcrumb(self)
+
+    def _overthinking_token_threshold(self) -> int:
+        """Per-round output-token threshold for the overthinking signal.
+
+        Context-proportional (1% of context window, floor 1024). Replaces
+        the legacy absolute 2000-token magic number so the threshold
+        scales with the model: 200K → 2000 (parity), 1M → 10000, 64K → 1024.
+        Mirrors the wrap-up (0.5%) and overthinking-budget (2%) ratios
+        used elsewhere in this file.
+
+        Defensive: if the token-tracker module is mocked or the lookup
+        otherwise fails (some tests stub ``sys.modules`` for a different
+        purpose), fall back to the legacy 2000-token threshold so the
+        loop still makes a deterministic decision.
+        """
+        try:
+            from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+
+            ctx_window = MODEL_CONTEXT_WINDOW.get(self.model, 200_000)
+            return max(1024, int(ctx_window) // 100)
+        except (TypeError, ValueError, AttributeError):
+            return 2000
+
+    def _build_model_action_result(
+        self,
+        *,
+        error_type: str,
+        severity: str,
+        hint: str,
+        rounds: int,
+        detail: str | None = None,
+    ) -> AgenticResult:
+        """Build an ``AgenticResult`` carrying a user-facing diagnostic.
+
+        Used when an LLM error survives the retry budget (or convergence
+        breaks). Replaces the prior auto-escalation path: rather than
+        silently swap to the next model, surface enough context for the
+        user to pick one with ``/model``.
+        """
+        from core.llm.errors import build_model_action_message
+
+        cost: float | None = None
+        try:
+            from core.llm.token_tracker import get_tracker
+
+            cost = float(get_tracker().accumulator.total_cost_usd)
+        except Exception:
+            cost = None
+        text = build_model_action_message(
+            error_type=error_type,
+            severity=severity,
+            hint=hint,
+            model=self.model,
+            provider=self._provider,
+            attempts=self._consecutive_llm_failures,
+            cost_so_far_usd=cost,
+            suggested_models=self._fallback_chain_suggestions() or None,
+            detail=detail,
+        )
+        return AgenticResult(
+            text=text,
+            tool_calls=self._tool_processor.tool_log,
+            rounds=rounds,
+            error="model_action_required",
+            termination_reason="model_action_required",
+        )
 
     # ------------------------------------------------------------------
     # Tool list refresh — delegate to ``_response``
@@ -266,30 +335,9 @@ class AgenticLoop:
         """Delegates to :func:`_model_switching.adapt_context_for_model`."""
         return _model_switching.adapt_context_for_model(self, target_model)
 
-    def _try_model_escalation(self) -> bool:
-        """Same-provider escalation only (v0.53.0 — no cross-provider auto-swap).
-
-        Once the current adapter's chain exhausts, the loop surfaces the
-        quota exhaustion to user via the ``BillingError`` panel; callers
-        must not reintroduce cross-provider iteration through fallbacks.
-        Delegates to :func:`_model_switching.try_model_escalation`.
-        """
-        return _model_switching.try_model_escalation(self)
-
-    @staticmethod
-    def _persist_escalated_model(model: str) -> None:
-        """Delegates to :func:`_model_switching.persist_escalated_model`."""
-        return _model_switching.persist_escalated_model(model)
-
-    def _try_cross_provider_escalation(self) -> bool:
-        """Disabled in v0.53.0 — early ``return False`` (no auto-swap).
-
-        Cross-provider auto-failover was removed in v0.53.0 because it
-        masked quota exhaustion with cost surprise and behaviour drift.
-        Delegates to :func:`_model_switching.try_cross_provider_escalation`,
-        which is a no-op that returns ``False``.
-        """
-        return _model_switching.try_cross_provider_escalation(self)
+    def _fallback_chain_suggestions(self) -> list[str]:
+        """Remaining models in the current adapter's chain — for diagnostics."""
+        return _model_switching.fallback_chain_suggestions(self)
 
     # ------------------------------------------------------------------
     # Run loop entry points
@@ -389,11 +437,11 @@ class AgenticLoop:
             # Model drift check: settings may have changed via switch_model tool
             # or /model command between rounds. Apply safely before next LLM call.
             #
-            # v0.52.5 — _prompt_dirty also catches escalation paths
-            # (`_try_model_escalation`, `_try_cross_provider_escalation`)
-            # which call update_model() without going through the drift sync.
-            # Without this, the system_prompt model card stays pinned to the
-            # previous model after escalation.
+            # v0.52.5 — _prompt_dirty catches any direct ``update_model`` call
+            # that bypasses the drift sync; without it the system_prompt model
+            # card would stay pinned to the previous model after a switch.
+            # v0.90.0 — auto-escalation paths were removed; the only such
+            # callers now are user-initiated /model switches.
             if self._sync_model_from_settings() or self._prompt_dirty:
                 system_prompt = self._build_system_prompt()
                 if decomposition_hint:
@@ -502,9 +550,15 @@ class AgenticLoop:
                     _ipc_writer.send_event("thinking_end")
 
             if response is None:
-                # Classify error for type-specific retry strategy
+                # Classify error for type-specific retry strategy.
+                # Defaults cover the case where the adapter swallowed the
+                # original exception (None response without a trailing
+                # ``last_error``); the diagnostic builder still needs
+                # ``_sev`` / ``_hint`` populated.
                 adapter_exc = getattr(self._adapter, "last_error", None)
-                _et = "unknown"
+                from core.llm.errors import _ERROR_CLASSIFICATION
+
+                _et, _sev, _hint = _ERROR_CLASSIFICATION["unknown"]
                 if adapter_exc is not None:
                     from core.llm.errors import classify_llm_error
 
@@ -538,9 +592,10 @@ class AgenticLoop:
                         )
                         return self._finalize_and_return(result, user_input, round_idx + 1)
 
-                    # Auth errors → try cross-provider escalation before giving up.
-                    # Expired keys affect all models in the same provider chain,
-                    # so skip intra-provider fallback and go straight to cross-provider.
+                    # Auth errors → surface to user; auto-swap was removed
+                    # in v0.90.0 (cross-provider stub already in place since
+                    # v0.53.0). Credentials are user-owned, so let the user
+                    # refresh keys or pick a different provider via /model.
                     if _et == "auth":
                         if not self._quiet:
                             from core.ui.agentic_ui import emit_llm_error
@@ -550,24 +605,12 @@ class AgenticLoop:
                         # the next round sees structured eligibility verdicts
                         # (Claude Code createModelSwitchBreadcrumbs pattern).
                         self._inject_credential_breadcrumb()
-                        old_model = self.model
-                        escalated = self._try_cross_provider_escalation()
-                        if escalated:
-                            from core.ui.agentic_ui import emit_model_escalation
-
-                            emit_model_escalation(
-                                old_model, self.model, self._consecutive_llm_failures
-                            )
-                            self._consecutive_llm_failures = 0
-                            messages[:] = self.context.messages
-                            continue
-                        # No cross-provider fallback available — exit
-                        detail = self._last_llm_error or str(adapter_exc)
-                        result = AgenticResult(
-                            text=f"LLM call failed ({detail}).",
+                        result = self._build_model_action_result(
+                            error_type=_et,
+                            severity=_sev,
+                            hint=_hint,
                             rounds=round_idx + 1,
-                            error="llm_call_failed",
-                            termination_reason="llm_error",
+                            detail=self._last_llm_error or str(adapter_exc),
                         )
                         return self._finalize_and_return(result, user_input, round_idx + 1)
 
@@ -610,27 +653,36 @@ class AgenticLoop:
                             },
                         )
 
-                # Auto-checkpoint before escalation/retry so user can resume
+                # Auto-checkpoint before retry so user can resume after a
+                # model switch. v0.90.0 — auto-escalation removed; the loop
+                # only ever retries the same model now.
                 self._sync_messages_to_context(messages)
                 self._save_checkpoint(user_input, round_idx=round_idx)
 
                 self._consecutive_llm_failures += 1
 
-                # Rate limit → immediate model escalation (different model = different quota)
+                # Rate limit → surface to user. We no longer auto-swap to a
+                # different model on rate_limit (silent provider/model
+                # change masks cost surprise). Wait, switch model via
+                # /model, or pick a different provider — the diagnostic
+                # carries the suggested fallback chain.
                 if _et == "rate_limit":
-                    old_model = self.model
-                    escalated = self._try_model_escalation()
-                    if escalated:
-                        from core.ui.agentic_ui import emit_model_escalation
+                    result = self._build_model_action_result(
+                        error_type=_et,
+                        severity=_sev,
+                        hint=_hint,
+                        rounds=round_idx + 1,
+                        detail=self._last_llm_error or str(adapter_exc),
+                    )
+                    return self._finalize_and_return(result, user_input, round_idx + 1)
 
-                        emit_model_escalation(old_model, self.model, self._consecutive_llm_failures)
-                        self._consecutive_llm_failures = 0
-                        messages[:] = self.context.messages  # re-sync adapted context
-                        continue
-
-                # Non-rate-limit errors: compact context + same model retry first,
-                # model switch only as last resort (downgrade loses quality).
-                if self._consecutive_llm_failures >= self._ESCALATION_THRESHOLD:
+                # Non-rate-limit errors: try aggressive context recovery
+                # before retrying the same model. If recovery helps, reset
+                # the failure counter and continue. Otherwise keep retrying
+                # the same model; once we hit ``_LLM_RETRY_CAP`` the
+                # bottom-of-loop branch surfaces a model_action_required
+                # diagnostic.
+                if self._consecutive_llm_failures >= 2:
                     recovered = self._aggressive_context_recovery(system_prompt, messages)
                     if recovered:
                         self._notify_context_event(
@@ -644,22 +696,6 @@ class AgenticLoop:
                             self.model,
                         )
                         self._consecutive_llm_failures = 0
-                        continue
-
-                    # Context compaction failed — model switch as last resort
-                    old_model = self.model
-                    escalated = self._try_model_escalation()
-                    if escalated:
-                        from core.ui.agentic_ui import emit_model_escalation
-
-                        emit_model_escalation(old_model, self.model, self._consecutive_llm_failures)
-                        log.info(
-                            "Context compaction insufficient, model escalated: %s → %s",
-                            old_model,
-                            self.model,
-                        )
-                        self._consecutive_llm_failures = 0
-                        messages[:] = self.context.messages  # re-sync adapted context
                         continue
 
                 # Below retry cap: backoff and retry (don't break the loop)
@@ -697,17 +733,17 @@ class AgenticLoop:
                     await _asyncio.sleep(delay)
                     continue  # retry without incrementing round_idx
 
-                # All retries exhausted — surface error
+                # All retries exhausted — surface as model_action_required.
+                # The diagnostic carries provider/model/attempts/cost +
+                # suggested fallback so the user can switch via /model
+                # and resume (conversation context is preserved).
                 detail = self._last_llm_error or "unknown error"
-                text = (
-                    f"LLM call failed ({detail}). "
-                    "Your conversation context is preserved — try again."
-                )
-                result = AgenticResult(
-                    text=text,
+                result = self._build_model_action_result(
+                    error_type=_et,
+                    severity=_sev,
+                    hint=_hint,
                     rounds=round_idx + 1,
-                    error="llm_call_failed",
-                    termination_reason="retry_exhausted",
+                    detail=detail,
                 )
                 return self._finalize_and_return(result, user_input, round_idx + 1)
 
@@ -764,11 +800,22 @@ class AgenticLoop:
                 except Exception:
                     log.debug("Cost budget check failed", exc_info=True)
 
-            # Adaptive compute: overthinking detection (DTR insight)
-            # Consecutive rounds with long text but no tool calls = overthinking signal
+            # Adaptive compute: overthinking detection (DTR insight).
+            # Consecutive rounds with long text but no tool calls = the
+            # model is talking to itself. v0.90.0 — when the threshold is
+            # crossed we no longer just log a warning and downgrade
+            # silently; we stop the loop and ask the user to narrow the
+            # request (``user_clarification_needed``).
+            #
+            # Threshold is context-window proportional (1%, floor 1024)
+            # — matches the 0.5% wrap-up budget / 2% overthinking-budget
+            # ratios used elsewhere in this file. Replaces the prior
+            # absolute 2000-token magic number, which mis-calibrated for
+            # both small-context (64K) and 1M-context models.
             if response.stop_reason != "tool_use":
                 out_tok = getattr(response.usage, "output_tokens", 0) if response.usage else 0
-                if out_tok > 2000:
+                threshold = self._overthinking_token_threshold()
+                if out_tok > threshold:
                     self._consecutive_text_only_rounds += 1
                 else:
                     self._consecutive_text_only_rounds = 0
@@ -778,9 +825,30 @@ class AgenticLoop:
                     # quadratically (consec=2,3,4 → +2+3+4=9 instead of 3 actual flagged rounds).
                     self._total_empty_rounds += 1
                     log.warning(
-                        "Overthinking detected: %d consecutive text-only rounds (>2000 tok each)",
+                        "Overthinking detected: %d consecutive text-only rounds "
+                        "(>%d tok each) — surfacing user_clarification_needed",
                         self._consecutive_text_only_rounds,
+                        threshold,
                     )
+                    self._op_logger.finalize()
+                    self._sync_messages_to_context(messages)
+                    last_text = self._extract_text(response).strip()
+                    summary = last_text[:400] + ("…" if len(last_text) > 400 else "")
+                    clarification = (
+                        f"~ I've spent {self._consecutive_text_only_rounds} consecutive "
+                        f"rounds reasoning without taking any action "
+                        f"(>{threshold} output tokens each). "
+                        "Could you narrow the request — point at a specific file, "
+                        "behaviour, or step you want me to focus on next?\n\n"
+                        f"Most recent reasoning (truncated):\n{summary}"
+                    )
+                    result = AgenticResult(
+                        text=clarification,
+                        tool_calls=self._tool_processor.tool_log,
+                        rounds=round_idx + 1,
+                        termination_reason="user_clarification_needed",
+                    )
+                    return self._finalize_and_return(result, user_input, round_idx + 1)
             else:
                 self._consecutive_text_only_rounds = 0
 
@@ -1031,16 +1099,14 @@ class AgenticLoop:
             force_text = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
-        # Adaptive compute allocation (DTR insight: match budget to round purpose)
-        # Context-proportional caps derived from model's context window
+        # Adaptive compute allocation (DTR insight: match budget to round purpose).
+        # Context-proportional caps derived from model's context window.
+        # v0.90.0 — the prior overthinking effort-downgrade branch is gone:
+        # the post-response check now exits the loop on the same condition,
+        # so the only remaining adaptive case is wrap-up.
         from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
         ctx_window = MODEL_CONTEXT_WINDOW.get(self.model, 200_000)
-        # v0.56.0 R4-mini — ``xhigh`` added (Opus 4.7-only level per
-        # platform.claude.com/docs/en/build-with-claude/effort).
-        # Adapter version-gates: ``xhigh`` downgrades to ``"max"`` on
-        # models that reject it (4.6 / Sonnet 4.6).
-        _EFFORT_LEVELS = ["low", "medium", "high", "max", "xhigh"]
 
         adaptive_max_tokens = self.max_tokens
         adaptive_thinking = self._thinking_budget
@@ -1051,14 +1117,6 @@ class AgenticLoop:
             adaptive_max_tokens = max(4096, min(self.max_tokens, ctx_window // 200))
             adaptive_thinking = 0
             adaptive_effort = "low"
-        elif self._consecutive_text_only_rounds >= 2:
-            # Overthinking: reduce budget — curb verbose non-actionable output
-            # Context-proportional: 2% of window, floor 8192
-            adaptive_max_tokens = max(8192, min(self.max_tokens, ctx_window // 50))
-            adaptive_thinking = max(0, adaptive_thinking // 2)
-            # Downgrade effort by one level
-            idx = _EFFORT_LEVELS.index(adaptive_effort) if adaptive_effort in _EFFORT_LEVELS else 2
-            adaptive_effort = _EFFORT_LEVELS[max(0, idx - 1)]
 
         response = await self._adapter.agentic_call(
             model=self.model,

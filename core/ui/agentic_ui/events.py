@@ -114,22 +114,36 @@ def emit_llm_error(
     _pkg.console.print(f"  [{style}]{symbol} {hint} [{model} · {elapsed_s:.1f}s][/{style}]")
 
 
-def emit_model_escalation(from_model: str, to_model: str, failures: int) -> None:
-    """Emit model_escalation event when LLM failures trigger auto-switch."""
+def emit_model_switch_required(
+    model: str,
+    error_type: str,
+    attempts: int,
+    suggested_models: list[str] | None = None,
+) -> None:
+    """Emit ``model_switch_required`` — the loop needs the user to pick a model.
+
+    v0.90.0 — replaces the prior ``emit_model_escalation`` event. The agent
+    no longer auto-swaps models on LLM error; instead it surfaces this
+    event so terminal UI / IPC consumers can render a "switch model"
+    prompt with the same suggestions the diagnostic carries.
+    """
     from core.ui import agentic_ui as _pkg
 
     writer = getattr(_ipc_writer_local, "writer", None)
+    suggestions = list(suggested_models or [])
     if writer is not None:
         writer.send_event(
-            "model_escalation",
-            from_model=from_model,
-            to_model=to_model,
-            failures=failures,
+            "model_switch_required",
+            model=model,
+            error_type=error_type,
+            attempts=attempts,
+            suggested_models=suggestions,
         )
         return
+    suggested_str = f" — try /model {' | '.join(suggestions)}" if suggestions else " — run /model"
     _pkg.console.print(
-        f"  [warning]⚡ Model escalated: {from_model} → {to_model}"
-        f" (after {failures} failures)[/warning]"
+        f"  [warning]✕ Model switch required: {model} hit {error_type} "
+        f"after {attempts} attempts{suggested_str}[/warning]"
     )
 
 

@@ -65,6 +65,11 @@ class AgenticResult:
     error: str | None = None
     # "natural" | "forced_text" | "max_rounds" | "time_budget_expired"
     # | "llm_error" | "context_exhausted" | "cost_budget_exceeded"
+    # | "model_action_required" — LLM error retried up to cap; user must
+    #   switch model/provider via /model and re-run. Diagnostic in ``text``.
+    # | "user_clarification_needed" — overthinking detected (consecutive
+    #   high-token text-only rounds with no tool use). Loop stops and asks
+    #   the user to narrow the request.
     termination_reason: str = "unknown"
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
     reasoning_metrics: dict[str, object] | None = None
