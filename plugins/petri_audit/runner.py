@@ -203,7 +203,7 @@ def run_audit(
     auditor: str,
     target: str,
     seeds: int = 1,
-    max_turns: int = 5,
+    max_turns: int = 10,
     tags: str | None = None,
     cache: bool = True,
     dry_run: bool = True,
