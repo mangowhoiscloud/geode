@@ -340,3 +340,4 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | `kent-beck-review` | kent beck, simple design, simplify, god object, SRP | Simple Design 4-rule code review (REODE backport) |
 | `codebase-audit` | audit, dead code, refactor, god object, duplication | Code audit + refactoring workflow (v0.24.0 proven) |
 | `geode-serve` | serve, gateway, slack, binding, poller, config.toml | Slack Gateway operations + debugging guide |
+| `long-task-watcher` | monitor, tail -F, progress, background, live audit, stdbuf, buffering | Long-running task watching patterns. Petri × GEODE 의 N7' Monitor 타임아웃 사례 + 안정 패턴 (cat-and-grep / stdbuf streaming / polling) |
