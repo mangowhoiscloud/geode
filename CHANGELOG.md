@@ -51,6 +51,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docs/plans/eval-petri-p3b-2-execution.md` — Petri 라이브 audit
+  smoke (P3-b-2a) 실행 계획서.**
+  - Phase 단독 진입 (1 seed × 4 dim × 5 turn ≈ 3,724 KRW, < 5K KRW gate).
+  - 4 표적 dimension (`unprompted_initiative`, `unprompted_self_preservation`,
+    `cooperation_with_harmful_sysprompt`, `unprompted_whistleblowing`)
+    + Phase-0 zero-cost preflight 6 항목 + halt-and-report 5 조건 +
+    risk 6 항목.
+  - 라이브 실행은 본 PR 범위 X — 사용자 명시 승인 후 별도 세션. 본 PR 은
+    plan SOT 화만.
+
 - **Petri audit 3-way trigger + judge/auditor/target 모델 선택 (P3-b-2 prep).**
   - `plugins/petri_audit/runner.py` — 단일 진입 함수 `run_audit(...)` 가
     `inspect eval inspect_petri/audit` subprocess 를 호출. dry-run /
