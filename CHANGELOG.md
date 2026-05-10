@@ -51,6 +51,46 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **P4 own-evaluator wiring — `[obs]` / `[viz]` extras + `obs_otel_export`
+  / `eval_inspect_viz` tool + `core/observability/` + `plugins/
+  petri_audit/viz.py`.**
+  - `pyproject.toml` 에 두 optional extra 추가:
+    - `[obs] = ["traceloop-sdk>=0.34", "opentelemetry-instrumentation-anthropic>=0.39"]`
+      — OpenLLMetry (Apache-2.0) OTel exporter. LangSmith 대체.
+    - `[viz] = ["matplotlib"]` — minimal. Petri/inspect_ai 결과 5종
+      차트 (heatmap/cost/tool/agree/trend) 모두 matplotlib 단독으로
+      렌더. ``seaborn`` / ``plotly`` / ``kaleido`` / ``inspect_viz`` 는
+      P3-b-2b/c 진입 시 실 사용 코드 동반 별도 PR.
+    default ``uv sync`` 영향 0 (cold-start ratchet 보호).
+  - `core/observability/{__init__,otel_export}.py` 신규 — `enable()` /
+    `disable()` / `status()` + `OtelStatus` dataclass + endpoint
+    resolution (explicit > `TRACELOOP_BASE_URL` > `OTEL_EXPORTER_OTLP_ENDPOINT`
+    > none). Lazy import — `[obs]` 미설치 시 `OtelExportError`
+    구조화된 메시지로 실패.
+  - `plugins/petri_audit/viz.py` 신규 — 5종 chart helper
+    (`render_heatmap` / `render_cost_breakdown` / `render_tool_frequency`
+    / `render_agreement` / `render_trend`) + `render_from_eval_log()`.
+    matplotlib / inspect_viz lazy import — `[viz]` 미설치 시
+    `VizError`.
+  - `core/cli/tool_handlers/observability.py` 신규 + `audit.py` 확장
+    — `obs_otel_export` (action: enable/disable/status) +
+    `eval_inspect_viz` (chart: heatmap/cost/tool/agree/trend) tool
+    handler. `_build_tool_handlers` wire-up + `__all__` 갱신.
+  - `core/tools/definitions.json` 에 두 tool entry. category =
+    `observability` (신규). cost_tier = `free` (둘 다 LLM 호출 0).
+  - `core/tools/base.py:VALID_CATEGORIES` 에 `observability` 추가.
+    `safety` 는 E (Constitutional AI revise) 진입 시 추가.
+  - `tests/observability/{__init__,test_otel_export,test_tool_handler}.py`
+    + `tests/plugins/petri_audit/test_viz.py` 신규 — 121+ 케이스 (extra
+    부재 → 구조화된 에러 + 매핑 + tool definition / category 동기화 +
+    아카이브 cold-start sanity).
+  - `pyproject.toml` `[tool.mypy.overrides]` 에 traceloop /
+    opentelemetry / matplotlib / seaborn / plotly / kaleido / inspect_viz
+    `ignore_missing_imports = true` 추가 — extra 미설치 환경에서도
+    mypy clean.
+  - 본 PR 자체는 LLM 비용 0. P4 메타-loop (DSPy/TextGrad — D 단계) +
+    Constitutional AI revise (E 단계) 는 별도 plan 후 별도 PR.
+
 - **`docs/plans/eval-petri-p3b-2-execution.md` 보강 — Reporting/Viz
   + Future tooling 라이브러리 카탈로그 + P4 own-evaluator 신규 tool
   후보.**
