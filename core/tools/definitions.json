@@ -1496,5 +1496,45 @@
       },
       "required": ["log_path"]
     }
+  },
+  {
+    "name": "eval_dspy_optimize",
+    "description": "DSPy-driven prompt re-compile from a Petri eval log — meta-loop tool. Use when the user explicitly asks to '컴파일', 'auto-tune', 'DSPy optimize' a system prompt with a finished Petri smoke. ENFORCED MITIGATIONS (plan § D 단계 도입 전 위험 카탈로그): M1 — judge ≠ generator family (fail-fast on same vendor), M2 — PR-only auto-edit (writes optimized_prompts/<id>.json, never mutates live prompt; user opens PR), M3 — budget cap (refuses calls below the per-compile floor; default $50/mo cap), M10 — deterministic compile_id from inputs. cost_tier=expensive — 1 compile averages $5-15 on Sonnet-class. dry_run=true (default) skips DSPy entirely and returns the compile plan + cost estimate.",
+    "category": "evaluation",
+    "cost_tier": "expensive",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "judge": {
+          "type": "string",
+          "description": "Judge model — GEODE id from a DIFFERENT vendor than generator (M1). e.g. claude-haiku-4-5-20251001 when generator=gpt-5.4."
+        },
+        "generator": {
+          "type": "string",
+          "description": "Generator (target) base model — what we're optimising the prompt for. e.g. gpt-5.4 when judge=claude-*."
+        },
+        "eval_log_path": {
+          "type": "string",
+          "description": "Path to a finished Petri *.eval log (output of `geode audit --live`)."
+        },
+        "output_dir": {
+          "type": "string",
+          "description": "Directory for the artefact. Default 'optimized_prompts'. Always written as <id>.json — caller opens a PR to apply."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Reproducibility seed (M10). Default 42."
+        },
+        "max_compile_usd": {
+          "type": "number",
+          "description": "M3 monthly cap. Default $50. Setting below the per-compile estimate ($12) fail-fasts."
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "MUST be true unless the user has explicitly authorised the live compile cost. Default true."
+        }
+      },
+      "required": ["judge", "generator", "eval_log_path"]
+    }
   }
 ]

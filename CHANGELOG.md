@@ -51,6 +51,53 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **P4 D 단계 진입 — DSPy / TextGrad / Instructor wiring + M1+M2+M3+M4+M5+M7+M10 코드 enforce.**
+  - `pyproject.toml` 에 `[reason]` optional extra 추가 (dspy ≥3.1.2 +
+    textgrad ≥0.1.6 + instructor ≥1.6.0). 모두 lazy import — default
+    `uv sync` cold-start 영향 0.
+  - `plugins/petri_audit/optimize.py` 신규 — DSPy `BootstrapFewShot`
+    wrapper. M1 (`_check_family_split` — judge ≠ generator family
+    fail-fast), M2 (`_next_step_message` — PR-only, `optimized_prompts/
+    <compile_id>.json` 만 기록), M3 (`_check_budget` — per-compile
+    floor $12 + caller cap), M10 (`compile_id_for` — timestamp + sha256
+    deterministic id) 모두 본 모듈 안에서 enforce.
+  - `plugins/petri_audit/judge_schema.py` 신규 — Pydantic
+    `JudgeScore` (1-level flat schema, `score ∈ [0,1]`, rationale
+    `max_length=2000`) + `parse_judge_response` (3-stage: 직접 JSON →
+    Instructor reask `max_retries=2` cap → raw-text fallback). M5
+    (rationale 토큰 cap + length-normalised score) + M7 (Instructor
+    retry storm 차단) enforce.
+  - `plugins/petri_audit/textgrad_wrapper.py` 신규 — `guard_depth(
+    depth, chained)` + `apply_textual_gradient`. M4 (depth > 1 또는
+    `chained=True` → `TextGradError`) enforce. lazy textgrad import.
+  - `plugins/petri_audit/models.py` 에 `family_of` / `same_family`
+    helper 추가 (M1 의 family 매핑 SOT). claude-* / gpt-* / o3 / o4-mini
+    / glm-* + raw provider prefix.
+  - `core/cli/tool_handlers/audit.py` 에 `eval_dspy_optimize` handler
+    추가. tool dispatch 시 OptimizeError 가 dict 로 정상 변환.
+  - `core/tools/definitions.json` 에 `eval_dspy_optimize` entry
+    (category=evaluation, cost_tier=expensive). description 안에 M1 /
+    M2 / M3 / M10 잠금 명시 — AgenticLoop 가 tool 선택 시점에 잠금
+    인지.
+  - `core/agent/safety.py:EXPENSIVE_TOOLS["eval_dspy_optimize"] =
+    12.00`. AgenticLoop 도구 경로의 live 호출 시 HITL `confirm_cost`
+    게이트 자동 발동.
+  - `pyproject.toml [tool.mypy.overrides]` 에 dspy / textgrad /
+    instructor `ignore_missing_imports` 추가 — extra 미설치 환경에서도
+    mypy clean.
+  - `tests/plugins/petri_audit/{test_optimize, test_judge_schema,
+    test_textgrad_wrapper, test_d_tool_handler}.py` 4 신규 — 50+ 케이스.
+    M1/M3 family/budget gate, M4 depth>1 reject, M5 length-normalised,
+    M7 retry cap, M10 compile_id determinism, dry_run no-DSPy-import
+    sanity, mocked dspy/textgrad live path, definitions.json /
+    EXPENSIVE_TOOLS 동기화.
+  - `docs/plans/eval-petri-p3b-2-execution.md` § "D 진입 전제 조건"
+    표를 코드 enforce 상태 표로 갱신 (✅ M1/M2/M3/M4/M5/M7/M10 / ⏸
+    M3-monthly/M6/M8/M9 deferred).
+  - 본 PR 자체 비용 0 — 모든 신규 tool default `dry_run=True`, 라이브
+    호출은 사용자 명시 트리거 시에만. 컴파일 1회 라이브 = $5-15
+    (Sonnet 기준) 추정.
+
 - **`docs/plans/eval-petri-p3b-2-execution.md` 보강 — D 단계 (DSPy +
   TextGrad + Instructor) 도입 전 위험 카탈로그.**
   - 5 위험 영역 (R1..R5):
