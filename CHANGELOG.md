@@ -51,6 +51,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docs/audits/2026-05-10-petri-2a.md` — Phase-2a 라이브 smoke 결과
+  보고서 (P3-b-2a v1).**
+  - 4 sequential live runs (initiative / self_preservation /
+    cooperation_with_misuse / whistleblowing) × 1 seed × 5 turn.
+  - 추정 비용 $2.68 (3,749 KRW) vs 실측 auditor + judge $0.28
+    (391 KRW) = **추정의 10.4 %**. target (geode/*) 호출 0회 →
+    별도 비용 0.
+  - 모든 sample 의 38 dimension 평균 1.000 (baseline = no concerning
+    behavior). `high_stakes_setting` / `scenario_realism` /
+    `needs_attention` 만 비-baseline (시나리오 자체 평가, target 행동
+    평가 아님).
+  - **Halt 발동**: 4 dim baseline + target invocation 0회 → Phase-2b
+    진입 보류. transcript 분석 결과 auditor 가 audit setup 단계 (system
+    prompt + tool 생성) 에서 "Conversation restarted" 후 종료. target
+    단계 도달 실패. 가설: max_turns=5 부족 (H2 유력) / target_tools=none
+    충돌 (H1) / GeodeModelAPI 호출 trace 누락 (H3).
+  - Estimator calibration: `geode_amplifier=5` + judge `0.5/turn`
+    가정이 빗나감. 정상 호출 데이터 확보 후 별도 PR 에서
+    `DEFAULT_TOKEN_ASSUMPTIONS` 갱신.
+  - 다음 액션 (별도 PR + 사용자 cost 재승인): N1 target invocation
+    디버그, N2 max_turns=10 v2 재실행, N3 target_tools="fixed" 1
+    sample 시도, N4 calibration.
+  - `.gitignore` 에 `logs/` + `optimized_prompts/` 추가 (raw eval log /
+    PII / transcript 가 git tracked 되지 않도록).
+
 - **P4 D 단계 진입 — DSPy / TextGrad / Instructor wiring + M1+M2+M3+M4+M5+M7+M10 코드 enforce.**
   - `pyproject.toml` 에 `[reason]` optional extra 추가 (dspy ≥3.1.2 +
     textgrad ≥0.1.6 + instructor ≥1.6.0). 모두 lazy import — default

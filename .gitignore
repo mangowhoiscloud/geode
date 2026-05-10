@@ -16,6 +16,12 @@ build/
 # Environment
 .env
 
+# inspect_ai eval logs from `geode audit --live` runs (raw transcripts).
+# SOT 는 docs/audits/<date>-petri-*.md 보고서. logs 자체는 너무 크고 PII /
+# transcript 가 있을 수 있어 git 제외.
+logs/
+optimized_prompts/
+
 # OS
 .DS_Store
 
