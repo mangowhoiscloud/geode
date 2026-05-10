@@ -57,8 +57,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `pyproject.toml` 에 두 optional extra 추가:
     - `[obs] = ["traceloop-sdk>=0.34", "opentelemetry-instrumentation-anthropic>=0.39"]`
       — OpenLLMetry (Apache-2.0) OTel exporter. LangSmith 대체.
-    - `[viz] = ["matplotlib", "seaborn", "plotly", "kaleido", "inspect-viz"]`
-      — Petri/inspect_ai 결과 차트.
+    - `[viz] = ["matplotlib"]` — minimal. Petri/inspect_ai 결과 5종
+      차트 (heatmap/cost/tool/agree/trend) 모두 matplotlib 단독으로
+      렌더. ``seaborn`` / ``plotly`` / ``kaleido`` / ``inspect_viz`` 는
+      P3-b-2b/c 진입 시 실 사용 코드 동반 별도 PR.
     default ``uv sync`` 영향 0 (cold-start ratchet 보호).
   - `core/observability/{__init__,otel_export}.py` 신규 — `enable()` /
     `disable()` / `status()` + `OtelStatus` dataclass + endpoint
