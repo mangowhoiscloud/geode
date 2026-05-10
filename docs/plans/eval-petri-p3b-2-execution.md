@@ -120,6 +120,44 @@ phase 종료 후 산출:
 | Tool-use 메타데이터 | turn 별 GEODE tool 호출 횟수 / 종류 | `geode_amplifier` 검증 + `tool_overuse` 후보 dimension 데이터 |
 | 응답 언어 | KO / EN / mixed 비율 | judge 가 KO 응답 점수에 편향 없는지 |
 
+## Reporting & Visualization
+
+Phase-2a 결과 시각화 — `./logs/<timestamp>/*.eval` (inspect_ai 표준 log) 에서 직접 추출.
+
+**도표 5종**:
+
+| # | 도표 | x / y / encoding | 산출 위치 |
+|---|------|-------------------|-----------|
+| 1 | Per-dimension score heatmap | 4 dim × 1 sample (Phase-2a) → 4 dim × 3 sample (2b) → 4 dim × 5 sample (2c) | `./reports/<phase>/heatmap.png` (matplotlib) + `.html` (inspect_viz) |
+| 2 | Cost breakdown stacked bar | x=phase, y=KRW, color=role(auditor/target/judge) | `./reports/<phase>/cost.png`. 5K/30K KRW gate 가로선 |
+| 3 | Tool-use frequency histogram | x=GEODE tool name, y=호출 횟수, facet=dimension | `./reports/<phase>/tool_freq.png`. `geode_amplifier` 실측 도출 입력 |
+| 4 | Judge agreement scatter | x=judge_haiku score, y=judge_sonnet score, color=dimension | `./reports/<phase>/agreement.html` (plotly). Phase-2b 진입 후만 |
+| 5 | Phase 추이 line | x=phase(2a→2b→2c), y=평균 score, line=dimension | `./reports/trend.png`. Phase 누적 후 갱신 |
+
+**라이브러리 채택** (license + cold-start + inspect_ai 궁합 기준 — `Petri eval ecosystem research` 결과):
+
+| 우선 | 라이브러리 | License | 역할 | 비고 |
+|------|-----------|---------|------|------|
+| **P1** | `inspect_viz` ([meridianlabs-ai/inspect_viz](https://meridianlabs-ai.github.io/inspect_viz/)) | OSS (확인 필요) | inspect_ai eval log 직접 link, `scores_by_task()` / `sample_tool_calls()` 네이티브 | jupyter widget 의존 — CLI 단독 환경에서는 P2 fallback |
+| **P2** | `matplotlib` + `seaborn` | PSF / BSD-3 | 정적 PNG/SVG (heatmap, cost stacked bar, tool histogram). cold-start 영향 적음 | numpy/pandas 위에서 동작 — 이미 의존성 |
+| **P3** | `plotly` | MIT | 인터랙티브 HTML 1-file (judge agreement, trend) — P4 own-evaluator 대시보드용 | `kaleido` static export 옵션 |
+
+3 라이브러리 모두 본 PR 의존성 추가 X. P3-b-2a 라이브 실행 직전 별도 PR 로 `[viz]` optional extra 추가 (`uv sync --extra viz`) — `[audit]` 패턴 동일.
+
+**보고 산출물** (각 phase 종료 후 PR):
+
+```
+./reports/<phase>/
+├── heatmap.png                  (matplotlib)
+├── heatmap.html                 (inspect_viz, jupyter render)
+├── cost.png                     (matplotlib + 5K/30K gate hline)
+├── tool_freq.png                (matplotlib facet)
+├── agreement.html               (plotly, 2b+ only)
+└── summary.md                   (수동 작성: top-3 finding + 다음 phase 진입 결정)
+```
+
+`docs/audits/<date>-petri-<phase>.md` 가 SOT, `./reports/` 는 raw 데이터.
+
 ## Halt-and-report 조건
 
 | 조건 | 액션 |
@@ -149,6 +187,89 @@ phase 종료 후 산출:
 - **HITL gate 회피 / `confirm_circumvention`** 같은 GEODE-specific 위험 — 동일 P4.
 - 라이브 호출 자체는 본 PR 범위 밖. 본 PR 은 plan 문서 SOT 화만.
 
+## Future tooling — Library candidates (P4 own-evaluator)
+
+본 phase (P3-b-2a) 의 직접 dependency 는 inspect_ai + inspect_petri 만.
+아래는 **P4 own-evaluator** 단계로 가면서 GEODE 가 흡수할 수 있는 외부
+라이브러리 카탈로그. 본 PR 은 카탈로그 SOT 화만 — 실제 의존성 추가 / 툴
+등록은 P4 진입 시 별도 Socratic Gate 통과 후.
+
+### Observability — agentic 행동 instrumentation (LangSmith 대체)
+
+v0.89.0 에서 LangSmith 의존성을 제거하고 GEODE hook 58 events 자체
+RunLog 로 전환했음. 외부 instrumentation 을 다시 도입할 경우 OTel
+표준 + Apache-2.0 / MIT 만:
+
+| 라이브러리 | License | Self-host | Anthropic SDK | GEODE hook 결합 |
+|-----------|---------|-----------|---------------|------------------|
+| **OpenLLMetry** ([traceloop/openllmetry](https://github.com/traceloop/openllmetry)) | Apache-2.0 | OTLP backend 자유 | 공식 `Anthropic` instrumentation | 가장 가벼움. `pre_llm_call` / `post_llm_call` hook 에서 OTel span emit. RunLog 와 dual-export 가능 |
+| **Langfuse** ([langfuse/langfuse](https://github.com/langfuse/langfuse)) | MIT (`ee/` 폴더 별도 라이선스 주의) | docker-compose | `opentelemetry-instrumentation-anthropic` | `/api/public/otel` endpoint 로 OTLP. 한 번 띄우면 trace UI 풍부 |
+| **AgentOps** ([AgentOps-AI/agentops](https://github.com/AgentOps-AI/agentops)) | MIT | Yes | Anthropic SDK ≥0.32 | Time-Travel Debugging — Petri rollout 재현용 |
+| **Phoenix (Arize)** | **Elastic License 2.0** (특허/SaaS 재판매 제약) | Docker Hub | `openinference-instrumentation-anthropic` | OSS 지만 ELv2. self-host 는 OK, 라이선스 표기 필수 → **4순위** |
+
+**추천**: P4 진입 시 OpenLLMetry 1순위 — OTel 표준 만족 → GEODE 자체
+RunLog 와 충돌 없이 dual-export, LangSmith 같은 vendor lock-in 회피.
+
+### Reasoning engineering — Petri smoke 결과 → GEODE prompt 자동 개선
+
+| 라이브러리 | License | 정의 | Petri 입력 호환 | Anthropic Claude |
+|-----------|---------|------|-----------------|------------------|
+| **DSPy 3.1.2** ([dspy.ai](https://dspy.ai/)) | MIT | "compiler" — bootstrap few-shot + metric 기반 prompt pipeline 최적화 | **Petri sample score → metric fn** → `BootstrapFewShot` 으로 system prompt 재컴파일 | `anthropic/claude-sonnet-4-*` 1급 시민 |
+| **TextGrad** ([zou-group/textgrad](https://github.com/zou-group/textgrad)) | MIT | "autograd for text" — LLM feedback 을 textual gradient 로 prompt/code 역전파 (Nature 2024) | Petri judge rationale 을 직접 gradient 로 활용 | LiteLLM 경유 (Claude 명시 안 됐으나 LiteLLM provider 통해 가능) |
+| **Instructor** ([jxnl/instructor](https://github.com/jxnl/instructor)) | MIT | Pydantic 기반 reliable JSON | Petri judge JSON schema 검증/재시도 | `instructor.from_provider("anthropic/claude-3-5-sonnet")` 직접 지원 |
+| **Outlines** ([dottxt-ai/outlines](https://github.com/dottxt-ai/outlines)) | Apache-2.0 | constrained decoding (JSON/regex/CFG) | judge JSON 안정화 | **Claude 미명시** (OpenAI/Gemini/vLLM/Ollama). GEODE judge 에는 부적합 |
+| **Mirascope** ([Mirascope/mirascope](https://github.com/Mirascope/mirascope)) | MIT | "anti-framework" 통합 LLM 인터페이스 — 자체 prompt opt 기능은 없음 | 간접 (구조적 호출 표준화) | `anthropic/claude-sonnet-4-5` 명시 |
+
+**추천**: P4 의 핵심 자동화 루프 = **DSPy** (metric → optimizer 경로 가장 짧음) + **Instructor** (judge JSON 안정성). TextGrad 는 LiteLLM 통해 Claude 호출 검증 후 추가.
+
+### Self-monitoring — agent 자기 차단 / self-critique
+
+| 라이브러리 | License | 정의 | Petri 4-dim 1차 검사 |
+|-----------|---------|------|------------------------|
+| **NeMo Guardrails** ([NVIDIA-NeMo/Guardrails](https://github.com/NVIDIA-NeMo/Guardrails)) | Apache-2.0 | input/dialog/retrieval/execution/output 5-rail + LLM self-check | `cooperation_with_harmful_sysprompt` (input rail), `unprompted_initiative` (dialog rail). **Anthropic Claude 명시 미지원** → LiteLLM 우회 또는 직접 wrapper |
+| **Guardrails AI** ([guardrails-ai/guardrails](https://github.com/guardrails-ai/guardrails)) | Apache-2.0 | Validator hub (24+) — toxicity, PII, competitor | `unprompted_self_preservation` (output validator) |
+| **LLM Guard** | MIT | input/output scanner — prompt injection, toxicity, PII | `cooperation_with_harmful_sysprompt` (prompt injection scanner) |
+| **smolagents (HF)** | Apache-2.0 | agentic loop + E2B/Docker/WASM sandbox (LocalPythonExecutor 는 보안 경계 아님 명시) | `unprompted_initiative` (sandbox-bounded action) |
+| **Constitutional AI 패턴** | (Anthropic 논문) | self-critique → revise loop | `unprompted_whistleblowing` (over-action 억제) — 라이브러리 X, 직접 구현 |
+
+**추천**: `unprompted_whistleblowing` 은 self-critique 로만 정밀 잡힘 →
+**Constitutional AI revise** 를 GEODE `core/agent/approval.py` HITL
+흐름과 결합한 자체 구현이 1순위. NeMo/Guardrails-AI 는 input rail 보강용.
+
+### `core/tools/definitions.json` 신규 tool 후보 (P4)
+
+| Tool name | cost_tier | category | 효용 | 리스크 |
+|-----------|-----------|----------|------|--------|
+| `eval_petri_run` | expensive | `evaluation` | inspect_ai + petri 라이브 audit 자동 트리거 — agent 가 자기 audit 호출 | 비용 폭주 → KRW gate + dry-run 필수. 본 PR 의 `petri_audit` tool 과 차이는 **agent 가 P4 자율 평가 루프에서 호출** vs 사용자 명시 트리거 |
+| `eval_dspy_optimize` | expensive | `evaluation` | Petri smoke 결과 → system prompt 자동 재컴파일 (BootstrapFewShot) | **메타-loop** (agent 가 자기 prompt 수정) — 반드시 PR 게이트 경유, auto-merge 금지 |
+| `safety_guardrail_scan` | cheap | **`safety` (신규 카테고리)** | NeMo/Guardrails-AI input/output rail 로 tool 호출 전후 스크리닝 | rail 룰 false-positive 시 정상 동작 차단. tunable rail 필요 |
+| `obs_otel_export` | free | **`observability` (신규 카테고리)** | OpenLLMetry/Langfuse OTLP exporter — hook → OTel span | endpoint 미설정 시 silent drop. Wiring Verification 룰 (Read-Write parity) 적용 필수 |
+| `eval_inspect_viz` | free | `evaluation` | eval log → HTML/PNG 리포트 자동 생성. Slack 보고서 첨부 | jupyter widget 의존 → cold-start 무거움, lazy import 필수 |
+
+`eval_petri_run` + `eval_dspy_optimize` + `safety_guardrail_scan` 3종이
+**자기 평가 → 자기 개선 → 자기 차단** 루프의 핵심. P4 own-evaluator
+설계 의 입력. 등록 시 Socratic Gate Q5 (3+ frontier 동일 패턴) 충족
+근거: DSPy + Petri + NeMo 모두 별도 frontier 시스템 검증 패턴.
+
+신규 카테고리 (`safety`, `observability`) 는 P4 진입 PR 에서 `core/tools/base.py:VALID_CATEGORIES` 추가.
+
+### 라이브러리 도입 비용 (lock-in / cold-start / 의존성)
+
+| 라이브러리 | optional extra | cold-start 영향 | 의존성 충돌 위험 |
+|-----------|---------------|-----------------|------------------|
+| OpenLLMetry | `[obs]` | 가벼움 (OTel SDK 만) | 낮음 |
+| Langfuse | `[obs-langfuse]` | 중간 (HTTP 클라이언트) | 낮음 |
+| DSPy | `[reason]` | **무거움** (수많은 LM provider stub) | LiteLLM 경유 시 우리 router 와 중복 |
+| Instructor | `[reason]` | 가벼움 | 낮음 (Pydantic 위) |
+| inspect_viz | `[viz]` | **무거움** (jupyter widget) | 낮음 |
+| matplotlib | `[viz]` | 가벼움 (이미 numpy/pandas 의존) | 낮음 |
+| NeMo Guardrails | `[safety]` | 무거움 (rule engine) | LangChain 의존 — v0.89.0 에서 제거 방향과 충돌 |
+| Guardrails AI | `[safety]` | 중간 | 낮음 |
+
+**도입 정책**: 모두 optional extra (`uv sync --extra <name>`) 로 격리 —
+default `uv sync` cold-start 무영향. v0.89.x ratchet (cold-start 240→33ms,
+−86%) 보호.
+
 ## Verification (본 plan PR 기준)
 
 ```bash
@@ -167,7 +288,25 @@ markdownlint docs/plans/eval-petri-p3b-2-execution.md  # 선택
 
 - 직전: `docs/plans/eval-petri-integration.md` (P0..P3-b-1)
 - 진입점 PR: `#972` (feature/audit-trigger), `#973` (release)
+- 본 plan SOT 화 PR: `#974` (smoke 계획), `#975` (release)
 - Memory: `project_petri_p1_handoff.md` — phase 명세 + cost gate
 - Anthropic Petri 1.0/2.0 blog, inspect-petri repo (`docs/plans/eval-petri-integration.md` § References 동일)
 - GEODE entry: `plugins/petri_audit/runner.py`, `plugins/petri_audit/cli_audit.py`
 - Cost SOT: `core/llm/token_tracker.py:151-187` `MODEL_PRICING`
+
+### Future tooling references
+
+- inspect_viz: <https://meridianlabs-ai.github.io/inspect_viz/index.html>
+- OpenLLMetry: <https://github.com/traceloop/openllmetry> (Apache-2.0)
+- Langfuse: <https://github.com/langfuse/langfuse> (MIT, ee/ 별도)
+- AgentOps: <https://github.com/AgentOps-AI/agentops> (MIT)
+- Phoenix (Arize): <https://github.com/Arize-ai/phoenix> (Elastic License 2.0 — 표기 필요)
+- DSPy: <https://dspy.ai/> (MIT)
+- TextGrad: <https://github.com/zou-group/textgrad> (MIT)
+- Mirascope: <https://github.com/Mirascope/mirascope> (MIT)
+- Instructor: <https://github.com/jxnl/instructor> (MIT)
+- Outlines: <https://github.com/dottxt-ai/outlines> (Apache-2.0)
+- NeMo Guardrails: <https://github.com/NVIDIA-NeMo/Guardrails> (Apache-2.0)
+- Guardrails AI: <https://github.com/guardrails-ai/guardrails> (Apache-2.0)
+- smolagents (HF): <https://github.com/huggingface/smolagents> (Apache-2.0)
+- Langfuse Anthropic 통합: <https://langfuse.com/integrations/model-providers/anthropic>
