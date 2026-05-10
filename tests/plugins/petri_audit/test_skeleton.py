@@ -77,6 +77,45 @@ def test_default_runner_rejects_empty_messages() -> None:
         asyncio.run(_default_geode_runner(messages=[]))
 
 
+def test_default_runner_passes_pinned_model_to_loop_with_drift_disabled() -> None:
+    """N6-followup: caller-pinned model arrives at AgenticLoop sticky.
+
+    Source-inspect — verify the runner constructs AgenticLoop with the
+    model arg and ``disable_settings_drift=True`` when ``model`` is
+    pinned, and lets it fall back (no flag) when ``model is None``.
+    """
+    import inspect
+
+    from plugins.petri_audit.targets import geode_target
+
+    src = inspect.getsource(geode_target._default_geode_runner)
+    code_only = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith("#"))
+    assert "model=model" in code_only, (
+        "_default_geode_runner must pass its ``model`` argument to AgenticLoop"
+    )
+    assert "disable_settings_drift=(model is not None)" in code_only, (
+        "_default_geode_runner must scope drift suppression to caller-pinned "
+        "models — passing model=None must keep the regular drift sync active."
+    )
+
+
+def test_geode_model_api_routes_default_sentinel_to_none() -> None:
+    """N6-followup: ``geode/default`` sentinel → runner_model=None.
+
+    The bare ``base`` (e.g. ``claude-opus-4-7``) is forwarded; the
+    ``default`` sentinel maps to ``None`` so AgenticLoop falls back to
+    ANTHROPIC_PRIMARY + drift sync.
+    """
+    import inspect
+
+    from plugins.petri_audit.targets import geode_target
+
+    src = inspect.getsource(geode_target.register)
+    assert 'base == "default"' in src, (
+        "GeodeModelAPI.generate must treat ``geode/default`` as the no-pin sentinel."
+    )
+
+
 def test_default_runner_uses_async_arun_not_sync_run() -> None:
     """N3 regression guard — must not call sync ``loop.run`` inside async runner.
 

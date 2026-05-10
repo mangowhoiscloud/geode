@@ -130,7 +130,7 @@ def estimate_cost_usd(
     *,
     judge: str,
     auditor: str,
-    target: str,
+    target: str | None,
     seeds: int,
     max_turns: int,
     assumptions: TokenAssumptions = DEFAULT_TOKEN_ASSUMPTIONS,
@@ -143,14 +143,27 @@ def estimate_cost_usd(
     or a target with the ``geode/`` prefix still resolves. Returns NaN
     when any of the three roles has no pricing entry — caller surfaces
     that as ``estimate unavailable`` rather than a fake number.
+
+    ``target`` may be ``None`` / empty when the caller did not pin a
+    base model — in that case we fall back to ``settings.model`` so
+    the estimate still reflects the model GEODE will actually use.
     """
 
     def _basename(model_id: str) -> str:
         return model_id.rsplit("/", 1)[-1]
 
-    pa = MODEL_PRICING.get(_basename(auditor))
-    pt = MODEL_PRICING.get(_basename(target))
-    pj = MODEL_PRICING.get(_basename(judge))
+    target_name = target or ""
+    if not target_name or _basename(target_name) == "default":
+        try:
+            from core.config import settings
+
+            target_name = settings.model or ""
+        except Exception:  # pragma: no cover — settings import edge
+            target_name = ""
+
+    pa = MODEL_PRICING.get(_basename(auditor)) if auditor else None
+    pt = MODEL_PRICING.get(_basename(target_name)) if target_name else None
+    pj = MODEL_PRICING.get(_basename(judge)) if judge else None
     if pa is None or pt is None or pj is None:
         return math.nan
 
@@ -201,7 +214,7 @@ def run_audit(
     *,
     judge: str,
     auditor: str,
-    target: str,
+    target: str | None = None,
     seeds: int = 1,
     max_turns: int = 10,
     tags: str | None = None,
@@ -216,6 +229,11 @@ def run_audit(
     three GEODE entry points (``geode audit``, ``/audit``,
     ``petri_audit`` tool) call this directly and only differ in how
     they report the resulting :class:`AuditReport`.
+
+    ``target=None`` falls back to GEODE's active ``settings.model``
+    (drift sync stays active). A pinned target id is sticky for the
+    audit's lifetime — see ``plugins/petri_audit/targets/geode_target.py``
+    docstring "Model priority" section.
     """
     inspect_auditor = to_inspect_model(auditor)
     inspect_judge = to_inspect_model(judge)

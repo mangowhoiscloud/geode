@@ -49,6 +49,31 @@ def test_sync_calls_health_check_before_update() -> None:
     )
 
 
+def test_sync_returns_false_when_drift_disabled() -> None:
+    """N6-followup: ``disable_settings_drift=True`` short-circuits sync.
+
+    The petri_audit runner constructs ``AgenticLoop`` with this flag so a
+    user-pinned ``--target`` is sticky for the audit's lifetime. If the
+    short-circuit ever regresses, every audit silently routes back to
+    ``settings.model`` between rounds — that exact failure was the v2
+    "target metrics 0회" mystery (docs/audits/2026-05-10-petri-2a-v2.md
+    § C4 follow-up).
+    """
+    stub = MagicMock()
+    stub.model = "claude-opus-4-7"
+    stub.update_model = MagicMock()
+    stub._disable_settings_drift = True
+    stub._sync_model_from_settings = _loop_mod.AgenticLoop._sync_model_from_settings.__get__(stub)
+
+    # settings.model intentionally divergent — would normally trigger drift.
+    fake_settings = MagicMock(model="gpt-5.5")
+    with patch("core.config.settings", fake_settings):
+        changed = stub._sync_model_from_settings()
+
+    assert changed is False
+    stub.update_model.assert_not_called()
+
+
 def test_drift_target_is_healthy_uses_rotator() -> None:
     """The health helper must consult ProfileRotator.resolve, not invent
     its own definition of health (which would diverge from the actual
@@ -74,6 +99,11 @@ def _make_loop_stub(loop_model: str = "glm-5.1") -> MagicMock:
     stub = MagicMock()
     stub.model = loop_model
     stub.update_model = MagicMock()
+    # MagicMock auto-creates a truthy attribute on first access — that
+    # would make ``getattr(loop, "_disable_settings_drift", False)``
+    # accidentally return a truthy mock and short-circuit the drift sync
+    # in *every* test. Pin to False so existing contracts run as before.
+    stub._disable_settings_drift = False
     # Bind the real methods to the stub so we exercise the patched logic.
     stub._sync_model_from_settings = _loop_mod.AgenticLoop._sync_model_from_settings.__get__(stub)
     stub._drift_target_is_healthy = _loop_mod.AgenticLoop._drift_target_is_healthy.__get__(stub)
