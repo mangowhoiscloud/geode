@@ -28,6 +28,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.93.1] — 2026-05-12
+
 ### Fixed
 
 - **Petri seeds flat-layout (G-A1).** Discovery (post-merge of PR #1044):
@@ -58,6 +60,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     flat.py` pinning: no sub-dirs, exactly 13 .md, `<category>_<seed>.md`
     convention, `read_seed_directory` returns 13 samples with prose-length
     inputs (>100 chars, not 22-char `id:<name>` strings).
+
+## [0.93.0] — 2026-05-12
 
 ### Changed
 
