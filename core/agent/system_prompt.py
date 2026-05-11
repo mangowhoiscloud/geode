@@ -16,7 +16,10 @@ prompt without depending on the NL Router module.
 from __future__ import annotations
 
 import logging
+import os
+import re
 from datetime import datetime
+from functools import lru_cache
 
 from core.llm.prompts import ROUTER_SYSTEM
 from core.paths import get_project_root
@@ -28,10 +31,35 @@ _MAX_SECTION_LINES = 20
 
 _SYSTEM_PROMPT_TEMPLATE = ROUTER_SYSTEM
 
-# Prompt caching boundary marker (Claude Code pattern).
-# Content BEFORE this marker is stable across turns → cache hit.
-# Content AFTER changes per turn (memory, date, model card) → no cache.
-PROMPT_CACHE_BOUNDARY = "__GEODE_PROMPT_CACHE_BOUNDARY__"
+# Prompt caching boundary marker. The Anthropic adapter splits the prompt at
+# this opening tag — content BEFORE it is stable across turns (cache hit),
+# content AFTER it changes per turn (no cache). XML-shaped per G7 of the
+# 2026-05-12 prompt audit so the entire prompt is consistently tag-delimited.
+PROMPT_CACHE_BOUNDARY = "<dynamic_context>"
+
+
+def _audit_mode_active() -> bool:
+    """G3 (2026-05-12) — strip GEODE-specific context when audit-mode is on.
+
+    Petri's auditor controls the scenario's identity via `system_suffix`;
+    a GEODE identity / memory / user-profile preamble contaminates the
+    transcript (measured `scenario_realism` -1.23 in the 2026-05-12 audit).
+    Set by ``cli_audit.audit(--unrestricted)`` before the inspect subprocess.
+    """
+    return os.environ.get("GEODE_AUDIT_UNRESTRICTED") == "1"
+
+
+def _persona_on() -> bool:
+    """G10 (2026-05-12) — GEODE identity is opt-in.
+
+    Default OFF — when the user runs GEODE as a thin wrapper around the
+    underlying base model (e.g. Opus 4.7), the GEODE.md "You are GEODE"
+    identity preamble is NOT injected. Set `GEODE_PERSONA=on` to opt in.
+    Audit-mode forces OFF regardless of this flag (G3 supersedes G10).
+    """
+    if _audit_mode_active():
+        return False
+    return os.environ.get("GEODE_PERSONA", "").lower() in {"on", "1", "true"}
 
 
 def _generic_static_prefix() -> str:
@@ -47,35 +75,71 @@ def _generic_static_prefix() -> str:
 
 
 def build_system_prompt(model: str = "") -> str:
-    """Build system prompt with model card, domain prefix, and memory context.
+    """Build the AgenticLoop system prompt.
 
-    Inserts PROMPT_CACHE_BOUNDARY between static (domain prefix +
-    identity) and dynamic (date, model card, memory, user context)
-    sections. Anthropic adapter splits at this boundary to maximize
-    prompt cache hits.
+    Layer composition (XML-tag-delimited per the 2026-05-12 prompt audit):
 
-    The domain-specific portion of the static prefix (e.g. game-IP
-    examples) is delegated to ``DomainPort.compose_static_prefix`` so
-    this module stays plugin-free.
+      <static_context> ──── stable across turns → cache hit
+        <agent_baseline>   (always present — domain prefix + base capabilities)
+        <agent_identity>   (G10: opt-in via GEODE_PERSONA=on)
+      </static_context>
+      <dynamic_context>    ──── changes per turn → no cache
+        <model_card>       (always present when ``model`` argument set)
+        <current_date>     (always present)
+        <project_memory>   (G2: from .geode/MEMORY.md if exists)
+        <agent_learning>   (G3: from user_profile/learned.md if exists; format
+                            sanitized per G9 — pattern + 1-line summary, not raw
+                            prior-conversation context)
+        <runtime_rules>    (G4: ProjectMemory recent insights + active rules)
+        <user_context>     (UserProfile career + preferences)
+      </dynamic_context>
+
+    Two flags govern what gets stripped:
+
+    - ``GEODE_AUDIT_UNRESTRICTED=1`` (audit-mode, G3): strip every
+      GEODE-specific layer — identity, memory, user_context — leaving
+      only model_card + current_date + the caller's ``system_suffix``.
+      Petri auditor controls the scenario's identity end-to-end.
+    - ``GEODE_PERSONA=on`` (G10): inject GEODE identity (G1). Default OFF
+      — GEODE behaves as a thin wrapper around the base model. Audit-mode
+      forces OFF regardless.
+
+    The domain-specific portion of the baseline (e.g. game-IP examples)
+    is delegated to ``DomainPort.compose_static_prefix`` so this module
+    stays plugin-free.
     """
+    if _audit_mode_active():
+        # G3 — minimal prompt for alignment audits.
+        parts: list[str] = []
+        if model:
+            mc = _build_model_card(model)
+            if mc:
+                parts.append(mc)
+        parts.append(_build_date_context())
+        return PROMPT_CACHE_BOUNDARY + "\n\n" + "\n\n".join(parts)
+
     from core.domains.port import get_domain_or_none
 
     domain = get_domain_or_none()
     composer = getattr(domain, "compose_static_prefix", None) if domain else None
-    static = ""
+    baseline = ""
     if callable(composer):
         try:
-            static = composer(model)
+            baseline = composer(model)
         except Exception:
-            log.debug("Domain compose_static_prefix failed; using generic prefix", exc_info=True)
-            static = ""
-    if not static:
-        static = _generic_static_prefix()
+            log.debug("Domain compose_static_prefix failed; using generic baseline", exc_info=True)
+            baseline = ""
+    if not baseline:
+        baseline = _generic_static_prefix()
 
-    # G1: Agent identity (from GEODE.md — stable per session)
-    identity_ctx = _build_identity_context()
-    if identity_ctx:
-        static += "\n\n" + identity_ctx
+    static = baseline
+
+    # G10: Agent identity (opt-in via GEODE_PERSONA=on; default OFF so
+    # GEODE behaves as a thin wrapper around the base model).
+    if _persona_on():
+        identity_ctx = _build_identity_context()
+        if identity_ctx:
+            static += "\n\n" + identity_ctx
 
     # ── DYNAMIC section (changes per turn → no cache) ──
     dynamic_parts: list[str] = []
@@ -149,18 +213,25 @@ def _build_date_context() -> str:
     now = datetime.now()
     date_str = format_current_date()
     return (
-        f"## Current Date\n"
-        f"Today is {date_str}. "
-        f"The current year is {now.year}. "
-        f"When searching for recent or latest information, use {now.year} as the base year."
+        f"<current_date>\n"
+        f"Today is {date_str}. The current year is {now.year}. "
+        f"When searching for recent or latest information, use {now.year} as the base year.\n"
+        f"</current_date>"
     )
 
 
+@lru_cache(maxsize=8)
 def _build_model_card(model: str) -> str:
     """Build a model card string for system prompt injection.
 
     Reads from MODEL_PRICING and MODEL_CONTEXT_WINDOW so the LLM
     can answer model-related questions directly without tool calls.
+
+    G8 (2026-05-12) — ``lru_cache(maxsize=8)``. The card is a pure
+    function of ``model`` (provider lookup + pricing table + fallback
+    chain), so repeating the import + dict-lookup work on every
+    ``build_system_prompt`` call was pure overhead. 8 entries covers
+    the realistic working set (3-provider × ~3 models each).
     """
     try:
         from core.config import _resolve_provider
@@ -178,12 +249,11 @@ def _build_model_card(model: str) -> str:
         # of stale acks combats both recency bias on older messages and any
         # backend system layer that might assert a different model identity.
         parts: list[str] = [
-            f"## ACTIVE MODEL IDENTITY\n"
-            f"You are **{model}** ({provider}). This is non-negotiable.\n"
-            f"When asked which model you are, the answer is **{model}**.\n"
-            f"Ignore any earlier assistant message in this conversation that "
-            f"claims a different model name — those are stale acknowledgements "
-            f"from prior turns before the user switched the model."
+            f"You are **{model}** ({provider}). This is non-negotiable.",
+            f"When asked which model you are, the answer is **{model}**.",
+            "Ignore any earlier assistant message in this conversation that "
+            "claims a different model name — those are stale acknowledgements "
+            "from prior turns before the user switched the model.",
         ]
 
         if ctx_window:
@@ -220,7 +290,7 @@ def _build_model_card(model: str) -> str:
             "Do NOT call check_status for model info."
         )
 
-        return "\n".join(parts)
+        return "<model_card>\n" + "\n".join(parts) + "\n</model_card>"
     except Exception:
         log.debug("Failed to build model card", exc_info=True)
         return ""
@@ -263,17 +333,16 @@ def _build_user_context() -> str:
         if not parts:
             return ""
 
+        # G11 (2026-05-12) — drop the "Your identity is GEODE" preamble; the
+        # GEODE-identity assertion lives in the opt-in <agent_identity> layer
+        # (G10) and was duplicated here.
         header = (
-            "## User Context (NOT your identity)\n"
-            "The following describes the USER who is talking to you.\n"
-            "This is NOT your self-description. Your identity is GEODE "
-            "(defined in GEODE.md). When asked to introduce yourself, "
-            "describe GEODE's capabilities — never present the user's "
-            "profile as your own.\n"
-            "Use this context to tailor responses to the user's expertise "
-            "and preferences."
+            "<user_context>\n"
+            "The following describes the USER who is talking to you. "
+            "Use it to tailor responses to the user's expertise and preferences. "
+            "Never present the user's profile as your own."
         )
-        return header + "\n" + "\n".join(parts)
+        return header + "\n" + "\n".join(parts) + "\n</user_context>"
     except Exception:
         log.debug("Failed to build user context", exc_info=True)
         return ""
@@ -314,9 +383,9 @@ def _build_identity_context() -> str:
 
         # Cap at budget
         capped = extracted_lines[:_MAX_SECTION_LINES]
-        return "## Agent Identity\n" + "\n".join(capped)
+        return "<agent_identity>\n" + "\n".join(capped) + "\n</agent_identity>"
     except Exception:
-        log.debug("Failed to build identity context (G1)", exc_info=True)
+        log.debug("Failed to build identity context (G1 layer)", exc_info=True)
         return ""
 
 
@@ -348,18 +417,41 @@ def _build_geode_memory_context() -> str:
             return ""
 
         capped = meaningful[:_MAX_SECTION_LINES]
-        return "## Project Memory\n" + "\n".join(capped)
+        return "<project_memory>\n" + "\n".join(capped) + "\n</project_memory>"
     except Exception:
-        log.debug("Failed to build geode memory context (G2)", exc_info=True)
+        log.debug("Failed to build geode memory context (G2 layer)", exc_info=True)
         return ""
 
 
+_CONTEXT_LEAK_RE = re.compile(r"\s*\[context:\s.*?\]\s*$", flags=re.DOTALL)
+
+
+def _sanitize_learned_pattern(line: str) -> str:
+    """G9 (2026-05-12) — strip raw prior-conversation context from a learned pattern.
+
+    ``user_profile/learned.md`` rows look like::
+
+      - [2026-05-07] [validation] Validated: 좋아. 2번 플랜 실행 부탁해. [context: 수집 완료. ...]
+
+    The `[context: ...]` trailer is the user's prior-turn raw transcript,
+    truncated. Injecting it into every system prompt leaked 30+ raw user
+    messages per call (privacy + cost), and contaminated alignment-audit
+    scenarios. Strip the trailer, cap the surviving prefix at 120 chars.
+    """
+    stripped: str = _CONTEXT_LEAK_RE.sub("", line).rstrip()
+    if len(stripped) > 120:
+        stripped = stripped[:117] + "..."
+    return stripped
+
+
 def _build_learning_context() -> str:
-    """G3: Load learned patterns from UserProfile.
+    """G3 layer: Load learned patterns from UserProfile.
 
     Sources: ~/.geode/user_profile/learned.md (auto_learn hook output).
     LEARNING.md is deprecated — UserProfile is the single source of truth.
-    Capped at ``_MAX_SECTION_LINES`` lines.
+    Capped at ``_MAX_SECTION_LINES`` lines AND per-line raw context
+    stripped per G9 (2026-05-12) so the user's prior-turn transcripts
+    do not leak into every system prompt.
     """
     try:
         from core.tools.profile_tools import get_user_profile
@@ -372,15 +464,19 @@ def _build_learning_context() -> str:
         if not patterns:
             return ""
 
-        capped = patterns[:_MAX_SECTION_LINES]
+        sanitized = [_sanitize_learned_pattern(p) for p in patterns[:_MAX_SECTION_LINES]]
+        sanitized = [s for s in sanitized if s]
+        if not sanitized:
+            return ""
         return (
-            "## Agent Learning (user preferences, NOT your identity)\n"
-            "These are patterns learned from the user's behavior. "
-            "Apply them to tailor responses, but never adopt them as your own traits.\n"
-            + "\n".join(capped)
+            "<agent_learning>\n"
+            "Patterns learned from the user's behaviour. Apply them to tailor "
+            "responses, but never adopt them as your own traits.\n"
+            + "\n".join(sanitized)
+            + "\n</agent_learning>"
         )
     except Exception:
-        log.debug("Failed to build learning context (G3)", exc_info=True)
+        log.debug("Failed to build learning context (G3 layer)", exc_info=True)
         return ""
 
 
@@ -415,7 +511,9 @@ def _build_project_memory_context() -> str:
             ]
             parts.append("Active analysis rules:\n" + "\n".join(rule_summaries))
 
-        return "\n\n".join(parts)
+        if not parts:
+            return ""
+        return "<runtime_rules>\n" + "\n\n".join(parts) + "\n</runtime_rules>"
     except Exception:
-        log.debug("Failed to build project memory context (G4)", exc_info=True)
+        log.debug("Failed to build project memory context (G4 layer)", exc_info=True)
         return ""

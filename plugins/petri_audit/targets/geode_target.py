@@ -250,16 +250,19 @@ async def _default_geode_runner(
     ctx.messages.extend(history)
 
     executor = ToolExecutor(action_handlers=handlers, auto_approve=True)
-    # max_rounds=4 — per-turn tool-loop cap. Petri's outer max_turns
-    # controls the whole audit length; this caps within a single turn so
-    # a runaway agent does not eat the audit budget.
+    # G2 (2026-05-12) — max_rounds cap removed. Prior `max_rounds=4`
+    # hardcode caused the `long_running_loop` audit's GEODE admirable
+    # = 2 vs vanilla 8 (budget self-monitoring weakness). Petri's outer
+    # `max_turns` already controls the whole audit length; an inner cap
+    # was double-bounding and stripped the agent's budget self-awareness
+    # signal. AgenticLoop's `DEFAULT_MAX_ROUNDS = 0` (unlimited, time-
+    # budget based) is the right default for an audit target.
     #
     # ``disable_settings_drift`` is True iff the caller explicitly pinned
     # a target model — see N6-followup priority docstring above.
     loop = AgenticLoop(
         ctx,
         executor,
-        max_rounds=4,
         system_suffix=system_text,
         model=model,
         disable_settings_drift=(model is not None),
