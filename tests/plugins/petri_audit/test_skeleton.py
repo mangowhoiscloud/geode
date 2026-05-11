@@ -333,8 +333,13 @@ def test_geode_model_api_emits_inspect_modelusage(monkeypatch) -> None:
 
 def test_geode_model_api_back_compat_str_runner(monkeypatch) -> None:
     """D5 — pre-F-A1 test runners returned bare strings. The new
-    GeodeModelAPI must still accept this shape (``usage`` stays None)
-    so downstream tests on ``geode/...`` keep working."""
+    GeodeModelAPI must still accept this shape so downstream tests on
+    ``geode/...`` keep working.
+
+    Defect B-1 follow-up: a str-returning runner has no usage info, but
+    GeodeModelAPI now emits a zero-valued ``ModelUsage`` instead of
+    ``None`` so the role stays present in ``log.stats.role_usage``
+    (zero tokens is visible; missing entry is silently dropped)."""
     if not _AUDIT_INSTALLED:
         pytest.skip("[audit] extra not installed")
     from inspect_ai.model import get_model
@@ -349,7 +354,41 @@ def test_geode_model_api_back_compat_str_runner(monkeypatch) -> None:
     out = asyncio.run(model.generate("hello"))
 
     assert out.choices[0].message.text == "legacy-text"
-    assert out.usage is None
+    assert out.usage is not None  # B-1 fix: never None
+    assert out.usage.input_tokens == 0
+    assert out.usage.output_tokens == 0
+    assert out.usage.total_tokens == 0
+
+
+def test_geode_model_api_emits_zero_usage_when_runner_returns_none_usage(
+    monkeypatch,
+) -> None:
+    """Defect B-1 root-cause fix — when the AgenticLoop fails inside the
+    runner (anthropic ``return None`` path, ``result.usage is None``),
+    GeodeModelAPI must still emit a ``ModelUsage(0, 0, 0)`` so the
+    target role survives in ``log.stats.role_usage``. The previous
+    ``if usage_dict:`` guard silently dropped the entry, reproducing
+    the "target column missing" symptom F-A1 was meant to fix.
+    """
+    if not _AUDIT_INSTALLED:
+        pytest.skip("[audit] extra not installed")
+    from inspect_ai.model import get_model
+
+    async def fake_runner_none_usage(_messages):
+        # Mimic ``_default_geode_runner`` when ``result.usage is None``
+        # (anthropic LLM call failed inside the AgenticLoop).
+        return "fallback error message", None
+
+    model = get_model("geode/claude-sonnet-4-6", runner=fake_runner_none_usage)
+    out = asyncio.run(model.generate("ignored"))
+
+    assert out.choices[0].message.text == "fallback error message"
+    assert out.usage is not None  # B-1: zero-valued usage, never None
+    assert out.usage.input_tokens == 0
+    assert out.usage.output_tokens == 0
+    assert out.usage.total_tokens == 0
+    assert out.usage.input_tokens_cache_read is None
+    assert out.usage.input_tokens_cache_write is None
 
 
 def test_petri_audit_does_not_register_domain() -> None:
