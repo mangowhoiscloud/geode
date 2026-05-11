@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -471,6 +472,62 @@ class TestAgenticLoop:
 
         with patch("core.llm.router.calculate_cost", side_effect=RuntimeError("boom")):
             loop._track_usage(mock_response)  # should not raise
+
+    def test_track_usage_records_cache_tokens(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """F-A2 — cache_creation_tokens / cache_read_tokens must flow
+        from ``response.usage`` (normalized ``ResponseUsage``) through
+        ``_track_usage`` into ``TokenTracker.record``, where the cost
+        path already handles them. Pre-F-A2 they were dropped and the
+        ``~/.geode/usage`` JSONL undercounted prompt-cache spend."""
+        from core.llm.token_tracker import get_tracker, reset_tracker
+
+        reset_tracker()
+        loop = AgenticLoop(context, executor, quiet=True)
+
+        mock_response = MagicMock()
+        mock_response.usage = MagicMock(
+            input_tokens=100,
+            output_tokens=50,
+            cache_creation_tokens=20,
+            cache_read_tokens=80,
+            thinking_tokens=10,
+        )
+
+        loop._track_usage(mock_response)
+
+        last = get_tracker().accumulator.calls[-1]
+        assert last.input_tokens == 100
+        assert last.output_tokens == 50
+        assert last.cache_creation_tokens == 20
+        assert last.cache_read_tokens == 80
+        assert last.thinking_tokens == 10
+
+    def test_track_usage_logs_warning_on_schema_mismatch(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+        caplog,
+    ) -> None:
+        """F-A2 — when the inner ``tracker.record`` raises (e.g. the
+        wrapper has only ``input_tokens`` and downstream code trips),
+        the swallowed exception must surface at WARNING level. Pre-F-A2
+        it was DEBUG-level and the silent-skip was invisible in normal
+        log output — Defect A's main symptom."""
+        loop = AgenticLoop(context, executor, quiet=True)
+        mock_response = MagicMock()
+        mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        with (
+            caplog.at_level(logging.WARNING, logger="core.agent.loop._response"),
+            patch("core.llm.token_tracker.TokenTracker.record", side_effect=RuntimeError("boom")),
+        ):
+            loop._track_usage(mock_response)  # should not raise
+
+        assert any("Failed to track usage" in r.message for r in caplog.records), (
+            "track_usage must log at WARNING when it swallows a record() failure"
+        )
 
 
 # ---------------------------------------------------------------------------
