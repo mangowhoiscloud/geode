@@ -77,6 +77,40 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `tests/test_agentic_loop.py` 2 신규 (track_usage cache 토큰
     flow-through, schema mismatch 시 WARNING). 4520 tests pass.
 
+- **Defect A F-A2 follow-up — petri judge / auditor / target usage 가
+  `~/.geode/usage/<YYYY-MM>.jsonl` 에도 흐르도록 cross-session ledger
+  보강.** 5/11 라이브 anthropic archive `.eval` 의 `role_usage` 는
+  judge `in=21 out=846 cache_w=6740`, auditor `in=7 out=1007 cache_r=
+  34006` 을 정상 기록하는 동안 같은 wall-clock 윈도우 (`2026-05-11
+  08:00-09:00 UTC`) 의 GEODE JSONL 에는 0 record — inspect_ai 의 native
+  `AnthropicAPI` / `OpenAIAPI` 가 GEODE TokenTracker 를 우회해 provider
+  SDK 를 직접 호출하기 때문 (ts 매치로 확정). `geode history` rollup
+  이 모든 petri audit 의 judge + auditor 비용을 빠뜨리고 있었음.
+  본 PR —
+  - `UsageRecord` schema 확장 — `cache_creation_tokens` (serialized
+    `cache_w`), `cache_read_tokens` (`cache_r`), `thinking_tokens`
+    (`think`), `role`, `source`, `eval_id` 필드 추가. `to_json` 이
+    falsy 시 omit, `from_json` 이 `.get(..., 0/"")` fallback —
+    pre-extension JSONL row 가 새 reader 에서 그대로 round-trip.
+  - `TokenTracker._persist_usage` 가 cache / thinking 을 실제로
+    JSONL 까지 흘려보냄 — F-A2 가 in-memory accumulator 까지만
+    채우고 persistent store 에서 drop 하던 잔여 leak 해결.
+  - `core/audit/eval_to_jsonl.py` 신규 — petri eval 종료 후
+    `extract_to_usage_store(.eval)` 가 `EvalStats.model_usage` 를
+    walk + `eval.model_roles` 의 role 태그를 매핑해 per-model row
+    를 `source="petri_eval"` 로 append. ts 는 `eval.created` 의
+    ISO8601 → unix 변환으로 wall-clock 보존. idempotent —
+    `UsageStore.has_eval_id` 로 중복 import 차단.
+  - `plugins.petri_audit.runner._maybe_auto_archive` 가 archive
+    직후 hook 호출 (`_import_usage`). 실패 시 swallow + note 만
+    — audit 자체는 영향 없음.
+  - **회귀 가드** — `tests/test_usage_store.py` 3 클래스 신규
+    (extension fields 직렬화/legacy compat, store record 의 cache
+    forwarding + has_eval_id dedup, TokenTracker.record 의 cache
+    flow-through) + `tests/audit/test_eval_to_jsonl.py` 6 신규
+    (ts 파싱, missing file, empty stats, role 태그 매핑, cost
+    fallback, idempotency, unknown role). 4517 passed.
+
 ### Notes
 
 - **`/claude-api migrate` to Opus 4.7 — noop migration.**

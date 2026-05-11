@@ -192,6 +192,179 @@ class TestUsageStore:
         assert summary["total_calls"] == 0
 
 
+class TestUsageRecordExtensionFields:
+    """Defect A F-A2 / 2026-05-11 — cache/think/role/source/eval_id extension."""
+
+    def test_to_json_omits_falsy_extension_fields(self):
+        rec = UsageRecord(
+            ts=1710000000.0,
+            model="claude-opus-4-6",
+            input_tokens=1000,
+            output_tokens=200,
+            cost_usd=0.01,
+        )
+        data = json.loads(rec.to_json())
+        # Pre-extension keys still present, extension keys omitted when 0/empty
+        assert "cache_w" not in data
+        assert "cache_r" not in data
+        assert "think" not in data
+        assert "role" not in data
+        assert "source" not in data
+        assert "eval_id" not in data
+
+    def test_to_json_emits_extension_fields_when_set(self):
+        rec = UsageRecord(
+            ts=1710000000.0,
+            model="claude-sonnet-4-6",
+            input_tokens=100,
+            output_tokens=200,
+            cost_usd=0.01,
+            cache_creation_tokens=9169,
+            cache_read_tokens=34006,
+            thinking_tokens=12,
+            role="auditor",
+            source="petri_eval",
+            eval_id="2026-05-11T08-21-40-00-00_audit_X.eval",
+        )
+        data = json.loads(rec.to_json())
+        assert data["cache_w"] == 9169
+        assert data["cache_r"] == 34006
+        assert data["think"] == 12
+        assert data["role"] == "auditor"
+        assert data["source"] == "petri_eval"
+        assert data["eval_id"] == "2026-05-11T08-21-40-00-00_audit_X.eval"
+
+    def test_from_json_legacy_record_compat(self):
+        # Pre-extension JSONL row — produced by code before 2026-05-11
+        legacy = '{"ts":1710000000,"model":"claude-opus-4-6","in":1200,"out":350,"cost":0.0148}'
+        rec = UsageRecord.from_json(legacy)
+        # Pre-extension fields parse as before
+        assert rec.input_tokens == 1200
+        # Extension fields default to 0 / "" — no KeyError, no crash
+        assert rec.cache_creation_tokens == 0
+        assert rec.cache_read_tokens == 0
+        assert rec.thinking_tokens == 0
+        assert rec.role == ""
+        assert rec.source == ""
+        assert rec.eval_id == ""
+
+    def test_from_json_extension_roundtrip(self):
+        original = UsageRecord(
+            ts=1778573700.0,
+            model="claude-haiku-4-5-20251001",
+            input_tokens=21,
+            output_tokens=846,
+            cost_usd=0.045,
+            cache_creation_tokens=6740,
+            cache_read_tokens=0,
+            thinking_tokens=0,
+            role="judge",
+            source="petri_eval",
+            eval_id="2026-05-11T08-21-40-00-00_audit_EfZ32YEeSNkzk5HittH65e.eval",
+        )
+        restored = UsageRecord.from_json(original.to_json())
+        assert restored.cache_creation_tokens == 6740
+        assert restored.role == "judge"
+        assert restored.source == "petri_eval"
+        assert restored.eval_id == original.eval_id
+
+
+class TestUsageStoreCacheFields:
+    """UsageStore.record forwards the new cache / think / role / source kwargs."""
+
+    @pytest.fixture()
+    def store(self, tmp_path: Path) -> UsageStore:
+        return UsageStore(usage_dir=tmp_path)
+
+    def test_record_persists_cache_fields(self, store: UsageStore, tmp_path: Path):
+        store.record(
+            "claude-opus-4-7",
+            1000,
+            200,
+            0.01,
+            cache_creation_tokens=500,
+            cache_read_tokens=2000,
+            thinking_tokens=50,
+        )
+        today = date.today()
+        fpath = tmp_path / f"{today.year:04d}-{today.month:02d}.jsonl"
+        line = fpath.read_text(encoding="utf-8").strip()
+        data = json.loads(line)
+        assert data["cache_w"] == 500
+        assert data["cache_r"] == 2000
+        assert data["think"] == 50
+
+    def test_record_with_explicit_ts(self, store: UsageStore):
+        # Eval extraction stamps rows with the eval's start time, not
+        # the (later) extraction time.
+        target_ts = 1778573700.0
+        rec = store.record(
+            "claude-sonnet-4-6",
+            7,
+            1007,
+            0.05,
+            cache_creation_tokens=9169,
+            cache_read_tokens=34006,
+            role="auditor",
+            source="petri_eval",
+            eval_id="some.eval",
+            ts=target_ts,
+        )
+        assert rec.ts == target_ts
+
+    def test_has_eval_id_skips_already_imported(self, store: UsageStore):
+        eval_id = "2026-05-11T08-21-40-00-00_audit_X.eval"
+        # Initially absent
+        assert store.has_eval_id(eval_id) is False
+        # After import
+        store.record(
+            "claude-haiku-4-5-20251001",
+            21,
+            846,
+            0.045,
+            cache_creation_tokens=6740,
+            role="judge",
+            source="petri_eval",
+            eval_id=eval_id,
+        )
+        assert store.has_eval_id(eval_id) is True
+        # Different source with same id does not register as imported —
+        # ``source != 'petri_eval'`` is a per-call row, not an eval row.
+        store.record("other-model", 1, 1, 0.0, eval_id=eval_id)
+        assert store.has_eval_id(eval_id) is True  # the petri_eval row still counts
+
+
+class TestTokenTrackerPersistsCacheFields:
+    """TokenTracker.record → _persist_usage forwards cache/think to JSONL."""
+
+    def test_record_propagates_cache_fields(self, tmp_path: Path):
+        from core.llm import usage_store as us_mod
+        from core.llm.token_tracker import TokenTracker
+
+        # Redirect the singleton at the JSONL boundary so the tracker
+        # writes into our tmp dir.
+        custom = UsageStore(usage_dir=tmp_path)
+        us_mod._store = custom
+        try:
+            tracker = TokenTracker()
+            tracker.record(
+                "claude-opus-4-7",
+                1000,
+                200,
+                cache_creation_tokens=500,
+                cache_read_tokens=2000,
+                thinking_tokens=10,
+            )
+            today = date.today()
+            fpath = tmp_path / f"{today.year:04d}-{today.month:02d}.jsonl"
+            data = json.loads(fpath.read_text(encoding="utf-8").strip())
+            assert data["cache_w"] == 500
+            assert data["cache_r"] == 2000
+            assert data["think"] == 10
+        finally:
+            us_mod._store = None
+
+
 class TestUsageStoreSingleton:
     """Tests for module-level singleton."""
 
