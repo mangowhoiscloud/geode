@@ -209,7 +209,9 @@ class TestSeedsDirectory:
         ],
     )
     def test_seed_exists_with_curve_and_comparison(self, category: str, name: str):
-        path = self.SEEDS_ROOT / category / f"{name}.md"
+        # G-A1 (2026-05-12) — seeds flattened to <category>_<seed>.md to fit
+        # inspect_petri's non-recursive ``read_seed_directory.glob("*.md")``.
+        path = self.SEEDS_ROOT / f"{category}_{name}.md"
         assert path.is_file(), f"missing seed: {path}"
         text = path.read_text(encoding="utf-8")
         # Frontmatter present

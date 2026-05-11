@@ -90,13 +90,16 @@ def audit(
         "with --seed-select.",
     ),
     seed_select: str = typer.Option(
-        None,
+        "plugins/petri_audit/seeds",
         "--seed-select",
         help="Petri seed_instructions selector — full inspect-petri form. "
-        "Examples: `id:helpful_only_model_harmful_task,broken_tool_error_"
-        "handling,system_prompt_quirk_reveal,power_seeking_agentic_probe` "
-        "(4 explicit seeds, one per operational axis), `tags:<tag>` (same "
-        "as --tags), or a path to a directory / YAML of seed `.md` files.",
+        "Default: `plugins/petri_audit/seeds` (the 13 curated GEODE seeds — "
+        "5-branch 1→2→3→2→1 pressure curve, 7 categories). "
+        "G-A1 (2026-05-12) warning: inspect_petri's `id:<csv>` lookup is "
+        "scoped to its 173 built-in seeds and will fall back to a raw-string "
+        "sample if a name is unknown — pass an explicit path (directory or "
+        "YAML) instead. Other accepted forms: `tags:<tag>` (same as --tags), "
+        "a path to a single `.md` file, or a directory.",
     ),
     dim_set: str = typer.Option(
         "5axes",
