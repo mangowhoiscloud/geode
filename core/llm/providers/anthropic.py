@@ -569,14 +569,45 @@ class ClaudeAgenticAdapter:
 
             if PROMPT_CACHE_BOUNDARY in system:
                 static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
-                sys_blocks: list[dict[str, Any]] = [
-                    {
-                        "type": "text",
-                        "text": static_part.rstrip(),
-                        "cache_control": {"type": "ephemeral"},
-                    },
-                    {"type": "text", "text": dynamic_part.lstrip()},
-                ]
+                static_text = static_part.rstrip()
+                dynamic_text = dynamic_part.lstrip()
+                # G-A2 (2026-05-12) — audit-mode (G3 strip) leaves
+                # ``static_part`` empty when GEODE identity + memory layers are
+                # all stripped; the boundary marker becomes the very first
+                # character of ``system``. Attaching ``cache_control`` to an
+                # empty text block trips
+                # ``system.0: cache_control cannot be set for empty text
+                # blocks`` (Anthropic 400). Promote the dynamic side to the
+                # single cacheable block when ``static_text`` is empty so the
+                # boundary still applies somewhere useful.
+                if static_text and dynamic_text:
+                    sys_blocks: list[dict[str, Any]] = [
+                        {
+                            "type": "text",
+                            "text": static_text,
+                            "cache_control": {"type": "ephemeral"},
+                        },
+                        {"type": "text", "text": dynamic_text},
+                    ]
+                elif dynamic_text:
+                    sys_blocks = [
+                        {
+                            "type": "text",
+                            "text": dynamic_text,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ]
+                elif static_text:
+                    sys_blocks = [
+                        {
+                            "type": "text",
+                            "text": static_text,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ]
+                else:
+                    # Both halves empty — drop the system block entirely.
+                    sys_blocks = []
             else:
                 sys_blocks = [
                     {
