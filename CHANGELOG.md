@@ -28,6 +28,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Notes
+
+- **`/claude-api migrate` to Opus 4.7 — noop migration.**
+  GEODE 의 anthropic adapter (`core/llm/providers/anthropic.py`) 가
+  이미 모든 Opus 4.7 breaking change 를 처리하고 있음 — `_ADAPTIVE_MODELS`
+  에 `claude-opus-4-7` 포함, `display: "summarized"` 명시, `xhigh` effort
+  4.7-only gating, MODEL_PRICING entry 정확, `ANTHROPIC_PRIMARY` default
+  이미 `claude-opus-4-7`. 본 마이그레이션의 코드 변경 surface = 0 lines.
+  분석 SOT — `docs/audits/2026-05-11-migrate-opus-4-7-noop-analysis.md`.
+
 ### Added
 
 - **결함 A 라이브 검증 — `docs/audits/2026-05-11-petri-tracker-A-live-verify.md`.**
