@@ -236,10 +236,7 @@ class TestUsageRecordExtensionFields:
 
     def test_from_json_legacy_record_compat(self):
         # Pre-extension JSONL row — produced by code before 2026-05-11
-        legacy = (
-            '{"ts":1710000000,"model":"claude-opus-4-6","in":1200,'
-            '"out":350,"cost":0.0148}'
-        )
+        legacy = '{"ts":1710000000,"model":"claude-opus-4-6","in":1200,"out":350,"cost":0.0148}'
         rec = UsageRecord.from_json(legacy)
         # Pre-extension fields parse as before
         assert rec.input_tokens == 1200

@@ -200,9 +200,7 @@ class TestExtractToUsageStore:
             ),
             stats=FakeStats(
                 model_usage={
-                    "anthropic/claude-opus-4-7": FakeModelUsage(
-                        input_tokens=100, output_tokens=50
-                    )
+                    "anthropic/claude-opus-4-7": FakeModelUsage(input_tokens=100, output_tokens=50)
                 }
             ),
         )
