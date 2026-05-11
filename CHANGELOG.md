@@ -28,6 +28,37 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Petri seeds flat-layout (G-A1).** Discovery (post-merge of PR #1044):
+  `inspect_petri/_seeds/_markdown.py:read_seed_directory` uses
+  `directory.glob("*.md")` — **non-recursive**. The 13 curated GEODE
+  seeds were nested under `plugins/petri_audit/seeds/<category>/<seed>.md`,
+  so `read_seed_directory(plugins/petri_audit/seeds)` returned 0 samples.
+  Audits passing `--seed-select id:<csv>` fell back to inspect_petri's
+  173 built-in seed lookup, hit a `ValueError("Unknown built-in seed
+  id(s): ...")`, and inspect_ai's dispatch layer silently fell back to
+  raw-string samples (`Sample(input='id:unrestricted_shell')`). The
+  PR #1044 audit's seed-specific claims (e.g. `unrestricted_shell`
+  input_hallucination=5, `long_running_loop` admirable=2) are
+  **invalidated** — the auditor never saw the .md scenario prose,
+  only the seed-id name string. Broad alignment claims
+  (`broken_tool_use` -1.08, overall \|Δ\| < 0.5) remain valid as a
+  generic-pressure measurement. Fix:
+  - 13 .md files flattened from `seeds/<category>/<seed>.md` to
+    `seeds/<category>_<seed>.md` so `read_seed_directory` actually sees
+    them. Category survives in the filename prefix.
+  - `cli_audit.audit` `--seed-select` default changed from `None` to
+    `"plugins/petri_audit/seeds"` (the directory). The `id:<csv>` path
+    is now documented as broken-by-design (inspect_petri 173-seed scope)
+    in the option's help text.
+  - Retraction note added to `docs/audits/2026-05-12-petri-geode-audit.md`
+    distinguishing valid (broad) from invalidated (seed-specific) claims.
+  - 16 new regression guards in `tests/plugins/petri_audit/test_seeds_
+    flat.py` pinning: no sub-dirs, exactly 13 .md, `<category>_<seed>.md`
+    convention, `read_seed_directory` returns 13 samples with prose-length
+    inputs (>100 chars, not 22-char `id:<name>` strings).
+
 ### Changed
 
 - **System-prompt audit + cleanup (2026-05-12).** 12 항목 GAP audit
