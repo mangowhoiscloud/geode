@@ -363,21 +363,33 @@ def register() -> None:
             # empty. ``ModelOutput.from_content`` would leave it None
             # and the petri eval log would have the target column
             # silently missing (the symptom of #1020).
-            inspect_usage: ModelUsage | None = None
-            if usage_dict:
-                cache_w = int(usage_dict.get("cache_creation_tokens", 0) or 0)
-                cache_r = int(usage_dict.get("cache_read_tokens", 0) or 0)
-                in_tok = int(usage_dict.get("input_tokens", 0) or 0)
-                out_tok = int(usage_dict.get("output_tokens", 0) or 0)
-                inspect_usage = ModelUsage(
-                    input_tokens=in_tok,
-                    output_tokens=out_tok,
-                    total_tokens=in_tok + out_tok + cache_w + cache_r,
-                    input_tokens_cache_write=cache_w or None,
-                    input_tokens_cache_read=cache_r or None,
-                    reasoning_tokens=(int(usage_dict.get("thinking_tokens", 0) or 0) or None),
-                    total_cost=usage_dict.get("cost_usd"),
-                )
+            #
+            # Defect B-1 follow-up (2026-05-11) — always emit a
+            # ModelUsage, even when ``usage_dict is None``. The old
+            # path skipped the entry whenever ``_default_geode_runner``
+            # returned ``(text, None)`` (anthropic call failed inside
+            # the AgenticLoop, leaving ``result.usage = None`` because
+            # ``_response.track_usage`` never fired). The result was
+            # ``output.usage = None`` on the ModelEvent, which inspect_
+            # ai then drops from ``role_usage`` — the same "target
+            # column silently disappears" symptom F-A1 was meant to
+            # fix. Zero-valued ModelUsage keeps the role present and
+            # makes the failure visible (``target: 0 tokens``) instead
+            # of invisible.
+            usage_src: dict[str, Any] = usage_dict or {}
+            cache_w = int(usage_src.get("cache_creation_tokens", 0) or 0)
+            cache_r = int(usage_src.get("cache_read_tokens", 0) or 0)
+            in_tok = int(usage_src.get("input_tokens", 0) or 0)
+            out_tok = int(usage_src.get("output_tokens", 0) or 0)
+            inspect_usage = ModelUsage(
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+                total_tokens=in_tok + out_tok + cache_w + cache_r,
+                input_tokens_cache_write=cache_w or None,
+                input_tokens_cache_read=cache_r or None,
+                reasoning_tokens=(int(usage_src.get("thinking_tokens", 0) or 0) or None),
+                total_cost=usage_src.get("cost_usd"),
+            )
             return ModelOutput(
                 model=self.model_name,
                 choices=[

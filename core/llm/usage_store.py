@@ -23,7 +23,29 @@ DEFAULT_USAGE_DIR = Path.home() / ".geode" / "usage"
 
 @dataclass(slots=True)
 class UsageRecord:
-    """Single LLM call usage record for JSONL persistence."""
+    """Single LLM call usage record for JSONL persistence.
+
+    Cache / thinking / role / source fields added 2026-05-11 to close the
+    Defect A F-A2 leak. Pre-extension records (no ``cache_w`` / ``cache_r``
+    / ``think`` / ``role`` / ``source`` / ``eval_id``) round-trip cleanly
+    because ``from_json`` ``.get(...)`` falls back to ``0`` / ``""``.
+
+    ``source`` distinguishes the producer:
+
+    - ``""`` (default) — recorded by ``TokenTracker.record`` at the
+      AgenticLoop seam: one row per LLM call. This is the historical
+      behaviour and how ``geode history`` rolls up monthly cost.
+    - ``"petri_eval"`` — appended by ``core.audit.eval_to_jsonl`` once
+      per ``(model, role)`` pair after an ``inspect_petri`` audit
+      finishes. inspect_ai's native ``AnthropicAPI`` / ``OpenAIAPI``
+      bypass GEODE's TokenTracker (verified 2026-05-11 via the 5/11
+      live archive ts-match), so judge / auditor cost is invisible to
+      ``geode history`` without this extraction path.
+
+    ``role`` is the inspect_ai role tag (``target`` / ``judge`` /
+    ``auditor``) — empty for source ``""``. ``eval_id`` is the eval
+    log basename, used by ``eval_to_jsonl`` to skip duplicate inserts.
+    """
 
     ts: float
     model: str
@@ -32,10 +54,16 @@ class UsageRecord:
     cost_usd: float = field(metadata={"alias": "cost"})
     session: str = ""
     ip_name: str = ""
+    cache_creation_tokens: int = 0
+    cache_read_tokens: int = 0
+    thinking_tokens: int = 0
+    role: str = ""
+    source: str = ""
+    eval_id: str = ""
 
     def to_json(self) -> str:
-        """Serialize to compact JSON line."""
-        d = {
+        """Serialize to compact JSON line. Falsy extension fields omitted."""
+        d: dict[str, Any] = {
             "ts": self.ts,
             "model": self.model,
             "in": self.input_tokens,
@@ -46,11 +74,23 @@ class UsageRecord:
             d["session"] = self.session
         if self.ip_name:
             d["ip"] = self.ip_name
+        if self.cache_creation_tokens:
+            d["cache_w"] = self.cache_creation_tokens
+        if self.cache_read_tokens:
+            d["cache_r"] = self.cache_read_tokens
+        if self.thinking_tokens:
+            d["think"] = self.thinking_tokens
+        if self.role:
+            d["role"] = self.role
+        if self.source:
+            d["source"] = self.source
+        if self.eval_id:
+            d["eval_id"] = self.eval_id
         return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
 
     @classmethod
     def from_json(cls, line: str) -> UsageRecord:
-        """Deserialize from a JSON line."""
+        """Deserialize from a JSON line. Missing extension fields → defaults."""
         data = json.loads(line)
         return cls(
             ts=data.get("ts", 0.0),
@@ -60,6 +100,12 @@ class UsageRecord:
             cost_usd=data.get("cost", 0.0),
             session=data.get("session", ""),
             ip_name=data.get("ip", ""),
+            cache_creation_tokens=data.get("cache_w", 0),
+            cache_read_tokens=data.get("cache_r", 0),
+            thinking_tokens=data.get("think", 0),
+            role=data.get("role", ""),
+            source=data.get("source", ""),
+            eval_id=data.get("eval_id", ""),
         )
 
 
@@ -92,20 +138,50 @@ class UsageStore:
         *,
         session: str = "",
         ip_name: str = "",
+        cache_creation_tokens: int = 0,
+        cache_read_tokens: int = 0,
+        thinking_tokens: int = 0,
+        role: str = "",
+        source: str = "",
+        eval_id: str = "",
+        ts: float | None = None,
     ) -> UsageRecord:
-        """Append a usage record to the current month's JSONL file."""
-        now = time.time()
+        """Append a usage record to the JSONL file (current month by default).
+
+        ``ts`` may be passed explicitly so :mod:`core.audit.eval_to_jsonl`
+        can stamp extracted records with the eval's start time instead of
+        the (later) extraction time — keeps cross-tier ts-matching intact.
+        """
         entry = UsageRecord(
-            ts=now,
+            ts=ts if ts is not None else time.time(),
             model=model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cost_usd=cost_usd,
             session=session,
             ip_name=ip_name,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
+            thinking_tokens=thinking_tokens,
+            role=role,
+            source=source,
+            eval_id=eval_id,
         )
         self._append(entry)
         return entry
+
+    def has_eval_id(self, eval_id: str, year: int | None = None, month: int | None = None) -> bool:
+        """Return True if a record with ``source='petri_eval'`` and the
+        given ``eval_id`` already exists in the month file. Used by
+        :mod:`core.audit.eval_to_jsonl` to skip duplicate extractions.
+        """
+        if not eval_id:
+            return False
+        today = date.today()
+        y = year or today.year
+        m = month or today.month
+        records = self._read_month(y, m)
+        return any(r.eval_id == eval_id and r.source == "petri_eval" for r in records)
 
     def get_monthly_summary(
         self,

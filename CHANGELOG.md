@@ -28,6 +28,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.90.0] — 2026-05-11
+
 ### Fixed
 
 - **Defect A root-cause fix — petri target tokens 가 inspect_ai
@@ -77,7 +79,224 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `tests/test_agentic_loop.py` 2 신규 (track_usage cache 토큰
     flow-through, schema mismatch 시 WARNING). 4520 tests pass.
 
+- **Defect A F-A2 follow-up — petri judge / auditor / target usage 가
+  `~/.geode/usage/<YYYY-MM>.jsonl` 에도 흐르도록 cross-session ledger
+  보강.** 5/11 라이브 anthropic archive `.eval` 의 `role_usage` 는
+  judge `in=21 out=846 cache_w=6740`, auditor `in=7 out=1007 cache_r=
+  34006` 을 정상 기록하는 동안 같은 wall-clock 윈도우 (`2026-05-11
+  08:00-09:00 UTC`) 의 GEODE JSONL 에는 0 record — inspect_ai 의 native
+  `AnthropicAPI` / `OpenAIAPI` 가 GEODE TokenTracker 를 우회해 provider
+  SDK 를 직접 호출하기 때문 (ts 매치로 확정). `geode history` rollup
+  이 모든 petri audit 의 judge + auditor 비용을 빠뜨리고 있었음.
+  본 PR —
+  - `UsageRecord` schema 확장 — `cache_creation_tokens` (serialized
+    `cache_w`), `cache_read_tokens` (`cache_r`), `thinking_tokens`
+    (`think`), `role`, `source`, `eval_id` 필드 추가. `to_json` 이
+    falsy 시 omit, `from_json` 이 `.get(..., 0/"")` fallback —
+    pre-extension JSONL row 가 새 reader 에서 그대로 round-trip.
+  - `TokenTracker._persist_usage` 가 cache / thinking 을 실제로
+    JSONL 까지 흘려보냄 — F-A2 가 in-memory accumulator 까지만
+    채우고 persistent store 에서 drop 하던 잔여 leak 해결.
+  - `core/audit/eval_to_jsonl.py` 신규 — petri eval 종료 후
+    `extract_to_usage_store(.eval)` 가 `EvalStats.model_usage` 를
+    walk + `eval.model_roles` 의 role 태그를 매핑해 per-model row
+    를 `source="petri_eval"` 로 append. ts 는 `eval.created` 의
+    ISO8601 → unix 변환으로 wall-clock 보존. idempotent —
+    `UsageStore.has_eval_id` 로 중복 import 차단.
+  - `plugins.petri_audit.runner._maybe_auto_archive` 가 archive
+    직후 hook 호출 (`_import_usage`). 실패 시 swallow + note 만
+    — audit 자체는 영향 없음.
+  - **회귀 가드** — `tests/test_usage_store.py` 3 클래스 신규
+    (extension fields 직렬화/legacy compat, store record 의 cache
+    forwarding + has_eval_id dedup, TokenTracker.record 의 cache
+    flow-through) + `tests/audit/test_eval_to_jsonl.py` 6 신규
+    (ts 파싱, missing file, empty stats, role 태그 매핑, cost
+    fallback, idempotency, unknown role). 4517 passed.
+
+### Added
+
+- **`docs/audits/eval-logs/MANIFEST.jsonl` — petri eval archive 의
+  cross-session index.** PR A 의 `~/.geode/usage/` ledger 가 매 LLM
+  call 단위의 누적이라면 본 MANIFEST 는 매 archive 단위의 metadata
+  (sha + seed_ids + role + role_usage_summary) 인덱스. inspect_ai 의
+  `.eval` 는 single-eval scope 이고 `~/.geode/petri/logs/` raw archive
+  는 git 외부 (PII/size 이유) — multi-archive 검색 (e.g.
+  "helpful_only_model_harmful_task seed 가 들어간 모든 eval") 는 본
+  manifest 외 다른 source 없음. 본 PR —
+  - `core/audit/manifest.py` 신규 — `append_manifest(eval_path,
+    summary_yaml=...)` / `has_archive(sha)` / `read_manifest()` /
+    `parse_started_ts()`. inspect_ai `header_only=True` 로 읽어
+    `eval.dataset.samples` + `sample_ids` + `model_roles` +
+    `stats.role_usage` 를 single JSONL line 으로 압축. archive_sha
+    (file sha1) 로 idempotent — 같은 archive 두 번 append 차단.
+    `header_only` 가 `log.samples` 를 비워도 dataset path 로 sample
+    수 정확히 추출.
+  - `core/audit/__init__.py` 가 `append_manifest` / `has_archive` /
+    `read_manifest` re-export.
+  - `plugins/petri_audit/runner.py:_maybe_auto_archive` 가 archive
+    직후 `_append_manifest_line(...)` 호출. 실패 swallow + note —
+    PR A 의 `_import_usage` 와 동일 best-effort 패턴.
+  - `scripts/retrofit_manifest.py` 신규 — 기존 6 archive 1회 backfill.
+    `<YYYY-MM-DD>-<sha1(basename)[:8]>.summary.yaml` 매칭으로 yaml ↔
+    eval link. 본 PR 에 retrofit 결과 (`MANIFEST.jsonl` 6 lines)
+    함께 commit.
+  - `docs/audits/eval-logs/README.md` 갱신 — 기존 수기 매핑 표 →
+    MANIFEST.jsonl 자동/수동 사용법 + `jq` 쿼리 예시.
+  - **회귀 가드** — `tests/audit/test_manifest.py` 신규 5 클래스
+    14 테스트 (extract entry core fields, missing role_usage,
+    missing file, append jsonl line, idempotent via sha,
+    has_archive, malformed line, read_manifest, parse_started_ts).
+    4554 passed (`uv sync --extra audit` 환경 기준; default env 는
+    inspect_ai skip 으로 4533 정도).
+  - **부수** — `tests/audit/test_eval_to_jsonl.py` 의 ts expected
+    값 정정 (`1778573700.0` → `1778487700.0`). PR A 머지 시 default
+    env 의 `importorskip` 가 module skip 시켜 CI 통과했지만
+    inspect_ai 깔린 env (audit extra) 에서는 실패. 본 PR 의
+    [audit] extra 환경에서 노출되어 같이 fix.
+
 ### Notes
+
+- **PR F — Defect B-1 상위 layer root cause 확정 (라이브 1 회,
+  ~$0.10) + `apply_messages_cache_control` empty-text guard.** PR E
+  의 fix 가 target row 의 가시성 (zero-valued ModelUsage) 회복한
+  후, 진짜 root cause 식별 — anthropic refusal 정책이나 새 stop_reason
+  과 무관. 순수 GEODE 측 bug.
+
+  **fa4 evidence (3 lines)**:
+  ```
+  anthropic _do_call about to fire: model=claude-opus-4-7
+  anthropic BadRequest: "messages.2.content.0.text: cache_control
+                         cannot be set for empty text blocks"
+  anthropic BadRequest path → return None
+  ```
+
+  **root cause**: `apply_messages_cache_control` (core/llm/providers/
+  anthropic.py:234-287) 가 empty string content 의 message 를 받았을
+  때 `{"type": "text", "text": "", "cache_control": ephemeral}` 의
+  empty text block + cache_control 로 변환. anthropic API 400 →
+  GEODE adapter `return None` → AgenticLoop 의
+  `result.error='llm_call_failed'` → 모든 target token 손실. petri
+  multi-turn 의 empty content history (예: refusal 직후 empty
+  assistant slot) 가 우연히 trigger. ransomware seed 외 다른 seed 도
+  conversation state 에 따라 동일 trigger 가능.
+
+  **fix** (`core/llm/providers/anthropic.py:265-296`):
+  - str content empty → skip cache_control
+  - list content last block 이 empty text → skip cache_control
+
+  **회귀 가드** (5 신규/갱신):
+  - `test_empty_string_content_skips_cache_control` (신규)
+  - `test_empty_text_last_block_skips_cache_control` (신규)
+  - `test_non_empty_string_still_gets_cache_control` (신규)
+  - `test_mixed_messages_skip_only_the_empty_one` (신규)
+  - `test_skips_empty_content` (갱신 — empty content 그대로 보존)
+
+  4559 passed.
+
+  **PR F 의 라이브 (~$0.10) — PR E fix 효과 검증**:
+  archive `2026-05-11T12-40-01_audit_fmpqGm...eval` 의 `role_usage`
+  에 **`target` entry 정확히 추가** (in=0 out=0). PR E fix
+  (GeodeModelAPI 의 zero-valued ModelUsage emit) 가 실측 환경에서
+  정확히 작동. F-A1 의 "target column 누락" 결함 가시성 회복 완료.
+  본 PR F fix 머지 후 다음 audit 에서 target entry 의 in/out 도
+  진짜 토큰 수로 채워짐.
+
+  **5-PR plan 완성** (#1026 A + #1027 B + #1028 C + #1029 D +
+  #1030 E + 본 PR F). 총 cost ~$0.30 = 30K KRW cap 의 1.4%. B-3
+  (LoggerEvent capture) / B-4 (judge stats race) 만 후속 잔존.
+
+- **PR E — Defect B-1 root cause 추적 (4 라이브 추가, ~$0.15 누적)
+  + minimal fix.** PR D 의 archive 만으로 B-1 의 정확한 root cause
+  결정 불가. temporary `core/_fa4_debug.py` (file-based log,
+  inspect_ai subprocess capture 우회) 로 정확한 path 식별 후 cleanup.
+
+  **확정된 root cause** (fa4 evidence 4 lines):
+  - `_default_geode_runner` 정상 호출 (last_user 58 chars 정확)
+  - AgenticLoop 1 round 만에 종료, `result.error='llm_call_failed'`
+    — anthropic 호출 실패 + GEODE 의 error fallback (235 chars) 채움
+  - `delta.call_count == 0` → `result.usage = None` (track_usage 한
+    번도 안 호출)
+  - `GeodeModelAPI.generate` 의 `if usage_dict:` guard 가 None case
+    에서 `inspect_usage = None` 으로 빠짐 → archive 의
+    `ModelEvent.output.usage = None` → inspect_ai 가
+    `stats.role_usage["target"]` entry 미생성. **F-A1 의 잔여 leak.**
+
+  **B-1 의 두 layer**:
+  - 상위 — anthropic adapter 호출 실패 (정확한 fail path 미식별).
+    후속 PR F 의 라이브로 식별.
+  - 하위 (본 PR E fix) — `GeodeModelAPI.generate` 의 `if usage_dict:`
+    guard 제거. 항상 ModelUsage 라도 emit.
+
+  **fix** (`plugins/petri_audit/targets/geode_target.py:368-389`):
+  ```python
+  # Before: if usage_dict: inspect_usage = ModelUsage(...)
+  # After:  usage_src = usage_dict or {}; 항상 ModelUsage 만듦
+  ```
+
+  **회귀 가드**:
+  - `test_geode_model_api_back_compat_str_runner` 갱신 — str-runner
+    case 의 `out.usage` 가 zero-valued ModelUsage (was None)
+  - `test_geode_model_api_emits_zero_usage_when_runner_returns_none_usage`
+    신규 — `(text, None)` runner return 의 fix 검증. 4555 passed.
+
+  **B-3 / B-4 잔존** — B-3 (logger propagate), B-4 (judge stats race)
+  는 후속 PR. 후속 PR F (~$0.10 추가) — anthropic.py 의 fail path
+  식별 + ransomware seed 의 refusal 정책 추적.
+
+  본 PR — `geode_target.py` fix + 회귀 2 + audit 보고서 §9.4-9.7
+  추가 + 라이브 4 archive 의 metadata (`MANIFEST.jsonl` 4 lines +
+  summary yaml 자동).
+
+- **PR D — F-A4 라이브 검증 (anthropic 1 sample, ~$0.05 실측) +
+  Defect B 발견 인벤토리.** PR #1024 (F-A1/A2/A3) + #1026 (PR A) +
+  #1027 (PR B) 의 누적 wiring 을 라이브로 검증. archive
+  `2026-05-11T10-43-40-00-00_audit_au96dd7ywTvqyVabo9JWKs.eval` +
+  `docs/audits/eval-logs/2026-05-11-3ed0e387.summary.yaml` +
+  MANIFEST.jsonl 7번째 line.
+
+  검증 contract 4 가지 중 1.5 PASS:
+  - **L1 (`.eval` role_usage target non-zero)** FAIL — target
+    ModelEvent 2 회 (time=5.44s + 6.92s) 발생했지만
+    `output.choices[0].message.content == ""`, `output.usage == None`.
+    auditor 가 두 번 rollback ("Empty target responses [M3, M5]").
+  - **L2 (`~/.geode/usage/` 새 3 row)** FAIL — 본 audit wall-clock
+    시각의 GEODE JSONL records 1 개 (auditor post-eval extraction)
+    만. target call 의 per-call record 없음.
+  - **L3 (MANIFEST.jsonl + target)** 부분 PASS — line 자동 추가됨,
+    `role_usage_summary={auditor}` (L1 결과 반영). PR A/B 의 wiring
+    자체는 graceful degradation 정상.
+  - **F-A3 (LoggerEvent capture)** FAIL — sample LoggerEvent 0.
+    inspect_ai 가 `inspect_ai.*` namespace 만 capture.
+
+  새 결함 (Defect B 후보):
+  - **B-1 (HIGH)** GEODE `AgenticResult.text == ""` — target 응답
+    추출 실패. F-A1 의 ModelUsage 매핑 코드 (`GeodeModelAPI.generate`)
+    까지 도달 못 함
+  - **B-2 (HIGH, B-1 종속)** target call 의 GEODE TokenTracker.record
+    미발생
+  - **B-3 (MID)** F-A3 INFO log 의 inspect_ai LoggerEvent 미캡처
+  - **B-4 (MID)** judge usage 가 stats.role_usage 에 누적 안 됨
+    (scoring path 의 stats 분리)
+
+  PR A/B 의 wiring 정상 (graceful degradation 입증), F-A1/A2 의 실측
+  검증은 Defect B-1 이 차단. 본 PR — audit 보고서 §9 갱신 +
+  MANIFEST.jsonl 7번째 line + summary yaml commit. Defect B root
+  cause 추적은 별도 PR (E, cost 0).
+
+- **Petri × GEODE 관측성 layered architecture — SOT 2 신규.** PR
+  #1024 + #1026 + #1027 의 누적 결과 (Defect A F-A1+A2+A3 fix + JSONL
+  schema + MANIFEST.jsonl) 를 한 곳에서 설명하는 architecture doc +
+  ground-truth audit report 추가.
+  - `docs/architecture/petri-observability.md` — 3-layer (Raw `.eval`
+    + `~/.geode/usage/` ledger + MANIFEST.jsonl) 의 책임 분리,
+    inspect_ai 가 이미 하는 것 vs GEODE 가 보강하는 것, cross-layer
+    flow diagram, "어디를 만지면 어디가 영향받는가" seam map.
+  - `docs/audits/2026-05-11-petri-observability-audit.md` — 5/11
+    라이브 archive 의 raw evidence (judge in=21 out=846 cache_w=6740,
+    auditor in=7 out=1007 cache_r=34006 vs 같은 wall-clock window
+    GEODE JSONL 0 records), inspect-petri 의 관측성 패턴 점검 결과
+    (6 layer + D 빠진 layer 점검 8 items), PR A/B 의 의사결정 연결,
+    PR D 의 검증 contract.
 
 - **`/claude-api migrate` to Opus 4.7 — noop migration.**
   GEODE 의 anthropic adapter (`core/llm/providers/anthropic.py`) 가

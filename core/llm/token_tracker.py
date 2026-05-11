@@ -326,7 +326,15 @@ class TokenTracker:
             cost_usd=cost,
         )
         self._accumulator.record(usage)
-        self._persist_usage(model, input_tokens, output_tokens, cost)
+        self._persist_usage(
+            model,
+            input_tokens,
+            output_tokens,
+            cost,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
+            thinking_tokens=thinking_tokens,
+        )
         return usage
 
     def calculate_cost(
@@ -409,12 +417,30 @@ class TokenTracker:
         input_tokens: int,
         output_tokens: int,
         cost_usd: float,
+        *,
+        cache_creation_tokens: int = 0,
+        cache_read_tokens: int = 0,
+        thinking_tokens: int = 0,
     ) -> None:
-        """Persist usage to ~/.geode/usage/ JSONL (no-op on failure)."""
+        """Persist usage to ~/.geode/usage/ JSONL (no-op on failure).
+
+        Cache / thinking fields added 2026-05-11 to close the F-A2 leak.
+        ``record`` already populated these on the in-memory accumulator
+        but ``_persist_usage`` dropped them, so the JSONL on disk and
+        ``geode history`` rollups silently zero-rated prompt-cache cost.
+        """
         try:
             from core.llm.usage_store import get_usage_store
 
-            get_usage_store().record(model, input_tokens, output_tokens, cost_usd)
+            get_usage_store().record(
+                model,
+                input_tokens,
+                output_tokens,
+                cost_usd,
+                cache_creation_tokens=cache_creation_tokens,
+                cache_read_tokens=cache_read_tokens,
+                thinking_tokens=thinking_tokens,
+            )
         except Exception:
             log.debug("Usage persistence skipped", exc_info=True)
 

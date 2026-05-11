@@ -266,6 +266,16 @@ def apply_messages_cache_control(
         msg = dict(out[i])
         content = msg.get("content")
         if isinstance(content, str):
+            # Defect B-1 upper-layer fix (2026-05-11, F-A4 live evidence)
+            # — anthropic 400s on ``messages.N.content.0.text:
+            # cache_control cannot be set for empty text blocks``.
+            # Skip cache_control whenever the message body is empty;
+            # there is nothing useful to cache anyway and attaching the
+            # breakpoint here turns a free-and-empty entry into a hard
+            # API failure that bubbles up as ``error='llm_call_failed'``
+            # in AgenticResult.
+            if not content:
+                continue
             msg["content"] = [
                 {
                     "type": "text",
@@ -276,6 +286,11 @@ def apply_messages_cache_control(
         elif isinstance(content, list) and content:
             new_content = list(content)
             last_block = dict(new_content[-1])
+            # Same empty-text guard for list-content messages — the API
+            # rejects ``{"type":"text","text":"","cache_control":...}``
+            # whether the block is the only one or the last of many.
+            if last_block.get("type") == "text" and not last_block.get("text"):
+                continue
             last_block["cache_control"] = {"type": "ephemeral"}
             new_content[-1] = last_block
             msg["content"] = new_content

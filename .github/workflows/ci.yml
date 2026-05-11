@@ -46,7 +46,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
+      # [audit] extra installs inspect_ai so tests/audit/ runs (otherwise
+      # ``pytest.importorskip("inspect_ai.log")`` skips those modules
+      # and the petri-bookkeeping code in core/audit/ shows up as 0%
+      # covered — pushing total coverage below the 75% ratchet).
+      - run: uv sync --extra audit
       - name: Run tests with coverage
         run: uv run pytest --cov=core --cov-report=term-missing
       - name: Ratchet — minimum test count
