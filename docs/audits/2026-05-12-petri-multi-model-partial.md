@@ -1,10 +1,11 @@
 # Petri × GEODE — Multi-model Partial Report (2026-05-12)
 
-> Anthropic API credit balance exhaust (2026-05-12 21:19 UTC) 의 mid-run abort 의 시점 의 evidence summary. 본 보고서 의 N=5 의 계획 대비 의 진행 status:
+> **본 보고서 의 status 의 정직 한 명시** — N=5 multi-model benchmark (50 batches 의 계획) 의 mid-run 의 **Anthropic API credit 초과 (credit balance exhaust)** 로 중단[^credit]. 본 시점 의 진행:
 > - **Opus**: N=2 (v3 + N=5 seed 1)
 > - **Sonnet**: N=1 (N=5 seed 1)
-> - **gpt-5.5**: vanilla N=1 만 (GEODE seed 1 의 credit exhaust)
+> - **gpt-5.5**: vanilla N=1 만 (GEODE seed 1 의 credit 초과 시점 의 partial fail)
 > - **haiku, gpt-5.4**: 0 (phase 2 미시작)
+> 본 작업 의 spent: ~$12 (~16,800 KRW). 본 GEODE / REODE 운영 누적 의 ~0.065%[^cost].
 
 ## 1. 한 줄 요약
 
@@ -181,6 +182,12 @@ uv add inspect_viz  # P3-b-2b/c 의 plan 의 명시
 - 본 보고서: `docs/audits/2026-05-12-petri-multi-model-partial.md`
 - v3 보고서 (Opus 전용): `docs/audits/2026-05-12-petri-geode-audit-v3.md`
 - v1 retraction: `docs/audits/2026-05-12-petri-geode-audit.md`
+
+---
+
+[^credit]: **실패 사유 — Anthropic API credit balance 초과**. `BadRequestError 400: "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."` (request_id `req_011CawUyiXGM1dGcz3EMWsib`). 본 fail 의 trigger 시점 — `gpt55-geode-seed1` (2026-05-12 21:19:56 UTC). 본 batch 의 partial archive (~$0.5 spent before abort, 본 cleanup 완료) + seed 2 의 모든 batch 의 fast-fail 의 3 file (cleanup 완료). 본 master + chain script 의 kill 의 추가 cost 의 회피.
+
+<sub>[^cost]: 본 audit 의 cost (~$12, ~1.7만원) 의 GEODE / REODE 의 운영 비용 의 context — (a) Eco² 클라우드 서버 유지 200×3 + 150×1 = **750만원** (4개월), (b) Eco² 백엔드/인프라/프론트엔드/Chat-Harness(Multi-agent)/스케일업 빌딩 의 Cursor API 콜 **1,000만원**, (c) Eco² 검증 토큰 소모 (`scripts/eco2_token_cost.py` 의 추정, Tier 4 gpt-5.4 grounding, 172.76M tokens × $2.5/$15/1M × 60/40 in-out split) **~181만원** (~$1,296), (d) 구독 비용 20만원 × 10 = **200만원**, (e) Autonomous 검증 (GEODE/REODE) **500만원**. 본 누적 합산 ≈ **2,631만원**. 본 Petri × GEODE audit 의 ~1.7만원 는 본 누적 의 **0.065%** 의 비중.</sub>
 - Archives:
   - `~/.geode/petri/logs/2026-05-11T20-16-25-*.eval` (v3 Opus GEODE)
   - `~/.geode/petri/logs/2026-05-11T20-22-13-*.eval` (v3 Opus vanilla)
