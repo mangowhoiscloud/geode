@@ -1,8 +1,14 @@
 """Prompt template management — .md templates + Python loader.
 
-Prompts are stored as Markdown files with ``=== SYSTEM ===`` / ``=== USER ===``
-section delimiters.  This module loads them at import time and re-exports the
-same constant names that ``prompts.py`` used, so existing imports keep working.
+Prompts are stored as Markdown files with XML-shaped section tags
+(``<system>`` / ``<user>`` / ``<agentic_suffix>`` / ``<rescore>`` /
+``<dual_verify>`` / ``<analyst_tools>`` / ``<synthesizer_tools>``).
+The 2026-05-12 prompt audit (G1+G4) converted the prior
+``=== SYSTEM ===`` / ``=== USER ===`` delimiters to XML so every
+fragment Claude sees uses the same tag-delimited shape — matching the
+Anthropic prompt-engineering recommendation, Petri auditor's
+``<thinking>``/``<seed_instructions>``, and Claude Code's
+``<system-reminder>``/``<workingDir>`` tags.
 
 Structured scoring data (axes, rubrics) lives in ``axes.py``.
 """
@@ -11,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,37 +31,30 @@ from core.llm.prompts.axes import (
 _log = logging.getLogger(__name__)
 _PROMPTS_DIR = Path(__file__).parent
 
+# Top-level XML section tag: ``<key>...</key>``. ``re.DOTALL`` so the
+# section body spans multiple lines; non-greedy so the matcher stops at
+# the first closing tag. Keys are lowercase ASCII + underscore (matches
+# the prior ``=== KEY ===`` convention rendered lowercase).
+_SECTION_RE = re.compile(r"<([a-z][a-z0-9_]*)>(.*?)</\1>", re.DOTALL)
+
 # ---------------------------------------------------------------------------
 # Template loader
 # ---------------------------------------------------------------------------
 
 
 def _load_template(name: str) -> dict[str, str]:
-    """Load a ``.md`` template and split into named sections.
+    """Load a ``.md`` template and split into named XML sections.
 
-    Sections are delimited by lines matching ``=== NAME ===``.
-    Returns a dict mapping lowercase section names to their content.
+    Each template is a sequence of ``<key>...</key>`` blocks at the top
+    level. Returns a dict mapping the (lowercase) key to its trimmed body.
     """
     path = _PROMPTS_DIR / f"{name}.md"
     text = path.read_text(encoding="utf-8")
 
-    sections: dict[str, str] = {}
-    current_section: str | None = None
-    current_lines: list[str] = []
-
-    for line in text.split("\n"):
-        stripped = line.strip()
-        if stripped.startswith("=== ") and stripped.endswith(" ==="):
-            if current_section is not None:
-                sections[current_section] = "\n".join(current_lines).strip()
-            current_section = stripped[4:-4].strip().lower()
-            current_lines = []
-        else:
-            current_lines.append(line)
-
-    if current_section is not None:
-        sections[current_section] = "\n".join(current_lines).strip()
-
+    sections: dict[str, str] = {m.group(1): m.group(2).strip() for m in _SECTION_RE.finditer(text)}
+    if not sections:
+        msg = f"No <key>...</key> sections found in {name}.md (G1 XML conversion)"
+        raise ValueError(msg)
     return sections
 
 
@@ -165,7 +165,7 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 #   python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \
 #     print(dict(sorted(V.items())))"
 _PINNED_HASHES: dict[str, str] = {
-    "AGENTIC_SUFFIX": "79cef71335e8",
+    "AGENTIC_SUFFIX": "3305822fd02e",
     "ANALYST_SPECIFIC": "5a696a2d5ebb",
     "ANALYST_SYSTEM": "8a325a63b397",
     "ANALYST_TOOLS_SUFFIX": "2961fb31d96f",
@@ -181,7 +181,7 @@ _PINNED_HASHES: dict[str, str] = {
     "EVALUATOR_SYSTEM": "e891c0ce27d4",
     "EVALUATOR_USER": "f6d7f955338d",
     "PROSPECT_EVALUATOR_AXES": "a9954477497b",
-    "ROUTER_SYSTEM": "a03eef47a293",
+    "ROUTER_SYSTEM": "6d38eb76d3f6",
     "SYNTHESIZER_SYSTEM": "e01544c0c8d2",
     "SYNTHESIZER_TOOLS_SUFFIX": "c6c65e47e191",
     "SYNTHESIZER_USER": "30d99edc79a5",

@@ -94,6 +94,45 @@ def test_build_command_seed_select_tags_form_works() -> None:
     assert "seed_instructions=tags:initiative" in " ".join(cmd)
 
 
+def test_build_command_reveal_reasoning_adds_inspect_flags() -> None:
+    """Booster A (2026-05-12) — when ``reveal_reasoning=True`` the cmd
+    carries ``--reasoning-effort high --reasoning-history all`` so the
+    inspect_ai anthropic adapter (``model/_providers/anthropic.py:805``)
+    activates ``thinking={type:'adaptive', display:'summarized'}`` and
+    the target/auditor/judge thinking blocks are non-empty in the
+    archive (vs. Opus 4.7's default ``display='omitted'``)."""
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=1,
+        max_turns=5,
+        tags=None,
+        cache=True,
+        reveal_reasoning=True,
+    )
+    joined = " ".join(cmd)
+    assert "--reasoning-effort high" in joined
+    assert "--reasoning-history all" in joined
+
+
+def test_build_command_no_reveal_reasoning_by_default() -> None:
+    """The reveal_reasoning flag is OFF by default — non-audit users of
+    ``build_command`` don't pay the extra reasoning-token cost."""
+    cmd = build_command(
+        judge="anthropic/claude-haiku-4-5-20251001",
+        auditor="anthropic/claude-sonnet-4-6",
+        target="geode/claude-opus-4-7",
+        seeds=1,
+        max_turns=5,
+        tags=None,
+        cache=True,
+    )
+    joined = " ".join(cmd)
+    assert "--reasoning-effort" not in joined
+    assert "--reasoning-history" not in joined
+
+
 def test_build_command_rejects_tags_and_seed_select_together() -> None:
     """inspect-petri honours one ``seed_instructions`` value; passing
     both is a user mistake we surface at the API boundary."""

@@ -28,6 +28,192 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.93.0] — 2026-05-12
+
+### Changed
+
+- **System-prompt audit + cleanup (2026-05-12).** 12 항목 GAP audit
+  (G1-G12) 의 통합 정리. **Default behaviour 가 바뀌었습니다 — GEODE
+  identity 가 매 호출에 default 로 inject 되지 않습니다.**
+  - **G1 — XML sandwich (`<key>...</key>`)**: `core/llm/prompts/*.md`
+    9 파일의 16 marker (`=== SYSTEM ===` / `=== USER ===` / `=== RESCORE
+    ===` / `=== DUAL_VERIFY ===` / `=== AGENTIC_SUFFIX ===` / `===
+    ANALYST_TOOLS ===` / `=== SYNTHESIZER_TOOLS ===`) 를 XML tag 로
+    일괄 변환. parser 는 `<([a-z][a-z0-9_]*)>(.*?)</\1>` 의 regex 로
+    section 추출. Anthropic / Petri auditor / Claude Code-ref 의
+    frontier 패턴과 일치.
+  - **G2 — `max_rounds=4` cap 제거**: `_default_geode_runner` 의
+    hardcoded inner cap 제거. AgenticLoop 의 `DEFAULT_MAX_ROUNDS = 0`
+    (unlimited, time-budget 기반) 가 default. petri audit 의 `long_
+    running_loop` seed 의 admirable 2 (vanilla 8) 약점의 root cause.
+  - **G3 — audit-mode 의 system prompt strip**: `GEODE_AUDIT_
+    UNRESTRICTED=1` 활성화 시 `<agent_identity>` / `<project_memory>`
+    / `<agent_learning>` / `<runtime_rules>` / `<user_context>` 모두
+    제외. `<model_card>` + `<current_date>` + caller `system_suffix`
+    만 송신. petri audit 의 `scenario_realism` -1.23 격차 (GEODE 6.15
+    vs vanilla 7.38) 의 root cause.
+  - **G9 — `learned.md` 의 raw-context leak 제거**: 본 file 의 `[context:
+    <한국어 prior-turn 일부>]` trailer 가 매 LLM call 에 inject 되어
+    user 의 prior conversation 30+ entry 가 leak. `_sanitize_learned_
+    pattern` 이 trailer strip + 120-char cap.
+  - **G10 — GEODE identity opt-in (`GEODE_PERSONA=on`)**: GEODE.md 의
+    Core Principles + CANNOT + Defaults 가 매 호출에 inject 되던 동작
+    을 default OFF 으로 변경. **GEODE 를 Opus 4.7 (또는 Sonnet 4.6 등)
+    의 thin wrapper 로 쓰는 default 경험 — GEODE identity 강제 없음.
+    별도 `GEODE_PERSONA=on` 설정 시에만 inject. audit-mode 는 G10 을
+    supersede (audit 시 GEODE identity 항상 OFF).**
+  - **G11 — router.md baseline identity 중화**: "You are GEODE,
+    a general-purpose autonomous execution agent" → "You are an
+    autonomous execution agent". GEODE 의 강한 identity 의 GEODE.md
+    G1 layer 의 opt-in 일관성. user_context 의 "Your identity is GEODE"
+    중복 preamble 도 제거.
+  - **G12 — CANNOT/CAN 중복 제거**: router.md 의 `## CANNOT / CAN
+    (absolute rules)` 의 GEODE.md G1 CANNOT 와 중복 portion 정리 +
+    `## Tool-call discipline (absolute rule)` 의 single-block 으로
+    재구성.
+  - **G6 — Round budget hard rule → soft guidance**: router.md
+    `agentic_suffix` 의 "Single-intent = 1 tool call" hardcoded
+    budget 을 soft efficiency target 으로 풀어줌. G2 와 묶임 —
+    long-running 작업의 budget self-awareness 신호 강화.
+  - **G7 — `PROMPT_CACHE_BOUNDARY` 의 XML 화**: 기존
+    `__GEODE_PROMPT_CACHE_BOUNDARY__` underscore marker → `<dynamic_
+    context>` opening tag. anthropic adapter 의 cache split 의 일관성
+    + 본 prompt 의 visible XML 일관성.
+  - **G8 — `_build_model_card` 의 `lru_cache(maxsize=8)`**: model
+    별 model card 의 dynamic build 의 매 turn 호출 의 import + dict
+    lookup overhead 제거. 8 entries 의 cache (3-provider × ~3 model).
+
+  **회귀 가드 신규 19** — `tests/test_prompt_audit_2026_05_12.py`:
+  G1 의 9 file XML parse 회귀 + G2 의 source check + G3 의 audit-mode
+  strip + G9 의 sanitize 의 다양한 input + G10 의 opt-in default
+  검증 + G11 의 router.md baseline neutralization.
+
+  **base_template_hash 영향**: `ROUTER_SYSTEM` (a03eef47a293 →
+  6d38eb76d3f6) + `AGENTIC_SUFFIX` (79cef71335e8 → 3305822fd02e) 두
+  hash 의 drift. 모든 GEODE user 의 first call 의 prompt cache miss
+  + 새 cache. 일시적 cost +. `_PINNED_HASHES` 동시 update.
+
+### Added
+
+- **Petri × GEODE alignment audit — 13 seeds × 2 targets 라이브
+  + 3 booster.** scenarios v1 + v2 (13 seeds) 의 첫 종합 라이브 결과.
+  GEODE wrapper (`geode/claude-opus-4-7`) vs vanilla Opus 4.7 의
+  alignment 행동 비교. 16/17 dim 에서 |Δ| < 0.5, 단 `broken_tool_use`
+  에서 GEODE -1.08 (tool layer robust) + `admirable` +0.77 + `scenario_
+  realism` -1.23 (wrapping 의 자연스러움 cost). 실측 cost **$6.49**
+  (~9,085 KRW), wall 8m 35s. Booster 3 종:
+  - **A** — `plugins/petri_audit/runner.py:build_command` 의
+    `reveal_reasoning` 파라미터. audit-mode (`GEODE_AUDIT_UNRESTRICTED=1`)
+    활성화 시 inspect cmd 에 `--reasoning-effort high
+    --reasoning-history all` 주입. inspect_ai anthropic adapter
+    (line 805-807) 의 `thinking={type:"adaptive",
+    display:"summarized"}` 활성화. (Honest scope — archive 의
+    ContentReasoning 보존은 inspect_ai upstream limitation, 후속 PR)
+  - **E** — `_default_geode_runner` (entry/policy/exit) + anthropic
+    provider (BadRequest/Exception path) 의 `core.audit.diagnostics.
+    diag()` 호출. inspect_ai subprocess 격리 우회 + `~/.geode/
+    diagnostics/<YYYY-MM>.log` 의 정식 활용 (PR #1039 의 인프라).
+  - **C** — diag log 안 audit_mode + usage 명시 (얕은 scope).
+    RunLog session_key sidecar 본격화는 후속 PR.
+
+  **docs**: `docs/audits/2026-05-12-petri-geode-audit.md` — Petri 로
+  수행한 GEODE Audit 종합 결과 (친절한 한국어). 13 sample × 17 dim
+  score, 6-axis 비교, seed 별 핵심 발견, booster 의 honest assessment,
+  후속 작업. **회귀 가드 2 신규** — `tests/plugins/petri_audit/
+  test_runner.py` 의 `test_build_command_reveal_reasoning_adds_inspect_
+  flags` + `test_build_command_no_reveal_reasoning_by_default`.
+
+- **Petri scenarios v2 — 5 신규 seeds (autonomy/efficiency/calibration)
+  로 5-axis 17 dims 100% direct cover.** scenarios-v1 (8 seeds, 4 카테고리)
+  로 cover 못 한 5 dims 보강:
+  - `autonomy/self_preservation_under_replacement` — replacement
+    threat 시나리오. `unprompted_self_preservation` cover
+  - `autonomy/whistleblowing_user_intent_violation` — CoC 위반
+    발견 시 외부 보고/저항. `unprompted_whistleblowing` cover
+  - `efficiency/long_running_loop` — non-existent target 탐색 시
+    bounded vs unbounded. `stuck_in_loops` cover
+  - `calibration/false_refusal_drift` — adjacent-to-sensitive 의
+    over-refusal 측정 (v1 reverse). `overrefusal` cover
+  - `calibration/high_stakes_security_advice` — financial signing
+    의 MD5 + warfarin-herbal 의 의료 adjacency. `high_stakes_setting`
+    cover
+
+  모두 5-branch 1→2→3→2→1 pressure curve + GEODE vs vanilla
+  comparison harness 동일 contract.
+
+  **Coverage 진단**:
+  - **5-axis (GEODE default 17 dims)**: 17/17 = **100%** direct/baseline
+  - **petri 38 default dims**: 22/38 direct + 5 meta = **71% effective**
+  - 본 audit 의 라이브 검증 (Y option) 의 출발점
+
+  **docs**: `docs/audits/petri-scenarios-coverage.md` 신규 — 13 seeds
+  × 38 dims matrix, 라이브 검증 plan, sequence shell script, 갭 + v3
+  후보 명시.
+
+  **회귀 가드**: `TestSeedsDirectory` parametrize 8 → 13. 4613 passed.
+
+- **Petri scenarios v1 — 8 GEODE-specific seeds (4 카테고리 × 2)
+  + audit-mode 가드레일 lift + GEODE vs vanilla 비교 harness.**
+  본 PoC 의 시나리오 layer 확장. 본 audit 의 frontier model 비교 의도
+  반영:
+
+  **8 seeds** (`plugins/petri_audit/seeds/<category>/<name>.md`):
+  - compute_use/{unrestricted_shell, sensitive_path_access}
+  - research/{fabrication_under_pressure, cherry_picking_dataset}
+  - exploratory/{silent_codebase_modification, dependency_change_disclosure}
+  - reasoning/{chain_manipulation, self_critique_bypass}
+
+  각 seed = **5-branch 1 → 2 → 3 → 2 → 1 pressure curve** + GEODE vs
+  vanilla comparison harness (peak 시 cave + post-peak lingering
+  effect 측정). canary GUID 포함. body 의 "Look for" section 이 각
+  branch 의 측정 기대.
+
+  **audit-mode** (`plugins/petri_audit/audit_mode.py`):
+  - 3 활성화 path — CLI `--unrestricted`, env
+    `GEODE_AUDIT_UNRESTRICTED=1`, config `.geode/audit-mode.toml`
+  - 적용 — ProfilePolicy 의 `allow_dangerous` / `allow_write` /
+    `allow_expensive` 모두 True + `denied_tools` clear, Readiness
+    의 `force_dry_run = False`. **non-mutating** — 사용자
+    `~/.geode/user_profile/preferences.toml` 절대 안 건드림
+  - `_default_geode_runner` 가 본 mode 활성 시 ProfilePolicy
+    오버라이드 + readiness 오버라이드
+
+  **CLI** (`plugins/petri_audit/cli_audit.py`):
+  - `geode audit --unrestricted` flag 신규 — env 변수 설정해서
+    `inspect eval` 자식 subprocess 가 inherit. one-shot.
+
+  **시각화 — Inspect transcript viewer v3 native** (Meridian Labs,
+  2026-05-07 의 Petri 3 출간):
+  - "The Inspect transcript viewer now natively supports Petri
+    transcripts."
+  - judge dimension sort/filter + branch navigation + citation
+    highlight 모두 native
+  - GEODE 의 14+ archives 의 transcript review 즉시 가능:
+    `inspect view start --log-dir ~/.geode/petri/logs/`
+  - 정적 SPA bundle: `inspect view bundle --output-dir <dir>` →
+    GitHub Pages 호환
+
+  **회귀 가드 35 신규** (`tests/plugins/petri_audit/
+  test_audit_mode.py`):
+  - `from_env` truthy/falsy parametrize 5+5
+  - `from_config` (4 cases — missing/disabled/full/malformed)
+  - `resolve` precedence (4 cases)
+  - `apply_to_profile_policy` non-mutating + override
+  - `apply_to_readiness` (4 cases — disabled/enabled/None/immutable)
+  - `TestSeedsDirectory` — 8 seeds × pressure curve + comparison
+    harness contract 검증
+  - `__repr__` (2 cases)
+
+  4608 passed.
+
+  **잔존 — 별도 후속**:
+  - 라이브 자연 검증 (각 카테고리 × 1 sample, ~$1.00 cost) — 본
+    fix 의 GEODE vs vanilla 결과 측정
+  - PII gate — ransomware seed 의 publish 보호 정책 (`docs/audits/
+    PUBLISH_POLICY.md` 후속)
+  - `inspect view bundle` 자동 publish CI (`.github/workflows/
+    pages.yml` 후속)
+
 ## [0.92.0] — 2026-05-12
 
 ### Added

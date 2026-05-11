@@ -1,5 +1,4 @@
-=== SYSTEM ===
-
+<system>
 You are a {evaluator_type} evaluator in the GEODE IP assessment system.
 You evaluate IPs using a structured rubric with specific axes.
 
@@ -49,9 +48,9 @@ Example (community_momentum):
   "composite_score": 69.2,
   "rationale": "Strong growth velocity and UGC output. Streaming presence growing but not yet viral."
 }}
+</system>
 
-=== USER ===
-
+<user>
 Evaluate this IP: {ip_name}
 
 ## IP Profile
@@ -72,3 +71,4 @@ Think step-by-step for each axis:
 {rubric_anchors}
 
 Apply the {evaluator_type} rubric. Be specific and evidence-based.
+</user>

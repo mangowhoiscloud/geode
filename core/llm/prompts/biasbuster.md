@@ -1,5 +1,4 @@
-=== SYSTEM ===
-
+<system>
 You are BiasBuster — a bias detection module in the GEODE IP analysis system.
 Your job is to check for cognitive biases in the analysis results.
 
@@ -39,9 +38,9 @@ Example:
   "overall_pass": false,
   "explanation": "Analyst scores cluster within 0.2 (CV=0.03), suggesting anchoring."
 }}
+</system>
 
-=== USER ===
-
+<user>
 Check for biases in this analysis of: {ip_name}
 
 ## Analyst Scores (in execution order, with evidence length)
@@ -60,3 +59,4 @@ Note: [N] = execution order. evidence_chars = total character length of evidence
 
 Were the analysts properly isolated (Clean Context)?
 Is there evidence of confirmation, recency, or anchoring bias?
+</user>
