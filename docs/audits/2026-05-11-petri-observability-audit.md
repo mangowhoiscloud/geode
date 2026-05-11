@@ -177,17 +177,56 @@ native event / timeline / `.eval` 안에 모든 관측성 정보를 채워넣음
 | "F-A2 의 cache 토큰이 JSONL 에 들어가나?" | 아니오 (in-memory accumulator 까지만) | 예 (PR A 의 `_persist_usage` schema 확장) |
 | "target 의 role_usage 가 archive 에 누적되나?" | 아니오 (F-A1 이전) | 예 (PR #1024 / F-A1+A2+A3 머지 후) |
 
-## 9. 후속 — PR D (F-A4 live 검증)
+## 9. PR D — F-A4 live 검증 (2026-05-11 19:43 KST / 10:43 UTC)
 
-본 점검의 evidence (`.eval` 의 target 누락) 가 PR #1024 / F-A1 fix 의
-정당성을 정량적으로 입증. PR D 의 라이브 1 sample (~$0.30, anthropic
-1 sample, helpful_only_model_harmful_task) 이 다음 3 가지를 동시 검증:
+archive: `2026-05-11T10-43-40-00-00_audit_au96dd7ywTvqyVabo9JWKs.eval` —
+seed `id:helpful_only_model_harmful_task`, max_turns 5, anthropic
+stack, total 16s, status success. 실측 비용 ~$0.05 (auditor 27,519
+tokens + target wasted credit 의 anthropic 측면).
 
-1. **Layer 1** — 새 archive 의 `role_usage["target"]` non-zero
-2. **Layer 2** — `~/.geode/usage/2026-05.jsonl` 에 새 3 row (target +
-   judge + auditor) `source="petri_eval"` 태그
-3. **Layer 3** — `docs/audits/eval-logs/MANIFEST.jsonl` 의 7 번째 line
-   + `target` role_usage_summary 포함
+### 9.1. 검증 contract 결과
+
+| # | Contract | 결과 | Evidence |
+|---|---|---|---|
+| L1 | `.eval` `role_usage["target"]` non-zero | **FAIL** | `role_usage={auditor: in=3 out=601 cw=9316 cr=17599}` — target/judge 항목 없음 |
+| L2 | `~/.geode/usage/` 새 3 row (target+judge+auditor) | **FAIL** | ts≥1778496215 의 row 1 개 (auditor source=petri_eval) 만 |
+| L3 | MANIFEST.jsonl 7번째 line + target role_usage_summary | **부분 PASS** | line 자동 추가됨, 단 `role_usage_summary={auditor}` (L1 결과 그대로 반영) |
+| F-A3 | INFO log (`petri runner entry: ...`) 가 LoggerEvent 에 capture | **FAIL** | sample LoggerEvent 0 |
+
+### 9.2. 새 결함 — F-A4 가 노출한 Defect B 후보
+
+| ID | 결함 | Evidence | 우선순위 |
+|---|---|---|---|
+| **B-1** | GEODE `AgenticResult.text == ""` (target 응답 추출 실패) | target ModelEvent 2 회 (time=5.44s + 6.92s, anthropic 실제 호출 발생) — `output.choices[0].message.content == ''`, `output.usage == None`. auditor 가 두 번 rollback ("Empty target responses [M3, M5]") | HIGH |
+| **B-2** | GEODE `TokenTracker.record` 가 target call 미캡처 | 본 audit wall-clock 시각의 GEODE JSONL records 1개 (auditor post-eval extraction). target call ~12s wasted credit 의 per-call record 없음 | HIGH (B-1 의 종속) |
+| **B-3** | F-A3 INFO log 이 LoggerEvent 로 capture 안 됨 | inspect_ai 의 LoggerEvent 가 `inspect_ai.*` namespace 만 capture, `plugins.petri_audit.*` 는 누락 | MID |
+| **B-4** | judge usage 가 `stats.role_usage` 에 누적 안 됨 | ModelEvent[57] (judge) `usage.in=21 out=846` 정상이지만 `log.stats.role_usage` 에서 누락. inspect_ai 의 scoring path 가 stats 와 분리 | MID |
+
+### 9.3. PR D 가 입증한 것 + 못한 것
+
+**입증된 것** (PR A/B 의 wiring 자체는 정상):
+- ✓ `_maybe_auto_archive` 가 archive + summary yaml + manifest + usage import 4 hook 모두 firing
+- ✓ MANIFEST.jsonl 의 자동 append 정상 (line schema 정확, `archive_sha`-based dedup 작동)
+- ✓ `extract_to_usage_store` 가 `.eval` 의 `model_usage` 를 walk + role 매핑 + ts 보존하여 JSONL 에 append
+- ✓ summary yaml 자동 생성 (`docs/audits/eval-logs/2026-05-11-3ed0e387.summary.yaml`)
+- ✓ inspect_ai 의 `EvalStats` 가 비어있는 (target 누락된) 상태에서도 PR A/B 의 코드가 crash 없이 graceful degradation
+
+**입증 못한 것** (Defect B 가 차단):
+- ✗ F-A1 의 ModelUsage 매핑 실측 — target 응답이 empty 라 `GeodeModelAPI.generate` 의 ModelOutput 구성 코드 (line 327 이후) 까지 도달 못 함. ModelUsage 매핑은 코드는 맞으나 wiring 의 lower step 에서 막힘
+- ✗ F-A2 의 cache 토큰 per-call persistence 실측 — target call 의 GEODE TokenTracker.record 미발생
+- ✗ F-A3 의 관측성 확장 실측 — inspect_ai logger capture policy 와 미스매치
+
+### 9.4. 후속 — Defect B 추적 (별도 PR E, cost 0)
+
+B-1 root cause 추적은 코드 검토만으로 가능 (cost 0):
+
+1. `AgenticLoop.arun(last_user)` 의 종료 조건 — max_rounds=4 + tools 활성 상태에서 tool_use 만 하고 text 없이 종료하는 path 가 있는지
+2. `_split_messages` 의 `last_user` 추출 — 본 audit 의 system+user message conversion 이 빈 last_user 를 만드는지
+3. anthropic adapter 의 응답 — 본 라이브의 target call 12s 동안 정상 응답 받았는지 (claude-opus-4-7 의 stop_reason 등)
+
+B-3 은 inspect_ai 의 `_util/logger.py` 점검 — `inspect_ai.*` 외 namespace 도 capture 하도록 `logging.getLogger("plugins.petri_audit").setLevel(...)` 또는 propagate 설정 필요.
+
+B-4 는 inspect_ai 의 sample.role_usage / stats.role_usage 누적 path 확인 — scoring 에서 fire 되는 ModelEvent 가 누적 대상인지.
 
 ## 10. 참고
 

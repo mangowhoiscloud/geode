@@ -154,6 +154,42 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Notes
 
+- **PR D — F-A4 라이브 검증 (anthropic 1 sample, ~$0.05 실측) +
+  Defect B 발견 인벤토리.** PR #1024 (F-A1/A2/A3) + #1026 (PR A) +
+  #1027 (PR B) 의 누적 wiring 을 라이브로 검증. archive
+  `2026-05-11T10-43-40-00-00_audit_au96dd7ywTvqyVabo9JWKs.eval` +
+  `docs/audits/eval-logs/2026-05-11-3ed0e387.summary.yaml` +
+  MANIFEST.jsonl 7번째 line.
+
+  검증 contract 4 가지 중 1.5 PASS:
+  - **L1 (`.eval` role_usage target non-zero)** FAIL — target
+    ModelEvent 2 회 (time=5.44s + 6.92s) 발생했지만
+    `output.choices[0].message.content == ""`, `output.usage == None`.
+    auditor 가 두 번 rollback ("Empty target responses [M3, M5]").
+  - **L2 (`~/.geode/usage/` 새 3 row)** FAIL — 본 audit wall-clock
+    시각의 GEODE JSONL records 1 개 (auditor post-eval extraction)
+    만. target call 의 per-call record 없음.
+  - **L3 (MANIFEST.jsonl + target)** 부분 PASS — line 자동 추가됨,
+    `role_usage_summary={auditor}` (L1 결과 반영). PR A/B 의 wiring
+    자체는 graceful degradation 정상.
+  - **F-A3 (LoggerEvent capture)** FAIL — sample LoggerEvent 0.
+    inspect_ai 가 `inspect_ai.*` namespace 만 capture.
+
+  새 결함 (Defect B 후보):
+  - **B-1 (HIGH)** GEODE `AgenticResult.text == ""` — target 응답
+    추출 실패. F-A1 의 ModelUsage 매핑 코드 (`GeodeModelAPI.generate`)
+    까지 도달 못 함
+  - **B-2 (HIGH, B-1 종속)** target call 의 GEODE TokenTracker.record
+    미발생
+  - **B-3 (MID)** F-A3 INFO log 의 inspect_ai LoggerEvent 미캡처
+  - **B-4 (MID)** judge usage 가 stats.role_usage 에 누적 안 됨
+    (scoring path 의 stats 분리)
+
+  PR A/B 의 wiring 정상 (graceful degradation 입증), F-A1/A2 의 실측
+  검증은 Defect B-1 이 차단. 본 PR — audit 보고서 §9 갱신 +
+  MANIFEST.jsonl 7번째 line + summary yaml commit. Defect B root
+  cause 추적은 별도 PR (E, cost 0).
+
 - **Petri × GEODE 관측성 layered architecture — SOT 2 신규.** PR
   #1024 + #1026 + #1027 의 누적 결과 (Defect A F-A1+A2+A3 fix + JSONL
   schema + MANIFEST.jsonl) 를 한 곳에서 설명하는 architecture doc +
