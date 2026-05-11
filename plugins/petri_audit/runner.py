@@ -596,7 +596,26 @@ def _maybe_auto_archive(
         notes.append(f"auto-archive failed: {exc}")
         return None, None
     _import_usage(result.raw_path, notes)
+    _append_manifest_line(result.raw_path, result.summary_path, notes)
     return str(result.raw_path), str(result.summary_path)
+
+
+def _append_manifest_line(raw_path: Path, summary_path: Path, notes: list[str]) -> None:
+    """Append one MANIFEST.jsonl line for the just-archived eval.
+
+    Same best-effort contract as :func:`_import_usage` — failure is
+    recorded as a note, never raised. Idempotent via archive_sha
+    (same file written twice → second call is a no-op).
+    """
+    try:
+        from core.audit.manifest import append_manifest
+
+        entry = append_manifest(raw_path, summary_yaml=summary_path)
+    except Exception as exc:  # pragma: no cover — defensive
+        notes.append(f"manifest-append failed: {exc}")
+        return
+    if entry is not None:
+        notes.append(f"manifest-append: {entry['archive']} indexed")
 
 
 def _import_usage(raw_path: Path, notes: list[str]) -> None:

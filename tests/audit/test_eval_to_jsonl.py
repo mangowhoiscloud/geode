@@ -76,11 +76,11 @@ def _read_jsonl(tmp_path: Path) -> list[dict[str, Any]]:
 class TestParseEvalTs:
     def test_iso_with_offset(self):
         ts = _parse_eval_ts("2026-05-11T08:21:40+00:00")
-        assert ts == pytest.approx(1778573700.0, abs=1.0)
+        assert ts == pytest.approx(1778487700.0, abs=1.0)
 
     def test_iso_with_z(self):
         ts = _parse_eval_ts("2026-05-11T08:21:40Z")
-        assert ts == pytest.approx(1778573700.0, abs=1.0)
+        assert ts == pytest.approx(1778487700.0, abs=1.0)
 
     def test_missing_returns_none(self):
         assert _parse_eval_ts("") is None
@@ -165,7 +165,7 @@ class TestExtractToUsageStore:
             assert r["source"] == "petri_eval"
             assert r["eval_id"] == archive.name
         # ts comes from eval.created, not now()
-        assert by_role["auditor"]["ts"] == pytest.approx(1778573700.0, abs=1.0)
+        assert by_role["auditor"]["ts"] == pytest.approx(1778487700.0, abs=1.0)
 
     def test_cost_filled_from_pricing_when_total_cost_missing(
         self, monkeypatch: pytest.MonkeyPatch, archive: Path, store: UsageStore, tmp_path: Path
