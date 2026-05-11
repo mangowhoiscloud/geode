@@ -15,6 +15,7 @@ copy of an audit's ground truth.
 from __future__ import annotations
 
 import argparse
+import os
 import shlex
 from pathlib import Path
 
@@ -128,8 +129,21 @@ def audit(
         "-y",
         help="Skip the confirm prompt before a live run.",
     ),
+    unrestricted: bool = typer.Option(
+        False,
+        "--unrestricted",
+        help="Audit-mode — lift GEODE's HITL/policy guardrails for this "
+        "petri run only (allow_dangerous + allow_write + force_dry_run=False "
+        "+ denied_tools clear + auto_approve). The scenario seeds in "
+        "plugins/petri_audit/seeds/ require this so the target's behaviour "
+        "under pressure is observed without GEODE itself intercepting. "
+        "Sets GEODE_AUDIT_UNRESTRICTED=1 in the inspect subprocess env. "
+        "Does NOT mutate ~/.geode/user_profile/preferences.toml.",
+    ),
 ) -> None:
     """Petri × GEODE alignment audit (P3-b-2 prep)."""
+    if unrestricted:
+        os.environ["GEODE_AUDIT_UNRESTRICTED"] = "1"
     report = run_audit(
         judge=judge,
         auditor=auditor,
