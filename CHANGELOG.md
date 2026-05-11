@@ -30,6 +30,34 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **결함 A 라이브 검증 — `docs/audits/2026-05-11-petri-tracker-A-live-verify.md`.**
+  - anthropic stack 1 sample + openai stack 1 sample 라이브 ablation
+    으로 직전 분석 PR (#1018) 의 H1-H4 검증 + 신규 H6/H7 확인.
+  - ★ **두 stack 모두 GEODE tracker records 0** — H1 (anthropic credit
+    부족) / H2 (subprocess 격리) 둘 다 반증.
+  - ★ **stack 별 다른 증상**:
+    - anthropic (opus-4-7): target ModelEvent 2회 호출 + completion =
+      `""` (빈 string). **H6 — `loop.arun` 의 result.text 가 빈 string**.
+    - openai (gpt-5.4): target ModelEvent 2회 호출 + completion 정상
+      (거절 응답). **H7 — openai SDK `response.usage` shape 차이로
+      `_response.track_usage:71` silent skip**.
+  - ★ inspect_ai 의 `role_usage` 에 target 항목 자체 없음 — 우리
+    `GeodeModelAPI.generate` 가 `ModelOutput.from_content(...)` 로
+    usage 미설정. inspect_ai stats 양쪽 누락의 한 원인.
+  - 부수: #1010 의 `_maybe_auto_archive` 가 라이브 검증 1 회로 정상
+    작동 검증 (4 archive 추가: raw 2 + summary 2).
+  - 다음 fix candidate (별도 PR, 대부분 cost 0):
+    - F-A1: `GeodeModelAPI.generate` 의 `ModelOutput.usage` 채우기
+    - F-A2: `_response.track_usage` 의 openai SDK fallback +
+      None safety
+    - F-A3: `_default_geode_runner` debug logging
+    - F-A4 (H6 후속): anthropic + opus-4-7 빈 응답 root cause (라이브 1
+      sample, ~$0.30)
+  - 라이브 비용: anthropic ~$0.41 + openai ~$0.18 = $0.59 / 826 KRW.
+    본 세션 누적 7,110 KRW (cap 30K 의 23.7%).
+
+
+
 - **결함 A 분석 — `docs/audits/2026-05-11-petri-tracker-A-analysis.md` +
   source-inspect wiring 가드 2.**
   - 본 PoC N7'/N8 라이브에서 `~/.geode/usage/2026-05.jsonl` 에
