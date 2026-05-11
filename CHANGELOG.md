@@ -154,6 +154,48 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Notes
 
+- **PR E — Defect B-1 root cause 추적 (4 라이브 추가, ~$0.15 누적)
+  + minimal fix.** PR D 의 archive 만으로 B-1 의 정확한 root cause
+  결정 불가. temporary `core/_fa4_debug.py` (file-based log,
+  inspect_ai subprocess capture 우회) 로 정확한 path 식별 후 cleanup.
+
+  **확정된 root cause** (fa4 evidence 4 lines):
+  - `_default_geode_runner` 정상 호출 (last_user 58 chars 정확)
+  - AgenticLoop 1 round 만에 종료, `result.error='llm_call_failed'`
+    — anthropic 호출 실패 + GEODE 의 error fallback (235 chars) 채움
+  - `delta.call_count == 0` → `result.usage = None` (track_usage 한
+    번도 안 호출)
+  - `GeodeModelAPI.generate` 의 `if usage_dict:` guard 가 None case
+    에서 `inspect_usage = None` 으로 빠짐 → archive 의
+    `ModelEvent.output.usage = None` → inspect_ai 가
+    `stats.role_usage["target"]` entry 미생성. **F-A1 의 잔여 leak.**
+
+  **B-1 의 두 layer**:
+  - 상위 — anthropic adapter 호출 실패 (정확한 fail path 미식별).
+    후속 PR F 의 라이브로 식별.
+  - 하위 (본 PR E fix) — `GeodeModelAPI.generate` 의 `if usage_dict:`
+    guard 제거. 항상 ModelUsage 라도 emit.
+
+  **fix** (`plugins/petri_audit/targets/geode_target.py:368-389`):
+  ```python
+  # Before: if usage_dict: inspect_usage = ModelUsage(...)
+  # After:  usage_src = usage_dict or {}; 항상 ModelUsage 만듦
+  ```
+
+  **회귀 가드**:
+  - `test_geode_model_api_back_compat_str_runner` 갱신 — str-runner
+    case 의 `out.usage` 가 zero-valued ModelUsage (was None)
+  - `test_geode_model_api_emits_zero_usage_when_runner_returns_none_usage`
+    신규 — `(text, None)` runner return 의 fix 검증. 4555 passed.
+
+  **B-3 / B-4 잔존** — B-3 (logger propagate), B-4 (judge stats race)
+  는 후속 PR. 후속 PR F (~$0.10 추가) — anthropic.py 의 fail path
+  식별 + ransomware seed 의 refusal 정책 추적.
+
+  본 PR — `geode_target.py` fix + 회귀 2 + audit 보고서 §9.4-9.7
+  추가 + 라이브 4 archive 의 metadata (`MANIFEST.jsonl` 4 lines +
+  summary yaml 자동).
+
 - **PR D — F-A4 라이브 검증 (anthropic 1 sample, ~$0.05 실측) +
   Defect B 발견 인벤토리.** PR #1024 (F-A1/A2/A3) + #1026 (PR A) +
   #1027 (PR B) 의 누적 wiring 을 라이브로 검증. archive

@@ -216,17 +216,81 @@ tokens + target wasted credit 의 anthropic 측면).
 - ✗ F-A2 의 cache 토큰 per-call persistence 실측 — target call 의 GEODE TokenTracker.record 미발생
 - ✗ F-A3 의 관측성 확장 실측 — inspect_ai logger capture policy 와 미스매치
 
-### 9.4. 후속 — Defect B 추적 (별도 PR E, cost 0)
+### 9.4. PR E — Defect B-1 root cause 추적 (라이브 4 회 + temp file-based debug log)
 
-B-1 root cause 추적은 코드 검토만으로 가능 (cost 0):
+PR D 의 archive 만으로 B-1 의 정확한 root cause 결정 불가. 4 라이브
+추가 (~$0.15 누적) + temporary `core/_fa4_debug.py` (file-based log,
+inspect_ai subprocess capture 우회) 로 정확한 path 식별. cleanup 후
+PR E 머지 시 _fa4_debug.py 제거.
 
-1. `AgenticLoop.arun(last_user)` 의 종료 조건 — max_rounds=4 + tools 활성 상태에서 tool_use 만 하고 text 없이 종료하는 path 가 있는지
-2. `_split_messages` 의 `last_user` 추출 — 본 audit 의 system+user message conversion 이 빈 last_user 를 만드는지
-3. anthropic adapter 의 응답 — 본 라이브의 target call 12s 동안 정상 응답 받았는지 (claude-opus-4-7 의 stop_reason 등)
+**Live archives (4 회 추가)**:
+- `2026-05-11T12-17-07_audit_fZeWcA...eval` — role_usage={auditor, judge}, target text=""
+- `2026-05-11T12-18-09_audit_KXwknS...eval` — 동일 패턴
+- `2026-05-11T12-20-55_audit_FJTroV...eval` — fa4 log 4 lines 캡처
+- `2026-05-11T12-23-23_audit_KqpadmT...eval` — 11s (cache hit 의심), role_usage={auditor} 만
 
-B-3 은 inspect_ai 의 `_util/logger.py` 점검 — `inspect_ai.*` 외 namespace 도 capture 하도록 `logging.getLogger("plugins.petri_audit").setLevel(...)` 또는 propagate 설정 필요.
+**fa4 evidence (3 번째 archive 의 `/tmp/fa4_debug.log`)**:
 
-B-4 는 inspect_ai 의 sample.role_usage / stats.role_usage 누적 path 확인 — scoring 에서 fire 되는 ModelEvent 가 누적 대상인지.
+```
+1778502070.990 runner entry: msg_count=4 sys_chars=300 last_user_chars=58
+1778502071.415 finalize entry: snap=set text_len=235 rounds=1
+1778502071.415 finalize delta: cc=0 in=0 out=0 cost=0.0000
+1778502071.424 runner exit: text_chars=235 result_usage_is_none=True
+                            rounds=1 error='llm_call_failed'
+```
+
+**확정된 root cause (Defect B-1 의 하위 layer)**:
+- `_default_geode_runner` 정상 호출, `last_user=58 chars` 정확히 추출 (H1 `_split_messages` 결함 가설 **반증**)
+- AgenticLoop 가 1 round 만에 종료, `result.error='llm_call_failed'` — anthropic 호출 실패 후 GEODE 가 error fallback (235 chars 메시지) 을 result.text 에 채움
+- `delta.call_count == 0` — TokenTracker.record 가 한 번도 안 호출 → `result.usage = None`
+- `_default_geode_runner` 가 `(text=235chars, usage_dict=None)` 반환
+- `GeodeModelAPI.generate` 의 `if usage_dict:` (line 369) 가 False → `inspect_usage = None`
+- archive 의 `ModelEvent.output.usage = None` → inspect_ai 가 `stats.role_usage["target"]` entry 미생성 — F-A1 의 의도 **여전히 invisible**
+
+**B-1 의 두 layer 분리**:
+- **상위 결함** — anthropic adapter 의 호출 실패. 정확한 fail path (`return None` 의 여러 path) 미식별. 본 라이브 evidence 부족 → 후속 PR F.
+- **하위 결함 (Defect B-1, 본 PR E 의 fix 대상)** — `GeodeModelAPI.generate` 의 `if usage_dict:` guard. None case 에서 inspect_usage=None 으로 빠짐. F-A1 의 잔여 leak. usage_dict 가 None 이라도 ModelUsage(0,0,0) 라도 들어가야 role 이 visible.
+
+### 9.5. PR E — Defect B-1 fix (minimal, cost 0)
+
+**fix** (`plugins/petri_audit/targets/geode_target.py:368-389`):
+
+```python
+# Before
+inspect_usage: ModelUsage | None = None
+if usage_dict:
+    ...
+    inspect_usage = ModelUsage(...)
+
+# After
+usage_src: dict[str, Any] = usage_dict or {}
+in_tok = int(usage_src.get("input_tokens", 0) or 0)
+... # 항상 추출, .get(..., 0) fallback
+inspect_usage = ModelUsage(input_tokens=in_tok, output_tokens=out_tok, ...)
+```
+
+효과:
+- 본 fix 후 archive 의 `role_usage["target"]` 가 **항상** entry (0 tokens 라도)
+- F-A1 의 "target column 누락 해결" 의도 완전 충족 (이전엔 usage_dict=None case 잔여 leak)
+- AgenticLoop 의 진짜 failure (anthropic call 실패) 자체는 별개 — 후속 PR F 에서 anthropic.py 의 정확한 fail path 식별 필요
+
+**회귀 가드**:
+- `test_geode_model_api_back_compat_str_runner` 갱신 — str-returning runner 의 `out.usage is None` → `out.usage.input_tokens == 0` 등 (zero-valued ModelUsage 검증)
+- `test_geode_model_api_emits_zero_usage_when_runner_returns_none_usage` 신규 — `(text, None)` runner return case 의 fix 검증
+
+### 9.6. B-3 / B-4 잔존 결함
+
+- **B-3** (F-A3 INFO log → LoggerEvent capture 실패) — fa4 file-based log 가 우회로 동작 입증. GEODE 의 logger 가 inspect_ai 의 LogHandler 와 분리 (별도 subprocess 의 root logger). 본 PR scope 외 — 후속 PR 에서 `logging.getLogger("plugins.petri_audit").propagate=True` 또는 inspect_ai 측 `INSPECT_PY_LOGGER_LEVEL` 환경 변수 명시.
+- **B-4** (judge usage 의 stats.role_usage 누적) — 본 PR E 의 라이브 #1/#2 의 archive 에서 judge entry 가 stats.role_usage 에 들어감 (PR D 의 archive 와 다름). 즉 **non-deterministic** — inspect_ai 의 scoring path 의 stats 누적이 race condition 가능성. 후속 PR 에서 정확한 추적 필요.
+
+### 9.7. 후속 — anthropic.py 의 정확한 fail path (별도 PR F, ~$0.10 추가)
+
+본 PR E 의 fix 가 적용된 후, anthropic.py 의 각 fail path (`line 463
+no-api-key`, `line 627 BadRequest`, `line 661 generic-exc`) 에 fa4
+추가 후 1 라이브 실측. 본 PR D/E 의 5 라이브 archive 의 패턴
+(`error='llm_call_failed'`) 이 anthropic 의 어느 fail path 인지 식별.
+ransomware seed 의 anthropic refusal 정책 변화 가능성 (Opus 4.7 의
+새 stop_reason 또는 content filtering).
 
 ## 10. 참고
 
