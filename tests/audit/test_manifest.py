@@ -249,3 +249,136 @@ class TestParseStartedTs:
 
     def test_returns_none_for_garbage(self):
         assert parse_started_ts({"started_at": "not-a-date"}) is None
+
+
+class TestB4Fallback:
+    """Defect B-4 — when ``stats.role_usage`` misses a role declared in
+    ``eval.model_roles``, ``extract_manifest_entry`` must re-aggregate
+    from sample ``ModelEvent.output.usage`` so the manifest's
+    ``role_usage_summary`` stays complete. 5/11 evidence: 8 archives,
+    judge entry missing on 4 (43%) despite the ModelEvent existing in
+    every sample.
+    """
+
+    def test_fallback_recovers_missing_judge_from_events(
+        self, monkeypatch: pytest.MonkeyPatch, archive: Path
+    ):
+        # Synthetic event types — duck-typed (type(e).__name__ ==
+        # "ModelEvent" + .model + .output.usage). The fallback walks
+        # them so we don't need real inspect_ai events.
+        from dataclasses import dataclass as _dc
+
+        @_dc
+        class _Usage:
+            input_tokens: int = 0
+            output_tokens: int = 0
+            input_tokens_cache_write: int = 0
+            input_tokens_cache_read: int = 0
+            reasoning_tokens: int = 0
+
+        @_dc
+        class _Output:
+            usage: Any = None
+
+        class ModelEvent:
+            def __init__(self, model: str, usage: _Usage) -> None:
+                self.model = model
+                self.output = _Output(usage=usage)
+
+        # Sample with judge ModelEvent but stats.role_usage 안 잡힘
+        # (race) — auditor 만 stats.
+        @_dc
+        class _Sample:
+            events: list[Any]
+
+        judge_usage = _Usage(input_tokens=21, output_tokens=846, input_tokens_cache_write=6740)
+        sample = _Sample(
+            events=[
+                ModelEvent("anthropic/claude-haiku-4-5-20251001", judge_usage),
+            ]
+        )
+
+        # Header-only read sees auditor only; full read sees the judge
+        # ModelEvent. ``_patch_read`` uses the same fake for both, so
+        # we adjust ``samples`` so the fallback re-read finds events.
+        fake_header = FakeEvalLog(
+            eval=FakeEvalMeta(
+                model_roles={
+                    "auditor": FakeModelCfg(model="anthropic/claude-sonnet-4-6"),
+                    "judge": FakeModelCfg(model="anthropic/claude-haiku-4-5-20251001"),
+                },
+                dataset=FakeDataset(samples=1, sample_ids=["x"]),
+            ),
+            stats=FakeStats(
+                role_usage={
+                    "auditor": FakeModelUsage(input_tokens=7, output_tokens=1007),
+                    # judge entry intentionally missing — reproduces B-4
+                }
+            ),
+            samples=[sample],  # fallback re-read uses this
+        )
+        _patch_read(monkeypatch, fake_header)
+
+        entry = extract_manifest_entry(archive)
+        ru = entry["role_usage_summary"]
+        # auditor stayed (from stats)
+        assert ru["auditor"]["in"] == 7
+        assert ru["auditor"]["out"] == 1007
+        # judge recovered from events (the fix)
+        assert ru["judge"]["in"] == 21
+        assert ru["judge"]["out"] == 846
+        assert ru["judge"]["cache_w"] == 6740
+
+    def test_fallback_no_op_when_all_roles_present(
+        self, monkeypatch: pytest.MonkeyPatch, archive: Path
+    ):
+        # All declared roles present in stats — fallback skipped.
+        fake = FakeEvalLog(
+            eval=FakeEvalMeta(
+                model_roles={
+                    "auditor": FakeModelCfg(model="anthropic/claude-sonnet-4-6"),
+                    "judge": FakeModelCfg(model="anthropic/claude-haiku-4-5-20251001"),
+                },
+                dataset=FakeDataset(samples=1, sample_ids=["x"]),
+            ),
+            stats=FakeStats(
+                role_usage={
+                    "auditor": FakeModelUsage(input_tokens=7, output_tokens=1007),
+                    "judge": FakeModelUsage(input_tokens=21, output_tokens=846),
+                }
+            ),
+        )
+        _patch_read(monkeypatch, fake)
+        entry = extract_manifest_entry(archive)
+        assert set(entry["role_usage_summary"]) == {"auditor", "judge"}
+
+    def test_fallback_logs_warning_when_no_events_match(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        archive: Path,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # Role declared but the sample carries no matching ModelEvent —
+        # fallback logs WARNING but does not crash; role just absent.
+        fake = FakeEvalLog(
+            eval=FakeEvalMeta(
+                model_roles={
+                    "auditor": FakeModelCfg(model="anthropic/claude-sonnet-4-6"),
+                    "judge": FakeModelCfg(model="anthropic/claude-haiku-4-5-20251001"),
+                },
+                dataset=FakeDataset(samples=1, sample_ids=["x"]),
+            ),
+            stats=FakeStats(
+                role_usage={
+                    "auditor": FakeModelUsage(input_tokens=7, output_tokens=1007),
+                }
+            ),
+            samples=[],  # no events
+        )
+        _patch_read(monkeypatch, fake)
+        import logging as _logging
+
+        with caplog.at_level(_logging.WARNING, logger="core.audit.manifest"):
+            entry = extract_manifest_entry(archive)
+        assert "judge" not in entry.get("role_usage_summary", {})
+        assert any("B-4 fallback" in r.message for r in caplog.records)

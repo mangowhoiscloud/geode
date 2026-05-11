@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -127,20 +128,110 @@ def extract_manifest_entry(
 
     model_roles = getattr(elog.eval, "model_roles", None) or {}
     models: dict[str, str] = {}
+    role_to_model_id: dict[str, str] = {}
     for role, cfg in model_roles.items():
         model_id = getattr(cfg, "model", None) or str(cfg)
         if model_id:
             models[str(role)] = _basename_model(str(model_id))
+            role_to_model_id[str(role)] = str(model_id)
     if models:
         entry["models"] = models
 
-    role_usage = getattr(elog.stats, "role_usage", None) or {}
+    role_usage = dict(getattr(elog.stats, "role_usage", None) or {})
+
+    # Defect B-4 fallback — `inspect_ai` occasionally fails to fold a
+    # judge `ModelEvent.output.usage` into `stats.role_usage` (race
+    # in the scoring path). When a role declared in `eval.model_roles`
+    # is missing from `role_usage`, re-aggregate from `sample.events`
+    # so the manifest's `role_usage_summary` stays complete.
+    expected_roles = set(role_to_model_id.keys())
+    present_roles = {str(r) for r in role_usage}
+    missing_roles = expected_roles - present_roles
+    if missing_roles:
+        missing_models = {role_to_model_id[r] for r in missing_roles}
+        recovered = _walk_events_for_missing_roles(path, missing_roles, role_to_model_id)
+        for role_name, synth in recovered.items():
+            role_usage[role_name] = synth
+        log.info(
+            "manifest: B-4 fallback for %s — recovered roles %s from events",
+            path.name,
+            sorted(recovered.keys()),
+        )
+        # Even if recovery yields nothing, log the missing_models so a
+        # debugger can spot the scoring-race archives.
+        if not recovered:
+            log.warning(
+                "manifest: B-4 fallback for %s — no ModelEvent for missing models %s",
+                path.name,
+                sorted(missing_models),
+            )
+
     if role_usage:
         entry["role_usage_summary"] = {
             str(role): _compact_usage(usage) for role, usage in role_usage.items()
         }
 
     return entry
+
+
+@dataclass
+class _SyntheticUsage:
+    """Stand-in for ``inspect_ai.model.ModelUsage`` built from event
+    aggregation when ``stats.role_usage`` misses a role (Defect B-4).
+    Mirrors :class:`core.audit.eval_to_jsonl._SyntheticUsage` — kept
+    independent so neither module imports from the other.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    input_tokens_cache_write: int = 0
+    input_tokens_cache_read: int = 0
+    reasoning_tokens: int = 0
+
+
+def _walk_events_for_missing_roles(
+    eval_path: Path,
+    missing_roles: set[str],
+    role_to_model_id: dict[str, str],
+) -> dict[str, _SyntheticUsage]:
+    """Re-read the eval with ``header_only=False`` and aggregate
+    ``ModelEvent.output.usage`` for each missing role.
+
+    Returns ``{role_name: _SyntheticUsage}`` for every role whose
+    declared model produced at least one ``ModelEvent``. Empty when
+    inspect_ai can't read the file or no events match.
+    """
+    from inspect_ai.log import read_eval_log
+
+    try:
+        elog_full = read_eval_log(str(eval_path))
+    except Exception:
+        log.warning("manifest: B-4 fallback re-read failed for %s", eval_path, exc_info=True)
+        return {}
+
+    # role-name → model-id (from manifest) reversed so we can match on
+    # the ModelEvent.model field which carries the full provider id.
+    model_to_role = {role_to_model_id[r]: r for r in missing_roles if r in role_to_model_id}
+    totals: dict[str, _SyntheticUsage] = {}
+    for sample in getattr(elog_full, "samples", None) or []:
+        for event in getattr(sample, "events", None) or []:
+            if type(event).__name__ != "ModelEvent":
+                continue
+            model_id = getattr(event, "model", "") or ""
+            role_name = model_to_role.get(model_id)
+            if role_name is None:
+                continue
+            output = getattr(event, "output", None)
+            usage = getattr(output, "usage", None) if output is not None else None
+            if usage is None:
+                continue
+            row = totals.setdefault(role_name, _SyntheticUsage())
+            row.input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
+            row.output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
+            row.input_tokens_cache_write += int(getattr(usage, "input_tokens_cache_write", 0) or 0)
+            row.input_tokens_cache_read += int(getattr(usage, "input_tokens_cache_read", 0) or 0)
+            row.reasoning_tokens += int(getattr(usage, "reasoning_tokens", 0) or 0)
+    return totals
 
 
 def append_manifest(
