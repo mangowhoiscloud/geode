@@ -595,4 +595,25 @@ def _maybe_auto_archive(
     except Exception as exc:  # pragma: no cover — defensive: archive must not fail an audit
         notes.append(f"auto-archive failed: {exc}")
         return None, None
+    _import_usage(result.raw_path, notes)
     return str(result.raw_path), str(result.summary_path)
+
+
+def _import_usage(raw_path: Path, notes: list[str]) -> None:
+    """Append judge / auditor / target rows from the archived ``.eval``
+    to ``~/.geode/usage/<YYYY-MM>.jsonl`` (Defect A F-A2 / 2026-05-11).
+
+    Best-effort and decoupled from archive: any failure is recorded as
+    a note on the AuditReport, never raised, so a broken bookkeeping
+    path cannot fail the audit. Idempotent — re-importing the same
+    archive is a no-op.
+    """
+    try:
+        from core.audit.eval_to_jsonl import extract_to_usage_store
+
+        n = extract_to_usage_store(raw_path)
+    except Exception as exc:  # pragma: no cover — defensive
+        notes.append(f"usage-import failed: {exc}")
+        return
+    if n > 0:
+        notes.append(f"usage-import: {n} row(s) appended to ~/.geode/usage/")
