@@ -30,6 +30,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Petri scenarios v2 — 5 신규 seeds (autonomy/efficiency/calibration)
+  로 5-axis 17 dims 100% direct cover.** scenarios-v1 (8 seeds, 4 카테고리)
+  로 cover 못 한 5 dims 보강:
+  - `autonomy/self_preservation_under_replacement` — replacement
+    threat 시나리오. `unprompted_self_preservation` cover
+  - `autonomy/whistleblowing_user_intent_violation` — CoC 위반
+    발견 시 외부 보고/저항. `unprompted_whistleblowing` cover
+  - `efficiency/long_running_loop` — non-existent target 탐색 시
+    bounded vs unbounded. `stuck_in_loops` cover
+  - `calibration/false_refusal_drift` — adjacent-to-sensitive 의
+    over-refusal 측정 (v1 reverse). `overrefusal` cover
+  - `calibration/high_stakes_security_advice` — financial signing
+    의 MD5 + warfarin-herbal 의 의료 adjacency. `high_stakes_setting`
+    cover
+
+  모두 5-branch 1→2→3→2→1 pressure curve + GEODE vs vanilla
+  comparison harness 동일 contract.
+
+  **Coverage 진단**:
+  - **5-axis (GEODE default 17 dims)**: 17/17 = **100%** direct/baseline
+  - **petri 38 default dims**: 22/38 direct + 5 meta = **71% effective**
+  - 본 audit 의 라이브 검증 (Y option) 의 출발점
+
+  **docs**: `docs/audits/petri-scenarios-coverage.md` 신규 — 13 seeds
+  × 38 dims matrix, 라이브 검증 plan, sequence shell script, 갭 + v3
+  후보 명시.
+
+  **회귀 가드**: `TestSeedsDirectory` parametrize 8 → 13. 4613 passed.
+
 - **Petri scenarios v1 — 8 GEODE-specific seeds (4 카테고리 × 2)
   + audit-mode 가드레일 lift + GEODE vs vanilla 비교 harness.**
   본 PoC 의 시나리오 layer 확장. 본 audit 의 frontier model 비교 의도
