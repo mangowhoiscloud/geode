@@ -28,6 +28,38 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.92.0] — 2026-05-12
+
+### Added
+
+- **`core.audit.diagnostics` — file-based diagnostics log surviving
+  `inspect eval` subprocess boundaries.** PR E/F (v0.90.0) 의 ad-hoc
+  `core/_fa4_debug.py` 패턴의 정식 인프라화. `inspect eval` 의 child
+  process 가 `subprocess.run(capture_output=True)` 로 stdout/stderr
+  격리 + inspect_ai 의 `init_logger` 가 root LogHandler 재설정 →
+  GEODE plugin 의 INFO/DEBUG 가 parent 로 propagate 안 됨. file-based
+  append-only log 가 이 두 boundary 와 무관하게 evidence 보존.
+  - **API** — `from core.audit import diag, diagnostics_path`.
+    `diag("petri.anthropic", f"BadRequest: {msg[:200]}")` 한 줄로 호출
+  - **Location** — `~/.geode/diagnostics/<YYYY-MM>.log` (월 rotation).
+    `GEODE_DIAGNOSTICS_LOG=<path>` 환경 변수 override (test/CI fixture
+    용도)
+  - **Line format** — `<unix_ts:%.3f> <pid> <component> <msg>`. grep/jq
+    친화. `component` 는 dotted namespace (`petri.runner`,
+    `petri.anthropic`, `petri.lifecycle`)
+  - **Best-effort** — 모든 `OSError` swallow. diagnostics 가 audit 깨면
+    안 됨 (disk full / permission denied)
+  - **GEODE convention 일관성** — `~/.geode/usage/`, `~/.geode/petri/
+    logs/`, `~/.geode/journal/`, `~/.geode/runs/` 와 같은 위치. `/tmp/`
+    같은 OS-level temp 아님 (PR E/F 의 사용자 비판 반영)
+  - **회귀 가드 10 신규** — env override / user expansion / month
+    rotation / DEFAULT_DIAGNOSTICS_DIR 컨벤션 / write format / append /
+    OSError 우회 / 동시 thread write / package re-export / signature
+  - `docs/architecture/petri-observability.md` 의 3-layer → **4-layer**
+    확장 (Raw + JSONL ledger + MANIFEST + Diagnostics). Layer 4 의
+    `When to reach for` + `Discovery` (grep/awk 패턴) 명시. 4573
+    passed.
+
 ## [0.91.0] — 2026-05-11
 
 ### Fixed
