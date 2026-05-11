@@ -8,7 +8,10 @@ from __future__ import annotations
 import dataclasses
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.llm.token_tracker import LLMUsage
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +60,18 @@ def _context_exhausted_message(user_input: str) -> str:
 
 @dataclass
 class AgenticResult:
-    """Result of an agentic loop execution."""
+    """Result of an agentic loop execution.
+
+    ``usage`` (Defect A F-A1 / 2026-05-11) carries the aggregated
+    ``LLMUsage`` for *this* arun invocation only — captured via a
+    ``TokenTracker.snapshot()`` taken at the start of ``arun`` and a
+    ``delta_since(snap)`` at finalize time. It is ``None`` when the
+    loop terminated before any LLM call (e.g. context-exhausted
+    fallback). Used by the petri ``GeodeModelAPI`` adapter to surface
+    target-side tokens into ``inspect_ai`` ``role_usage`` — without
+    it, custom ModelAPI implementations are invisible to the inspect
+    log's ``role_usage`` aggregation (see ``inspect_ai.log._log``).
+    """
 
     text: str
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
@@ -73,6 +87,7 @@ class AgenticResult:
     termination_reason: str = "unknown"
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
     reasoning_metrics: dict[str, object] | None = None
+    usage: "LLMUsage | None" = None  # noqa: UP037 — forward-ref for cycle avoidance
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, omitting None-valued fields."""

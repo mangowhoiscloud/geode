@@ -35,11 +35,25 @@ class TextBlock:
 
 @dataclass(slots=True)
 class ResponseUsage:
-    """Token usage from an LLM response."""
+    """Token usage from an LLM response.
+
+    Cache fields (Defect A F-A2, 2026-05-11): previously the normalize
+    layer dropped Anthropic's ``cache_creation_input_tokens`` and
+    ``cache_read_input_tokens``, so even though the adapter paid the
+    cost (and ``TokenTracker.calculate_cost`` accepted the kwargs),
+    the per-call record arriving at ``_response.track_usage`` had no
+    cache counts to forward. The result was a silently underestimated
+    session cost and an empty cache column in ``~/.geode/usage/``
+    JSONL — the kind of silent loss the petri Defect A live verify
+    (#1020) flagged. Codex/GLM normalizers leave these at 0 until
+    those providers ship cache surfaces.
+    """
 
     input_tokens: int = 0
     output_tokens: int = 0
     thinking_tokens: int = 0
+    cache_creation_tokens: int = 0
+    cache_read_tokens: int = 0
 
 
 @dataclass
@@ -151,10 +165,20 @@ def normalize_anthropic(response: Any) -> AgenticResponse:
         thinking_tok = 0
         if hasattr(response.usage, "thinking_tokens"):
             thinking_tok = response.usage.thinking_tokens or 0
+        # Defect A F-A2 — preserve cache token counts so the downstream
+        # ``_response.track_usage`` can forward them to the tracker
+        # (which already prices them correctly via ``calculate_cost``).
+        # The SDK exposes them as ``cache_creation_input_tokens`` /
+        # ``cache_read_input_tokens``; we standardise to the shorter
+        # names on ResponseUsage to match TokenTracker.record kwargs.
+        cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+        cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
         usage = ResponseUsage(
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
             thinking_tokens=thinking_tok,
+            cache_creation_tokens=cache_create,
+            cache_read_tokens=cache_read,
         )
 
     return AgenticResponse(
@@ -216,10 +240,20 @@ def normalize_openai(response: Any) -> AgenticResponse:
         details = getattr(response.usage, "completion_tokens_details", None)
         if details is not None:
             thinking_tok = getattr(details, "reasoning_tokens", 0) or 0
+        # Defect A F-A2 — OpenAI Chat Completions reports cached input
+        # tokens in ``prompt_tokens_details.cached_tokens``. The cached
+        # portion is *included* in ``prompt_tokens`` so we surface it
+        # separately for the tracker (which prices it at the cache_read
+        # rate). No cache_write equivalent on Chat Completions.
+        cache_read = 0
+        prompt_details = getattr(response.usage, "prompt_tokens_details", None)
+        if prompt_details is not None:
+            cache_read = getattr(prompt_details, "cached_tokens", 0) or 0
         usage = ResponseUsage(
             input_tokens=response.usage.prompt_tokens or 0,
             output_tokens=response.usage.completion_tokens or 0,
             thinking_tokens=thinking_tok,
+            cache_read_tokens=cache_read,
         )
 
     return AgenticResponse(

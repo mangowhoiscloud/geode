@@ -32,12 +32,24 @@ log = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class LLMUsage:
-    """Single LLM call usage record."""
+    """Single LLM call usage record.
+
+    Cache fields (added 2026-05-11 for Defect A F-A2): we previously
+    recorded the *cost* of cache_creation / cache_read tokens through
+    ``calculate_cost`` but the token counts themselves were dropped at
+    record time. That made downstream tracker snapshots invisible to
+    anyone who needed cache hit rate (prompt-caching audit) or wanted
+    to emit ``inspect_ai.model.ModelUsage`` with the cache fields
+    populated. Keep these on the record so a snapshot delta preserves
+    the full per-call shape.
+    """
 
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
     thinking_tokens: int = 0
+    cache_creation_tokens: int = 0
+    cache_read_tokens: int = 0
     cost_usd: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
@@ -49,6 +61,10 @@ class LLMUsage:
         }
         if self.thinking_tokens:
             d["thinking_tokens"] = self.thinking_tokens
+        if self.cache_creation_tokens:
+            d["cache_creation_tokens"] = self.cache_creation_tokens
+        if self.cache_read_tokens:
+            d["cache_read_tokens"] = self.cache_read_tokens
         return d
 
 
@@ -71,6 +87,14 @@ class LLMUsageAccumulator:
         return sum(c.thinking_tokens for c in self.calls)
 
     @property
+    def total_cache_creation_tokens(self) -> int:
+        return sum(c.cache_creation_tokens for c in self.calls)
+
+    @property
+    def total_cache_read_tokens(self) -> int:
+        return sum(c.cache_read_tokens for c in self.calls)
+
+    @property
     def total_cost_usd(self) -> float:
         return sum(c.cost_usd for c in self.calls)
 
@@ -87,6 +111,12 @@ class LLMUsageAccumulator:
         thinking = self.total_thinking_tokens
         if thinking:
             d["total_thinking_tokens"] = thinking
+        cache_w = self.total_cache_creation_tokens
+        if cache_w:
+            d["total_cache_creation_tokens"] = cache_w
+        cache_r = self.total_cache_read_tokens
+        if cache_r:
+            d["total_cache_read_tokens"] = cache_r
         return d
 
 
@@ -227,10 +257,20 @@ MODEL_CONTEXT_WINDOW: dict[str, int] = {
 
 
 class UsageSnapshot(NamedTuple):
-    """Immutable snapshot of cumulative usage at a point in time."""
+    """Immutable snapshot of cumulative usage at a point in time.
+
+    Defect A F-A1 (2026-05-11): added thinking / cache fields so a
+    snapshot delta carries the full per-call shape. AgenticLoop now
+    captures one of these at the top of ``arun`` and the finalize path
+    turns ``delta_since(snap)`` into an ``LLMUsage`` aggregate that
+    GeodeModelAPI translates into ``inspect_ai.model.ModelUsage``.
+    """
 
     total_input_tokens: int
     total_output_tokens: int
+    total_thinking_tokens: int
+    total_cache_creation_tokens: int
+    total_cache_read_tokens: int
     total_cost_usd: float
     call_count: int
 
@@ -281,6 +321,8 @@ class TokenTracker:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             thinking_tokens=thinking_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
             cost_usd=cost,
         )
         self._accumulator.record(usage)
@@ -333,6 +375,9 @@ class TokenTracker:
         return UsageSnapshot(
             total_input_tokens=acc.total_input_tokens,
             total_output_tokens=acc.total_output_tokens,
+            total_thinking_tokens=acc.total_thinking_tokens,
+            total_cache_creation_tokens=acc.total_cache_creation_tokens,
+            total_cache_read_tokens=acc.total_cache_read_tokens,
             total_cost_usd=acc.total_cost_usd,
             call_count=len(acc.calls),
         )
@@ -343,6 +388,10 @@ class TokenTracker:
         return UsageSnapshot(
             total_input_tokens=acc.total_input_tokens - snap.total_input_tokens,
             total_output_tokens=acc.total_output_tokens - snap.total_output_tokens,
+            total_thinking_tokens=acc.total_thinking_tokens - snap.total_thinking_tokens,
+            total_cache_creation_tokens=acc.total_cache_creation_tokens
+            - snap.total_cache_creation_tokens,
+            total_cache_read_tokens=acc.total_cache_read_tokens - snap.total_cache_read_tokens,
             total_cost_usd=acc.total_cost_usd - snap.total_cost_usd,
             call_count=len(acc.calls) - snap.call_count,
         )

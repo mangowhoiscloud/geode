@@ -106,6 +106,34 @@ def finalize_and_return(
     metrics = loop._build_reasoning_metrics(result)
     result.reasoning_metrics = metrics.to_dict()
 
+    # Defect A F-A1 (2026-05-11) — aggregate per-arun usage via tracker
+    # snapshot delta. Inspect_ai's role_usage aggregation reads this off
+    # the ModelEvent.output.usage that ``GeodeModelAPI.generate`` emits,
+    # so if ``result.usage`` is None the petri audit's target column
+    # silently disappears from log.stats.role_usage. The snapshot anchor
+    # is captured at the top of ``arun`` (see ``loop.py:429``); reading
+    # the accumulator directly here would over-count sibling loops on
+    # the same ContextVar tracker (e.g. compaction sub-LLM calls).
+    snap = getattr(loop, "_usage_snapshot", None)
+    if snap is not None:
+        try:
+            from core.llm.token_tracker import LLMUsage as _LLMUsage
+            from core.llm.token_tracker import get_tracker as _get_tracker
+
+            delta = _get_tracker().delta_since(snap)
+            if delta.call_count > 0:
+                result.usage = _LLMUsage(
+                    model=loop.model,
+                    input_tokens=delta.total_input_tokens,
+                    output_tokens=delta.total_output_tokens,
+                    thinking_tokens=delta.total_thinking_tokens,
+                    cache_creation_tokens=delta.total_cache_creation_tokens,
+                    cache_read_tokens=delta.total_cache_read_tokens,
+                    cost_usd=delta.total_cost_usd,
+                )
+        except Exception:
+            log.debug("usage delta snapshot failed", exc_info=True)
+
     loop._record_transcript_end(result)
     loop._save_checkpoint(user_input, round_idx=round_idx)
     if loop._hooks:

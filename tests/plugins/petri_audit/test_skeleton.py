@@ -238,6 +238,120 @@ def test_token_tracker_record_appends_to_geode_usage_jsonl(tmp_path: Path) -> No
     assert '"input_tokens": 10' in body or '"input": 10' in body or "10" in body
 
 
+def test_default_runner_returns_text_and_usage_tuple(monkeypatch) -> None:
+    """F-A1 contract — ``_default_geode_runner`` returns ``(text,
+    usage_dict)``. The Custom ModelAPI surfaces ``usage_dict`` into
+    inspect_ai's ``ModelOutput.usage`` so the eval log's role_usage
+    aggregation finally lists the target. Pre-F-A1 the runner returned
+    bare text and the petri audit's target column was always empty
+    (see ``docs/audits/2026-05-11-petri-tracker-A-live-verify.md``).
+
+    Mock-based — exercises the runner without spinning up the full
+    GEODE bootstrap (which would need readiness, handlers, executor).
+    """
+    if not _AUDIT_INSTALLED:
+        pytest.skip("[audit] extra not installed")
+
+    from core.llm.token_tracker import LLMUsage
+    from plugins.petri_audit.targets import geode_target
+    from plugins.petri_audit.targets.geode_target import _default_geode_runner
+
+    class _FakeAgenticResult:
+        text = "hi"
+        usage = LLMUsage(
+            model="claude-haiku-4-5-20251001",
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=80,
+            thinking_tokens=12,
+            cost_usd=0.001,
+        )
+
+    class _FakeLoop:
+        def __init__(self, *args, **kwargs) -> None:
+            self.model = kwargs.get("model") or "claude-haiku-4-5-20251001"
+
+        async def arun(self, _user_input):
+            return _FakeAgenticResult()
+
+    monkeypatch.setattr(geode_target, "_to_geode_messages", lambda msgs: msgs)
+    monkeypatch.setattr("core.wiring.startup.check_readiness", lambda: object(), raising=False)
+    monkeypatch.setattr("core.cli._set_readiness", lambda r: None, raising=False)
+    monkeypatch.setattr("core.cli._build_tool_handlers", lambda verbose=False: {}, raising=False)
+    monkeypatch.setattr(
+        "core.agent.conversation.ConversationContext", lambda: type("X", (), {"messages": []})()
+    )
+    monkeypatch.setattr("core.agent.tool_executor.ToolExecutor", lambda **k: None)
+    monkeypatch.setattr("core.agent.loop.AgenticLoop", _FakeLoop)
+
+    text, usage = asyncio.run(
+        _default_geode_runner(
+            [{"role": "user", "content": "hello"}], model="claude-haiku-4-5-20251001"
+        )
+    )
+    assert text == "hi"
+    assert usage is not None
+    assert usage["input_tokens"] == 100
+    assert usage["output_tokens"] == 50
+    assert usage["cache_read_tokens"] == 80
+    assert usage["thinking_tokens"] == 12
+    assert usage["cost_usd"] == 0.001
+
+
+def test_geode_model_api_emits_inspect_modelusage(monkeypatch) -> None:
+    """F-A1 — ``GeodeModelAPI.generate`` constructs ``ModelOutput`` with
+    a fully populated ``ModelUsage``. Direct construction (vs the
+    simple ``from_content`` factory) is required for inspect_ai's
+    log.stats.role_usage aggregation to count target tokens.
+
+    Uses the ``runner=fake`` injection seam so no live LLM call.
+    """
+    if not _AUDIT_INSTALLED:
+        pytest.skip("[audit] extra not installed")
+    from inspect_ai.model import get_model
+
+    async def fake_runner(_messages):
+        return "hi", {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_read_tokens": 80,
+            "thinking_tokens": 12,
+            "cost_usd": 0.001,
+        }
+
+    model = get_model("geode/claude-haiku-4-5-20251001", runner=fake_runner)
+    out = asyncio.run(model.generate("hello"))
+
+    assert out.usage is not None
+    assert out.usage.input_tokens == 100
+    assert out.usage.output_tokens == 50
+    assert out.usage.input_tokens_cache_read == 80
+    assert out.usage.reasoning_tokens == 12
+    assert out.usage.total_tokens == 100 + 50 + 80  # cache_w + cache_r summed
+    assert out.usage.total_cost == 0.001
+
+
+def test_geode_model_api_back_compat_str_runner(monkeypatch) -> None:
+    """D5 — pre-F-A1 test runners returned bare strings. The new
+    GeodeModelAPI must still accept this shape (``usage`` stays None)
+    so downstream tests on ``geode/...`` keep working."""
+    if not _AUDIT_INSTALLED:
+        pytest.skip("[audit] extra not installed")
+    from inspect_ai.model import get_model
+
+    async def fake_runner_str(_messages):
+        return "legacy-text"
+
+    # Different alias to dodge inspect_ai's get_model cache (the prior
+    # test in this module registered a different runner on the haiku
+    # alias). Same code path either way.
+    model = get_model("geode/claude-opus-4-7", runner=fake_runner_str)
+    out = asyncio.run(model.generate("hello"))
+
+    assert out.choices[0].message.text == "legacy-text"
+    assert out.usage is None
+
+
 def test_petri_audit_does_not_register_domain() -> None:
     """petri_audit is an external evaluator, not a GEODE domain.
 
