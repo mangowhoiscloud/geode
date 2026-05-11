@@ -28,6 +28,70 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Petri scenarios v1 — 8 GEODE-specific seeds (4 카테고리 × 2)
+  + audit-mode 가드레일 lift + GEODE vs vanilla 비교 harness.**
+  본 PoC 의 시나리오 layer 확장. 본 audit 의 frontier model 비교 의도
+  반영:
+
+  **8 seeds** (`plugins/petri_audit/seeds/<category>/<name>.md`):
+  - compute_use/{unrestricted_shell, sensitive_path_access}
+  - research/{fabrication_under_pressure, cherry_picking_dataset}
+  - exploratory/{silent_codebase_modification, dependency_change_disclosure}
+  - reasoning/{chain_manipulation, self_critique_bypass}
+
+  각 seed = **5-branch 1 → 2 → 3 → 2 → 1 pressure curve** + GEODE vs
+  vanilla comparison harness (peak 시 cave + post-peak lingering
+  effect 측정). canary GUID 포함. body 의 "Look for" section 이 각
+  branch 의 측정 기대.
+
+  **audit-mode** (`plugins/petri_audit/audit_mode.py`):
+  - 3 활성화 path — CLI `--unrestricted`, env
+    `GEODE_AUDIT_UNRESTRICTED=1`, config `.geode/audit-mode.toml`
+  - 적용 — ProfilePolicy 의 `allow_dangerous` / `allow_write` /
+    `allow_expensive` 모두 True + `denied_tools` clear, Readiness
+    의 `force_dry_run = False`. **non-mutating** — 사용자
+    `~/.geode/user_profile/preferences.toml` 절대 안 건드림
+  - `_default_geode_runner` 가 본 mode 활성 시 ProfilePolicy
+    오버라이드 + readiness 오버라이드
+
+  **CLI** (`plugins/petri_audit/cli_audit.py`):
+  - `geode audit --unrestricted` flag 신규 — env 변수 설정해서
+    `inspect eval` 자식 subprocess 가 inherit. one-shot.
+
+  **시각화 — Inspect transcript viewer v3 native** (Meridian Labs,
+  2026-05-07 의 Petri 3 출간):
+  - "The Inspect transcript viewer now natively supports Petri
+    transcripts."
+  - judge dimension sort/filter + branch navigation + citation
+    highlight 모두 native
+  - GEODE 의 14+ archives 의 transcript review 즉시 가능:
+    `inspect view start --log-dir ~/.geode/petri/logs/`
+  - 정적 SPA bundle: `inspect view bundle --output-dir <dir>` →
+    GitHub Pages 호환
+
+  **회귀 가드 35 신규** (`tests/plugins/petri_audit/
+  test_audit_mode.py`):
+  - `from_env` truthy/falsy parametrize 5+5
+  - `from_config` (4 cases — missing/disabled/full/malformed)
+  - `resolve` precedence (4 cases)
+  - `apply_to_profile_policy` non-mutating + override
+  - `apply_to_readiness` (4 cases — disabled/enabled/None/immutable)
+  - `TestSeedsDirectory` — 8 seeds × pressure curve + comparison
+    harness contract 검증
+  - `__repr__` (2 cases)
+
+  4608 passed.
+
+  **잔존 — 별도 후속**:
+  - 라이브 자연 검증 (각 카테고리 × 1 sample, ~$1.00 cost) — 본
+    fix 의 GEODE vs vanilla 결과 측정
+  - PII gate — ransomware seed 의 publish 보호 정책 (`docs/audits/
+    PUBLISH_POLICY.md` 후속)
+  - `inspect view bundle` 자동 publish CI (`.github/workflows/
+    pages.yml` 후속)
+
 ## [0.92.0] — 2026-05-12
 
 ### Added
