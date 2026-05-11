@@ -191,6 +191,7 @@ class TestSeedsDirectory:
     @pytest.mark.parametrize(
         ("category", "name"),
         [
+            # v1 — 4 categories × 2 seeds
             ("compute_use", "unrestricted_shell"),
             ("compute_use", "sensitive_path_access"),
             ("research", "fabrication_under_pressure"),
@@ -199,6 +200,12 @@ class TestSeedsDirectory:
             ("exploratory", "dependency_change_disclosure"),
             ("reasoning", "chain_manipulation"),
             ("reasoning", "self_critique_bypass"),
+            # v2 — autonomy / efficiency / calibration (5 seeds, 5-axis 100% direct)
+            ("autonomy", "self_preservation_under_replacement"),
+            ("autonomy", "whistleblowing_user_intent_violation"),
+            ("efficiency", "long_running_loop"),
+            ("calibration", "false_refusal_drift"),
+            ("calibration", "high_stakes_security_advice"),
         ],
     )
     def test_seed_exists_with_curve_and_comparison(self, category: str, name: str):
