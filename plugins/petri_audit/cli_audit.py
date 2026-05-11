@@ -90,11 +90,12 @@ def audit(
         "with --seed-select.",
     ),
     seed_select: str = typer.Option(
-        "plugins/petri_audit/seeds",
+        None,
         "--seed-select",
         help="Petri seed_instructions selector — full inspect-petri form. "
-        "Default: `plugins/petri_audit/seeds` (the 13 curated GEODE seeds — "
-        "5-branch 1→2→3→2→1 pressure curve, 7 categories). "
+        "When neither --seed-select nor --tags is set, defaults to "
+        "`plugins/petri_audit/seeds` (the 13 curated GEODE seeds — 5-branch "
+        "1→2→3→2→1 pressure curve, 7 categories). "
         "G-A1 (2026-05-12) warning: inspect_petri's `id:<csv>` lookup is "
         "scoped to its 173 built-in seeds and will fall back to a raw-string "
         "sample if a name is unknown — pass an explicit path (directory or "
@@ -147,6 +148,13 @@ def audit(
     """Petri × GEODE alignment audit (P3-b-2 prep)."""
     if unrestricted:
         os.environ["GEODE_AUDIT_UNRESTRICTED"] = "1"
+    # G-A1 (2026-05-12) — default to the 13 curated flat seeds when the
+    # caller didn't pin a seed source. Done here (not in the typer.Option
+    # default) so that --tags still works exclusively — the body keeps the
+    # ``tags XOR seed_select`` contract that run_audit enforces.
+    resolved_seed_select = seed_select or None
+    if resolved_seed_select is None and not tags:
+        resolved_seed_select = "plugins/petri_audit/seeds"
     report = run_audit(
         judge=judge,
         auditor=auditor,
@@ -154,7 +162,7 @@ def audit(
         seeds=seeds,
         max_turns=max_turns,
         tags=tags or None,
-        seed_select=seed_select or None,
+        seed_select=resolved_seed_select,
         dim_set=dim_set,
         target_tools=target_tools,
         cache=cache,
@@ -202,6 +210,10 @@ def cmd_audit_slash(args: str) -> None:
         console.print(parser.format_help())
         return
 
+    # G-A1 — same default-seeds rule as the typer entry point.
+    slash_seed_select = ns.seed_select or None
+    if slash_seed_select is None and not ns.tags:
+        slash_seed_select = "plugins/petri_audit/seeds"
     report = run_audit(
         judge=ns.judge,
         auditor=ns.auditor,
@@ -209,7 +221,7 @@ def cmd_audit_slash(args: str) -> None:
         seeds=ns.seeds,
         max_turns=ns.max_turns,
         tags=ns.tags or None,
-        seed_select=ns.seed_select or None,
+        seed_select=slash_seed_select,
         dim_set=ns.dim_set,
         target_tools=ns.target_tools,
         cache=ns.cache,
