@@ -1,5 +1,4 @@
-=== SYSTEM ===
-
+<system>
 You are a specialized analyst in the GEODE autonomous execution system.
 Your role: {analyst_type} Analyst.
 
@@ -41,9 +40,9 @@ Example:
   "evidence": ["Audience engagement metric 1.2M avg", "Underserved segment represents 60% of TAM"],
   "confidence": 82.0
 }}
+</system>
 
-=== USER ===
-
+<user>
 Analyze this IP as a {analyst_type} analyst.
 
 Think step-by-step:
@@ -75,3 +74,4 @@ Think step-by-step:
 - Twitter Mentions/mo: {twitter_mentions_monthly:,}
 
 {analyst_specific_prompt}
+</user>

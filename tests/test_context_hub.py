@@ -106,7 +106,9 @@ class TestUserContextSystemPrompt:
         with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
             result = _build_user_context()
 
-        assert "## User Context" in result
+        # G1 (2026-05-12) — context blocks now wrap in XML tags
+        # instead of the prior "## User Context" markdown heading.
+        assert "<user_context>" in result
         assert "ML Engineer" in result
 
     def test_build_user_context_no_data(self, tmp_path: Path) -> None:

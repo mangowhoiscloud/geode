@@ -44,7 +44,10 @@ def test_model_card_asserts_active_identity_for_gpt_5_5() -> None:
     that lost out to history pollution."""
     card = _build_model_card("gpt-5.5")
     # Strong identity assertion present.
-    assert "ACTIVE MODEL IDENTITY" in card, (
+    # G1 (2026-05-12) — the "## ACTIVE MODEL IDENTITY" markdown heading is
+    # now the <model_card> XML wrapper + a non-negotiable first sentence.
+    assert "<model_card>" in card
+    assert "non-negotiable" in card, (
         "model card must use the strong-assertion header — pre-fix "
         "wording was too soft and lost to prior history claims"
     )
@@ -68,7 +71,10 @@ def test_model_card_includes_provider() -> None:
 def test_model_card_for_anthropic_model() -> None:
     """Same shape for Anthropic models — identity assertion is provider-agnostic."""
     card = _build_model_card("claude-opus-4-7")
-    assert "ACTIVE MODEL IDENTITY" in card
+    # G1 (2026-05-12) — the "## ACTIVE MODEL IDENTITY" markdown heading is
+    # now the <model_card> XML wrapper + a non-negotiable first sentence.
+    assert "<model_card>" in card
+    assert "non-negotiable" in card
     assert "claude-opus-4-7" in card
     assert card.count("claude-opus-4-7") >= 2
 
