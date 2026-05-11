@@ -283,14 +283,115 @@ inspect_usage = ModelUsage(input_tokens=in_tok, output_tokens=out_tok, ...)
 - **B-3** (F-A3 INFO log → LoggerEvent capture 실패) — fa4 file-based log 가 우회로 동작 입증. GEODE 의 logger 가 inspect_ai 의 LogHandler 와 분리 (별도 subprocess 의 root logger). 본 PR scope 외 — 후속 PR 에서 `logging.getLogger("plugins.petri_audit").propagate=True` 또는 inspect_ai 측 `INSPECT_PY_LOGGER_LEVEL` 환경 변수 명시.
 - **B-4** (judge usage 의 stats.role_usage 누적) — 본 PR E 의 라이브 #1/#2 의 archive 에서 judge entry 가 stats.role_usage 에 들어감 (PR D 의 archive 와 다름). 즉 **non-deterministic** — inspect_ai 의 scoring path 의 stats 누적이 race condition 가능성. 후속 PR 에서 정확한 추적 필요.
 
-### 9.7. 후속 — anthropic.py 의 정확한 fail path (별도 PR F, ~$0.10 추가)
+### 9.7. PR F — anthropic 의 정확한 fail path (라이브 1 회, ~$0.10) + fix
 
-본 PR E 의 fix 가 적용된 후, anthropic.py 의 각 fail path (`line 463
-no-api-key`, `line 627 BadRequest`, `line 661 generic-exc`) 에 fa4
-추가 후 1 라이브 실측. 본 PR D/E 의 5 라이브 archive 의 패턴
-(`error='llm_call_failed'`) 이 anthropic 의 어느 fail path 인지 식별.
-ransomware seed 의 anthropic refusal 정책 변화 가능성 (Opus 4.7 의
-새 stop_reason 또는 content filtering).
+anthropic.py 의 각 fail path 에 fa4 추가 후 1 라이브 실측. 정확한
+fail path 와 root cause 확정 — anthropic refusal 정책이 아니라
+**GEODE 의 `apply_messages_cache_control` 가 empty text block 에
+cache_control 을 attach 하던 bug**.
+
+**Live archive (PR F)**: `2026-05-11T12-40-01_audit_fmpqGm...eval`
+status=success, 24s, role_usage={auditor in=3 out=450, **target in=0
+out=0**, judge in=21 out=1069}. **PR E 의 fix 효과 입증** — target
+entry 가 stats.role_usage 에 정확히 추가됨 (in/out 0 이지만 visible).
+
+**fa4 evidence (3 lines)**:
+
+```
+1778503215.047 anthropic _do_call about to fire: model=claude-opus-4-7
+                failover_count=2 tools=61
+1778503215.352 anthropic BadRequest: msg="Error code: 400 - ...
+                'messages.2.content.0.text: cache_control cannot be
+                set for empty text blocks'"
+1778503215.353 anthropic BadRequest path → return None
+```
+
+**root cause 확정** (line 234-287 `apply_messages_cache_control`):
+
+```python
+if isinstance(content, str):
+    msg["content"] = [
+        {
+            "type": "text",
+            "text": content,                    # ← "" empty 라도 들어감
+            "cache_control": {"type": "ephemeral"},  # ← 그대로 attach
+        }
+    ]
+```
+
+petri 의 messages 구성에서 multi-turn 의 일부가 empty string content
+(`{"role": user, "content": ""}` — 예: refusal 직후의 empty assistant
+slot). `apply_messages_cache_control` 가 그 empty content 를 text
+block + cache_control 로 변환 → anthropic 400 (`cache_control cannot
+be set for empty text blocks`) → `return None` → GEODE
+`AgenticResult.error='llm_call_failed'` → 모든 target token 손실.
+
+anthropic refusal 정책이나 Opus 4.7 의 새 stop_reason 과 **무관**.
+순수 GEODE 측 message rendering bug. ransomware seed 가 우연히
+empty-content history 를 만든 case — 다른 seed 도 conversation 의
+state 에 따라 동일하게 trigger 가능.
+
+### 9.8. PR F fix — `apply_messages_cache_control` 의 empty-text guard
+
+**fix** (`core/llm/providers/anthropic.py:265-296`):
+
+```python
+# Before (str content case)
+if isinstance(content, str):
+    msg["content"] = [
+        {"type": "text", "text": content, "cache_control": ...}
+    ]
+
+# After
+if isinstance(content, str):
+    if not content:       # empty string — skip cache_control
+        continue
+    msg["content"] = [...]
+```
+
+list content case 도 동일 — `last_block.type == "text" and not
+last_block.text` 이면 skip.
+
+**효과**:
+- empty text block 에 cache_control 안 attach → anthropic 400 안 발생
+- target call 정상 응답 → `_response.track_usage` 정상 동작 →
+  `result.usage` 정확히 채워짐
+- archive 의 `role_usage["target"]` 가 실측 토큰 수로 채워짐 (이전엔
+  PR E fix 덕분에 0-valued 라도 entry 는 있었음. 본 fix 후 진짜 토큰)
+
+**회귀 가드** (5 신규/갱신):
+- `test_empty_string_content_skips_cache_control` — empty str 의 content 가 그대로 보존 (text block 변환 안 됨)
+- `test_empty_text_last_block_skips_cache_control` — list content 의 last block 이 empty text 면 cache_control 안 attach
+- `test_non_empty_string_still_gets_cache_control` — sanity: 일반 case 영향 없음
+- `test_mixed_messages_skip_only_the_empty_one` — multi-message 의 empty 1 개만 skip, 나머지는 cache_control
+- 기존 `test_skips_empty_content` 갱신 — empty content 가 list 로 materialised 안 됨
+
+4559 passed.
+
+### 9.9. 본 5-PR plan 의 완성
+
+| PR | merge | 결과 |
+|---|---|---|
+| #1026 (A) | 07ac49be | JSONL schema + petri eval_to_jsonl extraction |
+| #1027 (B) | f73e6f19 | MANIFEST.jsonl + retrofit |
+| #1028 (C) | dac32ee1 | 3-layer architecture SOT + audit report |
+| #1029 (D) | b86d5fe4 | F-A4 1 라이브 + Defect B 인벤토리 |
+| #1030 (E) | 72cb137f | B-1 하위 (GeodeModelAPI usage_dict=None case) fix |
+| #1031 (F, 본) | — | B-1 상위 (apply_messages_cache_control empty-text bug) fix |
+
+**총 cost** ~$0.30 = ~420 KRW = 30K KRW cap 의 1.4%.
+
+**검증 contract 회복** (PR D 의 1.5 PASS → 본 PR F 머지 후 다음
+audit 에서 4/4 가능):
+- L1 (`.eval` role_usage["target"]) — 본 fix 후 non-zero 가능
+- L2 (`~/.geode/usage/`) — PR A wiring + 본 fix 후 per-call rows 들어옴
+- L3 (MANIFEST.jsonl) — PR B 정상 + 본 fix 후 role_usage_summary["target"] non-zero
+- F-A3 (LoggerEvent capture) — B-3 잔존. 후속.
+
+### 9.10. 잔존 Defect B (후속)
+
+- **B-3** (F-A3 INFO log → LoggerEvent capture 실패) — GEODE 의 logger 가 inspect_ai LogHandler 와 분리. `logging.getLogger("plugins.petri_audit").propagate=True` 또는 `INSPECT_PY_LOGGER_LEVEL` 환경 변수. cost 0, 후속.
+- **B-4** (judge stats.role_usage 누적의 non-determinism) — 본 PR D/E/F 의 5 라이브 archive 의 judge entry 존재 여부가 매번 다름. inspect_ai 의 scoring path race condition 의심. upstream issue 가능성. 후속 추적.
 
 ## 10. 참고
 

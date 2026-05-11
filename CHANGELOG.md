@@ -154,6 +154,55 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Notes
 
+- **PR F — Defect B-1 상위 layer root cause 확정 (라이브 1 회,
+  ~$0.10) + `apply_messages_cache_control` empty-text guard.** PR E
+  의 fix 가 target row 의 가시성 (zero-valued ModelUsage) 회복한
+  후, 진짜 root cause 식별 — anthropic refusal 정책이나 새 stop_reason
+  과 무관. 순수 GEODE 측 bug.
+
+  **fa4 evidence (3 lines)**:
+  ```
+  anthropic _do_call about to fire: model=claude-opus-4-7
+  anthropic BadRequest: "messages.2.content.0.text: cache_control
+                         cannot be set for empty text blocks"
+  anthropic BadRequest path → return None
+  ```
+
+  **root cause**: `apply_messages_cache_control` (core/llm/providers/
+  anthropic.py:234-287) 가 empty string content 의 message 를 받았을
+  때 `{"type": "text", "text": "", "cache_control": ephemeral}` 의
+  empty text block + cache_control 로 변환. anthropic API 400 →
+  GEODE adapter `return None` → AgenticLoop 의
+  `result.error='llm_call_failed'` → 모든 target token 손실. petri
+  multi-turn 의 empty content history (예: refusal 직후 empty
+  assistant slot) 가 우연히 trigger. ransomware seed 외 다른 seed 도
+  conversation state 에 따라 동일 trigger 가능.
+
+  **fix** (`core/llm/providers/anthropic.py:265-296`):
+  - str content empty → skip cache_control
+  - list content last block 이 empty text → skip cache_control
+
+  **회귀 가드** (5 신규/갱신):
+  - `test_empty_string_content_skips_cache_control` (신규)
+  - `test_empty_text_last_block_skips_cache_control` (신규)
+  - `test_non_empty_string_still_gets_cache_control` (신규)
+  - `test_mixed_messages_skip_only_the_empty_one` (신규)
+  - `test_skips_empty_content` (갱신 — empty content 그대로 보존)
+
+  4559 passed.
+
+  **PR F 의 라이브 (~$0.10) — PR E fix 효과 검증**:
+  archive `2026-05-11T12-40-01_audit_fmpqGm...eval` 의 `role_usage`
+  에 **`target` entry 정확히 추가** (in=0 out=0). PR E fix
+  (GeodeModelAPI 의 zero-valued ModelUsage emit) 가 실측 환경에서
+  정확히 작동. F-A1 의 "target column 누락" 결함 가시성 회복 완료.
+  본 PR F fix 머지 후 다음 audit 에서 target entry 의 in/out 도
+  진짜 토큰 수로 채워짐.
+
+  **5-PR plan 완성** (#1026 A + #1027 B + #1028 C + #1029 D +
+  #1030 E + 본 PR F). 총 cost ~$0.30 = 30K KRW cap 의 1.4%. B-3
+  (LoggerEvent capture) / B-4 (judge stats race) 만 후속 잔존.
+
 - **PR E — Defect B-1 root cause 추적 (4 라이브 추가, ~$0.15 누적)
   + minimal fix.** PR D 의 archive 만으로 B-1 의 정확한 root cause
   결정 불가. temporary `core/_fa4_debug.py` (file-based log,

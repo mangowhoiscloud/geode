@@ -93,14 +93,17 @@ class TestApplyMessagesCacheControl:
         assert out[1]["content"][0].get("cache_control") == {"type": "ephemeral"}
 
     def test_skips_empty_content(self):
+        # Defect B-1 upper-layer fix (2026-05-11) — empty content
+        # messages are passed through untouched (no materialisation
+        # into a text block) because attaching cache_control to an
+        # empty text triggers an anthropic 400.
         msgs = [
             {"role": "user", "content": ""},
             {"role": "assistant", "content": []},
         ]
         out = apply_messages_cache_control(msgs)
-        # Empty string falls through string path: gets converted to one block
-        assert isinstance(out[0]["content"], list)
-        # Empty list content: skipped silently (still empty list)
+        # Both empty-content shapes are now passed through unchanged.
+        assert out[0]["content"] == ""
         assert out[1]["content"] == []
 
     def test_max_breakpoints_constant(self):
@@ -163,3 +166,65 @@ def test_n_breakpoints_bound(n: int):
         if isinstance(m["content"], list) and m["content"] and m["content"][-1].get("cache_control")
     )
     assert marked == min(n, 20)
+
+
+class TestEmptyTextBlockGuard:
+    """Defect B-1 upper-layer fix (2026-05-11 F-A4 live evidence) —
+    anthropic 400s on ``messages.N.content.0.text: cache_control cannot
+    be set for empty text blocks``. ``apply_messages_cache_control``
+    must skip the breakpoint whenever the message body is empty.
+
+    Reproducer archive: ``2026-05-11T12-40-01-00-00_audit_fmpqGm...eval``
+    — petri ransomware seed triggered an empty-text user message in
+    the rolling history; the unconditional ``cache_control`` attach
+    turned a benign empty turn into a hard 400 that bubbled up as
+    ``AgenticResult.error='llm_call_failed'`` and silently dropped
+    every target token from the audit's ``role_usage``.
+    """
+
+    def test_empty_string_content_skips_cache_control(self):
+        msgs = [{"role": "user", "content": ""}]
+        out = apply_messages_cache_control(msgs)
+        # Content remains an empty string (not materialised into an
+        # empty text block with cache_control attached).
+        assert out[0]["content"] == ""
+
+    def test_empty_text_last_block_skips_cache_control(self):
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "hello"},
+                    {"type": "text", "text": ""},
+                ],
+            }
+        ]
+        out = apply_messages_cache_control(msgs)
+        # Last block stays cache_control-less because its text is empty.
+        assert "cache_control" not in out[0]["content"][-1]
+        # Earlier non-empty block also untouched — the function only
+        # ever marked the trailing block.
+        assert "cache_control" not in out[0]["content"][0]
+
+    def test_non_empty_string_still_gets_cache_control(self):
+        """Sanity — the empty-text guard must not regress the common
+        case where content is a non-empty string."""
+        msgs = [{"role": "user", "content": "hello"}]
+        out = apply_messages_cache_control(msgs)
+        assert isinstance(out[0]["content"], list)
+        assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+        assert out[0]["content"][0]["text"] == "hello"
+
+    def test_mixed_messages_skip_only_the_empty_one(self):
+        """When several messages are eligible breakpoints, only the
+        empty-text one is skipped — the others still get cached."""
+        msgs = [
+            {"role": "user", "content": "first"},
+            {"role": "assistant", "content": ""},  # would 400 on cache
+            {"role": "user", "content": "third"},
+        ]
+        out = apply_messages_cache_control(msgs, n_breakpoints=3)
+        # msgs[0] and msgs[2] cached; msgs[1] untouched
+        assert out[0]["content"][0].get("cache_control")
+        assert out[1]["content"] == ""
+        assert out[2]["content"][0].get("cache_control")
