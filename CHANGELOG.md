@@ -28,6 +28,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.90.0] — 2026-05-11
+
 ### Fixed
 
 - **Defect A root-cause fix — petri target tokens 가 inspect_ai
