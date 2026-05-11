@@ -28,6 +28,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.91.0] — 2026-05-11
+
 ### Fixed
 
 - **Defect B-4 — `inspect_ai` 의 scoring path 의 judge usage
