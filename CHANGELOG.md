@@ -28,6 +28,43 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Defect B-3 — `plugins.petri_audit.*` 의 INFO log 가 inspect_ai
+  의 `.eval` LoggerEvent transcript 로 propagate 되도록 namespace
+  setLevel 추가.** v0.90.0 시점 PR D/E/F 의 5 live archives 모두
+  sample LoggerEvent 0 — `_default_geode_runner` 의 `log.info("petri
+  runner entry: ...")` 와 `_response.track_usage` 의 진단 log 가
+  transcript 에 안 잡힘.
+
+  **root cause**: Python `logging` 의 effective level chain. inspect_ai
+  `_util/logger.py:init_logger` 가 root level 을 ``warning`` (default
+  `DEFAULT_LOG_LEVEL`) 으로 두고 transcript writer 는 INFO+ 캡처
+  (`DEFAULT_LOG_LEVEL_TRANSCRIPT='info'`). `plugins.petri_audit.*`
+  logger 들의 level=NOTSET → parent chain 통해 root WARNING 으로
+  fallback → INFO record 가 logger 단계에서 filter out 되어 root
+  LogHandler 의 emit 호출 자체가 없음 → LoggerEvent 생성 안 됨.
+
+  **fix** (`plugins/petri_audit/__init__.py`):
+  ```python
+  _logging.getLogger("plugins.petri_audit").setLevel(_logging.INFO)
+  ```
+  namespace 의 effective level 을 INFO 로 강제 → 모든 child logger
+  (`targets.geode_target`, `runner` 등) 의 INFO record 가 process →
+  propagate=True 통해 root 의 LogHandler 받음 → `transcript_levelno
+  >= INFO` 체크 통과 → `log_to_transcript(record)` 호출 → sample 의
+  events 에 LoggerEvent append.
+
+  **회귀 가드** (1 신규):
+  - `test_petri_audit_namespace_logger_level_is_info` — namespace
+    level=INFO, child `isEnabledFor(INFO)`=True, propagate=True
+    (default 유지) 검증. namespace 의 propagate 가 False 로 바뀌면
+    record 가 root 까지 못 가니까 명시적 guard.
+
+  4522 passed (default env, audit extra 환경에선 4559). 자연 검증 —
+  다음 audit 의 `.eval` 의 sample.events 에 LoggerEvent 가 non-zero
+  여야 함 (petri runner entry/exit + track_usage 의 INFO log).
+
 ## [0.90.0] — 2026-05-11
 
 ### Fixed

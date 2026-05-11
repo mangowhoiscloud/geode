@@ -43,6 +43,31 @@ def test_petri_audit_package_imports() -> None:
     import plugins.petri_audit  # noqa: F401
 
 
+def test_petri_audit_namespace_logger_level_is_info() -> None:
+    """Defect B-3 fix (2026-05-11) — ``plugins.petri_audit`` namespace
+    must be at INFO so ``log.info(...)`` inside the audit code path
+    propagates to inspect_ai's root LogHandler (which captures INFO+
+    into the eval transcript). The 5/11 PR D/E/F live archives had
+    zero LoggerEvent entries from petri_audit because the effective
+    level fell through to the root default (WARNING)."""
+    import logging
+
+    import plugins.petri_audit  # noqa: F401 — trigger setLevel
+
+    ns = logging.getLogger("plugins.petri_audit")
+    assert ns.level == logging.INFO
+
+    # Child loggers inherit via effective level (their own level stays
+    # NOTSET, which lets the namespace setLevel govern). Verify the
+    # actually-used target logger is INFO-enabled.
+    child = logging.getLogger("plugins.petri_audit.targets.geode_target")
+    assert child.isEnabledFor(logging.INFO)
+    # propagate=True (default) is required for the root LogHandler to
+    # see the record — fail loudly if a future change disables it.
+    assert ns.propagate is True
+    assert child.propagate is True
+
+
 def test_geode_target_module_imports_without_audit_extra() -> None:
     """Module-level surface has no ``inspect_ai`` dependency.
 
