@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -638,6 +639,13 @@ class ClaudeAgenticAdapter:
                     ),
                 ) from exc
             log.warning("Anthropic BadRequest in agentic loop: %s", msg)
+            # Booster E (2026-05-12) — surface the failure in
+            # ``~/.geode/diagnostics/`` so an inspect_ai subprocess crash
+            # leaves a trail outside the (subprocess-local) Python logger.
+            if os.environ.get("GEODE_AUDIT_UNRESTRICTED") == "1":
+                from core.audit.diagnostics import diag
+
+                diag("petri.anthropic", f"BadRequest model={model}: {msg[:200]}")
             if "tool_use_id" in msg or "tool_result" in msg:
                 from core.agent.loop import AgenticLoop
 
@@ -670,6 +678,11 @@ class ClaudeAgenticAdapter:
                 raise
             self.last_error = exc
             log.warning("Agentic LLM call failed", exc_info=True)
+            # Booster E — same rationale as the BadRequest branch above.
+            if os.environ.get("GEODE_AUDIT_UNRESTRICTED") == "1":
+                from core.audit.diagnostics import diag
+
+                diag("petri.anthropic", f"call_failed model={model}: {exc!r}")
             _circuit_breaker.record_failure()
             return None
 

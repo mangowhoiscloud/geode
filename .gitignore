@@ -106,3 +106,4 @@ reports/
 docs/progress-report.html
 
 # CI trigger
+/.audit/
