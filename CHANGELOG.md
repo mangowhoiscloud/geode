@@ -154,6 +154,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Notes
 
+- **Petri × GEODE 관측성 layered architecture — SOT 2 신규.** PR
+  #1024 + #1026 + #1027 의 누적 결과 (Defect A F-A1+A2+A3 fix + JSONL
+  schema + MANIFEST.jsonl) 를 한 곳에서 설명하는 architecture doc +
+  ground-truth audit report 추가.
+  - `docs/architecture/petri-observability.md` — 3-layer (Raw `.eval`
+    + `~/.geode/usage/` ledger + MANIFEST.jsonl) 의 책임 분리,
+    inspect_ai 가 이미 하는 것 vs GEODE 가 보강하는 것, cross-layer
+    flow diagram, "어디를 만지면 어디가 영향받는가" seam map.
+  - `docs/audits/2026-05-11-petri-observability-audit.md` — 5/11
+    라이브 archive 의 raw evidence (judge in=21 out=846 cache_w=6740,
+    auditor in=7 out=1007 cache_r=34006 vs 같은 wall-clock window
+    GEODE JSONL 0 records), inspect-petri 의 관측성 패턴 점검 결과
+    (6 layer + D 빠진 layer 점검 8 items), PR A/B 의 의사결정 연결,
+    PR D 의 검증 contract.
+
 - **`/claude-api migrate` to Opus 4.7 — noop migration.**
   GEODE 의 anthropic adapter (`core/llm/providers/anthropic.py`) 가
   이미 모든 Opus 4.7 breaking change 를 처리하고 있음 — `_ADAPTIVE_MODELS`
