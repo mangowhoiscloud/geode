@@ -28,6 +28,55 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Defect A root-cause fix — petri target tokens 가 inspect_ai
+  role_usage / GEODE tracker 양쪽에 흐르도록 wiring 보강 (F-A1 + F-A2
+  + F-A3).**
+  - **F-A1 (inspect_ai ModelAPI contract 충족)** — 직전 라이브 (#1020)
+    에서 `inspect_ai.log.stats.role_usage["target"]` 가 빈 dict 인
+    이유 추적: `GeodeModelAPI.generate` 가 `ModelOutput.from_content(...)`
+    만 호출해 `usage=None` 으로 둠. inspect_ai 의 role_usage 누적은
+    `ModelEvent.output.usage` 통해 일어나므로 custom ModelAPI 가 usage
+    안 채우면 target 항목 자체가 안 생김 (native AnthropicAPI/OpenAIAPI
+    는 `ModelOutput(..., usage=ModelUsage(...))` 직접 구성). 본 PR —
+    (1) `AgenticResult` 에 `usage: LLMUsage | None` 필드 추가 +
+    `TokenTracker.snapshot()` 을 `arun` 진입에서 캡처 → 종료 시
+    `delta_since(snap)` 으로 per-arun 집계, (2) `_default_geode_runner`
+    가 `(text, usage_dict)` tuple 반환 (back-compat: bare `str` 도 수용),
+    (3) `GeodeModelAPI.generate` 가 `ModelOutput(model, choices,
+    usage=ModelUsage(input_tokens, output_tokens, total_tokens,
+    input_tokens_cache_write, input_tokens_cache_read, reasoning_tokens,
+    total_cost))` 직접 구성. `UsageSnapshot` 도 thinking/cache 필드
+    포함하도록 확장.
+  - **F-A2 (`_response.track_usage` 안전화 + cache 보강)** — openai stack
+    라이브에서 target completion 정상이었는데 GEODE tracker 0 records
+    였던 이유: `_response.track_usage` 가 `response.usage.input_tokens`
+    직접 접근 + 예외 시 silent debug 로깅. 본 PR — 모든 counter 를
+    `int(getattr(..., 0) or 0)` fallback 으로 변경, cache_creation_tokens
+    / cache_read_tokens 도 `tracker.record` 에 전달 (이미 record path
+    에서 가격 산정만 하던 부분의 데이터 누락 해소), 예외 swallow 를
+    `log.debug` → `log.warning` 으로 승격. `ResponseUsage` 에
+    cache_creation_tokens / cache_read_tokens 필드 신규 + `normalize_
+    anthropic` (`cache_creation_input_tokens` / `cache_read_input_tokens`)
+    + `normalize_openai` (`prompt_tokens_details.cached_tokens`) populate.
+    `LLMUsage` / `LLMUsageAccumulator` / `UsageSnapshot` 도 cache 필드
+    승격해 `~/.geode/usage/<YYYY-MM>.jsonl` 에 누적.
+  - **F-A3 (`_default_geode_runner` 관측성)** — 진입 INFO 로그
+    (msg_count / last_user_chars / model), AgenticLoop 생성 DEBUG,
+    종료 INFO (text_chars / usage). 라이브 시 stdout 으로 흐르므로
+    다음 라이브 검증 (F-A4, 별도 PR) 에서 root cause 직접 가시.
+  - **GEODE = LLM 추론 시스템 관점** — 본 PR 은 inspect_ai 의 ModelAPI
+    contract 를 GEODE 가 정확히 충족하도록 wiring 보강. 이전 모델
+    (anthropic SDK) + 유용한 하네스 (inspect_ai ModelAPI) + 한 단계 더
+    (GEODE AgenticLoop) 의 발전사에서 각 layer 의 contract 가 깨지지
+    않게 — seam 에서 변환만 (LLMUsage → ModelUsage 는 GeodeModelAPI
+    안에서만 lazy import).
+  - **회귀 가드** — `tests/plugins/petri_audit/test_skeleton.py` 3 신규
+    (runner tuple, ModelUsage 정상 emit, str runner back-compat) +
+    `tests/test_agentic_loop.py` 2 신규 (track_usage cache 토큰
+    flow-through, schema mismatch 시 WARNING). 4520 tests pass.
+
 ### Notes
 
 - **`/claude-api migrate` to Opus 4.7 — noop migration.**

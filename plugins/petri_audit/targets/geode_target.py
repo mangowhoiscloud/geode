@@ -35,13 +35,27 @@ installs trigger registration, absent-extra installs silently skip.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+log = logging.getLogger(__name__)
+
 # Single-turn GEODE runner. Caller owns AgenticLoop bootstrap; we hand
 # it the converted GEODE-format message history and receive the assistant
-# text. Injection seam keeps unit tests free of a live LLM call.
-GeodeRunner = Callable[[list[dict[str, Any]]], Awaitable[str]]
+# text PLUS an optional usage dict.
+#
+# F-A1 (2026-05-11) — runner contract widened from ``Awaitable[str]`` to
+# ``Awaitable[str | tuple[str, dict | None]]``. ``GeodeModelAPI.generate``
+# unpacks both forms so existing test runners (``runner=fake`` returning
+# a bare string) keep working — the new tuple form lets the runner
+# surface the underlying loop's aggregate usage into
+# ``inspect_ai.model.ModelOutput.usage`` (and therefore into the eval
+# log's ``role_usage`` aggregation, which scoped on usage presence).
+GeodeRunner = Callable[
+    [list[dict[str, Any]]],
+    Awaitable["str | tuple[str, dict[str, Any] | None]"],
+]
 
 
 def _to_geode_messages(messages: list[Any]) -> list[dict[str, Any]]:
@@ -146,7 +160,7 @@ async def _default_geode_runner(
     messages: list[dict[str, Any]],
     *,
     model: str | None = None,
-) -> str:
+) -> tuple[str, dict[str, Any] | None]:
     """Default GEODE runner — bootstrap + ``AgenticLoop`` one-shot.
 
     Imports GEODE core lazily so the module-level surface stays free of
@@ -191,6 +205,18 @@ async def _default_geode_runner(
 
     system_text, history, last_user = _split_messages(messages)
 
+    # Defect A F-A3 (2026-05-11) — entry observability. Before this PR
+    # the live audit gave no signal whether GeodeModelAPI.generate was
+    # actually flowing through the runner, so chasing "tracker 0 records"
+    # post-mortems meant reading the inspect log's ModelEvent stream
+    # backward. INFO-level on entry, DEBUG once AgenticLoop is up.
+    log.info(
+        "petri runner entry: msg_count=%d last_user_chars=%d model=%s",
+        len(messages),
+        len(last_user),
+        model,
+    )
+
     readiness = check_readiness()
     _set_readiness(readiness)
     handlers = _build_tool_handlers(verbose=False)
@@ -213,6 +239,13 @@ async def _default_geode_runner(
         model=model,
         disable_settings_drift=(model is not None),
     )
+    log.debug(
+        "AgenticLoop constructed: model=%s drift_disabled=%s system_chars=%d history=%d",
+        loop.model,
+        model is not None,
+        len(system_text),
+        len(history),
+    )
 
     # ``loop.run()`` wraps ``asyncio.run(self.arun(...))`` which raises
     # ``RuntimeError: asyncio.run() cannot be called from a running event
@@ -222,7 +255,14 @@ async def _default_geode_runner(
     # loop and fixes the v2 N3 silent target-invocation failure
     # (``docs/audits/2026-05-10-petri-2a-v2.md`` § C4).
     result = await loop.arun(last_user)
-    return result.text or ""
+    text = result.text or ""
+    usage_dict = result.usage.to_dict() if result.usage is not None else None
+    log.info(
+        "petri runner exit: text_chars=%d usage=%s",
+        len(text),
+        usage_dict,
+    )
+    return text, usage_dict
 
 
 def register() -> None:
@@ -246,10 +286,13 @@ def register() -> None:
         model = get_model("geode/opus-4-7", runner=fake_runner)
     """
     from inspect_ai.model import (
+        ChatCompletionChoice,
         ChatMessage,
+        ChatMessageAssistant,
         GenerateConfig,
         ModelAPI,
         ModelOutput,
+        ModelUsage,
         modelapi,
     )
     from inspect_ai.tool import ToolChoice, ToolInfo
@@ -295,12 +338,18 @@ def register() -> None:
             _ = tools, tool_choice, config
 
             geode_messages = _to_geode_messages(input)
+            usage_dict: dict[str, Any] | None = None
             if self._runner is not None:
                 # Custom runner (used by tests via the ``runner=`` model
                 # arg). Receives messages only — ``model_name`` is
                 # already on ``self`` for any introspection the test
-                # wants to do.
-                text = await self._runner(geode_messages)
+                # wants to do. F-A1 back-compat — accept either bare str
+                # or ``(text, usage_dict)`` tuple.
+                raw = await self._runner(geode_messages)
+                if isinstance(raw, tuple):
+                    text, usage_dict = raw
+                else:
+                    text = raw
             else:
                 # N6-followup priority: pass the caller-pinned base
                 # model down to the runner. ``model_name`` is shaped
@@ -308,7 +357,40 @@ def register() -> None:
                 # means "no caller pin — fall back to settings.model".
                 base = self.model_name.rsplit("/", 1)[-1]
                 runner_model: str | None = None if base == "default" else base
-                text = await _default_geode_runner(geode_messages, model=runner_model)
-            return ModelOutput.from_content(model=self.model_name, content=text)
+                text, usage_dict = await _default_geode_runner(geode_messages, model=runner_model)
+            # Defect A F-A1 — emit a fully populated ``ModelUsage`` so
+            # inspect_ai's ``log.stats.role_usage["target"]`` is non-
+            # empty. ``ModelOutput.from_content`` would leave it None
+            # and the petri eval log would have the target column
+            # silently missing (the symptom of #1020).
+            inspect_usage: ModelUsage | None = None
+            if usage_dict:
+                cache_w = int(usage_dict.get("cache_creation_tokens", 0) or 0)
+                cache_r = int(usage_dict.get("cache_read_tokens", 0) or 0)
+                in_tok = int(usage_dict.get("input_tokens", 0) or 0)
+                out_tok = int(usage_dict.get("output_tokens", 0) or 0)
+                inspect_usage = ModelUsage(
+                    input_tokens=in_tok,
+                    output_tokens=out_tok,
+                    total_tokens=in_tok + out_tok + cache_w + cache_r,
+                    input_tokens_cache_write=cache_w or None,
+                    input_tokens_cache_read=cache_r or None,
+                    reasoning_tokens=(int(usage_dict.get("thinking_tokens", 0) or 0) or None),
+                    total_cost=usage_dict.get("cost_usd"),
+                )
+            return ModelOutput(
+                model=self.model_name,
+                choices=[
+                    ChatCompletionChoice(
+                        message=ChatMessageAssistant(
+                            content=text,
+                            model=self.model_name,
+                            source="generate",
+                        ),
+                        stop_reason="stop",
+                    )
+                ],
+                usage=inspect_usage,
+            )
 
     _ = GeodeModelAPI  # decorator return is unused at module level

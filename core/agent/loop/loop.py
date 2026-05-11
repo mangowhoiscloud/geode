@@ -427,6 +427,13 @@ class AgenticLoop:
         import time as _time
 
         self._loop_start_time = _time.monotonic()
+        # Defect A F-A1 — capture tracker snapshot at the loop entry so
+        # ``finalize_and_return`` can compute a per-arun usage delta
+        # without double-counting calls from sibling loops sharing the
+        # same ``ContextVar``-scoped tracker. See ``AgenticResult.usage``.
+        from core.llm.token_tracker import get_tracker as _get_tracker
+
+        self._usage_snapshot = _get_tracker().snapshot()
         round_idx = 0
         while True:
             # Guard 1: Round limit (max_rounds > 0 enforces; 0 = unlimited)

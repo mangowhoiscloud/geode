@@ -65,31 +65,55 @@ def serialize_content(loop: AgenticLoop, content: list[Any]) -> list[dict[str, A
 
 
 def track_usage(loop: AgenticLoop, response: Any) -> None:
-    """Track token usage for cost monitoring."""
-    if not response.usage:
+    """Track token usage for cost monitoring.
+
+    Defect A F-A2 (2026-05-11) — three hardenings:
+
+    1. ``getattr(..., 0)`` fallback for every counter so a wrapper /
+       mock with partial attributes no longer triggers an
+       ``AttributeError`` that the broad ``except`` block silently
+       swallows. The petri live (#1020) showed exactly this silent
+       loss on the openai stack — completion was non-empty, response
+       arrived, but every call was dropped here.
+    2. Forward ``cache_creation_tokens`` / ``cache_read_tokens`` to
+       ``tracker.record`` so prompt-cache usage is finally recorded
+       per-call (the normalize layer started populating these in F-A2
+       as well — see ``agentic_response.ResponseUsage``).
+    3. Promote the swallowed exception path from ``log.debug`` to
+       ``log.warning``. The failure was historically silent; making
+       it warning-level surfaces future regressions without breaking
+       the loop.
+    """
+    if not response or not getattr(response, "usage", None):
         return
     try:
         from core.llm.token_tracker import get_tracker
         from core.ui.agentic_ui import render_tokens
 
-        in_tok = response.usage.input_tokens
-        out_tok = response.usage.output_tokens
-        think_tok = getattr(response.usage, "thinking_tokens", 0) or 0
+        in_tok = int(getattr(response.usage, "input_tokens", 0) or 0)
+        out_tok = int(getattr(response.usage, "output_tokens", 0) or 0)
+        think_tok = int(getattr(response.usage, "thinking_tokens", 0) or 0)
+        cache_create = int(getattr(response.usage, "cache_creation_tokens", 0) or 0)
+        cache_read = int(getattr(response.usage, "cache_read_tokens", 0) or 0)
         tracker = get_tracker()
         usage = tracker.record(
             loop.model,
             in_tok,
             out_tok,
+            cache_creation_tokens=cache_create,
+            cache_read_tokens=cache_read,
             thinking_tokens=think_tok,
         )
         if not loop._quiet:
             render_tokens(loop.model, in_tok, out_tok, cost_usd=usage.cost_usd)
         log.info(
-            "LLM call: model=%s in=%d out=%d think=%d cost=$%.4f",
+            "LLM call: model=%s in=%d out=%d think=%d cache_w=%d cache_r=%d cost=$%.4f",
             loop.model,
             in_tok,
             out_tok,
             think_tok,
+            cache_create,
+            cache_read,
             usage.cost_usd,
         )
 
@@ -112,7 +136,7 @@ def track_usage(loop: AgenticLoop, response: Any) -> None:
                         {"total_cost_usd": total_cost, "limit_usd": cost_limit, "pct": pct},
                     )
     except Exception:
-        log.debug("Failed to track usage", exc_info=True)
+        log.warning("Failed to track usage", exc_info=True)
 
 
 def update_tool_error_tracking(loop: AgenticLoop, tool_results: list[dict[str, Any]]) -> None:
