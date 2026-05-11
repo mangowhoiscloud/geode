@@ -28,6 +28,43 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Notes
+
+- **B-1 + B-3 fix 자연 검증 라이브 (anthropic 1 sample, ~$0.25 실측)
+  + cache hit 부작용 발견.** v0.90.0 (#1024 F-A1+A2+A3) + #1030
+  (B-1 하위) + #1031 (B-1 상위) + #1034 (B-3) 가 함께 작동하는지
+  검증. archive `2026-05-11T14-09-15_audit_FAro9bJseFXk2Zk4HpXky9.eval`.
+
+  **검증 contract 4/4 PASS**:
+  - L1 (`.eval` role_usage target non-zero) — `target: in=18 out=873
+    cw=23238 cr=45566`. F-A1 + B-1 fix 양쪽 작동 입증
+  - L2 (`~/.geode/usage/` source="petri_eval" 3 rows) — target +
+    judge + auditor + per-call target rows 3
+  - L3 (MANIFEST.jsonl 새 line + role_usage_summary) — 13→14 lines
+  - F-A3/B-3 (LoggerEvent capture) — 6 LoggerEvent (3 turn entry/exit)
+    정확
+
+  **fa4 → LoggerEvent 전이**: PR E/F 의 file-based fa4 evidence 가
+  PR #1034 의 namespace setLevel(INFO) fix 후 정식 `.eval`
+  LoggerEvent 로 자동 승격. text_chars 가 924/649/1013 (모두 non-
+  empty) — PR F 의 `apply_messages_cache_control` empty-text guard
+  fix 효과 입증.
+
+  **cache hit 부작용 발견**: 첫 시도가 inspect_ai 의 `~/Library/
+  Caches/inspect_ai/generate/` cache hit — 11s 만에 archive 생성,
+  target usage=None (PR E 이전 stale 응답). cache clear 후 정상
+  라이브. 향후 PoC fix 검증 시 cache clear 필수.
+
+  **본 검증 cost** target $0.19 + auditor $0.037 + judge $0.018 ≈
+  $0.25, estimator ($0.27) 와 거의 일치.
+
+  **B-4 잔존**: 본 archive 의 judge stats 정상. 8 archives 중 PR D
+  1 회만 누락. inspect_ai upstream race condition 가능성. 후속.
+
+  본 PR — `docs/audits/2026-05-11-petri-observability-audit.md`
+  §9.10 갱신 (B-3 fixed 표시) + 새 §10 추가 (검증 결과) +
+  MANIFEST.jsonl 2 lines 자동 + summary yaml 2 자동.
+
 ### Fixed
 
 - **Defect B-3 — `plugins.petri_audit.*` 의 INFO log 가 inspect_ai
