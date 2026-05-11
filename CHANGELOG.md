@@ -111,6 +111,47 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     (ts 파싱, missing file, empty stats, role 태그 매핑, cost
     fallback, idempotency, unknown role). 4517 passed.
 
+### Added
+
+- **`docs/audits/eval-logs/MANIFEST.jsonl` — petri eval archive 의
+  cross-session index.** PR A 의 `~/.geode/usage/` ledger 가 매 LLM
+  call 단위의 누적이라면 본 MANIFEST 는 매 archive 단위의 metadata
+  (sha + seed_ids + role + role_usage_summary) 인덱스. inspect_ai 의
+  `.eval` 는 single-eval scope 이고 `~/.geode/petri/logs/` raw archive
+  는 git 외부 (PII/size 이유) — multi-archive 검색 (e.g.
+  "helpful_only_model_harmful_task seed 가 들어간 모든 eval") 는 본
+  manifest 외 다른 source 없음. 본 PR —
+  - `core/audit/manifest.py` 신규 — `append_manifest(eval_path,
+    summary_yaml=...)` / `has_archive(sha)` / `read_manifest()` /
+    `parse_started_ts()`. inspect_ai `header_only=True` 로 읽어
+    `eval.dataset.samples` + `sample_ids` + `model_roles` +
+    `stats.role_usage` 를 single JSONL line 으로 압축. archive_sha
+    (file sha1) 로 idempotent — 같은 archive 두 번 append 차단.
+    `header_only` 가 `log.samples` 를 비워도 dataset path 로 sample
+    수 정확히 추출.
+  - `core/audit/__init__.py` 가 `append_manifest` / `has_archive` /
+    `read_manifest` re-export.
+  - `plugins/petri_audit/runner.py:_maybe_auto_archive` 가 archive
+    직후 `_append_manifest_line(...)` 호출. 실패 swallow + note —
+    PR A 의 `_import_usage` 와 동일 best-effort 패턴.
+  - `scripts/retrofit_manifest.py` 신규 — 기존 6 archive 1회 backfill.
+    `<YYYY-MM-DD>-<sha1(basename)[:8]>.summary.yaml` 매칭으로 yaml ↔
+    eval link. 본 PR 에 retrofit 결과 (`MANIFEST.jsonl` 6 lines)
+    함께 commit.
+  - `docs/audits/eval-logs/README.md` 갱신 — 기존 수기 매핑 표 →
+    MANIFEST.jsonl 자동/수동 사용법 + `jq` 쿼리 예시.
+  - **회귀 가드** — `tests/audit/test_manifest.py` 신규 5 클래스
+    14 테스트 (extract entry core fields, missing role_usage,
+    missing file, append jsonl line, idempotent via sha,
+    has_archive, malformed line, read_manifest, parse_started_ts).
+    4554 passed (`uv sync --extra audit` 환경 기준; default env 는
+    inspect_ai skip 으로 4533 정도).
+  - **부수** — `tests/audit/test_eval_to_jsonl.py` 의 ts expected
+    값 정정 (`1778573700.0` → `1778487700.0`). PR A 머지 시 default
+    env 의 `importorskip` 가 module skip 시켜 CI 통과했지만
+    inspect_ai 깔린 env (audit extra) 에서는 실패. 본 PR 의
+    [audit] extra 환경에서 노출되어 같이 fix.
+
 ### Notes
 
 - **`/claude-api migrate` to Opus 4.7 — noop migration.**
