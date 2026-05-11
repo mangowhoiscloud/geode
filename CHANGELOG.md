@@ -28,6 +28,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Defect B-4 — `inspect_ai` 의 scoring path 의 judge usage
+  누락 race condition 의 GEODE-측 우회 fix.** 5/11 8 archives 중 4
+  개 (~43%) 에서 judge entry 가 `stats.role_usage` 에 미반영.
+  ModelEvent 자체는 sample.events 에 항상 존재. inspect_ai upstream
+  issue 가능성. user-facing 결과: `geode history` 의 judge cost
+  ~43% under-report.
+
+  **fix** — `core/audit/eval_to_jsonl.py` + `core/audit/manifest.py`
+  양쪽 event-walk fallback. `eval.model_roles` 에 선언된 role 이
+  stats 에서 missing 발견 → `read_eval_log(path)` (full) 로 re-read
+  → `sample.events` 의 `ModelEvent.output.usage` 를 missing role/
+  model 별로 aggregate → `_SyntheticUsage` 로 stats dict 채움.
+
+  **회귀 가드 3 신규**:
+  - `test_fallback_recovers_missing_judge_from_events` — race 상황
+    재현 + fallback 이 role_usage_summary["judge"] 복구
+  - `test_fallback_no_op_when_all_roles_present` — 정상 case
+    영향 없음 (header_only path 그대로)
+  - `test_fallback_logs_warning_when_no_events_match` — events 비어
+    있을 때 graceful + WARNING
+
+  **회귀**: 4563 passed.
+
+  **잔존**: B-4 본질 (inspect_ai scoring race) 은 upstream. GEODE
+  측은 본 fallback 로 완전 우회 → user-facing 누락 0%. 다음 audit
+  에서 race 발생 시 manifest 의 role_usage_summary 자동 복구.
+
 ### Notes
 
 - **B-1 + B-3 fix 자연 검증 라이브 (anthropic 1 sample, ~$0.25 실측)

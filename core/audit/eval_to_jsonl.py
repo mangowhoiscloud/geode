@@ -18,6 +18,7 @@ skipped via :meth:`core.llm.usage_store.UsageStore.has_eval_id`).
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -28,6 +29,22 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 __all__ = ["extract_to_usage_store"]
+
+
+@dataclass
+class _SyntheticUsage:
+    """Stand-in for ``inspect_ai.model.ModelUsage`` built from the
+    sample event stream when ``stats.model_usage`` misses a role
+    (Defect B-4 race). Matches the attribute names the main extraction
+    path reads via ``getattr`` so the downstream code is shape-agnostic.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    input_tokens_cache_write: int = 0
+    input_tokens_cache_read: int = 0
+    reasoning_tokens: int = 0
+    total_cost: float | None = None
 
 
 def _basename(model_id: str) -> str:
@@ -52,6 +69,66 @@ def _parse_eval_ts(created: Any) -> float | None:
         return None
 
 
+def _walk_events_for_missing_models(
+    eval_path: Path,
+    missing_models: set[str],
+) -> dict[str, dict[str, int]]:
+    """Defect B-4 fallback — re-read the eval with ``header_only=False``
+    and aggregate ``ModelEvent.output.usage`` for each missing model.
+
+    Returns ``{model_id: {input_tokens, output_tokens,
+    input_tokens_cache_write, input_tokens_cache_read,
+    reasoning_tokens}}`` keyed by the model id (with provider prefix
+    preserved). Empty when ``inspect_ai`` cannot read the file or no
+    ``ModelEvent`` for the missing models exists.
+
+    inspect_ai's scoring path occasionally fails to fold a judge
+    ``ModelEvent.output.usage`` into ``stats.model_usage`` /
+    ``stats.role_usage`` — 8 archives across the 5/11 session showed
+    ~43% miss rate for the judge role (B-4 of the Defect B inventory).
+    The event itself is always present though, so re-aggregating from
+    the event stream produces the correct totals.
+    """
+    from inspect_ai.log import read_eval_log
+
+    try:
+        elog_full = read_eval_log(str(eval_path))
+    except Exception:
+        log.warning("eval_to_jsonl: B-4 fallback failed for %s", eval_path, exc_info=True)
+        return {}
+
+    totals: dict[str, dict[str, int]] = {}
+    for sample in getattr(elog_full, "samples", None) or []:
+        for event in getattr(sample, "events", None) or []:
+            if type(event).__name__ != "ModelEvent":
+                continue
+            model_id = getattr(event, "model", "") or ""
+            if model_id not in missing_models:
+                continue
+            output = getattr(event, "output", None)
+            usage = getattr(output, "usage", None) if output is not None else None
+            if usage is None:
+                continue
+            row = totals.setdefault(
+                model_id,
+                {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "input_tokens_cache_write": 0,
+                    "input_tokens_cache_read": 0,
+                    "reasoning_tokens": 0,
+                },
+            )
+            row["input_tokens"] += int(getattr(usage, "input_tokens", 0) or 0)
+            row["output_tokens"] += int(getattr(usage, "output_tokens", 0) or 0)
+            row["input_tokens_cache_write"] += int(
+                getattr(usage, "input_tokens_cache_write", 0) or 0
+            )
+            row["input_tokens_cache_read"] += int(getattr(usage, "input_tokens_cache_read", 0) or 0)
+            row["reasoning_tokens"] += int(getattr(usage, "reasoning_tokens", 0) or 0)
+    return totals
+
+
 def extract_to_usage_store(
     eval_path: Path | str,
     *,
@@ -65,9 +142,15 @@ def extract_to_usage_store(
 
     - ``inspect_ai`` is not installed (default ``uv sync`` env)
     - the eval file does not exist
-    - ``EvalStats.model_usage`` is empty (eval cancelled before any LLM
-      call landed)
+    - ``EvalStats.model_usage`` is empty AND no fallback path finds
+      events to aggregate
     - ``skip_if_present`` and the ``eval_id`` is already in the JSONL
+
+    Defect B-4 fallback: when a role declared in ``eval.model_roles``
+    is missing from ``stats.model_usage`` (judge race), re-read with
+    ``header_only=False`` and aggregate from the per-sample
+    ``ModelEvent.output.usage`` stream. The event itself is always
+    present even when the stats roll-up drops it.
 
     Failures inside the read path are caught + logged at WARNING — a
     bookkeeping error must never fail the audit.
@@ -99,10 +182,7 @@ def extract_to_usage_store(
         log.warning("eval_to_jsonl: failed to read %s", path, exc_info=True)
         return 0
 
-    stats = getattr(elog.stats, "model_usage", None) or {}
-    if not stats:
-        log.debug("eval_to_jsonl: %s has empty model_usage", eval_id)
-        return 0
+    stats: dict[str, Any] = dict(getattr(elog.stats, "model_usage", None) or {})
 
     model_roles = getattr(elog.eval, "model_roles", None) or {}
     inverted: dict[str, str] = {}
@@ -110,6 +190,27 @@ def extract_to_usage_store(
         model_id = getattr(cfg, "model", None) or str(cfg)
         if model_id:
             inverted[str(model_id)] = str(role)
+
+    # Defect B-4 fallback — re-aggregate missing models from sample
+    # events. Only triggers when ``eval.model_roles`` declares a model
+    # that ``stats.model_usage`` did not record; the common-case (all
+    # roles present) stays on the cheap header_only path.
+    expected_models = set(inverted.keys())
+    present_models = {str(k) for k in stats}
+    missing_models = expected_models - present_models
+    if missing_models:
+        log.info(
+            "eval_to_jsonl: B-4 fallback for %s — stats missing %s, walking events",
+            eval_id,
+            sorted(missing_models),
+        )
+        events_totals = _walk_events_for_missing_models(path, missing_models)
+        for model_id, totals in events_totals.items():
+            stats[model_id] = _SyntheticUsage(**totals)
+
+    if not stats:
+        log.debug("eval_to_jsonl: %s has empty model_usage", eval_id)
+        return 0
 
     eval_ts = _parse_eval_ts(getattr(elog.eval, "created", None))
     tracker = get_tracker()
