@@ -28,6 +28,111 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.91.0] — 2026-05-11
+
+### Fixed
+
+- **Defect B-4 — `inspect_ai` 의 scoring path 의 judge usage
+  누락 race condition 의 GEODE-측 우회 fix.** 5/11 8 archives 중 4
+  개 (~43%) 에서 judge entry 가 `stats.role_usage` 에 미반영.
+  ModelEvent 자체는 sample.events 에 항상 존재. inspect_ai upstream
+  issue 가능성. user-facing 결과: `geode history` 의 judge cost
+  ~43% under-report.
+
+  **fix** — `core/audit/eval_to_jsonl.py` + `core/audit/manifest.py`
+  양쪽 event-walk fallback. `eval.model_roles` 에 선언된 role 이
+  stats 에서 missing 발견 → `read_eval_log(path)` (full) 로 re-read
+  → `sample.events` 의 `ModelEvent.output.usage` 를 missing role/
+  model 별로 aggregate → `_SyntheticUsage` 로 stats dict 채움.
+
+  **회귀 가드 3 신규**:
+  - `test_fallback_recovers_missing_judge_from_events` — race 상황
+    재현 + fallback 이 role_usage_summary["judge"] 복구
+  - `test_fallback_no_op_when_all_roles_present` — 정상 case
+    영향 없음 (header_only path 그대로)
+  - `test_fallback_logs_warning_when_no_events_match` — events 비어
+    있을 때 graceful + WARNING
+
+  **회귀**: 4563 passed.
+
+  **잔존**: B-4 본질 (inspect_ai scoring race) 은 upstream. GEODE
+  측은 본 fallback 로 완전 우회 → user-facing 누락 0%. 다음 audit
+  에서 race 발생 시 manifest 의 role_usage_summary 자동 복구.
+
+### Notes
+
+- **B-1 + B-3 fix 자연 검증 라이브 (anthropic 1 sample, ~$0.25 실측)
+  + cache hit 부작용 발견.** v0.90.0 (#1024 F-A1+A2+A3) + #1030
+  (B-1 하위) + #1031 (B-1 상위) + #1034 (B-3) 가 함께 작동하는지
+  검증. archive `2026-05-11T14-09-15_audit_FAro9bJseFXk2Zk4HpXky9.eval`.
+
+  **검증 contract 4/4 PASS**:
+  - L1 (`.eval` role_usage target non-zero) — `target: in=18 out=873
+    cw=23238 cr=45566`. F-A1 + B-1 fix 양쪽 작동 입증
+  - L2 (`~/.geode/usage/` source="petri_eval" 3 rows) — target +
+    judge + auditor + per-call target rows 3
+  - L3 (MANIFEST.jsonl 새 line + role_usage_summary) — 13→14 lines
+  - F-A3/B-3 (LoggerEvent capture) — 6 LoggerEvent (3 turn entry/exit)
+    정확
+
+  **fa4 → LoggerEvent 전이**: PR E/F 의 file-based fa4 evidence 가
+  PR #1034 의 namespace setLevel(INFO) fix 후 정식 `.eval`
+  LoggerEvent 로 자동 승격. text_chars 가 924/649/1013 (모두 non-
+  empty) — PR F 의 `apply_messages_cache_control` empty-text guard
+  fix 효과 입증.
+
+  **cache hit 부작용 발견**: 첫 시도가 inspect_ai 의 `~/Library/
+  Caches/inspect_ai/generate/` cache hit — 11s 만에 archive 생성,
+  target usage=None (PR E 이전 stale 응답). cache clear 후 정상
+  라이브. 향후 PoC fix 검증 시 cache clear 필수.
+
+  **본 검증 cost** target $0.19 + auditor $0.037 + judge $0.018 ≈
+  $0.25, estimator ($0.27) 와 거의 일치.
+
+  **B-4 잔존**: 본 archive 의 judge stats 정상. 8 archives 중 PR D
+  1 회만 누락. inspect_ai upstream race condition 가능성. 후속.
+
+  본 PR — `docs/audits/2026-05-11-petri-observability-audit.md`
+  §9.10 갱신 (B-3 fixed 표시) + 새 §10 추가 (검증 결과) +
+  MANIFEST.jsonl 2 lines 자동 + summary yaml 2 자동.
+
+### Fixed
+
+- **Defect B-3 — `plugins.petri_audit.*` 의 INFO log 가 inspect_ai
+  의 `.eval` LoggerEvent transcript 로 propagate 되도록 namespace
+  setLevel 추가.** v0.90.0 시점 PR D/E/F 의 5 live archives 모두
+  sample LoggerEvent 0 — `_default_geode_runner` 의 `log.info("petri
+  runner entry: ...")` 와 `_response.track_usage` 의 진단 log 가
+  transcript 에 안 잡힘.
+
+  **root cause**: Python `logging` 의 effective level chain. inspect_ai
+  `_util/logger.py:init_logger` 가 root level 을 ``warning`` (default
+  `DEFAULT_LOG_LEVEL`) 으로 두고 transcript writer 는 INFO+ 캡처
+  (`DEFAULT_LOG_LEVEL_TRANSCRIPT='info'`). `plugins.petri_audit.*`
+  logger 들의 level=NOTSET → parent chain 통해 root WARNING 으로
+  fallback → INFO record 가 logger 단계에서 filter out 되어 root
+  LogHandler 의 emit 호출 자체가 없음 → LoggerEvent 생성 안 됨.
+
+  **fix** (`plugins/petri_audit/__init__.py`):
+  ```python
+  _logging.getLogger("plugins.petri_audit").setLevel(_logging.INFO)
+  ```
+  namespace 의 effective level 을 INFO 로 강제 → 모든 child logger
+  (`targets.geode_target`, `runner` 등) 의 INFO record 가 process →
+  propagate=True 통해 root 의 LogHandler 받음 → `transcript_levelno
+  >= INFO` 체크 통과 → `log_to_transcript(record)` 호출 → sample 의
+  events 에 LoggerEvent append.
+
+  **회귀 가드** (1 신규):
+  - `test_petri_audit_namespace_logger_level_is_info` — namespace
+    level=INFO, child `isEnabledFor(INFO)`=True, propagate=True
+    (default 유지) 검증. namespace 의 propagate 가 False 로 바뀌면
+    record 가 root 까지 못 가니까 명시적 guard.
+
+  4522 passed (default env, audit extra 환경에선 4559). 자연 검증 —
+  다음 audit 의 `.eval` 의 sample.events 에 LoggerEvent 가 non-zero
+  여야 함 (petri runner entry/exit + track_usage 의 INFO log).
+
 ## [0.90.0] — 2026-05-11
 
 ### Fixed

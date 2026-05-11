@@ -390,10 +390,79 @@ audit 에서 4/4 가능):
 
 ### 9.10. 잔존 Defect B (후속)
 
-- **B-3** (F-A3 INFO log → LoggerEvent capture 실패) — GEODE 의 logger 가 inspect_ai LogHandler 와 분리. `logging.getLogger("plugins.petri_audit").propagate=True` 또는 `INSPECT_PY_LOGGER_LEVEL` 환경 변수. cost 0, 후속.
+- **B-3** (F-A3 INFO log → LoggerEvent capture 실패) — **FIXED in PR #1034**. namespace `plugins.petri_audit` setLevel(INFO). 본 §10 의 라이브에서 검증.
 - **B-4** (judge stats.role_usage 누적의 non-determinism) — 본 PR D/E/F 의 5 라이브 archive 의 judge entry 존재 여부가 매번 다름. inspect_ai 의 scoring path race condition 의심. upstream issue 가능성. 후속 추적.
 
-## 10. 참고
+## 10. B-1 + B-3 fix 의 자연 검증 라이브 (2026-05-11, ~$0.25)
+
+5-PR plan (A-F) + B-3 fix (#1034) 머지 후 자연 검증.
+
+**중대 발견 (첫 시도)** — `2026-05-11T14-07-22_audit_QpuC6JE...eval`
+11s, target ModelEvent usage=None — **inspect_ai 의 generate cache
+hit**. `~/Library/Caches/inspect_ai/generate/` 가 PR E 이전의 stale
+응답 cache. fix 코드 path 우회. cache clear 후 정상 라이브.
+
+**검증 archive**: `2026-05-11T14-09-15_audit_FAro9bJseFXk2Zk4HpXky9.
+eval` (1m11s, 정상).
+
+### 10.1. 검증 contract 결과 — 4/4 PASS
+
+| Contract | 결과 | Evidence |
+|---|---|---|
+| **L1** (`.eval` `role_usage["target"]` non-zero) | **PASS** | `target: in=18 out=873 cw=23238 cr=45566` — F-A1 + B-1 fix 모두 작동 입증 |
+| **L2** (`~/.geode/usage/` source="petri_eval" 3 rows) | **PASS** | target+judge+auditor 3 row 정확 + target per-call rows 3 회 (TokenTracker.record) |
+| **L3** (`MANIFEST.jsonl` 새 line + role_usage_summary) | **PASS** | 13→14 lines, target+judge+auditor 모두 정확 |
+| **F-A3 / B-3** (sample LoggerEvent capture) | **PASS** | LoggerEvent 6 — petri runner entry/exit × 3 turn 정확 |
+
+### 10.2. fa4 → LoggerEvent 의 전이 입증
+
+PR E/F 의 file-based fa4 evidence 가 PR B-3 (#1034) 의 namespace
+setLevel(INFO) fix 후 `.eval` 안의 정식 `LoggerEvent` 로 자동
+승격. archive 의 6 LoggerEvent (3 turn × entry/exit):
+
+```
+[INFO] petri runner entry: msg_count=2 last_user_chars=137 model=claude-opus-4-7
+[INFO] petri runner exit: text_chars=924 usage={input_tokens: 6, output_tokens: 333, ...}
+[INFO] petri runner entry: msg_count=4 last_user_chars=169 ...
+[INFO] petri runner exit: text_chars=649 ...
+[INFO] petri runner entry: msg_count=6 last_user_chars=200 ...
+[INFO] petri runner exit: text_chars=1013 ...
+```
+
+text_chars 가 모두 non-empty (924/649/1013) — PR F 의
+`apply_messages_cache_control` empty-text guard fix 효과 입증
+(이전엔 anthropic 400 → empty response).
+
+### 10.3. B-4 의 새 evidence (non-determinism 그대로)
+
+본 검증 archive 의 `role_usage` 에 judge 정상 (`in=21 out=1744 cw=
+7205 cr=0`). 본 archive 까지 8 archives 중 judge entry 누락은 PR D
+(5/11 morning) 1 회만. inspect_ai upstream 의 scoring path race
+condition 그대로. specific environment 의 timing 의존 — 후속 추적.
+
+### 10.4. inspect_ai generate cache 의 부작용 — PoC 시 주의
+
+본 검증 첫 시도가 cache hit. **fix 효과 검증 불가능** (코드 path 우회).
+location:
+- macOS: `~/Library/Caches/inspect_ai/generate/`
+- Linux: `~/.cache/inspect_ai/generate/`
+
+향후 PoC fix 검증 시 cache clear 필수. inspect_ai 의 `-T cache=false`
+또는 CLI option 으로 disable 가능한지는 별도 확인.
+
+### 10.5. 본 검증 cost
+
+| Role | model | in | out | cw | cr | cost |
+|---|---|---:|---:|---:|---:|---:|
+| target | opus-4-7 | 18 | 873 | 23,238 | 45,566 | $0.190 |
+| auditor | sonnet-4-6 | 7 | 1,172 | 1,681 | 41,974 | $0.037 |
+| judge | haiku-4-5 | 21 | 1,744 | 7,205 | 0 | $0.018 |
+| **총** | | | | | | **~$0.25** |
+
+estimator (`~$0.27`) 와 거의 일치 — B (cache cost reflection, #1016)
+의 정확성 입증.
+
+## 11. 참고
 
 - 본 점검의 raw ground truth 데이터 — `~/.geode/petri/logs/2026-05-11T*.eval`
   + `~/.geode/usage/2026-05.jsonl`
