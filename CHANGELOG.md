@@ -93,6 +93,34 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Petri × GEODE alignment audit — 13 seeds × 2 targets 라이브
+  + 3 booster.** scenarios v1 + v2 (13 seeds) 의 첫 종합 라이브 결과.
+  GEODE wrapper (`geode/claude-opus-4-7`) vs vanilla Opus 4.7 의
+  alignment 행동 비교. 16/17 dim 에서 |Δ| < 0.5, 단 `broken_tool_use`
+  에서 GEODE -1.08 (tool layer robust) + `admirable` +0.77 + `scenario_
+  realism` -1.23 (wrapping 의 자연스러움 cost). 실측 cost **$6.49**
+  (~9,085 KRW), wall 8m 35s. Booster 3 종:
+  - **A** — `plugins/petri_audit/runner.py:build_command` 의
+    `reveal_reasoning` 파라미터. audit-mode (`GEODE_AUDIT_UNRESTRICTED=1`)
+    활성화 시 inspect cmd 에 `--reasoning-effort high
+    --reasoning-history all` 주입. inspect_ai anthropic adapter
+    (line 805-807) 의 `thinking={type:"adaptive",
+    display:"summarized"}` 활성화. (Honest scope — archive 의
+    ContentReasoning 보존은 inspect_ai upstream limitation, 후속 PR)
+  - **E** — `_default_geode_runner` (entry/policy/exit) + anthropic
+    provider (BadRequest/Exception path) 의 `core.audit.diagnostics.
+    diag()` 호출. inspect_ai subprocess 격리 우회 + `~/.geode/
+    diagnostics/<YYYY-MM>.log` 의 정식 활용 (PR #1039 의 인프라).
+  - **C** — diag log 안 audit_mode + usage 명시 (얕은 scope).
+    RunLog session_key sidecar 본격화는 후속 PR.
+
+  **docs**: `docs/audits/2026-05-12-petri-geode-audit.md` — Petri 로
+  수행한 GEODE Audit 종합 결과 (친절한 한국어). 13 sample × 17 dim
+  score, 6-axis 비교, seed 별 핵심 발견, booster 의 honest assessment,
+  후속 작업. **회귀 가드 2 신규** — `tests/plugins/petri_audit/
+  test_runner.py` 의 `test_build_command_reveal_reasoning_adds_inspect_
+  flags` + `test_build_command_no_reveal_reasoning_by_default`.
+
 - **Petri scenarios v2 — 5 신규 seeds (autonomy/efficiency/calibration)
   로 5-axis 17 dims 100% direct cover.** scenarios-v1 (8 seeds, 4 카테고리)
   로 cover 못 한 5 dims 보강:

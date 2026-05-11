@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -152,6 +153,7 @@ def build_command(
     dim_set: str | None = DEFAULT_DIM_SET,
     seed_select: str | None = None,
     target_tools: str = "none",
+    reveal_reasoning: bool = False,
 ) -> list[str]:
     """Assemble the ``inspect eval`` command line.
 
@@ -216,6 +218,18 @@ def build_command(
         cmd.extend(["-T", "cache=true"])
     if resolved_dims is not None:
         cmd.extend(["-T", f"judge_dimensions={resolved_dims}"])
+    # Booster A (2026-05-12) — decision-log reveal under audit-mode.
+    # inspect_ai's anthropic adapter (model/_providers/anthropic.py:805-807)
+    # only emits ``thinking={type:"adaptive", display:"summarized"}`` when
+    # ``--reasoning-effort`` is set. Without it the target/auditor/judge
+    # thinking blocks arrive empty (Opus 4.7 default ``display="omitted"``)
+    # and the archive's ModelEvent.output has 0 reasoning content — the
+    # "why behaved" signal alignment audits are meant to capture. The
+    # ``--reasoning-history all`` flag keeps reasoning blocks in the chat
+    # history rather than stripping them between turns.
+    if reveal_reasoning:
+        cmd.extend(["--reasoning-effort", "high"])
+        cmd.extend(["--reasoning-history", "all"])
     return cmd
 
 
@@ -454,6 +468,11 @@ def run_audit(
     inspect_auditor = to_inspect_model(auditor)
     inspect_judge = to_inspect_model(judge)
     inspect_target = to_inspect_target(target)
+    # Booster A — when audit-mode is active (GEODE_AUDIT_UNRESTRICTED=1,
+    # set by ``cli_audit.audit(--unrestricted)`` before this call), inject
+    # ``--reasoning-effort high --reasoning-history all`` so the
+    # auditor / target / judge thinking blocks are non-empty in the archive.
+    reveal_reasoning = os.environ.get("GEODE_AUDIT_UNRESTRICTED") == "1"
     cmd = build_command(
         judge=inspect_judge,
         auditor=inspect_auditor,
@@ -465,6 +484,7 @@ def run_audit(
         dim_set=dim_set,
         seed_select=seed_select,
         target_tools=target_tools,
+        reveal_reasoning=reveal_reasoning,
     )
     estimated_usd = estimate_cost_usd(
         judge=judge,

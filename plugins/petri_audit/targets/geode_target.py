@@ -200,6 +200,7 @@ async def _default_geode_runner(
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
+    from core.audit.diagnostics import diag
     from core.cli import _build_tool_handlers, _set_readiness
     from core.wiring.startup import check_readiness
 
@@ -228,6 +229,18 @@ async def _default_geode_runner(
         len(last_user),
         model,
     )
+    # Booster E (2026-05-12) — diag() emission so the inspect_ai subprocess'
+    # logs are also captured to ``~/.geode/diagnostics/<YYYY-MM>.log`` for
+    # cross-session post-mortem. Booster C — the runner's RunLog binding
+    # is documented here even though no RunLog session_key is wired yet;
+    # the timestamp + pid in each diag line lets us pair entry / exit
+    # with the inspect archive's timestamp. Live RunLog cross-link is a
+    # follow-up PR.
+    diag(
+        "petri.runner.entry",
+        f"msg_count={len(messages)} last_user_chars={len(last_user)} "
+        f"model={model} audit_mode={'on' if audit_mode.enabled else 'off'}",
+    )
 
     readiness = check_readiness()
     readiness = apply_to_readiness(readiness, audit_mode)
@@ -243,8 +256,16 @@ async def _default_geode_runner(
                 if hasattr(handler, "policy"):
                     handler.policy = patched_policy
             log.info("petri runner: audit-mode active (%s)", audit_mode)
-        except Exception:
+            diag(
+                "petri.runner.policy",
+                f"audit_mode applied: allow_dangerous={audit_mode.allow_dangerous} "
+                f"allow_write={audit_mode.allow_write} "
+                f"force_dry_run={audit_mode.force_dry_run} "
+                f"auto_approve={audit_mode.auto_approve}",
+            )
+        except Exception as exc:
             log.warning("petri runner: audit-mode policy apply failed", exc_info=True)
+            diag("petri.runner.policy", f"audit_mode apply FAILED: {exc!r}")
 
     ctx = ConversationContext()
     ctx.messages.extend(history)
@@ -289,6 +310,10 @@ async def _default_geode_runner(
         "petri runner exit: text_chars=%d usage=%s",
         len(text),
         usage_dict,
+    )
+    diag(
+        "petri.runner.exit",
+        f"text_chars={len(text)} usage={usage_dict}",
     )
     return text, usage_dict
 
