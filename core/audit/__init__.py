@@ -9,6 +9,7 @@ and auditor cost is otherwise invisible to ``geode history``.
 
 from __future__ import annotations
 
+from core.audit.diagnostics import DEFAULT_DIAGNOSTICS_DIR, diag, diagnostics_path
 from core.audit.eval_to_jsonl import extract_to_usage_store
 from core.audit.manifest import (
     DEFAULT_MANIFEST_PATH,
@@ -18,8 +19,11 @@ from core.audit.manifest import (
 )
 
 __all__ = [
+    "DEFAULT_DIAGNOSTICS_DIR",
     "DEFAULT_MANIFEST_PATH",
     "append_manifest",
+    "diag",
+    "diagnostics_path",
     "extract_to_usage_store",
     "has_archive",
     "read_manifest",
