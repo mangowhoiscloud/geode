@@ -105,6 +105,7 @@ def test_g10_router_md_no_geode_name_in_baseline() -> None:
     <agent_identity> layer (G10), so the baseline reads neutrally.
     """
     from core.llm.prompts import ROUTER_SYSTEM
+
     assert "You are GEODE" not in ROUTER_SYSTEM
     assert "autonomous execution agent" in ROUTER_SYSTEM
 
@@ -140,10 +141,15 @@ def test_g1_xml_template_parses(name: str, expected_keys: set[str]) -> None:
 def test_g1_no_legacy_equals_marker_left() -> None:
     """No ``=== KEY ===`` delimiter should remain in the .md templates."""
     from pathlib import Path
+
     prompt_dir = Path(__file__).resolve().parent.parent / "core" / "llm" / "prompts"
     for md in sorted(prompt_dir.glob("*.md")):
         text = md.read_text(encoding="utf-8")
-        legacy = [ln for ln in text.splitlines() if ln.strip().startswith("===") and ln.strip().endswith("===")]
+        legacy = [
+            ln
+            for ln in text.splitlines()
+            if ln.strip().startswith("===") and ln.strip().endswith("===")
+        ]
         assert not legacy, f"{md.name} still contains legacy ``=== KEY ===``: {legacy}"
 
 
@@ -163,10 +169,9 @@ def test_g2_petri_runner_no_max_rounds_cap() -> None:
     import inspect
 
     from plugins.petri_audit.targets import geode_target
+
     src = inspect.getsource(geode_target._default_geode_runner)
-    code_only = "\n".join(
-        ln for ln in src.splitlines() if not ln.lstrip().startswith("#")
-    )
+    code_only = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
     assert "max_rounds" not in code_only, (
         "G2 regression: petri runner reintroduced a max_rounds keyword. "
         "AgenticLoop's DEFAULT_MAX_ROUNDS=0 (unlimited) is the correct default."

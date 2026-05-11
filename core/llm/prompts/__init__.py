@@ -51,9 +51,7 @@ def _load_template(name: str) -> dict[str, str]:
     path = _PROMPTS_DIR / f"{name}.md"
     text = path.read_text(encoding="utf-8")
 
-    sections: dict[str, str] = {
-        m.group(1): m.group(2).strip() for m in _SECTION_RE.finditer(text)
-    }
+    sections: dict[str, str] = {m.group(1): m.group(2).strip() for m in _SECTION_RE.finditer(text)}
     if not sections:
         msg = f"No <key>...</key> sections found in {name}.md (G1 XML conversion)"
         raise ValueError(msg)
