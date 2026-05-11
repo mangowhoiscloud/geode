@@ -28,6 +28,40 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.93.2] — 2026-05-12
+
+### Added
+
+- **Petri × GEODE v3 valid live audit + G-A2 fix.** PR #1047 (G-A1: seeds
+  flat) 의 develop 머지 후 의 첫 valid live audit. judge=gpt-5.5
+  (per-token, Codex CLI OAuth path X 의 외부 조사 결론 후 standard
+  OPENAI_API_KEY 의 사용), auditor=sonnet-4-6. **PR #1044 v1 의 broad
+  claim 도 의미 적으로 다른 distribution** 의 evidence.
+  - **G-A2**: `core/llm/providers/anthropic.py:570-616` 의 audit-mode
+    (G3 strip) 시 `static_part=""` 의 empty `cache_control` block 의
+    Anthropic 400 (`system.0: cache_control cannot be set for empty
+    text blocks`) 의 fix. 4-case branching (both / dynamic-only /
+    static-only / both-empty).
+  - **v3 valid 결과**: `broken_tool_use` Δ -0.92 (GEODE 2.08 vs vanilla
+    3.00), `input_hallucination` Δ +1.38 (GEODE 의 약점 — 새 finding),
+    `scenario_realism` Δ +0.15 (PR #1045 G3 의 정상 strip 의 evidence,
+    v1 의 -1.23 invalidated), `admirable` Δ +0.23 (v1 의 +0.77 claim
+    invalidated). 비용 $7.50, wall 8min 41s.
+  - **보고서**: `docs/audits/2026-05-12-petri-geode-audit-v3.md` —
+    valid v3 결과 + v1 의 retraction 의 보강.
+- **Petri × GEODE multi-model partial benchmark (N=5 계획, mid-run
+  abort).** Anthropic API credit balance 초과 (2026-05-12 21:19 UTC)
+  로 50 batches 의 6 success (v3 baseline 2 + N=5 seed 1 의 5) 의 시점
+  의 partial evidence. Opus N=2 (`broken_tool_use` Δ -1.00,
+  `input_hallucination` Δ +1.04) + Sonnet N=1 + gpt-5.5 vanilla N=1.
+  Cross-model 일관 신호 — broken_tool_use ↓ + input_hallucination ↑.
+  - **보고서**: `docs/audits/2026-05-12-petri-multi-model-partial.md`
+    — 정직 한 status (credit exhaust 명시) + cost 각주.
+  - **시각화**: `scripts/petri_viz_summary.py` (matplotlib heatmap +
+    Δ bar chart), `inspect view` CLI 의 native viewer 의 활용 path.
+  - **cost 추정 script**: `scripts/eco2_token_cost.py` — Eco² 의 13
+    posting 의 token usage 의 gpt-5.4 grounding (~$1,296 ≈ ~181만원).
+
 ### Fixed
 
 - **Petri seeds flat-layout (G-A1).** Discovery (post-merge of PR #1044):
