@@ -14,19 +14,23 @@ be answered if observability is wired end-to-end across three layered systems
 This doc is the single map of which layer captures what, why each one exists,
 and where the boundaries (cross-layer extraction points) live.
 
-## TL;DR — three layers, three responsibilities
+## TL;DR — four layers, four responsibilities
 
 | Layer | Path | Scope | Lifetime | Producer | Consumer |
 |------:|------|-------|----------|----------|----------|
 | **1. Raw archive** | `~/.geode/petri/logs/*.eval` | Single eval, full transcript | Forever (out-of-git, PII risk) | inspect_ai's `EvalRecorder` | `inspect view`, debugging, `extract_summary` |
 | **2. Token ledger** | `~/.geode/usage/<YYYY-MM>.jsonl` | All LLM calls across sessions | Forever | `TokenTracker._persist_usage` (per-call) + `core.audit.eval_to_jsonl` (per-eval rollup) | `geode history`, cost monitoring |
 | **3. Archive manifest** | `docs/audits/eval-logs/MANIFEST.jsonl` | Per-eval metadata + seed_ids + role tokens | Forever (git-tracked) | `core.audit.manifest.append_manifest` | seed lookup, cross-archive jq queries |
+| **4. Diagnostics** | `~/.geode/diagnostics/<YYYY-MM>.log` | Free-form GEODE debug records that need to survive `inspect eval` subprocess boundaries | Month-rolled (overwrite-safe) | `core.audit.diagnostics.diag(component, msg)` | grep/jq during incident triage |
 
-Layer 1 is **inspect_ai-native** (binary `.eval` ZIP). Layers 2 and 3 are
-**GEODE additions** because inspect_ai has no concept of cross-session
-aggregation or git-tracked index.
+Layer 1 is **inspect_ai-native** (binary `.eval` ZIP). Layers 2 / 3 / 4 are
+**GEODE additions**: 2/3 because inspect_ai has no concept of
+cross-session aggregation or git-tracked index, 4 because the
+`inspect eval` subprocess hides stdout/stderr and reroutes the Python
+`logging` root handler so any GEODE plugin's INFO/DEBUG records made
+inside that subprocess never reach the parent.
 
-## Why three layers
+## Why four layers
 
 inspect_ai already does a lot — 26 typed events, `EvalStats.role_usage` /
 `model_usage` aggregation, `LoggerEvent` capture of Python `logging`,
@@ -49,6 +53,19 @@ inspect_ai's scope (single-eval) leaves out:
    GEODE's TokenTracker dropped cache/thinking tokens at the `_persist_usage`
    seam even though `_calculate_cost` priced them correctly. The schema
    extension in PR #1026 closed the leak.
+
+4. **Subprocess-spanning diagnostics** — `inspect eval` runs as
+   `subprocess.run(..., capture_output=True)` so any GEODE `print` or
+   `sys.stderr.write` is hidden from the parent, and `init_logger`
+   inside that subprocess replaces the root LogHandler so even Python
+   `logging` records from GEODE namespaces never propagate back
+   (verified 2026-05-11 against the PR D/E/F live archives). PR E/F's
+   ad-hoc `core/_fa4_debug.py` file pattern proved that a file-based
+   append log bypasses both walls; PR v0.91.0+ promoted it to
+   `core.audit.diagnostics` so the same shape — `diag(component, msg)`
+   appending to `~/.geode/diagnostics/<YYYY-MM>.log` — is the
+   recommended path for the next time some GEODE code-path inside the
+   audit harness needs to leave evidence for a post-mortem.
 
 Everything else inspect_ai already covers — see [§Out of scope](#out-of-scope).
 
@@ -171,6 +188,72 @@ jq -s 'group_by(.models.judge)
               total_judge_in: ([.[].role_usage_summary.judge.in] | add)})' \
    MANIFEST.jsonl
 ```
+
+## Layer 4 — Diagnostics (`~/.geode/diagnostics/<YYYY-MM>.log`)
+
+```
+<unix_ts:%.3f> <pid> <component> <free-form message>
+```
+
+Producer: `core.audit.diagnostics.diag(component, msg)`. Append-only,
+month-rolled file under the same `~/.geode/` convention as Layer 2 +
+`~/.geode/petri/logs/`. Override via `GEODE_DIAGNOSTICS_LOG=<path>`.
+
+This layer exists because the other three are blind in one specific
+scenario: code that runs inside the `inspect eval` subprocess. Anything
+GEODE-side that wants to leave breadcrumbs from there — what arguments
+a fail path saw, which exception bubbled through which provider — has
+to bypass two walls at once:
+
+1. **stdout/stderr** — `subprocess.run(..., capture_output=True)`
+   collects both streams into memory and only surfaces them after the
+   child exits. Live `print` / `sys.stderr.write` is invisible while
+   the subprocess is running and is post-processed (truncated, mixed,
+   sometimes lost on signal) by the time the parent sees it.
+2. **Python `logging` root handler** — inspect_ai's `init_logger`
+   (`inspect_ai/_util/logger.py`) sets a custom root level, attaches
+   its own `LogHandler`, and (for the `inspect_ai` namespace)
+   `propagate = False`. GEODE plugin namespaces sit under the root
+   chain but their effective level falls back to root's `WARNING`
+   default, so a plain `log.info(...)` is filtered at the logger
+   level and never reaches the LogHandler. PR #1034 fixed this for
+   `plugins.petri_audit.*` by setting that namespace to INFO at
+   import time — but only for that one namespace, and the fix relies
+   on inspect_ai's transcript-capture path still being healthy
+   (which Defect B-3's evidence showed was not always the case).
+
+### When to reach for Layer 4
+
+- An inspect_ai sub-call returned `None` and you need to know which
+  `return None` path inside `core/llm/providers/anthropic.py` fired
+  it. (`diag("petri.anthropic", f"BadRequest: {msg[:200]}")`)
+- A target ModelEvent's `usage` is `None` and you need to know
+  whether `_response.track_usage` was reached. (`diag("petri.lifecycle",
+  f"finalize delta cc={delta.call_count}")`)
+- A test or live run is too cheap to repeat for instrumentation and
+  you want one durable line per relevant decision point.
+
+Anything that the Layer 1 `.eval` already records (events, samples,
+scores, stats) belongs in Layer 1; Layer 4 is for **GEODE code
+behaviour around `inspect eval`**, not for inspect_ai output.
+
+### Discovery
+
+```bash
+# Latest hits, any component
+tail -50 ~/.geode/diagnostics/$(date +%Y-%m).log
+
+# One component
+grep ' petri.anthropic ' ~/.geode/diagnostics/2026-05.log
+
+# A specific subprocess
+awk '$2 == 87410' ~/.geode/diagnostics/2026-05.log
+```
+
+The Layer 4 log is intentionally append-only and best-effort — every
+`OSError` during write is swallowed (disk full / permission denied
+must not break the audit). The `diag()` call site is safe to drop in
+without try/except guards.
 
 ## Cross-layer flow (one audit, end-to-end)
 
