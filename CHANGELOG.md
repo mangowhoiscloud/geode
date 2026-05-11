@@ -28,6 +28,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.93.0] — 2026-05-12
+
 ### Changed
 
 - **System-prompt audit + cleanup (2026-05-12).** 12 항목 GAP audit
