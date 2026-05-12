@@ -8,8 +8,8 @@ export default function Page() {
       slug="harness/hooks"
       title="Hook System"
       titleKo="훅 시스템"
-      summary="58 lifecycle events grouped into 12 categories. Listeners can observe, intercept, or modify."
-      summaryKo="58개 라이프사이클 이벤트, 12개 카테고리로 분류. 리스너가 관찰, 가로채기, 수정 가능."
+      summary="58 lifecycle events grouped into 14 categories. Listeners can observe, intercept, or modify."
+      summaryKo="58개 라이프사이클 이벤트, 14개 카테고리로 분류. 리스너가 관찰, 가로채기, 수정 가능."
     >
       <Bi
         ko={

@@ -1,135 +1,85 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "LangSmith — GEODE Docs" };
+export const metadata = { title: "LangSmith (removed) — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="runtime/llm/langsmith"
-      title="LangSmith"
-      titleKo="LangSmith"
-      summary="Opt-in tracing for the five LLM call sites in core/llm/router.py. Zero runtime cost when disabled."
-      summaryKo="core/llm/router.py의 다섯 개 LLM 호출 지점에 대한 opt-in 트레이싱. 비활성화 시 런타임 비용 0."
+      title="LangSmith (removed v0.89.0)"
+      titleKo="LangSmith (v0.89.0에서 제거됨)"
+      summary="LangSmith integration was removed in v0.89.0. Use hooks plus RunLog plus Petri audit instead."
+      summaryKo="LangSmith 통합은 v0.89.0에서 제거되었습니다. hook + RunLog + Petri audit으로 대체됩니다."
     >
       <Bi
         ko={
           <>
-            <h2>활성화</h2>
-            <pre>{`export LANGCHAIN_TRACING_V2=true
-export LANGCHAIN_API_KEY=ls_...      # 또는 LANGSMITH_API_KEY
-export LANGCHAIN_PROJECT=geode       # 선택`}</pre>
-            <p>
-              <code>LANGCHAIN_TRACING_V2=true</code> 게이트와 API 키가 모두 필요합니다.
-              한쪽만 있으면 트레이싱은 비활성화됩니다.
-            </p>
+            <div style={{ padding: "12px 16px", border: "1px solid #E89B5740", background: "#E89B5710", borderRadius: 6, marginBottom: 24 }}>
+              <strong>Deprecated:</strong> 이 페이지는 history 보존용입니다. GEODE v0.89.0에서 LangSmith 의존성과 트레이싱 모듈이
+              완전 제거되었습니다. 현재 관측은 <a href="/docs/ops/observability">hooks + RunLog + Petri audit</a> 3-layer로 수행합니다.
+            </div>
 
-            <h2>데코레이터</h2>
-            <pre>{`# core/llm/router.py:151-181
-def is_langsmith_enabled() -> bool:
-    tracing = os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true"
-    api_key = (
-        os.environ.get("LANGCHAIN_API_KEY")
-        or os.environ.get("LANGSMITH_API_KEY")
-    )
-    return tracing and api_key is not None
+            <h2>왜 제거되었나</h2>
+            <ul>
+              <li>외부 SaaS 의존성 제거 (provider lock-in 방지).</li>
+              <li>관측 데이터를 GEODE 내부에서 직접 보유하려는 방향 (RunLog).</li>
+              <li>LangSmith 트레이싱은 import-time cost가 컸음. cold-start lazy loading arc (v0.85~v0.89)와 충돌.</li>
+            </ul>
 
-def maybe_traceable(*, run_type="llm", name=None):
-    if is_langsmith_enabled():
-        from langsmith import traceable
-        return traceable(run_type=run_type, name=name)
-    return lambda fn: fn`}</pre>
-            <p>
-              LangSmith가 비활성 상태일 때 데코레이터는 항등 함수로 축소됩니다.
-              런타임 비용 0, import도 일어나지 않습니다.
-            </p>
-
-            <h2>래핑된 호출 지점</h2>
+            <h2>대체 경로</h2>
             <table>
-              <thead><tr><th>함수</th><th>run_type</th></tr></thead>
+              <thead><tr><th>이전 (LangSmith)</th><th>현재 (GEODE 자체)</th></tr></thead>
               <tbody>
-                <tr><td><code>call_llm</code></td><td>llm</td></tr>
-                <tr><td><code>call_llm_parsed</code></td><td>llm</td></tr>
-                <tr><td><code>call_llm_json</code></td><td>llm</td></tr>
-                <tr><td><code>call_llm_with_tools</code></td><td>chain</td></tr>
-                <tr><td><code>call_llm_streaming</code></td><td>llm</td></tr>
+                <tr><td>LLM 호출 trace</td><td><a href="/docs/harness/hooks"><code>LLM_CALL_START</code>·<code>LLM_CALL_END</code> hook</a></td></tr>
+                <tr><td>도구 호출 trace</td><td><code>TOOL_EXEC_START</code>·<code>TOOL_EXEC_END</code> hook</td></tr>
+                <tr><td>run 단위 시각화</td><td><code>~/.geode/runlog/</code> JSONL + inspect viewer</td></tr>
+                <tr><td>외부 dashboard</td><td>(없음) wiki/blog에서 자체 분석</td></tr>
+                <tr><td>alignment audit</td><td><a href="/docs/petri/overview">Petri × GEODE</a> (Anthropic Alignment Science framework)</td></tr>
               </tbody>
             </table>
 
-            <h2>트레이싱되는 것, 되지 않는 것</h2>
+            <h2>관련 출처</h2>
             <ul>
-              <li><strong>트레이싱됨</strong>. 모델 입출력 메시지, 토큰 사용량, 지연, 오류.</li>
-              <li><strong>트레이싱되지 않음</strong> (별도 채널). prompt 어셈블리 메타데이터. <code>PROMPT_ASSEMBLED</code> 훅 페이로드 (fragment 목록, skill 해시, 절단 이벤트)는 로컬에서 발생하지만 LangSmith run에 자동 첨부되지 않습니다. 브릿징은 로드맵에 있습니다 (<em>geode-prompt-evolution P2 #4</em>).</li>
+              <li>v0.89.0 CHANGELOG: "LangSmith 100% 제거"</li>
+              <li>현 관측 stack: <a href="/docs/ops/observability">Observability</a></li>
+              <li>Petri 통합: <a href="/docs/petri/overview">Petri × GEODE Integration</a></li>
             </ul>
-
-            <h2>로그 노이즈 제어</h2>
-            <pre>{`# core/llm/router.py:141-143
-logging.getLogger("langsmith").setLevel(logging.ERROR)
-logging.getLogger("langchain").setLevel(logging.ERROR)`}</pre>
-            <p>
-              LangSmith 내부의 429 재시도 로깅을{" "}
-              <code>WARNING</code>에서 <code>ERROR</code>로 올려 GEODE stdout을
-              깨끗하게 유지합니다.
-            </p>
           </>
         }
         en={
           <>
-            <h2>Activation</h2>
-            <pre>{`export LANGCHAIN_TRACING_V2=true
-export LANGCHAIN_API_KEY=ls_...      # or LANGSMITH_API_KEY
-export LANGCHAIN_PROJECT=geode       # optional`}</pre>
-            <p>
-              Both the <code>LANGCHAIN_TRACING_V2=true</code> gate and an API key
-              are required. Either alone disables tracing.
-            </p>
+            <div style={{ padding: "12px 16px", border: "1px solid #E89B5740", background: "#E89B5710", borderRadius: 6, marginBottom: 24 }}>
+              <strong>Deprecated:</strong> this page exists for historical context. GEODE v0.89.0 removed the LangSmith
+              dependency and tracing module entirely. Current observability uses the
+              <a href="/docs/ops/observability"> hooks + RunLog + Petri audit </a> three-layer stack instead.
+            </div>
 
-            <h2>The decorator</h2>
-            <pre>{`# core/llm/router.py:151-181
-def is_langsmith_enabled() -> bool:
-    tracing = os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true"
-    api_key = (
-        os.environ.get("LANGCHAIN_API_KEY")
-        or os.environ.get("LANGSMITH_API_KEY")
-    )
-    return tracing and api_key is not None
+            <h2>Why we removed it</h2>
+            <ul>
+              <li>Drop external SaaS dependency (avoid provider lock-in).</li>
+              <li>Keep observability data inside GEODE itself (RunLog).</li>
+              <li>LangSmith tracing had a noticeable import-time cost, which conflicted with the cold-start lazy-loading
+                arc across v0.85 to v0.89.</li>
+            </ul>
 
-def maybe_traceable(*, run_type="llm", name=None):
-    if is_langsmith_enabled():
-        from langsmith import traceable
-        return traceable(run_type=run_type, name=name)
-    return lambda fn: fn`}</pre>
-            <p>
-              When LangSmith is inactive the decorator collapses to identity —
-              zero runtime cost, no import.
-            </p>
-
-            <h2>Wrapped call sites</h2>
+            <h2>Replacement path</h2>
             <table>
-              <thead><tr><th>Function</th><th>run_type</th></tr></thead>
+              <thead><tr><th>Before (LangSmith)</th><th>After (GEODE-native)</th></tr></thead>
               <tbody>
-                <tr><td><code>call_llm</code></td><td>llm</td></tr>
-                <tr><td><code>call_llm_parsed</code></td><td>llm</td></tr>
-                <tr><td><code>call_llm_json</code></td><td>llm</td></tr>
-                <tr><td><code>call_llm_with_tools</code></td><td>chain</td></tr>
-                <tr><td><code>call_llm_streaming</code></td><td>llm</td></tr>
+                <tr><td>LLM call trace</td><td><a href="/docs/harness/hooks"><code>LLM_CALL_START</code> / <code>LLM_CALL_END</code> hooks</a></td></tr>
+                <tr><td>Tool call trace</td><td><code>TOOL_EXEC_START</code> / <code>TOOL_EXEC_END</code> hooks</td></tr>
+                <tr><td>Per-run visualization</td><td><code>~/.geode/runlog/</code> JSONL plus inspect viewer</td></tr>
+                <tr><td>External dashboard</td><td>(none) self-analysis via wiki / blog</td></tr>
+                <tr><td>Alignment audit</td><td><a href="/docs/petri/overview">Petri × GEODE</a> (Anthropic Alignment Science framework)</td></tr>
               </tbody>
             </table>
 
-            <h2>What gets traced, what does not</h2>
+            <h2>Related sources</h2>
             <ul>
-              <li><strong>Traced</strong>: model input/output messages, token usage, latency, errors.</li>
-              <li><strong>Not traced</strong> (separate channel): prompt assembly metadata. The <code>PROMPT_ASSEMBLED</code> hook payload (fragment list, skill hashes, truncation events) is fired locally but does not auto-attach to the LangSmith run. Bridging is on the roadmap (<em>geode-prompt-evolution P2 #4</em>).</li>
+              <li>v0.89.0 CHANGELOG: "LangSmith 100% removed".</li>
+              <li>Current observability stack: <a href="/docs/ops/observability">Observability</a>.</li>
+              <li>Petri integration: <a href="/docs/petri/overview">Petri × GEODE Integration</a>.</li>
             </ul>
-
-            <h2>Log noise control</h2>
-            <pre>{`# core/llm/router.py:141-143
-logging.getLogger("langsmith").setLevel(logging.ERROR)
-logging.getLogger("langchain").setLevel(logging.ERROR)`}</pre>
-            <p>
-              LangSmith&apos;s internal 429 retry logging is escalated from{" "}
-              <code>WARNING</code> to <code>ERROR</code> to keep the GEODE stdout
-              clean.
-            </p>
           </>
         }
       />

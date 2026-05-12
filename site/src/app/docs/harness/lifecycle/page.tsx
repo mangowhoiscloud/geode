@@ -8,8 +8,8 @@ export default function Page() {
       slug="harness/lifecycle"
       title="Lifecycle"
       titleKo="라이프사이클"
-      summary="Bootstrap, serve, shutdown. core/lifecycle/ + core/runtime.py drive the daemon's life cycle, handle signal-based termination, and emit lifecycle hook events."
-      summaryKo="Bootstrap, serve, shutdown. core/lifecycle/와 core/runtime.py가 데몬의 수명을 구동하고, 시그널 기반 종료를 처리하며, 라이프사이클 훅 이벤트를 발화합니다."
+      summary="Bootstrap, serve, shutdown. core/wiring/ + core/runtime.py drive the daemon's life cycle, handle signal-based termination, and emit lifecycle hook events."
+      summaryKo="Bootstrap, serve, shutdown. core/wiring/와 core/runtime.py가 데몬의 수명을 구동하고, 시그널 기반 종료를 처리하며, 라이프사이클 훅 이벤트를 발화합니다."
     >
       <Bi
         ko={
@@ -26,7 +26,7 @@ export default function Page() {
               <thead><tr><th>파일</th><th>역할</th></tr></thead>
               <tbody>
                 <tr><td><code>core/runtime.py</code></td><td>최상위 <code>bootstrap()</code></td></tr>
-                <tr><td><code>core/lifecycle/</code> (5 modules)</td><td>각 단계 구현과 시그널 핸들러</td></tr>
+                <tr><td><code>core/wiring/</code> (5 modules)</td><td>각 단계 구현과 시그널 핸들러</td></tr>
                 <tr><td><code>core/server/</code> (10 modules)</td><td>IPC 리스너, 요청 디스패치, 데몬 메인 루프</td></tr>
               </tbody>
             </table>
@@ -60,6 +60,13 @@ export default function Page() {
               <li><code>CONTEXT_RESET</code>. <code>/clear</code> 실행 시점.</li>
             </ul>
 
+            <h2>Cold start (v0.85~v0.89)</h2>
+            <p>
+              v0.85 ~ v0.89 동안 다수의 SDK (anthropic, numpy, pydantic, importlib.metadata 등)를 lazy load로 전환했습니다.
+              결과: cold start 누적 −258ms, warm cold-start −86% (~33ms). modules 341 → 167 (−174).
+              wiring 모듈 (이전 lifecycle)이 lazy import의 1차 게이트 역할을 합니다.
+            </p>
+
             <h2>크래시 복구</h2>
             <p>
               데몬에서 잡히지 않은 예외는 요청 디스패처 최상단에서 포착되고, 전체
@@ -83,7 +90,7 @@ export default function Page() {
               <thead><tr><th>File</th><th>Role</th></tr></thead>
               <tbody>
                 <tr><td><code>core/runtime.py</code></td><td>top-level <code>bootstrap()</code></td></tr>
-                <tr><td><code>core/lifecycle/</code> (5 modules)</td><td>phase implementations + signal handlers</td></tr>
+                <tr><td><code>core/wiring/</code> (5 modules)</td><td>phase implementations + signal handlers</td></tr>
                 <tr><td><code>core/server/</code> (10 modules)</td><td>IPC listener, request dispatch, daemon main loop</td></tr>
               </tbody>
             </table>
@@ -116,6 +123,13 @@ export default function Page() {
               <li><code>MODEL_SWITCHED</code> — when <code>/model</code> rotates</li>
               <li><code>CONTEXT_RESET</code> — on <code>/clear</code></li>
             </ul>
+
+            <h2>Cold start (v0.85 to v0.89)</h2>
+            <p>
+              Across v0.85 to v0.89 a number of SDKs (anthropic, numpy, pydantic, importlib.metadata, etc.) moved to lazy
+              loading. Result: cumulative cold start cut by 258ms, warm cold-start cut by 86% (~33ms). Modules
+              341 to 167 (−174). The wiring module (formerly lifecycle) is the primary lazy-import gate.
+            </p>
 
             <h2>Crash recovery</h2>
             <p>
