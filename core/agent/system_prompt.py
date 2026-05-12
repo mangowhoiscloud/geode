@@ -290,6 +290,23 @@ def _build_model_card(model: str) -> str:
             "Do NOT call check_status for model info."
         )
 
+        # GAP-17 — OpenAI / Codex tendency to emit HTML as a single
+        # ``data:text/html(;base64)?`` URL ('paste into address bar' shape)
+        # silently breaks every downstream GEODE consumer (slide build,
+        # report PDF, artifact archiving) and inflates output_tokens 30-50%.
+        # Anthropic + GLM do not exhibit this drift, so the guard is
+        # provider-gated.  ``core.llm.postprocess.html_output`` is the
+        # safety-net decoder when the guard fails.
+        if provider in ("openai", "openai-codex"):
+            parts.append(
+                "HTML output: NEVER emit ``data:text/html`` URLs or "
+                "base64-encoded single-string blobs (the 'paste into address "
+                "bar' shape). Always write raw ``<!DOCTYPE html>...`` source "
+                "and propose a file path for storage. The address-bar shape "
+                "is unreadable to the GEODE pipeline and inflates output "
+                "tokens by 30-50%."
+            )
+
         return "<model_card>\n" + "\n".join(parts) + "\n</model_card>"
     except Exception:
         log.debug("Failed to build model card", exc_info=True)
