@@ -1,0 +1,135 @@
+/* Docs prose styles — applied via .docs-prose class on the article wrapper. */
+
+.docs-prose {
+  color: #E8E8FF;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.docs-prose h2 {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+  color: #F0F0FF;
+  letter-spacing: -0.01em;
+}
+
+.docs-prose h3 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-top: 2.25rem;
+  margin-bottom: 0.75rem;
+  color: #F0F0FF;
+}
+
+.docs-prose h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #F0F0FF;
+}
+
+.docs-prose p {
+  margin: 1rem 0;
+}
+
+.docs-prose ul,
+.docs-prose ol {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.docs-prose ul {
+  list-style: disc;
+}
+
+.docs-prose ol {
+  list-style: decimal;
+}
+
+.docs-prose li {
+  margin: 0.35rem 0;
+}
+
+.docs-prose a {
+  color: #7BD2FF;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+.docs-prose a:hover {
+  color: #B0E5FF;
+}
+
+.docs-prose code {
+  font-family: var(--font-fira-code);
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  color: #FFD8A8;
+}
+
+.docs-prose pre {
+  font-family: var(--font-fira-code);
+  background: #060D1B;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.docs-prose pre code {
+  background: transparent;
+  padding: 0;
+  color: #C8D8F0;
+  font-size: inherit;
+}
+
+.docs-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 14px;
+}
+
+.docs-prose th,
+.docs-prose td {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.docs-prose th {
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 600;
+  color: #F0F0FF;
+}
+
+.docs-prose blockquote {
+  border-left: 3px solid rgba(123, 210, 255, 0.5);
+  padding-left: 1rem;
+  margin: 1.25rem 0;
+  color: rgba(232, 232, 255, 0.7);
+  font-style: italic;
+}
+
+.docs-prose hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 2rem 0;
+}
+
+.docs-prose strong {
+  color: #F0F0FF;
+  font-weight: 600;
+}
