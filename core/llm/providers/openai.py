@@ -94,6 +94,29 @@ def get_circuit_breaker() -> CircuitBreaker:
     return _openai_circuit_breaker
 
 
+def _build_prompt_cache_key(system: str, tools: list[dict[str, Any]]) -> str:
+    """Derive a stable ``prompt_cache_key`` from system + tools (GAP-A2).
+
+    OpenAI's Responses API auto-caches matching prefixes, but accepts an
+    optional ``prompt_cache_key`` that routes similar requests to the
+    same cache pool — improving hit rate when the system prompt + tools
+    schema are stable across sessions while the user / conversation
+    differs.  Same ``(system, tools)`` → same key → maximally warm cache.
+
+    Tools are serialized with ``sort_keys=True`` so dict-key ordering
+    drift inside schemas does not invalidate the key.  A ``\\x00``
+    separator prevents collisions between system suffixes and tool prefixes.
+    """
+    import hashlib
+    import json as _json
+
+    h = hashlib.sha256()
+    h.update(system.encode("utf-8"))
+    h.update(b"\x00")
+    h.update(_json.dumps(tools, sort_keys=True, default=str).encode("utf-8"))
+    return h.hexdigest()[:32]
+
+
 class OpenAIAdapter:
     """OpenAI GPT adapter implementing LLMClientPort.
 
@@ -548,6 +571,12 @@ class OpenAIAgenticAdapter:
                 # unused; opting out avoids unnecessary OpenAI-side
                 # retention of every response. SDK default is ``True``.
                 "store": False,
+                # GAP-A2 — stable prompt cache key derived from system +
+                # tools schema. OpenAI's Responses API auto-caches matching
+                # prefixes; the optional key routes similar requests to the
+                # same cache pool, lifting hit-rate across user/conversation
+                # variation while system+tools stay constant.
+                "prompt_cache_key": _build_prompt_cache_key(system, oai_tools),
             }
             # v0.60.0 R3-mini — Responses-API reasoning kwargs.
             # ``include=["reasoning.encrypted_content"]`` is required when
