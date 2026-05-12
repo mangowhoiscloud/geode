@@ -47,6 +47,41 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Infrastructure
 
+- **Docs restructure (F-series) plus Context system page.**
+  - **Chapter rename**. "LLM 파이프라인" to "Runtime". "왜 이렇게" to "Why".
+  - **Petri folded into Verification**. The five Petri pages (overview /
+    scenarios / run / judge-dimensions / bundle) now live under chapter
+    06 Verification next to guardrails, biasbuster, and observability.
+  - **LangSmith page deleted**. The deprecation notice page is now gone
+    entirely. References to LangSmith were already replaced by the
+    native four-lens stack in v0.89.0.
+  - **Observability moved and expanded**. From `/docs/ops/observability`
+    to `/docs/verification/observability`. Body expanded with per-lens
+    structure: hook 14-category table, RunLog JSONL schema, audit
+    diagnostics CallDiagnostic dataclass, Petri integration, usage
+    ledger, OpenTelemetry / inspect viewer adapters, why-LangSmith-was-
+    removed rationale.
+  - **Context System page new**. `/docs/runtime/context`. Single
+    reference for the four mechanisms: 5-tier memory hierarchy (integer
+    tiers 0 to 4, no fractional tiers), 5-layer prompt assembly with
+    `AssembledPrompt` dataclass, 200K absolute token guard plus 80 / 95
+    percent phases plus 25K MCP cap, Clean Context anchoring prevention,
+    cache interface, comparison with Claude Code / LangChain / LlamaIndex.
+  - **Fractional tier numbers retired**. `Automation (L4.5)` renamed to
+    `Automation` (or `Automation Sidecar`); body now describes it as a
+    sidecar between L2 Runtime and L4 Agent rather than as a tier.
+    `4.5-Tier`, `Memory(4.5T)`, and a `Tier 0.5` reference in portfolio
+    components likewise integerized.
+  - **Changelog page synced**. Highlight reel now spans v0.65 through
+    v0.95 (Anthropic agentic_call streaming, GLM 202_752 correction,
+    OpenAI HTML guard, GEODE_PERSONA, XML sandwich, 4-layer observability,
+    Petri scenarios, auto-escalation removal, LangSmith removal,
+    cold-start arc, lifecycle to wiring rename, geode audit CLI).
+  - Net: 50 pages, 11 chapters (down from 12). All bilingual.
+
+
+### Infrastructure
+
 - **Docs sync to v0.95 codebase facts plus Petri scenarios page.**
   Code-vs-docs GAP audit against CHANGELOG v0.66 to v0.95. Outcome: 14
   missing entries identified, 16 outdated pages, 7 recommended. Top

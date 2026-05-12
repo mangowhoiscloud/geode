@@ -9,7 +9,7 @@ import { useLocale, t } from "../locale-context";
 const ALL = [0, 1, 2, 3, 4]; // all components highlighted (shared resources)
 const layers = [
   { id: "Model",   color: "#818CF8", y: 10,  components: ["ClaudeAdapter", "OpenAIAdapter", "GLMAdapter"], highlight: { ipc: [0, 1, 2], daemon: [0, 1, 2], scheduler: [0, 1, 2] } },
-  { id: "Runtime", color: "#4ECDC4", y: 78,  components: ["ToolRegistry(43)", "MCP", "Skills(18)", "Memory(4.5T)"], highlight: { ipc: [0, 1, 2, 3], daemon: [0, 1, 2, 3], scheduler: [0, 1, 2, 3] } },
+  { id: "Runtime", color: "#4ECDC4", y: 78,  components: ["ToolRegistry(43)", "MCP", "Skills(18)", "Memory(5T)"], highlight: { ipc: [0, 1, 2, 3], daemon: [0, 1, 2, 3], scheduler: [0, 1, 2, 3] } },
   { id: "Harness", color: "#F5C542", y: 146, components: ["SessionLane", "Lane(global,8)", "PolicyChain", "HookSystem(48)"], highlight: { ipc: [0, 1, 2, 3], daemon: [0, 1, 2, 3], scheduler: [0, 1, 2, 3] } },
   { id: "Agent",   color: "#F4B8C8", y: 214, components: ["AgenticLoop", "SubAgent", "CLIPoller", "Gateway", "Scheduler"], highlight: { ipc: [0, 1, 2], daemon: [0, 1, 3], scheduler: [0, 1, 4] } },
 ];
