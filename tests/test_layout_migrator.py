@@ -16,15 +16,25 @@ import pytest
 
 @pytest.fixture
 def fake_geode_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect ``GEODE_HOME`` (and all derived paths) to a tmp dir."""
-    # Both the constant and the live reference in layout_migrator/paths must
-    # point at tmp_path so reads + writes land in the sandbox.
+    """Redirect ``GEODE_HOME`` (and all derived paths) to a tmp dir.
+
+    For v1→v2 migration, also redirect ``get_project_root`` so the
+    migration step's "current workspace" lands inside the same tmp_path
+    instead of the actual repo (which would archive real files).
+    """
     monkeypatch.setattr("core.paths.GEODE_HOME", tmp_path)
     monkeypatch.setattr("core.wiring.layout_migrator.GEODE_HOME", tmp_path)
     monkeypatch.setattr(
         "core.wiring.layout_migrator.LAYOUT_VERSION_FILE",
         tmp_path / ".layout-version",
     )
+
+    # Project root → a workspace inside tmp_path. v1→v2 migration archives
+    # things under {workspace}/.geode/_archive so we want the workspace to
+    # be sandboxed too.
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("core.paths.get_project_root", lambda: workspace)
 
     # Reset the once-per-process guard so each test starts fresh.
     from core.wiring.layout_migrator import reset_migration_guard
@@ -183,3 +193,126 @@ class TestV0ToV1PathReconciliation:
         assert len(step.skipped) == 3
         assert step.moved == []
         assert step.warnings == []
+
+
+class TestV1ToV2VestigialArchival:
+    """v1→v2 — archive `.geode/embedding-cache/` and `.geode/vectors/`
+    (no writer since 2026-04-05) under `.geode/_archive/` for safe review."""
+
+    def _workspace(self, fake_geode_home: Path) -> Path:
+        """Return the sandbox workspace that the fixture patched
+        `get_project_root` to return."""
+        return fake_geode_home / "workspace"
+
+    def test_archives_populated_embedding_cache(self, fake_geode_home: Path) -> None:
+        workspace = self._workspace(fake_geode_home)
+        src = workspace / ".geode" / "embedding-cache"
+        src.mkdir(parents=True)
+        (src / "old-cache.bin").write_bytes(b"junk")
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        # Source moved
+        assert not src.exists()
+        # Archive contains exactly one timestamped dir whose name starts with
+        # the original directory name (`embedding-cache-<UTC>`).
+        archive = workspace / ".geode" / "_archive"
+        moved = list(archive.iterdir())
+        assert len(moved) == 1
+        assert moved[0].name.startswith("embedding-cache-")
+        assert (moved[0] / "old-cache.bin").exists()
+
+    def test_archives_populated_vectors(self, fake_geode_home: Path) -> None:
+        workspace = self._workspace(fake_geode_home)
+        src = workspace / ".geode" / "vectors"
+        src.mkdir(parents=True)
+        (src / "index.faiss").write_bytes(b"stub")
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        assert not src.exists()
+        archive = workspace / ".geode" / "_archive"
+        moved = list(archive.iterdir())
+        assert any(d.name.startswith("vectors-") for d in moved)
+
+    def test_archives_both_when_both_present(self, fake_geode_home: Path) -> None:
+        workspace = self._workspace(fake_geode_home)
+        (workspace / ".geode" / "embedding-cache").mkdir(parents=True)
+        (workspace / ".geode" / "embedding-cache" / "a").write_text("x")
+        (workspace / ".geode" / "vectors").mkdir(parents=True)
+        (workspace / ".geode" / "vectors" / "b").write_text("y")
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        archive = workspace / ".geode" / "_archive"
+        names = sorted(d.name.split("-")[0] for d in archive.iterdir())
+        assert names == ["embedding", "vectors"]
+
+    def test_empty_dir_is_rmdir_not_archived(self, fake_geode_home: Path) -> None:
+        """Empty vestigial dir gets `rmdir`'d — no archive entry."""
+        workspace = self._workspace(fake_geode_home)
+        src = workspace / ".geode" / "embedding-cache"
+        src.mkdir(parents=True)
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        report = ensure_layout_migrated(force=True)
+
+        assert not src.exists()
+        assert not (workspace / ".geode" / "_archive").exists()
+        step = next(s for s in report.steps if s.name.startswith("v1→v2"))
+        moved_destinations = [dst for _, dst in step.moved]
+        assert any("empty" in d for d in moved_destinations)
+
+    def test_absent_dirs_skip_silently(self, fake_geode_home: Path) -> None:
+        """Fresh install with no vestigial dirs — both candidates skipped."""
+        workspace = self._workspace(fake_geode_home)
+        (workspace / ".geode").mkdir(parents=True)
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        report = ensure_layout_migrated(force=True)
+        step = next(s for s in report.steps if s.name.startswith("v1→v2"))
+        assert step.moved == []
+        assert step.warnings == []
+        assert len(step.skipped) == 2
+
+    def test_no_geode_dir_short_circuits(self, fake_geode_home: Path) -> None:
+        """If the workspace has no .geode/ at all, the step skips entirely."""
+        # Workspace exists but no .geode/ in it
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        report = ensure_layout_migrated(force=True)
+        step = next(s for s in report.steps if s.name.startswith("v1→v2"))
+        assert step.moved == []
+        # Single skipped entry — the .geode/ short-circuit
+        assert any(".geode/" in s for s in step.skipped)
+
+    def test_full_v0_to_v2_chain_on_fresh_install(self, fake_geode_home: Path) -> None:
+        """Pre-versioned install runs both v0→v1 and v1→v2 in one pass and
+        ends at the target marker."""
+        from core.wiring.layout_migrator import (
+            GEODE_LAYOUT_VERSION,
+            ensure_layout_migrated,
+            read_layout_version,
+        )
+
+        report = ensure_layout_migrated(force=True)
+        step_names = [s.name for s in report.steps]
+        assert any(n.startswith("v0→v1") for n in step_names)
+        assert any(n.startswith("v1→v2") for n in step_names)
+        assert read_layout_version() == GEODE_LAYOUT_VERSION == 2
+
+    def test_constants_removed_from_paths(self, fake_geode_home: Path) -> None:
+        """Sanity — the two vestigial constants must no longer exist on
+        ``core.paths`` (P1 sloppiness cleanup)."""
+        from core import paths
+
+        assert not hasattr(paths, "PROJECT_EMBEDDING_CACHE")
+        assert not hasattr(paths, "PROJECT_VECTORS_DIR")

@@ -186,46 +186,44 @@ class TestStatus:
 
 class TestClean:
     def test_dry_run_deletes_nothing(self, tmp_path: Path) -> None:
-        cache = tmp_path / "embedding-cache"
-        cache.mkdir()
-        (cache / "data.npy").write_bytes(b"x" * 100)
+        # v0.95.x — `PROJECT_EMBEDDING_CACHE` was removed (vestigial). Use
+        # `PROJECT_TOOL_OFFLOAD` (still live) for the dry-run guard test.
+        offload = tmp_path / "tool-offload"
+        offload.mkdir()
+        (offload / "result.json").write_text("payload")
 
-        with patch("core.cli.cmd_lifecycle.PROJECT_EMBEDDING_CACHE", cache):
+        with patch("core.cli.cmd_lifecycle.PROJECT_TOOL_OFFLOAD", offload):
             do_clean(scope="project", dry_run=True, force=True)
 
-        assert cache.exists()
-        assert (cache / "data.npy").exists()
+        assert offload.exists()
+        assert (offload / "result.json").exists()
 
     def test_default_cleans_caches(self, tmp_path: Path) -> None:
-        cache = tmp_path / "embedding-cache"
-        cache.mkdir()
-        (cache / "data.npy").write_bytes(b"x" * 50)
-
         offload = tmp_path / "tool-offload"
         offload.mkdir()
         (offload / "result.json").write_text("{}")
 
+        result_cache = tmp_path / "result_cache"
+        result_cache.mkdir()
+        (result_cache / "cached.json").write_text("{}")
+
         with (
-            patch("core.cli.cmd_lifecycle.PROJECT_EMBEDDING_CACHE", cache),
             patch("core.cli.cmd_lifecycle.PROJECT_TOOL_OFFLOAD", offload),
-            patch("core.cli.cmd_lifecycle.PROJECT_RESULT_CACHE_DIR", tmp_path / "no"),
-            patch("core.cli.cmd_lifecycle.PROJECT_VECTORS_DIR", tmp_path / "no2"),
+            patch("core.cli.cmd_lifecycle.PROJECT_RESULT_CACHE_DIR", result_cache),
             patch("core.cli.cmd_lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no3"),
             patch("core.cli.cmd_lifecycle.CLI_SOCKET_PATH", tmp_path / "no4"),
             patch("core.cli.cmd_lifecycle.CLI_STARTUP_LOCK", tmp_path / "no5"),
         ):
             do_clean(scope="project", force=True)
 
-        assert not cache.exists()
         assert not offload.exists()
+        assert not result_cache.exists()
 
     def test_nothing_to_clean(self, tmp_path: Path) -> None:
         """No error when nothing exists."""
         with (
-            patch("core.cli.cmd_lifecycle.PROJECT_EMBEDDING_CACHE", tmp_path / "no1"),
             patch("core.cli.cmd_lifecycle.PROJECT_TOOL_OFFLOAD", tmp_path / "no2"),
             patch("core.cli.cmd_lifecycle.PROJECT_RESULT_CACHE_DIR", tmp_path / "no3"),
-            patch("core.cli.cmd_lifecycle.PROJECT_VECTORS_DIR", tmp_path / "no4"),
             patch("core.cli.cmd_lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no5"),
             patch("core.cli.cmd_lifecycle.CLI_SOCKET_PATH", tmp_path / "no6"),
             patch("core.cli.cmd_lifecycle.CLI_STARTUP_LOCK", tmp_path / "no7"),

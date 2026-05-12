@@ -56,7 +56,7 @@ log = logging.getLogger(__name__)
 
 #: Current target layout schema version. Bumped each time a path-level
 #: migration is added.
-GEODE_LAYOUT_VERSION = 1
+GEODE_LAYOUT_VERSION = 2
 
 #: Marker file recording the migrated-up-to version. Absent ⇒ version 0
 #: (pre-versioned install — every existing user starts here on first run
@@ -215,6 +215,8 @@ def _run_pending_migrations(current_version: int, report: LayoutMigrationReport)
     """
     if current_version < 1:
         report.steps.append(_migrate_v0_to_v1())
+    if current_version < 2:
+        report.steps.append(_migrate_v1_to_v2())
 
 
 # ---------------------------------------------------------------------------
@@ -268,5 +270,84 @@ def _migrate_v0_to_v1() -> MigrationResult:
             log.info("Layout v0→v1: moved %s → %s", src, dst)
         except OSError as exc:
             result.warnings.append(f"{src.name}: move failed: {exc}")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# v1 → v2: vestigial directory archival (embedding-cache, vectors)
+# ---------------------------------------------------------------------------
+
+
+def _migrate_v1_to_v2() -> MigrationResult:
+    """v2 — archive `.geode/embedding-cache/` and `.geode/vectors/`.
+
+    The on-disk directories exist for legacy reasons but have no writer
+    since 2026-04-05. The corresponding ``paths.py`` constants
+    (``PROJECT_EMBEDDING_CACHE`` / ``PROJECT_VECTORS_DIR``) were removed
+    in the same PR.
+
+    Strategy — **archive, not delete**. Move to
+    ``{workspace}/.geode/_archive/<name>-<UTC>/`` so the operator can
+    inspect or restore. Reversible by design — mirrors the user-data
+    safety pattern from v0→v1 (`shutil.move`, never `rmtree`).
+
+    Scope — current workspace only. Other workspaces archive themselves
+    on their next bootstrap. The migration step is keyed off
+    ``core.paths.get_project_root()`` which respects the
+    `core/paths.get_project_root` resolution rules.
+
+    Skip cases — directory absent (fresh install), or directory present
+    but empty (nothing to archive; just `rmdir`).
+    """
+    from core.paths import get_project_root
+
+    result = MigrationResult(name="v1→v2: vestigial dir archival")
+
+    project_root = get_project_root()
+    geode_dir = project_root / ".geode"
+    if not geode_dir.exists():
+        result.skipped.append(".geode/: absent in current workspace")
+        return result
+
+    import datetime as _dt
+
+    stamp = _dt.datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%SZ")
+    archive_root = geode_dir / "_archive"
+    candidates = [
+        geode_dir / "embedding-cache",
+        geode_dir / "vectors",
+    ]
+
+    for src in candidates:
+        if not src.exists():
+            result.skipped.append(f"{src.name}: absent")
+            continue
+        try:
+            entries = list(src.iterdir())
+        except OSError as exc:
+            result.warnings.append(f"{src.name}: iterdir failed: {exc}")
+            continue
+        if not entries:
+            try:
+                src.rmdir()
+                result.moved.append((str(src), "(empty — removed)"))
+                log.info("Layout v1→v2: removed empty %s", src)
+            except OSError as exc:
+                result.warnings.append(f"{src.name}: empty rmdir failed: {exc}")
+            continue
+        dst = archive_root / f"{src.name}-{stamp}"
+        if dst.exists():
+            result.warnings.append(
+                f"{src.name}: archive target {dst} already exists — left source untouched"
+            )
+            continue
+        try:
+            archive_root.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+            result.moved.append((str(src), str(dst)))
+            log.info("Layout v1→v2: archived %s → %s", src, dst)
+        except OSError as exc:
+            result.warnings.append(f"{src.name}: archive failed: {exc}")
 
     return result

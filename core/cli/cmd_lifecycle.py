@@ -28,12 +28,10 @@ from core.paths import (
     GLOBAL_USAGE_DIR,
     GLOBAL_WORKERS_DIR,
     MCP_REGISTRY_CACHE,
-    PROJECT_EMBEDDING_CACHE,
     PROJECT_GEODE_DIR,
     PROJECT_RESULT_CACHE_DIR,
     PROJECT_SCHEDULER_LOG_DIR,
     PROJECT_TOOL_OFFLOAD,
-    PROJECT_VECTORS_DIR,
     SERVE_LOG_PATH,
 )
 from core.ui.console import console
@@ -324,10 +322,8 @@ def show_status(*, json_output: bool = False) -> None:
 
     # Project disk usage
     project_dirs = {
-        "embedding-cache": PROJECT_EMBEDDING_CACHE,
         "tool-offload": PROJECT_TOOL_OFFLOAD,
         "result_cache": PROJECT_RESULT_CACHE_DIR,
-        "vectors": PROJECT_VECTORS_DIR,
         "scheduler_logs": PROJECT_SCHEDULER_LOG_DIR,
     }
     for name, path in project_dirs.items():
@@ -462,10 +458,8 @@ def do_clean(
     # Tier 1 — Safe (always included for matching scope)
     if include_project:
         for path, label in [
-            (PROJECT_EMBEDDING_CACHE, "embedding-cache"),
             (PROJECT_TOOL_OFFLOAD, "tool-offload"),
             (PROJECT_RESULT_CACHE_DIR, "result_cache"),
-            (PROJECT_VECTORS_DIR, "vectors"),
         ]:
             if path.exists():
                 usage = _scan_directory(path)
