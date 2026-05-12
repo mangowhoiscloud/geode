@@ -30,6 +30,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **LLM retry policy SOT — GAP-E1.** `OpenAIAdapter._retry_with_backoff`
+  pinned `max_retries=3`, `retry_base_delay=1.0`, `retry_max_delay=30.0`
+  via module-local `_MAX_RETRIES` / `_RETRY_BASE_DELAY` / `_RETRY_MAX_DELAY`
+  constants, ignoring `settings.llm_max_retries` /
+  `settings.llm_retry_base_delay` / `settings.llm_retry_max_delay`.
+  GLM (via `OpenAIAgenticAdapter` inheritance) inherited the same drift.
+  Adapter now leaves these arguments unset so `retry_with_backoff_generic`
+  resolves them lazily from settings — restoring the single source of
+  truth shared with Anthropic. Regression test:
+  `tests/test_retry_policy_sot.py`.
+
 - **Petri seeds flat-layout (G-A1).** Discovery (post-merge of PR #1044):
   `inspect_petri/_seeds/_markdown.py:read_seed_directory` uses
   `directory.glob("*.md")` — **non-recursive**. The 13 curated GEODE
