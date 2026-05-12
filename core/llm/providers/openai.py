@@ -502,8 +502,11 @@ class OpenAIAgenticAdapter:
             log.warning("%s circuit breaker is OPEN, skipping call", self.provider_name)
             return None
 
-        # Responses API tool_choice is a string
-        tc_val = tool_choice.get("type", "auto") if isinstance(tool_choice, dict) else tool_choice
+        # GAP-T1 — normalize cross-provider tool_choice into the Responses API
+        # shape (string or {"type": "function", "name": "..."}).
+        from core.llm.tool_choice import normalize as _normalize_tool_choice
+
+        tc_val = _normalize_tool_choice("openai", tool_choice)
 
         # Build tools: function tools + native hosted tools (dedup)
         oai_tools: list[dict[str, Any]] = _tools_to_openai(tools)

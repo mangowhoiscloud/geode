@@ -187,7 +187,11 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
             log.warning("%s circuit breaker is OPEN, skipping call", self.provider_name)
             return None
 
-        tc_val = tool_choice.get("type", "auto") if isinstance(tool_choice, dict) else tool_choice
+        # GAP-T1 — normalize cross-provider tool_choice into the Chat Completions
+        # nested shape (string or {"type": "function", "function": {"name": "..."}}).
+        from core.llm.tool_choice import normalize as _normalize_tool_choice
+
+        tc_val = _normalize_tool_choice("glm", tool_choice)
 
         oai_tools = _tools_to_chat_completions(tools)
         oai_tools.append(_GLM_NATIVE_WEB_SEARCH)

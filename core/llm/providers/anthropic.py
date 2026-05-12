@@ -479,9 +479,11 @@ class ClaudeAgenticAdapter:
         if self._client is None:
             self._client = get_async_anthropic_client(api_key)
 
-        # Anthropic tool_choice is always a dict
-        if isinstance(tool_choice, str):
-            tool_choice = {"type": tool_choice}
+        # GAP-T1 — normalize cross-provider tool_choice into the Anthropic
+        # dict shape ({"type": "auto"|"any"|"tool"|"none", "name"?: ...}).
+        from core.llm.tool_choice import normalize as _normalize_tool_choice
+
+        tool_choice = _normalize_tool_choice("anthropic", tool_choice) or {"type": "auto"}
 
         api_tools = [{k: v for k, v in t.items() if k in _API_ALLOWED_KEYS} for t in tools]
 
