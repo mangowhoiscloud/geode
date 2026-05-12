@@ -28,6 +28,62 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.94.0] — 2026-05-12
+
+### Added
+
+- **OpenAI HTML data-URL guard — GAP-17.** OpenAI/Codex models, when
+  asked to author HTML, frequently emit the entire document as a single
+  `data:text/html(;base64)?,...` URL meant to be pasted into a browser's
+  address bar — a shape that silently breaks GEODE's downstream
+  consumers (slide build, report PDF, artifact archiving) and inflates
+  `output_tokens` 30–50% from base64 overhead.
+  - Primary guard: `core/agent/system_prompt._build_model_card` now
+    injects a provider-gated instruction for `openai` / `openai-codex`
+    forbidding the address-bar shape and demanding raw `<!DOCTYPE html>`
+    source. Anthropic / GLM cards are unchanged — they do not exhibit
+    this drift.
+  - Safety net: new `core/llm/postprocess/html_output.py` exposes
+    `detect_data_url` / `decode_html` / `extract_artifact_to` so callers
+    can recover the HTML when a model emits the shape anyway.
+    Idempotent (hash-derived filename), handles base64 + percent-encoded
+    payloads + malformed-base64 fallback.
+  - 18 regression tests: `tests/test_html_output_guard.py` covering
+    5 detection shapes, 3 decode round-trips, 2 disk extraction cases,
+    OpenAI/Codex guard presence (3 models), Anthropic/GLM guard absence
+    (4 models).
+- **GLM thinking effort gate — GAP-R1.** `GlmAgenticAdapter.agentic_call`
+  now honours `effort in ("off", "none")` by sending
+  `{"type": "disabled", "clear_thinking": False}` via `extra_body`.
+  GLM-5.x / 4.7 ignore the `disabled` value (thinking is compulsory per
+  the upstream contract — harmless) but GLM-4.5 / 4.6 hybrid models
+  honour it and recover the (typically large) reasoning-token cost when
+  the caller asks for cheap, non-thinking output. Any non-off effort
+  keeps the v0.58.0 enabled-with-context-preserve shape. Test:
+  `tests/test_glm_thinking_control.py` (9 cases — 3 hybrid models × off,
+  none alias, 4 non-off efforts, pre-4.5 omission).
+- **OpenAI prompt_cache_key — GAP-A2.** OpenAI's Responses API
+  auto-caches matching prefixes; an optional `prompt_cache_key` routes
+  similar requests to the same cache pool, lifting hit-rate when
+  `(system + tools)` is stable while the user / conversation differs.
+  `OpenAIAgenticAdapter.agentic_call` now derives a 32-hex-char SHA-256
+  key over `(system, sort_keys(tools))` with a `\x00` separator and
+  injects it into `responses.create` kwargs. Token tracking + cost
+  attribution were already wired (`agentic_response.py:251` reads
+  `prompt_tokens_details.cached_tokens`; `token_tracker.py:175` carries
+  per-model `cache_read` pricing), so this PR completes the path.
+  Test: `tests/test_openai_prompt_cache.py` (6 derivation contracts +
+  1 adapter-wiring stub = 7 cases).
+- **Cross-provider tool_choice normalization — GAP-T1.** New
+  `core/llm/tool_choice.py` centralizes the conversion of a canonical
+  `tool_choice` (string / dict / named-tool / `None`) into each
+  provider's native shape — Anthropic dict, OpenAI Responses string-or-flat,
+  GLM Chat Completions nested-function. Replaces 3× inlined conversions
+  in `anthropic.py:482-484`, `openai.py:507`, `glm.py:190` and adds first-class
+  support for named-tool forcing (`{"name": "X"}` → provider-specific shape)
+  and the `required` ↔ `any` keyword alias. Test:
+  `tests/test_tool_choice_normalize.py` (33 cases × 3 providers + edge cases).
+
 ## [0.93.2] — 2026-05-12
 
 ### Added
@@ -65,6 +121,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.93.1] — 2026-05-12
 
 ### Fixed
+
+- **LLM retry policy SOT — GAP-E1.** `OpenAIAdapter._retry_with_backoff`
+  pinned `max_retries=3`, `retry_base_delay=1.0`, `retry_max_delay=30.0`
+  via module-local `_MAX_RETRIES` / `_RETRY_BASE_DELAY` / `_RETRY_MAX_DELAY`
+  constants, ignoring `settings.llm_max_retries` /
+  `settings.llm_retry_base_delay` / `settings.llm_retry_max_delay`.
+  GLM (via `OpenAIAgenticAdapter` inheritance) inherited the same drift.
+  Adapter now leaves these arguments unset so `retry_with_backoff_generic`
+  resolves them lazily from settings — restoring the single source of
+  truth shared with Anthropic. Regression test:
+  `tests/test_retry_policy_sot.py`.
 
 - **Petri seeds flat-layout (G-A1).** Discovery (post-merge of PR #1044):
   `inspect_petri/_seeds/_markdown.py:read_seed_directory` uses
