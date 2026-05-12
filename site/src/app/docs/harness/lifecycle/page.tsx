@@ -38,6 +38,27 @@ export default function Page() {
               <li><strong>SIGHUP</strong>. 설정 재로드 (환경 변수, 모델 레지스트리).</li>
             </ul>
 
+            <h2>Client capability handshake (v0.84+)</h2>
+            <p>
+              Thin CLI가 IPC로 데몬에 연결되는 즉시 <code>client_capability</code> 메시지를 보냅니다.
+              <code>{`{"type": "client_capability", "is_tty": bool, "width": int}`}</code>. 데몬은 이 값을
+              사용해 per-thread Rich Console을 구성합니다. non-TTY 클라이언트에선 ANSI escape와
+              spinner frame이 자동 suppress 됩니다.
+            </p>
+            <pre>{`# core/cli/ipc_client.py
+def _send_client_capability(self) -> None:
+    """Send terminal capability to the daemon."""
+    is_tty = sys.stdin.isatty() and sys.stdout.isatty()
+    width = shutil.get_terminal_size((80, 24)).columns
+    self._send({
+        "type": "client_capability",
+        "is_tty": is_tty,
+        "width": width,
+    })
+
+# core/server/ipc_server/poller.py
+# receives client_capability and stores it per-connection`}</pre>
+
             <h2>ContextVar 배선</h2>
             <p>
               Bootstrap은 현재 세션, 현재 모델, 현재 사용자 프로파일, 현재 훅
@@ -101,6 +122,27 @@ export default function Page() {
               <li><strong>SIGINT</strong> — interrupt current LLM call (<code>UserCancelledError</code> propagates), keep daemon alive</li>
               <li><strong>SIGHUP</strong> — reload config (env vars, model registry)</li>
             </ul>
+
+            <h2>Client capability handshake (since v0.84)</h2>
+            <p>
+              The thin CLI sends a <code>client_capability</code> message to the daemon immediately on connect:
+              <code>{`{"type": "client_capability", "is_tty": bool, "width": int}`}</code>. The daemon
+              uses those values to build a per-thread Rich Console, suppressing ANSI escapes and spinner
+              frames for non-TTY clients.
+            </p>
+            <pre>{`# core/cli/ipc_client.py
+def _send_client_capability(self) -> None:
+    """Send terminal capability to the daemon."""
+    is_tty = sys.stdin.isatty() and sys.stdout.isatty()
+    width = shutil.get_terminal_size((80, 24)).columns
+    self._send({
+        "type": "client_capability",
+        "is_tty": is_tty,
+        "width": width,
+    })
+
+# core/server/ipc_server/poller.py
+# receives client_capability and stores it per-connection`}</pre>
 
             <h2>ContextVar wiring</h2>
             <p>
