@@ -246,12 +246,17 @@ MODEL_CONTEXT_WINDOW: dict[str, int] = {
     # OpenAI reasoning (kept — separate generation)
     "o3":                           200_000,
     "o4-mini":                      200_000,
-    # GLM — verified 2026-04-26 (200K standard across 5.x family)
-    "glm-5.1":                      200_000,
-    "glm-5":                        200_000,
-    "glm-5-turbo":                  200_000,
-    "glm-4.7":                      200_000,
-    "glm-4.7-flash":                200_000,
+    # GLM — re-verified 2026-05-12 against z.ai docs + openrouter (GAP-X1).
+    # All five models share 202_752 tokens of context (z.ai marketing rounds
+    # to "200K"; the precise value matters for the 200K guard's early-trip
+    # margin).  Cloudflare / LM Studio mirrors expose smaller windows
+    # (131_072 / 128k) for their hosted variants — GEODE calls z.ai directly
+    # so the upstream limit applies.
+    "glm-5.1":                      202_752,
+    "glm-5":                        202_752,
+    "glm-5-turbo":                  202_752,
+    "glm-4.7":                      202_752,
+    "glm-4.7-flash":                202_752,
 }
 # fmt: on
 

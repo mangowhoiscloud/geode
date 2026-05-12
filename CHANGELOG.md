@@ -28,6 +28,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **GLM context window precision — GAP-X1.** `MODEL_CONTEXT_WINDOW`
+  rounded all five registered GLM models (`glm-5.1`, `glm-5`,
+  `glm-5-turbo`, `glm-4.7`, `glm-4.7-flash`) to a flat `200_000`-token
+  guard. Re-verification against z.ai docs + openrouter listings (2026-05-12)
+  yields the precise value `202_752` — a +2_752-token delta that the
+  post-call 200K guard was tripping early. Cloudflare / LM Studio
+  deployments expose smaller windows (`131_072` / `128k`) but GEODE calls
+  z.ai directly so the upstream contract applies. Regression test:
+  `tests/test_glm_context_window.py` (6 cases — per-model assertion +
+  family-shared-window invariant). `tests/test_context_monitor.py` fixture
+  for the "200K models skip ceiling" case switched from `glm-5` to
+  `claude-opus-4-5` (exact 200_000) — `glm-5` is no longer exactly 200K.
+
 ### Changed
 
 - **Anthropic agentic_call streaming — GAP-S1.**
