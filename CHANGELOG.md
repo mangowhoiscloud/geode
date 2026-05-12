@@ -30,6 +30,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **GLM thinking effort gate — GAP-R1.** `GlmAgenticAdapter.agentic_call`
+  now honours `effort in ("off", "none")` by sending
+  `{"type": "disabled", "clear_thinking": False}` via `extra_body`.
+  GLM-5.x / 4.7 ignore the `disabled` value (thinking is compulsory per
+  the upstream contract — harmless) but GLM-4.5 / 4.6 hybrid models
+  honour it and recover the (typically large) reasoning-token cost when
+  the caller asks for cheap, non-thinking output. Any non-off effort
+  keeps the v0.58.0 enabled-with-context-preserve shape. Test:
+  `tests/test_glm_thinking_control.py` (9 cases — 3 hybrid models × off,
+  none alias, 4 non-off efforts, pre-4.5 omission).
 - **OpenAI prompt_cache_key — GAP-A2.** OpenAI's Responses API
   auto-caches matching prefixes; an optional `prompt_cache_key` routes
   similar requests to the same cache pool, lifting hit-rate when

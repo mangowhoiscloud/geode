@@ -199,6 +199,15 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
         oai_messages = _convert_messages_to_openai(system, messages)
         failover_models = [model] + [m for m in self.fallback_chain if m != model]
 
+        # GAP-R1 — effort=off / none explicitly disables GLM ``thinking``.
+        # GLM-5.x / 4.7 ignore the ``disabled`` value (thinking is compulsory
+        # per the upstream contract — harmless), but GLM-4.5 / 4.6 hybrid
+        # models honour it and recover the (typically large) reasoning-token
+        # cost when the caller asks for cheap non-thinking output.  Any other
+        # effort value keeps the v0.58.0 enabled-with-context-preserve shape.
+        _thinking_off = effort in ("off", "none")
+        _thinking_type = "disabled" if _thinking_off else "enabled"
+
         async def _do_call(m: str) -> Any:
             # v0.58.0 R2 — GLM ``thinking`` field (passed via ``extra_body``
             # because openai-python's ``ChatCompletion.create`` doesn't know
@@ -209,7 +218,10 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
             # models so the request is accepted.
             local_extra: dict[str, Any] = {}
             if _glm_thinking_supported(m):
-                local_extra["thinking"] = {"type": "enabled", "clear_thinking": False}
+                local_extra["thinking"] = {
+                    "type": _thinking_type,
+                    "clear_thinking": False,
+                }
             return await asyncio.to_thread(
                 client.chat.completions.create,
                 model=m,
