@@ -28,6 +28,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.95.0] — 2026-05-12
+
 ### Fixed
 
 - **GLM context window precision — GAP-X1.** `MODEL_CONTEXT_WINDOW`
