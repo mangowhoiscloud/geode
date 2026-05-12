@@ -17,8 +17,8 @@ from core.agent.safety import (
     AUTO_APPROVED_MCP_SERVERS,
     DANGEROUS_TOOLS,
     EXPENSIVE_TOOLS,
-    SAFE_BASH_PREFIXES,
     WRITE_TOOLS,
+    is_bash_command_read_only,
 )
 from core.ui.console import console
 
@@ -548,16 +548,17 @@ class ApprovalWorkflow:
     # -----------------------------------------------------------------
 
     def is_bash_auto_approved(self, command: str) -> bool:
-        """Check if a bash command can skip HITL approval."""
+        """Check if a bash command can skip HITL approval.
+
+        Auto-approves when HITL is fully open (level ≤ 1), the user explicitly
+        marked `run_bash` / category `bash` always-allowed, or the command is
+        a read-only pipeline (see :func:`is_bash_command_read_only`).
+        """
         if self._hitl_level <= 1:
             return True
         if "bash" in self._always_approved_categories or "run_bash" in self._always_approved_tools:
             return True
-        # Safe read-only commands
-        cmd_stripped = command.strip()
-        _UNSAFE_CHARS = frozenset(">|;")
-        has_unsafe_chars = any(c in command for c in _UNSAFE_CHARS)
-        return not has_unsafe_chars and any(cmd_stripped.startswith(p) for p in SAFE_BASH_PREFIXES)
+        return is_bash_command_read_only(command)
 
     # -----------------------------------------------------------------
     # Batch cost approval (used by ToolCallProcessor)
