@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+/* ===== GEODE Editorial — warm paper, restrained type, layer-aware ===== */
+
+@theme inline {
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-fira-code);
+  --radius-lg: 0.75rem;
+}
+
+/* Display font for headings — kept; new pages override at the section level */
+h1, h2 {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+}
+
+:root {
+  /* GEODE Editorial — geode mineral palette
+     Identity: amethyst (artifact accent) + citrine (line accent),
+     the two minerals most often found inside an actual geode cavity.
+     Deliberately distinct from Anthropic terracotta and from the
+     cyan/pink/indigo/gold/green/purple/coral palette already in use
+     by the DAG SVGs of inner sections. */
+
+  --paper:        #181816;   /* warm dark stone surface */
+  --paper-2:      #23211F;   /* elevated card, more visible than before */
+  --paper-deep:   #0E0E0C;   /* deepest code block */
+
+  --ink:          #EDE7DA;   /* primary text — bumped for legibility */
+  --ink-1:        #DDD3BE;   /* headings */
+  --ink-2:        #B5AC97;   /* body — brighter so prose does not fade */
+  --ink-3:        #807665;   /* captions, metadata */
+
+  --rule:         #3A342D;   /* hairline, slightly more visible */
+  --rule-soft:    #2A2520;
+
+  --acc-artifact: #A573E8;   /* AMETHYST — OS / artifact / runtime / model */
+  --acc-line:     #D5B27A;   /* CITRINE — scaffold / line / process / CI */
+  --acc-soft:     #C9A4F0;   /* amethyst hover */
+
+  --code-bg:      #0E0E0C;
+  --code-text:    #DDD3BE;
+  --code-string:  #D5B27A;   /* citrine for strings, kindred to line accent */
+
+  /* Legacy Deep Sea palette — retained for inner sections not yet migrated.
+     New work targets the GEODE Editorial tokens above. */
+  --sea-abyss: #040810;
+  --sea-deep: #0B1628;
+  --sea-mid: #0F1F3A;
+  --sea-upper: #122448;
+  --sea-surface: #142D52;
+
+  --glow-indigo: #818CF8;
+  --glow-teal: #4ECDC4;
+  --glow-pink: #F4B8C8;
+  --glow-gold: #F5C542;
+  --glow-green: #34D399;
+  --glow-purple: #C084FC;
+  --glow-coral: #E87080;
+  --glow-blue: #60A5FA;
+
+  --text-primary: #F0F0FF;
+  --text-secondary: #8B9CC0;
+  --text-muted: #5A6A8A;
+}
+
+/* Selection */
+::selection {
+  background: rgba(129, 140, 248, 0.3);
+  color: #F0F0FF;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(129, 140, 248, 0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(129, 140, 248, 0.3); }
+
+/* Smooth scroll */
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== Keyframes ===== */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes drift {
+  0% { transform: translateX(0) translateY(0); }
+  33% { transform: translateX(10px) translateY(-5px); }
+  66% { transform: translateX(-5px) translateY(5px); }
+  100% { transform: translateX(0) translateY(0); }
+}
+
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-drift { animation: drift 20s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 4s ease-in-out infinite; }
+
+@keyframes orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-orbit { animation: orbit 6s linear infinite; }
+
+@keyframes flow-dash {
+  from { stroke-dashoffset: 20; }
+  to { stroke-dashoffset: 0; }
+}
+.animate-flow { animation: flow-dash 0.8s linear infinite; }
+
+@keyframes particle-life {
+  0% { opacity: 0; }
+  6% { opacity: 0.9; }
+  75% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+@keyframes radar-expand {
+  0% { transform: scale(0); opacity: 0; }
+  20% { opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-radar-expand {
+  animation: radar-expand 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: center;
+}
+
+/* Noise texture overlay */
+.noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.02;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* SVG node gradient for depth effect */
+.svg-node-gradient {
+  stop:first-child { stop-color: #0F1525; }
+  stop:last-child { stop-color: #080E1A; }
+}
+
+/* (Removed: .dark-panel, .mascot-inset — transitional utilities for the
+   warm-paper substrate. Single warm-dark substrate replaces them.) */

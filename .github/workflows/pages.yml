@@ -1,0 +1,71 @@
+name: Deploy site to GitHub Pages
+
+# Builds the Next.js static export under `site/` and deploys it to GitHub
+# Pages. Site URL after deploy: https://mangowhoiscloud.github.io/geode/
+#
+# Triggers on changes to `site/**` or this workflow only — Python source
+# changes do not redeploy the site.
+#
+# Prerequisite: enable Pages once via repo Settings → Pages → Source =
+# "GitHub Actions". The deploy action handles the rest.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build (Next.js static export)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Sync GEODE stats into site SOT
+        run: npm run sync-stats
+        env:
+          GEODE_REPO: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build static export
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/out
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

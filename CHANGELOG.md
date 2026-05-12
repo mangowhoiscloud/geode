@@ -28,6 +28,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Public site at `site/` — GEODE Pages deploy.** Next.js 16 static
+  export integrated into the repo at `site/`. Builds and deploys to
+  GitHub Pages at `https://mangowhoiscloud.github.io/geode/` on push to
+  `main`.
+  - Routes: `/portfolio` (case-study narrative), `/docs` (28 reference
+    pages — architecture, runtime · LLM / tools / memory, harness,
+    verification, plugins, reference), `/about`, `/works/reode`.
+  - Single source of truth: `site/src/data/geode/sot.ts` — auto-synced
+    from this repo's `pyproject.toml` + `core/` + `plugins/` filesystem
+    counts + `CHANGELOG.md` release count via
+    `site/scripts/sync-stats.mjs`. The site cannot advertise a version
+    different from what `pyproject.toml` claims.
+  - Workflow: `.github/workflows/pages.yml` (Next.js build → Pages
+    artifact → official `actions/deploy-pages@v4`). Path-filtered to
+    `site/**`, so Python source changes do not redeploy. One-time
+    activation: repo Settings → Pages → Source = "GitHub Actions".
+  - Sourced from the standalone `portfolio` repo; route-restructured to
+    place GEODE's public surfaces under one tree (basePath `/portfolio`
+    → `/geode`, `/geode` page → `/portfolio`, `/geode/docs` → `/docs`,
+    root landing → `/about`, `/reode` → `/works/reode`).
+  - Master neologism locked: **self-hosting agent harness** (analogue
+    of self-hosting compiler — the runtime and the build line share the
+    same primitives). Defined once at `/geode/portfolio` after the
+    hero; every chapter below refers without redefining.
+
 ## [0.95.0] — 2026-05-12
 
 ### Fixed
