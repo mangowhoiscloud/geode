@@ -28,6 +28,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`run_bash` 의 read-only pipeline auto-approve.** 기존 `is_bash_auto_approved`
+  가 pipe (`|`) 자체를 무조건 unsafe 로 판정해 `find ~/x -type f | sed 's/…/…/'
+  | head -200` 같은 표준 read-only 체인이 매번 HITL approval 요구. 이제
+  `SAFE_BASH_PIPELINE_STAGES` (head/tail/wc/sort/uniq/cut/tr/grep/rg/cat/
+  less/more/sed/awk/jq/yq/column/fold/nl) 를 추가해 — 첫 stage 가 기존
+  `SAFE_BASH_PREFIXES` 매치 + 이후 stage 들이 모두 pipeline-safe 면 통과.
+  `tee` 는 by-design write 라 명시적 제외. `sed -i` / `--in-place` 도 별도
+  reject. 위 외 — `>`, `>>`, `;`, `&`, backtick, `$(...)`, `<(...)`, `>(...)`
+  는 여전히 hard reject. 정적 helper `core.agent.safety.is_bash_command_read_only`
+  로 추출 — `ApprovalController` 와 테스트가 같은 함수 호출해 drift 방지.
+  레퍼런스: `claude-code` settings.json 의 `permissions.allow:
+  ["Bash(find:*)", …]` per-command 글로브 + Codex CLI sandbox 의 read-only
+  stream filter 정책. 회귀 — `tests/test_bash_safe_prefix.py` 35 cases (12
+  신규 pipeline + sed -i / process subst / background / empty stage).
+
 ### Infrastructure
 
 - **Docs CHANGELOG full sync plus three outdated patches.**
