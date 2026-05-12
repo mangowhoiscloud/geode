@@ -122,16 +122,24 @@ class SkillRegistry:
     # -- Internal -----------------------------------------------------------
 
     def _resolve_skill_dirs(self) -> list[Path]:
-        """Return skill directories in 5-priority order (low → high)."""
+        """Return skill directories in 5-priority order (low → high).
+
+        Bundled skills live inside the geode package source tree (resolved
+        via ``__file__``) so we keep that one as a literal join — there is
+        no meaningful runtime constant for "the geode package root". Every
+        other tier is sourced from ``core.paths`` (P3 cleanup).
+        """
+        from core.paths import GLOBAL_SKILLS_DIR, PROJECT_SKILLS_DIR
+
         root = Path(__file__).resolve().parent.parent.parent
         cwd = Path.cwd()
         dirs: list[Path] = [
-            root / ".geode" / "skills",  # 1. Bundled (GEODE package)
-            Path.home() / ".geode" / "skills",  # 2. User global
-            cwd / ".geode" / "skills",  # 3. Project local (CWD)
+            root / ".geode" / "skills",  # 1. Bundled (GEODE package source tree)
+            GLOBAL_SKILLS_DIR,  # 2. User global (~/.geode/skills)
+            cwd / PROJECT_SKILLS_DIR,  # 3. Project local ({cwd}/.geode/skills)
             cwd / "skills",  # 4. Project flat
         ]
-        dirs.extend(self._extra_dirs)  # 4. Extra
+        dirs.extend(self._extra_dirs)  # 5. Extra
         return dirs
 
     @staticmethod

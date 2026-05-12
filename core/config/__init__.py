@@ -295,7 +295,9 @@ def _resolve_provider(model: str) -> str:
 # Model Policy — allowlist / denylist governance (.geode/model-policy.toml)
 # ---------------------------------------------------------------------------
 
-MODEL_POLICY_PATH = Path(".geode") / "model-policy.toml"
+# P3 (v0.95.x) — single source of truth in `core.paths`; kept as a module-level
+# re-export for callers that import `MODEL_POLICY_PATH` from `core.config`.
+from core.paths import PROJECT_MODEL_POLICY as MODEL_POLICY_PATH  # noqa: E402
 
 
 @dataclass
@@ -343,7 +345,8 @@ def is_model_allowed(model: str, policy: ModelPolicy | None = None) -> bool:
 # Routing Config — per-node model routing (.geode/routing.toml)
 # ---------------------------------------------------------------------------
 
-ROUTING_CONFIG_PATH = Path(".geode") / "routing.toml"
+# P3 (v0.95.x) — re-export from `core.paths` (SoT).
+from core.paths import PROJECT_ROUTING_CONFIG as ROUTING_CONFIG_PATH  # noqa: E402
 
 _routing_config_cache: RoutingConfig | None = None
 
