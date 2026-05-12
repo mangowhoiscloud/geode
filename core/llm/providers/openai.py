@@ -30,10 +30,12 @@ T = TypeVar("T", bound="BaseModel")
 
 log = logging.getLogger(__name__)
 
-# OpenAI retryable errors
-_MAX_RETRIES = 3
-_RETRY_BASE_DELAY = 1.0
-_RETRY_MAX_DELAY = 30.0
+# Retry policy values (max_retries / retry_base_delay / retry_max_delay) are
+# resolved lazily from ``core.config.settings.llm_*`` inside
+# ``retry_with_backoff_generic`` (fallback.py).  Keeping a single source of
+# truth ensures runtime ``settings.llm_max_retries`` tuning reaches every
+# provider — previously OpenAI/GLM passed module-local constants that pinned
+# them to ``3`` regardless of configuration.
 
 # Default OpenAI model — from config.py single source of truth
 DEFAULT_OPENAI_MODEL = OPENAI_PRIMARY
@@ -360,9 +362,6 @@ class OpenAIAdapter:
             billing_message=(
                 "OpenAI API billing/credit error. Check your OpenAI account billing settings."
             ),
-            max_retries=_MAX_RETRIES,
-            retry_base_delay=_RETRY_BASE_DELAY,
-            retry_max_delay=_RETRY_MAX_DELAY,
             provider_label="OpenAI",
         )
 
@@ -503,8 +502,11 @@ class OpenAIAgenticAdapter:
             log.warning("%s circuit breaker is OPEN, skipping call", self.provider_name)
             return None
 
-        # Responses API tool_choice is a string
-        tc_val = tool_choice.get("type", "auto") if isinstance(tool_choice, dict) else tool_choice
+        # GAP-T1 — normalize cross-provider tool_choice into the Responses API
+        # shape (string or {"type": "function", "name": "..."}).
+        from core.llm.tool_choice import normalize as _normalize_tool_choice
+
+        tc_val = _normalize_tool_choice("openai", tool_choice)
 
         # Build tools: function tools + native hosted tools (dedup)
         oai_tools: list[dict[str, Any]] = _tools_to_openai(tools)
