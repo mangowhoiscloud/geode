@@ -1,25 +1,25 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Automation (L4.5) — GEODE Docs" };
+export const metadata = { title: "Automation — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="runtime/automation"
-      title="Automation (L4.5 Feedback Loop)"
-      titleKo="자동화 (L4.5 피드백 루프)"
-      summary="Drift detection, model promotion, expert panel voting. The half-layer between agent and runtime that keeps the system improving over time."
-      summaryKo="drift 감지, 모델 프로모션, 전문가 패널 투표. 시간이 지나면서 시스템이 계속 개선되도록 에이전트와 런타임 사이에 자리한 0.5 계층."
+      title="Automation Sidecar"
+      titleKo="자동화 사이드카"
+      summary="Drift detection, model promotion, expert panel voting. The sidecar between agent and runtime that keeps the system improving over time."
+      summaryKo="drift 감지, 모델 프로모션, 전문가 패널 투표. 시간이 지나면서 시스템이 계속 개선되도록 에이전트(L4)와 런타임(L2) 사이에 자리한 사이드카."
     >
       <Bi
         ko={
           <>
-            <h2>왜 L4.5인가</h2>
+            <h2>왜 사이드카인가</h2>
             <p>
-              에이전트(L4)는 실행합니다. 런타임(L2)은 인프라를 제공합니다. L4.5는
-              결과를 관찰하고 그 아래 런타임을 회전시키는 메타 계층입니다. 더 나은
-              모델을 승격시키고, drift된 모델을 deprecate하고, 전문가 피드백을
-              수집합니다.
+              에이전트(L4)는 실행합니다. 런타임(L2)은 인프라를 제공합니다. Automation은
+              두 계층 사이에서 결과를 관찰하고 그 아래 런타임을 회전시키는 사이드카입니다.
+              더 나은 모델을 승격시키고, drift된 모델을 deprecate하고, 전문가 피드백을
+              수집합니다. 4-계층 스택 자체에는 포함되지 않습니다.
             </p>
 
             <h2>파일</h2>
@@ -64,12 +64,13 @@ export default function Page() {
         }
         en={
           <>
-            <h2>Why L4.5</h2>
+            <h2>Why a sidecar</h2>
             <p>
-              Agents (L4) execute. Runtime (L2) provides infrastructure. L4.5 is
-              the meta layer that watches outcomes and rotates the underlying
-              runtime — promoting better models, deprecating drifted ones,
-              collecting expert feedback.
+              The agent (L4) executes. The runtime (L2) provides infrastructure.
+              Automation is the sidecar that sits between them, watching outcomes
+              and rotating the underlying runtime: promoting better models,
+              deprecating drifted ones, and collecting expert feedback. It is
+              not part of the 4-layer stack itself.
             </p>
 
             <h2>Files</h2>
