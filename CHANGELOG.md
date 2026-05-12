@@ -28,6 +28,83 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Sandbox tilde expansion (`~` / `~/`) — silent-fail bug.**
+  `core/tools/sandbox.py:validate_path()` advertised that bare `~` and `~/`
+  were "expanded by Python, not shell" (`check_shell_expansion` allowed
+  them through), but the actual `os.path.expanduser()` call was missing.
+  Result: paths like `~/workspace/resume/common` were joined against the
+  project root verbatim, producing `/<project>/~/workspace/...` and a
+  misleading `Not a directory` error instead of the proper
+  `expanded-path-outside-sandbox` permission error. Surfaced by `geode
+  serve` when an agent attempted `glob_files(path="~/workspace/...")`.
+  Fix: call `os.path.expanduser(path_str)` immediately before `Path()`
+  construction in `validate_path()`, and `path.expanduser()` before
+  `.resolve()` in `add_working_directory` / `remove_working_directory`.
+  Regression: `tests/test_sandbox.py::TestTildeExpansion` (4 cases —
+  bare `~`, `~/`, sandbox-expanded resolution, working-dir registration).
+- **OpenAI OAuth plan tier auto-reconcile.** `chatgpt_plan_type` was
+  extracted from the JWT once during `/login` and frozen into
+  `Plan.subscription_tier`. If the user upgraded their ChatGPT plan
+  (Plus → Pro/Max/etc.) between logins, the stored tier kept showing
+  the old value while the JWT itself had the new claim. `load_auth_toml`
+  now calls `reconcile_plan_tier_from_stored_jwt()` after hydration,
+  which re-decodes the access_token's claims and updates
+  `Plan.subscription_tier` + profile metadata in place when a drift is
+  found. Drift events log at INFO so the change is visible without
+  forcing a re-login (a fresh `/login` still produces a brand-new JWT
+  with the current tier — this is the in-between fix).
+- **OpenAI OAuth — JWT decode DRY.** Extracted the inline base64+JSON
+  decode block in `login_openai()` into a reusable `_decode_jwt_claims`
+  helper; `_plan_type_from_token` builds on top so the reconciliation
+  path and login path can't drift apart.
+
+### Added
+
+- **OAuth login UX — press Enter to open the verification URL.**
+  `EventRenderer._handle_oauth_login_started` now prints
+  `Press [Enter] to open the URL in your browser` and spawns a daemon
+  thread that calls `webbrowser.open(verification_uri)` on the first
+  stdin line. Skipped automatically when stdin is not a TTY (piped
+  invocations stay quiet). Pattern grounded from Claude Code's OAuth
+  start prompt (`/Users/.../claude-code-ref/src/auth/providers.ts`).
+
+### Infrastructure
+
+- **Docs restructure (F-series) plus Context system page.**
+  - **Chapter rename**. "LLM 파이프라인" to "Runtime". "왜 이렇게" to "Why".
+  - **Petri folded into Verification**. The five Petri pages (overview /
+    scenarios / run / judge-dimensions / bundle) now live under chapter
+    06 Verification next to guardrails, biasbuster, and observability.
+  - **LangSmith page deleted**. The deprecation notice page is now gone
+    entirely. References to LangSmith were already replaced by the
+    native four-lens stack in v0.89.0.
+  - **Observability moved and expanded**. From `/docs/ops/observability`
+    to `/docs/verification/observability`. Body expanded with per-lens
+    structure: hook 14-category table, RunLog JSONL schema, audit
+    diagnostics CallDiagnostic dataclass, Petri integration, usage
+    ledger, OpenTelemetry / inspect viewer adapters, why-LangSmith-was-
+    removed rationale.
+  - **Context System page new**. `/docs/runtime/context`. Single
+    reference for the four mechanisms: 5-tier memory hierarchy (integer
+    tiers 0 to 4, no fractional tiers), 5-layer prompt assembly with
+    `AssembledPrompt` dataclass, 200K absolute token guard plus 80 / 95
+    percent phases plus 25K MCP cap, Clean Context anchoring prevention,
+    cache interface, comparison with Claude Code / LangChain / LlamaIndex.
+  - **Fractional tier numbers retired**. `Automation (L4.5)` renamed to
+    `Automation` (or `Automation Sidecar`); body now describes it as a
+    sidecar between L2 Runtime and L4 Agent rather than as a tier.
+    `4.5-Tier`, `Memory(4.5T)`, and a `Tier 0.5` reference in portfolio
+    components likewise integerized.
+  - **Changelog page synced**. Highlight reel now spans v0.65 through
+    v0.95 (Anthropic agentic_call streaming, GLM 202_752 correction,
+    OpenAI HTML guard, GEODE_PERSONA, XML sandwich, 4-layer observability,
+    Petri scenarios, auto-escalation removal, LangSmith removal,
+    cold-start arc, lifecycle to wiring rename, geode audit CLI).
+  - Net: 50 pages, 11 chapters (down from 12). All bilingual.
+
+
 ### Infrastructure
 
 - **Docs sync to v0.95 codebase facts plus Petri scenarios page.**

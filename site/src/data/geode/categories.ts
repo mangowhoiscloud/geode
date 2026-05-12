@@ -126,7 +126,7 @@ export const geodeCategories: CategoryData[] = [
   {
     id: "automation",
     icon: "🔄",
-    title: "L4.5 Automation",
+    title: "Automation Sidecar",
     postsCount: 4,
     statusKo: "Trigger Manager + Feedback Loop + Expert Panel",
     statusEn: "Trigger Manager + Feedback Loop + Expert Panel",

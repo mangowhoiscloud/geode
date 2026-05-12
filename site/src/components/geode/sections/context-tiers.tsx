@@ -98,9 +98,9 @@ export function ContextTiersSection() {
           variant="quote"
           labelColor="#F5C542"
           title="Context Hierarchy"
-          subtitle={t(locale, "3-Tier 경로 + 4.5-Tier 런타임 메모리 + 200K Ceiling", "3-Tier Paths + 4.5-Tier Runtime Memory + 200K Ceiling")}
+          subtitle={t(locale, "3-Tier 경로 + 5-Tier 런타임 메모리 + 200K Ceiling", "3-Tier Paths + 5-Tier Runtime Memory + 200K Ceiling")}
           description={t(locale,
-            "Claude Code의 ~/.claude/ 패턴을 참조하여 사용자 데이터와 프로젝트 데이터를 3계층으로 분리합니다. 1M 컨텍스트 모델에서도 ABSOLUTE_TOKEN_CEILING(200K)을 적용하고, 80% 도달 시 2-stage 압축(요약 → compact)으로 세션을 보존합니다. v0.45에서 User Preferences(Tier 0.5)를 추가하여 preferences.json이 시스템 프롬프트에 자동 주입됩니다.",
+            "Claude Code의 ~/.claude/ 패턴을 참조하여 사용자 데이터와 프로젝트 데이터를 3계층으로 분리합니다. 1M 컨텍스트 모델에서도 ABSOLUTE_TOKEN_CEILING(200K)을 적용하고, 80% 도달 시 2-stage 압축(요약 → compact)으로 세션을 보존합니다. v0.45에서 User Preferences(Tier 1)를 추가하여 preferences.json이 시스템 프롬프트에 자동 주입됩니다.",
             "User and project data separated into 3 tiers, following Claude Code's ~/.claude/ pattern. Even on 1M context models, ABSOLUTE_TOKEN_CEILING (200K) is enforced. At 80%, 2-stage compression (summarize → compact) preserves sessions. v0.45 added User Preferences (Tier 0.5), auto-injecting preferences.json into the system prompt."
           )}
         />

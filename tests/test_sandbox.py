@@ -278,6 +278,73 @@ class TestValidatePath:
 
 
 # ---------------------------------------------------------------------------
+# Tilde expansion (G4 — bare ~ / ~/ expansion regression coverage)
+# ---------------------------------------------------------------------------
+
+
+class TestTildeExpansion:
+    """`~` and `~/` must be expanded by Python before path construction.
+
+    Regression for sandbox hardening: `check_shell_expansion` allows bare
+    `~` and `~/` through, but `validate_path` previously joined the literal
+    string against project root (`/<root>/~/foo`) instead of expanding it.
+    The result was a misleading "Not a directory" error for `~/...` paths.
+    """
+
+    def test_bare_tilde_expands_to_home(self, tmp_path: Path):
+        """`~` alone should expand to $HOME (then sandbox-reject if outside)."""
+        result = sandbox.validate_path("~", write=False)
+        # $HOME is outside tmp_path sandbox → permission error,
+        # but the error must NOT be "Not a directory" (= literal `~` join).
+        assert isinstance(result, dict)
+        assert "~" not in result.get("error", "")
+
+    def test_tilde_slash_expands_to_home(self, tmp_path: Path):
+        """`~/foo` should expand to $HOME/foo, not `/<root>/~/foo`."""
+        result = sandbox.validate_path("~/some_path", write=False)
+        # Same sandbox-rejection reasoning as above.
+        assert isinstance(result, dict)
+        assert "~" not in result.get("error", "")
+
+    def test_tilde_path_resolvable_when_added_to_sandbox(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """`~/<dir>` should validate when its expanded path is added as a working dir."""
+        # Use tmp_path as a fake HOME so the expanded path stays sandboxed.
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        target_dir = fake_home / "resume"
+        target_dir.mkdir()
+        target_file = target_dir / "common.md"
+        target_file.write_text("content")
+
+        monkeypatch.setenv("HOME", str(fake_home))
+
+        # Without expansion, "~/resume/common.md" used to become
+        # /<sandbox>/~/resume/common.md → "Not a directory".
+        # With expansion, it becomes $HOME/resume/common.md → still outside
+        # tmp_path sandbox (the sandbox-root fixture remaps project root to
+        # tmp_path, but fake_home is tmp_path/home so it IS inside).
+        result = sandbox.validate_path("~/resume/common.md", write=False)
+        assert isinstance(result, Path), f"expected Path, got dict: {result}"
+        assert result == target_file.resolve()
+
+    def test_add_working_directory_expands_tilde(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """add_working_directory should expand `~` before resolving."""
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        extra = fake_home / "extra"
+        extra.mkdir()
+
+        monkeypatch.setenv("HOME", str(fake_home))
+        sandbox.add_working_directory(Path("~/extra"))
+
+        assert extra.resolve() in sandbox._additional_dirs
+
+
+# ---------------------------------------------------------------------------
 # OSError defense (sandbox hardening v0.47.2)
 # ---------------------------------------------------------------------------
 

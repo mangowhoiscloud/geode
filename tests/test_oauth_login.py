@@ -159,3 +159,163 @@ class TestCmdLogin:
 
         assert "/login" in COMMAND_MAP
         assert COMMAND_MAP["/login"] == "login"
+
+
+def _build_fake_jwt(claims: dict) -> str:
+    """Construct a JWT-shaped string with ``claims`` as the payload.
+
+    Signature is bogus — ``_decode_jwt_claims`` does no verification.
+    """
+    import base64
+    import json
+
+    header = base64.urlsafe_b64encode(b'{"alg":"none","typ":"JWT"}').rstrip(b"=").decode()
+    body = (
+        base64.urlsafe_b64encode(json.dumps(claims, separators=(",", ":")).encode())
+        .rstrip(b"=")
+        .decode()
+    )
+    return f"{header}.{body}.signature"
+
+
+class TestJWTDecode:
+    """`_decode_jwt_claims` + `_plan_type_from_token` — regression for the
+    v0.95.x plan tier reconciliation path."""
+
+    def test_decode_valid_jwt(self):
+        from core.auth.oauth_login import _decode_jwt_claims
+
+        token = _build_fake_jwt(
+            {
+                "https://api.openai.com/auth": {"chatgpt_plan_type": "pro"},
+                "https://api.openai.com/profile": {"email": "u@example.com"},
+                "exp": 9999999999,
+            }
+        )
+        claims = _decode_jwt_claims(token)
+        assert claims["exp"] == 9999999999
+        assert claims["https://api.openai.com/auth"]["chatgpt_plan_type"] == "pro"
+
+    def test_decode_malformed_returns_empty(self):
+        from core.auth.oauth_login import _decode_jwt_claims
+
+        # Fewer than 2 dot-separated parts → early return.
+        assert _decode_jwt_claims("not-a-jwt") == {}
+        assert _decode_jwt_claims("") == {}
+        # 2+ parts but the payload section is not valid base64+JSON.
+        assert _decode_jwt_claims("garbage.payload.sig") == {}
+        assert _decode_jwt_claims("only.one") == {}
+
+    def test_plan_type_extraction(self):
+        from core.auth.oauth_login import _plan_type_from_token
+
+        token = _build_fake_jwt({"https://api.openai.com/auth": {"chatgpt_plan_type": "max"}})
+        assert _plan_type_from_token(token) == "max"
+
+    def test_plan_type_missing_claim(self):
+        from core.auth.oauth_login import _plan_type_from_token
+
+        token = _build_fake_jwt({"some_other_claim": "x"})
+        assert _plan_type_from_token(token) == ""
+
+
+class TestPlanTierReconcile:
+    """`reconcile_plan_tier_from_stored_jwt` — drift detection + update."""
+
+    def test_no_drift_returns_none(self, tmp_path: Path, monkeypatch):
+        from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
+        from core.auth.plan_registry import get_plan_registry, reset_plan_registry
+        from core.auth.plans import Plan, PlanKind
+        from core.auth.profiles import AuthProfile, CredentialType
+        from core.wiring import container as container_mod
+
+        _isolate(tmp_path, monkeypatch)
+        reset_plan_registry()
+
+        registry = get_plan_registry()
+        registry.add(
+            Plan(
+                id="openai-codex-geode",
+                provider="openai-codex",
+                kind=PlanKind.OAUTH_BORROWED,
+                display_name="OpenAI Codex (GEODE OAuth)",
+                base_url="https://chatgpt.com/backend-api/codex",
+                subscription_tier="prolite",
+            )
+        )
+
+        from core.auth.profiles import ProfileStore
+
+        store = ProfileStore()
+        token = _build_fake_jwt({"https://api.openai.com/auth": {"chatgpt_plan_type": "prolite"}})
+        store.add(
+            AuthProfile(
+                name="openai-codex-geode:user",
+                provider="openai-codex",
+                credential_type=CredentialType.OAUTH,
+                key=token,
+                plan_id="openai-codex-geode",
+            )
+        )
+        monkeypatch.setattr(container_mod, "ensure_profile_store", lambda: store)
+
+        assert reconcile_plan_tier_from_stored_jwt() is None
+
+    def test_drift_reconciles_and_returns_pair(self, tmp_path: Path, monkeypatch):
+        from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
+        from core.auth.plan_registry import get_plan_registry, reset_plan_registry
+        from core.auth.plans import Plan, PlanKind
+        from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
+        from core.wiring import container as container_mod
+
+        _isolate(tmp_path, monkeypatch)
+        reset_plan_registry()
+
+        registry = get_plan_registry()
+        registry.add(
+            Plan(
+                id="openai-codex-geode",
+                provider="openai-codex",
+                kind=PlanKind.OAUTH_BORROWED,
+                display_name="OpenAI Codex (GEODE OAuth)",
+                base_url="https://chatgpt.com/backend-api/codex",
+                subscription_tier="plus",  # stale
+            )
+        )
+
+        store = ProfileStore()
+        token = _build_fake_jwt({"https://api.openai.com/auth": {"chatgpt_plan_type": "max"}})
+        store.add(
+            AuthProfile(
+                name="openai-codex-geode:user",
+                provider="openai-codex",
+                credential_type=CredentialType.OAUTH,
+                key=token,
+                plan_id="openai-codex-geode",
+                metadata={"plan_type": "plus"},
+            )
+        )
+        monkeypatch.setattr(container_mod, "ensure_profile_store", lambda: store)
+
+        result = reconcile_plan_tier_from_stored_jwt()
+        assert result == ("plus", "max")
+        plan = get_plan_registry().get("openai-codex-geode")
+        assert plan is not None
+        assert plan.subscription_tier == "max"
+        # Profile metadata also updated
+        profile = store.get("openai-codex-geode:user")
+        assert profile is not None
+        assert profile.metadata["plan_type"] == "max"
+
+    def test_no_profile_returns_none(self, tmp_path: Path, monkeypatch):
+        from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
+        from core.auth.plan_registry import reset_plan_registry
+        from core.auth.profiles import ProfileStore
+        from core.wiring import container as container_mod
+
+        _isolate(tmp_path, monkeypatch)
+        reset_plan_registry()
+
+        monkeypatch.setattr(container_mod, "ensure_profile_store", lambda: ProfileStore())
+
+        assert reconcile_plan_tier_from_stored_jwt() is None

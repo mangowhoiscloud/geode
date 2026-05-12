@@ -15,6 +15,7 @@ All file tools (Glob, Grep, Edit, Write, ReadDocument) delegate to
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 from pathlib import Path
@@ -77,7 +78,7 @@ _additional_dirs_lock = threading.Lock()
 def add_working_directory(path: Path) -> None:
     """Add a session-scoped working directory to the sandbox allowlist."""
     try:
-        resolved = path.resolve()
+        resolved = path.expanduser().resolve()
     except OSError:
         log.warning("Sandbox: cannot resolve %s, skipping", path)
         return
@@ -90,7 +91,7 @@ def add_working_directory(path: Path) -> None:
 def remove_working_directory(path: Path) -> None:
     """Remove a session-scoped working directory from the sandbox allowlist."""
     try:
-        resolved = path.resolve()
+        resolved = path.expanduser().resolve()
     except OSError:
         log.warning("Sandbox: cannot resolve %s, skipping", path)
         return
@@ -334,7 +335,10 @@ def validate_path(
         if err:
             return err
 
-    # 3. Construct path — resolve relative to project root
+    # 3. Construct path — expand leading ~/~ (Python-side, not shell) then resolve
+    #    relative paths against project root. `check_shell_expansion` already
+    #    rejected `~user`/`~+`/`~-`, so only bare `~` and `~/...` reach here.
+    path_str = os.path.expanduser(path_str)
     path = Path(path_str)
     if not path.is_absolute():
         path = get_project_root() / path
