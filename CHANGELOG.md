@@ -52,6 +52,22 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Documentation
+
+- **Storage hierarchy decision doc** (`docs/architecture/storage-hierarchy.md`).
+  3 frontier harness (Claude Code, Hermes Agent by NousResearch, OpenClaw)
+  의 context / storage 분리 정책 비교 + GEODE 의 `~/.geode/` (user-private)
+  vs `{workspace}/.geode/` (project-bound, team-shareable) 분담 규칙.
+  결정 트리 — credential / cross-project identity / agent operating state
+  / per-project user-private state 는 user-home, 반면 team-shareable rules /
+  skills / 프로젝트별 scheduler / reports 는 project-local. Hermes/OpenClaw
+  의 user-home-only 패턴은 multi-platform messaging context 한정으로 정당화
+  되며, GEODE 는 workspace-bound runtime 이라 Claude Code 의 hybrid 가 더
+  적합. 후속 PR 의 TODO 캐리오버: vestigial constants 3개
+  (`PROJECT_EMBEDDING_CACHE`, `PROJECT_TOOL_OFFLOAD`, `PROJECT_VECTORS_DIR`
+  — writer 없음, `cmd_lifecycle.py` 의 `/clean` 컨슈머에만 등록) 의 정리 +
+  `~/.geode/runs/` 의 `<YYYY-MM>/` bucket + vault TTL 정책.
+
 ### Infrastructure
 
 - **Changelog viewer: entry-level KO / EN toggle plus fallback banner.**
