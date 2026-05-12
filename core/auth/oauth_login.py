@@ -58,6 +58,87 @@ AUTH_STORE_PATH = auth_store_path()
 _GEODE_OPENAI_PLAN_ID = "openai-codex-geode"
 
 
+def _decode_jwt_claims(token: str) -> dict[str, Any]:
+    """Decode the payload section of a (signed) JWT, no verification.
+
+    Used to read OpenAI-issued claims like ``chatgpt_plan_type`` /
+    ``chatgpt_account_id`` / ``email`` from the access_token. The token's
+    signature is the OAuth provider's concern; GEODE only needs the
+    public claims for routing + display.
+    """
+    import base64
+
+    parts = token.split(".")
+    if len(parts) < 2:
+        return {}
+    try:
+        padded = parts[1] + "=" * (-len(parts[1]) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _plan_type_from_token(token: str) -> str:
+    """Extract ``chatgpt_plan_type`` from an OpenAI OAuth access token."""
+    claims = _decode_jwt_claims(token)
+    auth_claim = claims.get("https://api.openai.com/auth", {})
+    if isinstance(auth_claim, dict):
+        plan_type = auth_claim.get("chatgpt_plan_type", "")
+        return str(plan_type) if plan_type else ""
+    return ""
+
+
+def reconcile_plan_tier_from_stored_jwt() -> tuple[str, str] | None:
+    """Re-decode the stored OpenAI OAuth JWT and sync ``subscription_tier``.
+
+    The user's ChatGPT plan can change between logins (Plus → Pro → Max,
+    etc.). The Plan's ``subscription_tier`` is set on login but stays
+    frozen if the user only refreshes their access token via
+    ``refresh_token`` flow. This re-extracts ``chatgpt_plan_type`` from
+    the live JWT and updates both the Plan and the profile metadata.
+
+    Returns ``(old, new)`` tuple if a drift was reconciled, ``None``
+    when no GEODE OAuth profile exists or the tier matches.
+    """
+    try:
+        from core.auth.plan_registry import get_plan_registry
+        from core.wiring.container import ensure_profile_store
+    except Exception:
+        return None
+
+    registry = get_plan_registry()
+    plan = registry.get(_GEODE_OPENAI_PLAN_ID)
+    store = ensure_profile_store()
+    profile = store.get(f"{_GEODE_OPENAI_PLAN_ID}:user") if plan else None
+    if plan is None or profile is None or not profile.key:
+        return None
+
+    fresh = _plan_type_from_token(profile.key)
+    if not fresh:
+        return None
+    stored = plan.subscription_tier or ""
+    if fresh == stored:
+        return None
+
+    plan.subscription_tier = fresh
+    if profile.metadata is not None:
+        profile.metadata["plan_type"] = fresh
+    try:
+        from core.auth.auth_toml import save_auth_toml
+
+        save_auth_toml()
+    except Exception:
+        log.debug("auth.toml persist after tier drift skipped", exc_info=True)
+    log.info(
+        "OpenAI plan tier reconciled from JWT: %s → %s (plan=%s)",
+        stored or "(unset)",
+        fresh,
+        plan.id,
+    )
+    return (stored, fresh)
+
+
 def _migrate_legacy_auth_json_if_present() -> dict[str, Any]:
     """One-shot migration of pre-v0.50.2 ``~/.geode/auth.json``.
 
@@ -314,25 +395,15 @@ def login_openai() -> dict[str, Any]:
     if not access_token:
         raise RuntimeError("Token exchange did not return an access_token")
 
-    # Extract account info from JWT
-    account_id = ""
-    email = ""
-    plan_type = ""
-    try:
-        import base64
-
-        parts = access_token.split(".")
-        if len(parts) >= 2:
-            padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
-            payload = json.loads(base64.urlsafe_b64decode(padded))
-            auth_claim = payload.get("https://api.openai.com/auth", {})
-            profile_claim = payload.get("https://api.openai.com/profile", {})
-            account_id = auth_claim.get("chatgpt_account_id", "")
-            plan_type = auth_claim.get("chatgpt_plan_type", "")
-            email = profile_claim.get("email", "")
-            exp = payload.get("exp", 0)
-    except Exception:
-        exp = 0
+    # Extract account info from JWT (uses _decode_jwt_claims helper —
+    # any decode failure returns {} so the unpacks below resolve to "").
+    payload = _decode_jwt_claims(access_token)
+    auth_claim = payload.get("https://api.openai.com/auth", {}) or {}
+    profile_claim = payload.get("https://api.openai.com/profile", {}) or {}
+    account_id = str(auth_claim.get("chatgpt_account_id", "") or "")
+    plan_type = str(auth_claim.get("chatgpt_plan_type", "") or "")
+    email = str(profile_claim.get("email", "") or "")
+    exp = payload.get("exp", 0) or 0
 
     now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
