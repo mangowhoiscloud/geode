@@ -50,8 +50,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     5 detection shapes, 3 decode round-trips, 2 disk extraction cases,
     OpenAI/Codex guard presence (3 models), Anthropic/GLM guard absence
     (4 models).
+- **Cross-provider tool_choice normalization — GAP-T1.** New
+  `core/llm/tool_choice.py` centralizes the conversion of a canonical
+  `tool_choice` (string / dict / named-tool / `None`) into each
+  provider's native shape — Anthropic dict, OpenAI Responses string-or-flat,
+  GLM Chat Completions nested-function. Replaces 3× inlined conversions
+  in `anthropic.py:482-484`, `openai.py:507`, `glm.py:190` and adds first-class
+  support for named-tool forcing (`{"name": "X"}` → provider-specific shape)
+  and the `required` ↔ `any` keyword alias. Test:
+  `tests/test_tool_choice_normalize.py` (33 cases × 3 providers + edge cases).
 
 ### Fixed
+
+- **LLM retry policy SOT — GAP-E1.** `OpenAIAdapter._retry_with_backoff`
+  pinned `max_retries=3`, `retry_base_delay=1.0`, `retry_max_delay=30.0`
+  via module-local `_MAX_RETRIES` / `_RETRY_BASE_DELAY` / `_RETRY_MAX_DELAY`
+  constants, ignoring `settings.llm_max_retries` /
+  `settings.llm_retry_base_delay` / `settings.llm_retry_max_delay`.
+  GLM (via `OpenAIAgenticAdapter` inheritance) inherited the same drift.
+  Adapter now leaves these arguments unset so `retry_with_backoff_generic`
+  resolves them lazily from settings — restoring the single source of
+  truth shared with Anthropic. Regression test:
+  `tests/test_retry_policy_sot.py`.
 
 - **Petri seeds flat-layout (G-A1).** Discovery (post-merge of PR #1044):
   `inspect_petri/_seeds/_markdown.py:read_seed_directory` uses
