@@ -16,7 +16,13 @@
   <img src="https://img.shields.io/badge/+10_fallback-models-555?style=flat-square" alt="+10 fallback models">
 </p>
 
-[한국어](README.ko.md)
+<p align="center">
+  <a href="https://mangowhoiscloud.github.io/geode/portfolio">Portfolio</a>
+  ·
+  <a href="https://mangowhoiscloud.github.io/geode/docs">Docs</a>
+  ·
+  <a href="README.ko.md">한국어</a>
+</p>
 
 # GEODE v0.89.3 — Long-running Autonomous Execution Harness
 

@@ -107,3 +107,18 @@ docs/progress-report.html
 
 # CI trigger
 /.audit/
+
+# Next.js site (site/) build + install artifacts. The site/ tree itself is
+# tracked; only generated contents are excluded.
+site/node_modules/
+site/.next/
+site/out/
+site/tsconfig.tsbuildinfo
+
+# Un-ignore PNG/HTML inside site/public/ — the root .gitignore blanket
+# rejects *.png and *.html, but the site needs its mascot art + static
+# assets shipped to GitHub Pages.
+!site/public/**/*.png
+!site/public/**/*.html
+!site/public/**/*.svg
+!site/public/**/*.ico
