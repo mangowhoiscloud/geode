@@ -40,9 +40,11 @@ return response.text`}</pre>
                 제거하며, 도구별 pre/post 훅을 적용합니다.
               </li>
               <li>
-                <strong>ErrorRecoveryStrategy</strong>. 도구가 실패했을 때 어떻게
-                할지 결정합니다 (재시도, 에스컬레이션, 중단). 복구 프롬프트를
-                모델에 전달합니다.
+                <strong>ErrorRecoveryStrategy</strong>. 도구가 실패했을 때 재시도
+                또는 명시적 종료 신호 (<code>model_action_required</code>,{" "}
+                <code>user_clarification_needed</code>) 로 분기합니다. v0.90.0에서
+                auto-escalation이 제거되었습니다. 모델이 직접 종료 신호를 emit해야
+                루프가 빠져나갑니다.
               </li>
               <li>
                 <strong>ConvergenceDetector</strong>. 진전 없이 동일 도구를 동일
@@ -63,7 +65,7 @@ return response.text`}</pre>
               <code>build_system_prompt()</code>가 STATIC/DYNAMIC 경계
               마커(<code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>)와 함께 시스템
               프롬프트를 조립합니다. Anthropic 어댑터는 이 마커를 기준으로 프롬프트
-              캐싱을 위해 분할합니다. <a href="/geode/docs/runtime/llm/prompt-caching">프롬프트 캐싱</a>을
+              캐싱을 위해 분할합니다. <a href="/docs/runtime/llm/prompt-caching">프롬프트 캐싱</a>을
               참고하세요.
             </p>
 
@@ -116,9 +118,11 @@ return response.text`}</pre>
                 and applies tool-specific pre/post hooks.
               </li>
               <li>
-                <strong>ErrorRecoveryStrategy</strong> — decides what to do when a
-                tool fails (retry, escalate, abort) and surfaces a recovery prompt
-                to the model.
+                <strong>ErrorRecoveryStrategy</strong> — on tool failure, either
+                retries or yields one of two explicit termination signals
+                (<code>model_action_required</code>, <code>user_clarification_needed</code>).
+                Auto-escalation was removed in v0.90.0; the loop now exits only
+                when the model itself emits a termination signal.
               </li>
               <li>
                 <strong>ConvergenceDetector</strong> — watches for loops that are
@@ -141,7 +145,7 @@ return response.text`}</pre>
               <code>core/agent/system_prompt.py</code> assembles the system prompt
               with a STATIC/DYNAMIC boundary marker (<code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>).
               The Anthropic adapter splits at this marker for prompt caching. See{" "}
-              <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a>.
+              <a href="/docs/runtime/llm/prompt-caching">Prompt Caching</a>.
             </p>
 
             <h2>Hook integration</h2>

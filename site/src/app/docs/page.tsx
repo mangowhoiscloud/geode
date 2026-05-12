@@ -4,16 +4,19 @@ import Link from "next/link";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 import { DOCS_SITEMAP } from "@/lib/geode-docs/sitemap";
 import { useLocale, t } from "@/components/geode/locale-context";
+import { GEODE_SOT } from "@/data/geode/sot";
 
 export default function DocsIndex() {
   const locale = useLocale();
+  const summaryEn = `A general-purpose autonomous execution agent built on LangGraph. v${GEODE_SOT.version}, Python 3.12+, ${GEODE_SOT.modules.core} core + ${GEODE_SOT.modules.plugins} plugins = ${GEODE_SOT.modules.total} modules, ${GEODE_SOT.tests.standard.toLocaleString()} tests, 58 hook events, 61 tools.`;
+  const summaryKo = `LangGraph 기반 범용 자율 실행 에이전트. v${GEODE_SOT.version}, Python 3.12+, core ${GEODE_SOT.modules.core} + plugins ${GEODE_SOT.modules.plugins} = ${GEODE_SOT.modules.total} 모듈, ${GEODE_SOT.tests.standard.toLocaleString()} 테스트, 58 훅, 61 도구.`;
   return (
     <DocsShell
       slug=""
       title="GEODE Documentation"
       titleKo="GEODE 문서"
-      summary="A general-purpose autonomous execution agent built on LangGraph. v0.65.0, Python 3.12+, 223 core + 13 plugins, 4380 tests, 58 hooks, 57 tools."
-      summaryKo="LangGraph 기반 범용 자율 실행 에이전트. v0.65.0, Python 3.12+, core 223 + plugins 13, 4380 테스트, 58 훅, 57 도구."
+      summary={summaryEn}
+      summaryKo={summaryKo}
     >
       <Bi
         ko={
@@ -60,7 +63,7 @@ export default function DocsIndex() {
                 section.pages.length === 1 ? "페이지" : "페이지",
                 section.pages.length === 1 ? "page" : "pages"
               )}
-              {" — "}
+              {" . "}
               {section.pages.slice(0, 3).map((p, i) => (
                 <span key={p.slug}>
                   {i > 0 && ", "}
@@ -80,6 +83,7 @@ export default function DocsIndex() {
             <p>
               모든 섹션은 푸터의 날짜 기준 콘텐츠 완료 상태입니다. 페이지는
               자동 생성된 API 레퍼런스가 아니라 사람이 큐레이팅한 내러티브입니다.
+              메트릭은 GEODE_SOT (`site/src/data/geode/sot.ts`)에서 자동 sync됩니다.
             </p>
 
             <h2>이 문서가 다루지 않는 것</h2>
@@ -95,14 +99,16 @@ export default function DocsIndex() {
             <h2>Status</h2>
             <p>
               All sections are content-complete as of the date in the footer.
-              Pages are hand-curated narrative — no auto-generated API reference.
+              Pages are hand-curated narrative, not an auto-generated API
+              reference. Metrics are auto-synced from GEODE_SOT
+              (<code>site/src/data/geode/sot.ts</code>).
             </p>
 
             <h2>Out of scope</h2>
             <ul>
-              <li>API reference auto-generation (this site is hand-curated narrative)</li>
-              <li>Search index (the sidebar is the navigation surface)</li>
-              <li>Versioned docs (the site reflects the current main branch)</li>
+              <li>API reference auto-generation (this site is hand-curated narrative).</li>
+              <li>Search index (the sidebar is the navigation surface).</li>
+              <li>Versioned docs (the site reflects the current main branch).</li>
             </ul>
           </>
         }
