@@ -28,6 +28,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Sandbox tilde expansion (`~` / `~/`) — silent-fail bug.**
+  `core/tools/sandbox.py:validate_path()` advertised that bare `~` and `~/`
+  were "expanded by Python, not shell" (`check_shell_expansion` allowed
+  them through), but the actual `os.path.expanduser()` call was missing.
+  Result: paths like `~/workspace/resume/common` were joined against the
+  project root verbatim, producing `/<project>/~/workspace/...` and a
+  misleading `Not a directory` error instead of the proper
+  `expanded-path-outside-sandbox` permission error. Surfaced by `geode
+  serve` when an agent attempted `glob_files(path="~/workspace/...")`.
+  Fix: call `os.path.expanduser(path_str)` immediately before `Path()`
+  construction in `validate_path()`, and `path.expanduser()` before
+  `.resolve()` in `add_working_directory` / `remove_working_directory`.
+  Regression: `tests/test_sandbox.py::TestTildeExpansion` (4 cases —
+  bare `~`, `~/`, sandbox-expanded resolution, working-dir registration).
+
 ### Infrastructure
 
 - **Docs sync to v0.95 codebase facts plus Petri scenarios page.**
