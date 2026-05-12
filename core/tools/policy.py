@@ -267,10 +267,9 @@ def load_profile_policy(profile_dir: str | None = None) -> ProfilePolicy:
     import tomllib
     from pathlib import Path
 
-    if profile_dir:
-        pref_path = Path(profile_dir) / "preferences.toml"
-    else:
-        pref_path = Path.home() / ".geode" / "user_profile" / "preferences.toml"
+    from core.paths import GLOBAL_USER_PREFERENCES
+
+    pref_path = Path(profile_dir) / "preferences.toml" if profile_dir else GLOBAL_USER_PREFERENCES
 
     if not pref_path.exists():
         return ProfilePolicy()
