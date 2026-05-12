@@ -54,6 +54,24 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Infrastructure
 
+- **Changelog viewer: entry-level KO / EN toggle plus fallback banner.**
+  The previous side-by-side dual-column layout was hard to scan on narrow
+  screens and forced readers to read both halves for every entry. Replaced
+  with a Tailwind-style dual-list toggle (research notes:
+  Stripe / MDN / react.dev / Tailwind / Cloudflare).
+  - Per-entry pill at top right: `KO` / `EN`. Defaults to page locale.
+    Only rendered when both languages are detected in the entry.
+  - Mono-lingual entries: no toggle. When the requested language is
+    absent, a small amber Stripe-style banner notes the absence
+    ("이 entry는 영어 원문만 작성됐습니다" or the EN equivalent).
+  - Top sticky nav gains a 한국어 / English page-locale switch on the
+    right end. Switching globally changes the default for every entry.
+  - Detection logic unchanged (Hangul / Latin ratio per markdown block).
+    Code fences and short / symbol-only blocks live in both halves.
+
+
+### Infrastructure
+
 - **AGENTS.md at repo root.** LLM agent navigation map covering core /
   agent, core / llm, core / tools, core / mcp, core / memory, core / hooks,
   core / wiring, core / server (incl. client_capability handshake),
