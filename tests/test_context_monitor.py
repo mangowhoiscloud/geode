@@ -165,12 +165,19 @@ class TestCheckContext:
         assert not metrics.is_ceiling_exceeded
 
     def test_ceiling_not_triggered_for_200k_model(self):
-        """200K-window models are excluded — percentage thresholds handle them."""
-        # Even if tokens > 200K, the model's window IS 200K, so ceiling
-        # should not apply (percentage thresholds already fire).
+        """Exactly-200K models are excluded — percentage thresholds handle them.
+
+        GAP-X1 (2026-05-12): switched fixture from ``glm-5`` (202_752 per
+        z.ai docs — slightly above the 200K ceiling) to ``claude-opus-4-5``
+        which is registered at exactly ``200_000``.  The ceiling rule
+        (``ctx_window > 200K AND tokens > 200K``) genuinely fires for the
+        GLM family now that the precise window is reflected; the original
+        intent of this test was "models whose window IS 200K skip the
+        ceiling layer", so the new fixture preserves that invariant.
+        """
         big_msg = "x" * 1_000_000
         msgs = [{"role": "user", "content": big_msg}]
-        metrics = check_context(msgs, "glm-5")
+        metrics = check_context(msgs, "claude-opus-4-5")
         # context_window == 200K, NOT > 200K → ceiling should be False
         assert not metrics.is_ceiling_exceeded
         # But percentage thresholds should fire

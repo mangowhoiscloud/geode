@@ -28,6 +28,40 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.95.0] — 2026-05-12
+
+### Fixed
+
+- **GLM context window precision — GAP-X1.** `MODEL_CONTEXT_WINDOW`
+  rounded all five registered GLM models (`glm-5.1`, `glm-5`,
+  `glm-5-turbo`, `glm-4.7`, `glm-4.7-flash`) to a flat `200_000`-token
+  guard. Re-verification against z.ai docs + openrouter listings (2026-05-12)
+  yields the precise value `202_752` — a +2_752-token delta that the
+  post-call 200K guard was tripping early. Cloudflare / LM Studio
+  deployments expose smaller windows (`131_072` / `128k`) but GEODE calls
+  z.ai directly so the upstream contract applies. Regression test:
+  `tests/test_glm_context_window.py` (6 cases — per-model assertion +
+  family-shared-window invariant). `tests/test_context_monitor.py` fixture
+  for the "200K models skip ceiling" case switched from `glm-5` to
+  `claude-opus-4-5` (exact 200_000) — `glm-5` is no longer exactly 200K.
+
+### Changed
+
+- **Anthropic agentic_call streaming — GAP-S1.**
+  `ClaudeAgenticAdapter.agentic_call._do_call` now wraps the request in
+  `async with self._client.messages.stream(**create_kwargs) as s:` and
+  returns `await s.get_final_message()` instead of the previous
+  non-streaming `await self._client.messages.create(**create_kwargs)`.
+  The final message is the same `anthropic.types.Message` schema, so
+  `normalize_anthropic` and the token-tracker path are unchanged — the
+  benefit is chunk-level network delivery and an SDK-level surface for
+  partial state (not yet wired into the agentic loop's UI). OpenAI / GLM
+  streaming is deferred (separate PR — Responses API has a stricter
+  stream contract with reasoning replay). Regression test:
+  `tests/test_anthropic_agentic_stream.py` (2 cases — stream-vs-create,
+  kwargs passthrough). `tests/test_anthropic_sampling_params.py` helper
+  updated to mock both transports.
+
 ## [0.94.0] — 2026-05-12
 
 ### Added
