@@ -4,12 +4,30 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode } from "react";
 import { useLocale, useSetLocale, t } from "@/components/geode/locale-context";
-import { DOCS_SITEMAP, adjacentPages } from "@/lib/geode-docs/sitemap";
+import { DOCS_SITEMAP, adjacentPages, findPage, QUADRANT_META, type DocQuadrant } from "@/lib/geode-docs/sitemap";
+import { GEODE_SOT } from "@/data/geode/sot";
 
 const DOCS_BASE = "/docs";
 
 function pageHref(slug: string): string {
   return slug ? `${DOCS_BASE}/${slug}` : DOCS_BASE;
+}
+
+function QuadrantChip({ quadrant, size = "sm" }: { quadrant: DocQuadrant; size?: "sm" | "xs" }) {
+  const locale = useLocale();
+  const meta = QUADRANT_META[quadrant];
+  const classes =
+    size === "xs"
+      ? "inline-flex items-center px-1.5 py-0 rounded text-[9px] font-mono uppercase tracking-wider"
+      : "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider";
+  return (
+    <span
+      className={classes}
+      style={{ color: meta.color, border: `1px solid ${meta.color}40`, backgroundColor: `${meta.color}10` }}
+    >
+      {t(locale, meta.labelKo, meta.label)}
+    </span>
+  );
 }
 
 function Sidebar() {
@@ -23,7 +41,7 @@ function Sidebar() {
       >
         {t(locale, "GEODE Docs", "GEODE Docs")}
       </Link>
-      <div className="mt-2 space-y-6">
+      <div className="mt-2 space-y-5">
         {DOCS_SITEMAP.map((section) => (
           <div key={section.id}>
             <div className="px-3 text-[10px] uppercase tracking-[0.18em] text-white/40 font-semibold mb-2">
@@ -33,18 +51,27 @@ function Sidebar() {
               {section.pages.map((page) => {
                 const href = pageHref(page.slug);
                 const active = pathname === href || pathname === `${href}/`;
+                const meta = QUADRANT_META[page.quadrant];
                 return (
                   <li key={page.slug || "_index"}>
                     <Link
                       href={href}
                       className={
-                        "block px-3 py-1.5 rounded text-[13px] transition-colors " +
+                        "flex items-center gap-2 px-3 py-1.5 rounded text-[13px] transition-colors " +
                         (active
                           ? "bg-white/[0.06] text-[#F0F0FF]"
                           : "text-white/60 hover:text-[#F0F0FF] hover:bg-white/[0.03]")
                       }
                     >
-                      {t(locale, page.titleKo, page.title)}
+                      <span
+                        className="shrink-0 inline-block w-1 h-1 rounded-full"
+                        style={{ backgroundColor: meta.color }}
+                        aria-label={meta.label}
+                      />
+                      <span className="flex-1 truncate">{t(locale, page.titleKo, page.title)}</span>
+                      {page.externalUrl && (
+                        <span className="text-[9px] text-white/30">↗</span>
+                      )}
                     </Link>
                   </li>
                 );
@@ -149,22 +176,24 @@ export function DocsShell({
   const displayTitle = titleKo ? t(locale, titleKo, title) : title;
   const displaySummary =
     summary && summaryKo ? t(locale, summaryKo, summary) : summary;
+  const found = findPage(slug);
+  const quadrant = found?.page.quadrant;
   return (
     <div className="min-h-screen bg-[#0B1628] text-[#F0F0FF]">
       <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#0B1628]/85 backdrop-blur">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6">
             <Link href="/portfolio" className="text-sm text-white/60 hover:text-white">
-              ← /geode
+              ← /geode/portfolio
             </Link>
             <span className="text-sm font-display font-bold tracking-wide">
-              {t(locale, "GEODE · 문서", "GEODE · Docs")}
+              {t(locale, "GEODE . 문서", "GEODE . Docs")}
             </span>
           </div>
           <div className="flex items-center gap-4">
             <LocaleToggle />
             <a
-              href="https://github.com/mangowhoiscloud/portfolio"
+              href="https://github.com/mangowhoiscloud/geode"
               className="text-xs text-white/50 hover:text-white"
               target="_blank"
               rel="noreferrer"
@@ -182,6 +211,11 @@ export function DocsShell({
 
         <main className="flex-1 min-w-0 max-w-3xl">
           <div className="mb-10">
+            {quadrant && (
+              <div className="mb-3">
+                <QuadrantChip quadrant={quadrant} />
+              </div>
+            )}
             <h1 className="text-3xl md:text-4xl font-display font-bold tracking-tight">
               {displayTitle}
             </h1>
@@ -195,11 +229,21 @@ export function DocsShell({
       </div>
 
       <footer className="border-t border-white/[0.06] mt-20">
-        <div className="max-w-7xl mx-auto px-6 py-6 text-xs text-white/40 flex justify-between">
+        <div className="max-w-7xl mx-auto px-6 py-6 text-xs text-white/40 flex justify-between flex-wrap gap-2">
           <span>
-            {t(locale, "GEODE v0.64.0 · 문서 생성 2026-05-01", "GEODE v0.64.0 · Docs generated 2026-05-01")}
+            {t(
+              locale,
+              `GEODE v${GEODE_SOT.version} . 문서 동기화 ${GEODE_SOT.syncedAt}`,
+              `GEODE v${GEODE_SOT.version} . Docs synced ${GEODE_SOT.syncedAt}`
+            )}
           </span>
-          <span>{t(locale, "출처: github.com/mangowhoiscloud/portfolio", "Source: github.com/mangowhoiscloud/portfolio")}</span>
+          <span>
+            {t(
+              locale,
+              "출처: github.com/mangowhoiscloud/geode",
+              "Source: github.com/mangowhoiscloud/geode"
+            )}
+          </span>
         </div>
       </footer>
     </div>
