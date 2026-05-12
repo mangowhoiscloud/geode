@@ -28,6 +28,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Docs CHANGELOG full sync plus three outdated patches.**
+  - `site/scripts/sync-stats.mjs` now parses CHANGELOG.md and emits
+    `site/src/data/geode/changelog.ts` with every version entry
+    (134 releases plus the current Unreleased). The Changelog page reads
+    that file and renders every entry, replacing the prior selected-
+    highlights manual list.
+  - New minimal markdown renderer at
+    `site/src/components/geode-docs/markdown-lite.tsx`. Handles the
+    subset CHANGELOG entries use: h3 headings, nested bullets, bold,
+    inline code, links, fenced code blocks.
+  - `/docs/reference/changelog` page rebuilt to render the full list with
+    an in-page version index (grid of anchored versions), one section per
+    entry, and a footer note pointing back to the repo CHANGELOG.md as
+    the authoritative source.
+  - Three outdated pages patched.
+    - `/docs/runtime/llm/prompt-system`: summary now mentions the v0.93
+      XML envelope (16 markers across 9 files).
+    - `/docs/runtime/llm/prompt-caching`: boundary-marker section adds
+      the `<dynamic_context>` XML wrapper and the audit-mode strip link.
+    - `/docs/ops/cost`: full usage-ledger schema (CallDiagnostic-aligned
+      fields), v0.90 token-tracker dual-record fix, three jq one-liners,
+      provider downgrade chains updated to GLM 5.x and OpenAI 5.x.
+
+
 ### Fixed
 
 - **OAuth Press-[Enter] prompt — direct-render wiring parity.** PR #1077

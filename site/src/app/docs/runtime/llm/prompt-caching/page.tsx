@@ -16,11 +16,20 @@ export default function Page() {
           <>
             <h2>경계 마커</h2>
             <p>
-              <code>core/agent/system_prompt.py:35</code>에 정의되어 있습니다.
+              <code>core/agent/system_prompt.py:35</code>에 정의되어 있습니다. v0.93부터 9개 prompt 파일의 16개 marker가 XML 래퍼로 전환됩니다.
+              경계 자체는 동일 sentinel 문자열이지만, marker가 노출되는 영역은 <code>&lt;dynamic_context&gt;</code> XML 안으로 캡슐화됩니다.
             </p>
-            <pre>{`PROMPT_CACHE_BOUNDARY = "__GEODE_PROMPT_CACHE_BOUNDARY__"`}</pre>
+            <pre>{`PROMPT_CACHE_BOUNDARY = "__GEODE_PROMPT_CACHE_BOUNDARY__"
+
+# v0.93+ XML 래퍼 (system prompt 안에서)
+... STATIC 영역 ...
+__GEODE_PROMPT_CACHE_BOUNDARY__
+<dynamic_context>
+... DYNAMIC 영역 ...
+</dynamic_context>`}</pre>
             <p>
-              <code>build_system_prompt()</code>이 이 마커를 두 섹션 사이에 삽입합니다.
+              <code>build_system_prompt()</code>이 이 marker를 두 섹션 사이에 삽입합니다.
+              audit-mode는 dynamic 블록을 strip합니다 (<a href="/docs/runtime/llm/system-prompt-modes">System Prompt Modes</a> 참조).
             </p>
             <ul>
               <li>
