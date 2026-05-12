@@ -30,6 +30,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Infrastructure
 
+- **Docs restructure (v0.95.0+) — 12 chapters, 49 pages, References chapter
+  added.** Follow-up sprint to the docs rebuild. Three corrections based on
+  live review.
+  - **03 Build chapter removed.** The 4 pages (`build/add-tool`,
+    `build/add-domain`, `build/add-hook`, `build/testing`) returned 404 on
+    the deployed site even though the previous build log advertised them.
+    Cause: files were authored in a removed worktree and never staged into
+    the merged commit. User decision was to drop the chapter rather than
+    re-add it.
+  - **02 System Reference (24 pages) split into 7 focused chapters.** New
+    sections: 02 Architecture (3) · 03 LLM Pipeline (5) · 04 Tools and
+    Memory (3) · 05 Harness (5) · 06 Capabilities (3) · 07 Verification
+    (2) · 08 Plugins (2).
+  - **Vault page removed** (`runtime/memory/vault`). Vault is wiki-side
+    content; only the 5-Tier Context page remains under docs.
+  - **References chapter expanded** with a new `reference/external-references`
+    page citing frontier agent systems (Claude Code, Codex CLI, OpenClaw,
+    Hermes, Karpathy autoresearch + LLM Wiki, Cursor, Aider, Devin,
+    LangGraph), docs design standards (Diátaxis 4-quadrant, Anthropic
+    Platform Docs, OpenClaw AGENTS.md, Hermes llms.txt), Petri/inspect_ai
+    sources, and internal assets in mango-wiki and resume/common (incl.
+    Karpathy autoresearch 5 reusable patterns).
+  - Net: 53 → 49 pages, 8 → 12 chapters. All bilingual (`<Bi ko en />`),
+    all carry Diátaxis quadrant chips.
+
 - **Docs site rebuild — Diátaxis 8 chapters, 53 bilingual pages.**
   Site/docs restructured into 8 numbered chapters following Diátaxis (Tutorial,
   How-to, Reference, Explanation). Every page declares its quadrant via a
