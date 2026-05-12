@@ -55,8 +55,15 @@ CLI_STARTUP_LOCK = GEODE_HOME / "cli.startup.lock"
 SERVE_LOG_PATH = GEODE_HOME / "logs" / "serve.log"
 GLOBAL_JOURNAL_DIR = GEODE_HOME / "journal"
 GLOBAL_WORKERS_DIR = GEODE_HOME / "workers"
-MCP_REGISTRY_CACHE = GEODE_HOME / "mcp-registry-cache.json"
-APPROVE_HISTORY = GEODE_HOME / "approve_history.json"
+# v0.95.x layout migration v1 — moved under mcp/ to group with other MCP state.
+# Legacy ``~/.geode/mcp-registry-cache.json`` migrated by
+# ``core.wiring.layout_migrator._migrate_v0_to_v1`` on first bootstrap.
+MCP_REGISTRY_CACHE = GEODE_HOME / "mcp" / "registry-cache.json"
+# v0.95.x layout migration v1 — renamed to match the actual writer
+# (``core.hooks.approval_tracker``, which has always used ``approval_history.jsonl``).
+# Legacy ``~/.geode/approve_history.json`` (paths.py-side typo) migrated by
+# ``core.wiring.layout_migrator._migrate_v0_to_v1``.
+APPROVE_HISTORY = GEODE_HOME / "approval_history.jsonl"
 
 # ---------------------------------------------------------------------------
 # Project-level — {workspace}/.geode/
@@ -281,6 +288,19 @@ def ensure_directories() -> None:
 
     if created:
         _paths_log.info("Created %d directories: %s", len(created), ", ".join(created))
+
+    # --- Layout migration (Hermes `_init_schema` pattern) ---
+    # Runs on every bootstrap, idempotent via the module-level once-flag
+    # inside :mod:`core.wiring.layout_migrator`. Reconciles legacy paths
+    # produced by older GEODE versions with the current constants above.
+    # Lazy import — keeps `core.paths` free of `core.wiring` dependency for
+    # consumers that need pure path utilities without bootstrap side-effects.
+    try:
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated()
+    except Exception:  # pragma: no cover — migration must never block boot
+        _paths_log.warning("Layout migration skipped", exc_info=True)
 
 
 def _ensure_geode_gitignore() -> None:

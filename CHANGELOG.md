@@ -54,6 +54,24 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Infrastructure
 
+- **Changelog viewer: entry-level KO / EN toggle plus fallback banner.**
+  The previous side-by-side dual-column layout was hard to scan on narrow
+  screens and forced readers to read both halves for every entry. Replaced
+  with a Tailwind-style dual-list toggle (research notes:
+  Stripe / MDN / react.dev / Tailwind / Cloudflare).
+  - Per-entry pill at top right: `KO` / `EN`. Defaults to page locale.
+    Only rendered when both languages are detected in the entry.
+  - Mono-lingual entries: no toggle. When the requested language is
+    absent, a small amber Stripe-style banner notes the absence
+    ("이 entry는 영어 원문만 작성됐습니다" or the EN equivalent).
+  - Top sticky nav gains a 한국어 / English page-locale switch on the
+    right end. Switching globally changes the default for every entry.
+  - Detection logic unchanged (Hangul / Latin ratio per markdown block).
+    Code fences and short / symbol-only blocks live in both halves.
+
+
+### Infrastructure
+
 - **AGENTS.md at repo root.** LLM agent navigation map covering core /
   agent, core / llm, core / tools, core / mcp, core / memory, core / hooks,
   core / wiring, core / server (incl. client_capability handshake),
@@ -84,6 +102,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
     SKILL.md frontmatter convention, three-step authoring guide,
     hook integration.
 
+
+### Added
+
+- **`~/.geode/` 디렉터리 layout migration 인프라.** Hermes Agent (NousResearch)
+  의 `SessionDB._init_schema` 패턴 + OpenClaw `autoMigrateLegacyStateDir`
+  + GEODE 기존 `_resolve_with_fallback` 셋 종합. 신규 `core/wiring/
+  layout_migrator.py` — `GEODE_LAYOUT_VERSION` (현재 1), `~/.geode/
+  .layout-version` dotfile marker (Hermes 의 `.managed` / `active_profile`
+  dotfile 전례), module-level once-flag 로 idempotent (OpenClaw
+  `autoMigrateStateDirChecked` + Hermes `_bootstrap_applied` 평행),
+  `GEODE_DISABLE_LAYOUT_MIGRATION` env escape hatch.
+  - **v0→v1 마이그레이션**: 세 path 오류 정정 — (1) `serve.log` 가
+    `~/.geode/` 루트에서 `~/.geode/logs/serve.log` 로 (paths.py 의
+    `SERVE_LOG_PATH` 가 이미 가리키던 곳), (2) `approve_history.json`
+    (paths.py 오타) → `approval_history.jsonl` (실제 writer 이름),
+    (3) `mcp-registry-cache.json` → `mcp/registry-cache.json` (다른
+    MCP state 와 함께 묶음). `shutil.move` 로 atomic, 동일 파일 destination
+    이미 존재 시 손대지 않고 warning surface (never overwrite user data).
+  - **호출 시점**: `core.paths.ensure_directories()` 끝 — bootstrap 의
+    매 호출마다 (idempotent). `uv tool install` / `uv tool update` 는 우리 코드를
+    실행하지 않으므로 사실상 install/update 직후 첫 `geode` 명령에서 트리거됨.
+  - **회귀**: `tests/test_layout_migrator.py` 12 cases — version marker
+    round-trip / corrupt marker / disable env / idempotency / v0→v1 의
+    세 path 별 + conflict-keep-both + missing-source-skip.
 
 ### Added
 
