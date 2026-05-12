@@ -194,6 +194,4 @@ def test_guard_absent_for_non_openai(non_openai_model: str) -> None:
 
     _build_model_card.cache_clear()
     card = _build_model_card(non_openai_model)
-    assert _GUARD_NEEDLE not in card, (
-        f"GAP-17 guard leaked into {non_openai_model} model card"
-    )
+    assert _GUARD_NEEDLE not in card, f"GAP-17 guard leaked into {non_openai_model} model card"
