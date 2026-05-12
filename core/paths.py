@@ -84,9 +84,14 @@ PROJECT_LEARNING_FILE = PROJECT_GEODE_DIR / "LEARNING.md"
 PROJECT_MEMORY_INDEX = PROJECT_GEODE_DIR / "MEMORY.md"
 
 # Per-project caches surfaced by /clean for selective wipe.
-PROJECT_EMBEDDING_CACHE = PROJECT_GEODE_DIR / "embedding-cache"
+#
+# v0.95.x — `PROJECT_EMBEDDING_CACHE` and `PROJECT_VECTORS_DIR` were
+# removed (vestigial). No writer ever used either constant; the
+# corresponding on-disk directories (`.geode/embedding-cache/`,
+# `.geode/vectors/`) stopped receiving writes on 2026-04-05 and are
+# archived to `.geode/_archive/` by layout migration v1 → v2 (see
+# `core/wiring/layout_migrator.py:_migrate_v1_to_v2`).
 PROJECT_TOOL_OFFLOAD = PROJECT_GEODE_DIR / "tool-offload"
-PROJECT_VECTORS_DIR = PROJECT_GEODE_DIR / "vectors"
 
 
 # ---------------------------------------------------------------------------

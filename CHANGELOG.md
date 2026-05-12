@@ -52,6 +52,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Removed
+
+- **`PROJECT_EMBEDDING_CACHE` / `PROJECT_VECTORS_DIR`** path constants
+  in `core.paths` — vestigial. No writer ever used either; the on-disk
+  directories (`{workspace}/.geode/embedding-cache/` and
+  `{workspace}/.geode/vectors/`) stopped receiving writes on
+  2026-04-05. Cascading removals: `core/cli/cmd_lifecycle.py` 의
+  `/clean` lookup + scan list, `tests/test_lifecycle_commands.py` 의
+  `PROJECT_EMBEDDING_CACHE` patch 가 모두 정리됨. 잔여 디스크 디렉터리
+  는 layout migration v1→v2 가 `_archive/` 로 옮김 (아래 항목).
+
+### Fixed
+
+- **Layout migration v1→v2 — vestigial 디렉터리 archival.**
+  `core/wiring/layout_migrator.py:_migrate_v1_to_v2()` 가 현재 workspace
+  의 `.geode/{embedding-cache,vectors}/` 를 `.geode/_archive/<name>-<UTC>/`
+  로 안전하게 옮김 (`shutil.move`, never `rmtree`). 비어있는 경우 `rmdir`
+  만 수행, archive target 이 이미 있으면 원본 보존 + warning. v0→v1 의
+  same-FS atomic move 패턴 + lossless safety 계승. `GEODE_LAYOUT_VERSION`
+  1 → 2. 회귀: `tests/test_layout_migrator.py::TestV1ToV2VestigialArchival`
+  8 cases (populated cache / populated vectors / both / empty rmdir /
+  absent skip / no .geode/ short-circuit / full v0→v2 chain / constants
+  removed sanity).
+
 ### Documentation
 
 - **Storage hierarchy decision doc** (`docs/architecture/storage-hierarchy.md`).
