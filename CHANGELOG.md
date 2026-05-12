@@ -28,6 +28,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Anthropic agentic_call streaming — GAP-S1.**
+  `ClaudeAgenticAdapter.agentic_call._do_call` now wraps the request in
+  `async with self._client.messages.stream(**create_kwargs) as s:` and
+  returns `await s.get_final_message()` instead of the previous
+  non-streaming `await self._client.messages.create(**create_kwargs)`.
+  The final message is the same `anthropic.types.Message` schema, so
+  `normalize_anthropic` and the token-tracker path are unchanged — the
+  benefit is chunk-level network delivery and an SDK-level surface for
+  partial state (not yet wired into the agentic loop's UI). OpenAI / GLM
+  streaming is deferred (separate PR — Responses API has a stricter
+  stream contract with reasoning replay). Regression test:
+  `tests/test_anthropic_agentic_stream.py` (2 cases — stream-vs-create,
+  kwargs passthrough). `tests/test_anthropic_sampling_params.py` helper
+  updated to mock both transports.
+
 ## [0.94.0] — 2026-05-12
 
 ### Added
