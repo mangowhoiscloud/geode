@@ -135,15 +135,15 @@ class TestRuntimePolicyChain:
     def test_full_pipeline_blocks_notification(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="full_pipeline")
-        # 24 total minus send_notification = 23
-        assert len(tools) == 23
+        # 25 total minus send_notification = 24
+        assert len(tools) == 24
         assert "send_notification" not in tools
 
 
 class TestRuntimeToolRegistry:
     def test_registry_has_all_tools(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        assert len(runtime.tool_registry) == 24
+        assert len(runtime.tool_registry) == 25
         assert "run_analyst" in runtime.tool_registry
         assert "run_evaluator" in runtime.tool_registry
         assert "psm_calculate" in runtime.tool_registry
@@ -151,12 +151,14 @@ class TestRuntimeToolRegistry:
         assert "query_monolake" in runtime.tool_registry
         assert "cortex_analyst" in runtime.tool_registry
         assert "cortex_search" in runtime.tool_registry
-        # Signal tools
+        # Signal tools (IP-specific + generic web + Korean jobs)
         assert "youtube_search" in runtime.tool_registry
         assert "reddit_sentiment" in runtime.tool_registry
         assert "twitch_stats" in runtime.tool_registry
         assert "steam_info" in runtime.tool_registry
         assert "google_trends" in runtime.tool_registry
+        assert "web_search" in runtime.tool_registry
+        assert "wanted_jobs_search" in runtime.tool_registry
         # Memory tools
         assert "memory_search" in runtime.tool_registry
         assert "memory_get" in runtime.tool_registry
@@ -207,7 +209,7 @@ class TestDefaultBuilders:
 
     def test_default_registry(self):
         registry = _build_default_registry()
-        assert len(registry) == 24
+        assert len(registry) == 25
 
     def test_make_run_log_handler(self, tmp_path: Path):
         run_log = RunLog("test_session", log_dir=tmp_path)

@@ -95,7 +95,7 @@ def build_default_policies() -> PolicyChain:
 
 
 def build_default_registry() -> ToolRegistry:
-    """Build ToolRegistry with all 21 tools registered."""
+    """Build ToolRegistry with all 25 tools registered."""
     registry = ToolRegistry()
     # Analysis (4)
     from plugins.game_ip.tools.analysis import (
@@ -117,7 +117,7 @@ def build_default_registry() -> ToolRegistry:
     registry.register(QueryMonoLakeTool())
     registry.register(CortexAnalystTool())
     registry.register(CortexSearchTool())
-    # Signals (5 IP-specific + 1 generic)
+    # Signals (5 IP-specific + 2 generic — web_search, wanted_jobs_search)
     from plugins.game_ip.tools.signal_tools import (
         GoogleTrendsTool,
         RedditSentimentTool,
@@ -126,6 +126,7 @@ def build_default_registry() -> ToolRegistry:
         YouTubeSearchTool,
     )
 
+    from core.tools.jobs import WantedJobsSearchTool
     from core.tools.web_search import WebSearchTool
 
     registry.register(YouTubeSearchTool())
@@ -134,6 +135,7 @@ def build_default_registry() -> ToolRegistry:
     registry.register(SteamInfoTool())
     registry.register(GoogleTrendsTool())
     registry.register(WebSearchTool())
+    registry.register(WantedJobsSearchTool())
     # Memory (7)
     from core.tools.memory_tools import (
         MemoryGetTool,
