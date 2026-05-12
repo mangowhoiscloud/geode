@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/llm/prompt-system"
       title="Prompt System"
       titleKo="프롬프트 시스템"
-      summary="GEODE's prompt subsystem: 5 layers, 17 templates, 3 axes datasets, 20 pinned hashes, ephemeral cache, and an append-only assembler."
-      summaryKo="GEODE 프롬프트 서브시스템: 5계층, 17개 템플릿, 3개 axes 데이터, 20개 pin 해시, ephemeral 캐시, append-only 어셈블러."
+      summary="GEODE's prompt subsystem: 5 layers, 17 templates, 3 axes datasets, 20 pinned hashes, ephemeral cache, append-only assembler. Since v0.93, 16 boundary markers across 9 files use XML envelopes."
+      summaryKo="GEODE 프롬프트 서브시스템: 5계층, 17개 템플릿, 3개 axes 데이터, 20개 pin 해시, ephemeral 캐시, append-only 어셈블러. v0.93부터 9개 파일의 16개 경계 마커가 XML 래퍼로 전환됨."
     >
       <h2>{<Bi ko="5계층" en="Five layers" />}</h2>
       <pre>{`1. Templates Layer       core/llm/prompts/*.md           — 17 base + extended sections

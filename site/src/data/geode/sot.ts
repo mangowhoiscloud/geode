@@ -1,7 +1,7 @@
 /**
  * GEODE Single Source of Truth — site-wide metrics.
  *
- * Auto-synced from /Users/mango/workspace/geode via `npm run sync-stats`.
+ * Auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit the GEODE repo and re-run sync.
  *
  * Last sync: 2026-05-12
@@ -24,10 +24,6 @@ export const GEODE_SOT = {
   syncedAt: "2026-05-12",
 } as const;
 
-/**
- * Cumulative one-liner for hero / chapter intros.
- * KO/EN parity. Single source. Never duplicate these numbers elsewhere.
- */
 export const GEODE_CUMULATIVE_KO =
   `v${GEODE_SOT.version} · ${GEODE_SOT.modules.total} 모듈 · ` +
   `${GEODE_SOT.tests.standard.toLocaleString()} 테스트 · ` +

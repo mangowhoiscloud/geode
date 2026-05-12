@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// sync-stats.mjs — pull live GEODE metrics into src/data/geode/sot.ts.
+// sync-stats.mjs — pull live GEODE metrics into src/data/geode/sot.ts and
+// the full CHANGELOG into src/data/geode/changelog.ts.
 //
 // Reads from the GEODE repo at GEODE_REPO (default ../geode):
 //   - pyproject.toml         → version
 //   - filesystem (core/, plugins/) → module counts
-//   - CHANGELOG.md           → release count (excludes [Unreleased])
+//   - CHANGELOG.md           → release count (excludes [Unreleased]) plus
+//                              the full per-version body for changelog.ts
 //   - git log                → first commit YYYY-MM
 //   - CLAUDE.md              → test counts (avoids slow pytest --collect-only)
 //
@@ -19,10 +21,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SITE_ROOT = resolve(__dirname, "..");
 
-// Auto-detect GEODE repo:
-//   1) GEODE_REPO env var (explicit override)
-//   2) ../pyproject.toml exists → we live inside geode/site/, so geode root = ..
-//   3) ../geode/pyproject.toml exists → standalone portfolio repo next to geode
 function detectGeodeRepo() {
   if (process.env.GEODE_REPO) return resolve(process.env.GEODE_REPO);
   const asSibling = resolve(SITE_ROOT, "..", "geode");
@@ -35,6 +33,7 @@ function detectGeodeRepo() {
 
 const GEODE_REPO = detectGeodeRepo();
 const SOT_FILE = resolve(SITE_ROOT, "src/data/geode/sot.ts");
+const CHANGELOG_FILE = resolve(SITE_ROOT, "src/data/geode/changelog.ts");
 
 function fail(msg) {
   console.error(`sync-stats: ${msg}`);
@@ -72,7 +71,6 @@ function readSince() {
 
 function readTestCounts() {
   const claudeMd = readFileSync(resolve(GEODE_REPO, "CLAUDE.md"), "utf8");
-  // Match formats like: "Tests**: 4346 (+24 live)" or "Tests: 4346 (+24 live)"
   const m =
     claudeMd.match(/Tests\*{0,2}\s*[:|]\s*(\d[\d,]*)\s*\(\+\s*(\d+)\s*live\)/i) ??
     claudeMd.match(/(\d{3,})\s*\+\s*(\d+)\s*live/i);
@@ -86,6 +84,46 @@ function readTestCounts() {
   };
 }
 
+// Parse CHANGELOG.md into structured entries.
+// Each `## [version] — date` heading begins a new entry; everything until the
+// next `## [` heading (or `## ` of a non-version section) is the body.
+function parseChangelog() {
+  const raw = readFileSync(resolve(GEODE_REPO, "CHANGELOG.md"), "utf8");
+  const lines = raw.split(/\r?\n/);
+  const entries = [];
+  let cur = null;
+  for (const line of lines) {
+    const m = line.match(/^## \[([^\]]+)\](?:\s*[—\-]\s*(.+))?$/);
+    if (m) {
+      if (cur) entries.push(cur);
+      cur = { version: m[1].trim(), date: (m[2] ?? "").trim(), body: [] };
+      continue;
+    }
+    // A non-version `## ` heading (e.g. "## Scope Rules") starts a non-entry
+    // section. If we're currently inside an entry, stop appending.
+    if (line.startsWith("## ") && cur) {
+      entries.push(cur);
+      cur = null;
+      continue;
+    }
+    if (cur) cur.body.push(line);
+  }
+  if (cur) entries.push(cur);
+  // Trim trailing horizontal rules and blank lines from each body.
+  for (const e of entries) {
+    while (
+      e.body.length &&
+      (e.body[e.body.length - 1].trim() === "" ||
+        e.body[e.body.length - 1].trim() === "---")
+    ) {
+      e.body.pop();
+    }
+    // Also trim leading blanks.
+    while (e.body.length && e.body[0].trim() === "") e.body.shift();
+  }
+  return entries;
+}
+
 function writeSot(v) {
   const today = new Date().toISOString().slice(0, 10);
   const total = v.core + v.plugins;
@@ -94,7 +132,7 @@ function writeSot(v) {
   const body = `/**
  * GEODE Single Source of Truth — site-wide metrics.
  *
- * Auto-synced from /Users/mango/workspace/geode via \`npm run sync-stats\`.
+ * Auto-synced from the GEODE repo via \`npm run sync-stats\`.
  * Do not edit manually. Edit the GEODE repo and re-run sync.
  *
  * Last sync: ${today}
@@ -117,10 +155,6 @@ export const GEODE_SOT = {
   syncedAt: "${today}",
 } as const;
 
-/**
- * Cumulative one-liner for hero / chapter intros.
- * KO/EN parity. Single source. Never duplicate these numbers elsewhere.
- */
 export const GEODE_CUMULATIVE_KO =
   \`v\${GEODE_SOT.version} · \${GEODE_SOT.modules.total} 모듈 · \` +
   \`\${GEODE_SOT.tests.standard.toLocaleString()} 테스트 · \` +
@@ -131,8 +165,40 @@ export const GEODE_CUMULATIVE_EN =
   \`\${GEODE_SOT.tests.standard.toLocaleString()} tests · \` +
   \`\${GEODE_SOT.releases} releases · solo · since \${GEODE_SOT.since}\`;
 `;
-
   writeFileSync(SOT_FILE, body);
+}
+
+function writeChangelog(entries) {
+  const today = new Date().toISOString().slice(0, 10);
+  // JSON.stringify handles escaping cleanly for embed-as-TS-literal.
+  const data = entries.map((e) => ({
+    version: e.version,
+    date: e.date,
+    body: e.body.join("\n"),
+  }));
+
+  const body = `/**
+ * GEODE CHANGELOG, auto-synced from the GEODE repo via \`npm run sync-stats\`.
+ * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
+ *
+ * Last sync: ${today}
+ *
+ * Each entry's \`body\` is the raw markdown between two version headings.
+ * The Changelog page renders the body with a minimal markdown renderer
+ * (\`MarkdownLite\`) defined under \`src/components/geode-docs/\`.
+ */
+
+export type ChangelogEntry = {
+  version: string;
+  date: string;
+  body: string;
+};
+
+export const CHANGELOG: ChangelogEntry[] = ${JSON.stringify(data, null, 2)};
+
+export const CHANGELOG_SYNCED_AT = "${today}";
+`;
+  writeFileSync(CHANGELOG_FILE, body);
 }
 
 function main() {
@@ -152,6 +218,10 @@ function main() {
 
   writeSot({ version, core, plugins, standard, live, releases, since });
   console.log(`sync-stats: wrote ${SOT_FILE}`);
+
+  const entries = parseChangelog();
+  writeChangelog(entries);
+  console.log(`sync-stats: wrote ${CHANGELOG_FILE} (${entries.length} entries)`);
 }
 
 main();
