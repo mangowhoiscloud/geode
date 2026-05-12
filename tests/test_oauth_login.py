@@ -209,9 +209,7 @@ class TestJWTDecode:
     def test_plan_type_extraction(self):
         from core.auth.oauth_login import _plan_type_from_token
 
-        token = _build_fake_jwt(
-            {"https://api.openai.com/auth": {"chatgpt_plan_type": "max"}}
-        )
+        token = _build_fake_jwt({"https://api.openai.com/auth": {"chatgpt_plan_type": "max"}})
         assert _plan_type_from_token(token) == "max"
 
     def test_plan_type_missing_claim(self):
@@ -249,9 +247,7 @@ class TestPlanTierReconcile:
         from core.auth.profiles import ProfileStore
 
         store = ProfileStore()
-        token = _build_fake_jwt(
-            {"https://api.openai.com/auth": {"chatgpt_plan_type": "prolite"}}
-        )
+        token = _build_fake_jwt({"https://api.openai.com/auth": {"chatgpt_plan_type": "prolite"}})
         store.add(
             AuthProfile(
                 name="openai-codex-geode:user",
@@ -288,9 +284,7 @@ class TestPlanTierReconcile:
         )
 
         store = ProfileStore()
-        token = _build_fake_jwt(
-            {"https://api.openai.com/auth": {"chatgpt_plan_type": "max"}}
-        )
+        token = _build_fake_jwt({"https://api.openai.com/auth": {"chatgpt_plan_type": "max"}})
         store.add(
             AuthProfile(
                 name="openai-codex-geode:user",
