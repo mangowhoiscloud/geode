@@ -109,7 +109,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   thread that calls `webbrowser.open(verification_uri)` on the first
   stdin line. Skipped automatically when stdin is not a TTY (piped
   invocations stay quiet). Pattern grounded from Claude Code's OAuth
-  start prompt (`/Users/.../claude-code-ref/src/auth/providers.ts`).
+  start prompt (`claude-code/src/auth/providers.ts`).
 
 ### Infrastructure
 
@@ -2953,8 +2953,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Reference
 - Codex Rust client (`openai/codex` repo, `codex-rs/`): `ResponseCompleted` struct (`sse/responses.rs:120-128`), accumulator pattern (`core/src/client.rs:1641-1678`), `ResponseItem` enum + serde tagging (`protocol/src/models.rs:751-902`).
-- Hermes Agent (`/Users/mango/workspace/hermes-agent`): `_chat_messages_to_responses_input` (`agent/codex_responses_adapter.py:204-325`), output_item.done accumulator (`run_agent.py:4709-4785`).
-- OpenClaw (`/Users/mango/workspace/openclaw`): `processResponsesStream` (`src/agents/openai-transport-stream.ts:353-542`).
+- Hermes Agent (`hermes-agent`): `_chat_messages_to_responses_input` (`agent/codex_responses_adapter.py:204-325`), output_item.done accumulator (`run_agent.py:4709-4785`).
+- OpenClaw (`openclaw/openclaw`): `processResponsesStream` (`src/agents/openai-transport-stream.ts:353-542`).
 - OpenAI Responses API spec (`openai-python` TypedDicts): `ResponseFunctionToolCallParam`, `FunctionCallOutput`, `ResponseOutputMessageParam`, `ResponseReasoningItemParam`. Confirmed `function_call` has NO `content` field; `function_call_output` uses `output` not `content`.
 - Production daemon log 2026-04-27 19:07:06 — `HTTP 400 Invalid type for 'input[4].content'` after a `create_plan → tool_use → continuation` cycle.
 
