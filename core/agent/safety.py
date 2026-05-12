@@ -24,6 +24,7 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "grep_files",
         "profile_show",
         "calendar_list_events",
+        "wanted_jobs_search",
     }
 )
 

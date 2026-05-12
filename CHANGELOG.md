@@ -54,6 +54,16 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **Wanted.co.kr 기반 한국 job 검색 도구 (`wanted_jobs_search`).** LinkedIn
+  의 PerimeterX/Cloudflare bot detection 으로 `search_jobs` MCP 가 매번
+  403 + empty body 로 차단되는 상황에 대한 대체 경로. Wanted 의 공개 REST
+  endpoint (`/api/v4/jobs`) 를 httpx 로 직접 호출해 OAuth/proxy/scraper
+  미디어 의존성 없이 한국 tech job 을 검색. 결과는 평탄한 dict 리스트
+  `{job_id, position, company, location, url, posted_at}`. MCP server 가
+  아니라 GEODE 내장 도구 — 별도 subprocess 없음. `SAFE_TOOLS` 에 등록되어
+  sub-agent / read-only 정책 path 에서 auto-approve. tool count 24→25.
+  레퍼런스: Manus / Devin 의 paid scraping provider fallback 패턴과는
+  반대로 — 차단되는 source 를 바꾸는 lightweight 방향.
 - **`run_bash` 의 read-only pipeline auto-approve.** 기존 `is_bash_auto_approved`
   가 pipe (`|`) 자체를 무조건 unsafe 로 판정해 `find ~/x -type f | sed 's/…/…/'
   | head -200` 같은 표준 read-only 체인이 매번 HITL approval 요구. 이제
