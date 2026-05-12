@@ -76,6 +76,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     pages: [
       { slug: "runtime/llm/providers", title: "Providers", titleKo: "프로바이더", summary: "Anthropic, OpenAI, Codex, GLM. Wire-level differences and fallback chains.", summaryKo: "Anthropic, OpenAI, Codex, GLM. wire-level 차이와 폴백 체인.", quadrant: "reference" },
       { slug: "runtime/llm/prompt-system", title: "Prompt System", titleKo: "프롬프트 시스템", summary: "5-layer prompt architecture. Assembly pipeline.", summaryKo: "프롬프트 5계층 아키텍처. 어셈블리 파이프라인.", quadrant: "reference" },
+      { slug: "runtime/llm/system-prompt-modes", title: "System Prompt Modes", titleKo: "시스템 프롬프트 모드", summary: "GEODE_PERSONA opt-in plus audit-mode strip. The two ways the system prompt can be reshaped.", summaryKo: "GEODE_PERSONA opt-in과 audit-mode strip. 시스템 프롬프트가 변형되는 두 가지 방식.", quadrant: "reference" },
       { slug: "runtime/llm/prompt-caching", title: "Prompt Caching", titleKo: "프롬프트 캐싱", summary: "STATIC and DYNAMIC boundary. Ephemeral cache control.", summaryKo: "STATIC과 DYNAMIC 경계. ephemeral 캐시 제어.", quadrant: "reference" },
       { slug: "runtime/llm/prompt-hashing", title: "Prompt Hashing", titleKo: "프롬프트 해싱", summary: "Karpathy P4 ratchet. 20 pinned hashes. Build break on drift.", summaryKo: "Karpathy P4 ratchet. 20개 해시 핀. drift 발생 시 빌드 break.", quadrant: "reference" },
       { slug: "runtime/llm/langsmith", title: "LangSmith", titleKo: "LangSmith", summary: "Opt-in tracing. Hook + RunLog replacement path.", summaryKo: "Opt-in 트레이싱. 훅과 RunLog 대체 경로.", quadrant: "reference" },
@@ -149,6 +150,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     pages: [
       { slug: "petri/overview", title: "Petri × GEODE Integration", titleKo: "Petri × GEODE 통합", summary: "Anthropic Alignment Science's framework, wrapped over GEODE's agent. 173 seeds, 38 judge dimensions.", summaryKo: "Anthropic Alignment Science의 프레임워크를 GEODE 에이전트 위에 얹음. 173 seeds, 38 judge 차원.", quadrant: "explanation" },
       { slug: "petri/run", title: "Run an Audit", titleKo: "감사 실행", summary: "inspect eval inspect_petri/audit. Choose model roles, seeds, and turn budget.", summaryKo: "inspect eval inspect_petri/audit. 모델 역할, seeds, turn 예산 선택.", quadrant: "how-to" },
+      { slug: "petri/scenarios", title: "Scenarios", titleKo: "시나리오", summary: "173 default seeds plus 13 GEODE-specific seeds. The full audit catalog.", summaryKo: "173 default seeds + GEODE 13 seeds. 전체 audit 시나리오 카탈로그.", quadrant: "reference" },
       { slug: "petri/judge-dimensions", title: "38 Judge Dimensions", titleKo: "38 Judge 차원", summary: "What each dimension scores. How to read the heatmap.", summaryKo: "각 차원이 무엇을 평가하는지. heatmap 읽는 법.", quadrant: "reference" },
       { slug: "petri/bundle", title: "Audit Bundle Viewer", titleKo: "감사 Bundle 뷰어", summary: "Live inspect_ai transcript viewer for the latest GEODE audit run.", summaryKo: "최신 GEODE 감사 run의 라이브 inspect_ai 트랜스크립트 뷰어.", quadrant: "reference", externalUrl: "/petri-bundle/" },
     ],
@@ -161,7 +163,6 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "explanation/self-hosting", title: "Why a Self-Hosting Harness", titleKo: "왜 self-hosting 하네스인가", summary: "The runtime and the build line share primitives. Why that mattered.", summaryKo: "런타임과 빌드 라인이 같은 기본 단위를 공유하는 이유.", quadrant: "explanation" },
       { slug: "explanation/ratchet", title: "Why Ratchet Discipline", titleKo: "왜 ratchet 규율인가", summary: "20 pinned prompt hashes. 5-stage CI. The ratchet shape that prevents drift.", summaryKo: "20개 프롬프트 해시 핀. 5단계 CI. drift를 막는 ratchet 형태.", quadrant: "explanation" },
       { slug: "explanation/4-layer", title: "Why 4 Layers", titleKo: "왜 4-계층인가", summary: "Model, Runtime, Harness, Agent. Where each layer's responsibility ends.", summaryKo: "Model, Runtime, Harness, Agent. 각 계층의 책임이 끝나는 지점.", quadrant: "explanation" },
-      { slug: "explanation/solo", title: "Why a Solo Author", titleKo: "왜 단독 저자인가", summary: "What ratchet-driven release lets one person hold together. Trade-offs.", summaryKo: "ratchet-driven release가 한 명이 끌고 갈 수 있게 해주는 것. 트레이드오프.", quadrant: "explanation" },
     ],
   },
   {

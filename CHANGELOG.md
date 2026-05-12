@@ -30,6 +30,55 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Infrastructure
 
+- **Docs sync to v0.95 codebase facts plus Petri scenarios page.**
+  Code-vs-docs GAP audit against CHANGELOG v0.66 to v0.95. Outcome: 14
+  missing entries identified, 16 outdated pages, 7 recommended. Top
+  priorities folded in.
+  - **`solo` explanation page removed** per author request.
+  - **Two new pages.**
+    - `/docs/runtime/llm/system-prompt-modes` documents the
+      `GEODE_PERSONA` opt-in and `audit-mode` strip introduced in v0.92
+      to v0.93.
+    - `/docs/petri/scenarios` documents the 13 GEODE-specific Petri
+      seeds across 7 categories (autonomy, calibration, compute_use,
+      efficiency, exploratory, reasoning, research) and the
+      `inspect_petri` v3 default 173 seeds. Pressure curve (1 to 3 to 1)
+      and frontmatter convention included.
+  - **Outdated facts patched across nine pages.**
+    - `/docs` landing: hardcoded "v0.65.0, 223+13, 4380 tests" replaced
+      with live `GEODE_SOT` import.
+    - `/docs/runtime/tools/protocol`: 57 tools to 61 (6 always-loaded
+      plus 55 deferred).
+    - `/docs/harness/hooks`: "12 categories" to "14 categories".
+    - `/docs/harness/lifecycle` and `/docs/architecture/system-index`:
+      `core/lifecycle/` to `core/wiring/` (v0.87.0 rename). Cold-start
+      section added (v0.85 to v0.89 SDK lazy arc, minus 258ms, minus
+      86 percent warm).
+    - `/docs/runtime/llm/langsmith`: page repurposed as a deprecation
+      notice. LangSmith dependency was removed in v0.89.0; replacement
+      path links to hooks plus RunLog plus Petri.
+    - `/docs/runtime/llm/providers`: GLM family updated to 5 models
+      (5.1 / 5 / 5-turbo / 4.7 / 4.7-flash) with the 202_752 token
+      context. Added a "v0.94+ guards" section: HTML data-URL guard,
+      `tool_choice` normalization, `prompt_cache_key` derivation, GLM
+      thinking gate, Anthropic `agentic_call` streaming.
+    - `/docs/architecture/agentic-loop`: auto-escalation removed
+      (v0.90.0). Explicit `model_action_required` and
+      `user_clarification_needed` termination signals documented.
+    - `/docs/ops/observability`: third lens to four-lens stack. Added
+      `core.audit.diagnostics` per-call assertion lens (v0.92.0). Cost
+      ledger at `~/.geode/usage/*.jsonl` documented.
+    - `/docs/petri/run`: primary command flipped to `geode audit` Typer
+      CLI with `--dim-set`, `--seed-select`, `--target-tools`,
+      `--unrestricted`. `inspect eval` retained as the raw alternative.
+    - `/docs/petri/judge-dimensions`: default `geode_5axes` 17 dim
+      noted alongside the full 38 dim catalog.
+  - Net: 49 to 50 pages (one removed, two added). All bilingual, all
+    carry Diátaxis quadrant chips.
+
+
+### Infrastructure
+
 - **Docs restructure (v0.95.0+) — 12 chapters, 49 pages, References chapter
   added.** Follow-up sprint to the docs rebuild. Three corrections based on
   live review.

@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/tools/protocol"
       title="Tool Protocol"
       titleKo="도구 프로토콜"
-      summary="Tool protocol, registry, deferred loading. 57 tools (6 always-loaded + 51 deferred), single JSON SOT at core/tools/definitions.json."
-      summaryKo="도구 프로토콜, 레지스트리, 지연 로딩. 57개 도구 (상시 로드 6개 + 지연 로드 51개), 단일 JSON SOT가 core/tools/definitions.json에 있습니다."
+      summary="Tool protocol, registry, deferred loading. 61 tools (6 always-loaded + 55 deferred), single JSON SOT at core/tools/definitions.json."
+      summaryKo="도구 프로토콜, 레지스트리, 지연 로딩. 61개 도구 (상시 로드 6개 + 지연 로드 55개), 단일 JSON SOT가 core/tools/definitions.json에 있습니다."
     >
       <Bi
         ko={
@@ -44,11 +44,11 @@ export default function Page() {
               <thead><tr><th>티어</th><th>개수</th><th>동작</th></tr></thead>
               <tbody>
                 <tr><td>상시 로드</td><td>6</td><td>모든 LLM 호출에서 전송. <code>list_ips</code>, <code>search_ips</code>, <code>analyze_ip</code>, <code>memory_search</code>, <code>show_help</code>, <code>general_web_search</code>.</td></tr>
-                <tr><td>지연 로드</td><td>51</td><td><code>tool_search</code>로 발견 가능, 요청 시 로드. 전체 도구 수가 <code>defer_threshold</code> (기본 10) 를 넘으면 활성화됩니다.</td></tr>
+                <tr><td>지연 로드</td><td>55</td><td><code>tool_search</code>로 발견 가능, 요청 시 로드. 전체 도구 수가 <code>defer_threshold</code> (기본 10) 를 넘으면 활성화됩니다.</td></tr>
               </tbody>
             </table>
             <p>
-              총 도구 수. <strong>57</strong> (<code>core/tools/definitions.json</code>로
+              총 도구 수. <strong>61</strong> (<code>core/tools/definitions.json</code>로
               실측 확인). 상시 로드 도구의 frozenset은{" "}
               <code>core/tools/registry.py:209-218</code>에{" "}
               <code>ALWAYS_LOADED_TOOLS</code>로 정의됩니다.
@@ -111,18 +111,18 @@ export default function Page() {
 
             <h2>Deferred loading</h2>
             <p>
-              With 56 tools, sending all definitions on every LLM call would burn
+              With 61 tools, sending all definitions on every LLM call would burn
               ~10K tokens of input per turn. GEODE splits the catalog:
             </p>
             <table>
               <thead><tr><th>Tier</th><th>Count</th><th>Behaviour</th></tr></thead>
               <tbody>
                 <tr><td>Always-loaded</td><td>6</td><td>Sent on every LLM call: <code>list_ips</code>, <code>search_ips</code>, <code>analyze_ip</code>, <code>memory_search</code>, <code>show_help</code>, <code>general_web_search</code></td></tr>
-                <tr><td>Deferred</td><td>51</td><td>Discoverable via <code>tool_search</code>, loaded on demand. Activates when total tools exceed <code>defer_threshold</code> (default 10).</td></tr>
+                <tr><td>Deferred</td><td>55</td><td>Discoverable via <code>tool_search</code>, loaded on demand. Activates when total tools exceed <code>defer_threshold</code> (default 10).</td></tr>
               </tbody>
             </table>
             <p>
-              Total tool count: <strong>57</strong> (verified via{" "}
+              Total tool count: <strong>61</strong> (verified via{" "}
               <code>core/tools/definitions.json</code>). The frozenset of
               always-loaded tools lives at <code>core/tools/registry.py:209-218</code>{" "}
               as <code>ALWAYS_LOADED_TOOLS</code>.

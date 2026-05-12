@@ -8,8 +8,8 @@ export default function Page() {
       slug="architecture/system-index"
       title="System Index"
       titleKo="시스템 색인"
-      summary="Every first-class subsystem in GEODE v0.64.0, with module count and main entry point."
-      summaryKo="GEODE v0.64.0의 모든 1급 서브시스템. 모듈 수와 주요 진입점을 함께 정리합니다."
+      summary="Every first-class subsystem in GEODE v0.95.0+, with module count and main entry point. Live numbers in System Metrics SOT."
+      summaryKo="GEODE v0.95.0+의 모든 1급 서브시스템. 모듈 수와 주요 진입점. 라이브 수치는 시스템 메트릭 SOT 참조."
     >
       <Bi
         ko={
@@ -34,7 +34,7 @@ $ find tests/ -name "test_*.py" | wc -l  # ~229`}</pre>
                 <tr><td>cli</td><td><code>core/cli/</code></td><td>30</td><td><code>commands.py:41 ModelProfile</code></td></tr>
                 <tr><td>gateway</td><td><code>core/cli/serve/</code></td><td>—</td><td><code>geode serve</code></td></tr>
                 <tr><td>hooks</td><td><code>core/hooks/</code></td><td>7</td><td><code>system.py:200 HookSystem</code></td></tr>
-                <tr><td>lifecycle</td><td><code>core/lifecycle/</code></td><td>5</td><td>bootstrap entry</td></tr>
+                <tr><td>wiring</td><td><code>core/wiring/</code></td><td>5+</td><td>bootstrap entry (v0.87.0 lifecycle → wiring rename)</td></tr>
                 <tr><td>channels</td><td><code>core/channels/</code></td><td>4</td><td>adapter classes</td></tr>
                 <tr><td>ui</td><td><code>core/ui/</code></td><td>8</td><td>spinners, progress</td></tr>
               </tbody>
@@ -79,8 +79,8 @@ $ find tests/ -name "test_*.py" | wc -l  # ~229`}</pre>
                 <tr><th>Core 모듈</th><td>223</td></tr>
                 <tr><th>플러그인 모듈</th><td>13</td></tr>
                 <tr><th>테스트</th><td>~229 files (memory 83, llm 62, tools 59, hooks 31, agent 30)</td></tr>
-                <tr><th>훅 이벤트</th><td>58 (12 groups)</td></tr>
-                <tr><th>도구</th><td>57 (6 always-loaded + 51 deferred via <code>tool_search</code>)</td></tr>
+                <tr><th>훅 이벤트</th><td>58 (14 groups)</td></tr>
+                <tr><th>도구</th><td>61 (6 always-loaded + 55 deferred via <code>tool_search</code>)</td></tr>
                 <tr><th>MCP 서버</th><td>16</td></tr>
                 <tr><th>슬래시 명령</th><td>15개 이상</td></tr>
                 <tr><th>핀된 프롬프트 템플릿</th><td>20 (17 .md + 3 axes)</td></tr>
@@ -110,7 +110,7 @@ $ find tests/ -name "test_*.py" | wc -l  # ~229`}</pre>
                 <tr><td>cli</td><td><code>core/cli/</code></td><td>30</td><td><code>commands.py:41 ModelProfile</code></td></tr>
                 <tr><td>gateway</td><td><code>core/cli/serve/</code></td><td>—</td><td><code>geode serve</code></td></tr>
                 <tr><td>hooks</td><td><code>core/hooks/</code></td><td>7</td><td><code>system.py:200 HookSystem</code></td></tr>
-                <tr><td>lifecycle</td><td><code>core/lifecycle/</code></td><td>5</td><td>bootstrap entry</td></tr>
+                <tr><td>wiring</td><td><code>core/wiring/</code></td><td>5+</td><td>bootstrap entry (v0.87.0 lifecycle → wiring rename)</td></tr>
                 <tr><td>channels</td><td><code>core/channels/</code></td><td>4</td><td>adapter classes</td></tr>
                 <tr><td>ui</td><td><code>core/ui/</code></td><td>8</td><td>spinners, progress</td></tr>
               </tbody>
@@ -155,8 +155,8 @@ $ find tests/ -name "test_*.py" | wc -l  # ~229`}</pre>
                 <tr><th>Core modules</th><td>223</td></tr>
                 <tr><th>Plugin modules</th><td>13</td></tr>
                 <tr><th>Tests</th><td>~229 files (memory 83, llm 62, tools 59, hooks 31, agent 30)</td></tr>
-                <tr><th>Hook events</th><td>58 (12 groups)</td></tr>
-                <tr><th>Tools</th><td>57 (6 always-loaded + 51 deferred via <code>tool_search</code>)</td></tr>
+                <tr><th>Hook events</th><td>58 (14 groups)</td></tr>
+                <tr><th>Tools</th><td>61 (6 always-loaded + 55 deferred via <code>tool_search</code>)</td></tr>
                 <tr><th>MCP servers</th><td>16</td></tr>
                 <tr><th>Slash commands</th><td>15+</td></tr>
                 <tr><th>Prompt templates pinned</th><td>20 (17 .md + 3 axes)</td></tr>

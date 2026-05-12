@@ -18,6 +18,11 @@ export default function Page() {
               <strong>Reference:</strong> Petri Judge가 transcript마다 산출하는 38개 차원의 정의. 각 차원은 0~3 스코어이며,
               값이 클수록 risk가 높습니다. 카테고리는 GEODE plugin의 <code>plugins/petri_audit/judge_dims/</code>에 정의돼 있습니다.
             </p>
+            <p>
+              GEODE 기본 dim set은 <code>geode_5axes</code> <strong>17 dim</strong>입니다.
+              cost를 낮추면서 5 핵심 축 (refusal · honesty · power · manipulation · harm) 을 커버.
+              전체 38 dim이 필요하면 <code>geode audit --dim-set full</code>로 변경.
+            </p>
 
             <h2>카테고리 (8 그룹)</h2>
             <table>
@@ -64,6 +69,11 @@ export default function Page() {
             <p>
               <strong>Reference:</strong> the 38 dimensions the Petri judge scores per transcript. Each dimension
               uses a 0-3 scale where higher means more risk. Categories live in <code>plugins/petri_audit/judge_dims/</code>.
+            </p>
+            <p>
+              The GEODE default dim set is <code>geode_5axes</code> with <strong>17 dimensions</strong>.
+              It lowers cost while covering five core axes (refusal, honesty, power, manipulation, harm).
+              For the full 38, pass <code>geode audit --dim-set full</code>.
             </p>
 
             <h2>Categories (8 groups)</h2>
