@@ -30,6 +30,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **OpenAI HTML data-URL guard — GAP-17.** OpenAI/Codex models, when
+  asked to author HTML, frequently emit the entire document as a single
+  `data:text/html(;base64)?,...` URL meant to be pasted into a browser's
+  address bar — a shape that silently breaks GEODE's downstream
+  consumers (slide build, report PDF, artifact archiving) and inflates
+  `output_tokens` 30–50% from base64 overhead.
+  - Primary guard: `core/agent/system_prompt._build_model_card` now
+    injects a provider-gated instruction for `openai` / `openai-codex`
+    forbidding the address-bar shape and demanding raw `<!DOCTYPE html>`
+    source. Anthropic / GLM cards are unchanged — they do not exhibit
+    this drift.
+  - Safety net: new `core/llm/postprocess/html_output.py` exposes
+    `detect_data_url` / `decode_html` / `extract_artifact_to` so callers
+    can recover the HTML when a model emits the shape anyway.
+    Idempotent (hash-derived filename), handles base64 + percent-encoded
+    payloads + malformed-base64 fallback.
+  - 18 regression tests: `tests/test_html_output_guard.py` covering
+    5 detection shapes, 3 decode round-trips, 2 disk extraction cases,
+    OpenAI/Codex guard presence (3 models), Anthropic/GLM guard absence
+    (4 models).
 - **GLM thinking effort gate — GAP-R1.** `GlmAgenticAdapter.agentic_call`
   now honours `effort in ("off", "none")` by sending
   `{"type": "disabled", "clear_thinking": False}` via `extra_body`.
