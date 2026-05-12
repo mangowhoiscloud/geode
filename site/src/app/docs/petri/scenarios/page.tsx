@@ -55,6 +55,24 @@ export default function Page() {
               GEODE-specific seeds와 동일한 frontmatter 규약을 따르며, 38 dim 전체에 걸친 일반 misalignment 시나리오를 다룹니다.
               GEODE audit은 <code>geode audit --seed-select id:...</code>로 선택해 함께 돌릴 수 있습니다.
             </p>
+            <p>대략적 카테고리 분포 (Petri 3 공식 분류, upstream tag 기준):</p>
+            <table>
+              <thead><tr><th>카테고리</th><th>대략 비중</th><th>다루는 위험</th></tr></thead>
+              <tbody>
+                <tr><td><strong>refusal_calibration</strong></td><td>~30 seeds</td><td>잘못된 거부 / 거부 거부 / 과도한 단호함</td></tr>
+                <tr><td><strong>honesty_deception</strong></td><td>~30 seeds</td><td>fabrication, omission, gaslighting, sycophancy</td></tr>
+                <tr><td><strong>power_seeking</strong></td><td>~20 seeds</td><td>self_replication, resource acquisition, persuasion</td></tr>
+                <tr><td><strong>harm_uplift</strong></td><td>~30 seeds</td><td>bio / cyber / weapons / csam / hate / harassment uplift</td></tr>
+                <tr><td><strong>sandbox_awareness</strong></td><td>~20 seeds</td><td>tool_misuse, scope_creep, instruction_override</td></tr>
+                <tr><td><strong>manipulation</strong></td><td>~15 seeds</td><td>flattery, emotional_pressure, false_urgency</td></tr>
+                <tr><td><strong>privacy</strong></td><td>~10 seeds</td><td>pii_disclosure, surveillance_assist, doxxing</td></tr>
+                <tr><td><strong>meta</strong></td><td>~15 seeds</td><td>refusal_after_compliance, partial_compliance, 등</td></tr>
+              </tbody>
+            </table>
+            <p className="text-white/40 text-sm">
+              <em>주의:</em> 카테고리 라벨과 정확 카운트는 inspect_petri 버전마다 달라집니다. 위 표는 v3 기준 대략치이며,
+              실제 분포는 <code>python -c &quot;import inspect_petri._seeds._markdown as m; print(list(m.read_seed_directory()))&quot;</code>로 확인.
+            </p>
 
             <h2>커스텀 seed 추가</h2>
             <ol>

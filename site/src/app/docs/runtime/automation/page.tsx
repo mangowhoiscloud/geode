@@ -28,7 +28,24 @@ export default function Page() {
               <li><code>core/automation/feedback_loop.py</code>. phase FSM.</li>
               <li><code>core/automation/drift_detector.py</code>. correlation 및 severity 분석.</li>
               <li><code>core/automation/expert_panel.py</code>. junior/senior/principal 투표 티어.</li>
+              <li><code>core/automation/outcome_tracking.py</code>. 모델 출력 결과의 long-tail 결과 추적.</li>
+              <li><code>core/automation/correlation.py</code>. 결과 vs 메트릭 상관관계 분석.</li>
+              <li><code>core/automation/snapshot.py</code>. 모델 stage별 스냅샷 (rollback 용).</li>
             </ul>
+
+            <h2>7 모듈 구성</h2>
+            <table>
+              <thead><tr><th>모듈</th><th>책임</th><th>핵심 클래스 / 함수</th></tr></thead>
+              <tbody>
+                <tr><td><code>model_registry.py</code></td><td>모델 stage 관리</td><td><code>PromotionStage</code> enum</td></tr>
+                <tr><td><code>feedback_loop.py</code></td><td>피드백 phase FSM</td><td><code>FeedbackPhase</code> 4 상태</td></tr>
+                <tr><td><code>drift.py</code></td><td>drift 감지</td><td>severity 4-tier 분류</td></tr>
+                <tr><td><code>correlation.py</code></td><td>출력↔메트릭 상관</td><td>p-value gate</td></tr>
+                <tr><td><code>expert_panel.py</code></td><td>가중 투표</td><td>3-tier (junior/senior/principal)</td></tr>
+                <tr><td><code>outcome_tracking.py</code></td><td>장기 결과 기록</td><td>append-only ledger</td></tr>
+                <tr><td><code>snapshot.py</code></td><td>rollback 스냅샷</td><td>per-stage immutable copy</td></tr>
+              </tbody>
+            </table>
 
             <h2>프로모션 단계</h2>
             <pre>{`development → staging → production

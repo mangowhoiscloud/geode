@@ -1,6 +1,7 @@
-import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
+"use client";
 
-export const metadata = { title: "System Index — GEODE Docs" };
+import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
+import { GEODE_SOT } from "@/data/geode/sot";
 
 export default function Page() {
   return (
@@ -8,16 +9,21 @@ export default function Page() {
       slug="architecture/system-index"
       title="System Index"
       titleKo="시스템 색인"
-      summary="Every first-class subsystem in GEODE v0.95.0+, with module count and main entry point. Live numbers in System Metrics SOT."
-      summaryKo="GEODE v0.95.0+의 모든 1급 서브시스템. 모듈 수와 주요 진입점. 라이브 수치는 시스템 메트릭 SOT 참조."
+      summary={`Every first-class subsystem in GEODE v${GEODE_SOT.version}. Module count and main entry point. Live numbers from System Metrics SOT.`}
+      summaryKo={`GEODE v${GEODE_SOT.version}의 모든 1급 서브시스템. 모듈 수와 주요 진입점. 라이브 수치는 시스템 메트릭 SOT.`}
     >
       <Bi
         ko={
           <>
-            <h2>프로젝트 통계</h2>
-            <pre>{`$ find core/ -name "*.py" | wc -l        # 223
-$ find plugins/ -name "*.py" | wc -l     # 13
-$ find tests/ -name "test_*.py" | wc -l  # ~229`}</pre>
+            <h2>프로젝트 통계 (라이브 SOT)</h2>
+            <pre>{`# 버전: ${GEODE_SOT.version}
+# core   ${GEODE_SOT.modules.core} modules
+# plugins ${GEODE_SOT.modules.plugins} modules
+# total  ${GEODE_SOT.modules.total} modules
+# tests  ${GEODE_SOT.tests.standard.toLocaleString()} + ${GEODE_SOT.tests.live} live
+# releases ${GEODE_SOT.releases}
+# since   ${GEODE_SOT.since}
+# synced  ${GEODE_SOT.syncedAt}`}</pre>
 
             <h2>L4 Agent (1개)</h2>
             <table>
@@ -90,10 +96,15 @@ $ find tests/ -name "test_*.py" | wc -l  # ~229`}</pre>
         }
         en={
           <>
-            <h2>Project statistics</h2>
-            <pre>{`$ find core/ -name "*.py" | wc -l        # 223
-$ find plugins/ -name "*.py" | wc -l     # 13
-$ find tests/ -name "test_*.py" | wc -l  # ~229`}</pre>
+            <h2>Project statistics (live SOT)</h2>
+            <pre>{`# version: ${GEODE_SOT.version}
+# core   ${GEODE_SOT.modules.core} modules
+# plugins ${GEODE_SOT.modules.plugins} modules
+# total  ${GEODE_SOT.modules.total} modules
+# tests  ${GEODE_SOT.tests.standard.toLocaleString()} + ${GEODE_SOT.tests.live} live
+# releases ${GEODE_SOT.releases}
+# since   ${GEODE_SOT.since}
+# synced  ${GEODE_SOT.syncedAt}`}</pre>
 
             <h2>L4 Agent (1)</h2>
             <table>
