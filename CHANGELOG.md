@@ -30,6 +30,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Infrastructure
 
+- **Docs site rebuild — Diátaxis 8 chapters, 53 bilingual pages.**
+  Site/docs restructured into 8 numbered chapters following Diátaxis (Tutorial,
+  How-to, Reference, Explanation). Every page declares its quadrant via a
+  color chip in the title and sidebar.
+  - Chapters: 00 Welcome (3), 01 Run GEODE (7 how-to), 02 System Reference
+    (24), 03 Build on GEODE (4 how-to), 04 Operations (4 how-to),
+    05 Petri Audit (4, new), 06 Explanation (4 why-pages, new), 99 Reference (3).
+  - **53 of 53 pages are now bilingual** via `<Bi ko en />`. Previous state:
+    only 3 of 28 pages had Korean translations; 25 EN-only pages were
+    converted in this PR.
+  - New chapter: **05 Petri × GEODE** with overview, run guide,
+    38 judge-dimension reference, and a viewer link to
+    `https://mangowhoiscloud.github.io/geode/petri-bundle/` (external bundle
+    published separately).
+  - Master neologism page chain: `/docs/explanation/self-hosting`,
+    `/explanation/ratchet`, `/explanation/4-layer`, `/explanation/solo`
+    grounds every chapter that references "self-hosting agent harness".
+  - DocsShell footer now imports `GEODE_SOT` (version, modules, tests,
+    syncedAt) instead of hardcoding v0.65.0. GitHub link points at
+    `mangowhoiscloud/geode` (was `/portfolio`).
+  - Tracking artifact: `site/DOCS-PROGRESS.md` is the per-page status table.
+  - Reference patterns: Hermes Agent (NousResearch) `llms.txt` index pattern,
+    OpenClaw `AGENTS.md` code-root navigation, Diátaxis 4-quadrant framework,
+    Anthropic Platform Docs comparison-table-at-decision-point pattern.
+
 - **Public site at `site/` — GEODE Pages deploy.** Next.js 16 static
   export integrated into the repo at `site/`. Builds and deploys to
   GitHub Pages at `https://mangowhoiscloud.github.io/geode/` on push to
