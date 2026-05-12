@@ -435,37 +435,11 @@ class EventRenderer:
         self._out.write("\n")
         if uri:
             self._out.write("  \033[2mPress [Enter] to open the URL in your browser.\033[0m\n")
-            self._start_oauth_browser_watcher(uri)
+            from core.ui.oauth_browser import start_oauth_browser_watcher
+
+            start_oauth_browser_watcher(uri)
         self._out.write("  \033[2mWaiting for sign-in... (Ctrl+C to cancel)\033[0m\n")
         self._out.flush()
-
-    def _start_oauth_browser_watcher(self, uri: str) -> None:
-        """Daemon thread: open `uri` in the default browser on first stdin line.
-
-        Non-blocking — `_handle_oauth_login_started` returns immediately so
-        the polling heartbeats can continue rendering. If the user finishes
-        OAuth without pressing Enter the thread stays blocked on
-        ``sys.stdin.readline()``; it's a daemon thread so it dies with the
-        process.
-
-        Skips when stdin is not a TTY (piped / non-interactive sessions).
-        """
-        if not sys.stdin.isatty():
-            return
-
-        def _watcher() -> None:
-            try:
-                sys.stdin.readline()
-            except Exception:
-                return
-            try:
-                import webbrowser
-
-                webbrowser.open(uri)
-            except Exception:  # pragma: no cover — webbrowser is best-effort
-                log.debug("webbrowser.open failed for %s", uri, exc_info=True)
-
-        threading.Thread(target=_watcher, daemon=True, name="oauth-browser-watcher").start()
 
     def _handle_oauth_login_pending(self, event: dict[str, Any]) -> None:
         """Heartbeat — overwrite a single 'Waiting…' line in place."""

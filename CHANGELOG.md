@@ -30,6 +30,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **OAuth Press-[Enter] prompt — direct-render wiring parity.** PR #1077
+  added the Press-[Enter] watcher only to the IPC render path
+  (`EventRenderer._handle_oauth_login_started`). The thin-CLI direct path
+  in `core/ui/agentic_ui/events.py:emit_oauth_login_started` (used by
+  `RunLocation.THIN` `/login oauth openai`) still rendered the legacy
+  layout without the prompt, so users on the THIN path didn't see
+  "Press [Enter]" and the browser-watcher never spawned. Extracted the
+  watcher to `core/ui/oauth_browser.start_oauth_browser_watcher`; both
+  the IPC handler and the direct fallback now call it. Regression:
+  `tests/test_oauth_browser.py::TestEmitOauthLoginStartedFallback` (2
+  cases — fallback prints prompt + spawns watcher; IPC path skips
+  fallback) + `TestStartOauthBrowserWatcher` (2 cases — TTY gating).
+
+
+
 - **Sandbox tilde expansion (`~` / `~/`) — silent-fail bug.**
   `core/tools/sandbox.py:validate_path()` advertised that bare `~` and `~/`
   were "expanded by Python, not shell" (`check_shell_expansion` allowed
