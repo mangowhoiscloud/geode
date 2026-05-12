@@ -1,0 +1,254 @@
+# GEODE
+
+GEODE v0.95.0. A self-hosting agent harness for autonomous execution.
+스스로를 빌드하는 자율 에이전트 하네스.
+
+Last sync: 2026-05-12
+
+---
+
+### What GEODE is (GEODE 소개)
+URL: https://mangowhoiscloud.github.io/geode/docs
+EN: A self-hosting agent harness. What it does, who it is for, where to go next.
+KO: 스스로를 빌드하는 자율 에이전트 하네스. 무엇을 하고, 누구를 위한 것이고, 어디로 갈지.
+
+### Quick Start (빠른 시작)
+URL: https://mangowhoiscloud.github.io/geode/docs/quick-start
+EN: Install GEODE and run your first analysis in five minutes.
+KO: 5분 안에 GEODE를 설치하고 첫 분석을 실행합니다.
+
+### 4-Layer Stack (4-계층 스택)
+URL: https://mangowhoiscloud.github.io/geode/docs/architecture/overview
+EN: Model. Runtime. Harness. Agent. One paragraph each.
+KO: Model. Runtime. Harness. Agent. 한 문단씩.
+
+### Pick a Path (경로 선택)
+URL: https://mangowhoiscloud.github.io/geode/docs/run/pick-path
+EN: Subscription, API key, or free path. How to choose for your situation.
+KO: 구독, API 키, 무료 경로 중 본인 상황에 맞춰 고르는 법.
+
+### Configure Providers (프로바이더 설정)
+URL: https://mangowhoiscloud.github.io/geode/docs/run/providers
+EN: Anthropic, OpenAI, Codex, GLM. Where keys go, what fallback chain you get.
+KO: Anthropic, OpenAI, Codex, GLM. 키를 어디에 두고 어떤 폴백 체인이 동작하는지.
+
+### Run an Analysis (분석 실행)
+URL: https://mangowhoiscloud.github.io/geode/docs/run/analyze
+EN: Run the Game IP pipeline end to end, dry-run or live.
+KO: Game IP 파이프라인을 dry-run 또는 라이브로 끝까지 돌리기.
+
+### Schedule Tasks (작업 예약)
+URL: https://mangowhoiscloud.github.io/geode/docs/run/schedule
+EN: Natural language plus cron, with jitter. Daily reports as a single command.
+KO: 자연어와 cron, jitter 포함. 일일 리포트를 한 줄 명령으로.
+
+### Run as Daemon (데몬으로 실행)
+URL: https://mangowhoiscloud.github.io/geode/docs/run/serve
+EN: Start serve, restart, stop. Thin CLI on top of an IPC-served runtime.
+KO: serve 시작·재시작·종료. IPC 데몬 위에 thin CLI.
+
+### Messaging Integrations (메신저 연동)
+URL: https://mangowhoiscloud.github.io/geode/docs/run/messaging
+EN: Hook GEODE into Slack, Discord, or Telegram via gateway adapters.
+KO: 게이트웨이 어댑터로 Slack, Discord, Telegram에 연결.
+
+### Troubleshooting (문제 해결)
+URL: https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting
+EN: Common failure modes and where to look. Logs, hooks, runlog.
+KO: 흔한 실패 모드와 살펴볼 곳. 로그, 훅, runlog.
+
+### Agentic Loop (Agentic 루프)
+URL: https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop
+EN: while(tool_use) primitive. 50-round limit. 5 termination paths.
+KO: while(tool_use) 기본 단위. 50 라운드 상한. 5종 종료 경로.
+
+### System Index (시스템 색인)
+URL: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
+EN: Every subsystem with file paths. The flat catalog.
+KO: 모든 서브시스템과 파일 경로. 평면 카탈로그.
+
+### Skill Registry (스킬 레지스트리)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/skills
+EN: Runtime skills. Discovery, lifecycle, override.
+KO: 런타임 스킬. 발견, 라이프사이클, 오버라이드.
+
+### Providers (프로바이더)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers
+EN: Anthropic, OpenAI, Codex, GLM. 14 models, fallback chains, circuit breakers.
+KO: Anthropic, OpenAI, Codex, GLM. 14 모델, 폴백 체인, 회로 차단기.
+
+### Prompt System (프롬프트 시스템)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system
+EN: 5-layer prompt architecture. Assembly pipeline.
+KO: 프롬프트 5계층 아키텍처. 어셈블리 파이프라인.
+
+### Prompt Caching (프롬프트 캐싱)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-caching
+EN: STATIC and DYNAMIC boundary. Ephemeral cache control.
+KO: STATIC과 DYNAMIC 경계. ephemeral 캐시 제어.
+
+### Prompt Hashing (프롬프트 해싱)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing
+EN: Karpathy P4 ratchet. 20 pinned hashes. Build break on drift.
+KO: Karpathy P4 ratchet. 20개 해시 핀. drift 발생 시 빌드 break.
+
+### System Prompt Modes (시스템 프롬프트 모드)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/system-prompt-modes
+EN: GEODE_PERSONA opt-in plus audit-mode strip. The two ways the system prompt can be reshaped.
+KO: GEODE_PERSONA opt-in과 audit-mode strip. 시스템 프롬프트가 변형되는 두 가지 방식.
+
+### Context System (컨텍스트 시스템)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/context
+EN: 5-tier memory hierarchy plus 5-layer prompt assembly plus 200K guard. Every LLM call's context is built here.
+KO: 5계층 메모리 + 5층 프롬프트 어셈블리 + 200K 가드. 모든 LLM 호출의 컨텍스트가 여기서 조립됩니다.
+
+### Tool Protocol (도구 프로토콜)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol
+EN: Registry, deferred loading, 61 tools. Six always-loaded, the rest fetched on demand.
+KO: 레지스트리, 지연 로딩, 61개 도구. 6개 상시 로드, 나머지는 요청 시 가져옴.
+
+### MCP Servers (MCP 서버)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp
+EN: Servers, 25K result guard, HTML to Markdown fallback.
+KO: 서버, 25K 결과 가드, HTML to Markdown 폴백.
+
+### CLI and Slash (CLI와 슬래시 명령)
+URL: https://mangowhoiscloud.github.io/geode/docs/harness/cli
+EN: Thin gateway plus IPC. /model /stop /clean /uninstall /status.
+KO: Thin 게이트웨이와 IPC. /model /stop /clean /uninstall /status.
+
+### Hook System (훅 시스템)
+URL: https://mangowhoiscloud.github.io/geode/docs/harness/hooks
+EN: 58 lifecycle events grouped into 14 categories. Three trigger modes.
+KO: 58개 라이프사이클 이벤트, 14개 카테고리. 세 가지 트리거 모드.
+
+### Lifecycle (라이프사이클)
+URL: https://mangowhoiscloud.github.io/geode/docs/harness/lifecycle
+EN: Bootstrap, serve, shutdown. ContextVar injection order. Cold-start lazy arc.
+KO: Bootstrap, serve, shutdown. ContextVar 주입 순서. cold-start lazy arc.
+
+### Scheduler (스케줄러)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/scheduler
+EN: Natural language plus cron plus jitter. Where jobs persist.
+KO: 자연어 + cron + jitter. 작업 영속 위치.
+
+### Orchestration (오케스트레이션)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration
+EN: LangGraph StateGraph. Node topology. Send API parallelism.
+KO: LangGraph StateGraph. 노드 토폴로지. Send API 병렬화.
+
+### Computer Use (컴퓨터 사용)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use
+EN: Provider-agnostic desktop automation. Anthropic plus OpenAI unified.
+KO: 프로바이더 독립 데스크탑 자동화. Anthropic + OpenAI 통합.
+
+### Automation (자동화)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/automation
+EN: Feedback loop plus model promotion. Drift detection. Sidecar between agent and runtime.
+KO: 피드백 루프 + 모델 프로모션. drift 감지. agent와 runtime 사이의 사이드카.
+
+### Auth and OAuth (인증과 OAuth)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/auth
+EN: Profile rotator, Anthropic ToS path, Codex flow.
+KO: 프로파일 로테이터, Anthropic ToS 경로, Codex 플로우.
+
+### Guardrails G1-G4 (가드레일 G1-G4)
+URL: https://mangowhoiscloud.github.io/geode/docs/verification/guardrails
+EN: Schema, Range, Grounding, Coherence. Fail-fast ladder.
+KO: Schema, Range, Grounding, Coherence. fail-fast 사다리.
+
+### BiasBuster (BiasBuster)
+URL: https://mangowhoiscloud.github.io/geode/docs/verification/biasbuster
+EN: Six bias detectors. Confirmation, recency, anchoring, and three more.
+KO: 6종 편향 검사기. Confirmation, recency, anchoring 외 3종.
+
+### Observability (관측성)
+URL: https://mangowhoiscloud.github.io/geode/docs/verification/observability
+EN: Four lenses: hooks, RunLog, audit diagnostics, Petri. The native observability stack.
+KO: 네 가지 렌즈: 훅, RunLog, audit diagnostics, Petri. 자체 관측성 스택.
+
+### Petri × GEODE (Petri × GEODE)
+URL: https://mangowhoiscloud.github.io/geode/docs/petri/overview
+EN: Anthropic Alignment Science's framework, wrapped over GEODE's agent. 173 seeds, 38 judge dimensions.
+KO: Anthropic Alignment Science의 프레임워크를 GEODE 에이전트 위에 얹음. 173 seeds, 38 judge 차원.
+
+### Petri Scenarios (Petri 시나리오)
+URL: https://mangowhoiscloud.github.io/geode/docs/petri/scenarios
+EN: 173 default seeds plus 13 GEODE-specific seeds. The full audit catalog.
+KO: 173 default seeds + GEODE 13 seeds. 전체 audit 시나리오 카탈로그.
+
+### Petri Run (Petri 실행)
+URL: https://mangowhoiscloud.github.io/geode/docs/petri/run
+EN: geode audit (primary) or inspect eval (raw). Choose model roles, dim set, seeds, and turn budget.
+KO: geode audit (1차 명령) 또는 inspect eval (raw). 모델 역할, dim set, seeds, turn 예산 선택.
+
+### Petri Judge Dimensions (Petri Judge 차원)
+URL: https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions
+EN: What each dimension scores. How to read the heatmap. Default geode_5axes (17) vs full (38).
+KO: 각 차원이 무엇을 평가하는지. heatmap 읽는 법. 기본 geode_5axes (17) vs full (38).
+
+### Petri Bundle Viewer (Petri Bundle 뷰어)
+URL: https://mangowhoiscloud.github.io/geode/docs/petri/bundle
+EN: Live inspect_ai transcript viewer for the latest GEODE audit run.
+KO: 최신 GEODE 감사 run의 라이브 inspect_ai 트랜스크립트 뷰어.
+
+### Domain Plugins (도메인 플러그인)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/domains
+EN: DomainPort protocol. plugin loader. Add a domain in 30 lines.
+KO: DomainPort 프로토콜. 플러그인 로더. 30 라인으로 도메인 추가.
+
+### Game IP Plugin (Game IP 플러그인)
+URL: https://mangowhoiscloud.github.io/geode/docs/plugins/game-ip
+EN: 4 Analysts plus 3 Evaluators plus Synthesizer. 14-axis PSM scoring.
+KO: Analyst 4 + Evaluator 3 + Synthesizer. 14-axis PSM 점수.
+
+### Long-running Safety (장기 실행 안전)
+URL: https://mangowhoiscloud.github.io/geode/docs/ops/long-running
+EN: Token guards, context overflow, sliding window. Graceful drain.
+KO: 토큰 가드, 컨텍스트 오버플로, 슬라이딩 윈도. graceful drain.
+
+### Cost Monitoring (비용 모니터링)
+URL: https://mangowhoiscloud.github.io/geode/docs/ops/cost
+EN: Per-session and per-day budgets. Usage ledger schema. When to switch models.
+KO: 세션·일별 예산. usage ledger 스키마. 모델 전환 시점.
+
+### OAuth Token Rotation (OAuth 토큰 회전)
+URL: https://mangowhoiscloud.github.io/geode/docs/ops/oauth
+EN: Anthropic ToS, Codex flow, refresh policy.
+KO: Anthropic ToS, Codex 플로우, 갱신 정책.
+
+### Why a Self-Hosting Harness (왜 self-hosting 하네스인가)
+URL: https://mangowhoiscloud.github.io/geode/docs/explanation/self-hosting
+EN: The runtime and the build line share primitives. Why that mattered.
+KO: 런타임과 빌드 라인이 같은 기본 단위를 공유하는 이유.
+
+### Why Ratchet Discipline (왜 ratchet 규율인가)
+URL: https://mangowhoiscloud.github.io/geode/docs/explanation/ratchet
+EN: 20 pinned prompt hashes. 5-stage CI. The ratchet shape that prevents drift.
+KO: 20개 프롬프트 해시 핀. 5단계 CI. drift를 막는 ratchet 형태.
+
+### Why 4 Layers (왜 4-계층인가)
+URL: https://mangowhoiscloud.github.io/geode/docs/explanation/4-layer
+EN: Model, Runtime, Harness, Agent. Where each layer's responsibility ends.
+KO: Model, Runtime, Harness, Agent. 각 계층의 책임이 끝나는 지점.
+
+### External References (외부 참고)
+URL: https://mangowhoiscloud.github.io/geode/docs/reference/external-references
+EN: Frontier agent systems, design standards, and prior work cited by GEODE.
+KO: GEODE가 인용하는 frontier 에이전트 시스템, 디자인 표준, 선행 작업.
+
+### Frontier Comparison (프론티어 비교)
+URL: https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison
+EN: GEODE versus Claude Code, Codex CLI, OpenClaw, Hermes, autoresearch.
+KO: GEODE와 Claude Code, Codex CLI, OpenClaw, Hermes, autoresearch 비교.
+
+### Changelog (변경 이력)
+URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
+EN: Selected version highlights. The authoritative source is the repo's CHANGELOG.md.
+KO: 선별된 버전 하이라이트. 정본은 repo의 CHANGELOG.md.
+
+### System Metrics SOT (시스템 메트릭 SOT)
+URL: https://mangowhoiscloud.github.io/geode/docs/reference/sot-metrics
+EN: Live values for version, modules, tests, releases, since.
+KO: version, 모듈, 테스트, 릴리스, since 라이브 값.
+
