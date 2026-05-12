@@ -84,15 +84,22 @@ Sprint columns:
 
 ---
 
-## Summary (2026-05-12 P1 + P2 + P3 완료)
+## Summary (2026-05-12 후속 sprint 갱신)
 
 | Status | Count |
 |---|---:|
-| ✅ Bilingual production | 53 |
+| ✅ Bilingual production | 49 |
 | 🔴 outstanding | 0 |
-| **Total** | **53** |
+| **Total** | **49** |
 
-`<Bi>` wrap audit: **53/53 pages** carry both `ko={...}` and `en={...}`. `titleKo`/`summaryKo` audit: **53/53 pages** carry both. 53 routes prerender via `npm run build`. 새 챕터 stub (01 Run, 03 Build, 04 Ops, 05 Petri, 06 Why)도 본문 골격 + 첫 문장 quadrant 선언 + wiki source 참조로 production 적합 상태. 본문 깊이 보강은 추후 sprint.
+### 후속 sprint 변경
+
+- **03 Build 챕터 제거** — 4 페이지(`build/add-tool`·`build/add-domain`·`build/add-hook`·`build/testing`). 이전 PR 빌드 로그엔 53 routes로 보였으나 deploy commit에 build/* 파일이 누락돼 실제 라이브에서 404. 사용자 결정으로 챕터 자체를 제외.
+- **02 System Reference (24 페이지) → 7 챕터로 분할**: 02 Architecture · 03 LLM Pipeline · 04 Tools and Memory · 05 Harness · 06 Capabilities · 07 Verification · 08 Plugins.
+- **Vault 페이지 제거** — `runtime/memory/vault` 는 wiki에서 관리. site/docs에선 5-tier Context만 유지.
+- **References 챕터 확장** — 99 References에 신규 `reference/external-references` 추가. Frontier 시스템 (Claude Code·OpenClaw·Hermes·autoresearch 등), Diátaxis 표준, Petri/inspect_ai, mango-wiki 내부 자산, Karpathy autoresearch의 5 reusable pattern 인용.
+
+`<Bi>` wrap audit: 49/49 pages bilingual. 49 routes prerender. 신규 페이지 본문 깊이 보강은 wiki/concepts (33 narrative) 기반으로 추후 sprint.
 
 ## Sprint owners
 
