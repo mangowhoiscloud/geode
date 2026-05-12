@@ -24,6 +24,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 **Granularity**: Feature-level, not commit-level. One entry per logical change.
 
+## Bilingual convention (KR / EN)
+
+Going forward, each entry should carry both Korean and English paragraphs.
+The site's Changelog page (`/docs/reference/changelog`) auto-splits entries
+into two columns based on Hangul / Latin ratios per block, so you don't need
+explicit markers. Write each language as its own paragraph or bullet list.
+
+Example:
+
+```markdown
+### Added
+
+- **Anthropic agentic_call streaming.** GEODE adapter now uses
+  `messages.stream()` as an async context. The final message keeps the
+  same schema, so the token tracker path is unchanged.
+- **Anthropic agentic_call 스트리밍.** GEODE 어댑터가 `messages.stream()`을
+  async 컨텍스트로 사용합니다. 최종 메시지 스키마는 동일해 토큰 트래커는
+  변경 없음.
+```
+
+Code blocks and identifier-heavy paragraphs are language-neutral and appear
+in both columns automatically. When only one language is provided, the entry
+renders as a single column with a `KR`-only or `EN`-only chip.
+
 ---
 
 ## [Unreleased]
