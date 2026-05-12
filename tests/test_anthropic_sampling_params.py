@@ -18,7 +18,12 @@ import pytest
 
 
 def _run_agentic_call(model: str) -> dict[str, Any]:
-    """Invoke ClaudeAgenticAdapter.agentic_call once and capture create kwargs."""
+    """Invoke ClaudeAgenticAdapter.agentic_call once and capture create kwargs.
+
+    Post GAP-S1 (v0.95+) the adapter calls ``messages.stream`` instead of
+    ``messages.create``; we mock both to stay compatible with future
+    re-wirings and to capture kwargs whichever transport ships.
+    """
     from core.llm.providers.anthropic import ClaudeAgenticAdapter
 
     adapter = ClaudeAgenticAdapter()
@@ -35,9 +40,24 @@ def _run_agentic_call(model: str) -> dict[str, Any]:
         captured.update(kwargs)
         return response
 
+    class _StubStream:
+        async def __aenter__(self) -> Any:
+            return self
+
+        async def __aexit__(self, *_args: Any) -> None:
+            return None
+
+        async def get_final_message(self) -> Any:
+            return response
+
+    def fake_stream(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return _StubStream()
+
     client = MagicMock()
     client.messages = MagicMock()
     client.messages.create = AsyncMock(side_effect=fake_create)
+    client.messages.stream = MagicMock(side_effect=fake_stream)
     adapter._client = client
 
     async def fake_failover(models: list[str], do_call: Any) -> tuple[Any, str]:

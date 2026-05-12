@@ -644,7 +644,13 @@ class ClaudeAgenticAdapter:
             if extra_b:
                 create_kwargs["extra_body"] = extra_b
 
-            return await self._client.messages.create(**create_kwargs)
+            # GAP-S1 — stream API 로 TTFB 단축 + chunk-level 수신.
+            # ``get_final_message()`` 가 stream 을 완전 소비 한 뒤
+            # ``anthropic.types.Message`` 를 반환 — ``messages.create`` 와
+            # 동일 schema 이므로 ``normalize_anthropic`` / 회계 path 가
+            # 변경 없이 작동. agentic 소비자 interface 불변.
+            async with self._client.messages.stream(**create_kwargs) as _stream:
+                return await _stream.get_final_message()
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)
