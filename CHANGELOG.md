@@ -44,6 +44,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `.resolve()` in `add_working_directory` / `remove_working_directory`.
   Regression: `tests/test_sandbox.py::TestTildeExpansion` (4 cases —
   bare `~`, `~/`, sandbox-expanded resolution, working-dir registration).
+- **OpenAI OAuth plan tier auto-reconcile.** `chatgpt_plan_type` was
+  extracted from the JWT once during `/login` and frozen into
+  `Plan.subscription_tier`. If the user upgraded their ChatGPT plan
+  (Plus → Pro/Max/etc.) between logins, the stored tier kept showing
+  the old value while the JWT itself had the new claim. `load_auth_toml`
+  now calls `reconcile_plan_tier_from_stored_jwt()` after hydration,
+  which re-decodes the access_token's claims and updates
+  `Plan.subscription_tier` + profile metadata in place when a drift is
+  found. Drift events log at INFO so the change is visible without
+  forcing a re-login (a fresh `/login` still produces a brand-new JWT
+  with the current tier — this is the in-between fix).
+- **OpenAI OAuth — JWT decode DRY.** Extracted the inline base64+JSON
+  decode block in `login_openai()` into a reusable `_decode_jwt_claims`
+  helper; `_plan_type_from_token` builds on top so the reconciliation
+  path and login path can't drift apart.
+
+### Added
+
+- **OAuth login UX — press Enter to open the verification URL.**
+  `EventRenderer._handle_oauth_login_started` now prints
+  `Press [Enter] to open the URL in your browser` and spawns a daemon
+  thread that calls `webbrowser.open(verification_uri)` on the first
+  stdin line. Skipped automatically when stdin is not a TTY (piped
+  invocations stay quiet). Pattern grounded from Claude Code's OAuth
+  start prompt (`/Users/.../claude-code-ref/src/auth/providers.ts`).
 
 ### Infrastructure
 

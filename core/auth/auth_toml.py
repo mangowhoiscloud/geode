@@ -286,6 +286,17 @@ def load_auth_toml(
     for model, plan_ids in (data.get("routing") or {}).items():
         if isinstance(plan_ids, list):
             registry.set_routing(str(model), [str(pid) for pid in plan_ids])
+
+    # v0.95.x — re-read the stored JWT for the GEODE-owned OpenAI OAuth and
+    # update Plan.subscription_tier if the user's plan tier changed since
+    # auth.toml was last written (e.g. Plus → Pro upgrade between logins).
+    # Failures are non-fatal: the load itself has already succeeded.
+    try:
+        from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
+
+        reconcile_plan_tier_from_stored_jwt()
+    except Exception:
+        log.debug("Plan tier reconciliation skipped", exc_info=True)
     return True
 
 
