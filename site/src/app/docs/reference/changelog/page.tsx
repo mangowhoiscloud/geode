@@ -203,8 +203,8 @@ export default function Page() {
   return (
     <DocsShell
       slug="reference/changelog"
-      title="Changelog"
-      titleKo="변경 이력"
+      title="CHANGELOG"
+      titleKo="CHANGELOG"
       summary={`Full history auto-synced from CHANGELOG.md. ${CHANGELOG.length} entries, last synced ${CHANGELOG_SYNCED_AT}.`}
       summaryKo={`CHANGELOG.md에서 자동 sync된 전체 이력. ${CHANGELOG.length} entries, ${CHANGELOG_SYNCED_AT} 최신.`}
     >

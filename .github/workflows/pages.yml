@@ -3,8 +3,14 @@ name: Deploy site to GitHub Pages
 # Builds the Next.js static export under `site/` and deploys it to GitHub
 # Pages. Site URL after deploy: https://mangowhoiscloud.github.io/geode/
 #
-# Triggers on changes to `site/**` or this workflow only — Python source
-# changes do not redeploy the site.
+# Triggers on changes to `site/**`, this workflow, or any of the SOT files
+# that `sync-stats` reads (CHANGELOG.md, pyproject.toml, CLAUDE.md). A docs
+# page like `/docs/reference/changelog` therefore stays in sync with
+# CHANGELOG.md without a separate commit to `site/`.
+#
+# Daily 09:00 KST cron also runs as a safety net so the docs page can never
+# fall more than 24 hours behind even if Pages settings get changed by an
+# accidental admin action.
 #
 # Prerequisite: enable Pages once via repo Settings → Pages → Source =
 # "GitHub Actions". The deploy action handles the rest.
@@ -14,7 +20,13 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "CHANGELOG.md"
+      - "pyproject.toml"
+      - "CLAUDE.md"
       - ".github/workflows/pages.yml"
+  schedule:
+    # 09:00 KST = 00:00 UTC. Daily safety-net rebuild.
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:

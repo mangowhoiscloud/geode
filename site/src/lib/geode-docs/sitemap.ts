@@ -157,7 +157,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     pages: [
       { slug: "reference/external-references", title: "External References", titleKo: "외부 참고", summary: "Frontier agent systems, design standards, and prior work cited by GEODE.", summaryKo: "GEODE가 인용하는 frontier 에이전트 시스템, 디자인 표준, 선행 작업.", quadrant: "reference" },
       { slug: "reference/frontier-comparison", title: "Frontier Comparison", titleKo: "프론티어 비교", summary: "GEODE versus Claude Code, Codex CLI, OpenClaw, Hermes, autoresearch.", summaryKo: "GEODE와 Claude Code, Codex CLI, OpenClaw, Hermes, autoresearch 비교.", quadrant: "reference" },
-      { slug: "reference/changelog", title: "Changelog", titleKo: "변경 이력", summary: "Selected version highlights. The authoritative source is the repo's CHANGELOG.md.", summaryKo: "선별된 버전 하이라이트. 정본은 repo의 CHANGELOG.md.", quadrant: "reference" },
+      { slug: "reference/changelog", title: "CHANGELOG", titleKo: "CHANGELOG", summary: "Full version history auto-synced from CHANGELOG.md on every main push.", summaryKo: "main push 마다 CHANGELOG.md에서 자동 sync된 전체 버전 이력.", quadrant: "reference" },
       { slug: "reference/sot-metrics", title: "System Metrics SOT", titleKo: "시스템 메트릭 SOT", summary: "Live values for version, modules, tests, releases, since.", summaryKo: "version, 모듈, 테스트, 릴리스, since 라이브 값.", quadrant: "reference" },
     ],
   },
