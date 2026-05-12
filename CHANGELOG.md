@@ -28,6 +28,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Cross-provider tool_choice normalization — GAP-T1.** New
+  `core/llm/tool_choice.py` centralizes the conversion of a canonical
+  `tool_choice` (string / dict / named-tool / `None`) into each
+  provider's native shape — Anthropic dict, OpenAI Responses string-or-flat,
+  GLM Chat Completions nested-function. Replaces 3× inlined conversions
+  in `anthropic.py:482-484`, `openai.py:507`, `glm.py:190` and adds first-class
+  support for named-tool forcing (`{"name": "X"}` → provider-specific shape)
+  and the `required` ↔ `any` keyword alias. Test:
+  `tests/test_tool_choice_normalize.py` (33 cases × 3 providers + edge cases).
+
 ### Fixed
 
 - **Petri seeds flat-layout (G-A1).** Discovery (post-merge of PR #1044):
