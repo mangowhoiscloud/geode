@@ -22,8 +22,13 @@ _REGISTRY_API = (
     "?version=latest&visibility=commercial&limit=200"
 )
 _CACHE_TTL_S = 86400  # 24 hours
-_CACHE_DIR = Path.home() / ".geode"
-_CACHE_FILE = _CACHE_DIR / "mcp-registry-cache.json"
+# v0.95.x layout migration v1 — moved under ~/.geode/mcp/ to group with
+# other MCP state (trace-runs/, etc.). Legacy ``~/.geode/mcp-registry-cache.json``
+# is migrated by ``core.wiring.layout_migrator._migrate_v0_to_v1`` on first boot.
+# Single source of truth lives in ``core.paths.MCP_REGISTRY_CACHE``; this file
+# imports it lazily to avoid a circular import (paths imports layout_migrator).
+_CACHE_DIR = Path.home() / ".geode" / "mcp"
+_CACHE_FILE = _CACHE_DIR / "registry-cache.json"
 
 
 @dataclass(frozen=True, slots=True)

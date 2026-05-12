@@ -54,6 +54,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **`~/.geode/` 디렉터리 layout migration 인프라.** Hermes Agent (NousResearch)
+  의 `SessionDB._init_schema` 패턴 + OpenClaw `autoMigrateLegacyStateDir`
+  + GEODE 기존 `_resolve_with_fallback` 셋 종합. 신규 `core/wiring/
+  layout_migrator.py` — `GEODE_LAYOUT_VERSION` (현재 1), `~/.geode/
+  .layout-version` dotfile marker (Hermes 의 `.managed` / `active_profile`
+  dotfile 전례), module-level once-flag 로 idempotent (OpenClaw
+  `autoMigrateStateDirChecked` + Hermes `_bootstrap_applied` 평행),
+  `GEODE_DISABLE_LAYOUT_MIGRATION` env escape hatch.
+  - **v0→v1 마이그레이션**: 세 path 오류 정정 — (1) `serve.log` 가
+    `~/.geode/` 루트에서 `~/.geode/logs/serve.log` 로 (paths.py 의
+    `SERVE_LOG_PATH` 가 이미 가리키던 곳), (2) `approve_history.json`
+    (paths.py 오타) → `approval_history.jsonl` (실제 writer 이름),
+    (3) `mcp-registry-cache.json` → `mcp/registry-cache.json` (다른
+    MCP state 와 함께 묶음). `shutil.move` 로 atomic, 동일 파일 destination
+    이미 존재 시 손대지 않고 warning surface (never overwrite user data).
+  - **호출 시점**: `core.paths.ensure_directories()` 끝 — bootstrap 의
+    매 호출마다 (idempotent). `uv tool install` / `uv tool update` 는 우리 코드를
+    실행하지 않으므로 사실상 install/update 직후 첫 `geode` 명령에서 트리거됨.
+  - **회귀**: `tests/test_layout_migrator.py` 12 cases — version marker
+    round-trip / corrupt marker / disable env / idempotency / v0→v1 의
+    세 path 별 + conflict-keep-both + missing-source-skip.
+
+### Added
+
 - **Wanted.co.kr 기반 한국 job 검색 도구 (`wanted_jobs_search`).** LinkedIn
   의 PerimeterX/Cloudflare bot detection 으로 `search_jobs` MCP 가 매번
   403 + empty body 로 차단되는 상황에 대한 대체 경로. Wanted 의 공개 REST
