@@ -14,11 +14,12 @@ import logging
 import time
 from pathlib import Path
 
+from core.paths import PROJECT_AGENT_MEMORY_DIR
 from core.utils.atomic_io import atomic_write_json
 
 log = logging.getLogger(__name__)
 
-DEFAULT_BASE_DIR = Path(".geode") / "agent-memory"
+DEFAULT_BASE_DIR: Path = PROJECT_AGENT_MEMORY_DIR
 DEFAULT_TTL_HOURS = 24.0
 
 

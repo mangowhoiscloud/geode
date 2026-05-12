@@ -52,6 +52,20 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **P3 — `core.paths` 에 누락된 5 상수 추가** (`PROJECT_AGENT_MEMORY_DIR`,
+  `PROJECT_MODEL_POLICY`, `PROJECT_ROUTING_CONFIG`, `GLOBAL_SKILLS_DIR`,
+  `GLOBAL_USER_PREFERENCES`). 후속 sloppiness 정리의 두 번째 단계 — PR
+  #1098 audit 의 S2 카테고리. 5 사용처가 hardcoded `Path(".geode/...")`
+  literal 대신 새 상수 사용 — `core/memory/agent_memory.py`,
+  `core/config/__init__.py` 의 `MODEL_POLICY_PATH` + `ROUTING_CONFIG_PATH`
+  (re-export 로 backwards-compat), `core/tools/policy.py:_load_profile_policy`,
+  `core/llm/skill_registry.py:_resolve_skill_dirs`. bundled skills 의
+  `__file__` 기반 경로는 의도적으로 literal 유지 (geode 패키지 source tree
+  의 위치라 runtime 상수 의미 없음). S1 (11 사이트, paths.py constant 있는데
+  literal 쓰는 곳) 정리는 P2 후속 PR.
+
 ### Removed
 
 - **`PROJECT_EMBEDDING_CACHE` / `PROJECT_VECTORS_DIR`** path constants

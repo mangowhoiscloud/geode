@@ -33,6 +33,9 @@ GLOBAL_ENV_FILE = GEODE_HOME / ".env"
 # User identity & profile
 GLOBAL_IDENTITY_DIR = GEODE_HOME / "identity"
 GLOBAL_USER_PROFILE_DIR = GEODE_HOME / "user_profile"
+# P3 (v0.95.x) — user preferences TOML inside user_profile/.
+# Read by `core/tools/policy.py` to seed ProfilePolicy at boot.
+GLOBAL_USER_PREFERENCES = GLOBAL_USER_PROFILE_DIR / "preferences.toml"
 
 # Non-project-scoped data
 GLOBAL_VAULT_DIR = GEODE_HOME / "vault"
@@ -41,6 +44,11 @@ GLOBAL_RUNS_DIR = GEODE_HOME / "runs"
 GLOBAL_USAGE_DIR = GEODE_HOME / "usage"
 GLOBAL_MCP_DIR = GEODE_HOME / "mcp"
 GLOBAL_SCHEDULER_DIR = GEODE_HOME / "scheduler"
+# P3 (v0.95.x) — user-tier installed skills (priority 2 of 4-tier
+# resolution; see `core/llm/skill_registry.py`). Bundled skills live
+# inside the package source tree, not at `GEODE_HOME` — resolve via
+# `__file__` in skill_registry, do NOT add a constant for them here.
+GLOBAL_SKILLS_DIR = GEODE_HOME / "skills"
 
 # Project-scoped user data root
 GLOBAL_PROJECTS_DIR = GEODE_HOME / "projects"
@@ -92,6 +100,13 @@ PROJECT_MEMORY_INDEX = PROJECT_GEODE_DIR / "MEMORY.md"
 # archived to `.geode/_archive/` by layout migration v1 → v2 (see
 # `core/wiring/layout_migrator.py:_migrate_v1_to_v2`).
 PROJECT_TOOL_OFFLOAD = PROJECT_GEODE_DIR / "tool-offload"
+
+# P3 (v0.95.x) — project-level state files. Surfaced here so writers stop
+# hardcoding `Path(".geode/<file>")` literals (frontier parity — Hermes
+# `hermes_constants.py:14-68` keeps every path on a single SoT module).
+PROJECT_AGENT_MEMORY_DIR = PROJECT_GEODE_DIR / "agent-memory"
+PROJECT_MODEL_POLICY = PROJECT_GEODE_DIR / "model-policy.toml"
+PROJECT_ROUTING_CONFIG = PROJECT_GEODE_DIR / "routing.toml"
 
 
 # ---------------------------------------------------------------------------
