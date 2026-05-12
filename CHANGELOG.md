@@ -28,6 +28,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **OpenAI prompt_cache_key — GAP-A2.** OpenAI's Responses API
+  auto-caches matching prefixes; an optional `prompt_cache_key` routes
+  similar requests to the same cache pool, lifting hit-rate when
+  `(system + tools)` is stable while the user / conversation differs.
+  `OpenAIAgenticAdapter.agentic_call` now derives a 32-hex-char SHA-256
+  key over `(system, sort_keys(tools))` with a `\x00` separator and
+  injects it into `responses.create` kwargs. Token tracking + cost
+  attribution were already wired (`agentic_response.py:251` reads
+  `prompt_tokens_details.cached_tokens`; `token_tracker.py:175` carries
+  per-model `cache_read` pricing), so this PR completes the path.
+  Test: `tests/test_openai_prompt_cache.py` (6 derivation contracts +
+  1 adapter-wiring stub = 7 cases).
+
 ### Fixed
 
 - **Petri seeds flat-layout (G-A1).** Discovery (post-merge of PR #1044):
