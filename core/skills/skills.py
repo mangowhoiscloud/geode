@@ -228,11 +228,15 @@ class SkillLoader:
         if self._primary_dir:
             return [self._primary_dir, *self._extra_dirs]
 
+        from core.paths import GLOBAL_SKILLS_DIR, PROJECT_SKILLS_DIR
+
         cwd = Path.cwd()
         dirs: list[Path] = [
-            _PACKAGE_ROOT / ".geode" / "skills",  # 1. Bundled
-            Path.home() / ".geode" / "skills",  # 2. User global
-            cwd / ".geode" / "skills",  # 3. Project local (CWD)
+            _PACKAGE_ROOT
+            / ".geode"
+            / "skills",  # 1. Bundled (package source tree)  # noqa: paths-literal
+            GLOBAL_SKILLS_DIR,  # 2. User global (~/.geode/skills)
+            cwd / PROJECT_SKILLS_DIR,  # 3. Project local ({cwd}/.geode/skills)
         ]
         dirs.extend(self._extra_dirs)  # 4. Extra
         return dirs

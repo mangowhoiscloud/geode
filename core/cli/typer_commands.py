@@ -119,8 +119,10 @@ def about() -> None:
         )
 
     # Paths
-    geode_home = Path("~/.geode").expanduser()
-    project_geode = Path(".geode")
+    from core.paths import GEODE_HOME, PROJECT_GEODE_DIR
+
+    geode_home = GEODE_HOME
+    project_geode = PROJECT_GEODE_DIR
     console.print(f"  [bold]User home[/bold]  [muted]{geode_home}[/muted]")
     console.print(
         f"  [bold]Project[/bold]    [muted]{project_geode}"

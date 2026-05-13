@@ -43,10 +43,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from core.paths import GLOBAL_DIAGNOSTICS_DIR
+
 __all__ = ["DEFAULT_DIAGNOSTICS_DIR", "diag", "diagnostics_path"]
 
 #: GEODE convention. ``~/.geode/`` 의 다른 artifacts 와 동거.
-DEFAULT_DIAGNOSTICS_DIR: Path = Path.home() / ".geode" / "diagnostics"
+DEFAULT_DIAGNOSTICS_DIR: Path = GLOBAL_DIAGNOSTICS_DIR
 
 
 def diagnostics_path() -> Path:

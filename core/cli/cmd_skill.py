@@ -14,12 +14,13 @@ from typing import Annotated
 
 import typer
 
+from core.paths import GLOBAL_SKILLS_DIR, PROJECT_SKILLS_DIR
 from core.skills._frontmatter import parse_yaml_frontmatter
 
 app = typer.Typer(name="skill", help="Manage GEODE skills (list/create/install).")
 
-_PROJECT_SKILLS = Path(".geode/skills")
-_PERSONAL_SKILLS = Path.home() / ".geode" / "skills"
+_PROJECT_SKILLS = PROJECT_SKILLS_DIR
+_PERSONAL_SKILLS = GLOBAL_SKILLS_DIR
 
 
 def _discover_skills() -> list[dict[str, str]]:

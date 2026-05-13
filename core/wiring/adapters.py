@@ -198,9 +198,10 @@ def build_gateway() -> None:
     config_path = None
     try:
         import tomllib
-        from pathlib import Path
 
-        config_path = Path(".geode") / "config.toml"
+        from core.paths import PROJECT_CONFIG_TOML
+
+        config_path = PROJECT_CONFIG_TOML
         if config_path.exists():
             with open(config_path, "rb") as f:
                 toml_config = tomllib.load(f)

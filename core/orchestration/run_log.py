@@ -17,9 +17,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.paths import GLOBAL_RUNS_DIR
+
 log = logging.getLogger(__name__)
 
-DEFAULT_LOG_DIR = Path.home() / ".geode" / "runs"
+DEFAULT_LOG_DIR: Path = GLOBAL_RUNS_DIR
 DEFAULT_MAX_BYTES = 2 * 1024 * 1024  # 2MB
 DEFAULT_KEEP_LINES = 2000
 

@@ -21,7 +21,6 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
 from core.hooks import HookEvent, HookSystem
@@ -524,8 +523,10 @@ class IsolatedRunner:
     @staticmethod
     def _save_stderr(session_id: str, stderr_bytes: bytes) -> None:
         """Save subprocess stderr to ~/.geode/workers/ for debugging."""
+        from core.paths import GLOBAL_WORKERS_DIR
+
         try:
-            worker_dir = Path.home() / ".geode" / "workers"
+            worker_dir = GLOBAL_WORKERS_DIR
             worker_dir.mkdir(parents=True, exist_ok=True)
             path = worker_dir / f"{session_id}.stderr.log"
             path.write_bytes(stderr_bytes)
