@@ -29,6 +29,14 @@ def fake_geode_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         tmp_path / ".layout-version",
     )
 
+    # v2→v3 archives runs/vault/projects under GEODE_HOME. The constants
+    # were captured at core.paths import time bound to the *real*
+    # ``~/.geode/``, so monkeypatching ``GEODE_HOME`` alone is not enough
+    # — we also have to redirect the derived paths to ``tmp_path``.
+    monkeypatch.setattr("core.paths.GLOBAL_RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr("core.paths.GLOBAL_VAULT_DIR", tmp_path / "vault")
+    monkeypatch.setattr("core.paths.GLOBAL_PROJECTS_DIR", tmp_path / "projects")
+
     # Project root → a workspace inside tmp_path. v1→v2 migration archives
     # things under {workspace}/.geode/_archive so we want the workspace to
     # be sandboxed too.
@@ -294,9 +302,9 @@ class TestV1ToV2VestigialArchival:
         # Single skipped entry — the .geode/ short-circuit
         assert any(".geode/" in s for s in step.skipped)
 
-    def test_full_v0_to_v2_chain_on_fresh_install(self, fake_geode_home: Path) -> None:
-        """Pre-versioned install runs both v0→v1 and v1→v2 in one pass and
-        ends at the target marker."""
+    def test_full_chain_on_fresh_install(self, fake_geode_home: Path) -> None:
+        """Pre-versioned install runs every step in one pass and ends at
+        the current target marker."""
         from core.wiring.layout_migrator import (
             GEODE_LAYOUT_VERSION,
             ensure_layout_migrated,
@@ -307,7 +315,8 @@ class TestV1ToV2VestigialArchival:
         step_names = [s.name for s in report.steps]
         assert any(n.startswith("v0→v1") for n in step_names)
         assert any(n.startswith("v1→v2") for n in step_names)
-        assert read_layout_version() == GEODE_LAYOUT_VERSION == 2
+        assert any(n.startswith("v2→v3") for n in step_names)
+        assert read_layout_version() == GEODE_LAYOUT_VERSION
 
     def test_constants_removed_from_paths(self, fake_geode_home: Path) -> None:
         """Sanity — the two vestigial constants must no longer exist on
@@ -316,3 +325,192 @@ class TestV1ToV2VestigialArchival:
 
         assert not hasattr(paths, "PROJECT_EMBEDDING_CACHE")
         assert not hasattr(paths, "PROJECT_VECTORS_DIR")
+
+
+# ---------------------------------------------------------------------------
+# v2 → v3: TTL-based archival of runs/, vault/, projects/
+# ---------------------------------------------------------------------------
+
+
+class TestV2ToV3TTLArchival:
+    """v2→v3 — children of `runs/`, `vault/{general,research}/`, and
+    `projects/` older than the TTL are moved to a monthly bucket under
+    `_archive/<YYYY-MM>/`. No writer changes; one-shot sweep gated by
+    the version marker."""
+
+    @staticmethod
+    def _age_by_days(path: Path, days: float) -> None:
+        """Set ``mtime`` (and ``atime``) on ``path`` to ``days`` ago."""
+        import os
+        import time as _time
+
+        when = _time.time() - days * 86400.0
+        os.utime(path, (when, when))
+
+    def test_runs_old_files_archived_into_monthly_bucket(
+        self, fake_geode_home: Path
+    ) -> None:
+        runs_dir = fake_geode_home / "runs"
+        runs_dir.mkdir(parents=True)
+        old = runs_dir / "run-old.jsonl"
+        old.write_text('{"trace": "old"}')
+        self._age_by_days(old, days=90)
+        fresh = runs_dir / "run-fresh.jsonl"
+        fresh.write_text('{"trace": "fresh"}')
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        assert not old.exists()
+        assert fresh.exists()
+        archive = runs_dir / "_archive"
+        buckets = list(archive.iterdir())
+        assert len(buckets) == 1
+        assert len(buckets[0].name) == 7 and buckets[0].name[4] == "-"  # YYYY-MM
+        assert (buckets[0] / "run-old.jsonl").exists()
+
+    def test_vault_general_and_research_both_archived(
+        self, fake_geode_home: Path
+    ) -> None:
+        general = fake_geode_home / "vault" / "general"
+        research = fake_geode_home / "vault" / "research"
+        general.mkdir(parents=True)
+        research.mkdir(parents=True)
+        old_g = general / "g-old.md"
+        old_r = research / "r-old.md"
+        old_g.write_text("g")
+        old_r.write_text("r")
+        self._age_by_days(old_g, days=60)
+        self._age_by_days(old_r, days=60)
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        assert not old_g.exists()
+        assert not old_r.exists()
+        # Each scope keeps its own _archive bucket.
+        assert any((general / "_archive").iterdir())
+        assert any((research / "_archive").iterdir())
+
+    def test_projects_stale_workspace_dir_archived(
+        self, fake_geode_home: Path
+    ) -> None:
+        projects = fake_geode_home / "projects"
+        stale = projects / "encoded-cwd-stale"
+        stale.mkdir(parents=True)
+        (stale / "marker").write_text("x")
+        self._age_by_days(stale, days=90)
+        active = projects / "encoded-cwd-active"
+        active.mkdir(parents=True)
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        assert not stale.exists()
+        assert active.exists()
+        archived_buckets = list((projects / "_archive").iterdir())
+        assert len(archived_buckets) == 1
+        assert (archived_buckets[0] / "encoded-cwd-stale").exists()
+
+    def test_ttl_respected_default_30_days(self, fake_geode_home: Path) -> None:
+        runs_dir = fake_geode_home / "runs"
+        runs_dir.mkdir(parents=True)
+        just_inside = runs_dir / "29-days-old"
+        just_inside.write_text("a")
+        self._age_by_days(just_inside, days=29)
+        just_outside = runs_dir / "31-days-old"
+        just_outside.write_text("b")
+        self._age_by_days(just_outside, days=31)
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        assert just_inside.exists(), "29-day-old file must NOT be archived"
+        assert not just_outside.exists(), "31-day-old file must be archived"
+
+    def test_env_var_overrides_ttl(
+        self, fake_geode_home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GEODE_ARCHIVE_TTL_DAYS", "5")
+        runs_dir = fake_geode_home / "runs"
+        runs_dir.mkdir(parents=True)
+        seven_day = runs_dir / "7-day"
+        seven_day.write_text("c")
+        self._age_by_days(seven_day, days=7)
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        assert not seven_day.exists(), (
+            "7-day-old file must be archived when TTL=5"
+        )
+
+    def test_bad_env_var_falls_back_to_default(
+        self, fake_geode_home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GEODE_ARCHIVE_TTL_DAYS", "not-a-number")
+        runs_dir = fake_geode_home / "runs"
+        runs_dir.mkdir(parents=True)
+        ten_day = runs_dir / "10-day"
+        ten_day.write_text("d")
+        self._age_by_days(ten_day, days=10)
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        # Fallback to 30-day default → 10-day file stays.
+        assert ten_day.exists()
+
+    def test_absent_directories_skip_cleanly(self, fake_geode_home: Path) -> None:
+        """Fresh install with no runs/vault/projects → step records skips
+        and emits no warnings besides the TTL banner."""
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        report = ensure_layout_migrated(force=True)
+        step = next(s for s in report.steps if s.name.startswith("v2→v3"))
+        assert step.moved == []
+        assert len(step.skipped) >= 4  # runs, vault/general, vault/research, projects
+
+    def test_archive_root_is_not_self_archived(self, fake_geode_home: Path) -> None:
+        """The migration must not eat its own ``_archive`` directory even
+        if its mtime drifts past the TTL."""
+        runs_dir = fake_geode_home / "runs"
+        runs_dir.mkdir(parents=True)
+        archive = runs_dir / "_archive"
+        archive.mkdir()
+        self._age_by_days(archive, days=365)
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        ensure_layout_migrated(force=True)
+
+        assert archive.exists()
+        assert archive.is_dir()
+        # Nothing nested into itself.
+        assert not (archive / "_archive").exists()
+
+    def test_v2_to_v3_idempotent_on_rerun(self, fake_geode_home: Path) -> None:
+        """A second `force=True` run after archival completes must not
+        re-archive (marker is at v3, no work)."""
+        runs_dir = fake_geode_home / "runs"
+        runs_dir.mkdir(parents=True)
+        old = runs_dir / "x"
+        old.write_text("x")
+        self._age_by_days(old, days=90)
+
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        first = ensure_layout_migrated(force=True)
+        second = ensure_layout_migrated(force=True)
+
+        v3_first = [s for s in first.steps if s.name.startswith("v2→v3")]
+        v3_second = [s for s in second.steps if s.name.startswith("v2→v3")]
+        assert len(v3_first[0].moved) == 1
+        assert second.no_op is True
+        assert v3_second == []
