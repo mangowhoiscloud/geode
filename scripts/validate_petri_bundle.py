@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """Validate docs/petri-bundle/ before GitHub Pages deploy.
 
+Used as a **CI ratchet** — invoked from both ``.github/workflows/ci.yml``
+(PR gate, blocks merge) and ``.github/workflows/pages.yml`` (post-merge
+defense-in-depth). Either layer alone is insufficient: CI catches PRs
+before merge, pages.yml catches drift from cron-triggered rebuilds.
+
 Enforces:
 1. Every listing.json entry has status='success'.
 2. Every referenced .eval file exists on disk.
 3. No partial run (status='started') or error (status='error') leaks into
    the published bundle — both can trigger viewer TypeError on
-   `formatPrettyDecimal(g.metrics[i].value)` when results=None.
+   ``formatPrettyDecimal(g.metrics[i].value)`` when results=None
+   (inspect_ai #1747 pattern).
 
 Run from repo root:
-    python3 scripts/validate_petri_bundle.py
+    uv run python scripts/validate_petri_bundle.py
 
 Exit codes:
     0  All listing entries are status=success and files exist.

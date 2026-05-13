@@ -54,17 +54,21 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Fixed
 
-- **petri-bundle viewer TypeError 2차 차단 — error archive 제거 + status
-  filter 자동화.** 직전 PR (#1129) 의 partial archive 제거 후에도
+- **petri-bundle viewer TypeError 2차 차단 — error archive 제거 + CI
+  ratchet 자동화.** 직전 PR (#1129) 의 partial archive 제거 후에도
   `n5-sonnet-geode-seed1.eval` sample URL 에서 axis 클릭 시 TypeError
   재발. 원인 추적 결과 `2026-05-11T21-23-10-00-00_audit_STRuHye8...eval`
   가 status=`error` (credit balance) + `results: None` 으로 listing.json
   에 남아, viewer 의 cross-archive 비교 path 에서 null metric 을 만나
   `formatPrettyDecimal` TypeError 유발. error archive 파일 자체 git rm +
-  listing entry 제거 (10 → 9 entries). 향후 재유입 방지 위해
-  `scripts/validate_petri_bundle.py` 추가 + `pages.yml` build job 의
-  copy step 직전에 validation gate 삽입 (status≠`success` 또는 파일 부재
-  entry 발견 시 build fail).
+  listing entry 제거 (10 → 9 entries). 향후 재유입 방지 위해 다층 가드
+  레일 추가:
+  - `scripts/validate_petri_bundle.py` — listing.json 의 모든 entry 가
+    `status=success` + 파일 존재 강제 검증
+  - `ci.yml` 의 lint job 에 **Petri bundle ratchet** step 신설 — PR
+    단계에서 차단 (배포 전 머지 차단)
+  - `pages.yml` build job 의 copy step 직전에 validation gate 유지 —
+    post-merge defense-in-depth
 - **petri-bundle viewer TypeError prevention round 2 — error archive
   removal + status filter automation.** Even after #1129 removed the
   partial archive, the user reported recurring TypeError on the
