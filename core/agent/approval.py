@@ -20,6 +20,7 @@ from core.agent.safety import (
     WRITE_TOOLS,
     is_bash_command_read_only,
 )
+from core.hooks.system import HookEvent
 from core.ui.console import console
 
 if TYPE_CHECKING:
@@ -84,16 +85,13 @@ class ApprovalWorkflow:
         self._tool_approval_counts: dict[str, int] = {}
         self._tool_denial_counts: dict[str, int] = {}
 
-    def _fire_hook(self, event_name: str, data: dict[str, Any]) -> None:
+    def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
         if self._hooks is None:
             return
-        from core.hooks import HookEvent
-
         try:
-            event = HookEvent(event_name)
             self._hooks.trigger(event, data)
         except Exception:
-            log.debug("Hook fire failed for %s", event_name, exc_info=True)
+            log.debug("Hook fire failed for %s", event, exc_info=True)
 
     # -----------------------------------------------------------------
     # Pattern learning
@@ -184,12 +182,12 @@ class ApprovalWorkflow:
                     approved = True
                 else:
                     self._fire_hook(
-                        "tool_approval_requested",
+                        HookEvent.TOOL_APPROVAL_REQUESTED,
                         {"tool_name": tool_name, "safety_level": "write"},
                     )
                     if not self.confirm_write(tool_name, tool_input):
                         self._fire_hook(
-                            "tool_approval_denied",
+                            HookEvent.TOOL_APPROVAL_DENIED,
                             {
                                 "tool_name": tool_name,
                                 "safety_level": "write",
@@ -200,7 +198,7 @@ class ApprovalWorkflow:
                         )
                         return _write_denial_with_fallback(tool_name), False
                     self._fire_hook(
-                        "tool_approval_granted",
+                        HookEvent.TOOL_APPROVAL_GRANTED,
                         {
                             "tool_name": tool_name,
                             "safety_level": "write",
@@ -221,12 +219,12 @@ class ApprovalWorkflow:
                 else:
                     cost = EXPENSIVE_TOOLS[tool_name]
                     self._fire_hook(
-                        "tool_approval_requested",
+                        HookEvent.TOOL_APPROVAL_REQUESTED,
                         {"tool_name": tool_name, "safety_level": "cost"},
                     )
                     if not self.confirm_cost(tool_name, cost):
                         self._fire_hook(
-                            "tool_approval_denied",
+                            HookEvent.TOOL_APPROVAL_DENIED,
                             {
                                 "tool_name": tool_name,
                                 "safety_level": "cost",
@@ -240,7 +238,7 @@ class ApprovalWorkflow:
                             "denied": True,
                         }, False
                     self._fire_hook(
-                        "tool_approval_granted",
+                        HookEvent.TOOL_APPROVAL_GRANTED,
                         {
                             "tool_name": tool_name,
                             "safety_level": "cost",
@@ -268,7 +266,7 @@ class ApprovalWorkflow:
             console.print()
 
         self._fire_hook(
-            "tool_approval_requested",
+            HookEvent.TOOL_APPROVAL_REQUESTED,
             {
                 "tool_name": tool_name,
                 "safety_level": "MCP",
@@ -285,7 +283,7 @@ class ApprovalWorkflow:
             if response == "a":
                 self._always_approved_categories.add(f"mcp:{server}")
             self._fire_hook(
-                "tool_approval_granted",
+                HookEvent.TOOL_APPROVAL_GRANTED,
                 {
                     "tool_name": tool_name,
                     "permission_level": "MCP",
@@ -295,7 +293,7 @@ class ApprovalWorkflow:
             )
             return True
         self._fire_hook(
-            "tool_approval_denied",
+            HookEvent.TOOL_APPROVAL_DENIED,
             {
                 "tool_name": tool_name,
                 "permission_level": "MCP",
@@ -341,7 +339,7 @@ class ApprovalWorkflow:
 
         if self.check_auto_deny(tool_name):
             self._fire_hook(
-                "tool_approval_denied",
+                HookEvent.TOOL_APPROVAL_DENIED,
                 {
                     "tool_name": tool_name,
                     "permission_level": "WRITE",
@@ -352,7 +350,7 @@ class ApprovalWorkflow:
             return False
 
         self._fire_hook(
-            "tool_approval_requested",
+            HookEvent.TOOL_APPROVAL_REQUESTED,
             {
                 "tool_name": tool_name,
                 "safety_level": "WRITE",
@@ -370,7 +368,7 @@ class ApprovalWorkflow:
             if response == "a":
                 self._always_approved_categories.add("write")
             self._fire_hook(
-                "tool_approval_granted",
+                HookEvent.TOOL_APPROVAL_GRANTED,
                 {
                     "tool_name": tool_name,
                     "permission_level": "WRITE",
@@ -381,7 +379,7 @@ class ApprovalWorkflow:
             )
             return True
         self._fire_hook(
-            "tool_approval_denied",
+            HookEvent.TOOL_APPROVAL_DENIED,
             {
                 "tool_name": tool_name,
                 "permission_level": "WRITE",
@@ -409,7 +407,7 @@ class ApprovalWorkflow:
             console.print()
 
         self._fire_hook(
-            "tool_approval_requested",
+            HookEvent.TOOL_APPROVAL_REQUESTED,
             {
                 "tool_name": tool_name,
                 "safety_level": "EXPENSIVE",
@@ -419,7 +417,7 @@ class ApprovalWorkflow:
 
         if self.check_auto_deny(tool_name):
             self._fire_hook(
-                "tool_approval_denied",
+                HookEvent.TOOL_APPROVAL_DENIED,
                 {
                     "tool_name": tool_name,
                     "permission_level": "EXPENSIVE",
@@ -439,7 +437,7 @@ class ApprovalWorkflow:
             if response == "a":
                 self._always_approved_categories.add("cost")
             self._fire_hook(
-                "tool_approval_granted",
+                HookEvent.TOOL_APPROVAL_GRANTED,
                 {
                     "tool_name": tool_name,
                     "permission_level": "EXPENSIVE",
@@ -450,7 +448,7 @@ class ApprovalWorkflow:
             )
             return True
         self._fire_hook(
-            "tool_approval_denied",
+            HookEvent.TOOL_APPROVAL_DENIED,
             {
                 "tool_name": tool_name,
                 "permission_level": "EXPENSIVE",
@@ -474,7 +472,7 @@ class ApprovalWorkflow:
             console.print()
 
         self._fire_hook(
-            "tool_approval_requested",
+            HookEvent.TOOL_APPROVAL_REQUESTED,
             {
                 "tool_name": "run_bash",
                 "safety_level": "DANGEROUS",
@@ -484,7 +482,7 @@ class ApprovalWorkflow:
 
         if self.check_auto_deny("run_bash"):
             self._fire_hook(
-                "tool_approval_denied",
+                HookEvent.TOOL_APPROVAL_DENIED,
                 {
                     "tool_name": "run_bash",
                     "permission_level": "DANGEROUS",
@@ -504,7 +502,7 @@ class ApprovalWorkflow:
             if response == "a":
                 self._always_approved_categories.add("bash")
             self._fire_hook(
-                "tool_approval_granted",
+                HookEvent.TOOL_APPROVAL_GRANTED,
                 {
                     "tool_name": "run_bash",
                     "permission_level": "DANGEROUS",
@@ -515,7 +513,7 @@ class ApprovalWorkflow:
             )
             return True
         self._fire_hook(
-            "tool_approval_denied",
+            HookEvent.TOOL_APPROVAL_DENIED,
             {
                 "tool_name": "run_bash",
                 "permission_level": "DANGEROUS",

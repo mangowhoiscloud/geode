@@ -7,6 +7,7 @@ import logging
 import time
 from typing import Any
 
+from core.hooks.system import HookEvent
 from core.llm.provider_dispatch import (
     _cross_provider_dispatch,
     _get_provider_client,
@@ -50,7 +51,7 @@ def call_llm_with_tools(
 
     def _dispatch(p: str, m: str) -> ToolUseResult:
         _fire_hook(
-            "llm_call_start",
+            HookEvent.LLM_CALL_START,
             {"model": m, "provider": p, "function": "call_llm_with_tools"},
         )
         t0_tools = time.monotonic()
@@ -197,7 +198,7 @@ def call_llm_with_tools(
         except Exception as exc:
             elapsed_ms_total = (time.monotonic() - t0_tools) * 1000
             _fire_hook(
-                "llm_call_end",
+                HookEvent.LLM_CALL_END,
                 {
                     "model": m,
                     "provider": p,
@@ -210,7 +211,7 @@ def call_llm_with_tools(
 
         elapsed_ms_total = (time.monotonic() - t0_tools) * 1000
         _fire_hook(
-            "llm_call_end",
+            HookEvent.LLM_CALL_END,
             {
                 "model": m,
                 "provider": p,

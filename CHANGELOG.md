@@ -52,6 +52,45 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **Hook emit 사이트 string-literal → direct enum (Stage A).** Stage C
+  audit 후 발견된 50+ 호출 사이트에서 `_fire_hook("event_name", data)`
+  / `_fire_interceptor("event_name", data)` / `_fire_with_result(
+  "event_name", data)` 형태로 string 을 넘기던 패턴을 모두
+  `HookEvent.EVENT_NAME` 직접 참조로 변환. 8 wrapper 함수 (`memory_tools.
+  _fire_hook`, `provider_dispatch._fire_hook`, `router/_hooks._fire_hook`,
+  `mcp/manager._fire_mcp_hook`, `agent/approval.ApprovalWorkflow.
+  _fire_hook`, `tool_executor/executor.ToolExecutor._fire_hook`,
+  `tool_executor/processor.{._fire_hook,_fire_interceptor,_fire_with_result}`)
+  의 signature 도 `event_name: str` → `event: HookEvent` 로 강타입화.
+  부수 발견: `core/llm/router/calls/_failover.py:118` 가 `"retry_wait"`
+  를 emit 하던 사이트 — 이 string 은 `HookEvent` enum 멤버가 아니라
+  `fire_hook(_hooks_ctx, "retry_wait", data)` 가 `HookEvent("retry_wait")`
+  ValueError 로 silent fail 하던 dead emit 이었음. payload 의미 (model
+  / attempt / max_retries / delay_s / elapsed_s / error_type) 가
+  `LLM_CALL_RETRY` 와 일치하므로 그 enum 으로 라우팅. 행위 변경 — 이전엔
+  silent drop, 이제 RunLog wildcard + LLM_CALL_RETRY listener 가 fire.
+- **Hook emit sites: string-literal → direct enum (Stage A).** All 50+
+  call sites that previously passed a raw string to `_fire_hook(...)`,
+  `_fire_interceptor(...)`, or `_fire_with_result(...)` now pass a
+  typed `HookEvent` member directly. Tightened the signatures of 8
+  wrapper methods (`memory_tools._fire_hook`,
+  `provider_dispatch._fire_hook`, `router/_hooks._fire_hook`,
+  `mcp/manager._fire_mcp_hook`, `agent/approval.ApprovalWorkflow.
+  _fire_hook`, `tool_executor/executor.ToolExecutor._fire_hook`,
+  `tool_executor/processor.{_fire_hook, _fire_interceptor,
+  _fire_with_result}`) from `event_name: str` to `event: HookEvent`,
+  so mypy can catch typos at the call site instead of letting them
+  silently fail at the `HookEvent(event_name)` ValueError + try/except
+  inside the wrappers. Side finding: `core/llm/router/calls/
+  _failover.py:118` was emitting `"retry_wait"`, which is not a member
+  of `HookEvent` — the call silently swallowed for every retry. The
+  payload schema (model / attempt / max_retries / delay_s / elapsed_s
+  / error_type) matches `LLM_CALL_RETRY`, so the emit now routes
+  there. Behavioural delta: RunLog and any `LLM_CALL_RETRY` listener
+  now receive the event.
+
 ### Fixed
 
 - **GitHub Pages 의 `/geode/petri-bundle/` 404 복구.** `pages.yml` 의
