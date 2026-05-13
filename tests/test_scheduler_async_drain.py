@@ -152,7 +152,7 @@ class TestAsyncScheduledDrain:
             # Allow other hook calls but not PIPELINE_END
             from core.hooks import HookEvent
 
-            if len(call.args) >= 1 and call.args[0] == HookEvent.PIPELINE_END:
+            if len(call.args) >= 1 and call.args[0] == HookEvent.PIPELINE_ENDED:
                 pytest.fail("post_to_main=False should suppress PIPELINE_END hook")
 
     def test_queue_drain_nonblocking_pattern(self) -> None:

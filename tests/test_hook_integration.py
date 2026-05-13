@@ -15,8 +15,8 @@ class TestMakeHookedNode:
             triggered_events.append(event)
 
         hooks = HookSystem()
-        hooks.register(HookEvent.NODE_ENTER, recorder)
-        hooks.register(HookEvent.NODE_EXIT, recorder)
+        hooks.register(HookEvent.NODE_ENTERED, recorder)
+        hooks.register(HookEvent.NODE_EXITED, recorder)
 
         def dummy_node(state: GeodeState) -> dict:
             return {"pipeline_mode": "test"}
@@ -25,8 +25,8 @@ class TestMakeHookedNode:
         result = hooked({"ip_name": "test"})
 
         assert result == {"pipeline_mode": "test"}
-        assert HookEvent.NODE_ENTER in triggered_events
-        assert HookEvent.NODE_EXIT in triggered_events
+        assert HookEvent.NODE_ENTERED in triggered_events
+        assert HookEvent.NODE_EXITED in triggered_events
 
     def test_triggers_error_on_exception(self):
         triggered_events = []
@@ -57,7 +57,7 @@ class TestMakeHookedNode:
             triggered_events.append(event)
 
         hooks = HookSystem()
-        hooks.register(HookEvent.PIPELINE_START, recorder)
+        hooks.register(HookEvent.PIPELINE_STARTED, recorder)
 
         def router_fn(state: GeodeState) -> dict:
             return {"pipeline_mode": "full_pipeline"}
@@ -65,7 +65,7 @@ class TestMakeHookedNode:
         hooked = _make_hooked_node(router_fn, "router", hooks)
         hooked({"ip_name": "test"})
 
-        assert HookEvent.PIPELINE_START in triggered_events
+        assert HookEvent.PIPELINE_STARTED in triggered_events
 
     def test_synthesizer_triggers_pipeline_end(self):
         triggered_events = []
@@ -74,7 +74,7 @@ class TestMakeHookedNode:
             triggered_events.append(event)
 
         hooks = HookSystem()
-        hooks.register(HookEvent.PIPELINE_END, recorder)
+        hooks.register(HookEvent.PIPELINE_ENDED, recorder)
 
         def synth_fn(state: GeodeState) -> dict:
             return {"synthesis": {}}
@@ -82,17 +82,17 @@ class TestMakeHookedNode:
         hooked = _make_hooked_node(synth_fn, "synthesizer", hooks)
         hooked({"ip_name": "test"})
 
-        assert HookEvent.PIPELINE_END in triggered_events
+        assert HookEvent.PIPELINE_ENDED in triggered_events
 
     def test_hook_data_contains_duration(self):
         captured_data = {}
 
         def recorder(event, data):
-            if event == HookEvent.NODE_EXIT:
+            if event == HookEvent.NODE_EXITED:
                 captured_data.update(data)
 
         hooks = HookSystem()
-        hooks.register(HookEvent.NODE_EXIT, recorder)
+        hooks.register(HookEvent.NODE_EXITED, recorder)
 
         def slow_node(state: GeodeState) -> dict:
             return {"result": "done"}
@@ -112,7 +112,7 @@ class TestMakeHookedNode:
             triggered_events.append(event)
 
         hooks = HookSystem()
-        hooks.register(HookEvent.SCORING_COMPLETE, recorder)
+        hooks.register(HookEvent.SCORING_COMPLETED, recorder)
 
         def scoring_fn(state: GeodeState) -> dict:
             return {"final_score": 82.0}
@@ -120,7 +120,7 @@ class TestMakeHookedNode:
         hooked = _make_hooked_node(scoring_fn, "scoring", hooks)
         hooked({"ip_name": "test"})
 
-        assert HookEvent.SCORING_COMPLETE in triggered_events
+        assert HookEvent.SCORING_COMPLETED in triggered_events
 
 
 class TestBuildGraphWithHooks:

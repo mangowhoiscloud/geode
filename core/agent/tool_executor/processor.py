@@ -217,7 +217,7 @@ class ToolCallProcessor:
 
             # Hook: TOOL_EXEC_START (interceptor — can block or modify input)
             intercept = self._fire_interceptor(
-                HookEvent.TOOL_EXEC_START, {"tool_name": tool_name, "tool_input": tool_input}
+                HookEvent.TOOL_EXEC_STARTED, {"tool_name": tool_name, "tool_input": tool_input}
             )
             if intercept is not None and intercept.blocked:
                 log.info("Tool %s blocked by TOOL_EXEC_START hook: %s", tool_name, intercept.reason)
@@ -246,7 +246,7 @@ class ToolCallProcessor:
                 "has_error": _has_error,
                 "result": result,
             }
-            post_results = self._fire_with_result(HookEvent.TOOL_EXEC_END, _post_data)
+            post_results = self._fire_with_result(HookEvent.TOOL_EXEC_ENDED, _post_data)
             # Apply result modifications from PostToolUse-style handlers
             for hr in post_results:
                 if hr.success and isinstance(hr.data, dict):

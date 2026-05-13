@@ -56,11 +56,11 @@ class TestRuntimeHooksRunLog:
 
         # Trigger a pipeline event
         runtime.hooks.trigger(
-            HookEvent.NODE_ENTER,
+            HookEvent.NODE_ENTERED,
             {"node": "router", "ip_name": "Berserk"},
         )
         runtime.hooks.trigger(
-            HookEvent.NODE_EXIT,
+            HookEvent.NODE_EXITED,
             {"node": "router", "ip_name": "Berserk", "duration_ms": 42.0},
         )
 
@@ -216,7 +216,7 @@ class TestDefaultBuilders:
         name, handler = _make_run_log_handler(run_log, "test_session", "run-001")
         assert name == "run_log_writer"
 
-        handler(HookEvent.PIPELINE_START, {"node": "router"})
+        handler(HookEvent.PIPELINE_STARTED, {"node": "router"})
         entries = run_log.read(limit=1)
         assert len(entries) == 1
         assert entries[0].event == "pipeline_start"
@@ -258,14 +258,14 @@ class TestRuntimeNewComponents:
 
         # Trigger PIPELINE_START → should mark running
         runtime.hooks.trigger(
-            HookEvent.PIPELINE_START,
+            HookEvent.PIPELINE_STARTED,
             {"node": "router", "ip_name": "Berserk"},
         )
         assert runtime.stuck_detector.running_count == 1
 
         # Trigger PIPELINE_END → should mark completed
         runtime.hooks.trigger(
-            HookEvent.PIPELINE_END,
+            HookEvent.PIPELINE_ENDED,
             {"node": "synthesizer", "ip_name": "Berserk"},
         )
         assert runtime.stuck_detector.running_count == 0
@@ -328,7 +328,7 @@ class TestReactiveChains:
         initial_snaps = runtime.snapshot_manager.list_snapshots()
 
         runtime.hooks.trigger(
-            HookEvent.PIPELINE_END,
+            HookEvent.PIPELINE_ENDED,
             {"node": "synthesizer", "ip_name": "Berserk"},
         )
 
@@ -376,7 +376,7 @@ class TestRuntimeTaskGraph:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         old_graph = runtime.task_graph
         # Simulate some progress
-        runtime.hooks.trigger(HookEvent.NODE_ENTER, {"node": "router", "ip_name": "berserk"})
+        runtime.hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
         assert runtime.task_graph.get_task("berserk_router").status.value == "running"
 
         # Reset — old handlers should be unregistered
@@ -386,13 +386,13 @@ class TestRuntimeTaskGraph:
         assert runtime.task_graph.task_count == 13
 
         # Verify no duplicate handlers: trigger event → only new graph updates
-        runtime.hooks.trigger(HookEvent.NODE_ENTER, {"node": "router", "ip_name": "berserk"})
+        runtime.hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
         assert runtime.task_graph.get_task("berserk_router").status.value == "running"
         # Old graph should NOT have been updated again (it was already running)
         assert old_graph.get_task("berserk_router").status.value == "running"
 
     def test_hook_events_update_task_graph(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        runtime.hooks.trigger(HookEvent.NODE_ENTER, {"node": "router", "ip_name": "berserk"})
-        runtime.hooks.trigger(HookEvent.NODE_EXIT, {"node": "router", "ip_name": "berserk"})
+        runtime.hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
+        runtime.hooks.trigger(HookEvent.NODE_EXITED, {"node": "router", "ip_name": "berserk"})
         assert runtime.task_graph.get_task("berserk_router").status.value == "completed"

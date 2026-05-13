@@ -55,7 +55,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
 
     def _dispatch(p: str, m: str) -> T:
         _fire_hook(
-            HookEvent.LLM_CALL_START,
+            HookEvent.LLM_CALL_STARTED,
             {"model": m, "provider": p, "function": "call_llm_parsed"},
         )
         t0 = time.monotonic()
@@ -114,7 +114,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             _fire_hook(
-                HookEvent.LLM_CALL_END,
+                HookEvent.LLM_CALL_ENDED,
                 {
                     "model": m,
                     "provider": p,
@@ -127,7 +127,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
 
         elapsed_ms = (time.monotonic() - t0) * 1000
         _fire_hook(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             {
                 "model": m,
                 "provider": p,

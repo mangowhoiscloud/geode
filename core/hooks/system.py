@@ -28,21 +28,22 @@ log = logging.getLogger(__name__)
 class HookEvent(Enum):
     """Pipeline lifecycle events."""
 
-    # Pipeline level
-    PIPELINE_START = "pipeline_start"
-    PIPELINE_END = "pipeline_end"
+    # Pipeline level (lifecycle fires on success + error; ERROR is a distinct
+    # variant rather than a sub-state of ENDED, matching SUBAGENT_FAILED)
+    PIPELINE_STARTED = "pipeline_start"
+    PIPELINE_ENDED = "pipeline_end"
     PIPELINE_ERROR = "pipeline_error"
 
     # Node level
     NODE_BOOTSTRAP = "node_bootstrap"
-    NODE_ENTER = "node_enter"
-    NODE_EXIT = "node_exit"
+    NODE_ENTERED = "node_enter"
+    NODE_EXITED = "node_exit"
     NODE_ERROR = "node_error"
 
-    # Analysis level
-    ANALYST_COMPLETE = "analyst_complete"
-    EVALUATOR_COMPLETE = "evaluator_complete"
-    SCORING_COMPLETE = "scoring_complete"
+    # Analysis level (milestone — fires only on successful stage completion)
+    ANALYST_COMPLETED = "analyst_complete"
+    EVALUATOR_COMPLETED = "evaluator_complete"
+    SCORING_COMPLETED = "scoring_complete"
 
     # Verification level
     VERIFICATION_PASS = "verification_pass"  # noqa: S105 — hook event name, not a password
@@ -75,25 +76,29 @@ class HookEvent(Enum):
     TOOL_RECOVERY_SUCCEEDED = "tool_recovery_succeeded"
     TOOL_RECOVERY_FAILED = "tool_recovery_failed"
 
-    # Agentic turn lifecycle (OpenClaw command:new pattern)
-    TURN_COMPLETE = "turn_complete"
+    # Agentic turn lifecycle (OpenClaw command:new pattern; milestone-style —
+    # fires once per turn on completion)
+    TURN_COMPLETED = "turn_complete"
 
     # Context overflow detection (Karpathy P6 Context Budget)
     CONTEXT_CRITICAL = "context_critical"
     CONTEXT_OVERFLOW_ACTION = "context_overflow_action"
 
-    # Session lifecycle (OpenClaw agent:bootstrap pattern)
-    SESSION_START = "session_start"
-    SESSION_END = "session_end"
+    # Session lifecycle (OpenClaw agent:bootstrap pattern; lifecycle pair)
+    SESSION_STARTED = "session_start"
+    SESSION_ENDED = "session_end"
 
     # Model switching (L1 Observe)
     MODEL_SWITCHED = "model_switched"
 
-    # LLM call lifecycle (model-level latency/cost observability)
-    LLM_CALL_START = "llm_call_start"
-    LLM_CALL_END = "llm_call_end"
+    # LLM call lifecycle (model-level latency/cost observability; START/ENDED
+    # are the lifecycle pair, ENDED fires on success+error with ``error`` key,
+    # FAILED is a legacy alias retained for plugin compatibility, RETRIED is
+    # the action-past form for retry attempts)
+    LLM_CALL_STARTED = "llm_call_start"
+    LLM_CALL_ENDED = "llm_call_end"
     LLM_CALL_FAILED = "llm_call_failed"
-    LLM_CALL_RETRY = "llm_call_retry"
+    LLM_CALL_RETRIED = "llm_call_retry"
 
     # Tool approval HITL lifecycle
     TOOL_APPROVAL_REQUESTED = "tool_approval_requested"
@@ -119,10 +124,13 @@ class HookEvent(Enum):
     MCP_SERVER_CONNECTED = "mcp_server_connected"
     MCP_SERVER_FAILED = "mcp_server_failed"
 
-    # Production hooks (P0) — interceptor + cost enforcement + audit
+    # Production hooks (P0) — interceptor + cost enforcement + audit.
+    # TOOL_EXEC_STARTED / TOOL_EXEC_ENDED form the lifecycle pair; FAILED is the
+    # error variant. TOOL_RESULT_TRANSFORM is a separate feedback hook (post
+    # observation, result rewriting).
     USER_INPUT_RECEIVED = "user_input_received"
-    TOOL_EXEC_START = "tool_exec_start"
-    TOOL_EXEC_END = "tool_exec_end"
+    TOOL_EXEC_STARTED = "tool_exec_start"
+    TOOL_EXEC_ENDED = "tool_exec_end"
     TOOL_EXEC_FAILED = "tool_exec_failed"
     TOOL_RESULT_TRANSFORM = "tool_result_transform"
     COST_WARNING = "cost_warning"
@@ -190,8 +198,8 @@ class HookSystem:
         def on_start(event, data):
             print(f"Pipeline started for {data.get('ip_name')}")
 
-        hooks.register(HookEvent.PIPELINE_START, on_start, priority=10)
-        results = hooks.trigger(HookEvent.PIPELINE_START, {"ip_name": "Berserk"})
+        hooks.register(HookEvent.PIPELINE_STARTED, on_start, priority=10)
+        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"ip_name": "Berserk"})
     """
 
     # Events that support matcher-based tool_name filtering.
@@ -433,8 +441,8 @@ class HookSystem:
 # Populate _TOOL_EVENTS after HookEvent members are available.
 HookSystem._TOOL_EVENTS = frozenset(
     {
-        HookEvent.TOOL_EXEC_START,
-        HookEvent.TOOL_EXEC_END,
+        HookEvent.TOOL_EXEC_STARTED,
+        HookEvent.TOOL_EXEC_ENDED,
         HookEvent.TOOL_EXEC_FAILED,
         HookEvent.TOOL_RESULT_TRANSFORM,
     }

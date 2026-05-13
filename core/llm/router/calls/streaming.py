@@ -48,7 +48,7 @@ def call_llm_streaming(
 
     # Hook: LLM_CALL_START
     _fire_hook(
-        HookEvent.LLM_CALL_START,
+        HookEvent.LLM_CALL_STARTED,
         {"model": target_model, "provider": provider, "function": "call_llm_streaming"},
     )
     t0 = time.monotonic()
@@ -79,7 +79,7 @@ def call_llm_streaming(
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             _fire_hook(
-                HookEvent.LLM_CALL_END,
+                HookEvent.LLM_CALL_ENDED,
                 {
                     "model": target_model,
                     "provider": provider,
@@ -92,7 +92,7 @@ def call_llm_streaming(
         else:
             elapsed_ms = (time.monotonic() - t0) * 1000
             _fire_hook(
-                HookEvent.LLM_CALL_END,
+                HookEvent.LLM_CALL_ENDED,
                 {
                     "model": target_model,
                     "provider": provider,

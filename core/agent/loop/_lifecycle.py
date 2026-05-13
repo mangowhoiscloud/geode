@@ -138,7 +138,7 @@ def finalize_and_return(
     loop._save_checkpoint(user_input, round_idx=round_idx)
     if loop._hooks:
         loop._hooks.trigger(
-            HookEvent.SESSION_END,
+            HookEvent.SESSION_ENDED,
             {
                 "model": loop.model,
                 "provider": loop._provider,
@@ -150,7 +150,7 @@ def finalize_and_return(
             },
         )
         loop._hooks.trigger(
-            HookEvent.TURN_COMPLETE,
+            HookEvent.TURN_COMPLETED,
             {
                 "user_input": user_input,
                 "text": result.text[:500] if result.text else "",

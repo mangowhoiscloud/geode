@@ -54,6 +54,54 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Changed
 
+- **HookEvent 명명 정규화 (Stage B) — lifecycle 이벤트 past-tense 통일.**
+  Stage C audit 에서 식별된 시제 비일관 (`PIPELINE_START` vs
+  `SUBAGENT_STARTED`, `TURN_COMPLETE` vs `SUBAGENT_COMPLETED`,
+  `LLM_CALL_END` vs `*_COMPLETED`) 정리. 15 개 enum identifier 를 past
+  tense 로 통일: `_START` → `_STARTED`, `_END` → `_ENDED`, `_COMPLETE` →
+  `_COMPLETED`, `_ENTER`/`_EXIT` → `_ENTERED`/`_EXITED`, `_RETRY` →
+  `_RETRIED`. 컨벤션:
+  - Lifecycle pair (success+error 모두 fire): `*_STARTED`/`*_ENDED` →
+    `PIPELINE_*`, `LLM_CALL_*`, `TOOL_EXEC_*`, `SESSION_*`
+  - Direction: `*_ENTERED`/`*_EXITED` → `NODE_*`
+  - Success milestone: `*_COMPLETED` → `TURN_*`, `ANALYST_*`,
+    `EVALUATOR_*`, `SCORING_*`
+  - Action past: `*_RETRIED` → `LLM_CALL_*`
+
+  **String value 보존**: 모든 enum 의 string 값은 그대로 유지 (`"pipeline_start"`,
+  `"turn_complete"`, ...). RunLog JSONL 의 `event:` 필드 + 외부 plugin
+  / log consumer 호환성 무영향. Python identifier (enum member 이름) 만
+  바뀐다. 233 caller 사이트 일괄 sed 변환 (28 파일), `_E.X` alias 사용
+  4 사이트 추가 수정. SUBAGENT_*, TOOL_APPROVAL_*, TOOL_RECOVERY_*,
+  MEMORY/RULE_*, DRIFT_DETECTED, MODEL_PROMOTED, SNAPSHOT_CAPTURED,
+  TRIGGER_FIRED, SHUTDOWN_STARTED 등 이미 past-tense 이거나 도메인
+  특화 의미 (request-decision, attempt-outcome) 는 그대로.
+- **HookEvent naming normalization (Stage B) — past-tense uniformity
+  for lifecycle events.** Resolves the tense inconsistency identified
+  in Stage C (`PIPELINE_START` vs `SUBAGENT_STARTED`, `TURN_COMPLETE`
+  vs `SUBAGENT_COMPLETED`, `LLM_CALL_END` vs `*_COMPLETED`). Renamed
+  15 enum identifiers to past tense: `_START` → `_STARTED`, `_END` →
+  `_ENDED`, `_COMPLETE` → `_COMPLETED`, `_ENTER`/`_EXIT` →
+  `_ENTERED`/`_EXITED`, `_RETRY` → `_RETRIED`. Convention:
+  - Lifecycle pair (fires on success + error): `*_STARTED`/`*_ENDED`
+    — `PIPELINE_*`, `LLM_CALL_*`, `TOOL_EXEC_*`, `SESSION_*`
+  - Direction: `*_ENTERED`/`*_EXITED` — `NODE_*`
+  - Success milestone: `*_COMPLETED` — `TURN_*`, `ANALYST_*`,
+    `EVALUATOR_*`, `SCORING_*`
+  - Action past: `*_RETRIED` — `LLM_CALL_*`
+
+  **String values preserved**: all enum string values are unchanged
+  (`"pipeline_start"`, `"turn_complete"`, ...). Zero impact on RunLog
+  JSONL `event:` field, external plugin compatibility, or downstream
+  log consumers — only the Python identifier (enum member name)
+  changes. 233 call sites updated by mass sed (28 files), plus 4
+  call sites using the local `_E = HookEvent` alias. Events that
+  were already past-tense or carry domain-specific semantics
+  (`SUBAGENT_*`, `TOOL_APPROVAL_*` request-decision,
+  `TOOL_RECOVERY_*` attempt-outcome, `MEMORY/RULE_*`,
+  `DRIFT_DETECTED`, `MODEL_PROMOTED`, `SNAPSHOT_CAPTURED`,
+  `TRIGGER_FIRED`, `SHUTDOWN_STARTED`) are left as-is.
+
 - **Hook emit 사이트 string-literal → direct enum (Stage A).** Stage C
   audit 후 발견된 50+ 호출 사이트에서 `_fire_hook("event_name", data)`
   / `_fire_interceptor("event_name", data)` / `_fire_with_result(

@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 # Event → severity mapping
 _SEVERITY_MAP: dict[HookEvent, str] = {
-    HookEvent.PIPELINE_END: "info",
+    HookEvent.PIPELINE_ENDED: "info",
     HookEvent.PIPELINE_ERROR: "critical",
     HookEvent.DRIFT_DETECTED: "warning",
     HookEvent.SUBAGENT_FAILED: "warning",
@@ -32,7 +32,7 @@ def _format_message(event: HookEvent, data: dict[str, Any]) -> str:
     """Format a notification message from hook event data."""
     ip_name = data.get("ip_name", "unknown")
 
-    if event == HookEvent.PIPELINE_END:
+    if event == HookEvent.PIPELINE_ENDED:
         tier = data.get("tier", "?")
         score = data.get("final_score", data.get("score", 0))
         return f"Pipeline completed: {ip_name} — {tier} ({score:.1f})"

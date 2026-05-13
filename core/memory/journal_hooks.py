@@ -27,7 +27,7 @@ def make_journal_handlers(
     """
 
     def _on_pipeline_end(event: HookEvent, data: dict[str, Any]) -> None:
-        if event != HookEvent.PIPELINE_END:
+        if event != HookEvent.PIPELINE_ENDED:
             return
         ip_name = data.get("ip_name", "")
         tier = data.get("tier", "")

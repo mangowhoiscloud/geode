@@ -50,7 +50,7 @@ def call_llm(
 
     def _dispatch(p: str, m: str) -> str:
         _fire_hook(
-            HookEvent.LLM_CALL_START,
+            HookEvent.LLM_CALL_STARTED,
             {"model": m, "provider": p, "function": "call_llm"},
         )
         t0 = time.monotonic()
@@ -97,7 +97,7 @@ def call_llm(
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             _fire_hook(
-                HookEvent.LLM_CALL_END,
+                HookEvent.LLM_CALL_ENDED,
                 {
                     "model": m,
                     "provider": p,
@@ -110,7 +110,7 @@ def call_llm(
 
         elapsed_ms = (time.monotonic() - t0) * 1000
         _fire_hook(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             {
                 "model": m,
                 "provider": p,

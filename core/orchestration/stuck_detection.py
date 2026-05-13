@@ -195,8 +195,8 @@ class StuckDetector:
 
         self._on_stuck = _on_stuck_fire_hook
 
-        hooks.register(HookEvent.NODE_ENTER, _on_enter, name="stuck_detector_enter", priority=90)
-        hooks.register(HookEvent.NODE_EXIT, _on_exit, name="stuck_detector_exit", priority=90)
+        hooks.register(HookEvent.NODE_ENTERED, _on_enter, name="stuck_detector_enter", priority=90)
+        hooks.register(HookEvent.NODE_EXITED, _on_exit, name="stuck_detector_exit", priority=90)
         hooks.register(HookEvent.NODE_ERROR, _on_error, name="stuck_detector_error", priority=90)
         log.debug("StuckDetector registered on HookSystem")
 

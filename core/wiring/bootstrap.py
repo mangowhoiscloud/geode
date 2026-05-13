@@ -100,9 +100,9 @@ def _make_stuck_hook_handler(
 
     def _track_lifecycle(event: HookEvent, data: dict[str, Any]) -> None:
         session_key = data.get("ip_name", "")
-        if event == HookEvent.PIPELINE_START:
+        if event == HookEvent.PIPELINE_STARTED:
             detector.mark_running(session_key, metadata=data)
-        elif event in (HookEvent.PIPELINE_END, HookEvent.PIPELINE_ERROR):
+        elif event in (HookEvent.PIPELINE_ENDED, HookEvent.PIPELINE_ERROR):
             detector.mark_completed(session_key)
 
     return "stuck_tracker", _track_lifecycle
@@ -172,7 +172,7 @@ def build_hooks(
     # Stuck detector + hook handler
     stuck_detector = StuckDetector(timeout_s=stuck_timeout_s)
     stuck_name, stuck_fn = _make_stuck_hook_handler(stuck_detector)
-    for event in (HookEvent.PIPELINE_START, HookEvent.PIPELINE_END, HookEvent.PIPELINE_ERROR):
+    for event in (HookEvent.PIPELINE_STARTED, HookEvent.PIPELINE_ENDED, HookEvent.PIPELINE_ERROR):
         hooks.register(event, stuck_fn, name=stuck_name, priority=40)
 
     # Context overflow action handler (CONTEXT_OVERFLOW_ACTION -> strategy recommendation)
@@ -212,7 +212,7 @@ def build_hooks(
         journal = get_project_journal()
         for handler_name, handler_fn in make_journal_handlers(journal):
             target_events = {
-                "journal_pipeline_end": [HookEvent.PIPELINE_END],
+                "journal_pipeline_end": [HookEvent.PIPELINE_ENDED],
                 "journal_pipeline_error": [HookEvent.PIPELINE_ERROR],
                 "journal_subagent": [HookEvent.SUBAGENT_COMPLETED],
             }
@@ -240,7 +240,7 @@ def build_hooks(
             pm.add_insight(insight)
 
         hooks.register(
-            HookEvent.TURN_COMPLETE,
+            HookEvent.TURN_COMPLETED,
             _on_turn_complete,
             name="turn_auto_memory",
             priority=85,
@@ -255,7 +255,7 @@ def build_hooks(
 
         name, handler = make_auto_learn_handler(profile_provider=get_user_profile)
         hooks.register(
-            HookEvent.TURN_COMPLETE,
+            HookEvent.TURN_COMPLETED,
             handler,
             name=name,
             priority=84,
@@ -269,7 +269,7 @@ def build_hooks(
 
         name, handler = make_llm_extract_handler()
         hooks.register(
-            HookEvent.TURN_COMPLETE,
+            HookEvent.TURN_COMPLETED,
             handler,
             name=name,
             priority=82,  # lower priority than auto_learn (84)
@@ -290,13 +290,13 @@ def build_hooks(
             log.info("Session ended: model=%s", data.get("model"))
 
         hooks.register(
-            HookEvent.SESSION_START,
+            HookEvent.SESSION_STARTED,
             _on_session_start,
             name="session_start_logger",
             priority=90,
         )
         hooks.register(
-            HookEvent.SESSION_END,
+            HookEvent.SESSION_ENDED,
             _on_session_end,
             name="session_end_logger",
             priority=90,
@@ -356,7 +356,7 @@ def build_hooks(
                 )
 
         hooks.register(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             _on_llm_end,
             name="llm_slow_logger",
             priority=55,
@@ -411,7 +411,7 @@ def build_hooks(
             ["usage_pct", "model"],
         ),
         (_E.SUBAGENT_STARTED, "sa_started", "SubAgent started: %s (%s)", ["task_id", "task_type"]),
-        (_E.LLM_CALL_START, "llm_start", "LLM call: %s (%s)", ["model", "function"]),
+        (_E.LLM_CALL_STARTED, "llm_start", "LLM call: %s (%s)", ["model", "function"]),
         (_E.VERIFICATION_FAIL, "verif_fail", "Verification failed: %s — %s", ["node", "ip_name"]),
         (_E.TOOL_RECOVERY_ATTEMPTED, "recovery_try", "Tool recovery attempted: %s", ["tool_name"]),
         (
@@ -433,8 +433,8 @@ def build_hooks(
         (_E.MCP_SERVER_FAILED, "mcp_fail", "MCP server failed: %s — %s", ["server_name", "error"]),
         # P0 production hooks
         (_E.USER_INPUT_RECEIVED, "user_input", "User input received: session=%s", ["session_id"]),
-        (_E.TOOL_EXEC_START, "tool_start", "Tool exec start: %s", ["tool_name"]),
-        (_E.TOOL_EXEC_END, "tool_end", "Tool exec end: %s (%.0fms)", ["tool_name", "duration_ms"]),
+        (_E.TOOL_EXEC_STARTED, "tool_start", "Tool exec start: %s", ["tool_name"]),
+        (_E.TOOL_EXEC_ENDED, "tool_end", "Tool exec end: %s (%.0fms)", ["tool_name", "duration_ms"]),
         (
             _E.TOOL_EXEC_FAILED,
             "tool_failed",
@@ -462,7 +462,7 @@ def build_hooks(
         (_E.EXECUTION_CANCELLED, "exec_cancel", "Execution cancelled: %s", ["session_id"]),
         # Asymmetry fixes — events that had triggers but no audit logger
         (_E.LLM_CALL_FAILED, "llm_failed", "LLM call FAILED: %s — %s", ["model", "error_type"]),
-        (_E.LLM_CALL_RETRY, "llm_retry", "LLM call retry: %s (attempt %s)", ["model", "attempt"]),
+        (_E.LLM_CALL_RETRIED, "llm_retry", "LLM call retry: %s (attempt %s)", ["model", "attempt"]),
         (
             _E.TOOL_RECOVERY_SUCCEEDED,
             "recovery_ok",
@@ -794,7 +794,7 @@ def build_tool_offload(
             store.cleanup_session()
 
         hooks.register(
-            HookEvent.SESSION_END,
+            HookEvent.SESSION_ENDED,
             _cleanup_offload,
             name="tool_offload_cleanup",
             priority=95,

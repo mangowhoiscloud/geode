@@ -51,7 +51,7 @@ def call_llm_with_tools(
 
     def _dispatch(p: str, m: str) -> ToolUseResult:
         _fire_hook(
-            HookEvent.LLM_CALL_START,
+            HookEvent.LLM_CALL_STARTED,
             {"model": m, "provider": p, "function": "call_llm_with_tools"},
         )
         t0_tools = time.monotonic()
@@ -198,7 +198,7 @@ def call_llm_with_tools(
         except Exception as exc:
             elapsed_ms_total = (time.monotonic() - t0_tools) * 1000
             _fire_hook(
-                HookEvent.LLM_CALL_END,
+                HookEvent.LLM_CALL_ENDED,
                 {
                     "model": m,
                     "provider": p,
@@ -211,7 +211,7 @@ def call_llm_with_tools(
 
         elapsed_ms_total = (time.monotonic() - t0_tools) * 1000
         _fire_hook(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             {
                 "model": m,
                 "provider": p,
