@@ -52,7 +52,58 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **시작 배너 `harness:` 라벨을 GEODE 단독으로 축소.** 기존에는
+  `KNOWN_HARNESSES` 가 `.claude/`, `.cursor/`, `.codex/`, `.copilot/`,
+  `.openclaw/` 등 10 개 AI 도구 설정 디렉터리를 감지해 `harness: Claude
+  Code, GEODE` 처럼 함께 출력했는데, 이게 "GEODE 가 Claude Code 위에서
+  돌아간다" 는 잘못된 브랜드 신호로 읽혔습니다. GEODE 는 자체 런타임으로
+  LLM API 콜 + agentic loop + tool 실행 + tiered context memory + plugin
+  레지스트리를 직접 수행합니다. `.claude/` 등의 디렉터리는 **개발자가
+  GEODE 를 제작·정비할 때 사용하는 build-time 도구 설정**이지 GEODE 의
+  runtime dependency 가 아닙니다. `KNOWN_HARNESSES` 를 `{".geode":
+  "GEODE"}` 단일 항목으로 축소했고, 동일 데이터를 LLM context 로 주입하는
+  `core/memory/context.py:_inject_project_env` 도 같은 신호만 보게 됩니다.
+- **Startup banner `harness:` label reduced to GEODE only.**
+  `KNOWN_HARNESSES` previously detected 10 AI tool config directories
+  (`.claude/`, `.cursor/`, `.codex/`, `.copilot/`, `.openclaw/`, ...) and
+  rendered e.g. `harness: Claude Code, GEODE` at startup. That read as
+  "GEODE runs on top of Claude Code", which is wrong: GEODE drives its
+  own LLM API calls, agentic loop, tool execution, tiered context
+  memory, and plugin registry. `.claude/` etc. are **build-time** tooling
+  used by maintainers when developing GEODE, not runtime dependencies.
+  `KNOWN_HARNESSES` is now `{".geode": "GEODE"}`, and the parallel
+  injection into `core/memory/context.py:_inject_project_env` therefore
+  exposes the same self-only signal to the LLM context.
+
 ### Added
+
+- **Layout migration v2 → v3 — TTL archival for runs/vault/projects.** PR
+  feature/layout-v3. `core/wiring/layout_migrator.py` 의 `_migrate_v2_to_v3`
+  가 `~/.geode/runs/` (현재 600+ 파일 평면), `~/.geode/vault/{general,research}/`
+  (1800+ 파일), `~/.geode/projects/<encoded-cwd>/` (제거된 worktree 대응
+  엔트리 포함) 의 자식 중 `mtime` 이 TTL 보다 오래된 것을 `_archive/<YYYY-MM>/`
+  월 버킷으로 이동. TTL 기본 30일, `GEODE_ARCHIVE_TTL_DAYS` 로 오버라이드.
+  Hermes `SessionDB._init_schema` + Claude Code 월별 버킷 + GEODE 자체
+  `shutil.move` 무손실 패턴 합성. Writer 변경 없음 — bootstrap 1회 sweep,
+  버전 마커로 게이트.
+- **Layout migration v2 → v3 — TTL archival for runs/vault/projects.** PR
+  feature/layout-v3. `_migrate_v2_to_v3` archives children whose mtime is
+  past TTL from `~/.geode/runs/` (600+ flat files), `~/.geode/vault/
+  {general,research}/` (1800+ files), and `~/.geode/projects/` (entries
+  for removed worktrees) into `_archive/<YYYY-MM>/` monthly buckets. TTL
+  defaults to 30 days, overridable via `GEODE_ARCHIVE_TTL_DAYS`.
+  Synthesizes Hermes `SessionDB._init_schema` + Claude Code monthly
+  bucketing + GEODE's own `shutil.move` lossless pattern. No writer
+  change — one-shot bootstrap sweep gated by version marker.
+- **Migration report per-step diagnostic logging.** `ensure_layout_migrated`
+  의 종료 INFO 라인이 step 마다 `moved=/skipped=/warnings=` 카운트를
+  찍음. v1→v2 트리거 갭 ("마커는 v=2 인데 아카이브가 안 일어났다") 후속
+  진단 — `~/.geode/logs/serve.log` 한 줄로 "v3 가 무엇을 옮겼나" 가 보임.
+- **Migration report per-step diagnostic logging.** Closing INFO line now
+  emits per-step moved/skipped/warnings counts, so operators can answer
+  "did v3 actually archive anything?" at a glance.
 
 - **P4 — paths.py SoT lint guardrail + 추가 14 사이트 정렬.** PR #1098
   audit 의 마지막 단계. `tests/test_path_literal_guard.py` 신설 — pytest
