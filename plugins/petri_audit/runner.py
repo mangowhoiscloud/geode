@@ -591,6 +591,18 @@ def run_audit(
             same_provider_bias_chip=bias_chip,
         )
 
+    # Anthropic auth policy (2026-05-14): API KEY only. Claude Code
+    # OAuth tokens are NOT injected into the subprocess — anthropic
+    # alignment audits stay on the ``ANTHROPIC_API_KEY`` path so the
+    # provider's TOS for OAuth tokens (no programmatic / batch use)
+    # is respected. If the env is missing, the subprocess will surface
+    # inspect_ai's standard ``environment_prerequisite_error`` and the
+    # operator must export a real API key.
+    #
+    # 본 정책 + OAuth (OpenAI) 의 사용 가능 / 불가 속성 의 SOT:
+    # ``docs/audits/2026-05-14-petri-oauth-constraints.md``.
+    # 실 검증 (live audit 의 valid baseline 측정) 은 2026-05-25 이후
+    # 의 후속 cycle 의 operator credential 결정 의 의존.
     log.info("Petri audit subprocess: %s", " ".join(cmd))
     # ``cmd`` is built solely from validated model ids + numeric flags by
     # build_command — no shell metacharacters or untrusted user strings.

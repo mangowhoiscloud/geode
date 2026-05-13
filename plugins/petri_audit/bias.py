@@ -1,5 +1,10 @@
 """Petri judge bias correction — same-provider self-preference disadvantage.
 
+# 본 모듈 의 실 calibration (16 % default factor 의 fine-tune) 은 2026-
+# 05-25 이후 의 후속 cycle. 본 PR 은 polarity table + chip + runner
+# wiring 의 코드/축 보강 만. OAuth 제약 + 검증 일정 의 SOT:
+# ``docs/audits/2026-05-14-petri-oauth-constraints.md``.
+
 When ``auditor`` / ``target`` / ``judge`` are all on the same model
 provider (e.g. all ``openai-codex/gpt-5.x`` after the PR #6 OAuth
 alignment), LLM-as-judge self-preference bias inflates favorable

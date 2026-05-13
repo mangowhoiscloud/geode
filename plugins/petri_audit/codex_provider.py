@@ -1,5 +1,18 @@
 """inspect_ai ModelAPI for OpenAI Codex (ChatGPT Plus OAuth subscription).
 
+# OAuth 제약 + 검증 일정 (2026-05-14)
+#
+# 본 모듈 의 fix 의 집합 = PR #6 (initial bridge) + smoke 1..9 의
+# post-smoke fixes (entry-points fast-path, count_tokens tiktoken
+# override, async stream context, instructions placeholder). 모든 제약
+# 인벤토리 + same-provider 옵션 + 2026-05-25 이후 의 검증 일정 의 SOT:
+# ``docs/audits/2026-05-14-petri-oauth-constraints.md``.
+#
+# 본 PR 의 deliverable 은 코드 + bias 축 만. live audit 의 valid
+# baseline 측정 은 ChatGPT backend 의 cybersecurity content filter
+# (PR #5 trial 의 13/13 seed reject) 의 의존 → operator credential
+# refresh 또는 Trusted Access program 가입 의 user-side 결정 의 후속.
+
 Bridges ``inspect_ai`` (and therefore inspect-petri's judge / auditor)
 into the Codex OAuth path that already lives in
 ``core/llm/providers/codex.py`` so judge calls consume the user's
