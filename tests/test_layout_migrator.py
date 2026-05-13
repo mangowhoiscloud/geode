@@ -347,9 +347,7 @@ class TestV2ToV3TTLArchival:
         when = _time.time() - days * 86400.0
         os.utime(path, (when, when))
 
-    def test_runs_old_files_archived_into_monthly_bucket(
-        self, fake_geode_home: Path
-    ) -> None:
+    def test_runs_old_files_archived_into_monthly_bucket(self, fake_geode_home: Path) -> None:
         runs_dir = fake_geode_home / "runs"
         runs_dir.mkdir(parents=True)
         old = runs_dir / "run-old.jsonl"
@@ -370,9 +368,7 @@ class TestV2ToV3TTLArchival:
         assert len(buckets[0].name) == 7 and buckets[0].name[4] == "-"  # YYYY-MM
         assert (buckets[0] / "run-old.jsonl").exists()
 
-    def test_vault_general_and_research_both_archived(
-        self, fake_geode_home: Path
-    ) -> None:
+    def test_vault_general_and_research_both_archived(self, fake_geode_home: Path) -> None:
         general = fake_geode_home / "vault" / "general"
         research = fake_geode_home / "vault" / "research"
         general.mkdir(parents=True)
@@ -394,9 +390,7 @@ class TestV2ToV3TTLArchival:
         assert any((general / "_archive").iterdir())
         assert any((research / "_archive").iterdir())
 
-    def test_projects_stale_workspace_dir_archived(
-        self, fake_geode_home: Path
-    ) -> None:
+    def test_projects_stale_workspace_dir_archived(self, fake_geode_home: Path) -> None:
         projects = fake_geode_home / "projects"
         stale = projects / "encoded-cwd-stale"
         stale.mkdir(parents=True)
@@ -446,9 +440,7 @@ class TestV2ToV3TTLArchival:
 
         ensure_layout_migrated(force=True)
 
-        assert not seven_day.exists(), (
-            "7-day-old file must be archived when TTL=5"
-        )
+        assert not seven_day.exists(), "7-day-old file must be archived when TTL=5"
 
     def test_bad_env_var_falls_back_to_default(
         self, fake_geode_home: Path, monkeypatch: pytest.MonkeyPatch
