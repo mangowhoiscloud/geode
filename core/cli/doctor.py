@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import subprocess
-from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -150,8 +149,10 @@ def _check_scopes() -> dict[str, Any]:
 
 def _check_bindings() -> list[dict[str, Any]]:
     """Check config.toml gateway bindings."""
+    from core.paths import PROJECT_CONFIG_TOML
+
     results: list[dict[str, Any]] = []
-    config_path = Path(".geode/config.toml")
+    config_path = PROJECT_CONFIG_TOML
 
     if not config_path.exists():
         results.append(
@@ -250,7 +251,9 @@ def _check_mcp_slack() -> dict[str, Any]:
 
 def _check_socket() -> dict[str, Any]:
     """Check if IPC socket exists (serve is accepting connections)."""
-    sock_path = Path.home() / ".geode" / "cli.sock"
+    from core.paths import CLI_SOCKET_PATH
+
+    sock_path = CLI_SOCKET_PATH
     if sock_path.exists():
         return {"ok": True, "detail": str(sock_path)}
     return {"ok": False, "detail": "cli.sock not found", "hint": "geode serve creates this"}

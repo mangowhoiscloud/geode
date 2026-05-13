@@ -26,11 +26,11 @@ from typing import Any
 from dotenv import dotenv_values
 
 from core.mcp.stdio_client import StdioMCPClient
-from core.paths import get_project_root
+from core.paths import GLOBAL_ENV_FILE, get_project_root
 
 log = logging.getLogger(__name__)
 
-_GLOBAL_DOTENV_PATH = Path.home() / ".geode" / ".env"
+_GLOBAL_DOTENV_PATH = GLOBAL_ENV_FILE
 
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
 

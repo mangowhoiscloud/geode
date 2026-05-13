@@ -52,6 +52,32 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **P4 — paths.py SoT lint guardrail + 추가 14 사이트 정렬.** PR #1098
+  audit 의 마지막 단계. `tests/test_path_literal_guard.py` 신설 — pytest
+  단위에서 `core/` 트리를 regex 스캔해 `Path.home() / ".geode"` 또는
+  `Path(".geode/...")` literal 을 검출. 통과 조건: (1) paths.py 의 적절한
+  constant 사용, (2) `# noqa: paths-literal` 주석 + 사유, 또는 (3)
+  `_FILE_ALLOWLIST` 등재. `tests/test_no_daemon_print.py` 와 동일 패턴
+  (regex + per-line 옵트아웃).
+  - **P2 audit 누락 14 사이트 일괄 정렬** — P4 가드가 폭로:
+    `core/cli/bootstrap.py` (3), `core/cli/cmd_skill.py` (2), `core/cli/
+    commands/cost.py` (2), `core/cli/doctor.py` (2), `core/cli/ipc_client.py`,
+    `core/cli/typer_commands.py`, `core/mcp/manager.py`, `core/mcp/
+    registry.py`, `core/orchestration/isolated_execution.py`, `core/
+    orchestration/run_log.py`, `core/skills/skills.py`, `core/wiring/
+    adapters.py`, `core/wiring/bootstrap.py` (3), `core/audit/diagnostics.py`,
+    `core/auth/auth_toml.py`. 행위 변경 없음.
+  - **paths.py 신규 constants 4개** — `PROJECT_USER_PROFILE_DIR`,
+    `PROJECT_HOOKS_DIR`, `GLOBAL_DIAGNOSTICS_DIR`, `GLOBAL_AUTH_TOML`.
+    P3 의 5 constants 와 합쳐 paths.py 가 사실상 모든 `.geode/` 경로의
+    SoT.
+  - **allowlist** 4 파일 — `core/paths.py` (SoT), `core/scheduler/
+    scheduler/models.py` + `core/auth/oauth_login.py` (legacy migration
+    markers, 의도적), `core/cli/typer_init.py` (`geode init` 프로젝트
+    부트스트랩 — 20+ 일회성 mkdir, constant 화 가성비 낮음).
+
 ### Changed
 
 - **P2 — paths.py constant 정렬 (11+1 사이트).** PR #1098 audit 의

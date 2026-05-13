@@ -44,6 +44,12 @@ GLOBAL_RUNS_DIR = GEODE_HOME / "runs"
 GLOBAL_USAGE_DIR = GEODE_HOME / "usage"
 GLOBAL_MCP_DIR = GEODE_HOME / "mcp"
 GLOBAL_SCHEDULER_DIR = GEODE_HOME / "scheduler"
+# P4 (v0.95.x) — added during lint-guardrail rollout. fa4 diagnostics
+# log dir (cross-process append-only) and the auth.toml SoT path.
+# `core.auth.auth_toml` overrides via `GEODE_AUTH_TOML` env var; this
+# constant is the default fallback.
+GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
+GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # P3 (v0.95.x) — user-tier installed skills (priority 2 of 4-tier
 # resolution; see `core/llm/skill_registry.py`). Bundled skills live
 # inside the package source tree, not at `GEODE_HOME` — resolve via
@@ -90,6 +96,11 @@ PROJECT_SCHEDULER_LOG_DIR = PROJECT_GEODE_DIR / "scheduler_logs"
 PROJECT_PLANS_FILE = PROJECT_GEODE_DIR / "plans.json"
 PROJECT_LEARNING_FILE = PROJECT_GEODE_DIR / "LEARNING.md"
 PROJECT_MEMORY_INDEX = PROJECT_GEODE_DIR / "MEMORY.md"
+# P4 (v0.95.x) — added during the lint-guardrail rollout. project-local
+# user_profile override (read by `core.cli.bootstrap` + `core.wiring.bootstrap`)
+# and project-local hooks dir (read by `core.wiring.bootstrap` plugin loader).
+PROJECT_USER_PROFILE_DIR = PROJECT_GEODE_DIR / "user_profile"
+PROJECT_HOOKS_DIR = PROJECT_GEODE_DIR / "hooks"
 
 # Per-project caches surfaced by /clean for selective wipe.
 #

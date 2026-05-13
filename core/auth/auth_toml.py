@@ -47,10 +47,11 @@ from typing import Any
 from core.auth.plan_registry import PlanRegistry, get_plan_registry
 from core.auth.plans import Plan, PlanKind, Quota
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
+from core.paths import GLOBAL_AUTH_TOML
 
 log = logging.getLogger(__name__)
 
-DEFAULT_AUTH_TOML = Path.home() / ".geode" / "auth.toml"
+DEFAULT_AUTH_TOML: Path = GLOBAL_AUTH_TOML
 
 
 def auth_toml_path() -> Path:
