@@ -108,6 +108,20 @@ docs/progress-report.html
 # CI trigger
 /.audit/
 
+# Playwright MCP browser captures (console logs + screenshots from
+# transient debugging sessions). Never part of the tracked tree.
+.playwright-mcp/
+
+# Ad-hoc artifact dumps from local audit/benchmark runs.
+artifacts/
+
+# Scheduler lock file written by `geode serve` cron worker.
+.claude/scheduled_tasks.lock
+
+# Layout migration v1→v2 archive — vestigial dir archival output.
+# Reversible (user can `mv` back or `rm -rf`). Never tracked.
+.geode/_archive/
+
 # Next.js site (site/) build + install artifacts. The site/ tree itself is
 # tracked; only generated contents are excluded.
 site/node_modules/
