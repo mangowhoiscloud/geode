@@ -11,15 +11,15 @@ class TestHookEvent:
         assert len(HookEvent) == 58  # +2: TOOL_EXEC_FAILED, TOOL_RESULT_TRANSFORM
 
     def test_event_values(self):
-        assert HookEvent.PIPELINE_START.value == "pipeline_start"
-        assert HookEvent.PIPELINE_END.value == "pipeline_end"
+        assert HookEvent.PIPELINE_STARTED.value == "pipeline_start"
+        assert HookEvent.PIPELINE_ENDED.value == "pipeline_end"
         assert HookEvent.PIPELINE_ERROR.value == "pipeline_error"
-        assert HookEvent.NODE_ENTER.value == "node_enter"
-        assert HookEvent.NODE_EXIT.value == "node_exit"
+        assert HookEvent.NODE_ENTERED.value == "node_enter"
+        assert HookEvent.NODE_EXITED.value == "node_exit"
         assert HookEvent.NODE_ERROR.value == "node_error"
-        assert HookEvent.ANALYST_COMPLETE.value == "analyst_complete"
-        assert HookEvent.EVALUATOR_COMPLETE.value == "evaluator_complete"
-        assert HookEvent.SCORING_COMPLETE.value == "scoring_complete"
+        assert HookEvent.ANALYST_COMPLETED.value == "analyst_complete"
+        assert HookEvent.EVALUATOR_COMPLETED.value == "evaluator_complete"
+        assert HookEvent.SCORING_COMPLETED.value == "scoring_complete"
         assert HookEvent.VERIFICATION_PASS.value == "verification_pass"
         assert HookEvent.VERIFICATION_FAIL.value == "verification_fail"
 
@@ -33,8 +33,8 @@ class TestHookEvent:
     def test_production_p0_events(self):
         """P0 production hooks: interceptor + cost enforcement + audit."""
         assert HookEvent.USER_INPUT_RECEIVED.value == "user_input_received"
-        assert HookEvent.TOOL_EXEC_START.value == "tool_exec_start"
-        assert HookEvent.TOOL_EXEC_END.value == "tool_exec_end"
+        assert HookEvent.TOOL_EXEC_STARTED.value == "tool_exec_start"
+        assert HookEvent.TOOL_EXEC_ENDED.value == "tool_exec_end"
         assert HookEvent.TOOL_EXEC_FAILED.value == "tool_exec_failed"
         assert HookEvent.TOOL_RESULT_TRANSFORM.value == "tool_result_transform"
         assert HookEvent.COST_WARNING.value == "cost_warning"
@@ -125,7 +125,7 @@ class TestMemoryToolHooks:
 
 class TestHookResult:
     def test_success_result(self):
-        r = HookResult(success=True, event=HookEvent.PIPELINE_START, handler_name="my_hook")
+        r = HookResult(success=True, event=HookEvent.PIPELINE_STARTED, handler_name="my_hook")
         assert r.success is True
         assert r.error is None
 
@@ -161,8 +161,8 @@ class TestHookSystem:
         def on_start(event, data):
             calls.append({"event": event, "data": data})
 
-        hooks.register(HookEvent.PIPELINE_START, on_start)
-        results = hooks.trigger(HookEvent.PIPELINE_START, {"ip": "Berserk"})
+        hooks.register(HookEvent.PIPELINE_STARTED, on_start)
+        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"ip": "Berserk"})
 
         assert len(results) == 1
         assert results[0].success is True
@@ -179,20 +179,20 @@ class TestHookSystem:
         def high_priority(event, data):
             order.append("high")
 
-        hooks.register(HookEvent.NODE_ENTER, low_priority, priority=200)
-        hooks.register(HookEvent.NODE_ENTER, high_priority, priority=10)
+        hooks.register(HookEvent.NODE_ENTERED, low_priority, priority=200)
+        hooks.register(HookEvent.NODE_ENTERED, high_priority, priority=10)
 
-        hooks.trigger(HookEvent.NODE_ENTER)
+        hooks.trigger(HookEvent.NODE_ENTERED)
         assert order == ["high", "low"]
 
     def test_multiple_handlers_same_event(self):
         hooks = HookSystem()
         calls: list[str] = []
 
-        hooks.register(HookEvent.PIPELINE_END, lambda e, d: calls.append("a"), name="a")
-        hooks.register(HookEvent.PIPELINE_END, lambda e, d: calls.append("b"), name="b")
+        hooks.register(HookEvent.PIPELINE_ENDED, lambda e, d: calls.append("a"), name="a")
+        hooks.register(HookEvent.PIPELINE_ENDED, lambda e, d: calls.append("b"), name="b")
 
-        results = hooks.trigger(HookEvent.PIPELINE_END)
+        results = hooks.trigger(HookEvent.PIPELINE_ENDED)
         assert len(results) == 2
         assert len(calls) == 2
 
@@ -206,10 +206,10 @@ class TestHookSystem:
         def good_hook(event, data):
             calls.append("ok")
 
-        hooks.register(HookEvent.NODE_EXIT, bad_hook, name="bad", priority=1)
-        hooks.register(HookEvent.NODE_EXIT, good_hook, name="good", priority=2)
+        hooks.register(HookEvent.NODE_EXITED, bad_hook, name="bad", priority=1)
+        hooks.register(HookEvent.NODE_EXITED, good_hook, name="good", priority=2)
 
-        results = hooks.trigger(HookEvent.NODE_EXIT)
+        results = hooks.trigger(HookEvent.NODE_EXITED)
         assert len(results) == 2
         assert results[0].success is False
         assert results[0].error == "boom"
@@ -218,45 +218,45 @@ class TestHookSystem:
 
     def test_trigger_no_handlers(self):
         hooks = HookSystem()
-        results = hooks.trigger(HookEvent.SCORING_COMPLETE)
+        results = hooks.trigger(HookEvent.SCORING_COMPLETED)
         assert results == []
 
     def test_unregister(self):
         hooks = HookSystem()
-        hooks.register(HookEvent.PIPELINE_START, lambda e, d: None, name="tmp")
-        assert hooks.unregister(HookEvent.PIPELINE_START, "tmp") is True
-        assert hooks.trigger(HookEvent.PIPELINE_START) == []
+        hooks.register(HookEvent.PIPELINE_STARTED, lambda e, d: None, name="tmp")
+        assert hooks.unregister(HookEvent.PIPELINE_STARTED, "tmp") is True
+        assert hooks.trigger(HookEvent.PIPELINE_STARTED) == []
 
     def test_unregister_nonexistent(self):
         hooks = HookSystem()
-        assert hooks.unregister(HookEvent.PIPELINE_START, "nope") is False
+        assert hooks.unregister(HookEvent.PIPELINE_STARTED, "nope") is False
 
     def test_list_hooks(self):
         hooks = HookSystem()
-        hooks.register(HookEvent.NODE_ENTER, lambda e, d: None, name="h1")
-        hooks.register(HookEvent.NODE_EXIT, lambda e, d: None, name="h2")
+        hooks.register(HookEvent.NODE_ENTERED, lambda e, d: None, name="h1")
+        hooks.register(HookEvent.NODE_EXITED, lambda e, d: None, name="h2")
 
         all_hooks = hooks.list_hooks()
         assert "node_enter" in all_hooks
         assert "h1" in all_hooks["node_enter"]
 
-        filtered = hooks.list_hooks(HookEvent.NODE_EXIT)
+        filtered = hooks.list_hooks(HookEvent.NODE_EXITED)
         assert "node_exit" in filtered
         assert "h2" in filtered["node_exit"]
 
     def test_clear_specific_event(self):
         hooks = HookSystem()
-        hooks.register(HookEvent.NODE_ENTER, lambda e, d: None, name="a")
-        hooks.register(HookEvent.NODE_EXIT, lambda e, d: None, name="b")
+        hooks.register(HookEvent.NODE_ENTERED, lambda e, d: None, name="a")
+        hooks.register(HookEvent.NODE_EXITED, lambda e, d: None, name="b")
 
-        hooks.clear(HookEvent.NODE_ENTER)
-        assert hooks.list_hooks(HookEvent.NODE_ENTER) == {"node_enter": []}
-        assert "b" in hooks.list_hooks(HookEvent.NODE_EXIT)["node_exit"]
+        hooks.clear(HookEvent.NODE_ENTERED)
+        assert hooks.list_hooks(HookEvent.NODE_ENTERED) == {"node_enter": []}
+        assert "b" in hooks.list_hooks(HookEvent.NODE_EXITED)["node_exit"]
 
     def test_clear_all(self):
         hooks = HookSystem()
-        hooks.register(HookEvent.NODE_ENTER, lambda e, d: None, name="a")
-        hooks.register(HookEvent.NODE_EXIT, lambda e, d: None, name="b")
+        hooks.register(HookEvent.NODE_ENTERED, lambda e, d: None, name="a")
+        hooks.register(HookEvent.NODE_EXITED, lambda e, d: None, name="b")
 
         hooks.clear()
         assert hooks.list_hooks() == {}
@@ -267,7 +267,7 @@ class TestHookSystem:
         def my_handler(event, data):
             pass
 
-        hooks.register(HookEvent.PIPELINE_START, my_handler)
+        hooks.register(HookEvent.PIPELINE_STARTED, my_handler)
         all_hooks = hooks.list_hooks()
         assert "my_handler" in all_hooks["pipeline_start"]
 
@@ -278,8 +278,8 @@ class TestHookSystem:
         def handler(event, data):
             received.append(data)
 
-        hooks.register(HookEvent.PIPELINE_START, handler)
-        hooks.trigger(HookEvent.PIPELINE_START)  # No data arg
+        hooks.register(HookEvent.PIPELINE_STARTED, handler)
+        hooks.trigger(HookEvent.PIPELINE_STARTED)  # No data arg
         assert received == [{}]
 
 
@@ -412,10 +412,10 @@ class TestToolExecInterceptor:
                 return {"block": True, "reason": "tool blocked by policy"}
             return None
 
-        hooks.register(HookEvent.TOOL_EXEC_START, blocker, name="policy_gate")
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, blocker, name="policy_gate")
 
         result = hooks.trigger_interceptor(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             {"tool_name": "dangerous_tool", "tool_input": {"cmd": "rm -rf /"}},
         )
         assert result.blocked is True
@@ -428,10 +428,10 @@ class TestToolExecInterceptor:
         def sanitizer(_event, data):
             return {"modify": {"tool_input": {"sanitized": True}}}
 
-        hooks.register(HookEvent.TOOL_EXEC_START, sanitizer, name="input_sanitizer")
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, sanitizer, name="input_sanitizer")
 
         result = hooks.trigger_interceptor(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             {"tool_name": "search", "tool_input": {"query": "raw"}},
         )
         assert result.blocked is False
@@ -440,10 +440,10 @@ class TestToolExecInterceptor:
     def test_tool_exec_start_passthrough(self):
         """TOOL_EXEC_START with no-op handler passes through."""
         hooks = HookSystem()
-        hooks.register(HookEvent.TOOL_EXEC_START, lambda e, d: None, name="observer")
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, lambda e, d: None, name="observer")
 
         result = hooks.trigger_interceptor(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             {"tool_name": "safe_tool", "tool_input": {}},
         )
         assert result.blocked is False
@@ -458,10 +458,10 @@ class TestToolExecInterceptor:
                 return {"updated_result": {"data": "transformed"}}
             return None
 
-        hooks.register(HookEvent.TOOL_EXEC_END, result_modifier, name="transformer")
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, result_modifier, name="transformer")
 
         results = hooks.trigger_with_result(
-            HookEvent.TOOL_EXEC_END,
+            HookEvent.TOOL_EXEC_ENDED,
             {
                 "tool_name": "fetch",
                 "tool_input": {},
@@ -481,10 +481,10 @@ class TestToolExecInterceptor:
         def ctx_injector(_event, _data):
             return {"additional_context": "Extra info from hook"}
 
-        hooks.register(HookEvent.TOOL_EXEC_END, ctx_injector, name="ctx_inject")
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, ctx_injector, name="ctx_inject")
 
         results = hooks.trigger_with_result(
-            HookEvent.TOOL_EXEC_END,
+            HookEvent.TOOL_EXEC_ENDED,
             {"tool_name": "search", "tool_input": {}, "duration_ms": 50, "has_error": False},
         )
         assert results[0].data["additional_context"] == "Extra info from hook"
@@ -492,10 +492,10 @@ class TestToolExecInterceptor:
     def test_tool_exec_end_no_modification(self):
         """TOOL_EXEC_END observe-only handler returns empty data."""
         hooks = HookSystem()
-        hooks.register(HookEvent.TOOL_EXEC_END, lambda e, d: None, name="observer")
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, lambda e, d: None, name="observer")
 
         results = hooks.trigger_with_result(
-            HookEvent.TOOL_EXEC_END,
+            HookEvent.TOOL_EXEC_ENDED,
             {"tool_name": "t", "tool_input": {}, "duration_ms": 1, "has_error": False},
         )
         assert len(results) == 1
@@ -608,16 +608,16 @@ class TestMatcher:
         calls: list[str] = []
 
         hooks.register(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             lambda e, d: calls.append("bash"),
             name="bash_only",
             matcher="run_bash",
         )
 
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "run_bash"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "run_bash"})
         assert calls == ["bash"]
 
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "web_search"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "web_search"})
         assert calls == ["bash"]  # not fired again
 
     def test_matcher_regex_pattern(self):
@@ -626,15 +626,15 @@ class TestMatcher:
         calls: list[str] = []
 
         hooks.register(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             lambda e, d: calls.append(d["tool_name"]),
             name="dangerous",
             matcher="run_bash|terminal|computer_use",
         )
 
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "run_bash"})
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "terminal"})
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "web_search"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "run_bash"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "terminal"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "web_search"})
         assert calls == ["run_bash", "terminal"]
 
     def test_empty_matcher_matches_all(self):
@@ -643,13 +643,13 @@ class TestMatcher:
         calls: list[str] = []
 
         hooks.register(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             lambda e, d: calls.append(d["tool_name"]),
             name="all_tools",
         )
 
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "any_tool"})
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "other_tool"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "any_tool"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "other_tool"})
         assert calls == ["any_tool", "other_tool"]
 
     def test_matcher_ignored_for_non_tool_events(self):
@@ -658,13 +658,13 @@ class TestMatcher:
         calls: list[str] = []
 
         hooks.register(
-            HookEvent.PIPELINE_START,
+            HookEvent.PIPELINE_STARTED,
             lambda e, d: calls.append("fired"),
             name="with_matcher",
             matcher="run_bash",
         )
 
-        hooks.trigger(HookEvent.PIPELINE_START, {"tool_name": "something_else"})
+        hooks.trigger(HookEvent.PIPELINE_STARTED, {"tool_name": "something_else"})
         assert calls == ["fired"]  # matcher not applied
 
     def test_matcher_on_interceptor(self):
@@ -675,19 +675,19 @@ class TestMatcher:
             return {"block": True, "reason": "bash blocked"}
 
         hooks.register(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             bash_blocker,
             name="bash_gate",
             matcher="run_bash",
         )
 
         result_bash = hooks.trigger_interceptor(
-            HookEvent.TOOL_EXEC_START, {"tool_name": "run_bash"}
+            HookEvent.TOOL_EXEC_STARTED, {"tool_name": "run_bash"}
         )
         assert result_bash.blocked is True
 
         result_safe = hooks.trigger_interceptor(
-            HookEvent.TOOL_EXEC_START, {"tool_name": "web_search"}
+            HookEvent.TOOL_EXEC_STARTED, {"tool_name": "web_search"}
         )
         assert result_safe.blocked is False
 
@@ -696,20 +696,20 @@ class TestMatcher:
         hooks = HookSystem()
 
         hooks.register(
-            HookEvent.TOOL_EXEC_END,
+            HookEvent.TOOL_EXEC_ENDED,
             lambda e, d: {"updated_result": {"enriched": True}},
             name="enrich_search",
             matcher="web_search",
         )
 
         results_match = hooks.trigger_with_result(
-            HookEvent.TOOL_EXEC_END, {"tool_name": "web_search", "result": {}}
+            HookEvent.TOOL_EXEC_ENDED, {"tool_name": "web_search", "result": {}}
         )
         assert len(results_match) == 1
         assert results_match[0].data["updated_result"] == {"enriched": True}
 
         results_no_match = hooks.trigger_with_result(
-            HookEvent.TOOL_EXEC_END, {"tool_name": "read_file", "result": {}}
+            HookEvent.TOOL_EXEC_ENDED, {"tool_name": "read_file", "result": {}}
         )
         assert len(results_no_match) == 0
 
@@ -751,13 +751,13 @@ class TestMatcher:
         calls: list[str] = []
 
         hooks.register(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             lambda e, d: calls.append("fired"),
             name="bad_regex",
             matcher="[invalid",
         )
 
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "any_tool"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "any_tool"})
         assert calls == ["fired"]
 
     def test_mixed_matcher_and_no_matcher(self):
@@ -766,24 +766,24 @@ class TestMatcher:
         calls: list[str] = []
 
         hooks.register(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             lambda e, d: calls.append("all"),
             name="global",
             priority=10,
         )
         hooks.register(
-            HookEvent.TOOL_EXEC_START,
+            HookEvent.TOOL_EXEC_STARTED,
             lambda e, d: calls.append("bash"),
             name="bash_only",
             priority=20,
             matcher="run_bash",
         )
 
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "run_bash"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "run_bash"})
         assert calls == ["all", "bash"]
 
         calls.clear()
-        hooks.trigger(HookEvent.TOOL_EXEC_START, {"tool_name": "web_search"})
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "web_search"})
         assert calls == ["all"]
 
 

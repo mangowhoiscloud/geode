@@ -128,7 +128,7 @@ class TestJournalHooks:
         # Simulate PIPELINE_END
         end_handler = next(fn for name, fn in handlers if name == "journal_pipeline_end")
         end_handler(
-            HookEvent.PIPELINE_END,
+            HookEvent.PIPELINE_ENDED,
             {
                 "ip_name": "Berserk",
                 "tier": "S",
@@ -177,7 +177,7 @@ class TestJournalHooks:
 
         end_handler = next(fn for name, fn in handlers if name == "journal_pipeline_end")
         # Send wrong event type
-        end_handler(HookEvent.NODE_ENTER, {"ip_name": "X"})
+        end_handler(HookEvent.NODE_ENTERED, {"ip_name": "X"})
         assert journal.get_recent_runs(5) == []
 
 

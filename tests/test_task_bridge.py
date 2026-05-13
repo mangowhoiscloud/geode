@@ -22,15 +22,15 @@ def _make_bridge(ip: str = "berserk") -> tuple[TaskGraphHookBridge, HookSystem]:
 class TestSimpleNodeMapping:
     def test_router_enter_marks_running(self):
         bridge, hooks = _make_bridge()
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "router", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
         task = bridge.task_graph.get_task("berserk_router")
         assert task is not None
         assert task.status == TaskStatus.RUNNING
 
     def test_router_exit_marks_completed(self):
         bridge, hooks = _make_bridge()
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "router", "ip_name": "berserk"})
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "router", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "router", "ip_name": "berserk"})
         task = bridge.task_graph.get_task("berserk_router")
         assert task is not None
         assert task.status == TaskStatus.COMPLETED
@@ -42,10 +42,10 @@ class TestSimpleNodeMapping:
         bridge.task_graph.mark_running("berserk_router")
         bridge.task_graph.mark_completed("berserk_router")
 
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "signals", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "signals", "ip_name": "berserk"})
         assert bridge.task_graph.get_task("berserk_signals").status == TaskStatus.RUNNING
 
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "signals", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "signals", "ip_name": "berserk"})
         assert bridge.task_graph.get_task("berserk_signals").status == TaskStatus.COMPLETED
 
 
@@ -62,13 +62,13 @@ class TestAnalystTypeMapping:
         g.mark_completed("berserk_signals")
 
         hooks.trigger(
-            HookEvent.NODE_ENTER,
+            HookEvent.NODE_ENTERED,
             {"node": "analyst", "ip_name": "berserk", "_analyst_type": "game_mechanics"},
         )
         assert g.get_task("berserk_analyst_game_mechanics").status == TaskStatus.RUNNING
 
         hooks.trigger(
-            HookEvent.NODE_EXIT,
+            HookEvent.NODE_EXITED,
             {"node": "analyst", "ip_name": "berserk", "_analyst_type": "game_mechanics"},
         )
         assert g.get_task("berserk_analyst_game_mechanics").status == TaskStatus.COMPLETED
@@ -85,11 +85,11 @@ class TestAnalystTypeMapping:
 
         for atype in ["game_mechanics", "player_experience", "growth_potential", "discovery"]:
             hooks.trigger(
-                HookEvent.NODE_ENTER,
+                HookEvent.NODE_ENTERED,
                 {"node": "analyst", "ip_name": "berserk", "_analyst_type": atype},
             )
             hooks.trigger(
-                HookEvent.NODE_EXIT,
+                HookEvent.NODE_EXITED,
                 {"node": "analyst", "ip_name": "berserk", "_analyst_type": atype},
             )
             assert g.get_task(f"berserk_analyst_{atype}").status == TaskStatus.COMPLETED
@@ -118,22 +118,22 @@ class TestEvaluatorCounting:
 
         # Mark evaluators running via NODE_ENTER
         hooks.trigger(
-            HookEvent.NODE_ENTER,
+            HookEvent.NODE_ENTERED,
             {"node": "evaluator", "ip_name": "berserk", "_evaluator_type": "quality_judge"},
         )
         assert g.get_task("berserk_evaluators").status == TaskStatus.RUNNING
 
         # First 2 exits — still running
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "evaluator", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "evaluator", "ip_name": "berserk"})
         assert bridge.evaluator_done_count == 1
         assert g.get_task("berserk_evaluators").status == TaskStatus.RUNNING
 
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "evaluator", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "evaluator", "ip_name": "berserk"})
         assert bridge.evaluator_done_count == 2
         assert g.get_task("berserk_evaluators").status == TaskStatus.RUNNING
 
         # Third exit — completes
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "evaluator", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "evaluator", "ip_name": "berserk"})
         assert bridge.evaluator_done_count == 3
         assert g.get_task("berserk_evaluators").status == TaskStatus.COMPLETED
 
@@ -144,7 +144,7 @@ class TestEvaluatorCounting:
 
         # Mark running
         hooks.trigger(
-            HookEvent.NODE_ENTER,
+            HookEvent.NODE_ENTERED,
             {"node": "evaluator", "ip_name": "berserk", "_evaluator_type": "quality_judge"},
         )
 
@@ -159,8 +159,8 @@ class TestEvaluatorCounting:
         assert g.get_task("berserk_scoring").status == TaskStatus.SKIPPED
 
         # Evaluators 2 & 3 exit — done_count tracks, task stays FAILED
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "evaluator", "ip_name": "berserk"})
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "evaluator", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "evaluator", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "evaluator", "ip_name": "berserk"})
         assert bridge.evaluator_done_count == 3
         assert g.get_task("berserk_evaluators").status == TaskStatus.FAILED
 
@@ -182,11 +182,11 @@ class TestMultiTaskMapping:
         g.mark_running("berserk_evaluators")
         g.mark_completed("berserk_evaluators")
 
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "scoring", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "scoring", "ip_name": "berserk"})
         assert g.get_task("berserk_scoring").status == TaskStatus.RUNNING
         assert g.get_task("berserk_psm").status == TaskStatus.RUNNING
 
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "scoring", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "scoring", "ip_name": "berserk"})
         assert g.get_task("berserk_scoring").status == TaskStatus.COMPLETED
         assert g.get_task("berserk_psm").status == TaskStatus.COMPLETED
 
@@ -207,11 +207,11 @@ class TestMultiTaskMapping:
             g.mark_running(tid)
             g.mark_completed(tid)
 
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "verification", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "verification", "ip_name": "berserk"})
         assert g.get_task("berserk_verification").status == TaskStatus.RUNNING
         assert g.get_task("berserk_cross_llm").status == TaskStatus.COMPLETED  # already done
 
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "verification", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "verification", "ip_name": "berserk"})
         assert g.get_task("berserk_verification").status == TaskStatus.COMPLETED
 
     def test_synthesizer_maps_to_synthesis_and_report(self):
@@ -237,11 +237,11 @@ class TestMultiTaskMapping:
             g.mark_running(tid)
             g.mark_completed(tid)
 
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "synthesizer", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "synthesizer", "ip_name": "berserk"})
         assert g.get_task("berserk_synthesis").status == TaskStatus.RUNNING
         assert g.get_task("berserk_report").status == TaskStatus.RUNNING
 
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "synthesizer", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "synthesizer", "ip_name": "berserk"})
         assert g.get_task("berserk_synthesis").status == TaskStatus.COMPLETED
         assert g.get_task("berserk_report").status == TaskStatus.COMPLETED
 
@@ -250,7 +250,7 @@ class TestErrorPropagation:
     def test_node_error_marks_failed_and_propagates(self):
         bridge, hooks = _make_bridge()
         hooks.trigger(
-            HookEvent.NODE_ENTER,
+            HookEvent.NODE_ENTERED,
             {"node": "router", "ip_name": "berserk"},
         )
         hooks.trigger(
@@ -268,8 +268,8 @@ class TestErrorPropagation:
 class TestIgnoredNodes:
     def test_gather_ignored(self):
         bridge, hooks = _make_bridge()
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "gather", "ip_name": "berserk"})
-        hooks.trigger(HookEvent.NODE_EXIT, {"node": "gather", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "gather", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_EXITED, {"node": "gather", "ip_name": "berserk"})
         assert bridge.task_graph.get_task("berserk_router").status == TaskStatus.PENDING
 
 
@@ -285,7 +285,7 @@ class TestBridgeLifecycle:
     def test_unregister_removes_handlers(self):
         bridge, hooks = _make_bridge()
         # Verify handlers are active
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "router", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
         assert bridge.task_graph.get_task("berserk_router").status == TaskStatus.RUNNING
 
         # Unregister
@@ -296,7 +296,7 @@ class TestBridgeLifecycle:
         bridge2 = TaskGraphHookBridge(graph2, ip_prefix="berserk")
         bridge2.register(hooks)
 
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "signals", "ip_name": "berserk"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "signals", "ip_name": "berserk"})
         # Key: only 1 set of handlers, no duplicate firing
         assert bridge2.task_graph.get_task("berserk_router").status == TaskStatus.PENDING
 

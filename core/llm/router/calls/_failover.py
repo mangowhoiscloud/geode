@@ -121,7 +121,7 @@ async def call_with_failover(
                 # (model + attempt + max_retries + delay_s + elapsed_s + error_type)
                 # and unblocks any handler that listens to LLM_CALL_RETRY.
                 _fire_hook(
-                    HookEvent.LLM_CALL_RETRY,
+                    HookEvent.LLM_CALL_RETRIED,
                     {
                         "model": current_model,
                         "attempt": attempt + 1,

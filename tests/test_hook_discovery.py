@@ -77,7 +77,7 @@ def _make_class_plugin(
     plugin_dir.mkdir(parents=True, exist_ok=True)
 
     if events is None:
-        events = ["HookEvent.NODE_ENTER"]
+        events = ["HookEvent.NODE_ENTERED"]
     events_list = ", ".join(events)
 
     if class_body is None:
@@ -123,7 +123,7 @@ class TestYAMLDiscovery:
         assert len(found) == 1
         meta = found[0]
         assert meta.name == "my-yaml-hook"
-        assert HookEvent.NODE_EXIT in meta.events
+        assert HookEvent.NODE_EXITED in meta.events
         assert HookEvent.NODE_ERROR in meta.events
         assert meta.priority == 50
 
@@ -137,7 +137,7 @@ class TestYAMLDiscovery:
         hooks = HookSystem()
         loader.register_all(hooks)
 
-        results = hooks.trigger(HookEvent.PIPELINE_START, {"ip": "test"})
+        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"ip": "test"})
         assert len(results) == 1
         assert results[0].success is True
         assert results[0].handler_name == "fire-test"
@@ -150,16 +150,16 @@ class TestYAMLDiscovery:
 
 class TestClassDiscovery:
     def test_discover_class_plugin(self, hooks_dir: Path) -> None:
-        _make_class_plugin(hooks_dir, "my-class-hook", events=["HookEvent.NODE_ENTER"])
+        _make_class_plugin(hooks_dir, "my-class-hook", events=["HookEvent.NODE_ENTERED"])
 
         found = discover_hooks([hooks_dir])
         assert len(found) == 1
         meta = found[0]
         assert meta.name == "my-class-hook"
-        assert HookEvent.NODE_ENTER in meta.events
+        assert HookEvent.NODE_ENTERED in meta.events
 
     def test_class_plugin_fires(self, hooks_dir: Path) -> None:
-        _make_class_plugin(hooks_dir, "class-fire", events=["HookEvent.NODE_EXIT"])
+        _make_class_plugin(hooks_dir, "class-fire", events=["HookEvent.NODE_EXITED"])
 
         loader = HookPluginLoader()
         plugins = loader.load_from_dirs([hooks_dir])
@@ -168,7 +168,7 @@ class TestClassDiscovery:
         hooks = HookSystem()
         loader.register_all(hooks)
 
-        results = hooks.trigger(HookEvent.NODE_EXIT, {"node": "analyst"})
+        results = hooks.trigger(HookEvent.NODE_EXITED, {"node": "analyst"})
         assert len(results) == 1
         assert results[0].success is True
         assert results[0].handler_name == "class-fire"
@@ -233,7 +233,7 @@ class TestRegistration:
         hooks = HookSystem()
         loader.register_all(hooks)
 
-        results = hooks.trigger(HookEvent.NODE_EXIT, {"order": order})
+        results = hooks.trigger(HookEvent.NODE_EXITED, {"order": order})
         assert len(results) == 2
         assert all(r.success for r in results)
         assert order == ["high", "low"]
@@ -285,7 +285,7 @@ class TestEdgeCases:
         _make_class_plugin(
             hooks_dir,
             "disabled-class",
-            events=["HookEvent.NODE_ENTER"],
+            events=["HookEvent.NODE_ENTERED"],
             enabled=False,
         )
 

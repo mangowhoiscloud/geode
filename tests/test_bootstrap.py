@@ -68,11 +68,11 @@ class TestBootstrapManager:
             event_order.append("enter")
 
         hooks.register(HookEvent.NODE_BOOTSTRAP, on_bootstrap)
-        hooks.register(HookEvent.NODE_ENTER, on_enter)
+        hooks.register(HookEvent.NODE_ENTERED, on_enter)
 
         # Simulate the sequence: bootstrap fires first, then enter
         mgr.prepare_node("router", "Berserk", {})
-        hooks.trigger(HookEvent.NODE_ENTER, {"node": "router"})
+        hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router"})
 
         assert event_order == ["bootstrap", "enter"]
 
@@ -364,8 +364,8 @@ class TestMakeHookedNodeWithBootstrap:
         def track_events(event: HookEvent, data: dict[str, Any]) -> None:
             events_fired.append(event)
 
-        hooks.register(HookEvent.NODE_ENTER, track_events)
-        hooks.register(HookEvent.NODE_EXIT, track_events)
+        hooks.register(HookEvent.NODE_ENTERED, track_events)
+        hooks.register(HookEvent.NODE_EXITED, track_events)
 
         def fake_node(state: dict[str, Any]) -> dict[str, Any]:
             return {"value": 42}
@@ -375,8 +375,8 @@ class TestMakeHookedNodeWithBootstrap:
         result = wrapped({"ip_name": "Berserk"})  # type: ignore[arg-type]
 
         assert result == {"value": 42}
-        assert HookEvent.NODE_ENTER in events_fired
-        assert HookEvent.NODE_EXIT in events_fired
+        assert HookEvent.NODE_ENTERED in events_fired
+        assert HookEvent.NODE_EXITED in events_fired
         # NODE_BOOTSTRAP should NOT fire
         assert HookEvent.NODE_BOOTSTRAP not in events_fired
 
@@ -398,8 +398,8 @@ class TestMakeHookedNodeWithBootstrap:
             event_order.append("exit")
 
         hooks.register(HookEvent.NODE_BOOTSTRAP, on_bootstrap)
-        hooks.register(HookEvent.NODE_ENTER, on_enter)
-        hooks.register(HookEvent.NODE_EXIT, on_exit)
+        hooks.register(HookEvent.NODE_ENTERED, on_enter)
+        hooks.register(HookEvent.NODE_EXITED, on_exit)
 
         def fake_node(state: dict[str, Any]) -> dict[str, Any]:
             return {"done": True}
