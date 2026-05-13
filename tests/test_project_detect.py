@@ -209,53 +209,59 @@ class TestGenerateSettingsJsonHooks:
 
 
 class TestHarnessDetection:
-    """Test AI agent harness directory detection."""
+    """Test GEODE harness directory detection.
+
+    GEODE runs its own runtime — it is not hosted on another agent harness.
+    Only ``.geode/`` is detected; co-existing AI tool config directories
+    (`.claude/`, `.cursor/`, ...) are intentionally ignored to avoid the
+    "GEODE runs on top of <X>" misreading in the startup banner.
+    """
 
     def test_no_harnesses(self, tmp_path: Path) -> None:
         info = detect_project_type(tmp_path)
         assert info.harnesses == []
 
-    def test_detect_claude(self, tmp_path: Path) -> None:
-        (tmp_path / ".claude").mkdir()
+    def test_detect_geode(self, tmp_path: Path) -> None:
+        (tmp_path / ".geode").mkdir()
         info = detect_project_type(tmp_path)
-        assert ".claude" in info.harnesses
+        assert ".geode" in info.harnesses
 
-    def test_detect_multiple_harnesses(self, tmp_path: Path) -> None:
+    def test_other_agent_dirs_ignored(self, tmp_path: Path) -> None:
+        """Co-existing AI tool configs do not show up as harnesses.
+
+        ``.claude/`` etc. reflect build-time tooling used by maintainers,
+        not GEODE's runtime dependencies, so the banner must not list them.
+        """
+        for d in [".claude", ".cursor", ".codex", ".copilot"]:
+            (tmp_path / d).mkdir()
+        info = detect_project_type(tmp_path)
+        assert info.harnesses == []
+
+    def test_geode_alongside_other_dirs(self, tmp_path: Path) -> None:
         for d in [".claude", ".cursor", ".geode"]:
             (tmp_path / d).mkdir()
         info = detect_project_type(tmp_path)
-        assert ".claude" in info.harnesses
-        assert ".cursor" in info.harnesses
-        assert ".geode" in info.harnesses
-        assert len(info.harnesses) == 3
-
-    def test_harnesses_sorted(self, tmp_path: Path) -> None:
-        for d in [".geode", ".claude", ".cursor"]:
-            (tmp_path / d).mkdir()
-        info = detect_project_type(tmp_path)
-        assert info.harnesses == sorted(info.harnesses)
+        assert info.harnesses == [".geode"]
 
     def test_ignores_files_not_dirs(self, tmp_path: Path) -> None:
-        (tmp_path / ".claude").write_text("not a dir")
+        (tmp_path / ".geode").write_text("not a dir")
         info = detect_project_type(tmp_path)
-        assert ".claude" not in info.harnesses
+        assert ".geode" not in info.harnesses
 
     def test_harness_with_project_type(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
-        (tmp_path / ".claude").mkdir()
-        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".geode").mkdir()
+        (tmp_path / ".claude").mkdir()  # ignored
         info = detect_project_type(tmp_path)
         assert info.project_type == "python-uv"
-        assert ".claude" in info.harnesses
-        assert ".cursor" in info.harnesses
+        assert info.harnesses == [".geode"]
 
     def test_get_harness_summary_empty(self) -> None:
         assert get_harness_summary([]) == "none"
 
     def test_get_harness_summary_labels(self) -> None:
-        result = get_harness_summary([".claude", ".cursor"])
-        assert "Claude Code" in result
-        assert "Cursor" in result
+        result = get_harness_summary([".geode"])
+        assert "GEODE" in result
 
-    def test_known_harnesses_complete(self) -> None:
-        assert len(KNOWN_HARNESSES) >= 10
+    def test_known_harnesses_self_only(self) -> None:
+        assert KNOWN_HARNESSES == {".geode": "GEODE"}

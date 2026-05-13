@@ -1,14 +1,19 @@
 """Project type detection — harness-for-real init.sh pattern in Python.
 
 Auto-detects project type, package manager, build/test/lint commands,
-and AI agent harness directories by inspecting the project root.
+and the GEODE harness directory by inspecting the project root.
 
 Supported project types:
   node (npm/yarn/pnpm/bun), python-uv, python-pip, rust, go, java-maven, java-gradle
 
-Detected harness directories:
-  .claude/, .cursor/, .windsurf/, .copilot/, .openclaw/, .codeium/, .aider/,
-  .codex/, .geode/, .devin/
+Harness detection is intentionally GEODE-only. GEODE runs its own LLM
+API calls + agentic loop + tool execution + tiered context memory +
+plugin registry — it is not hosted on top of another agent harness.
+Listing co-existing AI agent config directories (`.claude/`, `.cursor/`,
+`.codex/`, ...) in the startup `harness:` banner historically read as
+"GEODE runs on top of <X>", which is wrong: those directories reflect
+**build-time** tooling used by maintainers, not GEODE's runtime
+dependencies. So only `.geode/` is recognised here.
 """
 
 from __future__ import annotations
@@ -17,18 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-# Known AI agent harness directories (name → display label)
 KNOWN_HARNESSES: dict[str, str] = {
-    ".claude": "Claude Code",
-    ".cursor": "Cursor",
-    ".windsurf": "Windsurf",
-    ".copilot": "GitHub Copilot",
-    ".openclaw": "OpenClaw",
-    ".codeium": "Codeium",
-    ".aider": "Aider",
-    ".codex": "Codex",
     ".geode": "GEODE",
-    ".devin": "Devin",
 }
 
 
