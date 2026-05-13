@@ -287,8 +287,14 @@ def register() -> None:
                 | (config.extra_headers or {}),
                 **params,
             )
-            if instructions:
-                request["instructions"] = instructions
+            # ChatGPT Plus backend's /responses endpoint rejects requests
+            # missing the ``instructions`` field with
+            # ``BadRequestError: 'Instructions are required'``. Stock OpenAI
+            # API treats it as optional, but the Codex backend is strict.
+            # When no system message was present in the input (e.g. petri's
+            # judge call uses tool_choice instead of a system prompt), fall
+            # back to a minimal placeholder so the field is non-empty.
+            request["instructions"] = instructions or "You are a helpful assistant."
             if len(tools) > 0 and "parallel_tool_calls" not in request:
                 request["parallel_tool_calls"] = (
                     True
