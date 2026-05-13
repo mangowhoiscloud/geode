@@ -12,7 +12,6 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -25,10 +24,11 @@ _CACHE_TTL_S = 86400  # 24 hours
 # v0.95.x layout migration v1 — moved under ~/.geode/mcp/ to group with
 # other MCP state (trace-runs/, etc.). Legacy ``~/.geode/mcp-registry-cache.json``
 # is migrated by ``core.wiring.layout_migrator._migrate_v0_to_v1`` on first boot.
-# Single source of truth lives in ``core.paths.MCP_REGISTRY_CACHE``; this file
-# imports it lazily to avoid a circular import (paths imports layout_migrator).
-_CACHE_DIR = Path.home() / ".geode" / "mcp"
-_CACHE_FILE = _CACHE_DIR / "registry-cache.json"
+# Single source of truth: ``core.paths.GLOBAL_MCP_DIR`` + ``MCP_REGISTRY_CACHE``.
+from core.paths import GLOBAL_MCP_DIR, MCP_REGISTRY_CACHE  # noqa: E402
+
+_CACHE_DIR = GLOBAL_MCP_DIR
+_CACHE_FILE = MCP_REGISTRY_CACHE
 
 
 @dataclass(frozen=True, slots=True)

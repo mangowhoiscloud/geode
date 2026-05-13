@@ -14,7 +14,8 @@ pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+
+from core.paths import PROJECT_CONFIG_TOML
 
 log = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ def _get_cost_budget() -> float:
         except ValueError:
             pass
 
-    config_path = Path(".geode") / "config.toml"
+    config_path = PROJECT_CONFIG_TOML
     if config_path.exists():
         import tomllib
 
@@ -187,7 +188,7 @@ def _get_cost_budget() -> float:
 
 def _set_cost_budget(amount: float) -> None:
     """Write monthly budget to .geode/config.toml."""
-    config_path = Path(".geode") / "config.toml"
+    config_path = PROJECT_CONFIG_TOML
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     lines: list[str] = []

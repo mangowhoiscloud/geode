@@ -16,9 +16,11 @@ import socket
 from pathlib import Path
 from typing import Any
 
+from core.paths import CLI_SOCKET_PATH
+
 log = logging.getLogger(__name__)
 
-DEFAULT_SOCKET_PATH = Path.home() / ".geode" / "cli.sock"
+DEFAULT_SOCKET_PATH: Path = CLI_SOCKET_PATH
 
 
 def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10.0) -> bool:

@@ -73,12 +73,13 @@ class GeodeBootstrap:
 
             from core.config import settings
             from core.memory.user_profile import FileBasedUserProfile
+            from core.paths import PROJECT_USER_PROFILE_DIR
             from core.tools.profile_tools import set_user_profile
 
             global_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
             if global_dir is None:
                 log.debug("Using default global profile dir: ~/.geode/user_profile")
-            project_dir = Path(".geode") / "user_profile"
+            project_dir = PROJECT_USER_PROFILE_DIR
             set_user_profile(
                 FileBasedUserProfile(
                     global_dir=global_dir,
@@ -102,7 +103,9 @@ def setup_contextvars(*, load_env: bool = False) -> None:
         from dotenv import dotenv_values, load_dotenv
 
         # 1) Global ~/.geode/.env — baseline for all projects
-        global_env = Path.home() / ".geode" / ".env"
+        from core.paths import GLOBAL_ENV_FILE
+
+        global_env = GLOBAL_ENV_FILE
         if global_env.exists():
             load_dotenv(str(global_env), override=False)
 
@@ -158,12 +161,13 @@ def setup_contextvars(*, load_env: bool = False) -> None:
 
         from core.config import settings
         from core.memory.user_profile import FileBasedUserProfile
+        from core.paths import PROJECT_USER_PROFILE_DIR
         from core.tools.profile_tools import set_user_profile
 
         global_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
         if global_dir is None:
             log.debug("Using default global profile dir: ~/.geode/user_profile")
-        project_dir = Path(".geode") / "user_profile"
+        project_dir = PROJECT_USER_PROFILE_DIR
         user_profile = FileBasedUserProfile(
             global_dir=global_dir,
             project_dir=project_dir if project_dir.parent.exists() else None,

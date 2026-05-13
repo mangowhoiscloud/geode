@@ -55,7 +55,9 @@ def __getattr__(name: str) -> Any:
 # ---------------------------------------------------------------------------
 # Default configuration (re-exported from runtime.py constants)
 # ---------------------------------------------------------------------------
-DEFAULT_LOG_DIR = Path.home() / ".geode" / "runs"
+from core.paths import GLOBAL_RUNS_DIR  # noqa: E402 — module sits below TYPE_CHECKING block
+
+DEFAULT_LOG_DIR: Path = GLOBAL_RUNS_DIR
 CONFIG_WATCHER_DEBOUNCE_MS = 300.0  # Avoid thrashing on rapid file changes
 
 # ---------------------------------------------------------------------------
@@ -389,9 +391,10 @@ def build_hooks(
     # C8: Filesystem hook plugin auto-discovery (.geode/hooks/ + core/hooks/plugins/)
     def _reg_filesystem_plugins() -> None:
         from core.hooks.discovery import HookPluginLoader
+        from core.paths import PROJECT_HOOKS_DIR
 
         loader = HookPluginLoader()
-        plugin_dirs = [Path(".geode/hooks"), Path("core/hooks/plugins")]
+        plugin_dirs = [PROJECT_HOOKS_DIR, Path("core/hooks/plugins")]
         loader.load_from_dirs(plugin_dirs)
         loader.register_all(hooks)
 
@@ -528,8 +531,10 @@ def build_memory(
     organization_memory = MonoLakeOrganizationMemory(fixture_dir=fixture_dir)
 
     # Tier 0.5: User Profile
+    from core.paths import PROJECT_USER_PROFILE_DIR
+
     global_profile_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
-    project_profile_dir = Path(".geode") / "user_profile"
+    project_profile_dir = PROJECT_USER_PROFILE_DIR
     user_profile = FileBasedUserProfile(
         global_dir=global_profile_dir,
         project_dir=project_profile_dir,
