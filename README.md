@@ -315,17 +315,63 @@ uv tool install -e . --force
 
 ## How GEODE compares
 
+Grounded against the actual state of each frontier harness as of May 2026: **Claude Code v2.1.72** (build 2026-03-09), **Codex CLI v0.130.0** (released 2026-05-08), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.95.0**. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
+
+### A. Runtime posture — how the agent stays alive
+
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| Always-on daemon | ❌ session only | ❌ session only | ✅ Gateway | ✅ `geode serve` |
-| Slack/Discord channels | ❌ | ❌ | ✅ many | ✅ Slack first-class |
-| Multi-provider failover | ⚠️ Anthropic only | ⚠️ OpenAI only | ✅ many | ✅ 3 + governance |
-| Subscription OAuth (no API key) | ✅ Pro/Max | ✅ Plus | ✅ both | ⚠️ ChatGPT only (Plus, Pro, Business, Edu, Enterprise — Anthropic ToS blocks Claude OAuth) |
-| Disk-persistent plans + memory | ⚠️ partial | ⚠️ partial | ✅ | ✅ 5-tier |
-| Swappable domain DAG | ❌ | ❌ | ❌ | ✅ `DomainPort` |
-| Scheduler (long-running) | ❌ | ❌ | ⚠️ partial | ✅ cron + triggers |
+| Always-on daemon | ❌ per-invocation | ⚠️ opt-in `codex remote-control` (v0.130+) | ✅✅ launchd / systemd control plane | ✅ `geode serve` daemon |
+| Native scheduler (cron) | ❌ (claude.ai web-only) | ❌ (Codex Cloud Automations only — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + event triggers |
+| Thin CLI ↔ daemon IPC | ❌ | ⚠️ remote-control server mode | ✅ Gateway / Agent split | ✅ IPC server (v0.48+) |
+| Sub-agent isolation | ✅ Agent tool + `run_in_background` | ✅ `multi_agent` feature, default `max_threads=6` | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost guard |
+| Session resume / fork | ✅ JSONL transcripts | ✅ `/resume` + `/fork` slash commands | ✅ Session bindings with TTL | ✅ session resume (v0.21+) |
 
-Use **Claude Code** or **Codex** for short coding sessions. Use **GEODE** when you need it to keep running, watch signals, and report back over hours or days.
+### B. Channels & UX surfaces — how it reaches users
+
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| Slack | ❌ (MCP plugin possible) | ⚠️ Codex Cloud only, not CLI | ✅ Socket Mode, first-class | ✅ Socket Mode, first-class |
+| Discord / Telegram / other chat | ❌ | ❌ | ✅✅ 23+ channels (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram pollers |
+| IDE plugin | ❌ (Chrome MCP extension only) | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
+| Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat plugin | ❌ (docs site only) |
+| MCP server catalog | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic-published registry (200+ servers, cached at `~/.geode/mcp/registry-cache.json`) |
+
+### C. LLM provider & cost governance
+
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| Multi-provider failover | ✅ Anthropic + AWS Bedrock + Google Vertex (env routing) | ✅✅ OpenAI + Azure + Bedrock + Ollama + any OpenAI-compatible (`model_providers` config) | ✅ `auth.order` cooldown-based auto-failover | ✅ Anthropic + OpenAI + ZhipuAI, in-provider only |
+| Subscription OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini onboarding | ⚠️ ChatGPT only (Plus / Pro / Business / Edu / Enterprise) — Anthropic ToS (2026-01-09) blocks third-party Claude OAuth |
+| Token / cost budget guard | ⚠️ cache token tracking only | ⚠️ retry caps (`request_max_retries`) | ⚠️ partial | ✅ **200K token guard** (v0.40), explicit budget governance |
+| Context overflow handling | ✅ autocompaction | ⚠️ skills progressive disclosure (~2% budget) + fork | ✅ compaction + transcript streaming (252 MB → 27 MB peak) | ✅✅ **5-layer context overflow** (v0.39+) |
+| Cross-vendor failover policy | ❌ | ⚠️ manual `model_providers` switch | ✅ automatic | ❌ by design (v0.53 governance — no surprise cross-vendor charges) |
+
+### D. Persistence, memory & verification
+
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| Memory tiers | ⚠️ 3 (user / project / local settings merge) | ✅ hierarchical AGENTS.md (global `~/.codex/` + repo + nested dirs) | ⚠️ session-scoped | ✅✅ **5-tier** (SOUL · User · Org · Project · Session) |
+| Disk-persistent plans | ✅ TodoWrite persistence | ⚠️ via resumable threads | ✅ task registry | ✅ `.geode/plans.json` |
+| Permission / sandbox layers | ✅ 3-mode (default / auto / bypass) + Confirmation UI | ✅ `sandbox_mode` 3-level (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain (40+ audit surfaces) | ✅ Policy Chain + tool gates |
+| Multi-layer guardrails | ⚠️ permission + hooks | ⚠️ hooks + sandbox | ✅ `audit.runtime` engine | ✅✅ **5-layer verification** (G1-G4 + BiasBuster + Cross-LLM Krippendorff α ≥ 0.67 + Confidence Gate + Rights Risk) |
+| Hook event count | ⚠️ 5 (PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange) | ⚠️ 6 (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop) | ✅ 5 event types · many bundled handlers | ✅✅ **58 events** (`docs/architecture/hook-system.md`) |
+
+### E. Extensibility & observability
+
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| Plugin / extension surfaces | ✅ manifest + marketplace (user / project / local scopes) | ✅ `/plugins` slash command + plugin sharing (v0.130+) | ✅✅ 4 extension points (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ `DomainPort` Protocol + plugin loader |
+| Skill system | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ skill filter + archive upload | ✅ runtime `SkillRegistry` (13 runtime skills) |
+| **Swappable domain DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — not a DAG abstraction) | ✅✅ `DomainPort` Protocol — pipeline is a first-class extension point |
+| Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Run Log + Petri eval integration (v0.90+, replaces LangSmith) |
+| Cross-LLM verification | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 inter-rater agreement gate |
+
+---
+
+Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via cloud sync. Use **OpenClaw** to run a multi-channel chat agent fleet across 23+ messaging surfaces. Use **GEODE** when an agent must work over hours or days on a non-coding domain with multi-tier memory, multi-layer verification, and a swappable domain pipeline.
+
+> Sources — Claude Code v2.1.72 (build 2026-03-09, reverse-engineered reference). Codex CLI v0.130.0 release notes + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw v2026.5.12-beta.1 (1.8M LoC TypeScript). GEODE — `CHANGELOG.md` (`v0.39` context overflow, `v0.40` 200K guard, `v0.85` 4-layer stack, `v0.90` Petri observability).
 
 ---
 
