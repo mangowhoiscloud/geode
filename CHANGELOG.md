@@ -52,6 +52,31 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **시작 배너 `harness:` 라벨을 GEODE 단독으로 축소.** 기존에는
+  `KNOWN_HARNESSES` 가 `.claude/`, `.cursor/`, `.codex/`, `.copilot/`,
+  `.openclaw/` 등 10 개 AI 도구 설정 디렉터리를 감지해 `harness: Claude
+  Code, GEODE` 처럼 함께 출력했는데, 이게 "GEODE 가 Claude Code 위에서
+  돌아간다" 는 잘못된 브랜드 신호로 읽혔습니다. GEODE 는 자체 런타임으로
+  LLM API 콜 + agentic loop + tool 실행 + tiered context memory + plugin
+  레지스트리를 직접 수행합니다. `.claude/` 등의 디렉터리는 **개발자가
+  GEODE 를 제작·정비할 때 사용하는 build-time 도구 설정**이지 GEODE 의
+  runtime dependency 가 아닙니다. `KNOWN_HARNESSES` 를 `{".geode":
+  "GEODE"}` 단일 항목으로 축소했고, 동일 데이터를 LLM context 로 주입하는
+  `core/memory/context.py:_inject_project_env` 도 같은 신호만 보게 됩니다.
+- **Startup banner `harness:` label reduced to GEODE only.**
+  `KNOWN_HARNESSES` previously detected 10 AI tool config directories
+  (`.claude/`, `.cursor/`, `.codex/`, `.copilot/`, `.openclaw/`, ...) and
+  rendered e.g. `harness: Claude Code, GEODE` at startup. That read as
+  "GEODE runs on top of Claude Code", which is wrong: GEODE drives its
+  own LLM API calls, agentic loop, tool execution, tiered context
+  memory, and plugin registry. `.claude/` etc. are **build-time** tooling
+  used by maintainers when developing GEODE, not runtime dependencies.
+  `KNOWN_HARNESSES` is now `{".geode": "GEODE"}`, and the parallel
+  injection into `core/memory/context.py:_inject_project_env` therefore
+  exposes the same self-only signal to the LLM context.
+
 ### Added
 
 - **P4 — paths.py SoT lint guardrail + 추가 14 사이트 정렬.** PR #1098
