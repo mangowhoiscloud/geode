@@ -34,6 +34,10 @@ def _render_report(report: AuditReport) -> None:
     console.print("  [header]Petri audit[/header]")
     console.print(f"  command:  [dim]{' '.join(report.command)}[/dim]")
     console.print(f"  estimate: {cost_label}")
+    # PR #8 (2026-05-14) — surface the same-provider self-preference
+    # disadvantage so the human reader sees it before the score table.
+    if report.same_provider_bias_chip:
+        console.print(f"  bias:     [yellow]{report.same_provider_bias_chip}[/yellow]")
     if report.dry_run:
         console.print("  status:   [yellow]dry-run — subprocess not executed[/yellow]")
     elif report.aborted:
