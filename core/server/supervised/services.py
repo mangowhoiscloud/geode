@@ -15,7 +15,6 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -259,12 +258,13 @@ def build_shared_services(
 
     # Build hooks if not provided
     if hook_system is None:
+        from core.paths import GLOBAL_RUNS_DIR
         from core.wiring.bootstrap import build_hooks
 
         hook_system, _run_log, _stuck, _metrics = build_hooks(
             session_key=f"geode-{uuid.uuid4().hex[:8]}",
             run_id=uuid.uuid4().hex[:12],
-            log_dir=Path.home() / ".geode" / "runs",
+            log_dir=GLOBAL_RUNS_DIR,  # P2 — was `Path.home() / ".geode" / "runs"`
             stuck_timeout_s=getattr(_settings, "stuck_timeout_s", 600.0),
         )
 

@@ -103,7 +103,13 @@ class TestUserContextSystemPrompt:
             encoding="utf-8",
         )
 
-        with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
+        # P2 (v0.95.x) — patch the module-level constant directly. Patching
+        # `Path.home` no longer works because the constant was captured at
+        # `core.paths` import time.
+        with patch(
+            "core.memory.user_profile.GLOBAL_USER_PROFILE_DIR",
+            profile_dir,
+        ):
             result = _build_user_context()
 
         # G1 (2026-05-12) — context blocks now wrap in XML tags
@@ -114,7 +120,14 @@ class TestUserContextSystemPrompt:
     def test_build_user_context_no_data(self, tmp_path: Path) -> None:
         from core.agent.system_prompt import _build_user_context
 
-        with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
+        # P2 (v0.95.x) — `FileBasedUserProfile` now resolves its global dir
+        # from the module-level `GLOBAL_USER_PROFILE_DIR` constant imported
+        # from `core.paths`. Patch that symbol (not `Path.home`) so the
+        # profile reads from tmp_path instead of the live user-home.
+        with patch(
+            "core.memory.user_profile.GLOBAL_USER_PROFILE_DIR",
+            tmp_path / "user_profile",
+        ):
             result = _build_user_context()
         assert result == ""
 

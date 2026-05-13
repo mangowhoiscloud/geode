@@ -8,16 +8,17 @@ exposed only for type hints and test fixtures.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from core.paths import GLOBAL_ENV_FILE
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="GEODE_",
-        env_file=(".env", str(Path.home() / ".geode" / ".env")),
+        # P2 (v0.95.x) — was literal `str(Path.home() / ".geode" / ".env")`
+        env_file=(".env", str(GLOBAL_ENV_FILE)),
         extra="ignore",
     )
 

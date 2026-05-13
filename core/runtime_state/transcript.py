@@ -30,11 +30,14 @@ def _get_default_transcript_dir() -> Path:
     Project slug is derived from CWD (same pattern as Claude Code).
     Falls back to 'default' if CWD cannot be resolved.
     """
+    from core.paths import GLOBAL_JOURNAL_DIR
+
     try:
         slug = str(Path.cwd()).replace("/", "-")
     except OSError:
         slug = "default"
-    return Path.home() / ".geode" / "journal" / "transcripts" / slug
+    # P2 (v0.95.x) — was literal `Path.home() / ".geode" / "journal" / "transcripts"`
+    return GLOBAL_JOURNAL_DIR / "transcripts" / slug
 
 
 DEFAULT_TRANSCRIPT_DIR = _get_default_transcript_dir()

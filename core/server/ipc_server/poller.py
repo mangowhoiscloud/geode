@@ -35,7 +35,9 @@ log = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from core.server.supervised.services import SharedServices
 
-DEFAULT_SOCKET_PATH = Path.home() / ".geode" / "cli.sock"
+from core.paths import CLI_SOCKET_PATH  # noqa: E402 — placed after TYPE_CHECKING block
+
+DEFAULT_SOCKET_PATH = CLI_SOCKET_PATH  # P2 — was `Path.home() / ".geode" / "cli.sock"`
 
 # Thread-local terminal capability advertised by the connected thin CLI.
 # v0.84.0 — populated when the daemon receives a ``client_capability``

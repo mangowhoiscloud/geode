@@ -298,7 +298,10 @@ def load_org_policy(config_path: str | None = None) -> OrgPolicy:
     import tomllib
     from pathlib import Path
 
-    path = Path(config_path) if config_path else Path(".geode") / "config.toml"
+    from core.paths import PROJECT_CONFIG_TOML
+
+    # P2 (v0.95.x) — was literal `Path(".geode") / "config.toml"`
+    path = Path(config_path) if config_path else PROJECT_CONFIG_TOML
 
     if not path.exists():
         return OrgPolicy()
