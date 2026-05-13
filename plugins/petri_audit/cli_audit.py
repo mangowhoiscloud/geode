@@ -36,8 +36,14 @@ def _render_report(report: AuditReport) -> None:
     console.print(f"  estimate: {cost_label}")
     # PR #8 (2026-05-14) — surface the same-provider self-preference
     # disadvantage so the human reader sees it before the score table.
+    # The chip's literal ``[same-provider bias ...]`` square brackets
+    # collide with Rich's markup tag parser — escape them before print.
     if report.same_provider_bias_chip:
-        console.print(f"  bias:     [yellow]{report.same_provider_bias_chip}[/yellow]")
+        from rich.markup import escape as _esc
+
+        console.print(
+            f"  bias:     [yellow]{_esc(report.same_provider_bias_chip)}[/yellow]"
+        )
     if report.dry_run:
         console.print("  status:   [yellow]dry-run — subprocess not executed[/yellow]")
     elif report.aborted:
