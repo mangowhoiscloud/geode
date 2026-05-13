@@ -20,10 +20,10 @@ class TestLLMLifecycleEvents:
     """HookEvent enum contains LLM_CALL_START and LLM_CALL_END."""
 
     def test_llm_call_start_exists(self) -> None:
-        assert HookEvent.LLM_CALL_START.value == "llm_call_start"
+        assert HookEvent.LLM_CALL_STARTED.value == "llm_call_start"
 
     def test_llm_call_end_exists(self) -> None:
-        assert HookEvent.LLM_CALL_END.value == "llm_call_end"
+        assert HookEvent.LLM_CALL_ENDED.value == "llm_call_end"
 
     def test_event_count_includes_llm_events(self) -> None:
         """40 events total after H6 orphan pruning."""
@@ -40,14 +40,14 @@ class TestFireHook:
         def recorder(event: HookEvent, data: dict[str, Any]) -> None:
             captured.append((event, data))
 
-        hooks.register(HookEvent.LLM_CALL_START, recorder, name="test_recorder")
+        hooks.register(HookEvent.LLM_CALL_STARTED, recorder, name="test_recorder")
         set_router_hooks(hooks)
         try:
             _fire_hook("llm_call_start", {"model": "test-model", "provider": "anthropic"})
 
             assert len(captured) == 1
             event, data = captured[0]
-            assert event == HookEvent.LLM_CALL_START
+            assert event == HookEvent.LLM_CALL_STARTED
             assert data["model"] == "test-model"
             assert data["provider"] == "anthropic"
         finally:
@@ -66,7 +66,7 @@ class TestFireHook:
         def recorder(event: HookEvent, data: dict[str, Any]) -> None:
             captured.append(data)
 
-        hooks.register(HookEvent.LLM_CALL_END, recorder, name="test_end")
+        hooks.register(HookEvent.LLM_CALL_ENDED, recorder, name="test_end")
         set_router_hooks(hooks)
         try:
             _fire_hook(
@@ -93,7 +93,7 @@ class TestFireHook:
         def recorder(event: HookEvent, data: dict[str, Any]) -> None:
             captured.append(data)
 
-        hooks.register(HookEvent.LLM_CALL_END, recorder, name="test_end_ok")
+        hooks.register(HookEvent.LLM_CALL_ENDED, recorder, name="test_end_ok")
         set_router_hooks(hooks)
         try:
             _fire_hook(
@@ -120,7 +120,7 @@ class TestFireHook:
         def bad_handler(event: HookEvent, data: dict[str, Any]) -> None:
             raise RuntimeError("handler boom")
 
-        hooks.register(HookEvent.LLM_CALL_END, bad_handler, name="bad")
+        hooks.register(HookEvent.LLM_CALL_ENDED, bad_handler, name="bad")
         set_router_hooks(hooks)
         try:
             # Should not raise despite handler error
@@ -142,10 +142,10 @@ class TestBootstrapLLMLifecycleHook:
             if error:
                 warned.append(data)
 
-        hooks.register(HookEvent.LLM_CALL_END, _on_llm_end, name="test_logger")
+        hooks.register(HookEvent.LLM_CALL_ENDED, _on_llm_end, name="test_logger")
 
         hooks.trigger(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             {
                 "model": "claude-opus-4-6",
                 "latency_ms": 500,
@@ -165,10 +165,10 @@ class TestBootstrapLLMLifecycleHook:
             if not data.get("error") and latency > 10_000:
                 slow_calls.append(data)
 
-        hooks.register(HookEvent.LLM_CALL_END, _on_llm_end, name="test_slow")
+        hooks.register(HookEvent.LLM_CALL_ENDED, _on_llm_end, name="test_slow")
 
         hooks.trigger(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             {"model": "claude-opus-4-6", "latency_ms": 15_000, "error": None},
         )
         assert len(slow_calls) == 1
@@ -184,10 +184,10 @@ class TestBootstrapLLMLifecycleHook:
             if error or latency > 10_000:
                 logged.append(data)
 
-        hooks.register(HookEvent.LLM_CALL_END, _on_llm_end, name="test_normal")
+        hooks.register(HookEvent.LLM_CALL_ENDED, _on_llm_end, name="test_normal")
 
         hooks.trigger(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             {"model": "claude-opus-4-6", "latency_ms": 2000, "error": None},
         )
         assert len(logged) == 0
@@ -214,19 +214,19 @@ class TestBootstrapLLMLifecycleHook:
             model_stats["total_latency_ms"] += latency
 
         hooks = HookSystem()
-        hooks.register(HookEvent.LLM_CALL_END, _on_llm_end, name="stats")
+        hooks.register(HookEvent.LLM_CALL_ENDED, _on_llm_end, name="stats")
 
         # Simulate 3 calls
         hooks.trigger(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             {"model": "claude-opus-4-6", "latency_ms": 1000.0, "error": None},
         )
         hooks.trigger(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             {"model": "gpt-5.4", "latency_ms": 2000.0, "error": None},
         )
         hooks.trigger(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             {"model": "claude-opus-4-6", "latency_ms": 500.0, "error": "timeout"},
         )
 
@@ -245,7 +245,7 @@ class TestHookPayloadSchema:
         captured: list[dict[str, Any]] = []
 
         hooks.register(
-            HookEvent.LLM_CALL_START,
+            HookEvent.LLM_CALL_STARTED,
             lambda e, d: captured.append(d),
             name="schema_check",
         )
@@ -255,7 +255,7 @@ class TestHookPayloadSchema:
             "provider": "anthropic",
             "function": "call_llm",
         }
-        hooks.trigger(HookEvent.LLM_CALL_START, payload)
+        hooks.trigger(HookEvent.LLM_CALL_STARTED, payload)
 
         assert len(captured) == 1
         data = captured[0]
@@ -268,7 +268,7 @@ class TestHookPayloadSchema:
         captured: list[dict[str, Any]] = []
 
         hooks.register(
-            HookEvent.LLM_CALL_END,
+            HookEvent.LLM_CALL_ENDED,
             lambda e, d: captured.append(d),
             name="schema_check",
         )
@@ -280,7 +280,7 @@ class TestHookPayloadSchema:
             "latency_ms": 1234.5,
             "error": None,
         }
-        hooks.trigger(HookEvent.LLM_CALL_END, payload)
+        hooks.trigger(HookEvent.LLM_CALL_ENDED, payload)
 
         assert len(captured) == 1
         data = captured[0]

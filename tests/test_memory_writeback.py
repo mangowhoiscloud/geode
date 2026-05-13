@@ -39,7 +39,7 @@ class TestPipelineEndMemoryWrite:
 
         # Should not raise
         hooks.trigger(
-            HookEvent.PIPELINE_END,
+            HookEvent.PIPELINE_ENDED,
             {
                 "node": "synthesizer",
                 "ip_name": "Berserk",
@@ -61,7 +61,7 @@ class TestEnrichedHookData:
         def _capture(event: HookEvent, data: dict[str, Any]) -> None:
             captured.append(dict(data))
 
-        hooks.register(HookEvent.PIPELINE_END, _capture, name="test_capture", priority=50)
+        hooks.register(HookEvent.PIPELINE_ENDED, _capture, name="test_capture", priority=50)
 
         # Create a fake synthesizer node that returns synthesis-like result
         class FakeSynthesis:

@@ -406,7 +406,7 @@ class AgenticLoop:
         # Hook: SESSION_START
         if self._hooks:
             self._hooks.trigger(
-                HookEvent.SESSION_START,
+                HookEvent.SESSION_STARTED,
                 {
                     "model": self.model,
                     "provider": self._provider,
@@ -734,7 +734,7 @@ class AgenticLoop:
                         )
                     if self._hooks:
                         self._hooks.trigger(
-                            HookEvent.LLM_CALL_RETRY,
+                            HookEvent.LLM_CALL_RETRIED,
                             {
                                 "model": self.model,
                                 "provider": self._provider,

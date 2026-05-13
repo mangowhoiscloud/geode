@@ -237,7 +237,7 @@ def wire_automation_hooks(
             )
 
     hooks.register(
-        HookEvent.PIPELINE_END,
+        HookEvent.PIPELINE_ENDED,
         _on_pipeline_end_snapshot,
         name="pipeline_end_snapshot",
         priority=80,
@@ -272,7 +272,7 @@ def wire_automation_hooks(
                 log.debug("Drift scan on SCORING_COMPLETE failed", exc_info=True)
 
         hooks.register(
-            HookEvent.SCORING_COMPLETE,
+            HookEvent.SCORING_COMPLETED,
             _on_scoring_drift,
             name="scoring_drift_scan",
             priority=60,
@@ -299,7 +299,7 @@ def wire_automation_hooks(
                 log.debug("Outcome scheduling on PIPELINE_END failed", exc_info=True)
 
         hooks.register(
-            HookEvent.PIPELINE_END,
+            HookEvent.PIPELINE_ENDED,
             _on_pipeline_end_outcomes,
             name="pipeline_end_outcomes",
             priority=70,

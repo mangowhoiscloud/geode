@@ -82,9 +82,9 @@ _DEGRADABLE_NODES = frozenset({"analyst", "evaluator", "scoring"})
 
 # Node → specific hook event mapping
 _NODE_COMPLETION_EVENTS: dict[str, HookEvent] = {
-    "analyst": HookEvent.ANALYST_COMPLETE,
-    "evaluator": HookEvent.EVALUATOR_COMPLETE,
-    "scoring": HookEvent.SCORING_COMPLETE,
+    "analyst": HookEvent.ANALYST_COMPLETED,
+    "evaluator": HookEvent.EVALUATOR_COMPLETED,
+    "scoring": HookEvent.SCORING_COMPLETED,
 }
 
 
@@ -212,11 +212,11 @@ def _make_hooked_node(
                 effective_state = es_dict  # type: ignore[assignment]
 
         # NODE_ENTER
-        hooks.trigger(HookEvent.NODE_ENTER, hook_data)
+        hooks.trigger(HookEvent.NODE_ENTERED, hook_data)
 
         # PIPELINE_START (router is the first real node)
         if node_name == "router":
-            hooks.trigger(HookEvent.PIPELINE_START, hook_data)
+            hooks.trigger(HookEvent.PIPELINE_STARTED, hook_data)
 
         start_time = time.time()
 
@@ -262,7 +262,7 @@ def _make_hooked_node(
                         hook_data["final_score"] = score
 
                 # NODE_EXIT
-                hooks.trigger(HookEvent.NODE_EXIT, hook_data)
+                hooks.trigger(HookEvent.NODE_EXITED, hook_data)
 
                 # Node-specific completion events
                 if node_name in _NODE_COMPLETION_EVENTS:
@@ -297,7 +297,7 @@ def _make_hooked_node(
                     hook_data["final_score"] = effective_state.get("final_score", 0.0)
                     hook_data["tier"] = effective_state.get("tier", "")
                     hook_data["dry_run"] = effective_state.get("dry_run", False)
-                    hooks.trigger(HookEvent.PIPELINE_END, hook_data)
+                    hooks.trigger(HookEvent.PIPELINE_ENDED, hook_data)
 
                 return result
 
@@ -653,7 +653,7 @@ def _register_drift_scan_hook(hooks: HookSystem) -> None:
             )
 
     hooks.register(
-        HookEvent.SCORING_COMPLETE,
+        HookEvent.SCORING_COMPLETED,
         _on_scoring_complete,
         name="drift_scan_on_scoring",
         priority=50,

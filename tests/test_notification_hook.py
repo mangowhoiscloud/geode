@@ -22,7 +22,7 @@ from core.mcp.notification_port import NotificationResult, set_notification
 class TestFormatMessage:
     def test_pipeline_end(self):
         msg = _format_message(
-            HookEvent.PIPELINE_END,
+            HookEvent.PIPELINE_ENDED,
             {"ip_name": "Berserk", "tier": "S", "final_score": 81.3},
         )
         assert "Pipeline completed" in msg
@@ -92,7 +92,7 @@ class TestNotificationHookRegistration:
 
         # Trigger PIPELINE_END
         hooks.trigger(
-            HookEvent.PIPELINE_END,
+            HookEvent.PIPELINE_ENDED,
             {"ip_name": "Berserk", "tier": "S", "final_score": 81.3},
         )
 
@@ -113,7 +113,7 @@ class TestNotificationHookRegistration:
 
         # Should not raise
         results = hooks.trigger(
-            HookEvent.PIPELINE_END,
+            HookEvent.PIPELINE_ENDED,
             {"ip_name": "Test", "tier": "A", "final_score": 65.0},
         )
         assert all(r.success for r in results)

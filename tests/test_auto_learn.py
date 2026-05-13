@@ -157,7 +157,7 @@ class TestAutoLearnHandler:
 
         with patch("core.tools.profile_tools.get_user_profile", return_value=mock_profile):
             handler(
-                HookEvent.TURN_COMPLETE,
+                HookEvent.TURN_COMPLETED,
                 {"user_input": "I am a game designer at Nexon", "tool_calls": []},
             )
 
@@ -172,7 +172,7 @@ class TestAutoLearnHandler:
         with patch("core.tools.profile_tools.get_user_profile", return_value=None):
             # Should not raise
             handler(
-                HookEvent.TURN_COMPLETE,
+                HookEvent.TURN_COMPLETED,
                 {"user_input": "I am a game designer at Nexon", "tool_calls": []},
             )
 
@@ -182,12 +182,12 @@ class TestAutoLearnHandler:
 
         with patch("core.tools.profile_tools.get_user_profile", return_value=mock_profile):
             handler(
-                HookEvent.TURN_COMPLETE,
+                HookEvent.TURN_COMPLETED,
                 {"user_input": "I am a game designer at Nexon", "tool_calls": []},
             )
             # Second call within cooldown — should be suppressed
             handler(
-                HookEvent.TURN_COMPLETE,
+                HookEvent.TURN_COMPLETED,
                 {"user_input": "I prefer concise answers always", "tool_calls": []},
             )
 
@@ -203,7 +203,7 @@ class TestAutoLearnHandler:
         ):
             for i in range(_MAX_PER_SESSION + 5):
                 handler(
-                    HookEvent.TURN_COMPLETE,
+                    HookEvent.TURN_COMPLETED,
                     {"user_input": f"I am developer number {i} at company", "tool_calls": []},
                 )
 
@@ -220,11 +220,11 @@ class TestAutoLearnHandler:
             patch("core.hooks.auto_learn._COOLDOWN_S", 0),
         ):
             handler(
-                HookEvent.TURN_COMPLETE,
+                HookEvent.TURN_COMPLETED,
                 {"user_input": "I am a game designer at Nexon", "tool_calls": []},
             )
             handler(
-                HookEvent.TURN_COMPLETE,
+                HookEvent.TURN_COMPLETED,
                 {"user_input": "I prefer dark fantasy game IPs", "tool_calls": []},
             )
 
@@ -239,7 +239,7 @@ class TestAutoLearnHandler:
         with patch("core.tools.profile_tools.get_user_profile", return_value=mock_profile):
             # Should not raise
             handler(
-                HookEvent.TURN_COMPLETE,
+                HookEvent.TURN_COMPLETED,
                 {"user_input": "I am a game designer at Nexon", "tool_calls": []},
             )
 

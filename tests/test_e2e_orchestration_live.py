@@ -101,8 +101,8 @@ class TestPipelineHookEventFlow:
         def on_exit(event: HookEvent, data: dict[str, Any]) -> None:
             exits.append(data.get("node", "unknown"))
 
-        hooks.register(HookEvent.NODE_ENTER, on_enter, name="enter_tracker")
-        hooks.register(HookEvent.NODE_EXIT, on_exit, name="exit_tracker")
+        hooks.register(HookEvent.NODE_ENTERED, on_enter, name="enter_tracker")
+        hooks.register(HookEvent.NODE_EXITED, on_exit, name="exit_tracker")
 
         graph = compile_graph(hooks=hooks)
         state: GeodeState = {
@@ -325,7 +325,7 @@ class TestEndToEndExecutionFlow:
         def track_node(event: HookEvent, data: dict[str, Any]) -> None:
             node_sequence.append(data.get("node", "?"))
 
-        hooks.register(HookEvent.NODE_ENTER, track_node, name="seq_tracker")
+        hooks.register(HookEvent.NODE_ENTERED, track_node, name="seq_tracker")
 
         graph = compile_graph(hooks=hooks)
         state: GeodeState = {
@@ -369,7 +369,7 @@ class TestEndToEndExecutionFlow:
             atype = data.get("_analyst_type", data.get("node", "unknown"))
             analyst_nodes.append(atype)
 
-        hooks.register(HookEvent.ANALYST_COMPLETE, track_analyst, name="analyst_track")
+        hooks.register(HookEvent.ANALYST_COMPLETED, track_analyst, name="analyst_track")
 
         graph = compile_graph(hooks=hooks)
         state: GeodeState = {

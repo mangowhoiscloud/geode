@@ -74,13 +74,13 @@ class TaskGraphHookBridge:
         """Register NODE_ENTER/EXIT/ERROR handlers on the HookSystem."""
         self._hooks = hooks
         hooks.register(
-            HookEvent.NODE_ENTER,
+            HookEvent.NODE_ENTERED,
             self._on_node_enter,
             name="task_bridge_enter",
             priority=30,
         )
         hooks.register(
-            HookEvent.NODE_EXIT,
+            HookEvent.NODE_EXITED,
             self._on_node_exit,
             name="task_bridge_exit",
             priority=30,
@@ -97,8 +97,8 @@ class TaskGraphHookBridge:
         if self._hooks is None:
             return
         for event, name in [
-            (HookEvent.NODE_ENTER, "task_bridge_enter"),
-            (HookEvent.NODE_EXIT, "task_bridge_exit"),
+            (HookEvent.NODE_ENTERED, "task_bridge_enter"),
+            (HookEvent.NODE_EXITED, "task_bridge_exit"),
             (HookEvent.NODE_ERROR, "task_bridge_error"),
         ]:
             self._hooks.unregister(event, name)
