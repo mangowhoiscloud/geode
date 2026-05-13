@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 from core.config import is_model_allowed
+from core.hooks.system import HookEvent
 from core.llm.router._hooks import _fire_hook
 
 # v0.88.0 — RETRYABLE_ERRORS / NON_RETRYABLE_ERRORS are lazy-resolved
@@ -113,9 +114,14 @@ async def call_with_failover(
                     type(exc).__name__,
                     wait,
                 )
-                # Emit retry_wait event for UX (elapsed timer + interrupt hint)
+                # Emit LLM_CALL_RETRY for UX (elapsed timer + interrupt hint).
+                # The legacy string "retry_wait" was silently swallowed by
+                # ``fire_hook`` since no enum member named "RETRY_WAIT" exists —
+                # routing to LLM_CALL_RETRY matches the payload semantics
+                # (model + attempt + max_retries + delay_s + elapsed_s + error_type)
+                # and unblocks any handler that listens to LLM_CALL_RETRY.
                 _fire_hook(
-                    "retry_wait",
+                    HookEvent.LLM_CALL_RETRY,
                     {
                         "model": current_model,
                         "attempt": attempt + 1,

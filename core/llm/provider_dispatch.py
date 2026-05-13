@@ -18,6 +18,7 @@ from core.config import (
     OPENAI_FALLBACK_CHAIN,
     is_model_allowed,
 )
+from core.hooks.system import HookEvent
 from core.hooks.utils import fire_hook
 from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
 
@@ -53,9 +54,9 @@ def set_dispatch_hooks(hooks: Any) -> None:
     _hooks_ctx = hooks
 
 
-def _fire_hook(event_name: str, data: dict[str, Any]) -> None:
+def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
     """Fire a hook event if HookSystem is wired (or no-op)."""
-    fire_hook(_hooks_ctx, event_name, data)
+    fire_hook(_hooks_ctx, event, data)
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +263,7 @@ def _cross_provider_dispatch(  # noqa: UP047 — PEP695 syntax requires Python 3
                     elapsed_ms,
                 )
                 _fire_hook(
-                    "fallback_cross_provider",
+                    HookEvent.FALLBACK_CROSS_PROVIDER,
                     {
                         "from_provider": provider,
                         "to_provider": next_p,

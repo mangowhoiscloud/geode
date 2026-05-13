@@ -44,16 +44,19 @@ def set_mcp_hooks(hooks: Any) -> None:
     _mcp_hooks = hooks
 
 
-def _fire_mcp_hook(event_name: str, data: dict[str, Any]) -> None:
-    """Fire a hook event if HookSystem is available."""
+def _fire_mcp_hook(event: Any, data: dict[str, Any]) -> None:
+    """Fire a hook event if HookSystem is available.
+
+    ``event`` is a ``HookEvent`` member (typed via ``Any`` only so the
+    annotation does not require importing HookEvent at module top level,
+    which would create a circular dependency in some bootstrap paths).
+    """
     if _mcp_hooks is None:
         return
     try:
-        from core.hooks import HookEvent
-
-        _mcp_hooks.trigger(HookEvent(event_name), data)
+        _mcp_hooks.trigger(event, data)
     except Exception:
-        log.debug("MCP hook fire failed for %s", event_name, exc_info=True)
+        log.debug("MCP hook fire failed for %s", event, exc_info=True)
 
 
 # Singleton instance — prevents duplicate MCP server processes
@@ -414,14 +417,16 @@ class MCPServerManager:
             )
             return None
 
+        from core.hooks import HookEvent
+
         client = StdioMCPClient(command=command, args=args, env=env)
         if client.connect():
             self._clients[server_name] = client
-            _fire_mcp_hook("mcp_server_connected", {"server_name": server_name})
+            _fire_mcp_hook(HookEvent.MCP_SERVER_CONNECTED, {"server_name": server_name})
             return client
 
         _fire_mcp_hook(
-            "mcp_server_failed",
+            HookEvent.MCP_SERVER_FAILED,
             {"server_name": server_name, "error": "Connection failed"},
         )
         log.debug("MCP server not available (skipped): %s", server_name)

@@ -16,6 +16,7 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
+from core.hooks.system import HookEvent
 from core.hooks.utils import fire_hook
 from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
@@ -61,9 +62,9 @@ def set_memory_hooks(hooks: Any) -> None:
     _hooks_ctx.set(hooks)
 
 
-def _fire_hook(event_name: str, data: dict[str, Any]) -> None:
+def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
     """Fire a hook event using the ContextVar-bound HookSystem (or no-op)."""
-    fire_hook(_hooks_ctx.get(), event_name, data)
+    fire_hook(_hooks_ctx.get(), event, data)
 
 
 def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePort:
@@ -335,7 +336,7 @@ class MemorySaveTool:
                     insight = str(data.get("content", data))
                     proj.add_insight(insight)
 
-        _fire_hook("memory_saved", {"key": session_id, "persistent": persistent})
+        _fire_hook(HookEvent.MEMORY_SAVED, {"key": session_id, "persistent": persistent})
 
         return {
             "result": {
@@ -400,7 +401,7 @@ class RuleCreateTool:
 
         success = proj.create_rule(rule_name, paths, content)
         if success:
-            _fire_hook("rule_created", {"name": rule_name, "paths": paths})
+            _fire_hook(HookEvent.RULE_CREATED, {"name": rule_name, "paths": paths})
         return {
             "result": {
                 "created": success,
@@ -451,7 +452,7 @@ class RuleUpdateTool:
 
         success = proj.update_rule(rule_name, content)
         if success:
-            _fire_hook("rule_updated", {"name": rule_name})
+            _fire_hook(HookEvent.RULE_UPDATED, {"name": rule_name})
         return {
             "result": {
                 "updated": success,
@@ -493,7 +494,7 @@ class RuleDeleteTool:
 
         success = proj.delete_rule(rule_name)
         if success:
-            _fire_hook("rule_deleted", {"name": rule_name})
+            _fire_hook(HookEvent.RULE_DELETED, {"name": rule_name})
         return {
             "result": {
                 "deleted": success,
