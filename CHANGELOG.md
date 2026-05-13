@@ -52,6 +52,42 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Documentation
+
+- **README peer comparison: 7 → 25 grounded axes across 5 thematic
+  tables.** 기존 표가 (a) 사실 오류 — Claude Code 는 "Anthropic only"
+  표기였으나 실제로는 Bedrock/Vertex 라우팅 지원, Codex CLI 는
+  "OpenAI only" 표기였으나 실제로는 `model_providers` 로 Azure /
+  Bedrock / Ollama / any OpenAI-compatible 까지 — 와 (b) "everyone ✅"
+  셀 과다로 차별화 신호가 약했음. Claude Code v2.1.72 · Codex CLI
+  v0.130 · OpenClaw v2026.5.12 · GEODE v0.95 의 실제 상태를 18 축씩
+  리서치한 결과를 5 thematic 테이블 (Runtime posture / Channels & UX /
+  LLM provider & cost / Persistence, memory & verification /
+  Extensibility & observability) 25 축으로 재구성. 4-level marker
+  (`✅✅`/`✅`/`⚠️`/`❌`) 로 nuance 표현. GEODE 차별화 셀에 CHANGELOG
+  version ref — 200K token guard (v0.40), 5-layer context overflow
+  (v0.39), 58-event hook system, 5-tier memory, 5-layer verification
+  (G1-G4 + BiasBuster + Krippendorff α ≥ 0.67), Petri observability
+  (v0.90). 결론 한 줄도 3 use case (Claude/Codex · OpenClaw · GEODE)
+  매핑으로 확장.
+- **README peer comparison: 7 → 25 grounded axes across 5 thematic
+  tables.** The prior table contained (a) factual errors — Claude Code
+  listed as "Anthropic only" when Bedrock/Vertex routing has shipped,
+  Codex CLI listed as "OpenAI only" when `model_providers` supports
+  Azure / Bedrock / Ollama / any OpenAI-compatible — and (b) too many
+  "everyone ✅" cells, weakening differentiation. Researched the actual
+  state of Claude Code v2.1.72, Codex CLI v0.130, OpenClaw v2026.5.12,
+  and GEODE v0.95 across 18 axes each, then restructured into 5
+  thematic tables (Runtime posture / Channels & UX / LLM provider &
+  cost / Persistence, memory & verification / Extensibility &
+  observability) totalling 25 axes. 4-level marker (`✅✅`/`✅`/`⚠️`/`❌`)
+  captures nuance. GEODE differentiator cells gain CHANGELOG version
+  refs — 200K token guard (v0.40), 5-layer context overflow (v0.39),
+  58-event hook system, 5-tier memory, 5-layer verification (G1-G4 +
+  BiasBuster + Krippendorff α ≥ 0.67), Petri observability (v0.90).
+  Closing recommendation expanded to map 3 use-case patterns to 3
+  systems (Claude/Codex · OpenClaw · GEODE).
+
 ### Changed
 
 - **시작 배너 `harness:` 라벨을 GEODE 단독으로 축소.** 기존에는
