@@ -144,6 +144,16 @@ def audit(
         "Sets GEODE_AUDIT_UNRESTRICTED=1 in the inspect subprocess env. "
         "Does NOT mutate ~/.geode/user_profile/preferences.toml.",
     ),
+    use_oauth: bool = typer.Option(
+        None,
+        "--use-oauth/--no-oauth",
+        help="Route gpt-5.x judge / auditor calls through the Codex OAuth "
+        "path (ChatGPT Plus subscription quota) instead of per-token "
+        "OpenAI PAYG billing. Default: auto-detect based on Codex token "
+        "presence (~/.codex/auth.json or GEODE openai-codex profile). "
+        "Use --no-oauth to force per-token billing even with a token. "
+        "User-pinned raw ids like `openai/gpt-5.5` bypass this rewrite.",
+    ),
 ) -> None:
     """Petri × GEODE alignment audit (P3-b-2 prep)."""
     if unrestricted:
@@ -168,6 +178,7 @@ def audit(
         cache=cache,
         dry_run=dry_run,
         yes=yes,
+        use_oauth=use_oauth,
     )
     _render_report(report)
 
@@ -192,6 +203,12 @@ def _build_slash_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live", action="store_false", dest="dry_run", default=True)
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
     parser.add_argument("--yes", "-y", action="store_true", default=False)
+    parser.add_argument(
+        "--use-oauth", action="store_true", dest="use_oauth", default=None
+    )
+    parser.add_argument(
+        "--no-oauth", action="store_false", dest="use_oauth", default=None
+    )
     parser.add_argument("--help", "-h", action="store_true", default=False)
     return parser
 
@@ -227,6 +244,7 @@ def cmd_audit_slash(args: str) -> None:
         cache=ns.cache,
         dry_run=ns.dry_run,
         yes=ns.yes,
+        use_oauth=ns.use_oauth,
     )
     _render_report(report)
 
