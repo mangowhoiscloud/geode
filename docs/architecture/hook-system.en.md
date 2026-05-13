@@ -4,7 +4,8 @@
 
 > **Module**: `core/hooks/` (cross-cutting concern, accessible from all layers L0-L5)
 > **Entry point**: `from core.hooks import HookSystem, HookEvent`
-> **Events**: 58 | **Registered handlers**: 38+ | **Plugins**: YAML + class-based
+> **Events**: 58 | **Registered handlers**: 60+ (table count) | **Plugins**: YAML + class-based
+> **Verified**: last doc ↔ code consistency audit — 2026-05-13 (PR feature/hook-doc-verify)
 
 ---
 
@@ -43,9 +44,9 @@ The Hook System evolves beyond simple event logging through 4 stages: **Observe,
 │  ✓ StuckDetector      P40  PIPELINE_START/END/ERROR             │
 │  ✓ RunLog             P50  ALL 58 events → JSONL                │
 │  ✓ JournalHook        P60  END/ERROR/SUBAGENT → journal         │
-│  ✓ NotificationHook   P75  END/ERROR → Slack/external alert     │
-│  ✓ TableLoggers ×5    P90  Automation events → structured log   │
-│  ✓ hook-llm-lifecycle  P55 LLM_CALL latency/cost aggregation    │
+│  ✓ NotificationHook  P200  END/ERROR/DRIFT/SUBAGENT → Slack    │
+│  ✓ TableLoggers ×20+  P90  Automation + tool exec → struct log  │
+│  ✓ hook-llm-lifecycle  P55 LLM_CALL_END latency/cost aggregation│
 └─────────────────────────────────────────────────────────────────┘
 
 ✓ = Implemented    ○ = Kanban Backlog    ▲ = Current Frontier
@@ -112,7 +113,7 @@ graph TB
         P70["P70: TriggerManager"]
         P80["P80: SnapshotManager"]
         P85["P85: MemoryWriteBack / TurnAutoMemory"]
-        P90["P90: TableLoggers ×5"]
+        P90["P90: TableLoggers ×20+"]
     end
 
     SG --> HS
@@ -214,7 +215,6 @@ AgenticLoop turn boundary:
 | **60** | `journal_pipeline_error` | `PIPELINE_ERROR` | `bootstrap.build_hooks()` | L1 |
 | **60** | `journal_subagent` | `SUBAGENT_COMPLETED` | `bootstrap.build_hooks()` | L1 |
 | **70** | `drift_pipeline_trigger` | `DRIFT_DETECTED` | `automation.wire_hooks()` | L2 |
-| **75** | `notification_*` | `PIPELINE_END/ERROR` | `notification_hook plugin` | L1 |
 | **80** | `drift_auto_snapshot` | `DRIFT_DETECTED` | `automation.wire_hooks()` | L2 |
 | **80** | `pipeline_end_snapshot` | `PIPELINE_END` | `automation.wire_hooks()` | L2 |
 | **85** | `turn_auto_memory` | `TURN_COMPLETE` | `bootstrap.build_hooks()` | L2 |
@@ -224,6 +224,14 @@ AgenticLoop turn boundary:
 | **90** | `outcome_logger` | `OUTCOME_COLLECTED` | `automation.wire_hooks()` | L1 |
 | **90** | `model_promotion_logger` | `MODEL_PROMOTED` | `automation.wire_hooks()` | L1 |
 | **90** | `model_switch_logger` | `MODEL_SWITCHED` | `bootstrap.build_hooks()` | L1 |
+| **200** | `notification_*` (4) | `PIPELINE_END/ERROR, DRIFT_DETECTED, SUBAGENT_FAILED` | `notification_hook plugin` (`register_notification_hooks`) | L1 |
+
+> **Verification note (2026-05-13)**: This table reflects actual `hooks.register(...)` sites grepped from `core/wiring/bootstrap.py:build_hooks()`, `core/wiring/automation.py:wire_automation_hooks()`, `core/hooks/plugins/notification_hook/hook.py:register_notification_hooks()`, and `core/orchestration/{task_bridge,stuck_detection}.py`. Key references:
+> - RunLog wildcard registration: `bootstrap.py:169-170` (`for event in HookEvent: hooks.register(event, ..., priority=50)`)
+> - audit_loggers 19-event coverage: `bootstrap.py:406-484` (`_AL` table) + `bootstrap.py:494` (P90)
+> - notification priority: `notification_hook/hook.py:142` (`priority=200`)
+
+> **Note**: The Korean doc (`hook-system.md`) carries the fully-enumerated 30-row handler table. This English version retains the abridged headline list above — sync deferred until the bilingual doc-build pipeline is in place.
 
 ---
 
