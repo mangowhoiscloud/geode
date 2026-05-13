@@ -103,7 +103,13 @@ class TestUserContextSystemPrompt:
             encoding="utf-8",
         )
 
-        with patch("core.memory.user_profile.Path.home", return_value=tmp_path):
+        # P2 (v0.95.x) — patch the module-level constant directly. Patching
+        # `Path.home` no longer works because the constant was captured at
+        # `core.paths` import time.
+        with patch(
+            "core.memory.user_profile.GLOBAL_USER_PROFILE_DIR",
+            profile_dir,
+        ):
             result = _build_user_context()
 
         # G1 (2026-05-12) — context blocks now wrap in XML tags
