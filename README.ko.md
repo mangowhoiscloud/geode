@@ -309,17 +309,78 @@ uv tool install -e . --force
 
 ## GEODE 비교
 
+각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.95.0**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
+
+<details>
+<summary><strong>A. 런타임 자세</strong> — 에이전트가 어떻게 떠 있는가</summary>
+
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| 상시 데몬 | ❌ 세션 only | ❌ 세션 only | ✅ Gateway | ✅ `geode serve` |
-| Slack/Discord 채널 | ❌ | ❌ | ✅ 다수 | ✅ Slack first-class |
-| 멀티 프로바이더 페일오버 | ⚠️ Anthropic only | ⚠️ OpenAI only | ✅ 다수 | ✅ 3 + 거버넌스 |
-| 구독 OAuth (API 키 불필요) | ✅ Pro/Max | ✅ Plus | ✅ 둘 다 | ⚠️ ChatGPT 만 (Plus, Pro, Business, Edu, Enterprise — Anthropic 약관이 Claude OAuth 차단) |
-| 디스크 영구 plan + 메모리 | ⚠️ 부분 | ⚠️ 부분 | ✅ | ✅ 5-tier |
-| 교체 가능한 도메인 DAG | ❌ | ❌ | ❌ | ✅ `DomainPort` |
-| 스케줄러 (장시간) | ❌ | ❌ | ⚠️ 부분 | ✅ cron + triggers |
+| 상시 데몬 | ❌ per-invocation | ⚠️ opt-in `codex remote-control` (v0.130+) | ✅✅ launchd / systemd 컨트롤 plane | ✅ `geode serve` 데몬 |
+| 네이티브 스케줄러 (cron) | ❌ (claude.ai 웹 전용) | ❌ (Codex Cloud Automations 전용 — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + 이벤트 트리거 |
+| Thin CLI ↔ 데몬 IPC | ❌ | ⚠️ remote-control 서버 모드 | ✅ Gateway / Agent 분리 | ✅ IPC 서버 (v0.48+) |
+| Sub-agent 격리 | ✅ Agent 도구 + `run_in_background` | ✅ `multi_agent` 기능, 기본 `max_threads=6` | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost 가드 |
+| 세션 resume / fork | ✅ JSONL 트랜스크립트 | ✅ `/resume` + `/fork` 슬래시 커맨드 | ✅ Session bindings + TTL | ✅ session resume (v0.21+) |
 
-짧은 코딩 세션엔 **Claude Code** 또는 **Codex**. 몇 시간/며칠 동안 계속 돌면서 시그널을 watch 하고 보고하는 작업엔 **GEODE**.
+</details>
+
+<details>
+<summary><strong>B. 채널 & UX 표면</strong> — 사용자에게 어떻게 닿는가</summary>
+
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| Slack | ❌ (MCP 플러그인 가능) | ⚠️ Codex Cloud 전용, CLI 는 미지원 | ✅ Socket Mode, first-class | ✅ Socket Mode, first-class |
+| Discord / Telegram / 기타 chat | ❌ | ❌ | ✅✅ 23+ 채널 (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram 폴러 |
+| IDE 플러그인 | ❌ (Chrome MCP 확장만) | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
+| Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat 플러그인 | ❌ (문서 사이트만) |
+| MCP 서버 카탈로그 | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic 배포 레지스트리 (200+ 서버, `~/.geode/mcp/registry-cache.json` 캐시) |
+
+</details>
+
+<details>
+<summary><strong>C. LLM 프로바이더 & 비용 거버넌스</strong></summary>
+
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| 멀티 프로바이더 페일오버 | ✅ Anthropic + AWS Bedrock + Google Vertex (환경변수 라우팅) | ✅✅ OpenAI + Azure + Bedrock + Ollama + OpenAI-호환 엔드포인트 전체 (`model_providers` 설정) | ✅ `auth.order` 쿨다운 기반 자동 페일오버 | ✅ Anthropic + OpenAI + ZhipuAI, in-provider 전용 |
+| 구독 OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini 온보딩 | ⚠️ ChatGPT 만 (Plus / Pro / Business / Edu / Enterprise) — Anthropic 약관 (2026-01-09) 이 3rd-party Claude OAuth 차단 |
+| 토큰 / 비용 예산 가드 | ⚠️ 캐시 토큰 추적만 | ⚠️ 재시도 cap 만 (`request_max_retries`) | ⚠️ 부분 | ✅ **200K 토큰 가드** (v0.40), 명시적 예산 거버넌스 |
+| 컨텍스트 overflow 처리 | ✅ 자동 컴팩션 | ⚠️ Skills progressive disclosure (~2% 예산) + fork | ✅ 컴팩션 + 트랜스크립트 스트리밍 (252 MB → 27 MB 피크) | ✅✅ **5-layer 컨텍스트 overflow** (v0.39+) |
+| 벤더 간 페일오버 정책 | ❌ | ⚠️ `model_providers` 수동 전환 | ✅ 자동 | ❌ 의도적 (v0.53 거버넌스 — 예기치 못한 cross-vendor 과금 방지) |
+
+</details>
+
+<details>
+<summary><strong>D. 영속성, 메모리 & 검증</strong></summary>
+
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| 메모리 tier | ⚠️ 3 (user / project / local 세팅 머지) | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **5-tier** (SOUL · User · Org · Project · Session) |
+| 디스크 영구 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ `.geode/plans.json` |
+| 권한 / 샌드박스 계층 | ✅ 3-mode (default / auto / bypass) + Confirmation UI | ✅ `sandbox_mode` 3 단계 (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain (40+ 감사 표면) | ✅ Policy Chain + 도구 게이트 |
+| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **5-layer 검증** (G1-G4 + BiasBuster + Cross-LLM Krippendorff α ≥ 0.67 + Confidence Gate + Rights Risk) |
+| Hook 이벤트 수 | ⚠️ 5 (PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange) | ⚠️ 6 (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop) | ✅ 5 이벤트 타입 · 다수 번들 핸들러 | ✅✅ **58 이벤트** (`docs/architecture/hook-system.md`) |
+
+</details>
+
+<details>
+<summary><strong>E. 확장성 & 관측성</strong></summary>
+
+| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
+|---|---|---|---|---|
+| 플러그인 / 확장 표면 | ✅ manifest + 마켓플레이스 (user / project / local 스코프) | ✅ `/plugins` 슬래시 커맨드 + 플러그인 공유 (v0.130+) | ✅✅ 4 확장 지점 (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ `DomainPort` Protocol + 플러그인 로더 |
+| Skill 시스템 | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ 스킬 필터 + archive 업로드 | ✅ 런타임 `SkillRegistry` (13 런타임 skills) |
+| **교체 가능한 도메인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ✅✅ `DomainPort` Protocol — 파이프라인이 first-class 확장 지점 |
+| 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ Run Log + Petri eval 통합 (v0.90+, LangSmith 대체) |
+| Cross-LLM 검증 | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 평가자 간 일치도 게이트 |
+
+</details>
+
+---
+
+IDE 내부 또는 클라우드 동기화로 짧은 코딩 세션을 돌릴 땐 **Claude Code** / **Codex**. 23+ 메시징 표면에 걸친 멀티 채널 chat 에이전트 fleet 을 운영할 땐 **OpenClaw**. 코딩 외 도메인을 다중 tier 메모리 + 다중 계층 검증 + 교체 가능 도메인 파이프라인으로 몇 시간 / 며칠 돌릴 땐 **GEODE**.
+
+> 출처 — Claude Code v2.1.72 (빌드 2026-03-09, 역공학 레퍼런스). Codex CLI v0.130.0 릴리즈 노트 + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw v2026.5.12-beta.1 (1.8M LoC TypeScript). GEODE — `CHANGELOG.md` (`v0.39` 컨텍스트 overflow, `v0.40` 200K 가드, `v0.85` 4-layer stack, `v0.90` Petri 관측성).
 
 ---
 
