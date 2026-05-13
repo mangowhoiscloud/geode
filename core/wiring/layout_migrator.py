@@ -40,11 +40,14 @@ Adding a new migration:
 from __future__ import annotations
 
 import contextlib
+import datetime as _dt
 import logging
 import os
 import shutil
 import threading
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from core.paths import GEODE_HOME
 
@@ -56,7 +59,13 @@ log = logging.getLogger(__name__)
 
 #: Current target layout schema version. Bumped each time a path-level
 #: migration is added.
-GEODE_LAYOUT_VERSION = 2
+GEODE_LAYOUT_VERSION = 3
+
+#: TTL in days for v2→v3 archival steps (runs/vault/projects). Override via
+#: ``GEODE_ARCHIVE_TTL_DAYS`` env var. Lowering for tests / aggressive
+#: cleanup; raising preserves more history at the cost of disk.
+DEFAULT_ARCHIVE_TTL_DAYS = 30.0
+ARCHIVE_TTL_ENV_VAR = "GEODE_ARCHIVE_TTL_DAYS"
 
 #: Marker file recording the migrated-up-to version. Absent ⇒ version 0
 #: (pre-versioned install — every existing user starts here on first run
@@ -185,13 +194,39 @@ def ensure_layout_migrated(*, force: bool = False) -> LayoutMigrationReport:
     report = LayoutMigrationReport(from_version=current, to_version=GEODE_LAYOUT_VERSION)
     _run_pending_migrations(current, report)
     write_layout_version(GEODE_LAYOUT_VERSION)
+    _log_migration_summary(report)
+    return report
+
+
+def _log_migration_summary(report: LayoutMigrationReport) -> None:
+    """Emit a per-step INFO summary so operators can confirm at-a-glance
+    that archival actually ran.
+
+    Diagnostic for the v1→v2 trigger gap: the previous one-line summary
+    only said "N step(s)" — operators had no way to tell whether each
+    step found work to do or no-op'd. We now log moved/skipped/warning
+    counts per step so a glance at ``~/.geode/logs/serve.log`` answers
+    "did v3 archive anything?"
+    """
+    total_moved = sum(len(s.moved) for s in report.steps)
     log.info(
-        "Layout migration v%d → v%d completed: %d step(s)",
+        "Layout migration v%d → v%d: %d step(s), %d entr%s moved",
         report.from_version,
         report.to_version,
         len(report.steps),
+        total_moved,
+        "y" if total_moved == 1 else "ies",
     )
-    return report
+    for step in report.steps:
+        log.info(
+            "  step %r: moved=%d skipped=%d warnings=%d",
+            step.name,
+            len(step.moved),
+            len(step.skipped),
+            len(step.warnings),
+        )
+        for warning in step.warnings:
+            log.info("    warning: %s", warning)
 
 
 def reset_migration_guard() -> None:
@@ -217,6 +252,8 @@ def _run_pending_migrations(current_version: int, report: LayoutMigrationReport)
         report.steps.append(_migrate_v0_to_v1())
     if current_version < 2:
         report.steps.append(_migrate_v1_to_v2())
+    if current_version < 3:
+        report.steps.append(_migrate_v2_to_v3())
 
 
 # ---------------------------------------------------------------------------
@@ -310,8 +347,6 @@ def _migrate_v1_to_v2() -> MigrationResult:
         result.skipped.append(".geode/: absent in current workspace")
         return result
 
-    import datetime as _dt
-
     stamp = _dt.datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%SZ")
     archive_root = geode_dir / "_archive"
     candidates = [
@@ -349,5 +384,165 @@ def _migrate_v1_to_v2() -> MigrationResult:
             log.info("Layout v1→v2: archived %s → %s", src, dst)
         except OSError as exc:
             result.warnings.append(f"{src.name}: archive failed: {exc}")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# v2 → v3: TTL-based archival of runs/, vault/, projects/
+# ---------------------------------------------------------------------------
+
+
+def _resolve_archive_ttl_days() -> float:
+    """Return the configured TTL in days. Falls back to default on any
+    parse / sign error so a misconfigured env var never blocks bootstrap.
+    """
+    raw = os.environ.get(ARCHIVE_TTL_ENV_VAR)
+    if raw is None:
+        return DEFAULT_ARCHIVE_TTL_DAYS
+    try:
+        value = float(raw)
+    except ValueError:
+        log.warning(
+            "%s=%r is not numeric — using default %.0f days",
+            ARCHIVE_TTL_ENV_VAR,
+            raw,
+            DEFAULT_ARCHIVE_TTL_DAYS,
+        )
+        return DEFAULT_ARCHIVE_TTL_DAYS
+    if value <= 0:
+        log.warning(
+            "%s=%r is non-positive — using default %.0f days",
+            ARCHIVE_TTL_ENV_VAR,
+            raw,
+            DEFAULT_ARCHIVE_TTL_DAYS,
+        )
+        return DEFAULT_ARCHIVE_TTL_DAYS
+    return value
+
+
+def _archive_old_entries_by_mtime(
+    source_dir: Path,
+    archive_root: Path,
+    cutoff: float,
+    result: MigrationResult,
+    *,
+    label: str,
+    bucket_by_month: bool = True,
+) -> None:
+    """Move every direct child of ``source_dir`` older than ``cutoff`` into
+    ``archive_root/<YYYY-MM>/`` (or ``archive_root/`` flat if
+    ``bucket_by_month=False``).
+
+    Uses ``mtime`` for files and the directory's own ``mtime`` for
+    subdirectories — sufficient signal for "user hasn't touched this
+    bucket in N days." Records moves on ``result`` (one entry per child).
+    Skips ``archive_root`` itself if it happens to live inside
+    ``source_dir`` so the migration cannot eat its own tail.
+    """
+    if not source_dir.exists():
+        result.skipped.append(f"{label}: {source_dir} absent")
+        return
+    try:
+        entries = list(source_dir.iterdir())
+    except OSError as exc:
+        result.warnings.append(f"{label}: iterdir({source_dir}) failed: {exc}")
+        return
+
+    archive_resolved = archive_root.resolve()
+    for entry in entries:
+        try:
+            if entry.resolve() == archive_resolved:
+                continue
+        except OSError:
+            pass
+        try:
+            mtime = entry.stat().st_mtime
+        except OSError as exc:
+            result.warnings.append(f"{label}: stat({entry.name}) failed: {exc}")
+            continue
+        if mtime >= cutoff:
+            continue
+
+        if bucket_by_month:
+            bucket = _dt.datetime.fromtimestamp(mtime, tz=_dt.UTC).strftime("%Y-%m")
+            dst_dir = archive_root / bucket
+        else:
+            dst_dir = archive_root
+        dst = dst_dir / entry.name
+        if dst.exists():
+            result.warnings.append(
+                f"{label}: {entry.name} already present in archive — left source untouched"
+            )
+            continue
+        try:
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(entry), str(dst))
+            result.moved.append((str(entry), str(dst)))
+        except OSError as exc:
+            result.warnings.append(f"{label}: archive of {entry.name} failed: {exc}")
+
+
+def _migrate_v2_to_v3() -> MigrationResult:
+    """v3 — TTL-based archival of high-volume global directories.
+
+    Three target categories under ``~/.geode/``:
+
+    1. ``runs/`` — per-execution receipts. Currently 600+ flat files,
+       indefinite retention. Archive children older than TTL to
+       ``runs/_archive/<YYYY-MM>/``.
+
+    2. ``vault/general/`` and ``vault/research/`` — long-term memory.
+       Currently 1800+ files across both, no eviction policy. Archive
+       per-file by ``mtime`` to ``vault/<scope>/_archive/<YYYY-MM>/``.
+
+    3. ``projects/<encoded-cwd>/`` — per-workspace state. Many entries
+       correspond to removed worktrees (``.claude/worktrees/*``).
+       Archive entire workspace dirs whose own ``mtime`` is past TTL to
+       ``projects/_archive/<YYYY-MM>/``.
+
+    TTL defaults to 30 days, overridable via ``GEODE_ARCHIVE_TTL_DAYS``.
+    Bucketing by month matches Claude Code's project-tracking dir
+    structure and keeps the archive browsable.
+
+    Lossless — uses :func:`shutil.move`. Reversible — operator can move
+    bucket contents back. No writer change: existing call sites keep
+    writing to the un-bucketed directories; archival is a periodic
+    sweep run at bootstrap, gated by the version marker so it only runs
+    once per install.
+    """
+    result = MigrationResult(name="v2→v3: TTL archival (runs/vault/projects)")
+
+    ttl_days = _resolve_archive_ttl_days()
+    cutoff = time.time() - ttl_days * 86400.0
+    result.warnings.append(f"TTL={ttl_days:.1f} days, cutoff={int(cutoff)}")
+
+    from core.paths import GLOBAL_PROJECTS_DIR, GLOBAL_RUNS_DIR, GLOBAL_VAULT_DIR
+
+    _archive_old_entries_by_mtime(
+        GLOBAL_RUNS_DIR,
+        GLOBAL_RUNS_DIR / "_archive",
+        cutoff,
+        result,
+        label="runs",
+    )
+
+    for scope in ("general", "research"):
+        scope_dir = GLOBAL_VAULT_DIR / scope
+        _archive_old_entries_by_mtime(
+            scope_dir,
+            scope_dir / "_archive",
+            cutoff,
+            result,
+            label=f"vault/{scope}",
+        )
+
+    _archive_old_entries_by_mtime(
+        GLOBAL_PROJECTS_DIR,
+        GLOBAL_PROJECTS_DIR / "_archive",
+        cutoff,
+        result,
+        label="projects",
+    )
 
     return result
