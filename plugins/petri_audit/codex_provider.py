@@ -342,26 +342,24 @@ async def _stream_and_accumulate(client: Any, request: dict[str, Any]) -> Any:
     SSE payload omits the ``output`` field (proven against codex-rs
     ``ResponseCompleted`` struct).
 
-    ``stream()`` is sync-returning on the openai SDK — wrap in
-    ``asyncio.to_thread`` to play nicely with the inspect_ai async
-    generate path.
+    The ``AsyncOpenAI`` client returns ``AsyncResponseStreamManager``
+    from ``client.responses.stream(...)``, which only supports the
+    ``async with`` protocol and yields async iteration. The earlier
+    ``asyncio.to_thread + sync with`` shape was for the sync
+    ``OpenAI`` client; switching to the native async context manager
+    matches the actual client type ``_create_client`` constructs.
     """
-    import asyncio
-
-    def _sync_call() -> Any:
-        with client.responses.stream(**request) as stream:
-            accumulated_items: list[Any] = []
-            for event in stream:
-                if getattr(event, "type", "") == "response.output_item.done":
-                    item = getattr(event, "item", None)
-                    if item is not None:
-                        accumulated_items.append(item)
-            final = stream.get_final_response()
-            if accumulated_items:
-                final.output = accumulated_items
-            return final
-
-    return await asyncio.to_thread(_sync_call)
+    async with client.responses.stream(**request) as stream:
+        accumulated_items: list[Any] = []
+        async for event in stream:
+            if getattr(event, "type", "") == "response.output_item.done":
+                item = getattr(event, "item", None)
+                if item is not None:
+                    accumulated_items.append(item)
+        final = await stream.get_final_response()
+        if accumulated_items:
+            final.output = accumulated_items
+        return final
 
 
 def _content_to_text(content: Any) -> str:

@@ -105,6 +105,13 @@ class AuditReport:
 
     Always populated; ``returncode``/``stdout``/``stderr`` are blank for
     ``dry_run=True`` or when the user aborts at the confirm prompt.
+
+    ``same_provider_bias_chip`` (PR #8, 2026-05-14): non-empty when
+    auditor + target + judge all share a provider root. Reports must
+    render this chip so reviewers see that any finding has the
+    −10..−22 % self-preference disadvantage applied — see
+    :mod:`plugins.petri_audit.bias` for the polarity table and
+    ``docs/audits/2026-05-14-petri-same-provider-bias.md``.
     """
 
     command: list[str]
@@ -116,6 +123,7 @@ class AuditReport:
     stdout: str = ""
     stderr: str = ""
     notes: list[str] = field(default_factory=list)
+    same_provider_bias_chip: str = ""
 
     #: Where the live ``.eval`` was archived (raw + summary). Populated
     #: when ``auto_archive=True`` and the inspect_ai run produced a
@@ -533,6 +541,20 @@ def run_audit(
     cost_label, estimated_krw = format_cost(estimated_usd)
     notes: list[str] = []
 
+    # PR #8 (2026-05-14) — same-provider bias detection. When auditor +
+    # target + judge share a provider root (e.g. all openai-codex/gpt-5.x
+    # after the PR #6 OAuth alignment), self-preference inflates favor
+    # signals and deflates harm signals on the order of −10..−22 %.
+    # Surface a chip on the report so reviewers see the disadvantage is
+    # acknowledged; downstream score reduction is in
+    # ``plugins.petri_audit.bias.apply_disadvantage``.
+    from plugins.petri_audit.bias import detect_same_provider, format_bias_chip
+
+    bias_chip = ""
+    if detect_same_provider(inspect_auditor, inspect_target, inspect_judge):
+        bias_chip = format_bias_chip()
+        notes.append(f"same-provider self-preference: {bias_chip}")
+
     if dry_run:
         notes.append("dry-run: subprocess not executed")
         return AuditReport(
@@ -541,6 +563,7 @@ def run_audit(
             estimated_krw=estimated_krw,
             dry_run=True,
             notes=notes,
+            same_provider_bias_chip=bias_chip,
         )
 
     if shutil.which("inspect") is None:
@@ -565,6 +588,7 @@ def run_audit(
             dry_run=False,
             aborted=True,
             notes=notes,
+            same_provider_bias_chip=bias_chip,
         )
 
     log.info("Petri audit subprocess: %s", " ".join(cmd))
@@ -590,6 +614,7 @@ def run_audit(
         notes=notes,
         archived_raw=archived_raw,
         archived_summary=archived_summary,
+        same_provider_bias_chip=bias_chip,
     )
 
 
