@@ -54,6 +54,25 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Documentation
 
+- **README peer comparison: 5 단원 collapsible + KO sync.** GitHub 에서
+  README 가 한 페이지에 너무 길어 보였던 문제 — 25 axes 5 테이블이 한꺼번에
+  렌더되어 scroll 이 길었음 — 을 해결하기 위해 A∼E 5 단원을 각자
+  `<details>` 블록으로 감쌌음 (기본 closed). 인트로 한 줄 + 결론 한 줄은
+  항상 보이게 유지. 또한 `README.ko.md` 가 이전 PR 의 영문 sync 에서
+  누락되어 옛 7-axis 표 + 사실 오류 셀 (Bedrock/Vertex 누락, Azure/Ollama
+  누락) 이 그대로 남아 있었음 — 영문판과 동일한 5 단원 25 축 구조 +
+  collapsible + 출처 footnote 까지 완전 sync.
+- **README peer comparison: collapsible 5 sections + KO sync.** Fixed
+  page-length problem on GitHub where 25 axes across 5 tables rendered
+  as one long scroll. Each of A–E now lives in its own `<details>` block
+  (closed by default). Intro line + closing recommendation remain
+  always visible. Also fixed a sync gap: `README.ko.md` retained the
+  old 7-axis table (with the factually wrong "Anthropic only" / "OpenAI
+  only" cells) because the previous PR only touched the English
+  README. The Korean README now mirrors the English structure
+  exactly — 5 collapsible thematic sections, 25 grounded axes, 4-level
+  marker, and source footnote.
+
 - **README peer comparison: 7 → 25 grounded axes across 5 thematic
   tables.** 기존 표가 (a) 사실 오류 — Claude Code 는 "Anthropic only"
   표기였으나 실제로는 Bedrock/Vertex 라우팅 지원, Codex CLI 는
