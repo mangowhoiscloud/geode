@@ -21,8 +21,9 @@ import logging
 import sys
 import time
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 from typing import Any
+
+from core.paths import GLOBAL_WORKERS_DIR
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ log = logging.getLogger(__name__)
 # Data contracts
 # ---------------------------------------------------------------------------
 
-WORKER_DIR = Path.home() / ".geode" / "workers"
+WORKER_DIR = GLOBAL_WORKERS_DIR  # P2 — was `Path.home() / ".geode" / "workers"`
 
 
 @dataclass

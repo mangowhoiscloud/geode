@@ -53,10 +53,13 @@ class ToolResultOffloadStore:
         ttl_hours: float = 4.0,
         base_dir: Path | None = None,
     ) -> None:
+        from core.paths import PROJECT_TOOL_OFFLOAD
+
         self.session_id = session_id
         self.threshold = threshold
         self._ttl_s = ttl_hours * 3600
-        self._base_dir = base_dir or Path(".geode/tool-offload")
+        # P2 (v0.95.x) — was literal `Path(".geode/tool-offload")`
+        self._base_dir = base_dir or PROJECT_TOOL_OFFLOAD
         self._session_dir = self._base_dir / session_id
         self._session_dir.mkdir(parents=True, exist_ok=True)
 

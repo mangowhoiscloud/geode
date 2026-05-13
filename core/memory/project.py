@@ -108,9 +108,15 @@ class ProjectMemory:
     """
 
     def __init__(self, project_root: Path | None = None) -> None:
+        # P2 (v0.95.x) — `Path` division joins relative `PROJECT_GEODE_DIR` to
+        # the caller-supplied root, replacing the previous literal
+        # `root / ".geode"` while still respecting the test-supplied root.
+        # `GEODE_HOME` is the SoT for the user-home tier.
+        from core.paths import GEODE_HOME, PROJECT_GEODE_DIR
+
         root = project_root or Path(".")
-        self._geode_dir = root / ".geode"
-        self._global_geode_dir = Path.home() / ".geode"
+        self._geode_dir = root / PROJECT_GEODE_DIR
+        self._global_geode_dir = GEODE_HOME
         self._memory_dir = self._geode_dir / "memory"
         self._memory_file = self._memory_dir / "PROJECT.md"
         self._rules_dir = self._geode_dir / "rules"

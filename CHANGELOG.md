@@ -52,6 +52,27 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **P2 — paths.py constant 정렬 (11+1 사이트).** PR #1098 audit 의
+  마지막 SoT 정리 단계. paths.py 가 SoT 인데 hardcoded `Path.home() /
+  ".geode" / ...` 또는 `Path(".geode/...")` literal 사용하던 12 사이트가
+  모두 paths.py constant 사용으로 변경 — `core/runtime.py:93`
+  (`DEFAULT_LOG_DIR`), `core/server/supervised/services.py:267`
+  (`build_hooks log_dir`), `core/llm/usage_store.py:21` (`DEFAULT_USAGE_DIR`),
+  `core/memory/user_profile.py:96` (`FileBasedUserProfile._global_dir`,
+  module-level import 으로 변경 + 호출 test 도 갱신), `core/config/
+  _settings.py:20` (`env_file`), `core/server/ipc_server/poller.py:38`
+  (`DEFAULT_SOCKET_PATH`), `core/runtime_state/transcript.py:37`
+  (`_get_default_transcript_dir`), `core/agent/worker.py:33` (`WORKER_DIR`),
+  `core/orchestration/tool_offload.py:59` (`ToolResultOffloadStore._base_dir`),
+  `core/utils/env_io.py:61` (config writer), `core/tools/policy.py:302`
+  (org policy loader), 그리고 parameterized root 케이스
+  `core/memory/project.py:112-113` 도 `PROJECT_GEODE_DIR` (relative Path)
+  과 `GEODE_HOME` 조합으로 정렬. **행위 변경 없음** — 순수 SoT 정렬.
+  회귀: 4749 tests pass, `test_context_hub.py::test_build_user_context_no_data`
+  의 patch site 도 `GLOBAL_USER_PROFILE_DIR` 로 갱신.
+
 ### Added
 
 - **P3 — `core.paths` 에 누락된 5 상수 추가** (`PROJECT_AGENT_MEMORY_DIR`,

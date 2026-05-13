@@ -16,9 +16,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from core.paths import GLOBAL_USAGE_DIR
+
 log = logging.getLogger(__name__)
 
-DEFAULT_USAGE_DIR = Path.home() / ".geode" / "usage"
+DEFAULT_USAGE_DIR: Path = GLOBAL_USAGE_DIR  # P2 — was literal `Path.home() / ".geode" / "usage"`
 
 
 @dataclass(slots=True)

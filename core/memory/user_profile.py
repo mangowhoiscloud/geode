@@ -23,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
+from core.paths import GLOBAL_USER_PROFILE_DIR
 from core.skills._frontmatter import _FRONTMATTER_RE
 from core.utils.atomic_io import atomic_write_text
 
@@ -93,7 +94,10 @@ class FileBasedUserProfile:
         global_dir: Path | None = None,
         project_dir: Path | None = None,
     ) -> None:
-        self._global_dir = global_dir or (Path.home() / ".geode" / "user_profile")
+        # P2 (v0.95.x) — `GLOBAL_USER_PROFILE_DIR` imported at module level so
+        # tests can `patch("core.memory.user_profile.GLOBAL_USER_PROFILE_DIR", ...)`
+        # to redirect to tmp_path without re-importing `core.paths`.
+        self._global_dir = global_dir or GLOBAL_USER_PROFILE_DIR
         self._project_dir = project_dir  # None = no project-local override
 
     @property
