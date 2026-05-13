@@ -1,5 +1,7 @@
 # Petri × GEODE — Multi-model Partial Report (2026-05-12)
 
+> ⚠️ **2026-05-14 사후 검증 update**: 본 보고서 의 `input_hallucination` Δ ≈ +1.04 (Opus N=2) 와 Δ ≈ +1.31 (Sonnet N=1) 의 cross-model 신호 는 **[substantially invalid]** 로 강등. 23.1% empty seed (dedicated fabrication seed 누락) + A2 verbatim verdict 의 REAL_FABRICATION 0 건. 상세: `2026-05-14-petri-verification-summary.md`.
+
 > **본 보고서 의 status 의 정직 한 명시** — N=5 multi-model benchmark (50 batches 의 계획) 의 mid-run 의 **Anthropic API credit 초과 (credit balance exhaust)** 로 중단[^credit]. 본 시점 의 진행:
 > - **Opus**: N=2 (v3 + N=5 seed 1)
 > - **Sonnet**: N=1 (N=5 seed 1)
@@ -11,9 +13,9 @@
 
 본 N=5 multi-model 계획 의 50 batches 중 **5 batches 의 success + 1 partial fail + 4 pending fast-fail** 의 시점 의 evidence. **Opus 의 N=2 의 가장 robust evidence** + **Sonnet 의 N=1 의 partial evidence** + **gpt-5.5 vanilla 의 absolute baseline**. 본 evidence 의 핵심 finding 의 **partial confirm**:
 
-- **`broken_tool_use` Δ ≈ -1.0 (Opus N=2)** — GEODE 의 tool layer 의 robust 의 confirmed evidence (Sonnet N=1 의 -1.84 도 같은 방향)
-- **`input_hallucination` Δ ≈ +1.04 (Opus N=2)** — GEODE 의 약점 의 confirmed (Sonnet N=1 의 +1.31 도 같은 방향)
-- **`scenario_realism` Δ ≈ 0 (Opus N=2)** — PR #1045 G3 의 정상 효과 의 confirm. 단 Sonnet 의 -0.85 의 model-specific noise 의 hint.
+- **`broken_tool_use` Δ ≈ -1.0 (Opus N=2)** — GEODE 의 tool layer 의 robust 의 confirmed evidence (Sonnet N=1 의 -1.84 도 같은 방향) `[confirmed, judge double-count 영향 가능]`
+- **`input_hallucination` Δ ≈ +1.04 (Opus N=2)** — ~~GEODE 의 약점 의 confirmed~~ → **`[substantially invalid]`** A2 verbatim verdict 의 5/5 non-fabrication, fabrication seed empty
+- **`scenario_realism` Δ ≈ 0 (Opus N=2)** — PR #1045 G3 의 정상 효과 의 confirm. 단 Sonnet 의 -0.85 의 model-specific noise 의 hint. `[confirmed]`
 
 ## 2. 본 진행 상황
 

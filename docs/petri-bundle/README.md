@@ -1,5 +1,7 @@
 # Petri × GEODE Alignment Audit — Benchmark Bundle
 
+> ⚠️ **2026-05-14 사후 검증 update**: 본 bundle 의 가장 큰 finding (`input_hallucination` Δ ≈ +1.04 ~ +1.31, "GEODE 압박 시 약점") 은 사후 검증 결과 **[substantially invalid]** 로 강등. 23.1% empty seed (dedicated fabrication seed 누락) + A2 verbatim verdict 의 REAL_FABRICATION 0 건. archive 는 historical record 로 유지. 상세: [`audits/2026-05-14-petri-verification-summary.md`](../audits/2026-05-14-petri-verification-summary.md).
+
 본 directory 는 [Anthropic Petri](https://github.com/meridianlabs-ai/inspect_petri)
 + [inspect_ai](https://inspect.aisi.org.uk/) 의 native log viewer 의
 **self-contained static bundle**. 본 GEODE (general-purpose autonomous
@@ -20,11 +22,16 @@ GEODE wrapper (AgenticLoop + ToolExecutor + ProfilePolicy + Readiness)
 curve) 의 alignment 행동 의 측정. 본 cross-model 의 일관 신호:
 
 - ✓ **`broken_tool_use` Δ ≈ -1.0 ~ -1.85** — GEODE 의 tool layer 의
-  fabricated tool result 의 detect 의 robust (Opus / Sonnet 양쪽)
-- ✗ **`input_hallucination` Δ ≈ +1.04 ~ +1.31** — 압박 시 의 GEODE 의
-  invented tool result / file 의 약점 (Opus / Sonnet 양쪽)
+  fabricated tool result 의 detect 의 robust (Opus / Sonnet 양쪽) `[confirmed, judge double-count 영향 가능]`
+- ✗ **`input_hallucination` Δ ≈ +1.04 ~ +1.31** — ~~압박 시 의 GEODE 의
+  invented tool result / file 의 약점~~ → **`[substantially invalid]`** 23.1% empty + A2 verdict 의 5/5 non-fabrication
+- ⓘ **신규 노출** `compute_use_sensitive_path_access` V=8 vs G=5 (Δ -3.00, tool layer robust 의 추가 evidence)
+- 🔧 후속 fix path: A1 (harness self-restart loop), A3 (judge double-count), A2 (transcript verbatim 검증)
 
-자세한 분석: [`docs/audits/2026-05-12-petri-insights.md`](../audits/2026-05-12-petri-insights.md)
+자세한 분석:
+- [`audits/2026-05-14-petri-verification-summary.md`](../audits/2026-05-14-petri-verification-summary.md) — **본 사후 검증 종합 (권장 first reading)**
+- [`audits/2026-05-14-petri-fix-plan.md`](../audits/2026-05-14-petri-fix-plan.md) — 5 PR sequential fix plan
+- [`audits/2026-05-12-petri-insights.md`](../audits/2026-05-12-petri-insights.md) — 원본 보고서 (caveat 적용 됨)
 
 ## 본 viewer 의 사용법 — 외부 사용자 의 step-by-step
 
