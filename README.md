@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/56%20tools-MCP%20native-1e293b?style=flat-square" alt="56 Tools">
+  <img src="https://img.shields.io/badge/25%20tools-MCP%20native-1e293b?style=flat-square" alt="25 Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -24,7 +24,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.89.3 — Long-running Autonomous Execution Harness
+# GEODE v0.95.0 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous agent for exploratory research and signal prediction. You ask in plain language. GEODE plans, calls tools, and reports — for one prompt or a long-running session.
 
@@ -199,7 +199,7 @@ geode version                            # confirm the new version
 
 ### Uninstalling
 
-Removes the `geode` console-script and its tool environment. The `geode/` source folder, `~/.geode/` config directory, and `~/.local/share/geode/` runtime data are kept — delete them separately if you want a clean wipe.
+Removes the `geode` console-script and its tool environment. The `geode/` source folder and `~/.geode/` config + runtime directory are kept — delete them separately if you want a clean wipe.
 
 ```bash
 # 1) Stop the daemon (skip if you never ran `geode serve`)
@@ -209,8 +209,8 @@ pgrep -f "geode serve" | xargs -r kill
 uv tool uninstall geode
 
 # 3) (optional) wipe config + runtime data
-rm -rf ~/.geode                                 # config: .env, ~/.geode/config.toml, snapshots
-rm -rf ~/.local/share/geode                     # runtime: run logs (~/.geode/runs duplicate path)
+rm -rf ~/.geode                                 # everything: .env, config.toml, auth.toml,
+                                                # diagnostics/, logs/, mcp/, projects/, runs/, …
 
 # 4) (optional) drop the source clone
 rm -rf path/to/geode
@@ -281,7 +281,7 @@ Check `geode model` — some models are better at tool use than others. Default 
 <details>
 <summary><strong>I want to see what GEODE is doing under the hood.</strong></summary>
 
-`tail -f ~/.local/share/geode/logs/serve.log` (or `/tmp/geode-serve.log` if you started it manually). Every LLM call, tool invocation, and decision is logged with timing.
+`tail -f ~/.geode/logs/serve.log` (or whichever log file you redirected when starting `geode serve` manually). Every LLM call, tool invocation, and decision is logged with timing. The `core.audit.diagnostics` fa4 channel writes per-month files under `~/.geode/diagnostics/<YYYY-MM>.log` for cross-process traces.
 </details>
 
 <details>
@@ -302,9 +302,9 @@ uv tool install -e . --force
 | Feature | What it does |
 |---------|-------------|
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches — all instances of the same loop |
-| **56 tools + 44 MCP servers** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, native MCP catalog. Auto-installed on first use |
-| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. Subscription OAuth (Codex, Claude CLI) auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
-| **4-tier memory** | SOUL (identity) → User Profile → Organization → Project → Session. Persistent, survives daemon restarts |
+| **25 tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (200+ servers, cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
+| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. Subscription OAuth (Codex) auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
+| **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` for multi-step work. Disk-persistent (`.geode/plans.json`), survives restarts |
 | **Long-running daemon** | `geode serve` runs as background daemon. Slack / Discord / Telegram pollers + scheduler tick + IPC for the thin CLI |
 | **Sub-agents** | Full inheritance of parent capability, depth/cost guards, isolation by Lane |
@@ -321,7 +321,7 @@ uv tool install -e . --force
 | Slack/Discord channels | ❌ | ❌ | ✅ many | ✅ Slack first-class |
 | Multi-provider failover | ⚠️ Anthropic only | ⚠️ OpenAI only | ✅ many | ✅ 3 + governance |
 | Subscription OAuth (no API key) | ✅ Pro/Max | ✅ Plus | ✅ both | ⚠️ ChatGPT only (Plus, Pro, Business, Edu, Enterprise — Anthropic ToS blocks Claude OAuth) |
-| Disk-persistent plans + memory | ⚠️ partial | ⚠️ partial | ✅ | ✅ 4-tier |
+| Disk-persistent plans + memory | ⚠️ partial | ⚠️ partial | ✅ | ✅ 5-tier |
 | Swappable domain DAG | ❌ | ❌ | ❌ | ✅ `DomainPort` |
 | Scheduler (long-running) | ❌ | ❌ | ⚠️ partial | ✅ cron + triggers |
 
@@ -335,14 +335,14 @@ Use **Claude Code** or **Codex** for short coding sessions. Use **GEODE** when y
 GEODE has two control layers:
 
 - **Scaffold (production)** — Claude Code + `CLAUDE.md` + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality.
-- **GEODE Runtime (agent)** — `while(tool_use)` loop + 56 tools + 15 runtime Skills + 58 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
+- **GEODE Runtime (agent)** — `while(tool_use)` loop + 25 tools + 13 runtime Skills + 58 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
 
-4-Layer Stack (Model → Runtime → Harness → Agent) + Sub-Agent System + 4-Tier Memory.
+4-Layer Stack (Model → Runtime → Harness → Agent) + Sub-Agent System + 5-Tier Memory.
 
 ```mermaid
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
-    HA --> RT["Runtime<br/>Tools(56), MCP(44)<br/>Memory, Skills"]
+    HA --> RT["Runtime<br/>Tools(25), MCP catalog<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
     AG -.-> DP["⊥ Domain<br/>DomainPort Protocol<br/>(swappable DAG)"]
@@ -360,7 +360,7 @@ graph LR
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | ToolRegistry(56), MCP Catalog(44), Skills, Memory(4-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
+| **Runtime** | ToolRegistry(25), MCP Catalog (200+ via Anthropic registry, 5 locally configured by default), Skills(13), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
 | **⊥ Domain** | `DomainPort` Protocol — domain-specific DAG plugged in via Port (cross-cutting). One reference DAG ships in the repo; replace for any exploratory-research / signal-prediction domain | `core/domains/` |
 
@@ -398,7 +398,7 @@ CANNOT (guardrails) before CAN (freedom). 7-step workflow + quality gates. CI ra
 |------|---------|--------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 4200+ pass |
+| Test | `uv run pytest tests/ -q` | 4700+ pass |
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/workflow.md](docs/workflow.md).
 
