@@ -54,6 +54,40 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Documentation
 
+- **Hook system doc ↔ 코드 정합성 audit (Stage C).** `docs/architecture/
+  hook-system.md` 의 maturity 모델 표 + 등록 핸들러 표를 실제 코드 (`core/
+  wiring/bootstrap.py`, `core/wiring/automation.py`, `core/hooks/plugins/
+  notification_hook/hook.py`, `core/orchestration/{task_bridge,
+  stuck_detection}.py`) 의 `hooks.register(...)` 사이트와 1:1 grep 검증.
+  5 군데 drift 발견 + 수정 — (1) NotificationHook 표기 priority `P75` →
+  실제 `P200` (`notification_hook/hook.py:142`). (2) RunLog 가 wildcard
+  로 등록하는 이벤트 수 "전체 56개" → 58개 (현재 enum size 와 일치).
+  (3) TableLoggers "×5" → 실제 19+5+1 = 20+ (audit_loggers 19 + automation
+  loggers 5 + stuck_detector_* 3 + model_switch_logger 등). (4) hook-llm-
+  lifecycle 가 listen 한다고 표기된 `LLM_CALL_START/END/FAILED/RETRY` 4
+  이벤트 → 실제 `LLM_CALL_END` 만 (`bootstrap.py:358`). 나머지 3 이벤트
+  는 RunLog wildcard 만 처리. (5) Headline "등록 핸들러: 38+" → 실제
+  table 상 60+. EN doc (`hook-system.en.md`) 도 동일 패턴 적용. 표 하단
+  에 "검증 메모 (2026-05-13)" + 핵심 file:line reference 3 줄 추가.
+- **Hook system doc ↔ code consistency audit (Stage C).** Verified the
+  maturity model and registered-handler tables in `docs/architecture/
+  hook-system.md` against actual `hooks.register(...)` sites in `core/
+  wiring/bootstrap.py`, `core/wiring/automation.py`, `core/hooks/plugins/
+  notification_hook/hook.py`, and `core/orchestration/{task_bridge,
+  stuck_detection}.py`. Found and fixed 5 drift points: (1)
+  NotificationHook priority was documented as `P75` but is actually
+  `P200` in code (`notification_hook/hook.py:142`). (2) RunLog wildcard
+  registration documented as covering "all 56 events" — corrected to 58
+  matching the current enum. (3) TableLoggers row claimed "×5" — actual
+  is 20+ across audit_loggers (19), automation loggers (5), and other
+  P90 loggers. (4) hook-llm-lifecycle documented as listening to
+  `LLM_CALL_START/END/FAILED/RETRY` — actually only `LLM_CALL_END`
+  (`bootstrap.py:358`); the other 3 are caught only by the RunLog
+  wildcard. (5) Headline "Registered handlers: 38+" — actual table
+  count is 60+. EN doc (`hook-system.en.md`) updated with the same
+  drift fixes. Added a "verification note (2026-05-13)" with three
+  key file:line references at the bottom of the table.
+
 - **README peer comparison: 5 단원 collapsible + KO sync.** GitHub 에서
   README 가 한 페이지에 너무 길어 보였던 문제 — 25 axes 5 테이블이 한꺼번에
   렌더되어 scroll 이 길었음 — 을 해결하기 위해 A∼E 5 단원을 각자
