@@ -20,6 +20,7 @@ from core.agent.safety import (
     SAFE_TOOLS,
     WRITE_TOOLS,
 )
+from core.hooks.system import HookEvent
 
 from ._helpers import _compute_model_tool_limit, _guard_tool_result
 from .executor import ToolExecutor
@@ -216,7 +217,7 @@ class ToolCallProcessor:
 
             # Hook: TOOL_EXEC_START (interceptor — can block or modify input)
             intercept = self._fire_interceptor(
-                "tool_exec_start", {"tool_name": tool_name, "tool_input": tool_input}
+                HookEvent.TOOL_EXEC_START, {"tool_name": tool_name, "tool_input": tool_input}
             )
             if intercept is not None and intercept.blocked:
                 log.info("Tool %s blocked by TOOL_EXEC_START hook: %s", tool_name, intercept.reason)
@@ -245,7 +246,7 @@ class ToolCallProcessor:
                 "has_error": _has_error,
                 "result": result,
             }
-            post_results = self._fire_with_result("tool_exec_end", _post_data)
+            post_results = self._fire_with_result(HookEvent.TOOL_EXEC_END, _post_data)
             # Apply result modifications from PostToolUse-style handlers
             for hr in post_results:
                 if hr.success and isinstance(hr.data, dict):
@@ -260,7 +261,7 @@ class ToolCallProcessor:
             # Hook: TOOL_EXEC_FAILED (observer — fires only on error)
             if _has_error:
                 self._fire_hook(
-                    "tool_exec_failed",
+                    HookEvent.TOOL_EXEC_FAILED,
                     {
                         "tool_name": tool_name,
                         "tool_input": tool_input,
@@ -277,7 +278,7 @@ class ToolCallProcessor:
 
             # Hook: TOOL_RESULT_TRANSFORM (feedback — result rewriting, post-observation)
             transform_results = self._fire_with_result(
-                "tool_result_transform",
+                HookEvent.TOOL_RESULT_TRANSFORM,
                 {
                     "tool_name": tool_name,
                     "tool_input": tool_input,
@@ -447,7 +448,7 @@ class ToolCallProcessor:
         and emits hook events for observability.
         """
         self._fire_hook(
-            "tool_recovery_attempted",
+            HookEvent.TOOL_RECOVERY_ATTEMPTED,
             {
                 "tool_name": tool_name,
                 "fail_count": fail_count,
@@ -465,7 +466,7 @@ class ToolCallProcessor:
         if recovery_result.recovered:
             self._consecutive_failures[tool_name] = 0
             self._fire_hook(
-                "tool_recovery_succeeded",
+                HookEvent.TOOL_RECOVERY_SUCCEEDED,
                 {
                     "tool_name": tool_name,
                     "strategy": recovery_result.strategy_used.value
@@ -481,7 +482,7 @@ class ToolCallProcessor:
             return result
 
         self._fire_hook(
-            "tool_recovery_failed",
+            HookEvent.TOOL_RECOVERY_FAILED,
             {
                 "tool_name": tool_name,
                 "attempts": len(recovery_result.attempts),
@@ -495,19 +496,16 @@ class ToolCallProcessor:
         result["skipped"] = True
         return result
 
-    def _fire_hook(self, event_name: str, data: dict[str, Any]) -> None:
+    def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
         """Emit a hook event if HookSystem is configured."""
         if self._hooks is None:
             return
         try:
-            from core.hooks import HookEvent as _HookEvent
-
-            event = _HookEvent(event_name)
             self._hooks.trigger(event, data)
         except Exception:
-            log.debug("Hook trigger failed for %s", event_name, exc_info=True)
+            log.debug("Hook trigger failed for %s", event, exc_info=True)
 
-    def _fire_interceptor(self, event_name: str, data: dict[str, Any]) -> InterceptResult | None:
+    def _fire_interceptor(self, event: HookEvent, data: dict[str, Any]) -> InterceptResult | None:
         """Emit a hook event as interceptor (block/modify semantics).
 
         Returns InterceptResult if hooks are configured, None otherwise.
@@ -515,15 +513,12 @@ class ToolCallProcessor:
         if self._hooks is None:
             return None
         try:
-            from core.hooks import HookEvent as _HookEvent
-
-            event = _HookEvent(event_name)
             return self._hooks.trigger_interceptor(event, data)
         except Exception:
-            log.debug("Interceptor trigger failed for %s", event_name, exc_info=True)
+            log.debug("Interceptor trigger failed for %s", event, exc_info=True)
             return None
 
-    def _fire_with_result(self, event_name: str, data: dict[str, Any]) -> list[HookResult]:
+    def _fire_with_result(self, event: HookEvent, data: dict[str, Any]) -> list[HookResult]:
         """Emit a hook event capturing handler return values.
 
         Returns list of HookResult with handler-returned data.
@@ -531,12 +526,9 @@ class ToolCallProcessor:
         if self._hooks is None:
             return []
         try:
-            from core.hooks import HookEvent as _HookEvent
-
-            event = _HookEvent(event_name)
             return self._hooks.trigger_with_result(event, data)
         except Exception:
-            log.debug("Hook trigger_with_result failed for %s", event_name, exc_info=True)
+            log.debug("Hook trigger_with_result failed for %s", event, exc_info=True)
             return []
 
     @staticmethod

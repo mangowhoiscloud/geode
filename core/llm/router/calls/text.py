@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 
+from core.hooks.system import HookEvent
 from core.llm.provider_dispatch import (
     _cross_provider_dispatch,
     _get_provider_client,
@@ -49,7 +50,7 @@ def call_llm(
 
     def _dispatch(p: str, m: str) -> str:
         _fire_hook(
-            "llm_call_start",
+            HookEvent.LLM_CALL_START,
             {"model": m, "provider": p, "function": "call_llm"},
         )
         t0 = time.monotonic()
@@ -96,7 +97,7 @@ def call_llm(
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             _fire_hook(
-                "llm_call_end",
+                HookEvent.LLM_CALL_END,
                 {
                     "model": m,
                     "provider": p,
@@ -109,7 +110,7 @@ def call_llm(
 
         elapsed_ms = (time.monotonic() - t0) * 1000
         _fire_hook(
-            "llm_call_end",
+            HookEvent.LLM_CALL_END,
             {
                 "model": m,
                 "provider": p,

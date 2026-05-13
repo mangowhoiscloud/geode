@@ -6,6 +6,10 @@ import logging
 import time
 from collections.abc import Iterator
 
+# v0.88.0 — RETRYABLE_ERRORS resolves through providers/anthropic
+# ``__getattr__`` (lazy SDK load).  Defer to function scope so the
+# cold-start path does not pull anthropic at module import.
+from core.hooks.system import HookEvent
 from core.llm.providers.anthropic import (
     FALLBACK_MODELS,
     get_anthropic_client,
@@ -13,10 +17,6 @@ from core.llm.providers.anthropic import (
 from core.llm.providers.anthropic import (
     system_with_cache as _system_with_cache,
 )
-
-# v0.88.0 — RETRYABLE_ERRORS resolves through providers/anthropic
-# ``__getattr__`` (lazy SDK load).  Defer to function scope so the
-# cold-start path does not pull anthropic at module import.
 from core.llm.router._hooks import _fire_hook
 from core.llm.router._usage import _record_response_usage
 
@@ -48,7 +48,7 @@ def call_llm_streaming(
 
     # Hook: LLM_CALL_START
     _fire_hook(
-        "llm_call_start",
+        HookEvent.LLM_CALL_START,
         {"model": target_model, "provider": provider, "function": "call_llm_streaming"},
     )
     t0 = time.monotonic()
@@ -79,7 +79,7 @@ def call_llm_streaming(
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             _fire_hook(
-                "llm_call_end",
+                HookEvent.LLM_CALL_END,
                 {
                     "model": target_model,
                     "provider": provider,
@@ -92,7 +92,7 @@ def call_llm_streaming(
         else:
             elapsed_ms = (time.monotonic() - t0) * 1000
             _fire_hook(
-                "llm_call_end",
+                HookEvent.LLM_CALL_END,
                 {
                     "model": target_model,
                     "provider": provider,

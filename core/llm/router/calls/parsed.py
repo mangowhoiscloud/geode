@@ -6,6 +6,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, TypeVar, cast
 
+from core.hooks.system import HookEvent
 from core.llm.provider_dispatch import (
     _cross_provider_dispatch,
     _get_provider_client,
@@ -54,7 +55,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
 
     def _dispatch(p: str, m: str) -> T:
         _fire_hook(
-            "llm_call_start",
+            HookEvent.LLM_CALL_START,
             {"model": m, "provider": p, "function": "call_llm_parsed"},
         )
         t0 = time.monotonic()
@@ -113,7 +114,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             _fire_hook(
-                "llm_call_end",
+                HookEvent.LLM_CALL_END,
                 {
                     "model": m,
                     "provider": p,
@@ -126,7 +127,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
 
         elapsed_ms = (time.monotonic() - t0) * 1000
         _fire_hook(
-            "llm_call_end",
+            HookEvent.LLM_CALL_END,
             {
                 "model": m,
                 "provider": p,

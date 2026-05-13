@@ -18,6 +18,7 @@ from core.agent.safety import (
     EXPENSIVE_TOOLS,
     WRITE_TOOLS,
 )
+from core.hooks.system import HookEvent
 
 log = logging.getLogger(__name__)
 
@@ -76,17 +77,14 @@ class ToolExecutor:
             approval_callback=approval_callback,
         )
 
-    def _fire_hook(self, event_name: str, data: dict[str, Any]) -> None:
+    def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
         """Fire a hook event if HookSystem is available. No-op otherwise."""
         if self._hooks is None:
             return
-        from core.hooks import HookEvent
-
         try:
-            event = HookEvent(event_name)
             self._hooks.trigger(event, data)
         except Exception:
-            log.debug("Hook fire failed for %s", event_name, exc_info=True)
+            log.debug("Hook fire failed for %s", event, exc_info=True)
 
     def _track_decision(self, tool_name: str, decision: str) -> None:
         """Delegates to ApprovalWorkflow."""
@@ -139,12 +137,12 @@ class ToolExecutor:
                 approved = True
             else:
                 self._fire_hook(
-                    "tool_approval_requested",
+                    HookEvent.TOOL_APPROVAL_REQUESTED,
                     {"tool_name": tool_name, "safety_level": "write"},
                 )
                 if not self._confirm_write(tool_name, tool_input):
                     self._fire_hook(
-                        "tool_approval_denied",
+                        HookEvent.TOOL_APPROVAL_DENIED,
                         {
                             "tool_name": tool_name,
                             "safety_level": "write",
@@ -155,7 +153,7 @@ class ToolExecutor:
                     )
                     return _write_denial_with_fallback(tool_name), False
                 self._fire_hook(
-                    "tool_approval_granted",
+                    HookEvent.TOOL_APPROVAL_GRANTED,
                     {
                         "tool_name": tool_name,
                         "safety_level": "write",
@@ -175,12 +173,12 @@ class ToolExecutor:
             else:
                 cost = EXPENSIVE_TOOLS[tool_name]
                 self._fire_hook(
-                    "tool_approval_requested",
+                    HookEvent.TOOL_APPROVAL_REQUESTED,
                     {"tool_name": tool_name, "safety_level": "cost"},
                 )
                 if not self._confirm_cost(tool_name, cost):
                     self._fire_hook(
-                        "tool_approval_denied",
+                        HookEvent.TOOL_APPROVAL_DENIED,
                         {
                             "tool_name": tool_name,
                             "safety_level": "cost",
@@ -191,7 +189,7 @@ class ToolExecutor:
                     )
                     return {"error": "User denied expensive operation", "denied": True}, False
                 self._fire_hook(
-                    "tool_approval_granted",
+                    HookEvent.TOOL_APPROVAL_GRANTED,
                     {
                         "tool_name": tool_name,
                         "safety_level": "cost",
