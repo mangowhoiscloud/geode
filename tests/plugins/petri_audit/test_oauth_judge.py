@@ -409,3 +409,73 @@ def test_openai_codex_constructor_sets_codex_headers() -> None:
     from core.config import CODEX_BASE_URL
 
     assert api.base_url == CODEX_BASE_URL
+
+
+# ---------------------------------------------------------------------------
+# Post-smoke fixes (2026-05-14) — observability of the live-run-only failures.
+# ---------------------------------------------------------------------------
+
+
+def test_entry_points_include_openai_codex_prefix() -> None:
+    """inspect_ai's ``ensure_entry_points(package=<prefix>)`` matches by
+    exact ``ep.name == prefix``. If the entry-point group does not list
+    ``openai-codex``, the subprocess never imports ``plugins.petri_audit``
+    and falls back to stock ``openai`` provider → SDK auth fails with
+    ``Could not resolve authentication method``. This guards against
+    regressing the pyproject.toml entry-points block.
+    """
+    from importlib.metadata import entry_points
+
+    names = {ep.name for ep in entry_points(group="inspect_ai")}
+    assert "openai-codex" in names, (
+        "pyproject.toml [project.entry-points.inspect_ai] must include "
+        "'openai-codex = plugins.petri_audit' so inspect_ai's subprocess "
+        "fast-path loads our ModelAPI registration"
+    )
+    assert "geode" in names, (
+        "pyproject.toml must also include 'geode = plugins.petri_audit' "
+        "for the target=geode/<base> prefix fast-path"
+    )
+
+
+@pytest.mark.skipif(
+    not _AUDIT_INSTALLED, reason="[audit] extra not installed"
+)
+def test_count_tokens_uses_tiktoken_not_responses_api() -> None:
+    """ChatGPT Plus backend returns ``PermissionDeniedError`` on
+    ``/responses/input_tokens.count``. Stock ``OpenAIAPI.count_tokens``
+    hits that endpoint when ``responses_api=True``. We override
+    ``count_tokens`` to do tiktoken-based local counting instead.
+
+    This test confirms the override path is wired by feeding a known
+    string and asserting tiktoken's count is returned (i.e., the method
+    does NOT raise the PermissionDenied that the live audit hit).
+    """
+    import asyncio
+    import base64
+    import json as _json
+
+    from inspect_ai.model import get_model
+    from inspect_ai.model._model import _models
+
+    import plugins.petri_audit  # noqa: F401 — register()
+
+    payload = {
+        "https://api.openai.com/auth": {"chatgpt_account_id": "fake-acc-id"}
+    }
+    payload_b64 = (
+        base64.urlsafe_b64encode(_json.dumps(payload).encode()).decode().rstrip("=")
+    )
+    fake_token = f"header.{payload_b64}.signature"
+
+    _models.clear()
+    with patch(
+        "core.llm.providers.codex._resolve_codex_token", return_value=fake_token
+    ):
+        model = get_model("openai-codex/gpt-5.5", memoize=False)
+
+    # tiktoken local count — must NOT make a network call to the
+    # responses endpoint. "hello world" → handful of tokens.
+    n = asyncio.run(model.count_tokens("hello world"))
+    assert isinstance(n, int)
+    assert 1 <= n <= 10, f"unexpected tiktoken count: {n}"

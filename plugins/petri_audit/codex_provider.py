@@ -166,6 +166,33 @@ def register() -> None:
                 **self.model_args,
             )
 
+        async def count_tokens(
+            self,
+            input: _Any,
+            config: _Any = None,
+        ) -> int:
+            """Force tiktoken-based local counting.
+
+            Stock ``OpenAIAPI.count_tokens`` hits
+            ``client.responses.input_tokens.count`` when ``responses_api=True``,
+            but the ChatGPT Plus backend returns
+            ``PermissionDeniedError`` on that endpoint. tiktoken handles
+            local counting for gpt-5.x and avoids the round-trip, which
+            also keeps subscription quota free for actual generations.
+
+            Mirrors the non-responses-API branch in
+            ``inspect_ai/model/_providers/openai.py:count_tokens`` so the
+            return shape matches what callers like ``count_tool_tokens``
+            and the compaction loop expect.
+            """
+            if isinstance(input, str):
+                return await self.count_text_tokens(input)
+            from inspect_ai.model._tokens import count_tokens as _count_tokens
+
+            return await _count_tokens(
+                input, self.count_text_tokens, self.count_media_tokens
+            )
+
         async def generate(
             self,
             input: _Any,
