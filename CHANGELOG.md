@@ -54,6 +54,29 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Fixed
 
+- **petri-bundle viewer TypeError 2차 차단 — error archive 제거 + status
+  filter 자동화.** 직전 PR (#1129) 의 partial archive 제거 후에도
+  `n5-sonnet-geode-seed1.eval` sample URL 에서 axis 클릭 시 TypeError
+  재발. 원인 추적 결과 `2026-05-11T21-23-10-00-00_audit_STRuHye8...eval`
+  가 status=`error` (credit balance) + `results: None` 으로 listing.json
+  에 남아, viewer 의 cross-archive 비교 path 에서 null metric 을 만나
+  `formatPrettyDecimal` TypeError 유발. error archive 파일 자체 git rm +
+  listing entry 제거 (10 → 9 entries). 향후 재유입 방지 위해
+  `scripts/validate_petri_bundle.py` 추가 + `pages.yml` build job 의
+  copy step 직전에 validation gate 삽입 (status≠`success` 또는 파일 부재
+  entry 발견 시 build fail).
+- **petri-bundle viewer TypeError prevention round 2 — error archive
+  removal + status filter automation.** Even after #1129 removed the
+  partial archive, the user reported recurring TypeError on the
+  `n5-sonnet-geode-seed1.eval` sample URL. Root cause: the credit-
+  balance error archive (`...STRuHye8...eval`) had `status=error` and
+  `results: None` and stayed in `listing.json`. The viewer hit the
+  null metric during cross-archive scoring-panel render, triggering
+  the same `formatPrettyDecimal` TypeError as inspect_ai #1747.
+  Removed the file + the listing entry (10 → 9 entries) and added
+  `scripts/validate_petri_bundle.py` invoked from `pages.yml` before
+  the copy step — any future `status≠success` entry fails the build.
+
 - **petri-bundle viewer TypeError 차단 — partial archive 제거.**
   `docs/petri-bundle/logs/baseline-pre-g-a1/` 의 partial run archive
   (`...AnmLZ98...eval`, status=`started`, header.json·samples 부재) 가
