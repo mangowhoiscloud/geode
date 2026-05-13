@@ -20,6 +20,7 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "docs/petri-bundle/**"
       - "CHANGELOG.md"
       - "pyproject.toml"
       - "CLAUDE.md"
@@ -64,6 +65,18 @@ jobs:
 
       - name: Build static export
         run: npm run build
+
+      - name: Copy docs/petri-bundle into site/out
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ -d docs/petri-bundle ]; then
+            mkdir -p site/out/petri-bundle
+            cp -R docs/petri-bundle/. site/out/petri-bundle/
+            echo "petri-bundle copied:"
+            ls -la site/out/petri-bundle/ | head -20
+          else
+            echo "docs/petri-bundle missing — skipping copy"
+          fi
 
       - uses: actions/configure-pages@v5
 

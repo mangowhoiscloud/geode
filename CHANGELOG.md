@@ -52,6 +52,26 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Fixed
+
+- **GitHub Pages 의 `/geode/petri-bundle/` 404 복구.** `pages.yml` 의
+  Next.js build artifact (`site/out`) 가 `docs/petri-bundle/` 를 포함하지
+  않아 외부에서 `https://mangowhoiscloud.github.io/geode/petri-bundle/`
+  접근 시 404 반환되던 이슈 수정. build job 에 `docs/petri-bundle` →
+  `site/out/petri-bundle` 복사 step 추가 + workflow trigger paths 에
+  `docs/petri-bundle/**` 추가하여 향후 bundle 갱신 시 자동 재배포. 본
+  bundle 은 이력서의 Petri × GEODE Alignment Audit 검증 자료로 외부
+  공유 중이라 무결성 회복이 시급.
+- **GitHub Pages `/geode/petri-bundle/` 404 recovery.** The
+  `pages.yml` workflow uploaded the Next.js artifact at `site/out`
+  only, leaving `docs/petri-bundle/` outside the published tree and
+  returning 404 at `https://mangowhoiscloud.github.io/geode/petri-bundle/`.
+  Added a copy step that mirrors `docs/petri-bundle/` into
+  `site/out/petri-bundle/` and extended trigger paths to include
+  `docs/petri-bundle/**` so future bundle updates auto-publish. The
+  bundle is the external evidence for the Petri × GEODE Alignment
+  Audit cited in the resume; integrity recovery was urgent.
+
 ### Documentation
 
 - **Hook system doc ↔ 코드 정합성 audit (Stage C).** `docs/architecture/
