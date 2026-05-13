@@ -52,6 +52,27 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Fixed
+
+- **petri-bundle viewer TypeError 차단 — partial archive 제거.**
+  `docs/petri-bundle/logs/baseline-pre-g-a1/` 의 partial run archive
+  (`...AnmLZ98...eval`, status=`started`, header.json·samples 부재) 가
+  `listing.json` 에 entry 남아 viewer 가 로딩 시도 시 `formatPrettyDecimal`
+  의 unguarded `num.toString()` 가 null metric 에 부딪혀 TypeError 발생
+  가능성. inspect_ai 의 알려진 이슈 #1747 (ScoreGrid → formatPrettyDecimal
+  null guard 부재) 와 동일 패턴. partial archive 파일 자체 git rm +
+  `listing.json` 의 해당 entry 제거. 본 bundle 은 이력서 외부 공유
+  자료라 클릭 시 에러 발생이 신뢰성 위험.
+- **petri-bundle viewer TypeError prevention — partial archive purge.**
+  `docs/petri-bundle/logs/baseline-pre-g-a1/...AnmLZ98...eval` was a
+  partial run (status=`started`, no header.json, no samples) leaking
+  into `listing.json`. When the viewer attempts to load it, the
+  unguarded `num.toString()` inside `formatPrettyDecimal` triggers a
+  TypeError on null metric values — the same pattern as inspect_ai
+  issue #1747. Removed the file + the matching listing entry. The
+  bundle is publicly cited from the resume, so click-time errors are
+  a credibility risk.
+
 ### Changed
 
 - **HookEvent 명명 정규화 (Stage B) — lifecycle 이벤트 past-tense 통일.**
