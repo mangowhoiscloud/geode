@@ -317,7 +317,8 @@ uv tool install -e . --force
 
 Grounded against the actual state of each frontier harness as of May 2026: **Claude Code v2.1.72** (build 2026-03-09), **Codex CLI v0.130.0** (released 2026-05-08), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.95.0**. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
 
-### A. Runtime posture — how the agent stays alive
+<details>
+<summary><strong>A. Runtime posture</strong> — how the agent stays alive</summary>
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
@@ -327,7 +328,10 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 | Sub-agent isolation | ✅ Agent tool + `run_in_background` | ✅ `multi_agent` feature, default `max_threads=6` | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost guard |
 | Session resume / fork | ✅ JSONL transcripts | ✅ `/resume` + `/fork` slash commands | ✅ Session bindings with TTL | ✅ session resume (v0.21+) |
 
-### B. Channels & UX surfaces — how it reaches users
+</details>
+
+<details>
+<summary><strong>B. Channels & UX surfaces</strong> — how it reaches users</summary>
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
@@ -337,7 +341,10 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 | Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat plugin | ❌ (docs site only) |
 | MCP server catalog | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic-published registry (200+ servers, cached at `~/.geode/mcp/registry-cache.json`) |
 
-### C. LLM provider & cost governance
+</details>
+
+<details>
+<summary><strong>C. LLM provider & cost governance</strong></summary>
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
@@ -347,7 +354,10 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 | Context overflow handling | ✅ autocompaction | ⚠️ skills progressive disclosure (~2% budget) + fork | ✅ compaction + transcript streaming (252 MB → 27 MB peak) | ✅✅ **5-layer context overflow** (v0.39+) |
 | Cross-vendor failover policy | ❌ | ⚠️ manual `model_providers` switch | ✅ automatic | ❌ by design (v0.53 governance — no surprise cross-vendor charges) |
 
-### D. Persistence, memory & verification
+</details>
+
+<details>
+<summary><strong>D. Persistence, memory & verification</strong></summary>
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
@@ -357,7 +367,10 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 | Multi-layer guardrails | ⚠️ permission + hooks | ⚠️ hooks + sandbox | ✅ `audit.runtime` engine | ✅✅ **5-layer verification** (G1-G4 + BiasBuster + Cross-LLM Krippendorff α ≥ 0.67 + Confidence Gate + Rights Risk) |
 | Hook event count | ⚠️ 5 (PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange) | ⚠️ 6 (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop) | ✅ 5 event types · many bundled handlers | ✅✅ **58 events** (`docs/architecture/hook-system.md`) |
 
-### E. Extensibility & observability
+</details>
+
+<details>
+<summary><strong>E. Extensibility & observability</strong></summary>
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
@@ -366,6 +379,8 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 | **Swappable domain DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — not a DAG abstraction) | ✅✅ `DomainPort` Protocol — pipeline is a first-class extension point |
 | Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Run Log + Petri eval integration (v0.90+, replaces LangSmith) |
 | Cross-LLM verification | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 inter-rater agreement gate |
+
+</details>
 
 ---
 
