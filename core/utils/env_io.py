@@ -58,7 +58,10 @@ def upsert_config_toml(section: str, key: str, value: str) -> None:
 
     Section headings use ``[section.subsection]`` notation per TOML.
     """
-    config_path = Path(".geode") / "config.toml"
+    from core.paths import PROJECT_CONFIG_TOML
+
+    # P2 (v0.95.x) — was literal `Path(".geode") / "config.toml"`
+    config_path = PROJECT_CONFIG_TOML
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     target_line = f'{key} = "{value}"'

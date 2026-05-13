@@ -68,6 +68,7 @@ from core.memory.session_key import build_session_key, build_thread_config
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog
 from core.orchestration.stuck_detection import StuckDetector
+from core.paths import GLOBAL_RUNS_DIR
 from core.tools.policy import NodeScopePolicy, PolicyChain
 from core.tools.registry import ToolRegistry
 from core.wiring.bootstrap import (  # noqa: F401  — backward compat
@@ -90,7 +91,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DEFAULT_SESSION_TTL = 3600.0  # 1 hour
-DEFAULT_LOG_DIR = Path.home() / ".geode" / "runs"
+DEFAULT_LOG_DIR = GLOBAL_RUNS_DIR  # P2 (v0.95.x) — was literal `Path.home() / ".geode" / "runs"`
 DEFAULT_STUCK_TIMEOUT_S = 7200.0  # 2 hours
 
 
