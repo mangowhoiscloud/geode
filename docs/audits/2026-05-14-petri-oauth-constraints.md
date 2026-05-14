@@ -95,6 +95,33 @@ OpenAI Codex OAuth (ChatGPT Plus subscription) 의 evaluation path 는 PR #6 으
 
 PR #9 (Claude Code OAuth env inject for anthropic subprocess) 는 *작업 후 즉시 revert* — `feature/petri-gpt-oauth-align` 의 runner.py 의 anthropic subprocess env inject 코드 제거. 본 의도 의 명시.
 
+### 3.1 실측 evidence — Anthropic API 도 Claude Code OAuth 거부
+
+PR #9 의 revert 직전 의 smoke 의 결과 (`/tmp/petri-pr9-anth-smoke2.log`):
+
+```
+ANTHROPIC_AUTH_TOKEN=<sk-ant-oat01-...> inspect eval ...
+→ AuthenticationError: Error code: 401
+  {'type': 'error', 'error': {
+    'type': 'authentication_error',
+    'message': 'Invalid authentication credentials'
+  }}
+```
+
+inspect_ai 의 anthropic provider 가 `auth_token=` + `anthropic-beta: oauth-2025-04-20` 헤더 의 정상 path 로 호출 (`inspect_ai/model/_providers/anthropic.py:329-338`), 그러나 anthropic API endpoint 자체 가 Claude Code OAuth token 의 일반 사용 의 거부. 즉:
+
+- TOS 정책 (operator 의 의도적 회피) **+**
+- 실 API endpoint 의 server-side 거부 (Claude Code 외 다른 client 의 사용 의 거부)
+
+본 evidence 의 결론: **anthropic OAuth path 의 시도 자체 가 불가**. ANTHROPIC_API_KEY 의 PAYG key 가 유일 의 옵션.
+
+추가 evidence — 단순 anthropic SDK 의 직접 호출 (no inspect_ai):
+- `claude-haiku-4-5-20251001` 의 `client.messages.create(api_key=oauth_tok)` → 200 OK ("Hi" 응답)
+- `claude-sonnet-4-6` 의 동일 호출 → 429 rate_limit
+- inspect_ai 의 OAuth path → 401 invalid
+
+본 차이 의 원인 의 추정: anthropic 의 Claude Code 의 client 의 *fingerprint* (특정 User-Agent + HTTP/2 의 connection 패턴) 를 server-side 의 detect. inspect_ai 의 anthropic SDK client 는 일반 sdk 의 패턴 → 401 거부.
+
 ## 4. Same-provider OAuth audit 옵션 검토
 
 ### 4.1 가용 시나리오 (content filter 통과 예상)
