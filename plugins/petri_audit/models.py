@@ -26,11 +26,29 @@ from core.llm.token_tracker import MODEL_PRICING
 __all__ = [
     "AuditModelMappingError",
     "family_of",
+    "is_oauth_routed",
     "list_audit_models",
     "same_family",
     "to_inspect_model",
     "to_inspect_target",
 ]
+
+
+def _codex_oauth_available() -> bool:
+    """Read the Codex OAuth availability flag via lazy import.
+
+    Indirected through ``plugins.petri_audit.codex_provider`` so the
+    underlying ``_resolve_codex_token`` import (which pulls in the
+    GEODE wiring container) stays optional — ``models.py`` is loaded
+    by ``runner.py`` on the bootstrap-free path and must not require
+    the full ``core.llm.providers.codex`` dependency graph.
+    """
+    try:
+        from plugins.petri_audit.codex_provider import is_codex_oauth_available
+
+        return bool(is_codex_oauth_available())
+    except Exception:
+        return False
 
 
 def family_of(model_id: str) -> str:
@@ -80,7 +98,7 @@ class AuditModelMappingError(ValueError):
     """Raised when a model id cannot be mapped to an ``inspect_ai`` identifier."""
 
 
-def to_inspect_model(geode_id: str) -> str:
+def to_inspect_model(geode_id: str, *, use_oauth: bool | None = None) -> str:
     """Map a GEODE model id to an ``inspect_ai`` ``provider/model`` identifier.
 
     Used for the ``auditor`` and ``judge`` Petri model-roles. The ``target``
@@ -90,6 +108,24 @@ def to_inspect_model(geode_id: str) -> str:
     Raw passthrough: any string containing ``/`` is returned untouched —
     callers can pass ``anthropic/claude-haiku-4-5-20251001`` or
     ``openai-api/glm/glm-5.1`` directly when the alias rules don't fit.
+    A user who explicitly pins ``openai/gpt-5.5`` stays on per-token
+    PAYG; the OAuth re-routing happens only on bare ``gpt-*`` ids.
+
+    **PR #6 (2026-05-14) — OAuth routing**: ``gpt-5.*`` ids (``gpt-5.5``,
+    ``gpt-5.4``, ``gpt-5.4-mini``, ``gpt-5.3-codex``) re-route to
+    ``openai-codex/<model>`` so judge / auditor calls consume ChatGPT
+    Plus quota instead of per-token billing. ``use_oauth`` controls
+    the auto-detect:
+
+    - ``None`` (default) → auto-detect: re-route when a Codex OAuth
+      token resolves, else fall back to ``openai/<model>``.
+    - ``True`` → force OAuth re-route regardless (token must exist or
+      ``OpenAICodexAPI.__init__`` will raise at call time).
+    - ``False`` → keep the legacy ``openai/<model>`` mapping.
+
+    ``o3`` / ``o4-mini`` are NOT covered by OAuth — they are not on
+    the Codex backend's model catalogue, so they always stay on the
+    per-token path.
     """
     if not geode_id:
         raise AuditModelMappingError("Empty model id")
@@ -98,6 +134,10 @@ def to_inspect_model(geode_id: str) -> str:
     if geode_id.startswith("claude-"):
         return f"anthropic/{geode_id}"
     if geode_id.startswith("gpt-") or geode_id in ("o3", "o4-mini"):
+        if geode_id.startswith("gpt-5"):
+            route_oauth = use_oauth if use_oauth is not None else _codex_oauth_available()
+            if route_oauth:
+                return f"openai-codex/{geode_id}"
         return f"openai/{geode_id}"
     if geode_id.startswith("glm-"):
         return f"geode/{geode_id}"
@@ -105,6 +145,16 @@ def to_inspect_model(geode_id: str) -> str:
         f"Unknown model id {geode_id!r}. Use a MODEL_PRICING key (claude-*, "
         f"gpt-*, o3, o4-mini, glm-*) or a raw 'provider/model' string."
     )
+
+
+def is_oauth_routed(inspect_id: str) -> bool:
+    """True when an ``inspect_ai`` model id is routed through Codex OAuth.
+
+    The cost estimator and audit-report renderer use this to zero out
+    the per-token cost line for judge / auditor calls that hit the
+    ChatGPT Plus subscription quota instead of the PAYG endpoint.
+    """
+    return inspect_id.startswith("openai-codex/")
 
 
 def to_inspect_target(geode_id: str | None) -> str:

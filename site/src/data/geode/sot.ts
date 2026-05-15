@@ -4,15 +4,15 @@
  * Auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit the GEODE repo and re-run sync.
  *
- * Last sync: 2026-05-12
+ * Last sync: 2026-05-15
  */
 
 export const GEODE_SOT = {
   version: "0.95.0",
   modules: {
-    core: 316,
-    plugins: 42,
-    total: 358,
+    core: 317,
+    plugins: 44,
+    total: 361,
   },
   tests: {
     standard: 4608,
@@ -21,7 +21,7 @@ export const GEODE_SOT = {
   },
   releases: 134,
   since: "2026-02",
-  syncedAt: "2026-05-12",
+  syncedAt: "2026-05-15",
 } as const;
 
 export const GEODE_CUMULATIVE_KO =

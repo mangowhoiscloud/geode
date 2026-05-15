@@ -30,7 +30,12 @@ from plugins.petri_audit.models import (
     ],
 )
 def test_to_inspect_model_known_families(geode_id: str, expected: str) -> None:
-    assert to_inspect_model(geode_id) == expected
+    # PR #6 (2026-05-14) — pin ``use_oauth=False`` so the legacy
+    # ``openai/<model>`` mapping is exercised regardless of whether the
+    # test runner has a Codex OAuth token in the environment. The
+    # auto-detect path is covered in tests/plugins/petri_audit/
+    # test_oauth_judge.py.
+    assert to_inspect_model(geode_id, use_oauth=False) == expected
 
 
 def test_to_inspect_model_raw_passthrough() -> None:
@@ -82,7 +87,12 @@ def test_list_audit_models_includes_each_family() -> None:
     pairs = list_audit_models()
     inspect_ids = {inspect for _, inspect in pairs}
     assert any(i.startswith("anthropic/claude-") for i in inspect_ids)
-    assert any(i.startswith("openai/gpt-") for i in inspect_ids)
+    # PR #6 — gpt-* now resolves to ``openai-codex/`` when a token is
+    # available, or ``openai/`` when not. Accept either form so the
+    # test passes in both environments.
+    assert any(
+        i.startswith("openai/gpt-") or i.startswith("openai-codex/gpt-") for i in inspect_ids
+    )
     assert any(i.startswith("geode/glm-") for i in inspect_ids)
 
 
