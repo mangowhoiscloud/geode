@@ -52,6 +52,69 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **CLI UI/UX regression tests for LaTeX rendering — Stage A/B/C 추가.**
+  PR #1165 의 `_render_text_with_latex` wiring 이 향후 refactor 로
+  silently 회귀하지 못하게 사용자 가시 동작에 anchor 하는 3-stage 회귀
+  보호 슈트. `tests/test_cli_latex_uiux.py` 21 신규.
+  - **Stage A (Component capture, 9 cases)** — `Rich.Console(file=StringIO,
+    force_terminal=False, theme=GEODE_THEME, color_system=None)` 로 실제
+    렌더 결과를 buffer 에 capture 후 plain-text substring 검증. 패턴:
+    pure prose (no math) / `\[...\]` block / `\(...\)` inline / `$x$`
+    inline / `$3.00` 가격 false positive 회피 / `\begin{equation}` env /
+    mixed dollar+bracket / segment ordering. raw delimiter 잔재 0 확인.
+  - **Stage B (Tier 2 structural invariants, 5 parametrize)** —
+    `\frac` / `\sum` / `\sqrt` / `\lim` / `\int` 각각에 대해 SymPy
+    `pretty()` 출력의 **structural** 속성만 검증 (substring group 중
+    하나 + 최소 line count). SymPy upgrade 시 fraction-bar 의 `─` ↔ `-`
+    같은 cosmetic shift 무관. brittleness 0.
+  - **Stage C (IPC response path, 6 test)** — `_render_ipc_response`
+    를 hand-crafted IPC dict 로 직접 호출. result + bracket math /
+    pure markdown fallback / error / streamed=True 의 tool 미중복 /
+    streamed=False 의 fallback summary / 4 lifecycle ack 들이 silent
+    drop. serve→thin-CLI 의 전체 print path cover.
+  - Spinner thread leak 회피 (PR #1165 follow-up 의 lesson): 모든
+    test 가 `force_terminal=False` non-TTY console 사용, 명시적
+    `EventRenderer.start_activity()` 호출 0. 다른 test 의
+    `@patch("...time.sleep")` 에 `time.sleep(0.08)` 누적 안 됨.
+  - Theme guard test: math 가 `style="value"` 호출하므로 `GEODE_THEME`
+    에 그 style 존재 verify — PR #1165 의 CRITICAL fix (`style="math"`
+    미정의 crash) 회귀 차단.
+- **CLI UI/UX regression tests for LaTeX rendering — Stage A/B/C.**
+  A three-stage regression suite anchored on the **user-visible CLI
+  behaviour** so a future refactor of the rendering stack cannot
+  silently regress the wiring that PR #1165 just shipped. 21 new tests
+  in `tests/test_cli_latex_uiux.py`.
+  - **Stage A (Component capture, 9 cases)** drives
+    `_render_text_with_latex` against a real `Rich.Console` writing into
+    a `StringIO`, then asserts on plain-text substrings — no raw
+    delimiters left, expected Unicode characters present, prose
+    boundaries preserved. Covers pure prose, `\[…\]`, `\(…\)`, `$x$`,
+    the `$3.00` price false-positive guard, `\begin{equation}`,
+    mixed segments, and text/math/text segment ordering.
+  - **Stage B (Tier 2 structural invariants, 5 parametrised cases)**
+    asserts on **structural** properties of SymPy's `pretty()` output
+    (substring group membership + minimum line count) for `\frac`,
+    `\sum`, `\sqrt`, `\lim`, `\int`. Tolerates SymPy version drift
+    (e.g. `─` vs `-` for the fraction bar) by accepting a set of
+    equivalent glyphs per slot. Zero snapshot brittleness.
+  - **Stage C (IPC response path, 6 tests)** invokes
+    `_render_ipc_response` with hand-crafted IPC dicts — covers
+    result + bracket math, math-free Markdown fallback, error
+    responses, the streamed-vs-non-streamed tool fallback divergence,
+    and silent drop of four lifecycle acks. Exercises the full
+    `serve → thin CLI` print path without an LLM in the loop.
+  - Spinner thread leak avoidance (lesson from PR #1165's follow-up
+    `time.sleep(0.08)` flake): every test uses a non-TTY console; no
+    test starts `EventRenderer.start_activity()` or any other daemon
+    animation, so a sibling test's `@patch("...time.sleep")` cannot
+    accumulate the 80 ms spinner sleeps in its `mock.call_args_list`.
+  - Theme guard test: math segments call `console.print(...,
+    style="value")`. The test asserts that style is registered on
+    `GEODE_THEME` so PR #1165's CRITICAL fix (Rich `MissingStyle`
+    crash when `style="math"` was used) cannot regress.
+
 ### Fixed
 
 - **CLI LaTeX 렌더링 — `interactive_loop` wiring + `\[...\]`/`\(...\)`/
