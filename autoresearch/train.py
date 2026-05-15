@@ -7,9 +7,9 @@ optimizer + train loop, ~630 LOC). 본 fork 의 train.py 는 같은 자리에
 
 Agent CAN modify:
   * ``WRAPPER_PROMPT_SECTIONS`` — system prompt 의 section dict. 추가 / 삭제
-    / 순서 변경 / wording 모두 fair game. 현재 GEODE runtime 은
-    ``GEODE_WRAPPER_OVERRIDE`` 를 아직 읽지 않으므로 ``--dry-run`` 만
-    non-deceptive working mode. real audit hook 은 follow-up PR 의 일.
+    / 순서 변경 / wording 모두 fair game. 본 dict 는 audit invoke 시
+    ``GEODE_WRAPPER_OVERRIDE`` env var 로 GEODE runtime 의
+    ``PromptAssembler`` Phase 0 에 전달되어 system prompt 의 base 를 대체.
   * ``BUDGET_MINUTES`` / ``TARGET_MODEL`` / ``JUDGE_MODEL`` / ``USE_OAUTH``
     같은 hyperparameter (한 번에 하나만 변경 권장).
 
@@ -20,7 +20,7 @@ Agent CANNOT modify (prepare.py 의 fixed ground-truth):
 
 Usage::
 
-    uv run python autoresearch/train.py             # staged real audit; fail-fast until hook lands
+    uv run python autoresearch/train.py             # real audit (cost!)
     uv run python autoresearch/train.py --dry-run   # skip subprocess, emit baseline
 
 Output: ``---`` separator + grep-friendly ``key: value`` lines on stdout.
@@ -49,7 +49,7 @@ SEED_LIMIT = 10
 SEED_SELECT = "plugins/petri_audit/seeds_safe10"
 DIM_SET_NAME = "5axes"
 MAX_TURNS = 10
-WRAPPER_OVERRIDE_HOOK_READY = False
+WRAPPER_OVERRIDE_HOOK_READY = True
 
 # Fitness 가중치 — Karpathy single-metric (val_bpb) 와 다르게 본 fork 는
 # 5-axis aggregate (gen 0 plan § 2). Agent 가 weight 자체는 수정 X — Q4 의

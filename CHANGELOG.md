@@ -92,6 +92,47 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **Autoresearch real-mode runtime hook (`GEODE_WRAPPER_OVERRIDE`).**
+  `core/llm/prompt_assembler.py` 의 `assemble()` 에 Phase 0 (Wrapper
+  Override) 추가. env var `GEODE_WRAPPER_OVERRIDE=<json-path>` 가 set
+  되면 JSON 을 `dict[str, str]` 로 로드해 그 value 들을 concat 한 결과로
+  `base_system` 을 대체. 후속 Phase (skill / memory / extra) 는 그대로
+  적용. env unset 은 baseline 을 유지하지만, env 가 set 된 뒤 파일 누락 /
+  malformed JSON / dict 아님 / empty dict / non-string entry 가 나오면
+  fail-closed `RuntimeError` 로 real audit quota 를 baseline prompt 에
+  쓰지 않게 함. `autoresearch/train.py` 의
+  `WRAPPER_OVERRIDE_HOOK_READY` 를 `True` 로 flip 해 real-mode 활성화 —
+  outer-loop agent 가 `WRAPPER_PROMPT_SECTIONS` 를 수정하면 `geode audit`
+  의 system prompt 가 실제로 그 dict 의 내용으로 동작. `.env.example` 에
+  `# GEODE_WRAPPER_OVERRIDE=` 항목 + 사용 설명 추가. 신규 9 pytest
+  (`tests/test_prompt_assembler.py` 의 `TestWrapperOverrideHook` —
+  env-unset baseline / 정상 override / 파일 누락 raise / malformed
+  JSON raise / 비-dict raise / empty dict raise / non-string entry raise /
+  hash 관측성 / extra 합성)
+  + train.py 의 fail-fast test 를 real-mode subprocess argv/env 검증
+  으로 교체 (mock subprocess, quota 사용 없음).
+- **Autoresearch real-mode runtime hook (`GEODE_WRAPPER_OVERRIDE`).**
+  Adds Phase 0 (Wrapper Override) to `core/llm/prompt_assembler.py`'s
+  `assemble()`. When `GEODE_WRAPPER_OVERRIDE=<json-path>` is set, the
+  JSON is loaded as `dict[str, str]` and its values are concatenated to
+  replace `base_system`; the remaining phases (skill / memory / extra)
+  still apply on top. When the env is unset, baseline behavior is
+  unchanged; once the env is set, missing files, malformed JSON,
+  non-dict payloads, empty dicts, or non-string entries fail closed with
+  `RuntimeError` so real audit quota is not spent on the baseline prompt.
+  `autoresearch/train.py` flips
+  `WRAPPER_OVERRIDE_HOOK_READY = True`, enabling real-mode runs — the
+  outer-loop agent's edits to `WRAPPER_PROMPT_SECTIONS` now actually
+  reach the `geode audit` system prompt. `.env.example` documents the
+  new optional variable. Nine new pytest cases in
+  `tests/test_prompt_assembler.py::TestWrapperOverrideHook` (baseline /
+  override / missing file raises / malformed JSON raises / non-dict raises /
+  empty dict raises / non-string entries raise / hash observability /
+  composition with bootstrap extras) plus
+  the existing `tests/test_autoresearch_train.py` fail-fast test
+  replaced by a real-mode subprocess argv/env assertion (subprocess
+  mocked — no LLM quota consumed).
+
 - **Phase 1a — Long-term Recall: messages table + dual-write.** Hermes
   흡수 plan(`docs/plans/2026-05-14-hermes-strengths-absorption.md`) 의 첫
   PR. `sessions.db` 에 `messages` 테이블 (id / session_id / seq / role /

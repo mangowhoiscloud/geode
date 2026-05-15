@@ -30,6 +30,11 @@ def empty_state() -> dict[str, Any]:
     return {}
 
 
+@pytest.fixture(autouse=True)
+def clear_wrapper_override_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GEODE_WRAPPER_OVERRIDE", raising=False)
+
+
 @pytest.fixture()
 def mock_skill() -> SkillDefinition:
     return SkillDefinition(
@@ -413,3 +418,217 @@ class TestCombinedAssembly:
         assert "combo-skill:2.0" in result.fragments_used
         assert "memory-context" in result.fragments_used
         assert "bootstrap-extra:1" in result.fragments_used
+
+
+class TestWrapperOverrideHook:
+    """Phase 0 — GEODE_WRAPPER_OVERRIDE consumer (autoresearch outer-loop)."""
+
+    def _write_override(self, tmp_path: Path, payload: object) -> Path:
+        import json
+
+        path = tmp_path / "wrapper-override.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    def test_no_env_var_keeps_base_system(
+        self,
+        tmp_path: Path,
+        base_system: str,
+        base_user: str,
+        empty_state: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("GEODE_WRAPPER_OVERRIDE", raising=False)
+        assembler = PromptAssembler()
+        result = assembler.assemble(
+            base_system=base_system,
+            base_user=base_user,
+            state=empty_state,
+            node="analyst",
+            role_type="game_mechanics",
+        )
+        assert base_system in result.system
+        assert not any(f.startswith("wrapper-override:") for f in result.fragments_used)
+
+    def test_override_replaces_base_system(
+        self,
+        tmp_path: Path,
+        base_user: str,
+        empty_state: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        override_path = self._write_override(
+            tmp_path,
+            {
+                "role": "You are an autoresearch-mutated agent.",
+                "tool_handling": "Be extra careful with tool results.",
+            },
+        )
+        monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
+
+        assembler = PromptAssembler()
+        result = assembler.assemble(
+            base_system="ORIGINAL_BASELINE_DO_NOT_USE",
+            base_user=base_user,
+            state=empty_state,
+            node="analyst",
+            role_type="game_mechanics",
+        )
+        assert "ORIGINAL_BASELINE_DO_NOT_USE" not in result.system
+        assert "autoresearch-mutated agent" in result.system
+        assert "extra careful" in result.system
+        assert "wrapper-override:2sections" in result.fragments_used
+
+    def test_missing_file_raises(
+        self,
+        tmp_path: Path,
+        base_user: str,
+        empty_state: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(tmp_path / "nonexistent.json"))
+        assembler = PromptAssembler()
+        with pytest.raises(RuntimeError, match="file not found"):
+            assembler.assemble(
+                base_system="ORIGINAL",
+                base_user=base_user,
+                state=empty_state,
+                node="analyst",
+                role_type="game_mechanics",
+            )
+
+    def test_malformed_json_raises(
+        self,
+        tmp_path: Path,
+        base_user: str,
+        empty_state: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        bad = tmp_path / "bad.json"
+        bad.write_text("{not valid json", encoding="utf-8")
+        monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(bad))
+        assembler = PromptAssembler()
+        with pytest.raises(RuntimeError, match="load failed"):
+            assembler.assemble(
+                base_system="ORIGINAL",
+                base_user=base_user,
+                state=empty_state,
+                node="analyst",
+                role_type="game_mechanics",
+            )
+
+    def test_non_dict_payload_raises(
+        self,
+        tmp_path: Path,
+        base_user: str,
+        empty_state: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        override_path = self._write_override(tmp_path, ["not", "a", "dict"])
+        monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
+        assembler = PromptAssembler()
+        with pytest.raises(RuntimeError, match=r"non-empty dict\[str, str\]"):
+            assembler.assemble(
+                base_system="ORIGINAL",
+                base_user=base_user,
+                state=empty_state,
+                node="analyst",
+                role_type="game_mechanics",
+            )
+
+    def test_empty_dict_raises(
+        self,
+        tmp_path: Path,
+        base_user: str,
+        empty_state: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        override_path = self._write_override(tmp_path, {})
+        monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
+        assembler = PromptAssembler()
+        with pytest.raises(RuntimeError, match=r"non-empty dict\[str, str\]"):
+            assembler.assemble(
+                base_system="ORIGINAL",
+                base_user=base_user,
+                state=empty_state,
+                node="analyst",
+                role_type="game_mechanics",
+            )
+
+    def test_non_string_entries_raise(
+        self,
+        tmp_path: Path,
+        base_user: str,
+        empty_state: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        override_path = self._write_override(
+            tmp_path,
+            {"role": "good string", "bogus": 42, "also_bogus": ["list", "nope"]},
+        )
+        monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
+        assembler = PromptAssembler()
+        with pytest.raises(RuntimeError, match="non-string key/value"):
+            assembler.assemble(
+                base_system="ORIGINAL_BASE",
+                base_user=base_user,
+                state=empty_state,
+                node="analyst",
+                role_type="game_mechanics",
+            )
+
+    def test_override_hashes_change_with_payload(
+        self,
+        tmp_path: Path,
+        base_user: str,
+        empty_state: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        first = self._write_override(tmp_path, {"role": "first mutation"})
+        monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(first))
+        assembler = PromptAssembler()
+        first_result = assembler.assemble(
+            base_system="ORIGINAL_BASE",
+            base_user=base_user,
+            state=empty_state,
+            node="analyst",
+            role_type="game_mechanics",
+        )
+
+        second = tmp_path / "wrapper-override-2.json"
+        second.write_text('{"role": "second mutation"}', encoding="utf-8")
+        monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(second))
+        second_result = assembler.assemble(
+            base_system="ORIGINAL_BASE",
+            base_user=base_user,
+            state=empty_state,
+            node="analyst",
+            role_type="game_mechanics",
+        )
+
+        assert first_result.base_template_hash == _hash_prompt("first mutation" + base_user)
+        assert second_result.base_template_hash == _hash_prompt("second mutation" + base_user)
+        assert first_result.base_template_hash != second_result.base_template_hash
+        assert first_result.assembled_hash != second_result.assembled_hash
+
+    def test_override_composes_with_extra_instructions(
+        self,
+        tmp_path: Path,
+        base_user: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        override_path = self._write_override(tmp_path, {"role": "mutated role"})
+        monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
+        state: dict[str, Any] = {"_extra_instructions": ["never apologize"]}
+        assembler = PromptAssembler()
+        result = assembler.assemble(
+            base_system="ORIGINAL",
+            base_user=base_user,
+            state=state,
+            node="analyst",
+            role_type="game_mechanics",
+        )
+        # Wrapper override replaces base, then bootstrap extras still append.
+        assert "mutated role" in result.system
+        assert "ORIGINAL" not in result.system
+        assert "never apologize" in result.system

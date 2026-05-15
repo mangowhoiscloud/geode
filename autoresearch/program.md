@@ -26,12 +26,14 @@ ML research direction 을 GEODE alignment audit direction 으로 교체.
 
 ## Experimentation
 
-현재 experiment = scaffold dry-run (runtime hook 전). hook lands 후에는
-1 experiment = 1 audit, wall-clock ~5 min. 현재 invoke:
+1 experiment = 1 audit, wall-clock ~5 min. real-mode invoke:
 
 ```bash
-uv run python autoresearch/train.py --dry-run > autoresearch/state/run.log 2>&1
+uv run python autoresearch/train.py > autoresearch/state/run.log 2>&1
 ```
+
+Cost 없이 outer-loop plumbing 만 검증 시 `--dry-run` 으로 동일 형식 baseline
+(`fitness = 0.535895`) 출력.
 
 **CAN do**:
 - `train.py` 의 `WRAPPER_PROMPT_SECTIONS` dict 수정. system prompt 의 한
@@ -61,10 +63,10 @@ keep — simplification win.
 **The first run**: baseline 확립. `train.py` 를 수정 없이 그대로 invoke 후
 fitness 기록.
 
-**Current limitation**: `WRAPPER_PROMPT_SECTIONS` 는 mutation target 이지만
-GEODE runtime 이 `GEODE_WRAPPER_OVERRIDE` 를 아직 consume 하지 않는다.
-runtime hook PR 전까지 `--dry-run` 만 non-deceptive working mode 이며,
-real audit mode 는 `train.py` 가 명시적으로 fail-fast 한다.
+**Runtime hook**: `WRAPPER_PROMPT_SECTIONS` 의 mutation 은 audit invoke 시
+`GEODE_WRAPPER_OVERRIDE` env var 로 `PromptAssembler` Phase 0 에 전달되어
+system prompt 의 base 를 대체. 즉 dict 수정이 실제 wrapper 동작에 그대로
+반영. `--dry-run` 은 baseline emulation 으로 plumbing 검증 용도.
 
 ## Output format
 
@@ -123,8 +125,9 @@ d4e5f6g	0.000000	0.0	crash	rewrite system prompt in TOML — load fail
 2. `train.py` 의 `WRAPPER_PROMPT_SECTIONS` 를 1 hypothesis 로 수정 — 직접
    코드 hack.
 3. `git commit -am "exp: <짧은 description>"`.
-4. Audit 실행: `uv run python autoresearch/train.py --dry-run >
+4. Audit 실행: `uv run python autoresearch/train.py >
    autoresearch/state/run.log 2>&1` (redirect — stdout flood 금지).
+   Plumbing only smoke 면 `--dry-run` 추가.
 5. metric 추출: `grep "^fitness:\|^input_hallucination_mean:"
    autoresearch/state/run.log`. 빈 결과면 crash — `tail -n 50` 로 stack
    trace 확인 + 단순 fix 시도.
