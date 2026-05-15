@@ -136,3 +136,7 @@ site/tsconfig.tsbuildinfo
 !site/public/**/*.html
 !site/public/**/*.svg
 !site/public/**/*.ico
+
+# autoresearch outer-loop runtime artifact (results.tsv, audit_logs/, failure_log)
+autoresearch/state/*
+!autoresearch/state/.gitkeep

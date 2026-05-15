@@ -37,6 +37,7 @@ dependencies = [
 
 [project.scripts]
 geode = "core.cli:app"
+geode-research = "autoresearch.loop:cli"
 
 # inspect_ai discovers third-party model providers via the `inspect_ai`
 # entry-point group (importlib.metadata). When the [audit] extra is
@@ -222,7 +223,7 @@ ignore_imports = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["core", "plugins", "tests"]
+src = ["core", "plugins", "tests", "autoresearch"]
 extend-exclude = [
     ".geode",        # runtime config + skill scripts (not part of codebase)
     ".claude",       # Claude Code session artifacts
