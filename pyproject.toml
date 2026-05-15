@@ -24,6 +24,15 @@ dependencies = [
     "rich>=14.0.0",
     "simple-term-menu>=1.6.0",
     "typer>=0.15.0",
+    # CLI LaTeX rendering (`core/ui/latex.py`).
+    # Tier 1 — pylatexenc converts inline LaTeX (symbols, Greek letters,
+    # super/subscripts) to a flat Unicode string. pure-Python, ~5 MB.
+    # Tier 2 — latex2sympy2 parses LaTeX into a SymPy expression and
+    # sympy.pretty draws a 2D Unicode block (fractions, matrices,
+    # integrals, sums). Adds sympy + mpmath (~30 MB).
+    "pylatexenc>=2.10",
+    "latex2sympy2>=1.9",
+    "sympy>=1.12",
 ]
 
 [project.scripts]
@@ -127,6 +136,10 @@ dev = [
     "import-linter>=2.0",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
+    # Render-lint stack — version-matched with .pre-commit-config.yaml and
+    # .github/workflows/pages.yml so local + CI surfaces match.
+    "pymarkdownlnt>=0.9.37",
+    "yamllint>=1.38.0",
     "pytest>=9.0.2",
     "pytest-cov>=6.0.0",
     "ruff>=0.15.2",

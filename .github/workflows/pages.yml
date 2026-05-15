@@ -21,9 +21,21 @@ on:
     paths:
       - "site/**"
       - "docs/petri-bundle/**"
+      - "docs/audits/**"
+      - "plugins/petri_audit/judge_dims/**"
       - "CHANGELOG.md"
       - "pyproject.toml"
       - "CLAUDE.md"
+      - ".pymarkdown.json"
+      - ".yamllint.yaml"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    paths:
+      - "docs/petri-bundle/**"
+      - "docs/audits/**"
+      - "plugins/petri_audit/judge_dims/**"
+      - ".pymarkdown.json"
+      - ".yamllint.yaml"
       - ".github/workflows/pages.yml"
   schedule:
     # 09:00 KST = 00:00 UTC. Daily safety-net rebuild.
@@ -40,8 +52,66 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Render-lint gate — fails fast on malformed markdown/YAML/JSON
+  # before we burn the full Next.js build. See
+  # docs/architecture/render-lint.md for the rule rationale.
+  lint:
+    name: Render lint (markdown + YAML + JSON)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install lint tools (pinned)
+        run: |
+          python -m pip install --upgrade pip
+          # Versions pinned to match .pre-commit-config.yaml so local
+          # `pre-commit run` and CI report the same violations.
+          pip install yamllint==1.38.0 pymarkdownlnt==0.9.37
+
+      - name: yamllint — petri YAML
+        run: |
+          shopt -s nullglob
+          targets=(
+            plugins/petri_audit/judge_dims/*.yaml
+            plugins/petri_audit/judge_dims/*.yml
+            docs/petri-bundle/*.yaml
+            docs/petri-bundle/*.yml
+          )
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "no YAML targets — skipping"
+            exit 0
+          fi
+          yamllint --strict -c .yamllint.yaml "${targets[@]}"
+        shell: bash
+
+      - name: pymarkdown — Pages-published docs
+        # The allowlist of render-gated files lives in
+        # scripts/lint_pages_markdown.sh so pre-commit and CI lint the
+        # same set. See docs/architecture/render-lint.md for the
+        # legacy-doc carve-out policy.
+        run: scripts/lint_pages_markdown.sh
+
+      - name: JSON parse — petri bundle assets
+        run: |
+          shopt -s globstar nullglob
+          targets=( docs/petri-bundle/**/*.json )
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "no JSON targets — skipping"
+            exit 0
+          fi
+          for f in "${targets[@]}"; do
+            echo "validating $f"
+            python -m json.tool "$f" > /dev/null
+          done
+        shell: bash
+
   build:
     name: Build (Next.js static export)
+    needs: lint
     runs-on: ubuntu-latest
     defaults:
       run:

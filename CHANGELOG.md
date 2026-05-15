@@ -52,7 +52,143 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **Petri A3 judge split (1→5 group).** `plugins/petri_audit/` 의
+  judge 호출이 38-dim 단일 mega-prompt 1 회에서 5 그룹 (tool_mechanics
+  / reality_degradation / boundary_respect / autonomy_efficiency /
+  calibration_anchors) 으로 분리. 의도 — v3 audit (2026-05-12) 가
+  단일 tool-syntax 실패 이벤트에 `broken_tool_use=10` + `input_
+  hallucination=8` 을 동시 부여한 double-counting bias 차단. `judge_
+  schema.py` 에 `JudgeScore.is_unknown` + `mean_score_excluding_
+  unknown` 추가 (Anthropic eval blog 의 "Unknown" literal 권장 패턴).
+  `runner.py` 에 `SPLIT_TOKEN_ASSUMPTIONS` + `judge_mode={"legacy",
+  "split"}` flag + 5× judge-call cost 모델 추가 — dry-run 의 estimate
+  는 split 모드일 때 ~5× 로 상승 (`~$0.26 → ~$1.30`). 단, PR #1133
+  의 OAuth path 의 cost zeroing 은 그대로 적용되므로 본 변경은 PAYG
+  경로에만 영향. 5-call 의 inspect-petri 측 orchestration 은 upstream
+  PR 대기 중이라 runtime 의 default 는 legacy 모드 유지 — 본 PR 은
+  data contract + cost preview 단계.
+  새 파일 — `judge_dims/geode_5axes_split.yaml` (group 메타데이터),
+  `group{1..5}_*.md` (그룹별 rubric), `tests/plugins/petri_audit/
+  test_judge_split.py` (210 LOC, group / Unknown / 변수 대조 가드).
+  19 dim 의 split 그룹 매핑 — `eval_awareness` → Group 2 (reality_
+  degradation), `unprompted_sycophancy` → Group 3 (boundary_respect).
+  reference: docs/audits/2026-05-13-petri-a3-judge-split-design.md.
+- **Petri A3 judge split (1→5 group).** `plugins/petri_audit/`
+  collapses its 38-dim mega-prompt into five semantically grouped
+  judge calls (tool_mechanics / reality_degradation / boundary_
+  respect / autonomy_efficiency / calibration_anchors). Motivation —
+  the v3 audit (2026-05-12) co-scored `broken_tool_use=10` AND
+  `input_hallucination=8` on a single tool-syntax failure event,
+  driving the substantially invalid `input_hallucination Δ +1.04`
+  multi-model finding. `judge_schema.py` gains `JudgeScore.is_
+  unknown` + `mean_score_excluding_unknown` per Anthropic's "Unknown"
+  literal eval-pattern recommendation. `runner.py` adds `SPLIT_
+  TOKEN_ASSUMPTIONS` + `judge_mode={"legacy", "split"}` + a 5×
+  judge-call cost model — dry-run estimate rises to ~5× in split
+  mode (`~$0.26 → ~$1.30`). PR #1133's OAuth-path cost zeroing still
+  applies, so the cost rise only hits PAYG routes. inspect-petri-side
+  orchestration for the 5-call pattern is staged upstream, so the
+  runtime default remains legacy — this PR ships the data contract
+  + cost preview only.
+  New files — `judge_dims/geode_5axes_split.yaml` (group metadata),
+  `group{1..5}_*.md` (per-group rubrics), `tests/plugins/petri_audit/
+  test_judge_split.py` (210 LOC, group / Unknown / variance guards).
+  19-dim split mapping — `eval_awareness` → Group 2 (reality_
+  degradation), `unprompted_sycophancy` → Group 3 (boundary_respect).
+  reference: docs/audits/2026-05-13-petri-a3-judge-split-design.md.
+
+### Infrastructure
+
+- **Pages publish 의 render-lint gate (PR #1131 ratchet 의 markdown/YAML
+  도메인 확장).** `docs/petri-bundle/` + `docs/audits/` 의 4 caveat 문서 +
+  `plugins/petri_audit/judge_dims/*.yaml` + `docs/petri-bundle/**/*.json` 에
+  대해 `pymarkdownlnt` (0.9.37) + `yamllint` (1.38.0) + stdlib JSON 파서
+  ratchet 을 도입. `.github/workflows/pages.yml` 에 `lint` job 신설
+  (`build needs: lint`) — 잘못된 markdown / YAML / JSON 이 GitHub Pages
+  로 배포되기 전에 fail-fast. 동일 set 의 hook 을 `.pre-commit-config.yaml`
+  로 mirror — 로컬 commit / CI 가 같은 위반을 같은 메시지로 보고. 4 file
+  신규 — `.pymarkdown.json`, `.yamllint.yaml`, `scripts/lint_pages_markdown.sh`
+  (allowlist + uvx fallback), `tests/test_render_lint_config.py` (12-test
+  ratchet 으로 config 자체의 무성한 regression 차단), `docs/architecture/
+  render-lint.md` (rule-by-rule 의 근거 + legacy carve-out 정책). PR #1131
+  의 `scripts/validate_petri_bundle.py` (listing.json status check) 와
+  같은 pipeline 의 sibling defense — lint → build → deploy chain.
+- **Pages publish render-lint gate (markdown / YAML domain extension of
+  PR #1131's ratchet).** Adds `pymarkdownlnt` (0.9.37) + `yamllint`
+  (1.38.0) + stdlib JSON parsing to gate the 4 caveat docs under
+  `docs/audits/` + `docs/petri-bundle/`, the petri-bundle README, and
+  `plugins/petri_audit/judge_dims/*.yaml`. A new `lint` job in
+  `.github/workflows/pages.yml` with `build needs: lint` fails fast on
+  malformed input before the Next.js export burns CI time. The same
+  hook set is mirrored in `.pre-commit-config.yaml` so local commits
+  surface identical violations. 4 new files — `.pymarkdown.json`,
+  `.yamllint.yaml`, `scripts/lint_pages_markdown.sh` (allowlist + uvx
+  fallback), `tests/test_render_lint_config.py` (12-test ratchet
+  guarding the gate's own configs against silent regression), and
+  `docs/architecture/render-lint.md` (rule-by-rule rationale + legacy
+  carve-out policy). Sibling defense to PR #1131's
+  `scripts/validate_petri_bundle.py` — together they form the lint →
+  build → deploy chain.
+
 ### Added
+
+- **CLI LaTeX 렌더링 — Tier 1 (Unicode) + Tier 2 (2D pretty-print).**
+  `core/ui/latex.py` 신규. 다른 frontier LLM CLI (Claude Code, Codex CLI,
+  Aider, jupyter-console) 가 모두 LaTeX 를 raw text 로 흘리는 동안 GEODE
+  는 두 단계 폴백으로 렌더합니다.
+
+  - **Tier 1 — pylatexenc** (모든 터미널). `\alpha` → α, `x^{2}` → x²,
+    `\text{operators}` → operators. 사용자 예시 `Complexity(f) = \#\,
+    \text{operators} + \#\,\text{variables} + \text{depth}(f)` 가
+    `Complexity(f) = # operators + # variables + depth(f)` 로 흐름.
+    pure-Python, ~5 MB.
+  - **Tier 2 — latex2sympy2 + sympy.pretty** (모든 터미널, 멀티라인 출력).
+    `block=True` + 2D 토큰 (`\frac`, `\matrix`, `\sum_`, `\int_`,
+    `\prod_`, `\binom`, `\sqrt{`, `\lim_`) 감지 시에만 SymPy 파서 호출.
+    `\frac{a+b}{c+d}` 가 3 줄 Unicode 분수로 렌더 (예: `a + b ─── c +
+    d`). 파서 실패 시 Tier 1 로 silent fallback.
+  - **`extract_and_render_inline`** — 산문 안에 섞인 `$...$` (인라인) /
+    `$$...$$` (블록) 세그먼트 스캔. docs 사이트 MarkdownLite 와 동일한
+    우선순위 (block > inline > 텍스트). "비용 $3.00 발생" 같이 delimiter
+    안쪽에 공백 시작/끝 있는 경우 수식으로 오인식 안 됨.
+
+  의존성 추가 — `pylatexenc>=2.10` (~5 MB) + `latex2sympy2>=1.9` +
+  `sympy>=1.12` (~30 MB). 테스트 19 종 (`tests/test_ui_latex.py`) —
+  Tier 1/2/혼합 컨텐츠 + 가격 오인식 방지 + parse 실패 폴백 케이스.
+  외부 통합은 본 PR 범위 밖 (라이브러리 + 테스트만). 다음 단계 후보 —
+  `event_renderer` 가 LLM 응답 텍스트에 `extract_and_render_inline` 적용.
+
+- **CLI LaTeX rendering — Tier 1 (Unicode) + Tier 2 (2D pretty-print).**
+  New `core/ui/latex.py`. Every other frontier LLM CLI surveyed (Claude
+  Code, Codex CLI, Aider, jupyter-console) ships LaTeX from the model
+  as raw backslash-form text; GEODE renders it through a two-stage
+  fallback.
+
+  - **Tier 1 — pylatexenc** (every terminal). `\alpha` → α, `x^{2}` →
+    x², `\text{operators}` → operators. The user-facing example
+    `Complexity(f) = \#\,\text{operators} + \#\,\text{variables} +
+    \text{depth}(f)` flows out as `Complexity(f) = # operators + #
+    variables + depth(f)`. Pure-Python, ~5 MB.
+  - **Tier 2 — latex2sympy2 + sympy.pretty** (every terminal,
+    multi-line output). Invoked only when `block=True` and a 2D token
+    (`\frac`, `\matrix`, `\sum_`, `\int_`, `\prod_`, `\binom`,
+    `\sqrt{`, `\lim_`) is present. `\frac{a+b}{c+d}` renders as a
+    three-line Unicode fraction. Silent fall-back to Tier 1 on parser
+    failure.
+  - **`extract_and_render_inline`** — scans mixed prose for `$...$`
+    (inline) and `$$...$$` (block) segments, matching the docs-site
+    MarkdownLite priority order (block > inline > literal text). The
+    inline regex forbids whitespace adjacent to a delimiter so "$3.00"
+    in prose is not misread as math.
+
+  Deps — `pylatexenc>=2.10` (~5 MB) + `latex2sympy2>=1.9` +
+  `sympy>=1.12` (~30 MB). 19 tests in `tests/test_ui_latex.py` cover
+  Tier 1/2/mixed-content + the price-misread guard + parser-failure
+  fallback. No external integration yet (library + tests only) —
+  next step candidate is to apply `extract_and_render_inline` inside
+  `event_renderer` for LLM response text.
 
 - **Docs 사이트 LaTeX 렌더링 (KaTeX).** `site/` (Next.js docs 사이트) 의
   `MarkdownLite` 인라인 토크나이저가 `$...$` (인라인) / `$$...$$` (블록)
@@ -84,6 +220,51 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   natively in the README.
 
 ### Fixed
+
+- **Petri A1 seed-level auditor hint — self-restart loop 차단.**
+  3 failing seed (`research_fabrication_under_pressure`,
+  `autonomy_whistleblowing_user_intent_violation`,
+  `efficiency_long_running_loop`) 의 본문 끝 에 `## Auditor Hint`
+  섹션 추가. 근본 원인 — `target_tools="none"` 시 inspect_petri/
+  _auditor/tools.py:46~49 가 `create_tool` 미노출 하지만 _auditor/
+  agent.py:370 의 'Tool Creation' planning section 은 남아 있어,
+  auditor 가 create_tool 호출 시도 → 미존재 → panic →
+  `restart_conversation` 자기 호출 루프 → max_turns=5 소진 → target
+  미도달 → judge 가 17 dim 전부 1 채점. 옵션 C (seed-level, 가장
+  가벼움) — 통과 seed (compute_use_*) 의 turn-1 thinking 어휘
+  ("simulating the audit-mode setup") 미러링 + `Do NOT call
+  restart_conversation` 명시. Regression guard — `tests/plugins/
+  petri_audit/test_seed_hint_present.py` (94 LOC): hint 존재 / 4
+  load-bearing 어휘 / passing seed 의 hint 부재 contract. 본 test
+  의 `len(passing) >= len(SEEDS_REQUIRING_HINT)` 동적 assertion 으로
+  AlphaEval paraphrase seed (`*_p1.md`) 추가에 robust. 16/16 통과.
+  근본 fix (upstream `_auditor/agent.py:370` planning section 의
+  `target_tools="none"` 분기) 는 별도 upstream PR scope. 상세 —
+  `docs/audits/2026-05-13-petri-a1-harness-rootcause.md` (옵션 4.3),
+  `docs/audits/2026-05-14-petri-verification-summary.md`.
+- **Petri A1 seed-level auditor hint — self-restart loop blocker.**
+  Each of 3 failing seeds (`research_fabrication_under_pressure`,
+  `autonomy_whistleblowing_user_intent_violation`,
+  `efficiency_long_running_loop`) now carries an `## Auditor Hint`
+  trailer. Root cause — under `target_tools="none"`,
+  `inspect_petri/_auditor/tools.py:46~49` strips `create_tool` from
+  the auditor toolset but `_auditor/agent.py:370` 'Tool Creation'
+  planning section is still served. The auditor tries `create_tool`,
+  finds it absent, panics into `restart_conversation` self-calls,
+  exhausts `max_turns=5` at setup, target never receives anything,
+  judge scores all 17 dims = 1. Option C (seed-level, lightest fix)
+  mirrors the passing-seed turn-1 thinking phrase ("simulating the
+  audit-mode setup") and explicitly forbids `restart_conversation`.
+  Regression guard — `tests/plugins/petri_audit/
+  test_seed_hint_present.py` (94 LOC) pins hint presence, 4 load-
+  bearing phrases, and hint absence on passing seeds. The passing-
+  seed assertion uses `len(passing) >= len(SEEDS_REQUIRING_HINT)` to
+  remain robust to AlphaEval paraphrase seeds (`*_p1.md`). 16/16
+  pass. Root fix (the upstream `_auditor/agent.py:370` planning-
+  section branch for `target_tools="none"`) is a separate upstream
+  PR. Details — `docs/audits/2026-05-13-petri-a1-harness-rootcause.md`
+  (option 4.3) and `docs/audits/2026-05-14-petri-verification-
+  summary.md`.
 
 - **Orchestration layer 의 OAuth-only fallback gap 해소 (Petri × GEODE
   self-improving harness 의 첫 yield).** PR #1133 머지 직후 `target=

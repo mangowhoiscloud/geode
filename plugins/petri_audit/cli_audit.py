@@ -118,6 +118,17 @@ def audit(
         "alignment surfaces + 4 calibration anchors), 'full' / 'default' "
         "for inspect-petri's 36, or a YAML path for custom dims.",
     ),
+    judge_mode: str = typer.Option(
+        "legacy",
+        "--judge-mode",
+        help="A3 judge split (2026-05-14). 'legacy' (default) — single "
+        "mega-judge call scoring all 17 dims; 'split' — 5-group call "
+        "structure per geode_5axes_split.yaml (broken_tool_use isolated "
+        "to prevent double-counting with input_hallucination). "
+        "Runtime orchestration for 'split' is staged behind upstream "
+        "inspect-petri support; currently the flag drives only the cost "
+        "estimator. See docs/audits/2026-05-13-petri-a3-judge-split-design.md.",
+    ),
     target_tools: str = typer.Option(
         "none",
         "--target-tools",
@@ -183,6 +194,7 @@ def audit(
         seed_select=resolved_seed_select,
         dim_set=dim_set,
         target_tools=target_tools,
+        judge_mode=judge_mode,
         cache=cache,
         dry_run=dry_run,
         yes=yes,
@@ -206,6 +218,12 @@ def _build_slash_parser() -> argparse.ArgumentParser:
         default="none",
         dest="target_tools",
         choices=["synthetic", "fixed", "none"],
+    )
+    parser.add_argument(
+        "--judge-mode",
+        default="legacy",
+        dest="judge_mode",
+        choices=["legacy", "split"],
     )
     parser.add_argument("--no-cache", action="store_false", dest="cache", default=True)
     parser.add_argument("--live", action="store_false", dest="dry_run", default=True)
@@ -245,6 +263,7 @@ def cmd_audit_slash(args: str) -> None:
         seed_select=slash_seed_select,
         dim_set=ns.dim_set,
         target_tools=ns.target_tools,
+        judge_mode=ns.judge_mode,
         cache=ns.cache,
         dry_run=ns.dry_run,
         yes=ns.yes,

@@ -38,6 +38,34 @@ repos:
       - id: check-merge-conflict
       - id: debug-statements
 
+  # yamllint — structural validation for YAML that ships with the Pages
+  # bundle (judge_dim sets + any petri-bundle config). Scoped narrowly so
+  # the broader codebase YAML (helm charts, etc.) keeps the existing
+  # check-yaml gate without dragging in stricter rules. See
+  # docs/architecture/render-lint.md for the rule-by-rule rationale.
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        name: yamllint (petri YAML)
+        args: [-c, .yamllint.yaml, --strict]
+        files: ^(plugins/petri_audit/judge_dims/.*\.ya?ml|docs/petri-bundle/.*\.ya?ml)$
+
+  # pymarkdownlnt — markdown render gate for the docs that get published
+  # to GitHub Pages or linked from the petri-bundle README. Scope is
+  # intentionally narrow (see scripts/lint_pages_markdown.sh for the
+  # allowlist + rationale). Legacy audit docs predating the gate are
+  # left alone — opening that scope would force a content rewrite.
+  # See docs/architecture/render-lint.md for the rule-by-rule rationale.
+  - repo: local
+    hooks:
+      - id: pymarkdown-pages
+        name: pymarkdown (Pages-published docs)
+        entry: scripts/lint_pages_markdown.sh
+        language: system
+        pass_filenames: false
+        files: ^(docs/audits/.*\.md|docs/petri-bundle/README\.md|docs/architecture/render-lint\.md|\.pymarkdown\.json)$
+
   # Local hooks — use project virtualenv (uv run) for full dependency access
   - repo: local
     hooks:

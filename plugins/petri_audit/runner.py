@@ -36,6 +36,8 @@ from plugins.petri_audit.models import (
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "DEFAULT_TOKEN_ASSUMPTIONS",
+    "SPLIT_TOKEN_ASSUMPTIONS",
     "AuditReport",
     "TokenAssumptions",
     "build_command",
@@ -78,9 +80,20 @@ class TokenAssumptions:
     auditor_out_per_turn: int = 400
     target_in_per_turn: int = 1_500
     target_out_per_turn: int = 1_500
+    #: Per-call judge tokens. A3 (2026-05-14) split mode reduces these per
+    #: call (smaller rubric subset) but multiplies the call count — net
+    #: cost is +2.16× per sample (see judge-split-design.md § 6). Caller
+    #: sets ``judge_calls_per_sample=5`` and trims per-call tokens (e.g.
+    #: judge_in 6_000→3_500, judge_out 2_000→580 avg) when running with
+    #: --judge-mode split.
     judge_in_per_sample: int = 6_000
     judge_out_per_sample: int = 2_000
     geode_amplifier: int = 1
+    #: 1 in legacy mode (single mega-judge call), 5 in A3 split mode.
+    #: See plugins/petri_audit/judge_dims/geode_5axes_split.yaml for the
+    #: 5-group definition; runtime orchestration is staged behind
+    #: cli_audit.py --judge-mode split (legacy is default until upstream
+    #: inspect-petri supports group-aware audit_judge).
     judge_calls_per_sample: float = 1.0
 
     # B (cache cost reflection) — anthropic / openai 모두 cache_read 가
@@ -97,6 +110,18 @@ class TokenAssumptions:
 
 
 DEFAULT_TOKEN_ASSUMPTIONS = TokenAssumptions()
+
+#: A3 (2026-05-14) split-mode token assumptions. 5 judge calls per sample
+#: with scoped rubrics — input drops from 6K (full 17-dim rubric) to 3.5K
+#: per call (one group's rubric), output averages 580 tokens (~17 dims
+#: total spread across 5 calls, ~3.4 dims × 170 tokens each). Net cost
+#: per sample: $0.0346 (vs legacy $0.016), +$1.40 on a 75-sample N=5 batch.
+#: See docs/audits/2026-05-13-petri-a3-judge-split-design.md § 6.2.
+SPLIT_TOKEN_ASSUMPTIONS = TokenAssumptions(
+    judge_in_per_sample=3_500,
+    judge_out_per_sample=580,
+    judge_calls_per_sample=5.0,
+)
 
 
 @dataclass
@@ -475,10 +500,11 @@ def run_audit(
     dim_set: str | None = DEFAULT_DIM_SET,
     seed_select: str | None = None,
     target_tools: str = "none",
+    judge_mode: str = "legacy",
     dry_run: bool = True,
     yes: bool = False,
     auto_archive: bool = True,
-    assumptions: TokenAssumptions = DEFAULT_TOKEN_ASSUMPTIONS,
+    assumptions: TokenAssumptions | None = None,
     use_oauth: bool | None = None,
 ) -> AuditReport:
     """Run a Petri audit (or print the command in ``dry_run``).
@@ -507,6 +533,18 @@ def run_audit(
     entirely so an operator who deliberately wants per-token billing
     can do so.
     """
+    # A3 (2026-05-14) — judge_mode "split" picks the 5-call token budget
+    # (SPLIT_TOKEN_ASSUMPTIONS). Actual 5-call orchestration is staged for
+    # an upstream inspect-petri PR; legacy mode (single mega-judge call)
+    # remains the runtime default. Cost estimate already reflects split
+    # when callers ask, so dry-run preview matches the eventual live cost.
+    if assumptions is None:
+        if judge_mode == "split":
+            assumptions = SPLIT_TOKEN_ASSUMPTIONS
+        elif judge_mode == "legacy":
+            assumptions = DEFAULT_TOKEN_ASSUMPTIONS
+        else:
+            raise ValueError(f"unknown judge_mode={judge_mode!r}; expected 'legacy' or 'split'")
     inspect_auditor = to_inspect_model(auditor, use_oauth=use_oauth)
     inspect_judge = to_inspect_model(judge, use_oauth=use_oauth)
     inspect_target = to_inspect_target(target)
