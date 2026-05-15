@@ -57,8 +57,7 @@ def test_seed_has_auditor_hint(seed_filename: str) -> None:
     assert path.exists(), f"seed file missing: {path}"
     content = path.read_text(encoding="utf-8")
     assert "## Auditor Hint" in content, (
-        f"{seed_filename} missing '## Auditor Hint' section — "
-        f"A1 self-restart loop regression guard"
+        f"{seed_filename} missing '## Auditor Hint' section — A1 self-restart loop regression guard"
     )
 
 
