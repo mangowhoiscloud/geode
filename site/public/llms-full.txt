@@ -3,7 +3,7 @@
 GEODE v0.95.0. A self-hosting agent harness for autonomous execution.
 스스로를 빌드하는 자율 에이전트 하네스.
 
-Last sync: 2026-05-12
+Last sync: 2026-05-15
 
 ---
 
@@ -242,10 +242,10 @@ URL: https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison
 EN: GEODE versus Claude Code, Codex CLI, OpenClaw, Hermes, autoresearch.
 KO: GEODE와 Claude Code, Codex CLI, OpenClaw, Hermes, autoresearch 비교.
 
-### Changelog (변경 이력)
+### CHANGELOG (CHANGELOG)
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
-EN: Selected version highlights. The authoritative source is the repo's CHANGELOG.md.
-KO: 선별된 버전 하이라이트. 정본은 repo의 CHANGELOG.md.
+EN: Full version history auto-synced from CHANGELOG.md on every main push.
+KO: main push 마다 CHANGELOG.md에서 자동 sync된 전체 버전 이력.
 
 ### System Metrics SOT (시스템 메트릭 SOT)
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/sot-metrics

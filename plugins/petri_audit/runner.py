@@ -27,7 +27,11 @@ from typing import Any
 from core.llm.token_tracker import MODEL_PRICING
 
 from plugins.petri_audit.judge_dims import DEFAULT_DIM_SET, resolve_dim_set
-from plugins.petri_audit.models import to_inspect_model, to_inspect_target
+from plugins.petri_audit.models import (
+    is_oauth_routed,
+    to_inspect_model,
+    to_inspect_target,
+)
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +105,13 @@ class AuditReport:
 
     Always populated; ``returncode``/``stdout``/``stderr`` are blank for
     ``dry_run=True`` or when the user aborts at the confirm prompt.
+
+    ``same_provider_bias_chip`` (PR #8, 2026-05-14): non-empty when
+    auditor + target + judge all share a provider root. Reports must
+    render this chip so reviewers see that any finding has the
+    −10..−22 % self-preference disadvantage applied — see
+    :mod:`plugins.petri_audit.bias` for the polarity table and
+    ``docs/audits/2026-05-14-petri-same-provider-bias.md``.
     """
 
     command: list[str]
@@ -112,6 +123,7 @@ class AuditReport:
     stdout: str = ""
     stderr: str = ""
     notes: list[str] = field(default_factory=list)
+    same_provider_bias_chip: str = ""
 
     #: Where the live ``.eval`` was archived (raw + summary). Populated
     #: when ``auto_archive=True`` and the inspect_ai run produced a
@@ -325,6 +337,8 @@ def estimate_cost_usd(
     seeds: int,
     max_turns: int,
     assumptions: TokenAssumptions = DEFAULT_TOKEN_ASSUMPTIONS,
+    judge_oauth: bool = False,
+    auditor_oauth: bool = False,
 ) -> float:
     """Estimate USD cost from MODEL_PRICING + per-turn token assumptions.
 
@@ -338,6 +352,13 @@ def estimate_cost_usd(
     ``target`` may be ``None`` / empty when the caller did not pin a
     base model — in that case we fall back to ``settings.model`` so
     the estimate still reflects the model GEODE will actually use.
+
+    **PR #6 (2026-05-14) — OAuth zeroing**: when ``judge_oauth`` /
+    ``auditor_oauth`` is True (caller already classified the role as
+    Codex Plus OAuth-routed via ``is_oauth_routed``), the per-token
+    contribution for that role is set to zero. Subscription quota is
+    not billed per token; the only cost is the user's monthly Plus
+    fee, which is out of band for this estimator.
     """
 
     def _basename(model_id: str) -> str:
@@ -371,18 +392,24 @@ def estimate_cost_usd(
     target_eff_in = _effective_in_price(pt, assumptions.target_cache_read_ratio)
     judge_eff_in = _effective_in_price(pj, assumptions.judge_cache_read_ratio)
 
-    auditor_per_turn = (
-        auditor_eff_in * assumptions.auditor_in_per_turn
-        + pa.output * assumptions.auditor_out_per_turn
-    )
+    if auditor_oauth:
+        auditor_per_turn = 0.0
+    else:
+        auditor_per_turn = (
+            auditor_eff_in * assumptions.auditor_in_per_turn
+            + pa.output * assumptions.auditor_out_per_turn
+        )
     target_per_turn = (
         target_eff_in * assumptions.target_in_per_turn + pt.output * assumptions.target_out_per_turn
     ) * assumptions.geode_amplifier
     per_sample_turn_cost = (auditor_per_turn + target_per_turn) * max_turns
-    judge_per_sample = assumptions.judge_calls_per_sample * (
-        judge_eff_in * assumptions.judge_in_per_sample
-        + pj.output * assumptions.judge_out_per_sample
-    )
+    if judge_oauth:
+        judge_per_sample = 0.0
+    else:
+        judge_per_sample = assumptions.judge_calls_per_sample * (
+            judge_eff_in * assumptions.judge_in_per_sample
+            + pj.output * assumptions.judge_out_per_sample
+        )
     per_sample = per_sample_turn_cost + judge_per_sample
     return seeds * per_sample
 
@@ -452,6 +479,7 @@ def run_audit(
     yes: bool = False,
     auto_archive: bool = True,
     assumptions: TokenAssumptions = DEFAULT_TOKEN_ASSUMPTIONS,
+    use_oauth: bool | None = None,
 ) -> AuditReport:
     """Run a Petri audit (or print the command in ``dry_run``).
 
@@ -464,9 +492,23 @@ def run_audit(
     (drift sync stays active). A pinned target id is sticky for the
     audit's lifetime — see ``plugins/petri_audit/targets/geode_target.py``
     docstring "Model priority" section.
+
+    **PR #6 (2026-05-14) — ``use_oauth``** governs whether gpt-5.x
+    judge / auditor ids re-route through the Codex OAuth provider
+    (``openai-codex/<model>``):
+
+    - ``None`` (default) → auto-detect via ``_codex_oauth_available``.
+    - ``True`` → force OAuth route (token must exist or the audit
+      subprocess raises ``EnvironmentVariableError`` at first judge
+      call).
+    - ``False`` → keep the legacy per-token ``openai/<model>`` map.
+
+    User-pinned raw ids (``openai/gpt-5.5``) bypass the rewrite
+    entirely so an operator who deliberately wants per-token billing
+    can do so.
     """
-    inspect_auditor = to_inspect_model(auditor)
-    inspect_judge = to_inspect_model(judge)
+    inspect_auditor = to_inspect_model(auditor, use_oauth=use_oauth)
+    inspect_judge = to_inspect_model(judge, use_oauth=use_oauth)
     inspect_target = to_inspect_target(target)
     # Booster A — when audit-mode is active (GEODE_AUDIT_UNRESTRICTED=1,
     # set by ``cli_audit.audit(--unrestricted)`` before this call), inject
@@ -493,9 +535,25 @@ def run_audit(
         seeds=seeds,
         max_turns=max_turns,
         assumptions=assumptions,
+        judge_oauth=is_oauth_routed(inspect_judge),
+        auditor_oauth=is_oauth_routed(inspect_auditor),
     )
     cost_label, estimated_krw = format_cost(estimated_usd)
     notes: list[str] = []
+
+    # PR #8 (2026-05-14) — same-provider bias detection. When auditor +
+    # target + judge share a provider root (e.g. all openai-codex/gpt-5.x
+    # after the PR #6 OAuth alignment), self-preference inflates favor
+    # signals and deflates harm signals on the order of −10..−22 %.
+    # Surface a chip on the report so reviewers see the disadvantage is
+    # acknowledged; downstream score reduction is in
+    # ``plugins.petri_audit.bias.apply_disadvantage``.
+    from plugins.petri_audit.bias import detect_same_provider, format_bias_chip
+
+    bias_chip = ""
+    if detect_same_provider(inspect_auditor, inspect_target, inspect_judge):
+        bias_chip = format_bias_chip()
+        notes.append(f"same-provider self-preference: {bias_chip}")
 
     if dry_run:
         notes.append("dry-run: subprocess not executed")
@@ -505,6 +563,7 @@ def run_audit(
             estimated_krw=estimated_krw,
             dry_run=True,
             notes=notes,
+            same_provider_bias_chip=bias_chip,
         )
 
     if shutil.which("inspect") is None:
@@ -529,8 +588,21 @@ def run_audit(
             dry_run=False,
             aborted=True,
             notes=notes,
+            same_provider_bias_chip=bias_chip,
         )
 
+    # Anthropic auth policy (2026-05-14): API KEY only. Claude Code
+    # OAuth tokens are NOT injected into the subprocess — anthropic
+    # alignment audits stay on the ``ANTHROPIC_API_KEY`` path so the
+    # provider's TOS for OAuth tokens (no programmatic / batch use)
+    # is respected. If the env is missing, the subprocess will surface
+    # inspect_ai's standard ``environment_prerequisite_error`` and the
+    # operator must export a real API key.
+    #
+    # 본 정책 + OAuth (OpenAI) 의 사용 가능 / 불가 속성 의 SOT:
+    # ``docs/audits/2026-05-14-petri-oauth-constraints.md``.
+    # 실 검증 (live audit 의 valid baseline 측정) 은 2026-05-25 이후
+    # 의 후속 cycle 의 operator credential 결정 의 의존.
     log.info("Petri audit subprocess: %s", " ".join(cmd))
     # ``cmd`` is built solely from validated model ids + numeric flags by
     # build_command — no shell metacharacters or untrusted user strings.
@@ -554,6 +626,7 @@ def run_audit(
         notes=notes,
         archived_raw=archived_raw,
         archived_summary=archived_summary,
+        same_provider_bias_chip=bias_chip,
     )
 
 

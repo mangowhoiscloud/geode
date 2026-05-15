@@ -53,4 +53,20 @@ except ImportError:
         exc_info=True,
     )
 
+# PR #6 (2026-05-14) — register the ``openai-codex`` ModelAPI alongside
+# ``geode``. ``OpenAICodexAPI`` routes ``openai-codex/<model>`` ids
+# through the ChatGPT Plus OAuth path so judge / auditor calls consume
+# the user's subscription quota instead of per-token billing. Same
+# try/except guard so the default ``uv sync`` (no [audit] extra) is
+# unaffected.
+try:
+    from plugins.petri_audit.codex_provider import register as _register_codex
+
+    _register_codex()
+except ImportError:
+    _logging.getLogger(__name__).debug(
+        "petri_audit openai-codex ModelAPI registration deferred — [audit] extra not installed",
+        exc_info=True,
+    )
+
 __all__: list[str] = []

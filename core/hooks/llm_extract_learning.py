@@ -71,7 +71,20 @@ def _build_context(data: dict[str, Any]) -> str:
 
 
 def _call_budget_llm(prompt: str) -> str | None:
-    """Call a budget model for extraction. Returns text or None on failure."""
+    """Call a budget model for extraction. Returns text or None on failure.
+
+    Fallback order: GLM-flash (free, zai_api_key) → Anthropic Haiku
+    (anthropic_api_key). In an OAuth-only environment with no zai /
+    anthropic key, returns ``None`` — graceful, the caller treats
+    extraction as a soft hint and proceeds without it.
+
+    TODO (follow-up PR): add a ``_call_codex_oauth`` path so a ChatGPT
+    Plus subscription quota can drive the extraction (matches the
+    PR #1133 OAuth bridge for Petri's judge/auditor). The Codex
+    ``/v1/responses`` streaming-only request shape lives in
+    ``plugins/petri_audit/codex_provider.py`` and would need to be
+    factored out before reuse here.
+    """
     try:
         from core.config import settings
 

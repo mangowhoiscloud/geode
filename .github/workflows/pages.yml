@@ -66,6 +66,10 @@ jobs:
       - name: Build static export
         run: npm run build
 
+      - name: Validate docs/petri-bundle before publish
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/validate_petri_bundle.py
+
       - name: Copy docs/petri-bundle into site/out
         working-directory: ${{ github.workspace }}
         run: |
