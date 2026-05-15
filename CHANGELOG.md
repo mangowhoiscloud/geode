@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.95.1] — 2026-05-16
+
 ### Fixed
 
 - **Docs 사이트 broken link 3 개 정정 (6 사이트).** docs 사이트 내부 링크
