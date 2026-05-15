@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
+import { MathExpr } from "./math";
 
 /**
  * MarkdownLite. The minimum subset needed to render CHANGELOG.md entries.
@@ -11,6 +12,7 @@ import { type ReactNode } from "react";
  *  - `**bold**`, `*italic*`
  *  - `` `code` ``
  *  - `[text](url)` links (target=_blank for external)
+ *  - `$inline math$` and `$$block math$$` via KaTeX
  *  - HTML tags `<code>x</code>`, `<strong>x</strong>` passed through (text-only)
  *  - fenced code blocks ```...```
  *  - blank line breaks
@@ -138,6 +140,18 @@ function renderInline(text: string): ReactNode {
     re: RegExp;
     render: (m: RegExpExecArray) => ReactNode;
   }> = [
+    {
+      // Block math: $$...$$ (must be tried before inline $...$)
+      re: /\$\$([^$]+)\$\$/,
+      render: (m) => <MathExpr key={`mb${key}`} expr={m[1]} block />,
+    },
+    {
+      // Inline math: $...$ . Disallow whitespace immediately inside the
+      // delimiters so a stray "$ price" or "cost $3.00" in prose does not
+      // accidentally match. Use a negative class for the first/last char.
+      re: /\$([^\s$][^$]*[^\s$]|[^\s$])\$/,
+      render: (m) => <MathExpr key={`mi${key}`} expr={m[1]} />,
+    },
     {
       re: /`([^`]+)`/,
       render: (m) => <code key={`c${key}`}>{m[1]}</code>,
