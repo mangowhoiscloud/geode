@@ -8,7 +8,6 @@ print path. This module pins the wiring so a future refactor of
 
 from __future__ import annotations
 
-from io import StringIO
 from unittest.mock import MagicMock, patch
 
 from core.cli.interactive_loop import _render_text_with_latex
@@ -89,16 +88,13 @@ def test_mixed_segments_alternate_markdown_and_math() -> None:
     assert kinds.count("math") >= 1
 
 
-def test_math_segments_print_with_configured_rich_style() -> None:
-    """The configured style must exist on the real GEODE theme."""
-    from rich.console import Console
-
-    buf = StringIO()
-    real_console = Console(file=buf, force_terminal=False, theme=GEODE_THEME, width=80)
-    with patch("core.cli.interactive_loop.console", real_console):
-        _render_text_with_latex(r"the term \(x^2\) and \[ \frac{a}{b} \]")
-
-    output = buf.getvalue()
-    assert "\\(" not in output
-    assert "\\[" not in output
-    assert "x" in output
+def test_math_style_is_defined_in_geode_theme() -> None:
+    """Math segments are printed with ``style="value"``. If that style is
+    not registered on :data:`GEODE_THEME`, Rich raises ``MissingStyle`` at
+    render time. This guard catches a future theme rename without spinning
+    up a real ``Console`` (which can leak EventRenderer animation threads
+    into other tests' mock contexts and inflate their ``time.sleep`` counts)."""
+    assert "value" in GEODE_THEME.styles, (
+        "math segments call console.print(..., style='value'); "
+        "the 'value' style must be present in GEODE_THEME"
+    )
