@@ -114,9 +114,7 @@ def _extract_message_fields(msg: dict[str, Any]) -> dict[str, Any]:
 
     # ``content`` is always JSON-serialised so the round-trip is type-safe;
     # ``None`` stays ``NULL`` in the column.
-    content_str: str | None = (
-        None if content is None else json.dumps(content, ensure_ascii=False)
-    )
+    content_str: str | None = None if content is None else json.dumps(content, ensure_ascii=False)
 
     tool_call_id: str | None = None
     tool_calls_json: str | None = None
@@ -180,9 +178,7 @@ def _extract_message_fields(msg: dict[str, Any]) -> dict[str, Any]:
         int(token_count_raw) if isinstance(token_count_raw, (int, float)) else None
     )
     finish_reason_raw = msg.get("finish_reason")
-    finish_reason: str | None = (
-        finish_reason_raw if isinstance(finish_reason_raw, str) else None
-    )
+    finish_reason: str | None = finish_reason_raw if isinstance(finish_reason_raw, str) else None
 
     metadata_raw = msg.get("metadata")
     metadata_json: str | None = (
@@ -346,9 +342,7 @@ class SessionManager:
             valid_seq_set.add(seq)
             fields = _extract_message_fields(msg)
             raw_ts = msg.get("timestamp")
-            timestamp = (
-                float(raw_ts) if isinstance(raw_ts, (int, float)) else ts_default
-            )
+            timestamp = float(raw_ts) if isinstance(raw_ts, (int, float)) else ts_default
             rows.append(
                 (
                     session_id,

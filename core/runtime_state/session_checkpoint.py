@@ -254,8 +254,7 @@ class SessionCheckpoint:
                 mgr.close()
         except Exception:
             log.warning(
-                "Failed to mirror messages to sessions.db (session=%s); "
-                "JSON checkpoint retained.",
+                "Failed to mirror messages to sessions.db (session=%s); JSON checkpoint retained.",
                 state.session_id,
                 exc_info=True,
             )

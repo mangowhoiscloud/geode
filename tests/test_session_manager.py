@@ -156,10 +156,7 @@ class TestMessagesTable:
     """Phase 1a — messages table CRUD + idempotent upsert."""
 
     def test_messages_schema_and_indexes(self, mgr: SessionManager) -> None:
-        cols = {
-            row[1]
-            for row in mgr._conn.execute("PRAGMA table_info(messages)").fetchall()
-        }
+        cols = {row[1] for row in mgr._conn.execute("PRAGMA table_info(messages)").fetchall()}
         assert cols == {
             "id",
             "session_id",
