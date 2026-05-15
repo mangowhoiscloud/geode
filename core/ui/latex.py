@@ -60,6 +60,7 @@ _TIER2_TOKENS: Final[tuple[str, ...]] = (
 )
 _LATEX_LINEBREAK = re.compile(r"(?<!\\)\\\\(?:\s*\[[^\]]*\])?")
 _LATEX_LINEBREAK_SENTINEL: Final = "<<<GEODE_LATEX_LINEBREAK_4A7D1B>>>"
+_DISPLAY_FRACTION_MACRO = re.compile(r"\\[dt]frac(?=\{)")
 
 
 def _has_tier2_construct(src: str) -> bool:
@@ -85,6 +86,7 @@ def _render_tier1(src: str) -> str:
     except ImportError:  # pragma: no cover — declared in pyproject
         return src
     try:
+        src = _DISPLAY_FRACTION_MACRO.sub(r"\\frac", src)
         protected_src = _LATEX_LINEBREAK.sub(
             f" {_LATEX_LINEBREAK_SENTINEL} ",
             src,
@@ -163,6 +165,134 @@ _BLOCK_ENV = re.compile(
 _INLINE_DOLLAR = re.compile(r"\$(?!\s)([^\s$][^$]*[^\s$]|[^\s$])\$")
 _INLINE_PAREN = re.compile(r"(?<!\\)\\\(([\s\S]+?)(?<!\\)\\\)")
 
+# ---------------------------------------------------------------------------
+# Delimiter-less math heuristic (last-resort).
+#
+# LLMs sometimes emit LaTeX macros without surrounding ``\(...\)`` / ``$...$``
+# delimiters — e.g. ``r_t = (P_t - P_{t-1}) / P_{t-1}`` in flowing prose.
+# The default delimiter scanners cannot see those tokens and the bare macros
+# leak into the Markdown render. We conservatively catch two narrow forms,
+# each requiring explicit LaTeX syntax (braces or a known macro name) so
+# ordinary ``snake_case`` identifiers, file paths, and Markdown emphasis
+# remain untouched:
+#
+#   * **Braced subscript/superscript token** — ``r_{t-1}``, ``P_{t+5}``,
+#     ``x^{2}``, ``W_{i,j}^{T}``. Requires `{…}` directly after `_` or `^`.
+#   * **Backslash macro with at least one braced arg** — ``\frac{a}{b}``,
+#     ``\sqrt{x+1}``, ``\bar{S}``, ``\hat{y}``, ``\sum_{i=1}``. A small
+#     allow-list of macro names keeps the pattern from over-firing on
+#     prose like ``\n`` escape sequences.
+#
+# Bare-underscore prose (``snake_case``, ``my_var``, ``some_word_here``)
+# never matches because there is no following ``{``. Bare letters with
+# subscripts in prose (``r_t``) are also skipped — the heuristic only
+# activates when the LaTeX intent is unambiguous.
+
+_MACRO_NAMES = (
+    "Alpha",
+    "alpha",
+    "approx",
+    "bar",
+    "Beta",
+    "beta",
+    "binom",
+    "cdot",
+    "chi",
+    "cos",
+    "Delta",
+    "delta",
+    "dfrac",
+    "div",
+    "Epsilon",
+    "epsilon",
+    "equiv",
+    "eta",
+    "exists",
+    "exp",
+    "forall",
+    "frac",
+    "Gamma",
+    "gamma",
+    "geq",
+    "hat",
+    "in",
+    "infty",
+    "int",
+    "iota",
+    "kappa",
+    "Lambda",
+    "lambda",
+    "leftarrow",
+    "leq",
+    "lim",
+    "ln",
+    "log",
+    "mapsto",
+    "mathbb",
+    "mathcal",
+    "mathrm",
+    "max",
+    "min",
+    "mp",
+    "mu",
+    "nabla",
+    "neq",
+    "notin",
+    "nu",
+    "Omega",
+    "omega",
+    "overline",
+    "partial",
+    "Phi",
+    "phi",
+    "Pi",
+    "pi",
+    "pm",
+    "prod",
+    "Psi",
+    "psi",
+    "rho",
+    "Rightarrow",
+    "rightarrow",
+    "Sigma",
+    "sigma",
+    "sin",
+    "sqrt",
+    "subset",
+    "subseteq",
+    "sum",
+    "tan",
+    "tau",
+    "text",
+    "tfrac",
+    "Theta",
+    "theta",
+    "tilde",
+    "times",
+    "to",
+    "underline",
+    "upsilon",
+    "vec",
+    "Xi",
+    "xi",
+    "zeta",
+)
+_DELIMITERLESS_MATH = re.compile(
+    r"(?:"
+    # Braced subscript/superscript token (chained): r_{t-1}, P_{t+5}^{2}, ...
+    r"[A-Za-z][A-Za-z0-9]*"
+    r"(?:[_^]\{[^{}]+\})+"
+    r"(?:[A-Za-z0-9]*[_^]\{[^{}]+\})*"
+    r"|"
+    # Backslash macro from the allow-list, optionally followed by braced
+    # args. Greek letters / operators (``\alpha``, ``\cdot``) need no args;
+    # 2D structural macros (``\frac``, ``\binom``) need up to two; cap at
+    # three so the pattern stays bounded.
+    r"\\(?:" + "|".join(_MACRO_NAMES) + r")(?![A-Za-z])"
+    r"(?:\{[^{}]*\}){0,3}"
+    r")"
+)
+
 
 def extract_and_render_inline(text: str) -> Iterator[tuple[str, str]]:
     """Yield ``(kind, payload)`` tuples for each segment of ``text``.
@@ -202,6 +332,12 @@ def extract_and_render_inline(text: str) -> Iterator[tuple[str, str]]:
         if _overlaps(m.start(), m.end(), matches):
             continue
         matches.append((m.start(), m.end(), "inline_math", m.group(1)))
+    # Last-resort heuristic: catch bare LaTeX tokens (braced sub/sup or
+    # allow-listed macro) that arrived without surrounding delimiters.
+    for m in _DELIMITERLESS_MATH.finditer(text):
+        if _overlaps(m.start(), m.end(), matches):
+            continue
+        matches.append((m.start(), m.end(), "inline_math", m.group(0)))
     matches.sort(key=lambda t: t[0])
 
     pos = 0

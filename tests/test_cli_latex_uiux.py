@@ -145,6 +145,82 @@ class TestStageAComponent:
         assert "inline" in output
         assert "more text" in output
 
+    def test_delimiterless_braced_subscript_macros(self) -> None:
+        """LLMs sometimes emit LaTeX without `\\(...\\)` / `$...$` wrappers.
+        The user reported (2026-05-16) `r_t = (P_t - P_{t-1}) / P_{t-1}` as
+        raw macros leaking into the Markdown render. The heuristic must
+        recognise the braced-subscript tokens and rewrite them while
+        leaving the surrounding prose intact."""
+        text = r"r_t = (P_t - P_{t-1}) / P_{t-1}"
+        output = _render_through_helper(text)
+        # Braced subscript tokens are converted (raw `P_{t-1}` 사라짐).
+        assert "P_{t-1}" not in output
+        assert output.count("P_t-1") == 2 or output.count("Pₜ₋₁") == 2
+        # The bare-letter parts (no braces) keep their literal form.
+        assert "r_t" in output
+        assert "P_t" in output
+
+    def test_delimiterless_does_not_match_snake_case_or_paths(self) -> None:
+        """Bare-underscore identifiers (`snake_case`, file paths, Python
+        variables) must never be promoted to math segments — that would
+        mangle ordinary prose and code references."""
+        text = "use `snake_case` for vars and `path/to/file_name.py` for paths"
+        output = _render_through_helper(text)
+        # Markdown code spans + identifier substrings survive.
+        assert "snake_case" in output
+        assert "file_name" in output
+
+    def test_delimiterless_macro_list(self) -> None:
+        """Backslash macros from the allow-list render even without
+        delimiters — `\\alpha`, `\\beta`, `\\frac`, `\\sqrt`, `\\bar`."""
+        text = r"\alpha + \beta yields \frac{1}{2}, also \sqrt{x+1} and \bar{S}"
+        output = _render_through_helper(text)
+        for raw in (r"\alpha", r"\beta", r"\frac", r"\sqrt", r"\bar"):
+            assert raw not in output, f"{raw} leaked"
+        # At least one rendered Greek letter present.
+        assert any(g in output for g in ("α", "β", "γ"))
+
+    def test_delimiterless_common_llm_macros(self) -> None:
+        """Frequent LLM macros from set/logic/prose math render without
+        explicit delimiters."""
+        text = (
+            r"\forall x \in \mathbb{R}, "
+            r"\mathrm{Var}(x) \geq 0 \Rightarrow \text{valid}; "
+            r"\dfrac{a}{b} \to y"
+        )
+        output = _render_through_helper(text)
+        for raw in (
+            r"\forall",
+            r"\in",
+            r"\mathbb",
+            r"\mathrm",
+            r"\geq",
+            r"\Rightarrow",
+            r"\text",
+            r"\dfrac",
+            r"\to",
+        ):
+            assert raw not in output, f"{raw} leaked"
+        for rendered in ("∀", "∈", "ℝ", "≥", "⇒", "valid", "a/b", "→"):
+            assert rendered in output
+
+    def test_delimiterless_skips_macro_word_prefix(self) -> None:
+        """`\\alphanumeric` must NOT be treated as `\\alpha` + suffix —
+        the macro requires a non-letter boundary."""
+        text = r"the term \alphanumeric appears once"
+        output = _render_through_helper(text)
+        # Literal `\alphanumeric` survives as text (Markdown may keep the
+        # backslash or strip it; what matters is no spurious Greek α).
+        assert "α" not in output
+        assert "alphanumeric" in output
+
+    def test_delimiterless_caret_superscript(self) -> None:
+        text = r"the energy is E = mc^{2} in this universe"
+        output = _render_through_helper(text)
+        assert "mc^{2}" not in output
+        assert "the energy is" in output
+        assert "in this universe" in output
+
     def test_multiline_latex_source_collapses_to_single_line_inline(self) -> None:
         """LLMs frequently emit LaTeX with source-level line breaks
         between ``\\frac`` and its arguments. pylatexenc preserves those
