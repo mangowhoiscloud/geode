@@ -10,14 +10,14 @@
 export const GEODE_SOT = {
   version: "0.95.0",
   modules: {
-    core: 317,
-    plugins: 44,
-    total: 361,
+    core: 318,
+    plugins: 45,
+    total: 363,
   },
   tests: {
-    standard: 4608,
+    standard: 4897,
     live: 24,
-    total: 4632,
+    total: 4921,
   },
   releases: 134,
   since: "2026-02",
