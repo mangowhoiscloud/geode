@@ -127,3 +127,71 @@ class TestMixedContent:
     def test_segmentation_table(self, source: str, expected_kinds: list[str]) -> None:
         chunks = list(extract_and_render_inline(source))
         assert [k for k, _ in chunks] == expected_kinds
+
+
+class TestDelimiterExpansion:
+    """PR #1165 — `\\[...\\]`, `\\(...\\)`, and `\\begin{equation}...\\end{equation}`
+    are recognised in addition to the original `$`-based forms."""
+
+    def test_bracket_block_math(self) -> None:
+        text = r"기대 손실은 \[ \frac{1}{m} \sum_{i=1}^{m} \ell(\alpha_i) \] 로 표현."
+        segments = list(extract_and_render_inline(text))
+        kinds = [k for k, _ in segments]
+        assert "block_math" in kinds, segments
+        # Bracket form contains \\frac → Tier 2 path → multi-line render.
+        block_payload = next(p for k, p in segments if k == "block_math")
+        assert "\n" in block_payload  # multi-line block
+
+    def test_paren_inline_math(self) -> None:
+        text = r"the term \(x^2\) appears once"
+        segments = list(extract_and_render_inline(text))
+        kinds = [k for k, _ in segments]
+        assert kinds == ["text", "inline_math", "text"]
+        _, payload = next(p for p in segments if p[0] == "inline_math")
+        assert "x²" in payload or "x^2" in payload
+
+    def test_equation_environment(self) -> None:
+        text = r"""다음을 보자
+\begin{equation}
+\frac{a}{b}
+\end{equation}
+끝."""
+        segments = list(extract_and_render_inline(text))
+        kinds = [k for k, _ in segments]
+        assert "block_math" in kinds
+
+    def test_align_environment(self) -> None:
+        text = r"""\begin{align}
+x &= 1
+\end{align}"""
+        segments = list(extract_and_render_inline(text))
+        assert any(k == "block_math" for k, _ in segments)
+
+    def test_mixed_dollar_and_bracket(self) -> None:
+        text = r"inline $x$ and block \[ \frac{a}{b} \] together"
+        segments = list(extract_and_render_inline(text))
+        kinds = [k for k, _ in segments]
+        assert kinds.count("inline_math") == 1
+        assert kinds.count("block_math") == 1
+
+    def test_paren_inside_bracket_block_does_not_double_match(self) -> None:
+        """Inline `\\(…\\)` inside a `\\[…\\]` block must not be re-extracted."""
+        text = r"\[ a = \frac{1}{2} \text{ where }(x) is normal \]"
+        segments = list(extract_and_render_inline(text))
+        kinds = [k for k, _ in segments]
+        # The whole bracketed span is one block_math; no spurious inline_math.
+        assert kinds.count("inline_math") == 0
+        assert kinds.count("block_math") == 1
+
+    def test_user_reported_case_logic_block(self) -> None:
+        """The exact example the user surfaced in the 2026-05-16 session."""
+        text = (
+            r"[ \mathrm{Logic} ]"  # The user pasted this as `[…]`, not `\[…\]` —
+            "\n\n"  # see the test below for that variant.
+            r"\[ \frac{1}{m} \sum_{i=1}^{m} \ell(\alpha_i) \]"
+        )
+        segments = list(extract_and_render_inline(text))
+        kinds = [k for k, _ in segments]
+        # `[ ... ]` (no backslash) is NOT a recognised LaTeX delimiter; it
+        # stays as text. The `\[ ... \]` form is recognised.
+        assert kinds.count("block_math") == 1
