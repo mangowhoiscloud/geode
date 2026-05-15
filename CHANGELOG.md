@@ -52,6 +52,66 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CLI LaTeX 렌더링 — `interactive_loop` wiring + `\[...\]`/`\(...\)`/
+  `\begin{env}…\end{env}` delimiter 추가.** PR #1141 이 `core/ui/latex.py`
+  의 Tier 1 (pylatexenc) + Tier 2 (latex2sympy2 + sympy.pretty) 라이브
+  러리 + 19 test 만 추가하고 "다음 단계 후보 — event_renderer 가 LLM 응답
+  텍스트에 extract_and_render_inline 적용" 으로 wiring 을 follow-up 으로
+  남겨두었음. 결과적으로 사용자는 LLM 응답에서 `\[ \frac{1}{m} \sum_{i=1}
+  ^{m} \ell(\alpha_i) \]` 같은 raw LaTeX 를 그대로 보고 있었다. 본 PR 이
+  두 갭을 닫음:
+  - `core/cli/interactive_loop.py` 의 `_render_ipc_response` 가 LLM final
+    text 를 `rich.markdown.Markdown` 으로 직접 흘리던 부분을 신규
+    `_render_text_with_latex` 헬퍼로 교체. 헬퍼는
+    `extract_and_render_inline(text)` 로 segment 분할 후 inline math 는
+    rendered Unicode 로 주변 Markdown paragraph 에 다시 합치고,
+    `block_math` 는 multi-line block 으로 render. math 가 전혀 없으면
+    단일 Markdown 호출로 fallback (회귀 위험 0).
+  - `core/ui/latex.py` 의 delimiter 가 `$...$` / `$$...$$` 두 가지 뿐이라
+    LLM 이 자주 출력하는 `\[...\]` (display) / `\(...\)` (inline) /
+    `\begin{equation|align|gather|multline|displaymath}…\end{...}` 가
+    모두 누락. 본 PR 이 세 패턴 모두 지원하도록 regex 확장 + overlap-
+    aware 우선순위 resolution (block > inline) 추가.
+  - 신규 test 13 (`tests/test_ui_latex.py::TestDelimiterExpansion` 7 +
+    `tests/test_interactive_loop_latex.py` 6) — 모든 delimiter form,
+    mixed segments, overlap 회피, raw 백슬래시 leak 회귀, 사용자가 보고한
+    `\[ \frac{1}{m} \sum_{i=1}^{m} \ell(\alpha_i) \]` 케이스 직접 검증.
+  - 의도된 비지원: backslash 없는 `[...]` / `(...)` — markdown link
+    문법과 충돌 + 일반 bracket 어휘 noise. 사용자는 `\[...\]` 형식을 써야
+    함.
+- **CLI LaTeX rendering — `interactive_loop` wiring + `\[...\]`/`\(...\)`/
+  `\begin{env}…\end{env}` delimiter support.** PR #1141 introduced
+  `core/ui/latex.py` with the Tier 1 (pylatexenc) and Tier 2
+  (latex2sympy2 + sympy.pretty) renderers plus 19 tests, but the
+  CHANGELOG flagged the actual wiring as a follow-up — the response
+  print path stayed on `rich.markdown.Markdown(text)`. Users therefore
+  saw the raw backslash form (e.g. `\[ \frac{1}{m} \sum_{i=1}^{m}
+  \ell(\alpha_i) \]`) in their terminals. This PR closes both gaps:
+  - The LLM final-text branch of
+    `core/cli/interactive_loop._render_ipc_response` now calls a new
+    `_render_text_with_latex` helper. The helper splits the body via
+    `extract_and_render_inline(text)`, folds inline math back into the
+    surrounding Markdown paragraph as rendered Unicode, and renders
+    `block_math` as a multi-line block. When the body has no math at
+    all, it falls back to the single Markdown call (zero regression
+    risk).
+  - `core/ui/latex.py` only knew `$...$` and `$$...$$`. The new regex
+    set adds the three forms LLMs actually emit — `\[…\]` for
+    display, `\(…\)` for inline, and `\begin{equation|align|gather|
+    multline|displaymath}…\end{...}` — with overlap-aware priority
+    resolution (block > inline) so an inline match inside a
+    multi-line bracket block is not double-extracted.
+  - 13 new tests
+    (`tests/test_ui_latex.py::TestDelimiterExpansion` plus
+    `tests/test_interactive_loop_latex.py`) pin every delimiter form,
+    mixed segments, the overlap rule, the raw-backslash leak
+    regression, and the user-reported case verbatim.
+  - Deliberately not supported: bracket forms without backslashes
+    (`[...]` / `(...)`) — those collide with Markdown link syntax and
+    ordinary parenthetical prose. Users must write `\[…\]`.
+
 ## [0.95.1] — 2026-05-16
 
 ### Infrastructure

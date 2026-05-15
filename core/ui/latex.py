@@ -117,19 +117,35 @@ def render_latex(src: str, *, block: bool = False) -> Text:
     if block and _has_tier2_construct(src):
         rendered = _render_tier2(src)
         if rendered is not None:
-            return Text(rendered, style="math")
+            return Text(rendered, style="value")
 
-    return Text(_render_tier1(src), style="math")
+    return Text(_render_tier1(src), style="value")
 
 
 # ---------------------------------------------------------------------------
-# Mixed-content scanner — `$...$` and `$$...$$` segments embedded in prose.
+# Mixed-content scanner — math segments embedded in prose.
 # ---------------------------------------------------------------------------
+#
+# Supported delimiters (in resolution-priority order):
+#   * Block:  ``$$ ... $$``    — TeX dollar-double
+#             ``\[ ... \]``    — LaTeX display math (backslash form)
+#             ``\begin{...} ... \end{...}`` — equation / align / gather / etc.
+#   * Inline: ``$ ... $``      — TeX dollar-single
+#             ``\( ... \)``    — LaTeX inline math
+#
+# Heuristics on the inline ``$ ... $`` form forbid whitespace immediately
+# inside the delimiters so prose like "비용 $3.00" does not get mis-parsed
+# as math.
 
-_BLOCK_MATH = re.compile(r"\$\$([^$]+)\$\$")
-# Inline: forbid whitespace immediately inside the delimiters so a phrase
-# like "비용 $3.00" does not get treated as a math segment.
-_INLINE_MATH = re.compile(r"\$(?!\s)([^\s$][^$]*[^\s$]|[^\s$])\$")
+_BLOCK_DOLLAR = re.compile(r"\$\$([^$]+)\$\$")
+_BLOCK_BRACKET = re.compile(r"(?<!\\)\\\[([\s\S]+?)(?<!\\)\\\]")
+_BLOCK_ENV = re.compile(
+    r"(?<!\\)\\begin\{(equation\*?|align\*?|gather\*?|multline\*?|displaymath)\}"
+    r"([\s\S]+?)"
+    r"(?<!\\)\\end\{\1\}"
+)
+_INLINE_DOLLAR = re.compile(r"\$(?!\s)([^\s$][^$]*[^\s$]|[^\s$])\$")
+_INLINE_PAREN = re.compile(r"(?<!\\)\\\(([^\n]+?)(?<!\\)\\\)")
 
 
 def extract_and_render_inline(text: str) -> Iterator[tuple[str, str]]:
@@ -148,13 +164,26 @@ def extract_and_render_inline(text: str) -> Iterator[tuple[str, str]]:
         return
 
     # Build a single match-stream: block segments first, then inline,
-    # then resolve by earliest start position.
+    # then resolve by earliest start position. ``\begin{env}`` matches
+    # capture the env name in group 1 and the body in group 2; the other
+    # patterns capture the body in group 1.
     matches: list[tuple[int, int, str, str]] = []  # (start, end, kind, inner)
-    for m in _BLOCK_MATH.finditer(text):
+    for m in _BLOCK_DOLLAR.finditer(text):
         matches.append((m.start(), m.end(), "block_math", m.group(1)))
-    for m in _INLINE_MATH.finditer(text):
-        # Skip if this inline match overlaps any block match already accepted.
-        if any(start <= m.start() < end for start, end, _, _ in matches):
+    for m in _BLOCK_BRACKET.finditer(text):
+        if _overlaps(m.start(), m.end(), matches):
+            continue
+        matches.append((m.start(), m.end(), "block_math", m.group(1)))
+    for m in _BLOCK_ENV.finditer(text):
+        if _overlaps(m.start(), m.end(), matches):
+            continue
+        matches.append((m.start(), m.end(), "block_math", m.group(2)))
+    for m in _INLINE_DOLLAR.finditer(text):
+        if _overlaps(m.start(), m.end(), matches):
+            continue
+        matches.append((m.start(), m.end(), "inline_math", m.group(1)))
+    for m in _INLINE_PAREN.finditer(text):
+        if _overlaps(m.start(), m.end(), matches):
             continue
         matches.append((m.start(), m.end(), "inline_math", m.group(1)))
     matches.sort(key=lambda t: t[0])
@@ -168,3 +197,8 @@ def extract_and_render_inline(text: str) -> Iterator[tuple[str, str]]:
         pos = end
     if pos < len(text):
         yield ("text", text[pos:])
+
+
+def _overlaps(start: int, end: int, matches: list[tuple[int, int, str, str]]) -> bool:
+    """True when ``start``/``end`` intersects any accepted match span."""
+    return any(start < e and s < end for s, e, _, _ in matches)
