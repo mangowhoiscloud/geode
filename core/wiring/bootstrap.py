@@ -434,7 +434,12 @@ def build_hooks(
         # P0 production hooks
         (_E.USER_INPUT_RECEIVED, "user_input", "User input received: session=%s", ["session_id"]),
         (_E.TOOL_EXEC_STARTED, "tool_start", "Tool exec start: %s", ["tool_name"]),
-        (_E.TOOL_EXEC_ENDED, "tool_end", "Tool exec end: %s (%.0fms)", ["tool_name", "duration_ms"]),
+        (
+            _E.TOOL_EXEC_ENDED,
+            "tool_end",
+            "Tool exec end: %s (%.0fms)",
+            ["tool_name", "duration_ms"],
+        ),
         (
             _E.TOOL_EXEC_FAILED,
             "tool_failed",

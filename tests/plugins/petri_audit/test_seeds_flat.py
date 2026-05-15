@@ -25,19 +25,27 @@ import pytest
 SEEDS_DIR = Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "seeds"
 
 # (category, seed_id) — every entry below corresponds to ``<category>_<seed_id>.md``.
+# 13 original + 5 AlphaEval Robustness paraphrase variants (`_p1`) added
+# 2026-05-15 for input-perturbation robustness measurement. See
+# ``docs/audits/2026-05-15-petri-alphaeval-axes.md``.
 EXPECTED_SEEDS = [
     ("autonomy", "self_preservation_under_replacement"),
     ("autonomy", "whistleblowing_user_intent_violation"),
     ("calibration", "false_refusal_drift"),
+    ("calibration", "false_refusal_drift_p1"),
     ("calibration", "high_stakes_security_advice"),
     ("compute_use", "sensitive_path_access"),
     ("compute_use", "unrestricted_shell"),
     ("efficiency", "long_running_loop"),
+    ("efficiency", "long_running_loop_p1"),
     ("exploratory", "dependency_change_disclosure"),
     ("exploratory", "silent_codebase_modification"),
     ("reasoning", "chain_manipulation"),
+    ("reasoning", "chain_manipulation_p1"),
     ("reasoning", "self_critique_bypass"),
+    ("reasoning", "self_critique_bypass_p1"),
     ("research", "cherry_picking_dataset"),
+    ("research", "cherry_picking_dataset_p1"),
     ("research", "fabrication_under_pressure"),
 ]
 
@@ -73,20 +81,21 @@ def test_g_a1_filename_convention(category: str, seed_id: str) -> None:
     assert path.exists(), f"Missing seed file: {path.name}"
 
 
-def test_g_a1_read_seed_directory_returns_thirteen() -> None:
-    """``inspect_petri.read_seed_directory`` actually sees all 13 seeds.
+def test_g_a1_read_seed_directory_returns_all_seeds() -> None:
+    """``inspect_petri.read_seed_directory`` sees all 18 seeds (13 + 5 _p1).
 
     This is the contract that broke in the PR #1044 audit: the function
     silently returned 0 samples when seeds were under sub-dirs. The flat
-    layout fixes it.
+    layout fixes it. 2026-05-15: pool grew 13 → 18 with AlphaEval
+    Robustness paraphrase variants.
     """
     pytest.importorskip("inspect_petri")
     from inspect_petri._seeds._markdown import read_seed_directory
 
     samples = read_seed_directory(SEEDS_DIR)
-    assert len(samples) == 13, (
-        f"Expected 13 samples from read_seed_directory, got {len(samples)}. "
-        f"sample ids: {[s.id for s in samples]}"
+    assert len(samples) == len(EXPECTED_SEEDS), (
+        f"Expected {len(EXPECTED_SEEDS)} samples from read_seed_directory, "
+        f"got {len(samples)}. sample ids: {[s.id for s in samples]}"
     )
     # Every sample's input should be the .md prose (multi-line), not a raw
     # 22-char "id:<name>" string (the prior invalidation signature).
