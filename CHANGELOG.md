@@ -52,6 +52,36 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Documentation
+
+- **README + CLAUDE.md count grounding — tool 25→61, skill 13→14, MCP
+  200+→200, module 353→363, test 4608→4897.** 직전 unified-daemon
+  다이어그램 self-audit 에서 발견된 outdated 수치 정정. README/README.ko
+  의 (a) shields.io 배지, (b) `What's inside` 표, (c) peer comparison 표
+  의 MCP 셀, (d) Architecture overview 의 `Runtime Tools(N)` /
+  `ToolRegistry(N)` / `Skills(N)` 라벨, (e) `GEODE Runtime` 단락의 도구
+  / Skill 카운트 모두 실측값으로 갱신. CLAUDE.md 의 `Modules` (`find
+  core/ -name "*.py" \| wc -l` = 318, `plugins/` = 45) + `Tests` (`pytest
+  --collect-only -m "not live"` = 4897) 카운트도 동기화. 측정 방식: (1)
+  `core/tools/definitions.json` JSON 길이 = 61. (2) `SkillLoader(lazy=
+  True).load_all()` 길이 = 14 (bundled+global+project 스코프 합산).
+  (3) `~/.geode/mcp/registry-cache.json` 의 `servers` array 길이 =
+  정확히 200 (예전 "200+" 는 부정확). 행위 변경 0 — doc 수치 only.
+- **README + CLAUDE.md count grounding — tool 25→61, skill 13→14,
+  MCP 200+→200, module 353→363, test 4608→4897.** Outdated counts
+  discovered while self-auditing the unified-daemon diagram were
+  resynced against measured values. Updated in README and README.ko:
+  (a) shields.io badges, (b) `What's inside` table, (c) peer
+  comparison MCP cell, (d) `Tools(N)` / `ToolRegistry(N)` /
+  `Skills(N)` labels in the Architecture overview, (e) `GEODE
+  Runtime` paragraph tool / skill counts. CLAUDE.md `Modules` and
+  `Tests` lines also resynced. Measurement: (1) length of
+  `core/tools/definitions.json` JSON array = 61. (2)
+  `SkillLoader(lazy=True).load_all()` returns 14 across
+  bundled/global/project scopes. (3) `~/.geode/mcp/registry-cache.
+  json` `servers` array length is exactly 200 — the prior "200+"
+  was inaccurate. Pure documentation change, no behavioral impact.
+
 ### Infrastructure
 
 - **Petri raw-archive analyzer + safe10 seed pool.** `scripts/petri_analyze.py`

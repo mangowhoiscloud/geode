@@ -12,8 +12,8 @@ A general-purpose autonomous execution agent built on LangGraph. Autonomously pe
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 311 core + 42 plugins = 353
-- **Tests**: 4608 (+24 live)
+- **Modules**: 318 core + 45 plugins = 363
+- **Tests**: 4897 (+24 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
