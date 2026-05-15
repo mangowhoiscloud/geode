@@ -1,0 +1,49 @@
+# yamllint config — render-lint for YAML that ships with the Pages
+# bundle and the petri_audit plugin.
+#
+# Korean engineer-essay docs run long; we keep most cosmetic rules off
+# and focus on what would break parsing or downstream tooling
+# (judge_dimensions load, listing.json mirroring).
+
+extends: default
+
+rules:
+  # Korean comments in YAML can hit very long lines; line-length is a
+  # rendering nit, not a render-breaking issue.
+  line-length: disable
+
+  # `key: value` two-space indent is the convention; disable so we do
+  # not fight pyyaml's emission rules.
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+    check-multi-line-strings: false
+
+  # `---` document start is conventional but not required. We accept
+  # both styles so plugin/petri_audit YAML (a bare list) stays valid
+  # without ceremony.
+  document-start: disable
+
+  # Allow `on:` / `off:` / `yes:` etc. in workflows. Keep `true/false`
+  # check for accidental boolean coercion.
+  truthy:
+    check-keys: false
+    level: warning
+
+  # Empty lines at end of file are normalized by end-of-file-fixer
+  # pre-commit hook, not yamllint, to keep the error budget readable.
+  empty-lines:
+    max-end: 1
+    max: 2
+
+  # The judge_dims/ YAML and listing.json sibling files use trailing
+  # commas in commentary; tolerate them.
+  trailing-spaces: enable
+
+  # Comments need a leading space, but allow `#!` and `#---` style
+  # banners that we use for shebang-style separators in tooling YAML.
+  comments:
+    require-starting-space: true
+    min-spaces-from-content: 1
+
+  comments-indentation: disable
