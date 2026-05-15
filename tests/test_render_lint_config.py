@@ -34,8 +34,7 @@ def test_pymarkdown_config_exists_and_parses() -> None:
     """The markdown render-lint config must be valid JSON."""
 
     assert PYMARKDOWN_CONFIG.is_file(), (
-        f"missing {PYMARKDOWN_CONFIG} — Pages publish lint gate will degrade "
-        "to a no-op without it"
+        f"missing {PYMARKDOWN_CONFIG} — Pages publish lint gate will degrade to a no-op without it"
     )
     data = json.loads(PYMARKDOWN_CONFIG.read_text(encoding="utf-8"))
     assert isinstance(data, dict)
@@ -111,8 +110,7 @@ def test_pages_workflow_has_lint_gate() -> None:
     needs = build.get("needs")
     needs_set = {needs} if isinstance(needs, str) else set(needs or [])
     assert "lint" in needs_set, (
-        "build job must declare needs: [lint] so the lint gate "
-        "actually blocks the deploy"
+        "build job must declare needs: [lint] so the lint gate actually blocks the deploy"
     )
 
 
@@ -149,9 +147,7 @@ def test_petri_bundle_json_parses() -> None:
 def test_judge_dims_yaml_parses() -> None:
     """The judge_dim YAML loads via PyYAML (= the path plugin code uses)."""
 
-    yaml_path = (
-        REPO_ROOT / "plugins" / "petri_audit" / "judge_dims" / "geode_5axes.yaml"
-    )
+    yaml_path = REPO_ROOT / "plugins" / "petri_audit" / "judge_dims" / "geode_5axes.yaml"
     assert yaml_path.is_file()
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     assert isinstance(data, list), "geode_5axes.yaml must parse as a list of dims"
