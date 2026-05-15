@@ -36,9 +36,20 @@ geode = "core.cli:app"
 # `plugins/petri_audit/__init__.py:register()`, which registers
 # `GeodeModelAPI` so `--model-role target=geode/<base>` resolves.
 #
+# PR #6 (2026-05-14) — multiple names point to the same module so that
+# inspect_ai's ``ensure_entry_points(package=<prefix>)`` finds a matching
+# ep regardless of which provider prefix appears in the model id. The
+# fast-path matches ep.name == prefix (no full-load fallback needed), so
+# ``openai-codex/gpt-5.5`` resolution loads ``plugins.petri_audit`` and
+# its top-level ``register_codex()`` runs before the model lookup retries.
+# Python's import system de-dupes the module so all registrations run
+# exactly once per process.
+#
 # Reference: inspect_ai/_util/entrypoints.py:ensure_entry_points
 [project.entry-points.inspect_ai]
 geode_audit = "plugins.petri_audit"
+geode = "plugins.petri_audit"
+openai-codex = "plugins.petri_audit"
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.0.0"]
