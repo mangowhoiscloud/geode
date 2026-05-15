@@ -127,6 +127,10 @@ dev = [
     "import-linter>=2.0",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
+    # Render-lint stack — version-matched with .pre-commit-config.yaml and
+    # .github/workflows/pages.yml so local + CI surfaces match.
+    "pymarkdownlnt>=0.9.37",
+    "yamllint>=1.38.0",
     "pytest>=9.0.2",
     "pytest-cov>=6.0.0",
     "ruff>=0.15.2",

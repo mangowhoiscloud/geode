@@ -1,0 +1,52 @@
+{
+  "$comment": [
+    "Render-lint config for GitHub Pages-published markdown under",
+    "docs/audits/ and docs/petri-bundle/README.md. The goal is to",
+    "catch syntax/structure issues that break Pages rendering — not",
+    "to enforce English-prose cosmetics.",
+    "",
+    "Rules disabled (with rationale):",
+    "  MD013 line-length: Korean engineer-essay tone runs long; we",
+    "    rely on wrap-as-you-go rather than a hard column limit.",
+    "  MD024 no-duplicate-heading: caveat blocks legitimately reuse",
+    "    section headers like '### 본 root cause 의 actual' across",
+    "    a long audit retrospective.",
+    "  MD033 no-inline-html: README and audits embed <sub>, <kbd>,",
+    "    and rare <br> for table-cell formatting.",
+    "  MD041 first-line-h1: footnotes ([^credit]) appear before the",
+    "    final H1 in some files because the audit footer pattern",
+    "    keeps the cost note at the very bottom.",
+    "",
+    "Rules kept on (with rationale):",
+    "  MD001 heading-increment: ensures TOC renders predictably.",
+    "  MD003 heading-style: enforces ATX-style # headings.",
+    "  MD009 no-trailing-spaces: Pages renderer treats two trailing",
+    "    spaces as <br>; surprises are bad.",
+    "  MD010 no-hard-tabs: tabs render unpredictably in tables.",
+    "  MD022 blanks-around-headings: missing blanks break heading",
+    "    detection in some GFM renderers.",
+    "  MD031 blanks-around-fences: same for code fences.",
+    "  MD032 blanks-around-lists: same for lists.",
+    "  MD040 fenced-code-language: code fences must declare a lang",
+    "    so the bundle highlighter picks the right grammar.",
+    "  MD055 table-pipe-style: caveat tables use leading/trailing",
+    "    pipes; enforce so column alignment markers (---:) parse.",
+    "  MD056 table-column-count: catches columns that fall out of",
+    "    sync — the most common Pages render breakage.",
+    "  MD058 blanks-around-tables: ensures table boundaries are",
+    "    detected (common cause of un-rendered tables on Pages)."
+  ],
+  "plugins": {
+    "md013": { "enabled": false },
+    "md024": { "enabled": false },
+    "md033": { "enabled": false },
+    "md041": { "enabled": false },
+    "md007": { "enabled": false },
+    "md026": { "enabled": false },
+    "md036": { "enabled": false },
+    "md034": { "enabled": false }
+  },
+  "extensions": {
+    "front-matter": { "enabled": true }
+  }
+}

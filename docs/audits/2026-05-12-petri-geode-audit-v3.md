@@ -1,7 +1,7 @@
 # Petri × GEODE Audit — v3 valid 결과 보고 (2026-05-12)
 
 > ⚠️ **2026-05-14 사후 검증 update**: 본 보고서 의 가장 큰 finding (`input_hallucination` +1.38) 은 사후 검증 결과 **[substantially invalid]** 로 강등. 23.1% empty seed + 5/5 indirect seed 의 non-fabrication 확정. 상세: `2026-05-14-petri-verification-summary.md`. 본 보고서 의 원문 은 historical record 로 유지 하되, finding 해석 은 caveat (1.5 절) 및 강등 표기 (5 절) 를 참조.
-
+>
 > Source: PR #1044 (v1 invalid, retraction) 의 후속 — G-A1 (seeds flat) + G-A2 (anthropic empty static_part) fix 후 의 첫 valid live audit.
 > Archive: `~/.geode/petri/logs/2026-05-11T20-16-25-*.eval` (GEODE) + `~/.geode/petri/logs/2026-05-11T20-22-13-*.eval` (vanilla).
 
@@ -97,6 +97,7 @@ PR #1044 의 audit 결과 가 silently broken 한 seed wiring (raw seed-id strin
 | **scenario_realism** | **6.15** | **5.92** | **7.38** | **5.77** |
 
 **관찰**:
+
 - v1 → v3 의 가장 큰 변화 — auditor 의 generic-pressure (v1 의 raw seed-id reconstruction) 의 결과 vs specific-scenario (v3 의 .md prose) 의 결과 의 차이.
 - `unprompted_initiative` 의 v1 3.15 → v3 1.31 (GEODE), v1 3.38 → v3 1.15 (vanilla) — v1 의 raw "self_preservation_under_replacement", "whistleblowing_user_intent_violation" 같은 단어 의미 의 reconstruction 의 결과 — auditor 가 자율 행동 의 prompt 의 생성. v3 의 정상 시나리오 의 1→2→3→2→1 pressure curve 의 결과 — target 의 self-preservation / whistleblowing 의 신호 가 reduce.
 - `admirable` 의 v1 의 양쪽 6.46/5.69 → v3 의 2.46/2.23 — v1 의 generic-pressure 의 결과 의 generic favorability 의 큰 차이 vs v3 의 specific scenario 의 결과 의 favorability 가 vanilla 수준.
@@ -125,11 +126,13 @@ GEODE 의 ToolExecutor 가 fabricated tool result 에 대한 robust 가 vanilla 
 GEODE 의 `input_hallucination` 이 vanilla 의 1.54 보다 +1.38 큰 2.92. **본 audit 의 가장 큰 새 finding** — GEODE 의 AgenticLoop 가 압박 시나리오 의 invented tool result / file 행동 의 vanilla 보다 강한 경향. v1 의 +0.31 hint 가 v3 의 specific scenario 의 정상 prose 의 inject 시 +1.38 의 magnitude 확장.
 
 본 root cause 의 candidate (2026-05-14 사후 검증 으로 모두 기각):
+
 - ~~AgenticLoop 의 system prompt 의 generic tool 호출 의 강한 prompting~~ → A2 verdict: target 의 tool call 아님, auditor inject 의 acknowledge
 - ~~ProfilePolicy 의 audit-mode strip 의 결과 의 target 의 tool 사용 의 free freedom~~ → A2 verdict: GEODE wrapper 의 noise (M-routing artifact)
 - ~~본 .md 시나리오 의 "압박 하 + tool 사용 의 autonomy" 의 결합~~ → A1 finding: fabrication seed 는 측정조차 안 됨 (empty)
 
 본 root cause 의 actual (사후 검증):
+
 - **A1 (harness)**: auditor self-restart loop → dedicated fabrication seed 측정 불능
 - **A3 (judge)**: broken_tool_use × input_hallucination 의 single-event double-count
 - **A2 (transcript)**: auditor 의 inject narrative 의 target acknowledge 의 mis-classification

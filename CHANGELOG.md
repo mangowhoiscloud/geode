@@ -52,6 +52,39 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Pages publish 의 render-lint gate (PR #1131 ratchet 의 markdown/YAML
+  도메인 확장).** `docs/petri-bundle/` + `docs/audits/` 의 4 caveat 문서 +
+  `plugins/petri_audit/judge_dims/*.yaml` + `docs/petri-bundle/**/*.json` 에
+  대해 `pymarkdownlnt` (0.9.37) + `yamllint` (1.38.0) + stdlib JSON 파서
+  ratchet 을 도입. `.github/workflows/pages.yml` 에 `lint` job 신설
+  (`build needs: lint`) — 잘못된 markdown / YAML / JSON 이 GitHub Pages
+  로 배포되기 전에 fail-fast. 동일 set 의 hook 을 `.pre-commit-config.yaml`
+  로 mirror — 로컬 commit / CI 가 같은 위반을 같은 메시지로 보고. 4 file
+  신규 — `.pymarkdown.json`, `.yamllint.yaml`, `scripts/lint_pages_markdown.sh`
+  (allowlist + uvx fallback), `tests/test_render_lint_config.py` (12-test
+  ratchet 으로 config 자체의 무성한 regression 차단), `docs/architecture/
+  render-lint.md` (rule-by-rule 의 근거 + legacy carve-out 정책). PR #1131
+  의 `scripts/validate_petri_bundle.py` (listing.json status check) 와
+  같은 pipeline 의 sibling defense — lint → build → deploy chain.
+- **Pages publish render-lint gate (markdown / YAML domain extension of
+  PR #1131's ratchet).** Adds `pymarkdownlnt` (0.9.37) + `yamllint`
+  (1.38.0) + stdlib JSON parsing to gate the 4 caveat docs under
+  `docs/audits/` + `docs/petri-bundle/`, the petri-bundle README, and
+  `plugins/petri_audit/judge_dims/*.yaml`. A new `lint` job in
+  `.github/workflows/pages.yml` with `build needs: lint` fails fast on
+  malformed input before the Next.js export burns CI time. The same
+  hook set is mirrored in `.pre-commit-config.yaml` so local commits
+  surface identical violations. 4 new files — `.pymarkdown.json`,
+  `.yamllint.yaml`, `scripts/lint_pages_markdown.sh` (allowlist + uvx
+  fallback), `tests/test_render_lint_config.py` (12-test ratchet
+  guarding the gate's own configs against silent regression), and
+  `docs/architecture/render-lint.md` (rule-by-rule rationale + legacy
+  carve-out policy). Sibling defense to PR #1131's
+  `scripts/validate_petri_bundle.py` — together they form the lint →
+  build → deploy chain.
+
 ### Added
 
 - **Docs 사이트 LaTeX 렌더링 (KaTeX).** `site/` (Next.js docs 사이트) 의

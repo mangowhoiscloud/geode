@@ -1,8 +1,9 @@
 # Petri × GEODE Audit — 모델 별 GEODE 의 강점 / 약점 + Feedback Loop 의 개선 insights
 
 > ⚠️ **2026-05-14 사후 검증 update**: 본 보고서 의 두 cross-model 일관 신호 중 `input_hallucination` 약점 은 **[substantially invalid]** 로 강등. 23.1% empty seed + A2 verdict 의 REAL_FABRICATION 0 건. 상세: `2026-05-14-petri-verification-summary.md`.
-
+>
 > 본 보고서 는 본 turn 의 다음 archive 의 partial evidence 기반 :
+>
 > - **Opus N=2** (`geode-13-v3.eval` + `n5-opus-geode-seed1.eval` + `vanilla-13-v3.eval` + `n5-opus-vanilla-seed1.eval`)
 > - **Sonnet N=1** (`n5-sonnet-{geode,vanilla}-seed1.eval`)
 > - **gpt-5.5** vanilla N=1 만 (GEODE 의 credit exhaust 의 fail, comparison X)
@@ -40,6 +41,7 @@
 ### 2.3 gpt-5.5
 
 본 GEODE wrap 의 측정 X (credit exhaust 의 fail). 본 후속 라이브 의 evidence 의 추가 의 필요. 본 시점 의 vanilla 의 baseline 만:
+
 - `scenario_realism` 8.62 (가장 realistic)
 - `broken_tool_use` 2.92 (Anthropic vanilla 보다 robust)
 - `input_hallucination` 1.77 (가장 정직)
@@ -66,6 +68,7 @@
 ### 3.3 model-specific 약점 의 hypothesis
 
 본 cross-model 의 다른 결과 의 가능 cause:
+
 - **judge gpt-5.5 의 calibration**: 본 same auditor 의 transcript 의 의 model 별 의 다른 scoring
 - **GEODE wrapper 의 system prompt overhead 의 model 별 의 effect**: 본 Opus 의 1M context 의 absorb 의 robust vs Sonnet 의 200K context 의 wrapping 의 visible
 - **본 N=5 의 statistical 의 후속 evidence 의 confirm / refute 의 path**
@@ -85,6 +88,7 @@
 - **A3 (judge)**: broken_tool_use × input_hallucination 의 single-event double-count 의 잔존 noise 증폭
 
 본 fix path (`2026-05-14-petri-fix-plan.md`):
+
 - ~~AgenticLoop 의 tool prompting review~~ → **불필요** (root cause 가 아님)
 - PR #3 (A1 seed hint): 3 empty seed 의 ## Auditor Hint 추가
 - PR #4 (A3 judge split): 1→5 judge 분리, `broken_tool_use` 단독 격리
@@ -93,6 +97,7 @@
 ### 4.3 Model-specific 의 noise (Sonnet 의 Opus 보다 다른 결과)
 
 본 Sonnet 의 `scenario_realism` -0.85 의 wrapping cost — 본 Opus 의 -0.04 의 거의 동등 의 반대. 본 hypothesis:
+
 - 본 Sonnet 의 200K context 의 wrapping 의 visible (GEODE 의 system prompt overhead 의 절대 의 큰 비중)
 - 본 Opus 의 1M context 의 absorb 의 robust
 
@@ -134,6 +139,7 @@
 **본 audit 의 measurement 자체 의 invalid (v1) 의 발견 → 본 fix (G-A1) → valid 의 새 evidence (v3) 의 다른 distribution → 본 새 finding (input_hallucination 의 GEODE 약점) → 본 의 후속 audit / fix 의 path** 의 cycle 의 evidence.
 
 본 cycle 의 의미:
+
 1. **alignment audit 의 wiring 자체 의 검증 의 가치 의 본 결과 의 magnitude 보다 큼** — 본 invalid measurement 의 silent 의 weeks 의 의 trust loss 의 회피
 2. **본 feedback loop 의 가치 의 외부 publish (Pages) 의 의의** — 본 audit 의 발견 의 외부 검증 의 path
 3. **본 fix 의 mechanism 의 cross-validation** — G3 strip 의 valid evidence 의 v3 의 scenario_realism 의 회복
