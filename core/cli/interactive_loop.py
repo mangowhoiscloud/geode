@@ -48,6 +48,52 @@ def _drain_scheduler_queue(
     )
 
 
+def _render_text_with_latex(text: str) -> None:
+    """Render an LLM response with LaTeX segments lifted out of Markdown.
+
+    The body is scanned for math delimiters (``$``/``$$``/``\\[\\]``/``\\(\\)``/
+    ``\\begin{equation}…``) and split into text + math segments. Text
+    segments still flow through :class:`rich.markdown.Markdown`; math
+    segments render through :func:`core.ui.latex.render_latex` so the
+    user sees Unicode (Tier 1) or a 2D Sympy block (Tier 2) instead of
+    raw backslash form. Inline math is folded back into the surrounding
+    Markdown paragraph; block math splits the Markdown stream. Falls back
+    to plain Markdown when the body contains no math.
+    """
+    from rich.markdown import Markdown
+
+    from core.ui.latex import extract_and_render_inline
+
+    segments = list(extract_and_render_inline(text))
+    has_math = any(kind != "text" for kind, _ in segments)
+
+    console.print()
+    if not has_math:
+        console.print(Markdown(text))
+        console.print()
+        return
+
+    text_buffer: list[str] = []
+
+    def flush_text_buffer() -> None:
+        if text_buffer:
+            console.print(Markdown("".join(text_buffer)))
+            text_buffer.clear()
+
+    for kind, payload in segments:
+        if not payload:
+            continue
+        if kind in {"text", "inline_math"}:
+            text_buffer.append(payload)
+        else:  # block_math
+            flush_text_buffer()
+            console.print()
+            console.print(payload, style="value")
+            console.print()
+    flush_text_buffer()
+    console.print()
+
+
 def _render_ipc_response(response: dict[str, Any], *, streamed: bool = False) -> None:
     """Render an IPC response from serve.
 
@@ -71,11 +117,7 @@ def _render_ipc_response(response: dict[str, Any], *, streamed: bool = False) ->
         # Main text (always render — this is the LLM's final response)
         text = response.get("text", "")
         if text:
-            from rich.markdown import Markdown
-
-            console.print()
-            console.print(Markdown(text))
-            console.print()
+            _render_text_with_latex(text)
 
         if not streamed:
             # Fallback status line when streaming wasn't available
