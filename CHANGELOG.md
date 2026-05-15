@@ -54,6 +54,43 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **Codex MCP verify skill + session handoff (cross-LLM verification).**
+  Claude Code 본 세션 안에서 Codex (ChatGPT Plus 구독 quota) 를 second-
+  opinion verifier 로 활용하는 skill + 본 cycle 의 작업 chain 의 다음
+  session 진입 plan 의 SOT.
+  - `.geode/skills/codex-mcp-verify/SKILL.md` — skill 정식 commit
+    (PR #1147 의 follow-up). triggers: codex / mcp / codex-verify /
+    second opinion / cross-llm / gpt-5 / codex review. Codex MCP 의
+    invocation pattern (`mcp__codex__exec`, `mcp__codex__review`,
+    `mcp__codex__apply`) + 3 verify task spec (Phase 5 implementation
+    review, autoresearch mutation_blocklist, 21 dim expansion).
+  - `docs/audits/2026-05-15-session-handoff-codex-verify.md` — 본 session
+    의 12 PR chain SOT + 다음 session 의 첫 3 task + worktree cleanup
+    상태 + autoresearch generation 1 의 first task plan.
+  - Codex MCP server 등록: `claude mcp add codex -- codex mcp-server`
+    (project-level), `~/.claude.json` 의 mcpServers.codex 의 stdio
+    command. PR #1133 의 Codex OAuth (`~/.codex/auth.json`) 와 같은
+    auth source.
+
+- **Codex MCP verify skill + session handoff (cross-LLM verification).**
+  Skill enabling Codex (ChatGPT Plus subscription quota) as a second-
+  opinion verifier inside the Claude Code session, plus a handoff
+  document indexing this cycle's PR chain as the SOT for next-session
+  entry.
+  - `.geode/skills/codex-mcp-verify/SKILL.md` — skill committed (follow-
+    up to PR #1147). Triggers: codex / mcp / codex-verify / second
+    opinion / cross-llm / gpt-5 / codex review. Documents Codex MCP
+    invocation patterns (`mcp__codex__exec`, `mcp__codex__review`,
+    `mcp__codex__apply`) and three verify tasks (Phase 5 implementation
+    review, autoresearch mutation_blocklist, 21-dim expansion).
+  - `docs/audits/2026-05-15-session-handoff-codex-verify.md` — Index of
+    this session's 12-PR chain plus the next-session entry plan, worktree
+    cleanup status, and the autoresearch generation-1 first-task plan.
+  - Codex MCP server registration: `claude mcp add codex -- codex mcp-
+    server` (project scope) wrote into `~/.claude.json` mcpServers.codex
+    stdio command. Same auth source (`~/.codex/auth.json`) as PR #1133's
+    Codex OAuth.
+
 - **Petri × Claude Code judge adapter (autoresearch Phase 5).** Petri
   audit 의 judge role 의 cost frontier 를 Claude Max subscription 으로
   확장. PR #1133 의 `codex_provider.py` (auditor/target 의 ChatGPT Plus
