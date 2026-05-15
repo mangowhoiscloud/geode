@@ -32,6 +32,7 @@ def try_decompose(loop: AgenticLoop, user_input: str) -> str | None:
 
         if loop._goal_decomposer is None:
             loop._goal_decomposer = GoalDecomposer(
+                model=loop.model,
                 tool_definitions=loop._tools,
             )
 
