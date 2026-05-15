@@ -10,8 +10,11 @@ Central assembly point that resolves the 5 disconnections identified in ADR-007:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from core.hooks import HookEvent, HookSystem
@@ -19,6 +22,52 @@ from core.llm.prompts import _hash_prompt
 from core.llm.skill_registry import SkillDefinition, SkillRegistry
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Wrapper-override loader (autoresearch outer-loop hook)
+# ---------------------------------------------------------------------------
+#
+# When ``GEODE_WRAPPER_OVERRIDE=<path-to-json>`` is set, the JSON file is
+# read as ``dict[str, str]`` and its values are concatenated to *replace*
+# ``base_system`` in :meth:`PromptAssembler.assemble`. autoresearch's
+# ``train.py`` writes this file before invoking ``geode audit``, so the
+# outer-loop's wrapper-section mutations actually reach the runtime.
+#
+# If the env var is absent, assembly proceeds with the unmodified
+# ``base_system``. If the env var is present but the payload cannot be loaded
+# as a non-empty ``dict[str, str]``, assembly fails closed so real-mode audits
+# cannot spend quota on an accidentally ignored mutation.
+
+_WRAPPER_OVERRIDE_ENV = "GEODE_WRAPPER_OVERRIDE"
+
+
+def _load_wrapper_override() -> dict[str, str] | None:
+    """Return the wrapper-section override dict, or ``None`` when disabled.
+
+    The env var is the opt-in signal. Once it is set, malformed payloads are
+    fatal because silently falling back to the baseline would make the
+    autoresearch mutation surface unobservable.
+    """
+    override_path = os.environ.get(_WRAPPER_OVERRIDE_ENV)
+    if not override_path:
+        return None
+    path = Path(override_path)
+    if not path.is_file():
+        raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} file not found")
+    try:
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} load failed: {exc}") from exc
+    if not isinstance(data, dict) or not data:
+        raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} must be a non-empty dict[str, str]")
+    for key, value in data.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise RuntimeError(
+                f"{_WRAPPER_OVERRIDE_ENV}={path} has non-string key/value at {key!r}"
+            )
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -104,10 +153,21 @@ class PromptAssembler:
         Returns:
             ``AssembledPrompt`` with fully composed prompts and metadata.
         """
-        base_hash = _hash_prompt(base_system + base_user)
         fragments_used: list[str] = []
         skill_hashes: dict[str, str] = {}  # Karpathy P4: track skill content for drift
         truncation_events: list[str] = []  # Karpathy P6: record what was truncated
+
+        # --- Phase 0: Wrapper-level override (autoresearch outer-loop) ---
+        # GEODE_WRAPPER_OVERRIDE=<json-path> lets ``autoresearch/train.py``
+        # mutate the wrapper system prompt for a single audit run. The dict
+        # values replace ``base_system`` entirely; the rest of the assembly
+        # phases (skill / memory / extra) still apply on top.
+        wrapper_override = _load_wrapper_override()
+        if wrapper_override:
+            base_system = "\n\n".join(wrapper_override.values())
+            fragments_used.append(f"wrapper-override:{len(wrapper_override)}sections")
+
+        base_hash = _hash_prompt(base_system + base_user)
 
         # --- Phase 1: Prompt Override ---
         overrides = state.get("_prompt_overrides", {})
