@@ -35,7 +35,15 @@ class TestRetryWithBackoff:
         result = _retry_with_backoff(fn, model="test-model")
         assert result == "ok"
         assert fn.call_count == 2
-        mock_sleep.assert_called_once()
+        # Filter out background spinner sleeps (always exactly 0.08s from
+        # ``core.ui.{event_renderer,status,tool_tracker}._animate``) so we
+        # only count the genuine retry-backoff sleep emitted by
+        # ``_retry_with_backoff`` itself. ``@patch("core.llm.fallback.time.sleep")``
+        # rebinds the ``time`` module attribute, which is shared across
+        # every module that ``import time``, so daemon spinner threads
+        # started by a prior test leak into this mock's call_args_list.
+        retry_sleeps = [c for c in mock_sleep.call_args_list if c.args[0] != 0.08]
+        assert len(retry_sleeps) == 1, retry_sleeps
 
     @patch("core.llm.fallback.time.sleep")
     def test_fallback_model_on_persistent_failure(self, mock_sleep):
