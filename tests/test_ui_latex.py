@@ -75,9 +75,7 @@ class TestTier2PrettyPrint:
     def test_unparseable_falls_back_to_tier1(self) -> None:
         # latex2sympy2 cannot parse a free-form `\text{...}` block, but the
         # caller should still get a usable Tier 1 string back.
-        out = render_latex(
-            r"\frac{\text{numerator}}{\text{denominator}}", block=True
-        ).plain
+        out = render_latex(r"\frac{\text{numerator}}{\text{denominator}}", block=True).plain
         assert "numerator" in out
         assert "denominator" in out
 
@@ -126,8 +124,6 @@ class TestMixedContent:
             (r"start $a$ mid $b$ end", ["text", "inline_math", "text", "inline_math", "text"]),
         ],
     )
-    def test_segmentation_table(
-        self, source: str, expected_kinds: list[str]
-    ) -> None:
+    def test_segmentation_table(self, source: str, expected_kinds: list[str]) -> None:
         chunks = list(extract_and_render_inline(source))
         assert [k for k, _ in chunks] == expected_kinds
