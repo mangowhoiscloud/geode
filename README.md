@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/25%20tools-MCP%20native-1e293b?style=flat-square" alt="25 Tools">
+  <img src="https://img.shields.io/badge/61%20tools-MCP%20native-1e293b?style=flat-square" alt="61 Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -302,7 +302,7 @@ uv tool install -e . --force
 | Feature | What it does |
 |---------|-------------|
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches — all instances of the same loop |
-| **25 tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (200+ servers, cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
+| **61 tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (200 servers, cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
 | **3-provider failover** | Anthropic + OpenAI + ZhipuAI. Subscription OAuth (Codex) auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` for multi-step work. Disk-persistent (`.geode/plans.json`), survives restarts |
@@ -339,7 +339,7 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 | Discord / Telegram / other chat | ❌ | ❌ | ✅✅ 23+ channels (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram pollers |
 | IDE plugin | ❌ (Chrome MCP extension only) | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
 | Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat plugin | ❌ (docs site only) |
-| MCP server catalog | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic-published registry (200+ servers, cached at `~/.geode/mcp/registry-cache.json`) |
+| MCP server catalog | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic-published registry (200 servers, cached at `~/.geode/mcp/registry-cache.json`) |
 
 </details>
 
@@ -375,7 +375,7 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | Plugin / extension surfaces | ✅ manifest + marketplace (user / project / local scopes) | ✅ `/plugins` slash command + plugin sharing (v0.130+) | ✅✅ 4 extension points (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ `DomainPort` Protocol + plugin loader |
-| Skill system | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ skill filter + archive upload | ✅ runtime `SkillRegistry` (13 runtime skills) |
+| Skill system | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ skill filter + archive upload | ✅ runtime `SkillRegistry` (14 skills across bundled/global/project scopes) |
 | **Swappable domain DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — not a DAG abstraction) | ✅✅ `DomainPort` Protocol — pipeline is a first-class extension point |
 | Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Run Log + Petri eval integration (v0.90+, replaces LangSmith) |
 | Cross-LLM verification | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 inter-rater agreement gate |
@@ -396,14 +396,14 @@ Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via 
 GEODE has two control layers:
 
 - **Scaffold (production)** — Claude Code + `CLAUDE.md` + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality.
-- **GEODE Runtime (agent)** — `while(tool_use)` loop + 25 tools + 13 runtime Skills + 58 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
+- **GEODE Runtime (agent)** — `while(tool_use)` loop + 61 tools + 14 runtime Skills + 58 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
 
 4-Layer Stack (Model → Runtime → Harness → Agent) + Sub-Agent System + 5-Tier Memory.
 
 ```mermaid
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
-    HA --> RT["Runtime<br/>Tools(25), MCP catalog<br/>Memory, Skills"]
+    HA --> RT["Runtime<br/>Tools(61), MCP catalog<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
     AG -.-> DP["⊥ Domain<br/>DomainPort Protocol<br/>(swappable DAG)"]
@@ -421,7 +421,7 @@ graph LR
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | ToolRegistry(25), MCP Catalog (200+ via Anthropic registry, 5 locally configured by default), Skills(13), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
+| **Runtime** | ToolRegistry(61), MCP Catalog (200 via Anthropic registry, 5 locally configured by default), Skills(14), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
 | **⊥ Domain** | `DomainPort` Protocol — domain-specific DAG plugged in via Port (cross-cutting). One reference DAG ships in the repo; replace for any exploratory-research / signal-prediction domain | `core/domains/` |
 
