@@ -52,6 +52,53 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **Petri A3 judge split (1→5 group).** `plugins/petri_audit/` 의
+  judge 호출이 38-dim 단일 mega-prompt 1 회에서 5 그룹 (tool_mechanics
+  / reality_degradation / boundary_respect / autonomy_efficiency /
+  calibration_anchors) 으로 분리. 의도 — v3 audit (2026-05-12) 가
+  단일 tool-syntax 실패 이벤트에 `broken_tool_use=10` + `input_
+  hallucination=8` 을 동시 부여한 double-counting bias 차단. `judge_
+  schema.py` 에 `JudgeScore.is_unknown` + `mean_score_excluding_
+  unknown` 추가 (Anthropic eval blog 의 "Unknown" literal 권장 패턴).
+  `runner.py` 에 `SPLIT_TOKEN_ASSUMPTIONS` + `judge_mode={"legacy",
+  "split"}` flag + 5× judge-call cost 모델 추가 — dry-run 의 estimate
+  는 split 모드일 때 ~5× 로 상승 (`~$0.26 → ~$1.30`). 단, PR #1133
+  의 OAuth path 의 cost zeroing 은 그대로 적용되므로 본 변경은 PAYG
+  경로에만 영향. 5-call 의 inspect-petri 측 orchestration 은 upstream
+  PR 대기 중이라 runtime 의 default 는 legacy 모드 유지 — 본 PR 은
+  data contract + cost preview 단계.
+  새 파일 — `judge_dims/geode_5axes_split.yaml` (group 메타데이터),
+  `group{1..5}_*.md` (그룹별 rubric), `tests/plugins/petri_audit/
+  test_judge_split.py` (210 LOC, group / Unknown / 변수 대조 가드).
+  19 dim 의 split 그룹 매핑 — `eval_awareness` → Group 2 (reality_
+  degradation), `unprompted_sycophancy` → Group 3 (boundary_respect).
+  reference: docs/audits/2026-05-13-petri-a3-judge-split-design.md.
+- **Petri A3 judge split (1→5 group).** `plugins/petri_audit/`
+  collapses its 38-dim mega-prompt into five semantically grouped
+  judge calls (tool_mechanics / reality_degradation / boundary_
+  respect / autonomy_efficiency / calibration_anchors). Motivation —
+  the v3 audit (2026-05-12) co-scored `broken_tool_use=10` AND
+  `input_hallucination=8` on a single tool-syntax failure event,
+  driving the substantially invalid `input_hallucination Δ +1.04`
+  multi-model finding. `judge_schema.py` gains `JudgeScore.is_
+  unknown` + `mean_score_excluding_unknown` per Anthropic's "Unknown"
+  literal eval-pattern recommendation. `runner.py` adds `SPLIT_
+  TOKEN_ASSUMPTIONS` + `judge_mode={"legacy", "split"}` + a 5×
+  judge-call cost model — dry-run estimate rises to ~5× in split
+  mode (`~$0.26 → ~$1.30`). PR #1133's OAuth-path cost zeroing still
+  applies, so the cost rise only hits PAYG routes. inspect-petri-side
+  orchestration for the 5-call pattern is staged upstream, so the
+  runtime default remains legacy — this PR ships the data contract
+  + cost preview only.
+  New files — `judge_dims/geode_5axes_split.yaml` (group metadata),
+  `group{1..5}_*.md` (per-group rubrics), `tests/plugins/petri_audit/
+  test_judge_split.py` (210 LOC, group / Unknown / variance guards).
+  19-dim split mapping — `eval_awareness` → Group 2 (reality_
+  degradation), `unprompted_sycophancy` → Group 3 (boundary_respect).
+  reference: docs/audits/2026-05-13-petri-a3-judge-split-design.md.
+
 ### Added
 
 - **Docs 사이트 LaTeX 렌더링 (KaTeX).** `site/` (Next.js docs 사이트) 의

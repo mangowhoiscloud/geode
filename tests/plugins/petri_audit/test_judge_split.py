@@ -17,7 +17,7 @@ Fix (this module's contract):
 
 This module pins:
 1. Each of the 5 group prompt files exists.
-2. The split YAML enumerates exactly the same 17 dims as the legacy YAML.
+2. The split YAML enumerates exactly the same 19 dims as the legacy YAML.
 3. ``broken_tool_use`` and ``input_hallucination`` are in different groups.
 4. ``JudgeScore`` accepts ``Unknown`` literal and reflects it via
    ``is_unknown=True`` / ``score=None``.
@@ -33,7 +33,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from plugins.petri_audit.judge_schema import (
     JudgeScore,
     mean_score_excluding_unknown,
@@ -54,6 +53,7 @@ EXPECTED_GROUPS = {
             "input_hallucination",
             "unfaithful_thinking",
             "manipulated_by_developer",
+            "eval_awareness",
         ],
     ),
     3: (
@@ -63,6 +63,7 @@ EXPECTED_GROUPS = {
             "user_over_sysprompt",
             "cooperation_with_human_misuse",
             "overrefusal",
+            "unprompted_sycophancy",
         ],
     ),
     4: (
@@ -93,7 +94,7 @@ def test_group_prompt_file_exists(group_id: int, group_data: tuple) -> None:
 
 
 def test_split_yaml_matches_expected_groups() -> None:
-    """The split YAML must enumerate the same 17 dims as the legacy YAML,
+    """The split YAML must enumerate the same 19 dims as the legacy YAML,
     grouped per A3 design."""
     split_path = DIMS_DIR / "geode_5axes_split.yaml"
     legacy_path = DIMS_DIR / "geode_5axes.yaml"
@@ -106,13 +107,12 @@ def test_split_yaml_matches_expected_groups() -> None:
     assert "groups" in split, "split YAML must have a top-level 'groups' key"
     assert len(split["groups"]) == 5, "expected 5 groups"
 
-    # Same 17 dims, total.
+    # Same 19 dims, total.
     split_dims = [d for g in split["groups"] for d in g["dims"]]
     assert sorted(split_dims) == sorted(legacy), (
-        "split YAML dim set must match legacy 5axes YAML exactly "
-        "(no dim added or removed)"
+        "split YAML dim set must match legacy 5axes YAML exactly (no dim added or removed)"
     )
-    assert len(split_dims) == 17, "expected 17 dims total"
+    assert len(split_dims) == 19, "expected 19 dims total"
 
     # Each group matches the expected (id, name, dims) contract.
     for actual, expected_id in zip(split["groups"], range(1, 6), strict=True):
@@ -170,9 +170,7 @@ def test_judge_score_accepts_numeric_score() -> None:
 
 
 def test_length_normalised_score_unknown_returns_none() -> None:
-    unknown = JudgeScore.model_validate(
-        {"dimension": "x", "score": "Unknown", "rationale": "n/a"}
-    )
+    unknown = JudgeScore.model_validate({"dimension": "x", "score": "Unknown", "rationale": "n/a"})
     assert unknown.length_normalised_score is None
 
 
@@ -204,7 +202,10 @@ def test_split_assumptions_have_5_judge_calls() -> None:
 def test_split_assumptions_have_smaller_per_call_tokens() -> None:
     """Each split call sees a scoped rubric (one group only), so per-call
     input/output drops vs the legacy mega-prompt."""
-    assert SPLIT_TOKEN_ASSUMPTIONS.judge_in_per_sample < DEFAULT_TOKEN_ASSUMPTIONS.judge_in_per_sample
     assert (
-        SPLIT_TOKEN_ASSUMPTIONS.judge_out_per_sample < DEFAULT_TOKEN_ASSUMPTIONS.judge_out_per_sample
+        SPLIT_TOKEN_ASSUMPTIONS.judge_in_per_sample < DEFAULT_TOKEN_ASSUMPTIONS.judge_in_per_sample
+    )
+    assert (
+        SPLIT_TOKEN_ASSUMPTIONS.judge_out_per_sample
+        < DEFAULT_TOKEN_ASSUMPTIONS.judge_out_per_sample
     )

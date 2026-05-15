@@ -36,9 +36,9 @@ from plugins.petri_audit.models import (
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "AuditReport",
     "DEFAULT_TOKEN_ASSUMPTIONS",
     "SPLIT_TOKEN_ASSUMPTIONS",
+    "AuditReport",
     "TokenAssumptions",
     "build_command",
     "confirm_or_abort",
@@ -544,9 +544,7 @@ def run_audit(
         elif judge_mode == "legacy":
             assumptions = DEFAULT_TOKEN_ASSUMPTIONS
         else:
-            raise ValueError(
-                f"unknown judge_mode={judge_mode!r}; expected 'legacy' or 'split'"
-            )
+            raise ValueError(f"unknown judge_mode={judge_mode!r}; expected 'legacy' or 'split'")
     inspect_auditor = to_inspect_model(auditor, use_oauth=use_oauth)
     inspect_judge = to_inspect_model(judge, use_oauth=use_oauth)
     inspect_target = to_inspect_target(target)
