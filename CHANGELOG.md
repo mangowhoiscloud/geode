@@ -52,6 +52,44 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **CLI LaTeX Tier 3 (graphics inline) — capability detection scaffold.**
+  CLI LaTeX 의 frontier 5-tier 조사 결과 LLM CLI 6 도구 (Claude Code /
+  Codex CLI / Aider / glow / mdcat / bat) 모두 Tier 0 (raw), GEODE 만
+  Tier 1+2 cascade. Tier 3 (image inline via Kitty / SIXEL graphics
+  protocols) 추가 시 **유일한 4-tier 통합 CLI agent**. 본 PR 은 scaffold:
+  - `core/ui/latex_graphics.py` — `detect_graphics_capability()` 가
+    `TERM=xterm-kitty` / `TERM=wezterm-*` / `TERM=xterm-ghostty` /
+    `KITTY_WINDOW_ID` / `WEZTERM_PANE` / `WEZTERM_EXECUTABLE` /
+    `GHOSTTY_RESOURCES_DIR` / `KONSOLE_VERSION` (Kitty graphics protocol
+    family) + `mlterm` / `foot` (SIXEL) conservative allow-list + non-TTY
+    회피 + `GEODE_LATEX_GRAPHICS_FORCE` / `_DISABLE` operator override.
+    `render_latex_image()` 는 public API 시그너처 pin, 현재
+    `NotImplementedError` (다음 PR 에서 matplotlib 또는 sympy.preview
+    + dvipng → PNG → Kitty/SIXEL escape wire).
+  - `graphics_opt_in_active()` — env `GEODE_LATEX_GRAPHICS` truthy
+    체크. capability detect 와 분리되어 matplotlib import 비용을
+    opt-out 사용자가 안 짊어지게.
+  - 18 신규 test (`tests/test_latex_graphics.py`): unknown / Kitty
+    family 5 / SIXEL 2 / force-disable / force-protocol / invalid
+    force / non-TTY / opt-in truthy/falsy / scaffold NotImplementedError
+    + 의도된 메시지.
+  - Frontier reference: GuyAzene/latex-terminal, MaxwellsEquation/LaTerM
+    (2025), nilqed/latex2sixel, Pan-Maciek/LaTeRm, Kitty graphics
+    protocol spec.
+- **CLI LaTeX Tier 3 (graphics inline) — capability detection
+  scaffold.** Adds `core/ui/latex_graphics.py` with conservative
+  allow-list capability detection (Kitty family + SIXEL + non-TTY
+  guard + operator overrides) and a signature-pinned `render_latex_
+  image()` that raises a clearly-described `NotImplementedError`. The
+  follow-up PR will wire matplotlib (or sympy.preview + dvipng) → PNG
+  → Kitty / SIXEL escape sequences. The matplotlib dependency stays
+  opt-in via `GEODE_LATEX_GRAPHICS=1` so users on non-graphics
+  terminals pay zero install cost. 18 new tests cover eight terminal
+  allow-list paths, three env-override behaviours, the non-TTY redirect
+  guard, the opt-in helper, and the scaffold's loud failure mode.
+
 ### Changed
 
 - **Phase 1b — Long-term Recall: JSON 20-trim 해제 + DB SoT 전환 + layout
