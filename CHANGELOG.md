@@ -54,6 +54,32 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Infrastructure
 
+- **`docs-link-audit` skill 등록.** `scripts/check_docs_links.py` (PR #1161)
+  를 1차 도구로 하는 workflow skill 을 `.claude/skills/docs-link-audit/
+  SKILL.md` 에 추가. 분류 4 종 (internal /docs / internal /other / anchor
+  / external) 매핑 표, link 패턴 추출 정규식 2 개, 특이 처리 (`/geode/`
+  basepath / build-time copy 인지 / `${...}` unresolved / 스킴 스킵), exit
+  code 기반 CI guard, 잘못된 link 의 4 흔한 원인 (chapter 삭제 leftover /
+  section 이전 / slug typo / external rot), CI wiring 옵션 2 종 (pages.yml
+  pre-build / ci.yml dispatch) 모두 정리. CLAUDE.md 의 Custom Skills 표
+  에도 트리거 키워드 ("broken link", "404", "docs link", "hyperlink",
+  "링크 점검", "링크 깨짐", "audit links", "link checker") 등록. PR
+  #1157 (3 broken 정정) + PR #1161 (script 도입) 의 케이스 스터디 포함.
+- **`docs-link-audit` skill registered.** Added
+  `.claude/skills/docs-link-audit/SKILL.md` as a workflow skill around
+  `scripts/check_docs_links.py` (PR #1161). Covers the 4-category map
+  (internal /docs / internal /other / anchor / external), the 2
+  regexes that drive link extraction, special handling (`/geode/`
+  basepath, build-time copy awareness, `${...}` as unresolved, scheme
+  skip list), exit-code-based CI guard semantics, four common
+  root causes of broken links (chapter deletion leftover, section
+  move, slug typo, external rot), and two CI wiring options (pages.yml
+  pre-build vs ci.yml dispatch). CLAUDE.md Custom Skills table now
+  carries the trigger keywords ("broken link", "404", "docs link",
+  "hyperlink", "링크 점검", "링크 깨짐", "audit links", "link
+  checker"). Case studies from PR #1157 (3 broken corrected) + PR
+  #1161 (script introduction) included.
+
 - **`scripts/check_docs_links.py` — docs 사이트 링크 정적 + HTTP 점검
   스크립트.** site/src 의 모든 `.tsx`/`.ts` 에서 본문/JSX 링크 패턴 (
   `href="..."`, ``href={`...`}``, `src="..."`, `to="..."`, 그리고 markdown
