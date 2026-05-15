@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.95.1] — 2026-05-16
+
 ### Infrastructure
 
 - **`scripts/check_docs_links.py` — docs 사이트 링크 정적 + HTTP 점검
