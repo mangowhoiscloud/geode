@@ -162,7 +162,8 @@ def register() -> None:
             from openai import AsyncOpenAI
             from openai._types import NOT_GIVEN
 
-            if getattr(self, "http_client", None) is None or self.http_client.is_closed:
+            existing: _Any = getattr(self, "http_client", None)
+            if existing is None or existing.is_closed:
                 self.http_client = OpenAIAsyncHttpxClient()
 
             return AsyncOpenAI(
@@ -194,10 +195,12 @@ def register() -> None:
             and the compaction loop expect.
             """
             if isinstance(input, str):
-                return await self.count_text_tokens(input)
+                single: int = await self.count_text_tokens(input)
+                return single
             from inspect_ai.model._tokens import count_tokens as _count_tokens
 
-            return await _count_tokens(input, self.count_text_tokens, self.count_media_tokens)
+            multi: int = await _count_tokens(input, self.count_text_tokens, self.count_media_tokens)
+            return multi
 
         async def generate(
             self,
