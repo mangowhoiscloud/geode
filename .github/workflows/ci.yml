@@ -20,8 +20,8 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
-      - run: uv run ruff check core/ tests/ plugins/
-      - run: uv run ruff format --check core/ tests/ plugins/
+      - run: uv run ruff check core/ tests/ plugins/ autoresearch/
+      - run: uv run ruff format --check core/ tests/ plugins/ autoresearch/
       - name: Dependency drift (deptry)
         run: uv run deptry .
       - name: Legacy import ratchet
@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
-      - run: uv run mypy core/ plugins/
+      - run: uv run mypy core/ plugins/ autoresearch/
       - name: Prompt integrity check
         run: uv run python -c "from core.llm.prompts import verify_prompt_integrity; verify_prompt_integrity(raise_on_drift=True)"
 
