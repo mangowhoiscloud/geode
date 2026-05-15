@@ -59,7 +59,7 @@ log = logging.getLogger(__name__)
 
 #: Current target layout schema version. Bumped each time a path-level
 #: migration is added.
-GEODE_LAYOUT_VERSION = 3
+GEODE_LAYOUT_VERSION = 4
 
 #: TTL in days for v2→v3 archival steps (runs/vault/projects). Override via
 #: ``GEODE_ARCHIVE_TTL_DAYS`` env var. Lowering for tests / aggressive
@@ -254,6 +254,8 @@ def _run_pending_migrations(current_version: int, report: LayoutMigrationReport)
         report.steps.append(_migrate_v1_to_v2())
     if current_version < 3:
         report.steps.append(_migrate_v2_to_v3())
+    if current_version < 4:
+        report.steps.append(_migrate_v3_to_v4())
 
 
 # ---------------------------------------------------------------------------
@@ -544,5 +546,122 @@ def _migrate_v2_to_v3() -> MigrationResult:
         result,
         label="projects",
     )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# v3 → v4: backfill messages.json into the SQLite messages table
+# ---------------------------------------------------------------------------
+
+
+def _migrate_v3_to_v4() -> MigrationResult:
+    """v4 — backfill ``messages.json`` of every existing session into the
+    SQLite ``messages`` table introduced in PR #1151 (Phase 1a).
+
+    Phase 1a wired ``SessionCheckpoint.save()`` to dual-write into the DB
+    going forward, but pre-PR-1151 sessions and any session whose DB
+    write quietly failed only have the JSON copy. Phase 1b flips the
+    runtime SoT to the DB; before the flip this step backfills so every
+    historical session is queryable from SQL the moment 1b ships.
+
+    Strategy — for every ``~/.geode/projects/<id>/sessions/<sid>/`` with a
+    ``messages.json`` file:
+
+      1. Open ``sessions.db`` in the same directory (created if absent).
+      2. Compare ``count_messages(<sid>)`` against ``len(json_messages)``.
+         If the DB already has at least as many rows, skip (idempotent).
+      3. Otherwise call ``upsert_messages(<sid>, json_messages)`` —
+         the UNIQUE(session_id, seq) key makes this safe to re-run.
+
+    Corrupt or unreadable JSON files are *skipped* with a WARN, never
+    fatal — a single bad session must not block the whole migration.
+    Progress is reported every 10 backfilled sessions.
+    """
+    import json as _json  # local import keeps top-level lean
+
+    result = MigrationResult(name="v3→v4: messages backfill")
+
+    sessions_root = GEODE_HOME / "projects"
+    if not sessions_root.is_dir():
+        result.skipped.append("projects/ dir absent — fresh install")
+        return result
+
+    backfilled = 0
+    already_in_db = 0
+    skipped_corrupt = 0
+    progress_every = 10
+
+    for project_dir in sorted(sessions_root.iterdir()):
+        if not project_dir.is_dir():
+            continue
+        sessions_dir = project_dir / "sessions"
+        if not sessions_dir.is_dir():
+            continue
+
+        db_path = sessions_dir / "sessions.db"
+        for session_dir in sorted(sessions_dir.iterdir()):
+            if not session_dir.is_dir():
+                continue
+            msg_file = session_dir / "messages.json"
+            if not msg_file.exists():
+                continue
+
+            try:
+                payload = _json.loads(msg_file.read_text(encoding="utf-8"))
+            except (_json.JSONDecodeError, OSError) as exc:
+                log.warning("v3→v4 backfill: skip corrupt %s (%s)", msg_file, exc)
+                skipped_corrupt += 1
+                result.warnings.append(f"corrupt: {msg_file}: {exc}")
+                continue
+
+            if not isinstance(payload, list):
+                log.warning(
+                    "v3→v4 backfill: skip non-list payload at %s (type=%s)",
+                    msg_file,
+                    type(payload).__name__,
+                )
+                skipped_corrupt += 1
+                continue
+
+            session_id = session_dir.name
+            try:
+                # Local import — avoid pulling SQLite/threading at module load.
+                from core.memory.session_manager import SessionManager
+
+                mgr = SessionManager(db_path)
+                try:
+                    if mgr.count_messages(session_id) >= len(payload):
+                        already_in_db += 1
+                        continue
+                    mgr.upsert_messages(session_id, payload)
+                finally:
+                    mgr.close()
+                backfilled += 1
+                if backfilled % progress_every == 0:
+                    log.info("v3→v4 backfill: %d sessions migrated...", backfilled)
+            except Exception as exc:
+                log.warning(
+                    "v3→v4 backfill: %s/%s upsert failed (%s)",
+                    project_dir.name,
+                    session_id,
+                    exc,
+                )
+                skipped_corrupt += 1
+                result.warnings.append(f"upsert fail: {session_id}: {exc}")
+
+    log.info(
+        "v3→v4 backfill complete: %d backfilled, %d already-in-db, %d skipped",
+        backfilled,
+        already_in_db,
+        skipped_corrupt,
+    )
+    if backfilled == 0 and already_in_db == 0 and skipped_corrupt == 0:
+        result.skipped.append("no sessions found")
+    else:
+        result.warnings.append(
+            f"summary: backfilled={backfilled} already_in_db={already_in_db} "
+            f"skipped_corrupt={skipped_corrupt}"
+        )
 
     return result

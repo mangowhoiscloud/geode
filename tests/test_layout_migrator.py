@@ -506,3 +506,116 @@ class TestV2ToV3TTLArchival:
         assert len(v3_first[0].moved) == 1
         assert second.no_op is True
         assert v3_second == []
+
+
+class TestV3ToV4MessagesBackfill:
+    """v4 — backfill ``messages.json`` of every existing session into the
+    SQLite ``messages`` table introduced in PR #1151."""
+
+    def _make_session(
+        self,
+        fake_geode_home: Path,
+        project: str,
+        session_id: str,
+        messages: list[dict[str, str]] | str,
+    ) -> Path:
+        sessions_dir = fake_geode_home / "projects" / project / "sessions"
+        session_dir = sessions_dir / session_id
+        session_dir.mkdir(parents=True)
+        msg_file = session_dir / "messages.json"
+        if isinstance(messages, str):
+            msg_file.write_text(messages, encoding="utf-8")  # corrupt
+        else:
+            import json as _json
+
+            msg_file.write_text(_json.dumps(messages), encoding="utf-8")
+        return sessions_dir / "sessions.db"
+
+    def test_v3_to_v4_backfills_pre_phase_1a_session(self, fake_geode_home: Path) -> None:
+        from core.memory.session_manager import SessionManager
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        # Pre-PR #1151 session: only messages.json exists, DB has nothing.
+        db_path = self._make_session(
+            fake_geode_home,
+            "alpha",
+            "sess-1",
+            [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "ok"},
+            ],
+        )
+
+        report = ensure_layout_migrated(force=True)
+
+        v4 = [s for s in report.steps if s.name.startswith("v3→v4")]
+        assert v4, "v3→v4 step must run"
+
+        mgr = SessionManager(db_path=db_path)
+        try:
+            assert mgr.count_messages("sess-1") == 2
+        finally:
+            mgr.close()
+
+    def test_v3_to_v4_skips_corrupt_messages_json(self, fake_geode_home: Path) -> None:
+        """A single corrupt session must NOT block the rest of the migration."""
+        from core.memory.session_manager import SessionManager
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        # One good session, one corrupt — both under the same project.
+        db_path = self._make_session(
+            fake_geode_home,
+            "alpha",
+            "good",
+            [{"role": "user", "content": "ok"}],
+        )
+        self._make_session(
+            fake_geode_home,
+            "alpha",
+            "bad",
+            "{not valid json",
+        )
+
+        report = ensure_layout_migrated(force=True)
+
+        v4 = [s for s in report.steps if s.name.startswith("v3→v4")]
+        assert v4
+        assert any("corrupt" in w for w in v4[0].warnings)
+
+        mgr = SessionManager(db_path=db_path)
+        try:
+            assert mgr.count_messages("good") == 1
+            assert mgr.count_messages("bad") == 0
+        finally:
+            mgr.close()
+
+    def test_v3_to_v4_idempotent(self, fake_geode_home: Path) -> None:
+        """Re-running the migration on an already-migrated session is a no-op
+        (UNIQUE(session_id, seq) makes upsert_messages safe)."""
+        from core.memory.session_manager import SessionManager
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        db_path = self._make_session(
+            fake_geode_home,
+            "alpha",
+            "idem",
+            [{"role": "user", "content": "x"}],
+        )
+
+        ensure_layout_migrated(force=True)
+        ensure_layout_migrated(force=True)  # second run
+
+        mgr = SessionManager(db_path=db_path)
+        try:
+            assert mgr.count_messages("idem") == 1
+        finally:
+            mgr.close()
+
+    def test_v3_to_v4_no_op_on_fresh_install(self, fake_geode_home: Path) -> None:
+        """No projects/ dir → step records ``skipped`` reason, no error."""
+        from core.wiring.layout_migrator import ensure_layout_migrated
+
+        report = ensure_layout_migrated(force=True)
+        v4 = [s for s in report.steps if s.name.startswith("v3→v4")]
+        assert v4
+        assert any("projects/ dir absent" in s for s in v4[0].skipped)
