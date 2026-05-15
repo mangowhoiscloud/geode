@@ -29,8 +29,14 @@ def _get_default_session_dir() -> Path:
 
 
 DEFAULT_SESSION_DIR = _get_default_session_dir()
-CHECKPOINT_MAX_MESSAGES = 20  # Context Budget: keep recent N messages
 CLEANUP_AGE_HOURS = 72
+# ``CHECKPOINT_MAX_MESSAGES`` (= 20) used to trim the JSON snapshot for
+# context-budget reasons. Phase 1b (Hermes absorption) flips the SoT to the
+# SQLite ``messages`` table, which holds the *full* history, so the
+# JSON ``messages.json`` becomes a hot-cache copy of the same full list.
+# The constant is kept (re-exported) for any third-party caller that
+# imported it; the value of 0 means "no truncation".
+CHECKPOINT_MAX_MESSAGES = 0
 
 
 @dataclass
@@ -66,13 +72,17 @@ class SessionCheckpoint:
         self._dir = Path(session_dir) if session_dir else DEFAULT_SESSION_DIR
 
     def save(self, state: SessionState) -> None:
-        """Save session checkpoint. Overwrites previous checkpoint for same ID."""
+        """Save session checkpoint. Overwrites previous checkpoint for same ID.
+
+        Phase 1b (Hermes absorption) flips the SoT to the SQLite
+        ``messages`` table. The JSON ``messages.json`` and ``tools.json``
+        are kept as a hot cache (so old offline tooling that reads them
+        still works) but no longer carry truncated state — the DB is now
+        the only place that has the full conversation.
+        """
         state.updated_at = time.time()
         session_path = self._dir / state.session_id
         session_path.mkdir(parents=True, exist_ok=True)
-
-        # Trim messages to budget
-        trimmed = state.messages[-CHECKPOINT_MAX_MESSAGES:]
 
         data = {
             "session_id": state.session_id,
@@ -90,11 +100,21 @@ class SessionCheckpoint:
         state_file = session_path / "state.json"
         atomic_write_json(state_file, data, indent=2)
 
-        # Write messages.json (conversation, trimmed)
-        msg_file = session_path / "messages.json"
-        atomic_write_json(msg_file, trimmed)
+        # Phase 1b: SoT lives in SQLite ``messages`` table. Mirror the
+        # *full* message list into the DB **first** so a JSON-only failure
+        # below (disk full, write race) cannot leave the SoT with a stale
+        # message count.
+        self._sync_messages_to_db(state)
 
-        # Write tools.json (tool call log)
+        # Write messages.json as a hot cache (full list, no trim). Old
+        # offline tooling can still read this; the runtime ``load()`` path
+        # prefers the DB.
+        msg_file = session_path / "messages.json"
+        atomic_write_json(msg_file, state.messages)
+
+        # Write tools.json hot cache when tool log exists. The structured
+        # ``tool_calls`` column on each ``messages`` row is now the SoT,
+        # so this is a convenience copy only.
         if state.tool_log:
             tools_file = session_path / "tools.json"
             atomic_write_json(tools_file, state.tool_log[-50:])
@@ -108,16 +128,26 @@ class SessionCheckpoint:
             indent=2,
         )
 
-        # GAP 3: Sync to SQLite index for fast query
-        self._sync_to_index(state, len(trimmed))
-
-        # Phase 1a (Hermes absorption): mirror the *full* message list
-        # into the ``messages`` table. JSON remains SoT until Phase 1b;
-        # a DB failure logs WARN but the JSON write above is preserved.
-        self._sync_messages_to_db(state)
+        # Sync session metadata to SQLite index for fast query (GAP 3).
+        self._sync_to_index(state, len(state.messages))
 
     def load(self, session_id: str) -> SessionState | None:
-        """Load a session checkpoint. Returns None if not found."""
+        """Load a session checkpoint. Returns None if not found.
+
+        Phase 1b — read order:
+            1. ``state.json`` for metadata (always; the DB ``sessions``
+               table mirrors this but the JSON keeps the user-input and
+               status fields so old offline tooling still works).
+            2. ``messages`` table (DB) for the full conversation. This is
+               the new SoT.
+            3. ``messages.json`` only when the DB cannot answer
+               authoritatively for this session — happens for sessions
+               written before the v3→v4 migration had a chance to run,
+               and for sessions whose DB write raced with the JSON write.
+            4. ``tools.json`` for the tool log (kept JSON-only; the DB
+               ``messages.tool_calls`` column carries per-message tool
+               metadata but does not subsume the loop's tool_log shape).
+        """
         session_path = self._dir / session_id
         state_file = session_path / "state.json"
         if not state_file.exists():
@@ -125,10 +155,25 @@ class SessionCheckpoint:
 
         try:
             data = json.loads(state_file.read_text(encoding="utf-8"))
-            messages = []
+
             msg_file = session_path / "messages.json"
-            if msg_file.exists():
-                messages = json.loads(msg_file.read_text(encoding="utf-8"))
+            state_updated_at_raw = data.get("updated_at")
+            state_updated_at = (
+                float(state_updated_at_raw)
+                if isinstance(state_updated_at_raw, (int, float))
+                else None
+            )
+
+            messages = self._load_messages_from_db(
+                session_id,
+                state_updated_at=state_updated_at,
+                msg_file=msg_file,
+            )
+            if messages is None:
+                if msg_file.exists():
+                    messages = json.loads(msg_file.read_text(encoding="utf-8"))
+                else:
+                    messages = []
 
             tool_log = []
             tools_file = session_path / "tools.json"
@@ -150,6 +195,51 @@ class SessionCheckpoint:
             )
         except (json.JSONDecodeError, KeyError, OSError) as e:
             log.warning("Failed to load session %s: %s", session_id, e)
+            return None
+
+    def _load_messages_from_db(
+        self,
+        session_id: str,
+        *,
+        state_updated_at: float | None = None,
+        msg_file: Path | None = None,
+    ) -> list[dict[str, Any]] | None:
+        """Read the full message history from the SQLite ``messages`` table.
+
+        Returns ``None`` when the DB cannot answer authoritatively so the
+        caller can fall back to JSON. A valid DB result may be an empty list:
+        after Phase 1b an explicit zero-message save must not resurrect a
+        stale ``messages.json`` cache.
+        """
+        db_path = self._dir / "sessions.db"
+        if not db_path.exists():
+            return None
+
+        try:
+            from core.memory.session_manager import SessionManager
+
+            mgr = SessionManager(db_path)
+            try:
+                messages = mgr.get_messages(session_id)
+                if messages:
+                    return messages
+
+                meta = mgr.get(session_id)
+                if meta and meta.message_count == 0:
+                    return []
+                if msg_file is None or not msg_file.exists():
+                    return []
+                if state_updated_at is not None:
+                    try:
+                        if msg_file.stat().st_mtime < state_updated_at:
+                            return []
+                    except OSError:
+                        return []
+                return None
+            finally:
+                mgr.close()
+        except Exception:
+            log.debug("DB-first message load failed for %s", session_id, exc_info=True)
             return None
 
     def mark_completed(self, session_id: str) -> None:
