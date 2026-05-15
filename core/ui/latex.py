@@ -90,10 +90,7 @@ def _render_tier1(src: str) -> str:
             src,
         )
         raw: str = LatexNodes2Text().latex_to_text(protected_src).strip()
-        lines = [
-            re.sub(r"\s+", " ", part).strip()
-            for part in raw.split(_LATEX_LINEBREAK_SENTINEL)
-        ]
+        lines = [re.sub(r"\s+", " ", part).strip() for part in raw.split(_LATEX_LINEBREAK_SENTINEL)]
         return "\n".join(line for line in lines if line)
     except Exception:
         log.debug("Tier 1 LaTeX render failed for %r", src, exc_info=True)

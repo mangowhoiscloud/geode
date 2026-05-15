@@ -183,7 +183,9 @@ class TestStageAComponent:
         body_lines = [
             line for line in output.splitlines() if line.strip() and "는 trial t" not in line
         ]
-        math_lines = [line for line in body_lines if "여기서" in line or "S_t" in line or "y_t" in line]
+        math_lines = [
+            line for line in body_lines if "여기서" in line or "S_t" in line or "y_t" in line
+        ]
         assert len(math_lines) <= 6, (
             f"multi-line LaTeX source did not collapse — {len(math_lines)} math "
             f"lines (pre-fix bug was 12+):\n{output!r}"
