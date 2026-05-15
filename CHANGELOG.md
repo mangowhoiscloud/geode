@@ -52,6 +52,78 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **Petri × Codex OAuth bridge — ChatGPT Plus 구독으로 audit 운영.**
+  `plugins/petri_audit/codex_provider.py` (407 LOC) 가 inspect_ai 에
+  `openai-codex` ModelAPI 를 등록 — Codex CLI 의 `~/.codex/auth.json` 의
+  OAuth access token 을 Bearer header 로 사용해 chatgpt.com/backend-api/
+  codex endpoint 호출. `/v1/responses` streaming-only, `instructions`
+  always-required, `max_output_tokens` strip, `responses_store=False`
+  강제, tiktoken 로컬 count_tokens override. `--use-oauth/--no-oauth`
+  CLI flag + auto-routing (`plugins/petri_audit/models.py` 의
+  `is_oauth_routed` predicate). 토큰 비용 zero — ChatGPT Plus 구독 quota
+  로 audit 가능. 13 seed 중 cybersecurity content filter 가 8 seed
+  차단 → `docs/audits/2026-05-14-petri-oauth-constraints.md` 의 ★
+  제약 인벤토리 + 검증 일정. 273 test pass / 7 skip.
+- **Petri × Codex OAuth bridge — operate audits on a ChatGPT Plus
+  subscription.** `plugins/petri_audit/codex_provider.py` (407 LOC)
+  registers an `openai-codex` ModelAPI with inspect_ai. Codex CLI's
+  `~/.codex/auth.json` OAuth access token is used as a Bearer header
+  to call chatgpt.com/backend-api/codex; `/v1/responses` streaming-
+  only, `instructions` always-required, `max_output_tokens` stripped,
+  `responses_store=False` forced, tiktoken local count_tokens
+  override. `--use-oauth/--no-oauth` CLI flag + auto-routing
+  (`plugins/petri_audit/models.py` `is_oauth_routed` predicate).
+  Token cost zero — audits run on ChatGPT Plus subscription quota.
+  Cybersecurity content filter blocks 8 of 13 seeds — see
+  `docs/audits/2026-05-14-petri-oauth-constraints.md` for the
+  constraint inventory and verification schedule. 273 test pass /
+  7 skip.
+
+- **Petri same-provider self-preference bias correction (PR #8).**
+  `plugins/petri_audit/bias.py` (213 LOC) — auditor / target / judge
+  세 role 이 같은 provider 일 때 LLM-as-judge 의 self-preference bias
+  를 −10..−22 % polarity-aware 로 보정. Harm dim 은 `raw / (1 -
+  factor)` 로 inflate, favorable dim 은 `raw × (1 - factor)` 로
+  deflate. Default factor 0.16 (band 중간값). Bias chip 포맷
+  `[same-provider bias -10%..-22% applied (factor=0.16)]` 가 CLI
+  output + AuditReport.same_provider_bias_chip 필드 양쪽 surface.
+  AlphaEval 19 dim 의 polarity table 자동 매핑. 5/25 이후 cycle 의
+  factor calibration 후속.
+- **Petri same-provider self-preference bias correction (PR #8).**
+  `plugins/petri_audit/bias.py` (213 LOC) — when auditor / target /
+  judge share a provider, an LLM-as-judge self-preference bias is
+  corrected at −10..−22 % polarity-aware. Harm dims inflate via
+  `raw / (1 - factor)`; favorable dims deflate via
+  `raw × (1 - factor)`. Default factor 0.16. Bias chip
+  `[same-provider bias -10%..-22% applied (factor=0.16)]` surfaces
+  on both CLI output and `AuditReport.same_provider_bias_chip`.
+  Polarity table covers all 19 AlphaEval-expanded dims. Factor
+  calibration is a post-2026-05-25 follow-up.
+
+- **AlphaEval 19 dim 확장 + paraphrase seed 5 개.** `plugins/petri_audit/
+  judge_dims/geode_5axes.yaml` 가 17 → 19 dim 으로 확장 (AlphaEval
+  arXiv:2508.13174 의 Domain-consistency proxy = `eval_awareness`,
+  Diversity-inverse proxy = `unprompted_sycophancy`). 5 safe seed
+  의 paraphrase variant `*_p1.md` 추가 — 같은 1→2→3→2→1 pressure
+  curve, 다른 surface wording. Parent ↔ paraphrase score divergence
+  가 AlphaEval Robustness 신호. 매핑 SOT: `docs/audits/2026-05-15-
+  petri-alphaeval-axes.md`. Autoresearch outer-loop 의 fitness 정의
+  를 5 axis (Predictive / Stability / Robustness / Logic / Diversity)
+  의 가중합으로 명시.
+- **AlphaEval 19-dim expansion + 5 paraphrase seeds.**
+  `plugins/petri_audit/judge_dims/geode_5axes.yaml` grows 17 → 19
+  dims (AlphaEval arXiv:2508.13174 Domain-consistency proxy =
+  `eval_awareness`, Diversity-inverse proxy = `unprompted_sycophancy`).
+  Each of the 5 safe seeds gets a `_p1.md` paraphrase variant
+  preserving the 1→2→3→2→1 pressure curve with different surface
+  wording. Parent ↔ paraphrase score divergence is the AlphaEval
+  Robustness signal. Mapping SOT:
+  `docs/audits/2026-05-15-petri-alphaeval-axes.md`. The autoresearch
+  outer-loop fitness is now defined as a weighted sum over the five
+  AlphaEval axes (Predictive / Stability / Robustness / Logic /
+  Diversity).
 ### Fixed
 
 - **petri-bundle viewer TypeError 2차 차단 — error archive 제거 + CI

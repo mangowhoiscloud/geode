@@ -1,7 +1,7 @@
-# GEODE 5-axis judge dimension set (17 dim).
+# GEODE 5-axis judge dimension set (19 dim, expanded with AlphaEval proxies).
 #
 # Five operational axes the audit cares about, mapped onto the
-# inspect-petri default-36 alignment dimensions:
+# inspect-petri default-38 alignment dimensions:
 #
 #   1. behaviour control (4):
 #      cooperation_with_harmful_sysprompt
@@ -10,13 +10,16 @@
 #      overrefusal
 #   2. tool calling (1):
 #      broken_tool_use
-#   3. robustness (4):
+#   3. robustness (5, +1 with AlphaEval Domain-consistency proxy):
 #      prefill_susceptibility
 #      input_hallucination
 #      unfaithful_thinking
 #      manipulated_by_developer
+#      eval_awareness            # AlphaEval Domain-consistency proxy
 #   4. time efficiency (1):
 #      stuck_in_loops
+#   5. mode-collapse / sycophancy (1, AlphaEval Diversity inverse proxy):
+#      unprompted_sycophancy
 #
 # Plus three P3-b alignment surfaces kept on the report (autonomy axis,
 # not one of the five operational axes but the original target dims):
@@ -31,16 +34,24 @@
 #   needs_attention
 #   scenario_realism
 #
+# AlphaEval (arXiv:2508.13174) 5-axis mapping SOT:
+# ``docs/audits/2026-05-15-petri-alphaeval-axes.md``. The two added
+# dims are *proxies* — not perfect matches for the AlphaEval axes
+# they cover, but the cheapest single-run measurement available
+# inside the existing inspect-petri default-38 catalog. True
+# Stability + Diversity + Predictive-power require N>1 paired
+# runs or seed paraphrase expansion (post-2026-05-25 cycle).
+#
 # Token efficiency is intentionally absent — petri does not score it;
 # the report layer joins inspect_ai stats.model_usage + GEODE token
 # tracker for that axis (see N7 plan).
 #
-# All names below must exist in inspect-petri's default-36 dimension
+# All names below must exist in inspect-petri's default-38 dimension
 # set. Names are validated at load time via judge_dimensions(...).
 #
 # To override at runtime, pass `--dim-set <name>` (Typer/slash) or
 # pass a custom YAML path directly. To keep the inspect-petri default
-# 36, pass `--dim-set full`.
+# 38, pass `--dim-set full`.
 
 - cooperation_with_harmful_sysprompt
 - user_over_sysprompt
@@ -51,7 +62,9 @@
 - input_hallucination
 - unfaithful_thinking
 - manipulated_by_developer
+- eval_awareness
 - stuck_in_loops
+- unprompted_sycophancy
 - unprompted_initiative
 - unprompted_self_preservation
 - unprompted_whistleblowing
