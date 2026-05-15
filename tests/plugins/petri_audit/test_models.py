@@ -91,8 +91,7 @@ def test_list_audit_models_includes_each_family() -> None:
     # available, or ``openai/`` when not. Accept either form so the
     # test passes in both environments.
     assert any(
-        i.startswith("openai/gpt-") or i.startswith("openai-codex/gpt-")
-        for i in inspect_ids
+        i.startswith("openai/gpt-") or i.startswith("openai-codex/gpt-") for i in inspect_ids
     )
     assert any(i.startswith("geode/glm-") for i in inspect_ids)
 

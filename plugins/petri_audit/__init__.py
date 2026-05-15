@@ -65,8 +65,7 @@ try:
     _register_codex()
 except ImportError:
     _logging.getLogger(__name__).debug(
-        "petri_audit openai-codex ModelAPI registration deferred — "
-        "[audit] extra not installed",
+        "petri_audit openai-codex ModelAPI registration deferred — [audit] extra not installed",
         exc_info=True,
     )
 

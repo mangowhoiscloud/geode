@@ -162,10 +162,7 @@ def register() -> None:
             from openai import AsyncOpenAI
             from openai._types import NOT_GIVEN
 
-            if (
-                getattr(self, "http_client", None) is None
-                or self.http_client.is_closed
-            ):
+            if getattr(self, "http_client", None) is None or self.http_client.is_closed:
                 self.http_client = OpenAIAsyncHttpxClient()
 
             return AsyncOpenAI(
@@ -173,9 +170,7 @@ def register() -> None:
                 base_url=model_base_url(self.base_url, "OPENAI_BASE_URL"),
                 http_client=self.http_client,
                 default_headers=self._codex_headers,
-                timeout=self.client_timeout
-                if self.client_timeout is not None
-                else NOT_GIVEN,
+                timeout=self.client_timeout if self.client_timeout is not None else NOT_GIVEN,
                 **self.model_args,
             )
 
@@ -202,9 +197,7 @@ def register() -> None:
                 return await self.count_text_tokens(input)
             from inspect_ai.model._tokens import count_tokens as _count_tokens
 
-            return await _count_tokens(
-                input, self.count_text_tokens, self.count_media_tokens
-            )
+            return await _count_tokens(input, self.count_text_tokens, self.count_media_tokens)
 
         async def generate(
             self,
@@ -245,15 +238,9 @@ def register() -> None:
             instructions_parts: list[str] = []
             cleaned_input: list[_Any] = []
             for item in raw_input_items:
-                role = (
-                    item.get("role")
-                    if isinstance(item, dict)
-                    else getattr(item, "role", None)
-                )
+                role = item.get("role") if isinstance(item, dict) else getattr(item, "role", None)
                 item_type = (
-                    item.get("type")
-                    if isinstance(item, dict)
-                    else getattr(item, "type", None)
+                    item.get("type") if isinstance(item, dict) else getattr(item, "type", None)
                 )
                 if item_type == "message" and role == "developer":
                     content = (
@@ -292,12 +279,9 @@ def register() -> None:
                 input=cleaned_input,
                 tools=tool_params,
                 tool_choice=openai_responses_tool_choice(tool_choice, tool_params)
-                if isinstance(tool_params, list)
-                and tool_choice != "auto"
-                and len(tools) > 0
+                if isinstance(tool_params, list) and tool_choice != "auto" and len(tools) > 0
                 else NOT_GIVEN,
-                extra_headers={"X-Inspect-Request-Id": request_id}
-                | (config.extra_headers or {}),
+                extra_headers={"X-Inspect-Request-Id": request_id} | (config.extra_headers or {}),
                 **params,
             )
             # ChatGPT Plus backend's /responses endpoint rejects requests
@@ -310,14 +294,10 @@ def register() -> None:
             request["instructions"] = instructions or "You are a helpful assistant."
             if len(tools) > 0 and "parallel_tool_calls" not in request:
                 request["parallel_tool_calls"] = (
-                    True
-                    if config.parallel_tool_calls is None
-                    else config.parallel_tool_calls
+                    True if config.parallel_tool_calls is None else config.parallel_tool_calls
                 )
 
-            model_call = set_active_model_event_call(
-                request=request, filter=openai_media_filter
-            )
+            model_call = set_active_model_event_call(request=request, filter=openai_media_filter)
 
             try:
                 final_response = await _stream_and_accumulate(self.client, request)

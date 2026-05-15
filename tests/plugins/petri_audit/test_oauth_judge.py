@@ -36,9 +36,7 @@ def test_to_inspect_model_uses_oauth_when_token_present() -> None:
     """Auto-detect: token resolves → ``openai-codex/<model>``."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=True
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
         assert to_inspect_model("gpt-5.5") == "openai-codex/gpt-5.5"
         assert to_inspect_model("gpt-5.4-mini") == "openai-codex/gpt-5.4-mini"
         assert to_inspect_model("gpt-5.3-codex") == "openai-codex/gpt-5.3-codex"
@@ -48,9 +46,7 @@ def test_to_inspect_model_falls_back_to_per_token_without_token() -> None:
     """Auto-detect: no token → legacy ``openai/<model>``."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=False
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=False):
         assert to_inspect_model("gpt-5.5") == "openai/gpt-5.5"
         assert to_inspect_model("gpt-5.4-mini") == "openai/gpt-5.4-mini"
 
@@ -64,9 +60,7 @@ def test_to_inspect_model_use_oauth_true_forces_route() -> None:
     """
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=False
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=False):
         assert to_inspect_model("gpt-5.5", use_oauth=True) == "openai-codex/gpt-5.5"
 
 
@@ -74,9 +68,7 @@ def test_to_inspect_model_use_oauth_false_keeps_per_token() -> None:
     """``use_oauth=False`` keeps PAYG mapping even when a token exists."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=True
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
         assert to_inspect_model("gpt-5.5", use_oauth=False) == "openai/gpt-5.5"
 
 
@@ -84,14 +76,10 @@ def test_to_inspect_model_raw_openai_passthrough_bypasses_oauth() -> None:
     """User-pinned raw ``openai/gpt-5.5`` stays PAYG even with token."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=True
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
         assert to_inspect_model("openai/gpt-5.5") == "openai/gpt-5.5"
         # And the explicit OAuth-routed form is honoured.
-        assert (
-            to_inspect_model("openai-codex/gpt-5.5") == "openai-codex/gpt-5.5"
-        )
+        assert to_inspect_model("openai-codex/gpt-5.5") == "openai-codex/gpt-5.5"
 
 
 def test_to_inspect_model_o_series_never_oauth() -> None:
@@ -99,9 +87,7 @@ def test_to_inspect_model_o_series_never_oauth() -> None:
     they stay on per-token regardless of OAuth availability."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=True
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
         assert to_inspect_model("o3") == "openai/o3"
         assert to_inspect_model("o4-mini") == "openai/o4-mini"
 
@@ -110,12 +96,9 @@ def test_to_inspect_model_claude_unaffected() -> None:
     """Anthropic mapping is not touched by the OAuth re-route."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=True
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
         assert (
-            to_inspect_model("claude-haiku-4-5-20251001")
-            == "anthropic/claude-haiku-4-5-20251001"
+            to_inspect_model("claude-haiku-4-5-20251001") == "anthropic/claude-haiku-4-5-20251001"
         )
 
 
@@ -162,8 +145,7 @@ def test_estimate_cost_zero_for_oauth_judge() -> None:
     assert payg > 0
     assert oauth >= 0
     assert oauth < payg, (
-        "OAuth-routed judge must reduce the per-sample cost. "
-        f"payg={payg:.4f}, oauth={oauth:.4f}"
+        f"OAuth-routed judge must reduce the per-sample cost. payg={payg:.4f}, oauth={oauth:.4f}"
     )
 
 
@@ -228,9 +210,7 @@ def test_run_audit_uses_oauth_when_token_present() -> None:
     in the constructed command + the cost line drops below PAYG."""
     from plugins.petri_audit.runner import run_audit
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=True
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
         report = run_audit(
             judge="gpt-5.5",
             auditor="claude-sonnet-4-6",
@@ -249,9 +229,7 @@ def test_run_audit_no_oauth_flag_forces_per_token() -> None:
     """Explicit ``--no-oauth`` keeps PAYG even when a token resolves."""
     from plugins.petri_audit.runner import run_audit
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=True
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
         report = run_audit(
             judge="gpt-5.5",
             auditor="claude-sonnet-4-6",
@@ -270,9 +248,7 @@ def test_run_audit_falls_back_when_no_token() -> None:
     """No OAuth token + auto-detect → legacy ``openai/`` path."""
     from plugins.petri_audit.runner import run_audit
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=False
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=False):
         report = run_audit(
             judge="gpt-5.5",
             auditor="claude-sonnet-4-6",
@@ -290,9 +266,7 @@ def test_run_audit_user_pinned_raw_openai_not_rewritten() -> None:
     """User pinned ``openai/gpt-5.5`` → no rewrite (raw passthrough)."""
     from plugins.petri_audit.runner import run_audit
 
-    with patch(
-        "plugins.petri_audit.models._codex_oauth_available", return_value=True
-    ):
+    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
         report = run_audit(
             judge="openai/gpt-5.5",
             auditor="claude-sonnet-4-6",
@@ -311,9 +285,7 @@ def test_run_audit_user_pinned_raw_openai_not_rewritten() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not _AUDIT_INSTALLED, reason="[audit] extra not installed"
-)
+@pytest.mark.skipif(not _AUDIT_INSTALLED, reason="[audit] extra not installed")
 def test_openai_codex_provider_registered_with_inspect_ai() -> None:
     """``openai-codex`` is in inspect_ai's modelapi registry after
     ``import plugins.petri_audit`` runs ``register()``."""
@@ -337,9 +309,7 @@ def test_openai_codex_provider_registered_with_inspect_ai() -> None:
     )
 
 
-@pytest.mark.skipif(
-    not _AUDIT_INSTALLED, reason="[audit] extra not installed"
-)
+@pytest.mark.skipif(not _AUDIT_INSTALLED, reason="[audit] extra not installed")
 def test_openai_codex_init_raises_without_token() -> None:
     """Constructing the provider with no token + no env raises the
     standard inspect_ai environment-prerequisite error so the caller
@@ -348,9 +318,7 @@ def test_openai_codex_init_raises_without_token() -> None:
 
     # Patch the resolver to return empty token and clear OPENAI_API_KEY.
     with (
-        patch(
-            "core.llm.providers.codex._resolve_codex_token", return_value=""
-        ),
+        patch("core.llm.providers.codex._resolve_codex_token", return_value=""),
         patch.dict("os.environ", {}, clear=False) as env,
     ):
         env.pop("OPENAI_API_KEY", None)
@@ -369,9 +337,7 @@ def test_openai_codex_init_raises_without_token() -> None:
         assert "codex" in msg or "auth" in msg or "prerequisite" in msg or "openai" in msg
 
 
-@pytest.mark.skipif(
-    not _AUDIT_INSTALLED, reason="[audit] extra not installed"
-)
+@pytest.mark.skipif(not _AUDIT_INSTALLED, reason="[audit] extra not installed")
 def test_openai_codex_constructor_sets_codex_headers() -> None:
     """When a token resolves, the provider wires ``ChatGPT-Account-ID``
     and ``originator`` into ``default_headers``. Avoid actually opening
@@ -388,18 +354,12 @@ def test_openai_codex_constructor_sets_codex_headers() -> None:
 
     import plugins.petri_audit  # noqa: F401 — register()
 
-    payload = {
-        "https://api.openai.com/auth": {"chatgpt_account_id": "fake-acc-id"}
-    }
-    payload_b64 = (
-        base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-    )
+    payload = {"https://api.openai.com/auth": {"chatgpt_account_id": "fake-acc-id"}}
+    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
     fake_token = f"header.{payload_b64}.signature"
 
     _models.clear()
-    with patch(
-        "core.llm.providers.codex._resolve_codex_token", return_value=fake_token
-    ):
+    with patch("core.llm.providers.codex._resolve_codex_token", return_value=fake_token):
         model = get_model("openai-codex/gpt-5.5", memoize=False)
     api = model.api  # OpenAICodexAPI instance
     assert api._codex_token == fake_token
@@ -438,9 +398,7 @@ def test_entry_points_include_openai_codex_prefix() -> None:
     )
 
 
-@pytest.mark.skipif(
-    not _AUDIT_INSTALLED, reason="[audit] extra not installed"
-)
+@pytest.mark.skipif(not _AUDIT_INSTALLED, reason="[audit] extra not installed")
 def test_count_tokens_uses_tiktoken_not_responses_api() -> None:
     """ChatGPT Plus backend returns ``PermissionDeniedError`` on
     ``/responses/input_tokens.count``. Stock ``OpenAIAPI.count_tokens``
@@ -460,18 +418,12 @@ def test_count_tokens_uses_tiktoken_not_responses_api() -> None:
 
     import plugins.petri_audit  # noqa: F401 — register()
 
-    payload = {
-        "https://api.openai.com/auth": {"chatgpt_account_id": "fake-acc-id"}
-    }
-    payload_b64 = (
-        base64.urlsafe_b64encode(_json.dumps(payload).encode()).decode().rstrip("=")
-    )
+    payload = {"https://api.openai.com/auth": {"chatgpt_account_id": "fake-acc-id"}}
+    payload_b64 = base64.urlsafe_b64encode(_json.dumps(payload).encode()).decode().rstrip("=")
     fake_token = f"header.{payload_b64}.signature"
 
     _models.clear()
-    with patch(
-        "core.llm.providers.codex._resolve_codex_token", return_value=fake_token
-    ):
+    with patch("core.llm.providers.codex._resolve_codex_token", return_value=fake_token):
         model = get_model("openai-codex/gpt-5.5", memoize=False)
 
     # tiktoken local count — must NOT make a network call to the

@@ -41,9 +41,7 @@ def _render_report(report: AuditReport) -> None:
     if report.same_provider_bias_chip:
         from rich.markup import escape as _esc
 
-        console.print(
-            f"  bias:     [yellow]{_esc(report.same_provider_bias_chip)}[/yellow]"
-        )
+        console.print(f"  bias:     [yellow]{_esc(report.same_provider_bias_chip)}[/yellow]")
     if report.dry_run:
         console.print("  status:   [yellow]dry-run — subprocess not executed[/yellow]")
     elif report.aborted:
@@ -213,12 +211,8 @@ def _build_slash_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live", action="store_false", dest="dry_run", default=True)
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
     parser.add_argument("--yes", "-y", action="store_true", default=False)
-    parser.add_argument(
-        "--use-oauth", action="store_true", dest="use_oauth", default=None
-    )
-    parser.add_argument(
-        "--no-oauth", action="store_false", dest="use_oauth", default=None
-    )
+    parser.add_argument("--use-oauth", action="store_true", dest="use_oauth", default=None)
+    parser.add_argument("--no-oauth", action="store_false", dest="use_oauth", default=None)
     parser.add_argument("--help", "-h", action="store_true", default=False)
     return parser
 

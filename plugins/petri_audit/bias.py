@@ -215,7 +215,4 @@ def format_bias_chip(factor: float = DEFAULT_DISADVANTAGE) -> str:
     summaries) and the markdown lint regex can rely on it.
     """
     low, high = DISADVANTAGE_BAND
-    return (
-        f"[same-provider bias -{low:.0%}..-{high:.0%} applied "
-        f"(factor={factor:.2f})]"
-    )
+    return f"[same-provider bias -{low:.0%}..-{high:.0%} applied (factor={factor:.2f})]"
