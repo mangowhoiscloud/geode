@@ -58,6 +58,8 @@ _TIER2_TOKENS: Final[tuple[str, ...]] = (
     r"\sqrt{",
     r"\lim_",
 )
+_LATEX_LINEBREAK = re.compile(r"(?<!\\)\\\\(?:\s*\[[^\]]*\])?")
+_LATEX_LINEBREAK_SENTINEL: Final = "<<<GEODE_LATEX_LINEBREAK_4A7D1B>>>"
 
 
 def _has_tier2_construct(src: str) -> bool:
@@ -66,16 +68,30 @@ def _has_tier2_construct(src: str) -> bool:
 
 
 def _render_tier1(src: str) -> str:
-    """Flatten LaTeX to a single Unicode line. Never raises — pylatexenc
-    swallows unknown macros and returns whatever it can parse."""
+    """Flatten LaTeX source whitespace to Unicode text. Never raises — pylatexenc
+    swallows unknown macros and returns whatever it can parse.
+
+    Source-level line breaks in the input (an LLM emitting ``\\frac`` on
+    one line and its numerator on the next) carry **no mathematical
+    meaning** but pylatexenc preserves them verbatim. We collapse every
+    run of whitespace (newlines, tabs, multiple spaces) inside a rendered
+    line so the inline-flow guarantee holds even when the LLM hands us a
+    multi-line LaTeX block. Explicit LaTeX row breaks (``\\``) are
+    preserved for cases/aligned-style output.
+    """
     try:
         # pylatexenc ships no py.typed marker; suppress at site.
         from pylatexenc.latex2text import LatexNodes2Text  # type: ignore[import-untyped]
     except ImportError:  # pragma: no cover — declared in pyproject
         return src
     try:
-        result: str = LatexNodes2Text().latex_to_text(src).strip()
-        return result
+        protected_src = _LATEX_LINEBREAK.sub(
+            f" {_LATEX_LINEBREAK_SENTINEL} ",
+            src,
+        )
+        raw: str = LatexNodes2Text().latex_to_text(protected_src).strip()
+        lines = [re.sub(r"\s+", " ", part).strip() for part in raw.split(_LATEX_LINEBREAK_SENTINEL)]
+        return "\n".join(line for line in lines if line)
     except Exception:
         log.debug("Tier 1 LaTeX render failed for %r", src, exc_info=True)
         return src
@@ -145,7 +161,7 @@ _BLOCK_ENV = re.compile(
     r"(?<!\\)\\end\{\1\}"
 )
 _INLINE_DOLLAR = re.compile(r"\$(?!\s)([^\s$][^$]*[^\s$]|[^\s$])\$")
-_INLINE_PAREN = re.compile(r"(?<!\\)\\\(([^\n]+?)(?<!\\)\\\)")
+_INLINE_PAREN = re.compile(r"(?<!\\)\\\(([\s\S]+?)(?<!\\)\\\)")
 
 
 def extract_and_render_inline(text: str) -> Iterator[tuple[str, str]]:
