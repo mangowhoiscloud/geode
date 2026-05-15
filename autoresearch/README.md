@@ -32,10 +32,10 @@ Plus quota / Anthropic API 비용 cap 으로 제어). Metric `val_bpb` → Alpha
 fitness (5-axis aggregate, **higher = better**). `results.tsv` 도 column 만
 교체 (commit / fitness / hallucination_mean / status / description).
 
-현재 `WRAPPER_PROMPT_SECTIONS` 는 mutation target 이지만 runtime hook 은
-아직 staged 상태다. GEODE core 가 `GEODE_WRAPPER_OVERRIDE` 를 consume 하기
-전까지 `train.py --dry-run` 만 non-deceptive working mode 이며 real audit
-mode 는 fail-fast 한다.
+`WRAPPER_PROMPT_SECTIONS` 의 mutation 은 audit invoke 시
+`GEODE_WRAPPER_OVERRIDE` env var (`autoresearch/state/wrapper-override.json`)
+로 GEODE runtime 의 `PromptAssembler` Phase 0 에 전달되어 system prompt 의
+base 를 대체. `--dry-run` 은 cost 없는 plumbing 검증 mode.
 
 ## Quick start
 
@@ -49,7 +49,10 @@ uv sync --extra audit
 # 2. Seed pool + rubric sanity check (one-time)
 uv run python autoresearch/prepare.py
 
-# 3. Scaffold smoke test (real audit mode is fail-fast until runtime hook lands)
+# 3. Real audit experiment (~5 min, uses LLM quota / API budget)
+uv run python autoresearch/train.py
+
+# 3-alt. Plumbing-only smoke (no quota)
 uv run python autoresearch/train.py --dry-run
 ```
 
