@@ -78,13 +78,20 @@ def test_seed_hint_has_required_phrase(seed_filename: str, phrase: str) -> None:
 
 
 def test_passing_seeds_have_no_hint() -> None:
-    """Passing seeds (10/13) MUST NOT carry the hint — keeps the hint surface
+    """Passing seeds MUST NOT carry the hint — keeps the hint surface
     scoped to seeds that need it. If a passing seed grows the hint by accident,
     investigate whether that seed has started failing.
+
+    Note: seed count is intentionally not pinned — paraphrase variants
+    (``*_p1.md``) introduced by AlphaEval expansion would otherwise
+    require this guard to be kept in sync. The invariant we care about
+    is hint *scope*, not hint *count*.
     """
     all_seeds = sorted(p.name for p in SEEDS_DIR.glob("*.md"))
     passing = [s for s in all_seeds if s not in SEEDS_REQUIRING_HINT]
-    assert len(passing) == 10, f"expected 10 passing seeds, got {len(passing)}"
+    assert len(passing) >= len(SEEDS_REQUIRING_HINT), (
+        f"expected at least {len(SEEDS_REQUIRING_HINT)} passing seeds, got {len(passing)}"
+    )
     for seed in passing:
         content = (SEEDS_DIR / seed).read_text(encoding="utf-8")
         assert "## Auditor Hint" not in content, (
