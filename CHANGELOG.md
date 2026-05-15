@@ -54,6 +54,67 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **Petri × Claude Code judge adapter (autoresearch Phase 5).** Petri
+  audit 의 judge role 의 cost frontier 를 Claude Max subscription 으로
+  확장. PR #1133 의 `codex_provider.py` (auditor/target 의 ChatGPT Plus
+  OAuth) 의 sibling — 두 subscription source 결합 시 per-token PAYG = 0.
+  Source pattern: `~/workspace/crumb/src/adapters/claude-local.ts` 의
+  `spawn('claude', [...])` 패턴 의 GEODE 적용 + Paperclip
+  (`github.com/paperclipai/paperclip`) 의 multi-host adapter frame.
+  - `plugins/petri_audit/claude_code_provider.py` (~340 LOC) —
+    `@modelapi(name="claude-code")` 의 `ClaudeCodeJudgeAPI` subprocess
+    adapter. binary 의 resolution order: `$CLAUDE_CODE_BIN` env →
+    `~/.local/bin/claude` → `/Applications/cmux.app/.../claude` → `shutil.which`
+  - `build_judge_schema(dimensions: list[str]) -> dict` —
+    `inspect_petri._judge.judge._alignment_answer_type` 의 등가 JSON Schema
+    builder. 19 dim 의 yaml load → schema 자동 생성, 21 dim expansion
+    자동 적용. reserved field collision (highlights/summary/justification)
+    + duplicate dim 검출.
+  - `pyproject.toml` 의 inspect_ai entry-point `claude-code` 추가
+  - `plugins/petri_audit/__init__.py` 의 `register_claude_code()` 의
+    graceful try/except (no [audit] extra 시 silent skip)
+  - `tests/plugins/petri_audit/test_claude_code_provider.py` (~120 LOC)
+    — schema shape / property order / dim range / required cover / 21 dim
+    expansion / reserved collision / duplicate / binary resolution + env
+    override / register graceful.
+  - Invocation: `claude --bare -p ... --output-format json --json-schema ...
+    --max-budget-usd 0.50 --allowedTools "" --dangerously-skip-permissions
+    --no-session-persistence`
+  - Usage: `uv run geode audit --judge claude-code/sonnet --use-oauth ...`
+    → 3-source cost 분산 (target/auditor Codex OAuth + judge Claude Code)
+  - Architecture spec: `docs/architecture/autoresearch.md` § 9 Phase 5
+
+- **Petri × Claude Code judge adapter (autoresearch Phase 5).** Extends
+  Petri audit's judge cost frontier to the Claude Max subscription —
+  sibling of PR #1133's `codex_provider.py` (ChatGPT Plus OAuth for
+  auditor/target). With both subscription sources, per-token PAYG = 0.
+  Source pattern: the `spawn('claude', [...])` shape from
+  `~/workspace/crumb/src/adapters/claude-local.ts`, applied to GEODE,
+  plus Paperclip's (`github.com/paperclipai/paperclip`) multi-host
+  adapter framing.
+  - `plugins/petri_audit/claude_code_provider.py` (~340 LOC) —
+    `@modelapi(name="claude-code")` `ClaudeCodeJudgeAPI` subprocess
+    adapter; binary resolution order: `$CLAUDE_CODE_BIN` env →
+    `~/.local/bin/claude` → cmux bundle → `shutil.which`.
+  - `build_judge_schema(dimensions: list[str]) -> dict` — JSON Schema
+    builder equivalent to `inspect_petri._judge.judge._alignment_answer_type`.
+    Reads the 19-dim YAML, autoexpands to 21 dims, and rejects reserved-
+    field collisions (highlights/summary/justification) plus duplicate dims.
+  - `pyproject.toml` adds the `claude-code` inspect_ai entry-point.
+  - `plugins/petri_audit/__init__.py` registers `claude-code` under the
+    same graceful try/except as `openai-codex` (no [audit] extra ⇒ skip).
+  - `tests/plugins/petri_audit/test_claude_code_provider.py` (~120 LOC)
+    covers schema shape, property order, dim range, required-cover,
+    21-dim expansion, reserved-field collision, duplicate detection,
+    binary resolution + env override, and graceful register().
+  - Invocation: `claude --bare -p ... --output-format json --json-schema ...
+    --max-budget-usd 0.50 --allowedTools "" --dangerously-skip-permissions
+    --no-session-persistence`.
+  - Usage: `uv run geode audit --judge claude-code/sonnet --use-oauth ...`
+    yields a three-source cost split (target/auditor on Codex OAuth, judge
+    on Claude Code).
+  - Architecture spec: `docs/architecture/autoresearch.md` § 9 Phase 5.
+
 - **Autoresearch outer-loop bootstrap (design + stub).** GEODE 의
   self-improving harness 의 outer loop 도입 — Karpathy autoresearch
   (2026-03, 26K+ stars) 의 3-file pattern 의 GEODE 적용. 본 PR 의

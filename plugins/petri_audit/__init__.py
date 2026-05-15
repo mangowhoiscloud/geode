@@ -69,4 +69,21 @@ except ImportError:
         exc_info=True,
     )
 
+# Phase 5 (2026-05-15) — register the ``claude-code`` ModelAPI for the
+# Petri judge role. ``ClaudeCodeJudgeAPI`` shells out to the local Claude
+# Code CLI binary so judge calls consume the user's Claude Max subscription
+# quota (per-token PAYG = 0). Sibling of ``openai-codex`` — the two
+# subscription sources together close the cost frontier for the
+# autoresearch outer loop. Source pattern: ``~/workspace/crumb/src/adapters/
+# claude-local.ts``. Spec: ``docs/architecture/autoresearch.md`` § 9 Phase 5.
+try:
+    from plugins.petri_audit.claude_code_provider import register as _register_claude_code
+
+    _register_claude_code()
+except ImportError:
+    _logging.getLogger(__name__).debug(
+        "petri_audit claude-code ModelAPI registration deferred — [audit] extra not installed",
+        exc_info=True,
+    )
+
 __all__: list[str] = []
