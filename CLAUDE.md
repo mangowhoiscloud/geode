@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.95.0
+- **Version**: 0.95.1
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -341,3 +341,4 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | `codebase-audit` | audit, dead code, refactor, god object, duplication | Code audit + refactoring workflow (v0.24.0 proven) |
 | `geode-serve` | serve, gateway, slack, binding, poller, config.toml | Slack Gateway operations + debugging guide |
 | `long-task-watcher` | monitor, tail -F, progress, background, live audit, stdbuf, buffering | Long-running task watching patterns. Petri × GEODE 의 N7' Monitor 타임아웃 사례 + 안정 패턴 (cat-and-grep / stdbuf streaming / polling) |
+| `docs-link-audit` | broken link, 404, docs link, hyperlink, 링크 점검, 링크 깨짐, audit links, link checker | Docs 사이트 (`site/` Next.js) 본문/JSX/markdown 링크 audit. `scripts/check_docs_links.py` 가 4 카테고리 (internal /docs / internal /other / anchor / external) 검증, build-time copy 인지, exit code 기반 CI guard 가능. PR #1157/#1161 케이스 스터디 포함 |
