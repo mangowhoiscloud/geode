@@ -52,6 +52,37 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **Docs 사이트 LaTeX 렌더링 (KaTeX).** `site/` (Next.js docs 사이트) 의
+  `MarkdownLite` 인라인 토크나이저가 `$...$` (인라인) / `$$...$$` (블록)
+  구문을 인식해 KaTeX 로 수식을 렌더합니다. 또한 hand-written TSX 페이지
+  에서 직접 사용할 수 있는 `<MathExpr expr block />` 컴포넌트를 신규
+  추가 (`site/src/components/geode-docs/math.tsx`). `katex.min.css` 는
+  `site/src/app/layout.tsx` 에서 글로벌 import. KaTeX 의 `throwOnError:
+  false` + `errorColor` 폴백으로 잘못된 LaTeX 한 줄이 전체 페이지를
+  깨뜨리지 않게 함. 영향 범위 — `/docs/reference/changelog` (MarkdownLite
+  소비자) 자동 활성, 나머지 49 페이지는 `<MathExpr>` 명시 사용. 번들
+  사이즈 — KaTeX ~280 KB JS + ~22 KB CSS, static export 로 1 회 fetch
+  후 캐시. **CLI / README scope 제외** — CLI 는 Rich 기반 ASCII fallback,
+  README 는 GitHub 의 native `$...$` 가 이미 처리.
+- **Docs site LaTeX rendering (KaTeX).** The `MarkdownLite` inline
+  tokenizer in the Next.js docs site (`site/`) now recognizes `$...$`
+  (inline) and `$$...$$` (block) and renders them via KaTeX. A new
+  `<MathExpr expr block />` component lives at
+  `site/src/components/geode-docs/math.tsx` for hand-written TSX
+  pages. The `katex.min.css` stylesheet is globally imported from
+  `site/src/app/layout.tsx`. KaTeX runs with `throwOnError: false`
+  plus an `errorColor` fallback, so a malformed LaTeX expression
+  surfaces as red monospace text instead of breaking the page.
+  Surface — `/docs/reference/changelog` (the lone existing
+  MarkdownLite consumer) gets math support automatically; the other
+  49 docs pages can opt in with explicit `<MathExpr>`. Bundle —
+  KaTeX adds ~280 KB JS and ~22 KB CSS, fetched once on the static
+  export and cached. **CLI and README out of scope** — the CLI is
+  Rich-based with ASCII-only fallback, and GitHub renders `$...$`
+  natively in the README.
+
 ### Fixed
 
 - **Orchestration layer 의 OAuth-only fallback gap 해소 (Petri × GEODE
