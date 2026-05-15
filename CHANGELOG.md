@@ -54,6 +54,50 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [0.95.1] — 2026-05-16
 
+### Infrastructure
+
+- **`scripts/check_docs_links.py` — docs 사이트 링크 정적 + HTTP 점검
+  스크립트.** site/src 의 모든 `.tsx`/`.ts` 에서 본문/JSX 링크 패턴 (
+  `href="..."`, ``href={`...`}``, `src="..."`, `to="..."`, 그리고 markdown
+  스타일 `[text](url)`) 을 모두 추출. 4 분류:
+  - **internal /docs/...** — `site/src/app/docs/` 하위 `page.tsx` slug
+    와 차집합 → 누락 시 broken
+  - **internal /<other>...** — `/portfolio`, `/works`, `/petri-bundle/`
+    등 → app route + public asset + build-time copy (pages.yml 의
+    `docs/petri-bundle/` → `site/out/petri-bundle/` step 인지) 와 대조
+  - **anchor #section** — 같은 page.tsx 의 `id="..."` 와 대조
+  - **external http(s)://** — `--http` 옵트인 시 HEAD/GET 으로 reachability
+    검사 (concurrent 8, 8s timeout, 200/3xx OK)
+  CI 통합 옵션: `python3 scripts/check_docs_links.py` 만으로 정적 검사
+  통과 시 exit 0, broken 발견 시 exit 1. 향후 pages.yml build job 의
+  pre-build step 또는 별 ci.yml lint 으로 wiring 가능.
+
+  현재 측정 (이 PR 적용 후): 193 link 스캔, 0 broken, 17 external 모두
+  reachable, 2 unresolved (markdown-lite.tsx 의 regex 패턴 문자열, false
+  positive 무시).
+- **`scripts/check_docs_links.py` — static + HTTP audit script for docs
+  site links.** Extracts every link-shaped string from `site/src/**.tsx`
+  / `.ts` (JSX `href="..."`, ``href={`...`}``, `src="..."`, `to="..."`,
+  and markdown-style `[text](url)` inside string literals). Classifies
+  into four buckets:
+  - **internal /docs/...** — diffed against the `page.tsx` slug set
+    under `site/src/app/docs/`; misses flagged.
+  - **internal /\<other\>...** — `/portfolio`, `/works`,
+    `/petri-bundle/` etc., diffed against app routes + public assets +
+    build-time copies (the script recognises the
+    `docs/petri-bundle/` → `site/out/petri-bundle/` copy step in
+    `.github/workflows/pages.yml`).
+  - **anchor #section** — checked against `id="..."` occurrences in
+    the emitting `page.tsx`.
+  - **external http(s)://** — opt-in `--http` HEAD/GET probe
+    (concurrency 8, 8 s timeout, 200/3xx considered OK).
+  Returns exit 0 on a clean run and exit 1 if anything is broken, so
+  the script can later be wired into the Pages build (pre-build step)
+  or into the `ci.yml` lint job. Current measurement after this PR:
+  193 link occurrences scanned, 0 broken, all 17 external URLs
+  reachable, 2 false-positive "unresolved" entries from regex pattern
+  strings in `markdown-lite.tsx` (informational, not failure).
+
 ### Fixed
 
 - **Docs 사이트 broken link 3 개 정정 (6 사이트).** docs 사이트 내부 링크
