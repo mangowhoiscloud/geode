@@ -52,6 +52,58 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **Autoresearch outer-loop bootstrap (design + stub).** GEODE 의
+  self-improving harness 의 outer loop 도입 — Karpathy autoresearch
+  (2026-03, 26K+ stars) 의 3-file pattern 의 GEODE 적용. 본 PR 의
+  deliverable = design + minimal stub (코드 implementation 은 follow-up
+  PR1-4 에 분산):
+  - `docs/architecture/autoresearch.md` — outer-loop 의 spec (lifecycle
+    8 step + Karpathy 5 원칙 + rationale extractor + baseline marker +
+    results.tsv schema + risks + roadmap)
+  - `autoresearch/` top-level package — `__init__.py` + `program.md`
+    (human-direction template) + `README.md` (quick start + invariants)
+    + 6 module stub (`loop.py` CLI runner + `hypothesis.py` +
+    `fitness.py` 5-axis aggregate + `ratchet.py` git ops +
+    `rationale_extractor.py` explanation/highlights/summary NLP +
+    `baseline_marker.py` generation-N metadata)
+  - `autoresearch/state/` — `.gitignored` runtime artifact (results.tsv
+    + audit_logs + failure_log)
+  - `pyproject.toml` 의 `geode-research` entry-point + ruff `src` 의
+    `autoresearch` 포함
+  - `.github/workflows/ci.yml` 의 ruff + mypy step 의 `autoresearch/`
+    포함 — bootstrap PR 의 stub 도 CI quality gate 통과
+  - **Plugin 레벨 부적합** rationale (자기참조 loop + lifecycle mismatch
+    + meta-level 의미 분리) 명시. **mutation_blocklist 의 자기참조 회피**
+    (`autoresearch/`, `plugins/petri_audit/`, `core/llm/router/` 의
+    autoresearch mutation 금지).
+
+- **Autoresearch outer-loop bootstrap (design + stub).** Introduces
+  GEODE's self-improving harness outer loop — Karpathy autoresearch's
+  three-file pattern mapped onto GEODE. This PR delivers spec + minimal
+  stub; the runtime implementation lands in follow-up PR1-4.
+  - `docs/architecture/autoresearch.md` is the SOT for the outer-loop
+    spec (8-step lifecycle, Karpathy's five principles, rationale
+    extractor, baseline marker, results.tsv schema, risks, roadmap).
+  - `autoresearch/` top-level package: `program.md` (human-authored
+    direction template), `README.md` (invariants + quick start), six
+    module stubs (`loop.py` CLI runner, `hypothesis.py`, `fitness.py`
+    five-axis aggregate, `ratchet.py` git ops, `rationale_extractor.py`
+    NLP over explanation/highlights/summary, `baseline_marker.py`
+    generation-N metadata).
+  - `autoresearch/state/` is `.gitignored` (results.tsv + audit_logs +
+    failure_log).
+  - `pyproject.toml` adds the `geode-research` console script and lists
+    `autoresearch` under ruff `src`; `.github/workflows/ci.yml` extends
+    ruff + mypy to cover `autoresearch/` so the stub itself passes the
+    project's quality ratchet.
+  - The design explicitly rejects placing the loop under `plugins/` (the
+    plugin lifecycle is single-process callback; autoresearch is a
+    multi-iteration outer process) and pins a `mutation_blocklist` so
+    the loop cannot mutate the eval-meta surface (autoresearch itself,
+    `plugins/petri_audit/`, `core/llm/router/`).
+
 ### Changed
 
 - **Petri A3 judge split (1→5 group).** `plugins/petri_audit/` 의
