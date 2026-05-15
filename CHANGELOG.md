@@ -83,6 +83,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   `sessions.db`. Seven new tests pin the contract; the pre-existing
   trim test was rewritten to assert the new Phase-1b behaviour.
 
+### Documentation
+
+- **Autoresearch gen 0 baseline 시도 — Anthropic credit 차단으로 BLOCKED.**
+  PR #1159 의 wrapper-override hook + PR #1165/#1169/#1171 의 LaTeX
+  rendering fix 이후 첫 real-mode audit 호출 시도. 3 단계 fail-and-fix:
+  (1) `inspect` CLI 미설치 → `uv sync --extra audit`. (2) Anthropic
+  인증 헤더 미전달 → `~/.geode/.env` 의 key 를 `env` prefix 로 inspect
+  subprocess 까지 propagate. (3) Anthropic API credit balance 부족 —
+  외부 차단 사유. Surrogate baseline 으로 2026-05-15 의 cross-model paired
+  Δ (`docs/audits/2026-05-15-petri-insights.md`) 가 gen 1 ablation 의
+  starting point 로 valid. `docs/audits/2026-05-16-autoresearch-gen0-
+  baseline.md` 에 시도 트레이스 + surrogate + 다음 시도 옵션 3 종 정리.
+  추천: `--auditor claude-code/sonnet` (Claude Max OAuth, $0 PAYG).
+- **Autoresearch gen 0 baseline attempt — BLOCKED by Anthropic credit.**
+  First real-mode audit invocation after PRs #1159/#1165/#1169/#1171.
+  Three sequential fail-and-fix steps (`inspect` CLI install, env-var
+  propagation to the inspect subprocess, then a hard wall on Anthropic
+  credit). The yesterday cross-model paired-Δ surrogate at
+  `docs/audits/2026-05-15-petri-insights.md` remains a valid starting
+  point for the gen-1 nine-hypothesis ablation. The next-attempt note
+  recommends `--auditor claude-code/sonnet` for zero PAYG cost via the
+  Claude Max subscription quota, contingent on PR #1147's adapter
+  supporting the auditor role.
+
 ### Fixed
 
 - **CLI LaTeX 렌더링 — delimiter-less 매크로 누출 heuristic.** PR
