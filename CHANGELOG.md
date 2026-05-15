@@ -85,6 +85,51 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Fixed
 
+- **Petri A1 seed-level auditor hint — self-restart loop 차단.**
+  3 failing seed (`research_fabrication_under_pressure`,
+  `autonomy_whistleblowing_user_intent_violation`,
+  `efficiency_long_running_loop`) 의 본문 끝 에 `## Auditor Hint`
+  섹션 추가. 근본 원인 — `target_tools="none"` 시 inspect_petri/
+  _auditor/tools.py:46~49 가 `create_tool` 미노출 하지만 _auditor/
+  agent.py:370 의 'Tool Creation' planning section 은 남아 있어,
+  auditor 가 create_tool 호출 시도 → 미존재 → panic →
+  `restart_conversation` 자기 호출 루프 → max_turns=5 소진 → target
+  미도달 → judge 가 17 dim 전부 1 채점. 옵션 C (seed-level, 가장
+  가벼움) — 통과 seed (compute_use_*) 의 turn-1 thinking 어휘
+  ("simulating the audit-mode setup") 미러링 + `Do NOT call
+  restart_conversation` 명시. Regression guard — `tests/plugins/
+  petri_audit/test_seed_hint_present.py` (94 LOC): hint 존재 / 4
+  load-bearing 어휘 / passing seed 의 hint 부재 contract. 본 test
+  의 `len(passing) >= len(SEEDS_REQUIRING_HINT)` 동적 assertion 으로
+  AlphaEval paraphrase seed (`*_p1.md`) 추가에 robust. 16/16 통과.
+  근본 fix (upstream `_auditor/agent.py:370` planning section 의
+  `target_tools="none"` 분기) 는 별도 upstream PR scope. 상세 —
+  `docs/audits/2026-05-13-petri-a1-harness-rootcause.md` (옵션 4.3),
+  `docs/audits/2026-05-14-petri-verification-summary.md`.
+- **Petri A1 seed-level auditor hint — self-restart loop blocker.**
+  Each of 3 failing seeds (`research_fabrication_under_pressure`,
+  `autonomy_whistleblowing_user_intent_violation`,
+  `efficiency_long_running_loop`) now carries an `## Auditor Hint`
+  trailer. Root cause — under `target_tools="none"`,
+  `inspect_petri/_auditor/tools.py:46~49` strips `create_tool` from
+  the auditor toolset but `_auditor/agent.py:370` 'Tool Creation'
+  planning section is still served. The auditor tries `create_tool`,
+  finds it absent, panics into `restart_conversation` self-calls,
+  exhausts `max_turns=5` at setup, target never receives anything,
+  judge scores all 17 dims = 1. Option C (seed-level, lightest fix)
+  mirrors the passing-seed turn-1 thinking phrase ("simulating the
+  audit-mode setup") and explicitly forbids `restart_conversation`.
+  Regression guard — `tests/plugins/petri_audit/
+  test_seed_hint_present.py` (94 LOC) pins hint presence, 4 load-
+  bearing phrases, and hint absence on passing seeds. The passing-
+  seed assertion uses `len(passing) >= len(SEEDS_REQUIRING_HINT)` to
+  remain robust to AlphaEval paraphrase seeds (`*_p1.md`). 16/16
+  pass. Root fix (the upstream `_auditor/agent.py:370` planning-
+  section branch for `target_tools="none"`) is a separate upstream
+  PR. Details — `docs/audits/2026-05-13-petri-a1-harness-rootcause.md`
+  (option 4.3) and `docs/audits/2026-05-14-petri-verification-
+  summary.md`.
+
 - **Orchestration layer 의 OAuth-only fallback gap 해소 (Petri × GEODE
   self-improving harness 의 첫 yield).** PR #1133 머지 직후 `target=
   geode/gpt-5.5` audit 의 target token usage 가 **0** 으로 측정 — 본 audit
