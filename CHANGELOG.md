@@ -81,6 +81,56 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   bundled/global/project scopes. (3) `~/.geode/mcp/registry-cache.
   json` `servers` array length is exactly 200 — the prior "200+"
   was inaccurate. Pure documentation change, no behavioral impact.
+- **Verification 5-Layer 표기 정정 — `Confidence Gate` 가 아니라 `Calibration`.**
+  `core/verification/` 구성요소 audit 결과 README 의 "5-Layer Verification
+  (G1-G4 + BiasBuster + Cross-LLM + Confidence Gate + Rights Risk)" 표기가
+  실제 코드와 불일치. 실제 5번째 layer 는 `core/verification/calibration.py`
+  (Swiss Cheese Layer 5, docstring 직접 인용 — "orthogonal to G1-G4
+  (structural), BiasBuster (cognitive), Cross-LLM (inter-model). Calibration
+  validates against external expert consensus"). "Confidence Gate" 는
+  실제로는 `plugins/game_ip/nodes/scoring.py:301` 의 confidence multiplier
+  ((1 - CV) × 100) — 별도 layer 가 아니라 scoring 단계의 sub-routine.
+  코드 사이트 grounding:
+  - **Layer 1 (structural)** — `core/verification/guardrails.py` 의 `_g1_schema`
+    (L13), `_g2_range` (L47), `_g3_grounding` (L90), `_g4_consistency` (L148)
+  - **Layer 2 (cognitive)** — `core/verification/biasbuster.py:43`
+    `run_biasbuster(state) -> BiasBusterResult`, 4-step RECOGNIZE → EXPLAIN
+    → ALTER → EVALUATE
+  - **Layer 3 (inter-model)** — `core/verification/cross_llm.py:81`
+    `run_cross_llm_check(...)`, `core/verification/stats.py` Krippendorff α
+  - **Layer 4 (legal)** — `core/verification/rights_risk.py:79`
+    `check_rights_risk(...) -> RightsRiskResult`
+  - **Layer 5 (Ground Truth)** — `core/verification/calibration.py:328`
+    `run_calibration(...)`, expert-annotated Golden Set 대비 axis/tier/
+    cause 일치 검증
+  README/README.ko peer comparison `Multi-layer guardrails` 셀 + `What's
+  inside` 표 의 layer 명 모두 정정 (`Confidence Gate` → `Calibration`).
+  각 layer 에 "(structural)", "(cognitive)", "(inter-model)", "(legal)",
+  "(Ground Truth, Swiss Cheese Layer 5)" 의미 라벨 추가.
+
+- **Verification 5-Layer label fix — `Confidence Gate` → `Calibration`.**
+  Audit of `core/verification/` revealed that the README's "5-Layer
+  Verification" cell (`G1-G4 + BiasBuster + Cross-LLM + Confidence Gate +
+  Rights Risk`) was inaccurate. The true layer 5 is
+  `core/verification/calibration.py` (its docstring spells out "Swiss Cheese
+  Layer 5: orthogonal to G1-G4 (structural), BiasBuster (cognitive),
+  Cross-LLM (inter-model). Calibration validates against external expert
+  consensus"). What the README called "Confidence Gate" is actually the
+  confidence multiplier `(1 - CV) × 100` inside `plugins/game_ip/nodes/
+  scoring.py:301` — a scoring sub-routine, not a verification layer.
+  Grounded layer map:
+  - **Layer 1 (structural)** — `guardrails.py` `_g1_schema` (L13),
+    `_g2_range` (L47), `_g3_grounding` (L90), `_g4_consistency` (L148)
+  - **Layer 2 (cognitive)** — `biasbuster.py:43` `run_biasbuster`,
+    4-step RECOGNIZE → EXPLAIN → ALTER → EVALUATE
+  - **Layer 3 (inter-model)** — `cross_llm.py:81` `run_cross_llm_check`
+    + `stats.py` Krippendorff α
+  - **Layer 4 (legal)** — `rights_risk.py:79` `check_rights_risk`
+  - **Layer 5 (Ground Truth)** — `calibration.py:328` `run_calibration`,
+    expert-annotated Golden Set comparison
+  README and README.ko peer comparison `Multi-layer guardrails` cell and
+  `What's inside` table both fixed (`Confidence Gate` → `Calibration`).
+  Each layer now carries the semantic label parenthetical.
 
 ### Infrastructure
 

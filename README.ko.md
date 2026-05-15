@@ -302,7 +302,7 @@ uv tool install -e . --force
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
 | **장시간 데몬** | `geode serve` 가 백그라운드로 상주. Slack / Discord / Telegram 폴러 + 스케줄러 tick + thin CLI 용 IPC |
 | **서브에이전트** | 부모 권한 완전 상속, depth/cost 가드, Lane 격리 |
-| **5-layer 검증** | Guardrails G1-G4 + BiasBuster + Cross-LLM (Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
+| **5-layer 검증** | Guardrails G1-G4 (structural) + BiasBuster (cognitive) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal) + Calibration (Ground Truth, Swiss Cheese Layer 5) |
 | **도메인-specific DAG (교체 가능)** | 파이프라인 (리서치, 다축 평가, 합성) 은 `DomainPort` Protocol 로 plug-in. 레퍼런스 DAG 1개 동봉 — 어떤 탐색적 리서치 / 시그널 예측 도메인에도 교체해 사용 |
 
 ---
@@ -358,7 +358,7 @@ uv tool install -e . --force
 | 메모리 tier | ⚠️ 3 (user / project / local 세팅 머지) | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **5-tier** (SOUL · User · Org · Project · Session) |
 | 디스크 영구 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ `.geode/plans.json` |
 | 권한 / 샌드박스 계층 | ✅ 3-mode (default / auto / bypass) + Confirmation UI | ✅ `sandbox_mode` 3 단계 (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain (40+ 감사 표면) | ✅ Policy Chain + 도구 게이트 |
-| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **5-layer 검증** (G1-G4 + BiasBuster + Cross-LLM Krippendorff α ≥ 0.67 + Confidence Gate + Rights Risk) |
+| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **5-layer 검증** (G1-G4 + BiasBuster + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk + Calibration) |
 | Hook 이벤트 수 | ⚠️ 5 (PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange) | ⚠️ 6 (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop) | ✅ 5 이벤트 타입 · 다수 번들 핸들러 | ✅✅ **58 이벤트** (`docs/architecture/hook-system.md`) |
 
 </details>
