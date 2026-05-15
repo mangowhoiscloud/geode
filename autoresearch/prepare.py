@@ -1,0 +1,186 @@
+"""
+One-time sanity check for autoresearch experiments (Petri-signal fork).
+
+Karpathy 원본의 ``prepare.py`` 는 fineweb 다운로드 + BPE tokenizer 학습
+이었음. 본 fork 의 prepare 는 그 자리에 **fixed audit harness** 의 무결성
+검증을 둠 — Petri seed pool 의 file count / format, AlphaEval rubric 의 dim
+count, audit CLI 의 dry-run reachability.
+
+Usage:
+    uv run python autoresearch/prepare.py             # full check
+    uv run python autoresearch/prepare.py --skip-cli  # rubric/seed only
+
+Artefact 위치 (원본 prepare 의 ``~/.cache/autoresearch/`` 와 동일한 정신
+으로, 본 fork 는 ``~/.cache/autoresearch-petri/`` 에 sanity report 만 저장):
+
+    ~/.cache/autoresearch-petri/prepare-report.txt
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import yaml
+
+# ---------------------------------------------------------------------------
+# Constants (fixed, do not modify — agent 가 수정 X)
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SEED_POOL_DIR = REPO_ROOT / "plugins" / "petri_audit" / "seeds_safe10"
+RUBRIC_FILE = REPO_ROOT / "plugins" / "petri_audit" / "judge_dims" / "geode_5axes.yaml"
+EXPECTED_SEED_COUNT = 10  # 5 base × 2 paraphrase
+EXPECTED_DIM_COUNT = 19  # AlphaEval expansion (17 base + eval_awareness + unprompted_sycophancy)
+
+CACHE_DIR = Path.home() / ".cache" / "autoresearch-petri"
+REPORT_FILE = CACHE_DIR / "prepare-report.txt"
+FALLBACK_REPORT_FILE = REPO_ROOT / "autoresearch" / "state" / "prepare-report.txt"
+
+
+# ---------------------------------------------------------------------------
+# Checks
+# ---------------------------------------------------------------------------
+
+
+def check_seed_pool() -> tuple[bool, str]:
+    """Verify the 10 safe-seed pool exists with the expected layout."""
+    if not SEED_POOL_DIR.is_dir():
+        return False, f"missing seed pool dir: {SEED_POOL_DIR}"
+    seeds = sorted(SEED_POOL_DIR.glob("*.md"))
+    if len(seeds) != EXPECTED_SEED_COUNT:
+        return (
+            False,
+            f"expected {EXPECTED_SEED_COUNT} seeds in {SEED_POOL_DIR}, found {len(seeds)}",
+        )
+    # spot-check: paraphrase pair convention (`*_p1.md` next to `*.md`)
+    bases = {p.stem for p in seeds if not p.stem.endswith("_p1")}
+    paraphrases = {p.stem.removesuffix("_p1") for p in seeds if p.stem.endswith("_p1")}
+    missing = bases ^ paraphrases
+    if missing:
+        return (
+            False,
+            f"seed pool paraphrase pairing inconsistent — orphans: {sorted(missing)}",
+        )
+    return True, f"seed pool OK — {len(seeds)} files in {SEED_POOL_DIR}"
+
+
+def check_rubric() -> tuple[bool, str]:
+    """Verify the AlphaEval rubric file has the expected dim count."""
+    if not RUBRIC_FILE.is_file():
+        return False, f"missing rubric file: {RUBRIC_FILE}"
+    with RUBRIC_FILE.open(encoding="utf-8") as f:
+        dims = yaml.safe_load(f)
+    if not isinstance(dims, list) or not all(isinstance(dim, str) for dim in dims):
+        return False, f"rubric must be a flat YAML list of dimension names: {RUBRIC_FILE}"
+    if len(dims) != EXPECTED_DIM_COUNT:
+        return (
+            False,
+            f"expected {EXPECTED_DIM_COUNT} dims in {RUBRIC_FILE.name}, found {len(dims)}",
+        )
+    return True, f"rubric OK — {len(dims)} dims in {RUBRIC_FILE.name}"
+
+
+def check_audit_cli(skip_cli: bool) -> tuple[bool, str]:
+    """Verify the ``geode audit`` CLI is reachable (dry-run --help only)."""
+    if skip_cli:
+        return True, "audit CLI check skipped (--skip-cli)"
+    geode_bin = shutil.which("geode") or shutil.which("uv")
+    if geode_bin is None:
+        return False, "neither `geode` nor `uv` on PATH"
+    cmd = (
+        [geode_bin, "audit", "--help"]
+        if geode_bin.endswith("/geode")
+        else [geode_bin, "run", "geode", "audit", "--help"]
+    )
+    try:
+        result = subprocess.run(  # noqa: S603  # nosec B603 — argv from shutil.which + module constants
+            cmd, capture_output=True, timeout=30, check=False
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"audit CLI --help timed out: {' '.join(cmd)}"
+    if result.returncode != 0:
+        return (
+            False,
+            f"audit CLI --help exit={result.returncode}: {result.stderr.decode()[:200]}",
+        )
+    return True, "audit CLI reachable (--help OK)"
+
+
+def write_report(text: str) -> Path:
+    """Write the prepare report, falling back inside the worktree if needed."""
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        REPORT_FILE.write_text(text, encoding="utf-8")
+        return REPORT_FILE
+    except PermissionError:
+        FALLBACK_REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        FALLBACK_REPORT_FILE.write_text(text, encoding="utf-8")
+        return FALLBACK_REPORT_FILE
+
+
+# ---------------------------------------------------------------------------
+# Entry
+# ---------------------------------------------------------------------------
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--skip-cli",
+        action="store_true",
+        help="skip the `geode audit --help` reachability check",
+    )
+    args = parser.parse_args()
+
+    print("autoresearch (Petri-signal fork) — prepare.py sanity check")
+    print(f"  repo: {REPO_ROOT}")
+    print()
+
+    started = time.time()
+    checks = [
+        ("seed pool", check_seed_pool()),
+        ("rubric", check_rubric()),
+        ("audit CLI", check_audit_cli(args.skip_cli)),
+    ]
+    elapsed = time.time() - started
+
+    all_ok = True
+    lines: list[str] = []
+    for label, (ok, msg) in checks:
+        marker = "OK " if ok else "FAIL"
+        line = f"  [{marker}] {label}: {msg}"
+        print(line)
+        lines.append(line)
+        all_ok = all_ok and ok
+
+    report_path = write_report(
+        "\n".join(
+            [
+                f"autoresearch-petri prepare report — {time.strftime('%Y-%m-%d %H:%M:%S')}",
+                f"elapsed_seconds: {elapsed:.2f}",
+                f"all_ok: {all_ok}",
+                "",
+                *lines,
+            ]
+        )
+        + "\n"
+    )
+    print()
+    print(f"report → {report_path}")
+
+    if not all_ok:
+        print("\nprepare failed — fix the issues above before running train.py")
+        return 1
+
+    print(json.dumps({"status": "ok", "elapsed_seconds": round(elapsed, 2)}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
