@@ -87,6 +87,62 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **CLI LaTeX 렌더링 — Tier 1 (Unicode) + Tier 2 (2D pretty-print).**
+  `core/ui/latex.py` 신규. 다른 frontier LLM CLI (Claude Code, Codex CLI,
+  Aider, jupyter-console) 가 모두 LaTeX 를 raw text 로 흘리는 동안 GEODE
+  는 두 단계 폴백으로 렌더합니다.
+
+  - **Tier 1 — pylatexenc** (모든 터미널). `\alpha` → α, `x^{2}` → x²,
+    `\text{operators}` → operators. 사용자 예시 `Complexity(f) = \#\,
+    \text{operators} + \#\,\text{variables} + \text{depth}(f)` 가
+    `Complexity(f) = # operators + # variables + depth(f)` 로 흐름.
+    pure-Python, ~5 MB.
+  - **Tier 2 — latex2sympy2 + sympy.pretty** (모든 터미널, 멀티라인 출력).
+    `block=True` + 2D 토큰 (`\frac`, `\matrix`, `\sum_`, `\int_`,
+    `\prod_`, `\binom`, `\sqrt{`, `\lim_`) 감지 시에만 SymPy 파서 호출.
+    `\frac{a+b}{c+d}` 가 3 줄 Unicode 분수로 렌더 (예: `a + b ─── c +
+    d`). 파서 실패 시 Tier 1 로 silent fallback.
+  - **`extract_and_render_inline`** — 산문 안에 섞인 `$...$` (인라인) /
+    `$$...$$` (블록) 세그먼트 스캔. docs 사이트 MarkdownLite 와 동일한
+    우선순위 (block > inline > 텍스트). "비용 $3.00 발생" 같이 delimiter
+    안쪽에 공백 시작/끝 있는 경우 수식으로 오인식 안 됨.
+
+  의존성 추가 — `pylatexenc>=2.10` (~5 MB) + `latex2sympy2>=1.9` +
+  `sympy>=1.12` (~30 MB). 테스트 19 종 (`tests/test_ui_latex.py`) —
+  Tier 1/2/혼합 컨텐츠 + 가격 오인식 방지 + parse 실패 폴백 케이스.
+  외부 통합은 본 PR 범위 밖 (라이브러리 + 테스트만). 다음 단계 후보 —
+  `event_renderer` 가 LLM 응답 텍스트에 `extract_and_render_inline` 적용.
+
+- **CLI LaTeX rendering — Tier 1 (Unicode) + Tier 2 (2D pretty-print).**
+  New `core/ui/latex.py`. Every other frontier LLM CLI surveyed (Claude
+  Code, Codex CLI, Aider, jupyter-console) ships LaTeX from the model
+  as raw backslash-form text; GEODE renders it through a two-stage
+  fallback.
+
+  - **Tier 1 — pylatexenc** (every terminal). `\alpha` → α, `x^{2}` →
+    x², `\text{operators}` → operators. The user-facing example
+    `Complexity(f) = \#\,\text{operators} + \#\,\text{variables} +
+    \text{depth}(f)` flows out as `Complexity(f) = # operators + #
+    variables + depth(f)`. Pure-Python, ~5 MB.
+  - **Tier 2 — latex2sympy2 + sympy.pretty** (every terminal,
+    multi-line output). Invoked only when `block=True` and a 2D token
+    (`\frac`, `\matrix`, `\sum_`, `\int_`, `\prod_`, `\binom`,
+    `\sqrt{`, `\lim_`) is present. `\frac{a+b}{c+d}` renders as a
+    three-line Unicode fraction. Silent fall-back to Tier 1 on parser
+    failure.
+  - **`extract_and_render_inline`** — scans mixed prose for `$...$`
+    (inline) and `$$...$$` (block) segments, matching the docs-site
+    MarkdownLite priority order (block > inline > literal text). The
+    inline regex forbids whitespace adjacent to a delimiter so "$3.00"
+    in prose is not misread as math.
+
+  Deps — `pylatexenc>=2.10` (~5 MB) + `latex2sympy2>=1.9` +
+  `sympy>=1.12` (~30 MB). 19 tests in `tests/test_ui_latex.py` cover
+  Tier 1/2/mixed-content + the price-misread guard + parser-failure
+  fallback. No external integration yet (library + tests only) —
+  next step candidate is to apply `extract_and_render_inline` inside
+  `event_renderer` for LLM response text.
+
 - **Docs 사이트 LaTeX 렌더링 (KaTeX).** `site/` (Next.js docs 사이트) 의
   `MarkdownLite` 인라인 토크나이저가 `$...$` (인라인) / `$$...$$` (블록)
   구문을 인식해 KaTeX 로 수식을 렌더합니다. 또한 hand-written TSX 페이지
