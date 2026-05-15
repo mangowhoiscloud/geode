@@ -52,6 +52,41 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Orchestration layer 의 OAuth-only fallback gap 해소 (Petri × GEODE
+  self-improving harness 의 첫 yield).** PR #1133 머지 직후 `target=
+  geode/gpt-5.5` audit 의 target token usage 가 **0** 으로 측정 — 본 audit
+  의 fail log 가 GEODE orchestration layer (GoalDecomposer / AgenticLoop
+  의 provider 결정) 의 Anthropic hardcode 4 site 를 자동 식별. 본 PR 의 fix:
+  - **H1 (HIGH)** — `core/agent/loop/_decomposition.py:34` 에 `model=
+    loop.model` 인자 추가. GoalDecomposer 가 ANTHROPIC_BUDGET (Haiku)
+    hardcode default 대신 loop.model 의 provider 따름.
+  - **H2 (HIGH)** — `core/llm/adapters.py` 에 `infer_provider_from_model()`
+    helper 추가 (model prefix + Codex OAuth availability 기반).
+    `plugins/petri_audit/targets/geode_target.py:284` 의 AgenticLoop 생성
+    시 본 helper 로 provider 명시 전달.
+  - **H3 (MEDIUM, docs-only)** — `core/hooks/llm_extract_learning.py`
+    의 `_call_budget_llm` docstring 보강 + Codex OAuth follow-up TODO.
+  - **H4 (MEDIUM, docs-only)** — `core/agent/loop/models.py` 의
+    `_context_exhausted_message` docstring 보강 + Codex OAuth TODO.
+  - **Before/after smoke**: target token 0 → 17,490 (single sample
+    `reasoning_chain_manipulation` gpt-5.5 OAuth). full 10-seed valid
+    baseline → `docs/audits/2026-05-15-petri-oauth-orchestration-gap.md`.
+
+- **Orchestration-layer OAuth-only fallback gap closed (self-improving
+  harness's first yield).** Right after PR #1133, the first audit
+  measured target token = **0**; the fail log auto-identified 4
+  hardcoded Anthropic sites in GEODE's orchestration layer.
+  - **H1** `_decomposition.py:34` passes `model=loop.model`.
+  - **H2** `adapters.py` `infer_provider_from_model()` helper +
+    `geode_target.py:284` explicit `provider=`.
+  - **H3** `_call_budget_llm` docstring + Codex OAuth TODO.
+  - **H4** `_context_exhausted_message` docstring + Codex OAuth TODO.
+  - Before/after smoke target token 0 → 17,490 on `reasoning_chain_
+    manipulation`. Full 10-seed baseline →
+    `docs/audits/2026-05-15-petri-oauth-orchestration-gap.md`.
+
 ### Added
 
 - **Petri × Codex OAuth bridge — ChatGPT Plus 구독으로 audit 운영.**

@@ -34,7 +34,19 @@ _EXHAUSTED_SYSTEM = (
 
 
 def _context_exhausted_message(user_input: str) -> str:
-    """Generate context-exhausted message in the user's language via lightweight LLM call."""
+    """Generate context-exhausted message in the user's language via lightweight LLM call.
+
+    Fallback order: Anthropic Haiku (anthropic_api_key) → static
+    ``_EXHAUSTED_FALLBACK`` text. In an OAuth-only environment with no
+    anthropic key, returns the static fallback — graceful, the loop
+    surfaces the static notice to the user. No silent failure.
+
+    TODO (follow-up PR): add a Codex OAuth path so ChatGPT Plus
+    subscription quota can drive the language-matching call. The Codex
+    ``/v1/responses`` streaming request shape lives in
+    ``plugins/petri_audit/codex_provider.py`` and would need to be
+    factored out before reuse here.
+    """
     try:
         import anthropic
 

@@ -281,11 +281,14 @@ async def _default_geode_runner(
     #
     # ``disable_settings_drift`` is True iff the caller explicitly pinned
     # a target model — see N6-followup priority docstring above.
+    from core.llm.adapters import infer_provider_from_model
+
     loop = AgenticLoop(
         ctx,
         executor,
         system_suffix=system_text,
         model=model,
+        provider=infer_provider_from_model(model) if model else "anthropic",
         disable_settings_drift=(model is not None),
     )
     log.debug(
