@@ -92,6 +92,185 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   alignment. A Codex MCP cross-LLM verifier round caught two CRITICAL
   gaps (stale rows on shrink, leftovers on empty save), both fixed.
 
+### Changed
+
+- **Autoresearch outer-loop: Karpathy 3-file fork (Petri-signal domain).**
+  PR #1145 의 6-module python stub (`loop.py` / `hypothesis.py` /
+  `fitness.py` / `ratchet.py` / `rationale_extractor.py` /
+  `baseline_marker.py`, 480 LOC, "follow-up PR1" 표기로 implementation
+  대기) 을 폐기하고 Karpathy
+  [autoresearch](https://github.com/karpathy/autoresearch) (228791f, MIT,
+  26K+ stars) 의 3-file 패턴 (`prepare.py` + `train.py` + `program.md`)
+  으로 재구성. ML 도메인 (GPT pre-train + `val_bpb`) 을 GEODE alignment-
+  audit 도메인 (Petri seed pool + AlphaEval 5-axis fitness) 으로 최소
+  교체. Karpathy 원본의 single-mutation-file + fixed-budget + grep-friendly
+  stdout + `results.tsv` 5-col + git-as-optimizer 정신 유지.
+  - `autoresearch/prepare.py` — `~/.cache/autoresearch/` 의 fineweb 다운
+    로드 + tokenizer 학습 자리에 **fixed audit harness sanity check**
+    (10 safe seed file count, 19-dim YAML rubric parse, `geode audit
+    --help` reachability). `~/.cache` 가 read-only 일 때 worktree-local
+    fallback.
+  - `autoresearch/train.py` — GPT 학습 자리에 **wrapper system-prompt
+    section dict** (mutation target) + `geode audit` subprocess invocation
+    (staged: `--seed-select` / `--dim-set` / `--live` / `--yes`) + 5-axis
+    fitness extraction. 현재 GEODE core 가 `GEODE_WRAPPER_OVERRIDE` 를
+    아직 consume 하지 않으므로 real mode 는 fail-fast (`RuntimeError`),
+    `--dry-run` 만 working mode — runtime hook 은 follow-up PR.
+  - `autoresearch/program.md` — ML research direction 자리에 Petri
+    direction (gen 0 hypothesis space, `input_hallucination` Δ +1.13 /
+    `overrefusal` +0.31 / `broken_tool_use` −1.28 driver seed 의 prior,
+    9 hypothesis = wrapper section ablation).
+  - `autoresearch/README.md` — Petri-signal fork 의 quick start.
+  - `pyproject.toml` 의 `geode-research = "autoresearch.loop:cli"`
+    entry-point 제거 (Karpathy 원본 정신: single-script `uv run python
+    autoresearch/train.py`, CLI wrapping 없음).
+  - 3 신규 pytest (`tests/test_autoresearch_train.py`) — argv 가 현재
+    `geode audit` flag 만 사용 + 사라진 flag 의 retro 회피 + real-mode
+    fail-fast + dry-run baseline 의 fitness range 검증.
+  - 그라운딩 reference clone: `~/workspace/autoresearch` (단순 clone,
+    GEODE repo 와 git 연동 없음).
+  - Codex MCP cross-LLM verifier 가 CRITICAL 1 + HIGH 4 자동 fix —
+    real-mode deception, obsolete CLI flag, rubric grep 의 stale 형식,
+    `~/.cache` 권한 fallback.
+- **Autoresearch outer-loop: Karpathy 3-file fork (Petri-signal domain).**
+  Retires the 6-module Python stub from PR #1145 (`loop.py` /
+  `hypothesis.py` / `fitness.py` / `ratchet.py` / `rationale_extractor.py`
+  / `baseline_marker.py`, 480 LOC, "follow-up PR1" placeholder) and
+  rebases the outer loop on the Karpathy
+  [autoresearch](https://github.com/karpathy/autoresearch) 3-file pattern
+  (228791f, MIT, 26K+ stars). Domain swapped from ML pre-training
+  (`val_bpb`) to GEODE alignment-audit (Petri seed pool + AlphaEval
+  5-axis fitness), preserving Karpathy's single-mutation-file +
+  fixed-budget + grep-friendly stdout + `results.tsv` 5-col +
+  git-as-optimizer spirit.
+  - `autoresearch/prepare.py` replaces fineweb download + tokenizer
+    training with a **fixed audit harness sanity check** (seed file
+    count, 19-dim YAML rubric parse, `geode audit --help` reachability),
+    and falls back to a worktree-local report if `~/.cache` is read-only.
+  - `autoresearch/train.py` replaces the GPT training loop with a
+    **wrapper system-prompt section dict** (the agent's mutation surface)
+    plus a `geode audit` subprocess invocation (staged: `--seed-select` /
+    `--dim-set` / `--live` / `--yes`) and 5-axis fitness extraction.
+    Until GEODE core consumes `GEODE_WRAPPER_OVERRIDE`, real mode
+    fail-fasts and only `--dry-run` is non-deceptive; the runtime hook
+    lands in a follow-up PR.
+  - `autoresearch/program.md` replaces the ML research direction with a
+    Petri direction (gen-0 hypothesis space drawn from yesterday's
+    driver seeds: `input_hallucination` Δ +1.13 / `overrefusal` +0.31 /
+    `broken_tool_use` −1.28 across three model families, pruning the
+    space to nine wrapper-section ablations).
+  - `autoresearch/README.md` ships a Petri-signal fork quick-start.
+  - `pyproject.toml` drops the `geode-research = "autoresearch.loop:cli"`
+    entry-point — Karpathy keeps the runner as a plain `python train.py`,
+    so the fork does too.
+  - Three new pytest tests (`tests/test_autoresearch_train.py`) pin the
+    current `geode audit` flag set, block obsolete flags from creeping
+    back in, assert the real-mode fail-fast, and check the dry-run
+    fitness range.
+  - Grounding reference clone: `~/workspace/autoresearch` (a plain
+    clone, not wired into the GEODE repo).
+  - Codex MCP acted as a cross-LLM verifier and applied one CRITICAL fix
+    plus four HIGH fixes — real-mode deception, obsolete CLI flags,
+    stale rubric grep, and the `~/.cache` permission fallback.
+
+### Fixed
+
+- **Autoresearch Petri scaffold verifier fixes.** `prepare.py` now parses the
+  19-dimension YAML rubric instead of grepping for a stale `- name:` shape,
+  falls back to a workspace-local prepare report when `~/.cache` is not
+  writable, and `train.py` fail-fast blocks real audit mode until GEODE core
+  actually consumes `GEODE_WRAPPER_OVERRIDE`. The staged live argv now matches
+  the current `geode audit` CLI (`--seed-select`, `--dim-set`, `--live`,
+  `--yes`) instead of obsolete `--rubric` / `--budget-minutes` flags.
+- **Autoresearch Petri scaffold 검증 수정.** `prepare.py` 가 오래된
+  `- name:` 형식 grep 대신 19-dim YAML rubric 을 직접 parse 하고,
+  `~/.cache` 에 쓸 수 없을 때 worktree-local prepare report 로 fallback
+  합니다. `train.py` 는 GEODE core 가 `GEODE_WRAPPER_OVERRIDE` 를 실제로
+  consume 하기 전까지 real audit mode 를 fail-fast 로 막아, wrapper mutation
+  이 적용되는 것처럼 보이는 착시를 제거했습니다. staged live argv 도 현재
+  `geode audit` CLI 의 `--seed-select`, `--dim-set`, `--live`, `--yes` 에
+  맞췄습니다.
+
+### Documentation
+
+- **README + CLAUDE.md count grounding — tool 25→61, skill 13→14, MCP
+  200+→200, module 353→363, test 4608→4897.** 직전 unified-daemon
+  다이어그램 self-audit 에서 발견된 outdated 수치 정정. README/README.ko
+  의 (a) shields.io 배지, (b) `What's inside` 표, (c) peer comparison 표
+  의 MCP 셀, (d) Architecture overview 의 `Runtime Tools(N)` /
+  `ToolRegistry(N)` / `Skills(N)` 라벨, (e) `GEODE Runtime` 단락의 도구
+  / Skill 카운트 모두 실측값으로 갱신. CLAUDE.md 의 `Modules` (`find
+  core/ -name "*.py" \| wc -l` = 318, `plugins/` = 45) + `Tests` (`pytest
+  --collect-only -m "not live"` = 4897) 카운트도 동기화. 측정 방식: (1)
+  `core/tools/definitions.json` JSON 길이 = 61. (2) `SkillLoader(lazy=
+  True).load_all()` 길이 = 14 (bundled+global+project 스코프 합산).
+  (3) `~/.geode/mcp/registry-cache.json` 의 `servers` array 길이 =
+  정확히 200 (예전 "200+" 는 부정확). 행위 변경 0 — doc 수치 only.
+- **README + CLAUDE.md count grounding — tool 25→61, skill 13→14,
+  MCP 200+→200, module 353→363, test 4608→4897.** Outdated counts
+  discovered while self-auditing the unified-daemon diagram were
+  resynced against measured values. Updated in README and README.ko:
+  (a) shields.io badges, (b) `What's inside` table, (c) peer
+  comparison MCP cell, (d) `Tools(N)` / `ToolRegistry(N)` /
+  `Skills(N)` labels in the Architecture overview, (e) `GEODE
+  Runtime` paragraph tool / skill counts. CLAUDE.md `Modules` and
+  `Tests` lines also resynced. Measurement: (1) length of
+  `core/tools/definitions.json` JSON array = 61. (2)
+  `SkillLoader(lazy=True).load_all()` returns 14 across
+  bundled/global/project scopes. (3) `~/.geode/mcp/registry-cache.
+  json` `servers` array length is exactly 200 — the prior "200+"
+  was inaccurate. Pure documentation change, no behavioral impact.
+- **Verification 5-Layer 표기 정정 — `Confidence Gate` 가 아니라 `Calibration`.**
+  `core/verification/` 구성요소 audit 결과 README 의 "5-Layer Verification
+  (G1-G4 + BiasBuster + Cross-LLM + Confidence Gate + Rights Risk)" 표기가
+  실제 코드와 불일치. 실제 5번째 layer 는 `core/verification/calibration.py`
+  (Swiss Cheese Layer 5, docstring 직접 인용 — "orthogonal to G1-G4
+  (structural), BiasBuster (cognitive), Cross-LLM (inter-model). Calibration
+  validates against external expert consensus"). "Confidence Gate" 는
+  실제로는 `plugins/game_ip/nodes/scoring.py:301` 의 confidence multiplier
+  ((1 - CV) × 100) — 별도 layer 가 아니라 scoring 단계의 sub-routine.
+  코드 사이트 grounding:
+  - **Layer 1 (structural)** — `core/verification/guardrails.py` 의 `_g1_schema`
+    (L13), `_g2_range` (L47), `_g3_grounding` (L90), `_g4_consistency` (L148)
+  - **Layer 2 (cognitive)** — `core/verification/biasbuster.py:43`
+    `run_biasbuster(state) -> BiasBusterResult`, 4-step RECOGNIZE → EXPLAIN
+    → ALTER → EVALUATE
+  - **Layer 3 (inter-model)** — `core/verification/cross_llm.py:81`
+    `run_cross_llm_check(...)`, `core/verification/stats.py` Krippendorff α
+  - **Layer 4 (legal)** — `core/verification/rights_risk.py:79`
+    `check_rights_risk(...) -> RightsRiskResult`
+  - **Layer 5 (Ground Truth)** — `core/verification/calibration.py:328`
+    `run_calibration(...)`, expert-annotated Golden Set 대비 axis/tier/
+    cause 일치 검증
+  README/README.ko peer comparison `Multi-layer guardrails` 셀 + `What's
+  inside` 표 의 layer 명 모두 정정 (`Confidence Gate` → `Calibration`).
+  각 layer 에 "(structural)", "(cognitive)", "(inter-model)", "(legal)",
+  "(Ground Truth, Swiss Cheese Layer 5)" 의미 라벨 추가.
+
+- **Verification 5-Layer label fix — `Confidence Gate` → `Calibration`.**
+  Audit of `core/verification/` revealed that the README's "5-Layer
+  Verification" cell (`G1-G4 + BiasBuster + Cross-LLM + Confidence Gate +
+  Rights Risk`) was inaccurate. The true layer 5 is
+  `core/verification/calibration.py` (its docstring spells out "Swiss Cheese
+  Layer 5: orthogonal to G1-G4 (structural), BiasBuster (cognitive),
+  Cross-LLM (inter-model). Calibration validates against external expert
+  consensus"). What the README called "Confidence Gate" is actually the
+  confidence multiplier `(1 - CV) × 100` inside `plugins/game_ip/nodes/
+  scoring.py:301` — a scoring sub-routine, not a verification layer.
+  Grounded layer map:
+  - **Layer 1 (structural)** — `guardrails.py` `_g1_schema` (L13),
+    `_g2_range` (L47), `_g3_grounding` (L90), `_g4_consistency` (L148)
+  - **Layer 2 (cognitive)** — `biasbuster.py:43` `run_biasbuster`,
+    4-step RECOGNIZE → EXPLAIN → ALTER → EVALUATE
+  - **Layer 3 (inter-model)** — `cross_llm.py:81` `run_cross_llm_check`
+    + `stats.py` Krippendorff α
+  - **Layer 4 (legal)** — `rights_risk.py:79` `check_rights_risk`
+  - **Layer 5 (Ground Truth)** — `calibration.py:328` `run_calibration`,
+    expert-annotated Golden Set comparison
+  README and README.ko peer comparison `Multi-layer guardrails` cell and
+  `What's inside` table both fixed (`Confidence Gate` → `Calibration`).
+  Each layer now carries the semantic label parenthetical.
+
 ### Infrastructure
 
 - **Petri raw-archive analyzer + safe10 seed pool.** `scripts/petri_analyze.py`
