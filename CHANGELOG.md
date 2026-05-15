@@ -52,6 +52,37 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **Phase 1b — Long-term Recall: JSON 20-trim 해제 + DB SoT 전환 + layout
+  v4 migration.** Hermes 흡수 plan (`docs/plans/2026-05-14-hermes-
+  strengths-absorption.md`) 의 1b. PR #1151 의 dual-write (JSON SoT, DB
+  mirror) 를 뒤집어 SQLite `messages` 테이블이 SoT, JSON 은 hot cache.
+  - `core/runtime_state/session_checkpoint.py` 의
+    `CHECKPOINT_MAX_MESSAGES` 를 20→0 (no trim). `save()` 가 DB 먼저
+    write 후 JSON hot cache (full list, no trim) write. `load()` 가
+    DB 우선 (`_load_messages_from_db`), DB 가 비어있을 때만 JSON
+    fallback — pre-PR-1151 / dual-write race loser 호환.
+  - `core/wiring/layout_migrator.py` 의 `GEODE_LAYOUT_VERSION` 3→4 +
+    신규 `_migrate_v3_to_v4()` — `~/.geode/projects/*/sessions/*/
+    messages.json` 일괄 backfill. 손상 파일 skip + WARN, idempotent
+    (UNIQUE(session_id, seq)), 진행률 INFO every 10 sessions, fresh
+    install graceful skip.
+  - `tools.json` 은 backward compat 으로 hot cache 유지. 신규 7 test
+    + 기존 `test_message_trimming` 을 `test_no_trim_full_history_
+    preserved` 로 의미 전환.
+- **Phase 1b — Long-term Recall: JSON trim removed, SoT flipped to
+  SQLite, layout v4 migration.** Inverts PR #1151's dual-write
+  contract — the SQLite `messages` table is now the source of truth
+  and `messages.json` is a full-list hot cache for offline tooling.
+  `CHECKPOINT_MAX_MESSAGES` zeroed (20→0, "no trim"); `save()` writes
+  the DB first then the untrimmed JSON; `load()` reads DB-first with a
+  JSON fallback for legacy sessions. `GEODE_LAYOUT_VERSION` bumped
+  3→4 with `_migrate_v3_to_v4()` doing an idempotent corrupt-tolerant
+  backfill of every pre-existing `messages.json` into the per-project
+  `sessions.db`. Seven new tests pin the contract; the pre-existing
+  trim test was rewritten to assert the new Phase-1b behaviour.
+
 ### Documentation
 
 - **Autoresearch gen 0 baseline 시도 — Anthropic credit 차단으로 BLOCKED.**
