@@ -52,6 +52,44 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docs 사이트 broken link 3 개 정정 (6 사이트).** docs 사이트 내부 링크
+  정적 스캔 결과 다음 3 경로가 404 였음 — 해당 페이지가 sitemap 에 존재하지
+  않거나 다른 slug 로 이전된 상태:
+  - `/docs/build/add-domain` → `/docs/runtime/domains` (D 스프린트에서
+    `build/` 챕터 삭제 후 남은 leftover 참조 2 사이트 — `run/analyze/page.tsx`
+    L38, L65). 실제 도메인 추가 문서는 `runtime/domains` 슬러그.
+  - `/docs/build/add-tool` → `/docs/runtime/tools/protocol` (`run/messaging/
+    page.tsx` L35, L60). 도구 프로토콜 문서는 `runtime/tools/protocol` 슬러그.
+  - `/docs/ops/observability` → `/docs/verification/observability`
+    (`petri/run/page.tsx` L77, L146). 관측성 문서는 `ops/` 가 아니라
+    `verification/` 섹션 하위 슬러그.
+
+  탐지 방법 — `grep` 으로 `site/src/` 의 모든 `href="(/docs/...)"`,
+  `href={\`/docs/...\`}`, markdown style `](/docs/...)` 패턴 23 개 추출 →
+  `find site/src/app/docs -name "page.tsx"` 의 50 개 실재 페이지 슬러그와
+  `comm -23` 으로 차집합 → 3 broken 발견. `npm run build` 성공 후 6 사이트
+  교체. doc 변경 only, 행위 변경 0.
+
+- **Docs site broken-link fix — 3 paths (6 sites).** A static scan of
+  internal links in `site/src/` found three routes that returned 404
+  because the target slug either no longer exists (an earlier `build/`
+  chapter was retired) or was renamed to another section:
+  - `/docs/build/add-domain` → `/docs/runtime/domains`
+    (`run/analyze/page.tsx` L38, L65).
+  - `/docs/build/add-tool` → `/docs/runtime/tools/protocol`
+    (`run/messaging/page.tsx` L35, L60).
+  - `/docs/ops/observability` → `/docs/verification/observability`
+    (`petri/run/page.tsx` L77, L146).
+
+  Detection used `grep` against `site/src/` for all `href="(/docs/...)"`,
+  ``href={`/docs/...`}``, and markdown-style `](/docs/...)` patterns
+  (23 unique link targets) cross-referenced via `comm -23` against the
+  50 page-slug paths under `site/src/app/docs/**/page.tsx`; the
+  difference produced exactly 3 broken targets. `npm run build` passes
+  after the 6 edits. Documentation only — no behavioural impact.
+
 ### Added
 
 - **Phase 1a — Long-term Recall: messages table + dual-write.** Hermes

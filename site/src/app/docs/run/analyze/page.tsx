@@ -35,7 +35,7 @@ export default function Page() {
             <h2>다음</h2>
             <ul>
               <li>점수 의미: <a href="/docs/plugins/game-ip">Game IP 플러그인</a></li>
-              <li>다른 도메인 추가: <a href="/docs/build/add-domain">도메인 플러그인 추가</a></li>
+              <li>다른 도메인 추가: <a href="/docs/runtime/domains">도메인 플러그인 추가</a></li>
             </ul>
           </>
         }
@@ -62,7 +62,7 @@ export default function Page() {
             <h2>Next</h2>
             <ul>
               <li>What the scores mean: <a href="/docs/plugins/game-ip">Game IP Plugin</a>.</li>
-              <li>Add another domain: <a href="/docs/build/add-domain">Add a Domain Plugin</a>.</li>
+              <li>Add another domain: <a href="/docs/runtime/domains">Add a Domain Plugin</a>.</li>
             </ul>
           </>
         }

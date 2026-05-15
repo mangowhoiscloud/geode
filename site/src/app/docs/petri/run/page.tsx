@@ -74,7 +74,7 @@ export default function Page() {
             <h2>다음 단계</h2>
             <ul>
               <li>점수 의미: <a href="/docs/petri/judge-dimensions">17/38 Judge 차원</a></li>
-              <li>관측 분석: <a href="/docs/ops/observability">관측성</a></li>
+              <li>관측 분석: <a href="/docs/verification/observability">관측성</a></li>
               <li>비용: <a href="/docs/ops/cost">비용 모니터링</a></li>
             </ul>
           </>
@@ -143,7 +143,7 @@ export default function Page() {
             <h2>Next</h2>
             <ul>
               <li>What the scores mean: <a href="/docs/petri/judge-dimensions">17/38 Judge Dimensions</a></li>
-              <li>Bigger picture: <a href="/docs/ops/observability">Observability</a></li>
+              <li>Bigger picture: <a href="/docs/verification/observability">Observability</a></li>
               <li>Cost: <a href="/docs/ops/cost">Cost Monitoring</a></li>
             </ul>
           </>
