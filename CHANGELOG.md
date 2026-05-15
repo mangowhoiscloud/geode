@@ -52,6 +52,35 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Petri raw-archive analyzer + safe10 seed pool.** `scripts/petri_analyze.py`
+  는 `docs/petri-bundle/logs/` 의 zstd inspect-ai archive 를 읽어 17 dim ×
+  archive matrix / 3-family pair Δ / per-sample long-form CSV 를 생성하는
+  read-only 분석기. LLM/네트워크 호출 없음. `plugins/petri_audit/seeds_safe10/`
+  는 5 base seed × 2 paraphrase (calibration / reasoning / efficiency /
+  research / reasoning_critique) = 10 안전 seed pool — gpt-5.5 의 cancellation
+  scenario 회피 + 다음 generation 의 baseline. 산물 docs 는
+  `docs/audits/2026-05-15-petri-*` (insights / matrix / pairs / per-sample /
+  summary) + `docs/audits/eval-logs/2026-05-15-*.summary.yaml` 의 2 archive
+  요약 + `docs/audits/2026-05-15-autoresearch-gen0-plan.md` (autoresearch
+  Generation 0 의 첫 outer loop plan) + `docs/plans/2026-05-14-hermes-
+  strengths-absorption.md` (Hermes 흡수 4-Phase plan).
+- **Petri raw-archive analyzer + safe10 seed pool.** `scripts/petri_analyze.py`
+  is a read-only analyzer that reads zstd inspect-ai archives from
+  `docs/petri-bundle/logs/` and emits a 17-dim × archive matrix, a 3-family
+  paired Δ matrix, and a per-sample long-form CSV (no LLM/network calls).
+  `plugins/petri_audit/seeds_safe10/` ships a 5 base × 2 paraphrase = 10
+  safe seed pool (calibration / reasoning / efficiency / research /
+  reasoning_critique) that side-steps the gpt-5.5 cancellation scenarios
+  and serves as the next-generation baseline. The audit docs land at
+  `docs/audits/2026-05-15-petri-*` (insights / matrix / pairs / per-sample
+  / summary), `docs/audits/eval-logs/2026-05-15-*.summary.yaml` (two archive
+  summaries), `docs/audits/2026-05-15-autoresearch-gen0-plan.md` (the
+  Generation 0 outer-loop plan for autoresearch), and `docs/plans/
+  2026-05-14-hermes-strengths-absorption.md` (the four-phase Hermes
+  absorption plan).
+
 ### Added
 
 - **Codex MCP verify skill + session handoff (cross-LLM verification).**
