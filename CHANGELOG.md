@@ -54,6 +54,58 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Fixed
 
+- **CLI LaTeX 렌더링 — delimiter-less 매크로 누출 heuristic.** PR
+  #1165/#1169 의 wiring 이 `\(...\)` / `$...$` / `\[...\]` 같은 명시적
+  delimiter 가 있는 경우만 cover 하여 LLM 이 delimiter 없이 prose 안에
+  매크로를 emit 하는 경우 (사용자 2026-05-16 보고: `r_t = (P_t - P_{t-1})
+  / P_{t-1}` raw 노출) 회귀.
+  - `core/ui/latex.py` 에 `_DELIMITERLESS_MATH` regex 추가 — 두 좁은
+    형식만 catch: (1) **braced subscript/superscript token** (`r_{t-1}`,
+    `P_{t+5}`, `x^{2}`, `W_{i,j}^{T}`) — `{…}` 가 직접 따라야 하므로
+    `snake_case`/`file_name`/`r_t` 같은 일반 underscore identifier 는
+    절대 매치 X. (2) **allow-list 매크로** (`\frac`, `\sum`, `\sqrt`,
+    `\bar`, `\hat`, `\alpha`–`\omega`, `\cdot`, `\infty` 등) +
+    word boundary `(?![A-Za-z])` — `\alphanumeric` 같은 prefix collision
+    회피. 우선순위는 모든 delimited match 이후 (마지막 fallback).
+  - 7 신규 test (`tests/test_cli_latex_uiux.py`): 사용자 보고 case +
+    braced sub/sup multi-token + snake_case/path false-positive 회피 +
+    macro allow-list + `\alphanumeric` boundary + braced superscript.
+  - 한계: `r_t` (braces 없는 단일 character subscript) 는 의도적 비매치
+    — Markdown emphasis `_text_` 와 충돌 회피 + 일반 변수명 false
+    positive 차단 우선. LLM 이 명시적 `r_{t}` 형식을 쓰거나
+    `\(...\)` 으로 wrap 해야 정확 변환.
+  - follow-up verifier 보강: delimiter-less allow-list 에 `\mathbb`,
+    `\mathcal`, `\mathrm`, `\text`, `\overline`, `\underline`,
+    `\dfrac`, `\tfrac`, 비교/집합/논리/화살표 매크로를 추가하고,
+    `\dfrac`/`\tfrac` 는 Tier 1 에서 `\frac` 처럼 `a/b` 로 렌더되도록
+    정규화.
+- **CLI LaTeX rendering — delimiter-less macro leak heuristic.** PRs
+  #1165/#1169 wired the renderer for explicit delimiters (`\(...\)` /
+  `$...$` / `\[...\]`) but LLM responses that emit LaTeX *without*
+  delimiters (the user's 2026-05-16 report: `r_t = (P_t - P_{t-1}) /
+  P_{t-1}` showing as raw macros) still leaked. The new
+  `_DELIMITERLESS_MATH` regex catches two narrow forms: (1) braced
+  subscript/superscript tokens (`r_{t-1}`, `P_{t+5}^{2}`,
+  `W_{i,j}^{T}`) — the `{…}` requirement keeps `snake_case`, file
+  paths, and bare-letter subscripts like `r_t` immune, and (2) an
+  allow-list of backslash macros (`\frac`, `\sum`, `\sqrt`,
+  `\bar`, `\hat`, `\alpha`–`\omega`, `\cdot`, `\infty`, …) with a
+  word-boundary guard so `\alphanumeric` is not misread as `\alpha`.
+  The heuristic fires after every delimited pattern, so explicit
+  `\(…\)` math still takes precedence. Seven new tests in
+  `tests/test_cli_latex_uiux.py` pin the user-reported case, false-
+  positive immunity for `snake_case` / paths, the macro allow-list,
+  the word boundary, and braced superscripts. Known limit: bare-letter
+  subscripts like `r_t` stay literal — adding them would conflict with
+  Markdown's `_text_` emphasis and create false positives across
+  ordinary prose; the LLM must use `r_{t}` or wrap in `\(...\)`.
+  Follow-up verifier hardening expands the delimiter-less allow-list for
+  frequent LLM set / logic / prose math macros (`\mathbb`, `\mathcal`,
+  `\mathrm`, `\text`, `\overline`, `\underline`, `\dfrac`, `\tfrac`,
+  comparisons, arrows, and quantifiers) and normalizes `\dfrac` /
+  `\tfrac` through the Tier 1 `\frac` path so they render as `a/b`
+  instead of collapsing to adjacent numerator / denominator text.
+
 - **CLI LaTeX 렌더링 — multi-line source 의 vertical 줄긋기 회귀.**
   PR #1141/#1165 의 wiring 이후 LLM 이 `\frac` / `\sum` / `\sqrt` 같은
   매크로를 multi-line LaTeX source 로 emit 하면 (`\frac{<newline>num
