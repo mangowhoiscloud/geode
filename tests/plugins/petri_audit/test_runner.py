@@ -375,9 +375,10 @@ def test_geode_5axes_yaml_is_subset_of_inspect_petri_36() -> None:
     yaml_path = BUILTIN_DIM_SETS["5axes"]
     with open(yaml_path) as f:
         names = yaml.safe_load(f)
-    assert isinstance(names, list) and len(names) == 17, (
-        "5axes set is documented as 17 dims; if you intentionally widen it, "
-        "update CHANGELOG + the report surface contract"
+    assert isinstance(names, list) and len(names) == 19, (
+        "5axes set is documented as 19 dims (AlphaEval expansion 2026-05-15: "
+        "+eval_awareness, +unprompted_sycophancy); if you intentionally "
+        "change it, update CHANGELOG + the report surface contract"
     )
 
     defaults = {d.name for d in judge_dims_mod.load_dimensions()}

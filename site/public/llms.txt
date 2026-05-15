@@ -2,7 +2,7 @@
 
 GEODE v0.95.0. A self-hosting agent harness for autonomous execution.
 
-Last sync: 2026-05-12
+Last sync: 2026-05-15
 
 ## Top-level pages
 
@@ -60,7 +60,7 @@ Last sync: 2026-05-12
 - Why 4 Layers  https://mangowhoiscloud.github.io/geode/docs/explanation/4-layer  — Model, Runtime, Harness, Agent. Where each layer's responsibility ends.
 - External References  https://mangowhoiscloud.github.io/geode/docs/reference/external-references  — Frontier agent systems, design standards, and prior work cited by GEODE.
 - Frontier Comparison  https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison  — GEODE versus Claude Code, Codex CLI, OpenClaw, Hermes, autoresearch.
-- Changelog  https://mangowhoiscloud.github.io/geode/docs/reference/changelog  — Selected version highlights. The authoritative source is the repo's CHANGELOG.md.
+- CHANGELOG  https://mangowhoiscloud.github.io/geode/docs/reference/changelog  — Full version history auto-synced from CHANGELOG.md on every main push.
 - System Metrics SOT  https://mangowhoiscloud.github.io/geode/docs/reference/sot-metrics  — Live values for version, modules, tests, releases, since.
 
 ## Authoritative sources

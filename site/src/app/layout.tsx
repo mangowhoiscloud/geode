@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Fira_Code, Outfit } from "next/font/google";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 const inter = Inter({
