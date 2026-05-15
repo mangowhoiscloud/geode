@@ -52,6 +52,46 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 1a — Long-term Recall: messages table + dual-write.** Hermes
+  흡수 plan(`docs/plans/2026-05-14-hermes-strengths-absorption.md`) 의 첫
+  PR. `sessions.db` 에 `messages` 테이블 (id / session_id / seq / role /
+  content / tool_call_id / tool_calls / tool_name / timestamp /
+  token_count / finish_reason / reasoning / metadata + `UNIQUE(session_id,
+  seq)`) + `idx_messages_session` + `idx_messages_tool_name` 신설.
+  `SessionCheckpoint.save()` 가 JSON 본문 저장 직후
+  `SessionManager.upsert_messages()` 로 본문을 mirror — JSON 은 Phase 1b
+  의 SoT 전환까지 authoritative. DB 실패 시 WARN 로깅 + `exc_info=True`,
+  JSON 본문은 그대로 보존 (graceful degradation). 동일/축소/빈 message
+  list 의 재저장 모두 idempotent — 줄어든 seq 의 stale row 와 빈 저장의
+  잔여 row 까지 제거해 JSON ↔ DB 가 항상 정렬. Anthropic content blocks
+  (`tool_use` / `tool_result` / `thinking`) 와 OpenAI 형식 (`tool_calls`
+  / `tool_call_id` / `name`) 양쪽 추출 + 18 신규 테스트 (dual-write
+  parity / sqlite 실패 graceful / openai+anthropic 추출 / stale row
+  제거 / 빈 저장 정합). Codex MCP cross-LLM verifier 가 CRITICAL 2 건
+  (stale row + 빈-save 잔재) 을 발견·반영.
+- **Phase 1a — Long-term Recall: messages table + dual-write.** First PR
+  of the Hermes-absorption plan (`docs/plans/2026-05-14-hermes-strengths-
+  absorption.md`). Adds a `messages` table to `sessions.db` (columns: id
+  / session_id / seq / role / content / tool_call_id / tool_calls /
+  tool_name / timestamp / token_count / finish_reason / reasoning /
+  metadata + `UNIQUE(session_id, seq)`) plus `idx_messages_session` and
+  `idx_messages_tool_name`. `SessionCheckpoint.save()` mirrors the full
+  message list into the table right after the JSON write, via
+  `SessionManager.upsert_messages()`; JSON remains SoT until Phase 1b
+  flips the source. DB failures emit a WARNING with `exc_info=True` and
+  leave the JSON checkpoint intact (graceful degradation). Re-saving the
+  same, shorter, or empty message list is idempotent — stale rows from a
+  shrunk transcript and leftovers from an empty save are removed so JSON
+  and the mirror stay aligned. The extractor reads both Anthropic content
+  blocks (`tool_use` / `tool_result` / `thinking`) and OpenAI-style
+  fields (`tool_calls` / `tool_call_id` / `name`). 18 new tests cover
+  dual-write parity, a real `sqlite3.OperationalError` graceful path,
+  OpenAI/Anthropic extraction, stale-row removal, and empty-save
+  alignment. A Codex MCP cross-LLM verifier round caught two CRITICAL
+  gaps (stale rows on shrink, leftovers on empty save), both fixed.
+
 ### Changed
 
 - **Autoresearch outer-loop: Karpathy 3-file fork (Petri-signal domain).**

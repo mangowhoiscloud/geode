@@ -111,6 +111,11 @@ class SessionCheckpoint:
         # GAP 3: Sync to SQLite index for fast query
         self._sync_to_index(state, len(trimmed))
 
+        # Phase 1a (Hermes absorption): mirror the *full* message list
+        # into the ``messages`` table. JSON remains SoT until Phase 1b;
+        # a DB failure logs WARN but the JSON write above is preserved.
+        self._sync_messages_to_db(state)
+
     def load(self, session_id: str) -> SessionState | None:
         """Load a session checkpoint. Returns None if not found."""
         session_path = self._dir / session_id
@@ -226,6 +231,33 @@ class SessionCheckpoint:
             mgr.close()
         except Exception:
             log.debug("Failed to sync session to SQLite index", exc_info=True)
+
+    def _sync_messages_to_db(self, state: SessionState) -> None:
+        """Phase 1a: mirror ``state.messages`` into the messages table.
+
+        Independent of ``_sync_to_index`` — uses a separate transaction so
+        a failure here does not roll back metadata. JSON above remains
+        authoritative; a WARN log surfaces DB-side problems without
+        disturbing the resume path.
+        """
+        try:
+            from core.memory.session_manager import SessionManager
+
+            mgr = SessionManager(self._dir / "sessions.db")
+            try:
+                mgr.upsert_messages(
+                    state.session_id,
+                    state.messages,
+                    default_timestamp=state.updated_at,
+                )
+            finally:
+                mgr.close()
+        except Exception:
+            log.warning(
+                "Failed to mirror messages to sessions.db (session=%s); JSON checkpoint retained.",
+                state.session_id,
+                exc_info=True,
+            )
 
     def _clear_active_if_matches(self, session_id: str) -> None:
         active_file = self._dir / "active.json"
