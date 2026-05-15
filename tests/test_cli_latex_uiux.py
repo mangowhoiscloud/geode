@@ -37,6 +37,7 @@ from unittest.mock import patch
 import pytest
 from core.cli.interactive_loop import _render_ipc_response, _render_text_with_latex
 from core.ui.console import GEODE_THEME
+from core.ui.latex import render_latex
 from rich.console import Console
 
 # ---------------------------------------------------------------------------
@@ -143,6 +144,96 @@ class TestStageAComponent:
             assert delim not in output
         assert "inline" in output
         assert "more text" in output
+
+    def test_multiline_latex_source_collapses_to_single_line_inline(self) -> None:
+        """LLMs frequently emit LaTeX with source-level line breaks
+        between ``\\frac`` and its arguments. pylatexenc preserves those
+        breaks verbatim, which (before the Tier 1 whitespace collapse) shows
+        up in narrow terminals as a vertical stack of single tokens —
+        ``IC_t`` on one line, ``=`` on the next, ``(`` on the next, etc.
+
+        Regression guard: a multi-line LaTeX source inside an inline
+        ``\\(...\\)`` segment must render as flowing Unicode prose, not as
+        a vertical stack. We accept terminal width-induced wrapping but
+        forbid (a) source-level newline preservation, (b) raw backslash
+        macros leaking through, and (c) explosion to more lines than the
+        terminal width could possibly justify.
+        """
+        text = (
+            "여기서 \\( IC_t = \\frac{\n"
+            "  \\sum_{i=1}^{N}(S_{t,i} - \\bar{S}_{t,:})\n"
+            "  (y_{t,i} - \\bar{y}_{t,:})\n"
+            "}{\n"
+            "  \\sqrt{\\sum_{i=1}^{N}(S_{t,i} - \\bar{S}_{t,:})^2}\n"
+            "  \\sqrt{\\sum_{i=1}^{N}(y_{t,i} - \\bar{y}_{t,:})^2}\n"
+            "} \\) 는 trial t."
+        )
+        output = _render_through_helper(text)
+        # Math is rendered (key Unicode tokens reached the buffer).
+        assert "∑" in output
+        assert "√" in output
+        assert "IC_t" in output
+        assert "는 trial t" in output
+        # No raw LaTeX macros leaked through.
+        for raw in ("\\(", "\\)", "\\frac", "\\sqrt", "\\sum", "\\bar"):
+            assert raw not in output, f"raw {raw} leaked into output: {output!r}"
+        # Source-level structure exploded into 16+ lines pre-fix. Cap at 6
+        # so a single-line response with width=80 wrap (~2 lines) passes
+        # but a fully vertical regression fails.
+        body_lines = [
+            line for line in output.splitlines() if line.strip() and "는 trial t" not in line
+        ]
+        math_lines = [line for line in body_lines if "여기서" in line or "S_t" in line or "y_t" in line]
+        assert len(math_lines) <= 6, (
+            f"multi-line LaTeX source did not collapse — {len(math_lines)} math "
+            f"lines (pre-fix bug was 12+):\n{output!r}"
+        )
+
+    def test_multiline_latex_source_collapses_to_single_line_block(self) -> None:
+        """Same regression in block (``\\[...\\]``) mode. When Tier 2 SymPy
+        parsing fails (which it does for `\\bar{S}_{t,:}` and similar
+        LLM-emitted notation), the Tier 1 fallback path must still produce
+        a single line — not the raw multi-line pylatexenc output."""
+        text = (
+            "loss:\n\n"
+            "\\[\n"
+            "IC_t = \\frac{\n"
+            "  \\sum_{i=1}^{N}(S_{t,i} - \\bar{S}_{t,:})\n"
+            "  (y_{t,i} - \\bar{y}_{t,:})\n"
+            "}{\n"
+            "  \\sqrt{\\sum_{i=1}^{N}(S_{t,i} - \\bar{S}_{t,:})^2}\n"
+            "  \\sqrt{\\sum_{i=1}^{N}(y_{t,i} - \\bar{y}_{t,:})^2}\n"
+            "}\n"
+            "\\]\n\n"
+            "end."
+        )
+        output = _render_through_helper(text)
+        # Both Tier 2 (pretty 2D, multi-line OK) and Tier 1 fallback paths
+        # produce *bounded* line counts. The pre-fix bug yielded 16+
+        # 1-token lines in the math block. Cap the math block at 12 lines
+        # so a future regression of the same shape would trip.
+        math_lines = [
+            line.rstrip()
+            for line in output.splitlines()
+            if line.strip() and "loss:" not in line and line.strip() != "end."
+        ]
+        assert len(math_lines) <= 12, (
+            f"math block too tall ({len(math_lines)} lines) — "
+            f"likely Tier 1 newline regression:\n{output!r}"
+        )
+        for raw in ("\\[", "\\]", "\\frac"):
+            assert raw not in output
+
+    def test_tier1_preserves_explicit_latex_row_breaks(self) -> None:
+        """Whitespace collapse must not erase meaningful ``\\`` row breaks."""
+        rendered = render_latex(
+            r"\begin{cases} a & b \\ c & d \end{cases}",
+            block=True,
+        ).plain
+        lines = [line.strip() for line in rendered.splitlines() if line.strip()]
+
+        assert lines == ["a b", "c d"]
+        assert "a b c d" not in rendered
 
     @pytest.mark.parametrize(
         "text,math_tokens",

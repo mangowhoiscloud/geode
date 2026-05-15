@@ -52,6 +52,58 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CLI LaTeX 렌더링 — multi-line source 의 vertical 줄긋기 회귀.**
+  PR #1141/#1165 의 wiring 이후 LLM 이 `\frac` / `\sum` / `\sqrt` 같은
+  매크로를 multi-line LaTeX source 로 emit 하면 (`\frac{<newline>num
+  <newline>}{<newline>denom<newline>}`), pylatexenc 가 source line break
+  를 그대로 보존하여 터미널에서 모든 토큰이 한 줄씩 vertical 로 늘어졌음
+  (사용자 보고 2026-05-16: IC_t / = / ∑_i=1^N / ( / S_t,i - S̄_t,: / )
+  ... 16+ 줄).
+  - `core/ui/latex.py:_render_tier1` 이 explicit LaTeX row break (`\\`)
+    를 보존하면서 rendered line 내부의 whitespace run 을 single space 로
+    collapse. LaTeX source line break 는 mathematical 의미가 없으므로
+    inline + block fallback 의 vertical stack 을 막되, `cases`/`aligned`
+    스타일의 의도적 행 구분은 유지. Tier 2 (SymPy pretty) 는 무관.
+  - `core/ui/latex.py:_INLINE_PAREN` 의 `[^\n]+?` → `[\s\S]+?` —
+    multi-line 본문의 `\(...\)` 도 인식하도록. 이전엔 inline regex 가
+    매치 실패 시 본문이 raw 텍스트로 흘러 `\frac`/`\sum` 매크로가 그대로
+    노출됐음.
+  - 3 신규 회귀 test (`tests/test_cli_latex_uiux.py` 의
+    `test_multiline_latex_source_collapses_to_single_line_inline` +
+    `_block`, `test_tier1_preserves_explicit_latex_row_breaks`) — IC_t
+    Pearson 상관계수 식의 7-line LaTeX source 가 inline (`\(...\)`) /
+    block (`\[...\]`) 두 형식에서 모두 single-paragraph 로 흐름 + raw
+    매크로 leak 0 + math 토큰 (∑, √) 출현 + 출력 line 수 cap. 추가로
+    `cases` 의 explicit row break 보존을 pin. pre-fix 의 16+
+    vertical-stack regression 차단.
+- **CLI LaTeX rendering — vertical-stack regression from multi-line
+  source.** After PR #1141/#1165 wired the renderer, an LLM emitting
+  `\frac` / `\sum` / `\sqrt` with source-level line breaks
+  (`\frac{<newline>num<newline>}{<newline>denom<newline>}`) caused
+  pylatexenc to preserve every newline verbatim, which a narrow terminal
+  printed as a vertical stack of single tokens (`IC_t` / `=` / `∑_i=1^N`
+  / `(` / `S_t,i - S̄_t,:` / `)` / …, 16+ lines).
+  - `core/ui/latex.py:_render_tier1` now preserves explicit LaTeX row
+    breaks (`\\`) while collapsing whitespace runs inside each rendered
+    line to a single space. LaTeX source line breaks have no mathematical
+    meaning — flattening preserves the math while restoring inline flow,
+    without erasing intentional `cases`/`aligned` rows. Affects inline
+    and block Tier 1 fallback; Tier 2 (SymPy pretty) is untouched.
+  - `core/ui/latex.py:_INLINE_PAREN` widens `[^\n]+?` to `[\s\S]+?` so
+    multi-line `\(…\)` segments are recognised. Pre-fix, the inline
+    regex silently failed on a multi-line body and the raw `\frac` /
+    `\sum` / `\bar` macros leaked through as plain prose.
+  - 3 new regression tests (`tests/test_cli_latex_uiux.py`,
+    `test_multiline_latex_source_collapses_to_single_line_inline`,
+    `_block`, and `test_tier1_preserves_explicit_latex_row_breaks`) drive
+    a 7-line IC_t Pearson-correlation formula through both `\(…\)` and
+    `\[…\]` modes and assert: (a) math symbols (`∑`, `√`) reach the
+    output, (b) no raw `\`-macros leak, (c) the math block stays within a
+    sane line-count cap. The third test pins explicit `cases` row breaks,
+    blocking both the pre-fix 16-line regression and over-collapse.
+
 ### Infrastructure
 
 - **CLI UI/UX regression tests for LaTeX rendering — Stage A/B/C 추가.**
