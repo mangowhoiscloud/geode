@@ -37,7 +37,6 @@ dependencies = [
 
 [project.scripts]
 geode = "core.cli:app"
-geode-research = "autoresearch.loop:cli"
 
 # inspect_ai discovers third-party model providers via the `inspect_ai`
 # entry-point group (importlib.metadata). When the [audit] extra is

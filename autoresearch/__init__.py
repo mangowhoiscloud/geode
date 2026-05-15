@@ -1,27 +1,11 @@
-"""GEODE autoresearch — outer-loop self-improvement orchestrator.
+"""autoresearch — Petri-signal fork of Karpathy/autoresearch (MIT, 2026-03).
 
-Top-level package for the meta-loop that mutates GEODE's wrapper prompt
-surface, runs the Petri × GEODE audit harness as inner-loop fitness
-oracle, and ratchets promotions via git commit / reject via
-``git reset --hard``.
+Karpathy 의 3-file pattern (``prepare.py`` / ``train.py`` / ``program.md``)
+을 GEODE alignment-audit 도메인으로 옮긴 fork. ML pre-train + ``val_bpb``
+의 자리에 Petri seed pool + AlphaEval 5-axis fitness 가 들어간다. 본
+``__init__`` 은 deliberately empty — 본 fork 의 outer-loop agent 는 모듈을
+import 하지 않고 ``uv run python autoresearch/train.py`` 의 단일 script
+패턴을 사용한다 (원본의 single-file constraint 보존).
 
-Karpathy autoresearch (2026-03, 26K+ stars) reference pattern, mapped to
-GEODE's runtime:
-
-- ``prepare.py`` (harness, frozen)   → ``plugins/petri_audit/``
-- ``train.py``   (~630 LOC, mutable) → ``core/agent/system_prompt.py`` + skills + loop prompts
-- ``program.md`` (human direction)   → ``autoresearch/program.md``
-- ``results.tsv``                    → ``autoresearch/state/results.tsv``
-
-The package is **top-level** rather than a ``plugins/`` member so that
-mutation-of-self and lifecycle conflicts are avoided — the outer loop
-invokes ``geode audit`` as a subprocess, never via in-process import.
-
-Full spec: ``docs/architecture/autoresearch.md``.
+Reference: ``autoresearch/README.md`` + ``autoresearch/program.md``.
 """
-
-from __future__ import annotations
-
-__version__ = "0.0.1"
-
-__all__ = ["__version__"]
