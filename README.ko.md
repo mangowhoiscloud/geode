@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/25%20tools-MCP%20native-1e293b?style=flat-square" alt="25 Tools">
+  <img src="https://img.shields.io/badge/61%20tools-MCP%20native-1e293b?style=flat-square" alt="61 Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -296,13 +296,13 @@ uv tool install -e . --force
 | 기능 | 설명 |
 |------|------|
 | **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 — 전부 같은 루프의 인스턴스 |
-| **25 도구 + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, 캘린더, Slack/Discord, 한국 채용공고 검색, 그리고 Anthropic 발행 MCP 레지스트리 (200+ 서버, `~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
+| **61 도구 + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, 캘린더, Slack/Discord, 한국 채용공고 검색, 그리고 Anthropic 발행 MCP 레지스트리 (200 서버, `~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
 | **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. 구독 OAuth (Codex, Claude CLI) 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
 | **장시간 데몬** | `geode serve` 가 백그라운드로 상주. Slack / Discord / Telegram 폴러 + 스케줄러 tick + thin CLI 용 IPC |
 | **서브에이전트** | 부모 권한 완전 상속, depth/cost 가드, Lane 격리 |
-| **5-layer 검증** | Guardrails G1-G4 + BiasBuster + Cross-LLM (Krippendorff α ≥ 0.67) + Confidence Gate + Rights Risk |
+| **5-layer 검증** | Guardrails G1-G4 (structural) + BiasBuster (cognitive) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal) + Calibration (Ground Truth, Swiss Cheese Layer 5) |
 | **도메인-specific DAG (교체 가능)** | 파이프라인 (리서치, 다축 평가, 합성) 은 `DomainPort` Protocol 로 plug-in. 레퍼런스 DAG 1개 동봉 — 어떤 탐색적 리서치 / 시그널 예측 도메인에도 교체해 사용 |
 
 ---
@@ -333,7 +333,7 @@ uv tool install -e . --force
 | Discord / Telegram / 기타 chat | ❌ | ❌ | ✅✅ 23+ 채널 (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram 폴러 |
 | IDE 플러그인 | ❌ (Chrome MCP 확장만) | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
 | Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat 플러그인 | ❌ (문서 사이트만) |
-| MCP 서버 카탈로그 | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic 배포 레지스트리 (200+ 서버, `~/.geode/mcp/registry-cache.json` 캐시) |
+| MCP 서버 카탈로그 | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic 배포 레지스트리 (200 서버, `~/.geode/mcp/registry-cache.json` 캐시) |
 
 </details>
 
@@ -358,7 +358,7 @@ uv tool install -e . --force
 | 메모리 tier | ⚠️ 3 (user / project / local 세팅 머지) | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **5-tier** (SOUL · User · Org · Project · Session) |
 | 디스크 영구 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ `.geode/plans.json` |
 | 권한 / 샌드박스 계층 | ✅ 3-mode (default / auto / bypass) + Confirmation UI | ✅ `sandbox_mode` 3 단계 (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain (40+ 감사 표면) | ✅ Policy Chain + 도구 게이트 |
-| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **5-layer 검증** (G1-G4 + BiasBuster + Cross-LLM Krippendorff α ≥ 0.67 + Confidence Gate + Rights Risk) |
+| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **5-layer 검증** (G1-G4 + BiasBuster + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk + Calibration) |
 | Hook 이벤트 수 | ⚠️ 5 (PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange) | ⚠️ 6 (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop) | ✅ 5 이벤트 타입 · 다수 번들 핸들러 | ✅✅ **58 이벤트** (`docs/architecture/hook-system.md`) |
 
 </details>
@@ -369,7 +369,7 @@ uv tool install -e . --force
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | 플러그인 / 확장 표면 | ✅ manifest + 마켓플레이스 (user / project / local 스코프) | ✅ `/plugins` 슬래시 커맨드 + 플러그인 공유 (v0.130+) | ✅✅ 4 확장 지점 (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ `DomainPort` Protocol + 플러그인 로더 |
-| Skill 시스템 | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ 스킬 필터 + archive 업로드 | ✅ 런타임 `SkillRegistry` (13 런타임 skills) |
+| Skill 시스템 | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ 스킬 필터 + archive 업로드 | ✅ 런타임 `SkillRegistry` (14 skills · bundled/global/project 스코프) |
 | **교체 가능한 도메인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ✅✅ `DomainPort` Protocol — 파이프라인이 first-class 확장 지점 |
 | 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ Run Log + Petri eval 통합 (v0.90+, LangSmith 대체) |
 | Cross-LLM 검증 | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 평가자 간 일치도 게이트 |
@@ -390,14 +390,14 @@ IDE 내부 또는 클라우드 동기화로 짧은 코딩 세션을 돌릴 땐 *
 GEODE 는 두 개의 컨트롤 레이어가 있습니다:
 
 - **Scaffold (생산)** — Claude Code + `CLAUDE.md` + 개발 Skills + CI Hooks. GEODE 의 코드를 만들고 품질을 보장하는 외부 하네스.
-- **GEODE Runtime (에이전트)** — `while(tool_use)` 루프 + 25 도구 + 13 런타임 Skills + 58 런타임 Hooks + 5-Layer Verification. 자율 실행 에이전트의 내부 시스템.
+- **GEODE Runtime (에이전트)** — `while(tool_use)` 루프 + 61 도구 + 14 런타임 Skills + 58 런타임 Hooks + 5-Layer Verification. 자율 실행 에이전트의 내부 시스템.
 
 4-Layer Stack (Model → Runtime → Harness → Agent) + 서브에이전트 시스템 + 5-Tier 메모리.
 
 ```mermaid
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
-    HA --> RT["Runtime<br/>Tools(25), MCP catalog<br/>Memory, Skills"]
+    HA --> RT["Runtime<br/>Tools(61), MCP catalog<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
     AG -.-> DP["⊥ Domain<br/>DomainPort Protocol<br/>(swappable DAG)"]
@@ -415,7 +415,7 @@ graph LR
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | ToolRegistry(25), MCP Catalog (200+ via Anthropic registry, 5 locally configured by default), Skills(13), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
+| **Runtime** | ToolRegistry(61), MCP Catalog (200 via Anthropic registry, 5 locally configured by default), Skills(14), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
 | **⊥ Domain** | `DomainPort` Protocol — 도메인-specific DAG 가 Port 통해 plug-in (cross-cutting). 레퍼런스 DAG 1개 동봉. 어떤 탐색적 리서치 / 시그널 예측 도메인이든 교체해 사용 | `core/domains/` |
 
