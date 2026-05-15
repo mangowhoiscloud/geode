@@ -60,6 +60,7 @@ geode-research = "autoresearch.loop:cli"
 geode_audit = "plugins.petri_audit"
 geode = "plugins.petri_audit"
 openai-codex = "plugins.petri_audit"
+claude-code = "plugins.petri_audit"
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.0.0"]

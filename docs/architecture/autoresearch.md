@@ -287,8 +287,122 @@ reject 시 자동 PR 발행 X — rejected hypothesis 는 failure_log 에만 rec
 | `results.tsv` schema | spec only | follow-up PR1 |
 | CI ratchet integration | spec only | follow-up PR3 |
 | Auto-PR feature | spec only | follow-up PR4 |
+| `plugins/petri_audit/claude_code_provider.py` (Phase 5) | ★ this PR | this PR |
 
-총 4 PR 의 roadmap. 각 PR 의 scope 작게 (Karpathy Simplicity Selection 의 GEODE 자체 적용).
+총 5 PR 의 roadmap. 각 PR 의 scope 작게 (Karpathy Simplicity Selection).
+
+### Phase 5 — Claude Code judge adapter (cost frontier 확장)
+
+outer-loop 의 inner-loop (Petri audit) 의 **judge role 의 cost frontier 를 Claude Max
+subscription 으로 확장**. PR #1133 (Codex OAuth bridge for auditor/target = ChatGPT Plus
+subscription) 의 sibling — 두 subscription source 결합 시 per-token PAYG = 0.
+
+#### 5.1 Source pattern — Crumb + Paperclip 의 GEODE 적용
+
+| Source | Pattern | GEODE 적용 |
+|---|---|---|
+| `~/workspace/crumb/src/adapters/claude-local.ts` | `spawn('claude', ['-p', ..., '--append-system-prompt', sandwich, '--add-dir', ..., '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'])` | `plugins/petri_audit/claude_code_provider.py` 의 정확한 invocation |
+| Paperclip (`github.com/paperclipai/paperclip`) | "Claude Code, Codex, CLI agents 의 plugin" multi-host adapter | Petri model-role host-agnostic 매핑 frame |
+| `plugins/petri_audit/codex_provider.py` (PR #1133) | `@modelapi(name="openai-codex")` + OAuth bridge | sibling — 같은 패턴, 다른 subscription source |
+
+#### 5.2 Invocation spec
+
+```bash
+claude --bare -p "<transcript>" \
+  --append-system-prompt "<JUDGE_PROMPT>" \
+  --model sonnet \
+  --output-format json \
+  --json-schema "<19 dim + highlights + summary + justification>" \
+  --max-budget-usd 0.50 \
+  --allowedTools "" \
+  --dangerously-skip-permissions \
+  --no-session-persistence
+```
+
+각 flag 의 의의:
+- `--bare` — hooks/LSP/plugin/auto-memory/CLAUDE.md skip (judge contamination 차단)
+- `-p` — non-interactive single-turn
+- `--append-system-prompt` — judge persona overlay (sandwich)
+- `--output-format json` + `--json-schema` — structured output, inspect_petri AlignmentAnswer 와 schema 정합
+- `--max-budget-usd` — per-call cost cap
+- `--allowedTools ""` — empty (judge 는 pure response)
+- `--dangerously-skip-permissions` — non-interactive permission prompt 회피
+- `--no-session-persistence` — stateless judge
+
+#### 5.3 JSON Schema — `build_judge_schema(dimensions: list[str]) -> dict`
+
+inspect_petri `AlignmentAnswer` pydantic model 의 등가 JSON Schema:
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["highlights", "summary", ...19 dim..., "justification"],
+  "properties": {
+    "highlights": {"type": "string", "description": "..."},
+    "summary": {"type": "string", "description": "..."},
+    "cooperation_with_harmful_sysprompt": {"type": "integer", "minimum": 1, "maximum": 10},
+    ...,
+    "justification": {"type": "string", "description": "..."}
+  }
+}
+```
+
+dim list 는 `geode_5axes.yaml` 에서 load — 19 → 21 dim expansion 자동 적용.
+
+#### 5.4 inspect_ai Score 변환
+
+```python
+Score(
+    value={dim: parsed[dim] for dim in dimensions},
+    answer="",
+    explanation=parsed["justification"],
+    metadata={"highlights": parsed["highlights"], "summary": parsed["summary"]},
+)
+```
+
+inspect_petri `_move_text_fields_to_metadata` 후처리 와 동일.
+
+#### 5.5 Model role 사용
+
+```bash
+uv run geode audit --target gpt-5.5 --auditor gpt-5.5 \
+  --judge claude-code/sonnet --use-oauth ...
+```
+
+→ **3-source cost 분산** — target/auditor (Codex OAuth) + judge (Claude Code) + per-token PAYG = 0.
+
+#### 5.6 Component deliverable (본 PR)
+
+| File | LOC | 역할 |
+|---|---|---|
+| `plugins/petri_audit/claude_code_provider.py` | ~400 | ClaudeCodeJudgeAPI + build_judge_schema + _build_score |
+| `plugins/petri_audit/__init__.py` | +3 | `register_claude_code()` entry-point |
+| `pyproject.toml` | +2 | inspect_ai entry-point `claude-code` |
+| `plugins/petri_audit/models.py` | 0 (raw passthrough) | `claude-code/<model>` 은 `/` 포함 → `to_inspect_model()` 의 raw passthrough branch 가 cover. routing 변경 불필요. |
+| `tests/plugins/petri_audit/test_claude_code_provider.py` | ~250 | schema + adapter + Score 변환 |
+| `CHANGELOG.md` | +30 | Added entry (KR+EN) |
+
+#### 5.7 Risks
+
+| Risk | Mitigation |
+|---|---|
+| Anthropic ToS batch automation 회색 | per-cycle ≤ 10 sample, `--max-budget-usd` daily cap |
+| Claude Max rate limit | judge call ~5-10초 × 10 sample = 50-100초 / cycle |
+| subprocess overhead (~3-5초 spawn) | audit 5분 cycle 의 ~2%, marginal |
+| Claude Code CLI binary missing | `is_claude_code_available()` + `~/.local/bin/claude` resolution |
+| `--json-schema` dialect drift | 1-sample validation pass + version pin |
+
+#### 5.8 Cost frontier 의 의의
+
+| Source | per-token | quota |
+|---|---|---|
+| Anthropic API (PAYG) | $3-15 / 1M | unlimited (cost-bound) |
+| OpenAI API (PAYG) | $5-20 / 1M | unlimited |
+| ChatGPT Plus + Codex OAuth (PR #1133) | **0** | daily/weekly limit |
+| **Claude Max + Claude Code CLI (Phase 5)** | **0** | daily/weekly limit |
+
+본 Phase 5 → autoresearch outer-loop 의 cost-zero path 완성. single-source 대비 2x quota.
 
 ## 10. Risks + mitigations
 
