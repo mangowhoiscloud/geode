@@ -157,8 +157,8 @@ class TestStageAComponent:
         assert "P_{t-1}" not in output
         assert output.count("P_t-1") == 2 or output.count("Pₜ₋₁") == 2
         # The bare-letter parts (no braces) keep their literal form.
-        assert "r_t" in output
-        assert "P_t" in output
+        assert "rₜ" in output
+        assert "Pₜ" in output
 
     def test_delimiterless_does_not_match_snake_case_or_paths(self) -> None:
         """Bare-underscore identifiers (`snake_case`, file paths, Python
@@ -248,7 +248,7 @@ class TestStageAComponent:
         # Math is rendered (key Unicode tokens reached the buffer).
         assert "∑" in output
         assert "√" in output
-        assert "IC_t" in output
+        assert "ICₜ" in output
         assert "는 trial t" in output
         # No raw LaTeX macros leaked through.
         for raw in ("\\(", "\\)", "\\frac", "\\sqrt", "\\sum", "\\bar"):
@@ -260,7 +260,9 @@ class TestStageAComponent:
             line for line in output.splitlines() if line.strip() and "는 trial t" not in line
         ]
         math_lines = [
-            line for line in body_lines if "여기서" in line or "S_t" in line or "y_t" in line
+            line
+            for line in body_lines
+            if ("여기서" in line or "S_t" in line or "Sₜ" in line or "y_t" in line or "yₜ" in line)
         ]
         assert len(math_lines) <= 6, (
             f"multi-line LaTeX source did not collapse — {len(math_lines)} math "
@@ -312,6 +314,24 @@ class TestStageAComponent:
 
         assert lines == ["a b", "c d"]
         assert "a b c d" not in rendered
+
+    def test_user_reported_bare_scripts_render_unicode_end_to_end(self) -> None:
+        """Regression guard for the 2026-05-16 second-wave CLI report."""
+        text = "\n".join(
+            [
+                "h^* = max_h ∈ℋ S(h |G, E)",
+                "S(h) = w_1 + w_2 + w_3",
+                "h_i, h_j",
+                "C(h_i, h_j) = 1",
+                "W(h_i) = 1/N-1 ∑_j C(h_i, h_j)",
+            ]
+        )
+        output = _render_through_helper(text)
+
+        for rendered in ("maxₕ", "w₁", "w₂", "w₃", "hᵢ", "hⱼ", "∑ⱼ"):
+            assert rendered in output
+        for raw in ("max_h", "w_1", "w_2", "w_3", "h_i", "h_j", "∑_j"):
+            assert raw not in output
 
     @pytest.mark.parametrize(
         "text,math_tokens",

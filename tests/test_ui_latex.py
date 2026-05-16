@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from core.ui.latex import (
     _has_tier2_construct,
+    _render_tier1,
     extract_and_render_inline,
     render_latex,
 )
@@ -32,11 +33,32 @@ class TestTier1Unicode:
 
     def test_subscript_superscript(self) -> None:
         out = render_latex(r"x_{i}^{2}").plain
-        # pylatexenc emits x_i^2 — Unicode digits in superscript are preferred
-        # but the exact glyphs depend on the font. We only require the chars.
-        assert "x" in out
-        assert "i" in out
-        assert "2" in out
+        assert out == "xᵢ²"
+
+    @pytest.mark.parametrize(
+        ("source", "expected"),
+        [
+            ("h_i", "hᵢ"),
+            ("w_1", "w₁"),
+            ("w_{12}", "w₁₂"),
+            ("x^{2}", "x²"),
+            ("x^123", "x¹²³"),
+        ],
+    )
+    def test_unicode_script_postprocess_supported_tokens(
+        self,
+        source: str,
+        expected: str,
+    ) -> None:
+        assert _render_tier1(source) == expected
+
+    def test_superscript_star_stays_raw(self) -> None:
+        # Unicode has no standard superscript asterisk that reads better in
+        # terminal math, so the atomic fallback preserves the raw marker.
+        assert _render_tier1("h^*") == "h^*"
+
+    def test_unsupported_subscript_token_stays_raw(self) -> None:
+        assert _render_tier1("h_∞") == "h_∞"
 
     def test_empty_string(self) -> None:
         assert render_latex("").plain == ""
@@ -94,6 +116,13 @@ class TestMixedContent:
         _, math = chunks[1]
         assert "α" in math
         assert "β" in math
+
+    def test_delimiterless_bare_subscripts_render_unicode(self) -> None:
+        chunks = list(extract_and_render_inline("h_i, h_j"))
+        inline_payloads = [payload for kind, payload in chunks if kind == "inline_math"]
+        assert any("hᵢ" in payload for payload in inline_payloads)
+        assert any("hⱼ" in payload for payload in inline_payloads)
+        assert not any("h_i" in payload or "h_j" in payload for payload in inline_payloads)
 
     def test_block_math(self) -> None:
         chunks = list(extract_and_render_inline(r"see $$\frac{a}{b}$$ here"))

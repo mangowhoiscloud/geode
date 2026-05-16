@@ -52,6 +52,19 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CLI LaTeX bare script Unicode rendering.** Tier 1 LaTeX 렌더러가
+  `pylatexenc` 출력 이후 `_i`, `_1`, `^2` 같은 delimiter-less
+  subscript/superscript 토큰을 Unicode 아래/위첨자로 후처리합니다.
+  지원 문자가 없는 토큰은 원문 marker 를 보존해 `h_∞` 같은 표기를
+  부분 변환하지 않습니다.
+- **CLI LaTeX bare script Unicode rendering.** Tier 1 now post-processes
+  `pylatexenc` output so delimiter-less scripts such as `h_i`, `w_1`, and
+  `x^2` render as Unicode glyphs. Tokens containing unsupported script
+  characters remain raw atomically, preserving forms like `h_∞` instead of
+  producing mixed output.
+
 ## [0.95.2] — 2026-05-16
 
 ### Added
