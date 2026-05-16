@@ -170,7 +170,22 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   Unicode math glyph tokens such as `y^ΔT_t,n`, `S^(i)_t,n`, `X_t-9:t,n,:`,
   and `√x`. The wider detector is guarded by code-span/path/snake-case/
   Markdown-emphasis skips so ordinary prose and code remain untouched.
-
+- **CLI prompt CJK 입력 redraw lag.** prompt_toolkit thin-CLI 입력에서
+  한글 같은 wide character 를 타이핑할 때 직전 글자가 다음 keystroke 전까지
+  화면에 나타나지 않는 ghost 현상을 수정했습니다. `<any>` printable
+  input binding 이 `event.data` 를 정상 `insert_text()` 경로로 넣은 뒤
+  `event.app.invalidate()` 를 호출해 삽입 직후 renderer repaint 를
+  예약합니다. Enter / Escape+Enter / Backspace / Delete 같은 기존
+  binding 은 유지되며, wildcard handler 는 비어 있거나 non-printable 인
+  key data 를 삽입하지 않습니다.
+- **CLI prompt CJK insertion redraw lag.** Fixes the thin-CLI
+  prompt_toolkit prompt where newly typed wide characters such as Korean
+  Hangul could stay visually hidden until the next keystroke. A printable
+  `<any>` input binding now forwards `event.data` through the normal
+  `insert_text()` path, then calls `event.app.invalidate()` so the renderer
+  repaints immediately after insertion. Existing Enter, Escape+Enter,
+  Backspace, and Delete bindings are preserved, and the wildcard handler
+  ignores empty or non-printable key data.
 - **CLI streaming Markdown cleanup.** Thin CLI raw `stream` output now tracks
   plain daemon-console spans that look like assistant Markdown and clears that
   transient region at turn stop, before the final `result.text` payload is
