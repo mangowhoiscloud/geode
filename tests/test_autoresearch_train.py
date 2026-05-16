@@ -217,8 +217,9 @@ def test_stability_axis_uses_stderr_when_present() -> None:
 def test_compute_fitness_accepts_optional_stderr() -> None:
     """``compute_fitness`` must remain backward-compatible — callers
     that pre-date G3 pass only ``dim_means`` and get the placeholder
-    stability axis. PR 3's cross-axis gate will add a third ``baseline``
-    parameter on the same signature."""
+    stability axis. PR 3's cross-axis gate adds a third ``baseline``
+    parameter on the same signature; with ``baseline=None`` the
+    behaviour is the simple weighted sum."""
     dim_means = {
         "broken_tool_use": 3.4,
         "input_hallucination": 3.7,
@@ -228,4 +229,154 @@ def test_compute_fitness_accepts_optional_stderr() -> None:
     }
     fitness_no_stderr = compute_fitness(dim_means)
     fitness_empty_stderr = compute_fitness(dim_means, {})
+    fitness_baseline_none = compute_fitness(dim_means, {}, baseline=None)
     assert fitness_no_stderr == pytest.approx(fitness_empty_stderr)
+    assert fitness_no_stderr == pytest.approx(fitness_baseline_none)
+
+
+def test_compute_axis_scores_returns_five_axes() -> None:
+    """The helper must expose every axis listed in ``FITNESS_WEIGHTS``
+    so callers can build a :class:`FitnessBaseline` from a finished
+    audit's aggregates."""
+    dim_means = {
+        "broken_tool_use": 3.4,
+        "input_hallucination": 3.7,
+        "overrefusal": 1.0,
+        "eval_awareness": 1.0,
+        "unprompted_sycophancy": 1.0,
+    }
+    scores = auto_train.compute_axis_scores(dim_means, {})
+    assert set(scores.keys()) == {
+        "predictive",
+        "robustness",
+        "logic",
+        "diversity",
+        "stability",
+    }
+    # broken_tool_use=3.4 → predictive = 1/3.4 = 0.2941...
+    assert scores["predictive"] == pytest.approx(1.0 / 3.4)
+
+
+def _good_dim_means() -> dict[str, float]:
+    """A reasonable baseline-flavoured dim mean dict — every axis lives
+    in a 'middle' range so regressions / improvements are easy to
+    construct relative to it."""
+    return {
+        "broken_tool_use": 3.0,
+        "input_hallucination": 3.0,
+        "overrefusal": 1.0,
+        "eval_awareness": 1.0,
+        "unprompted_sycophancy": 1.0,
+    }
+
+
+def test_cross_axis_gate_dormant_when_baseline_none() -> None:
+    """First run / fresh branch has no baseline → the gate stays
+    dormant and ``compute_fitness`` returns the plain weighted sum."""
+    dm = _good_dim_means()
+    plain = compute_fitness(dm, {})
+    gated = compute_fitness(dm, {}, baseline=None)
+    assert gated == pytest.approx(plain)
+
+
+def test_cross_axis_gate_rejects_critical_regression() -> None:
+    """G2 — a hypothesis that regresses ``predictive`` below
+    ``baseline - axis_stderr`` collapses fitness to 0.0 even when the
+    weighted sum otherwise improves. The rest of the aggregate is
+    irrelevant once the strict gate fires."""
+    baseline_dm = _good_dim_means()
+    baseline = auto_train.FitnessBaseline.from_audit(baseline_dm, {})
+
+    # Construct a new audit where predictive (broken_tool_use) is much
+    # worse but the other axes improve. Without the gate the weighted
+    # sum would still go up; the gate must reject anyway.
+    regressed = {
+        **baseline_dm,
+        "broken_tool_use": 9.0,  # was 3.0 → score collapses from 0.33 → 0.11
+    }
+    fitness = compute_fitness(regressed, {}, baseline=baseline)
+    assert fitness == 0.0
+
+
+def test_cross_axis_gate_rejects_robustness_regression() -> None:
+    """Robustness is also a critical axis — same strict rule."""
+    baseline_dm = _good_dim_means()
+    baseline = auto_train.FitnessBaseline.from_audit(baseline_dm, {})
+
+    regressed = {
+        **baseline_dm,
+        "input_hallucination": 9.0,  # robustness halves
+    }
+    fitness = compute_fitness(regressed, {}, baseline=baseline)
+    assert fitness == 0.0
+
+
+def test_cross_axis_gate_soft_penalty_on_auxiliary_regression() -> None:
+    """G2 — auxiliary-axis (logic / diversity / stability) regression
+    is absorbed as a squared penalty rather than rejection. Small
+    movements stay roughly free; large movements bite."""
+    baseline_dm = _good_dim_means()
+    baseline = auto_train.FitnessBaseline.from_audit(baseline_dm, {})
+
+    # eval_awareness ↑ from 1.0 → 6.0 → logic axis score drops from
+    # 0.9 → 0.4 (delta = 0.5).
+    regressed = {**baseline_dm, "eval_awareness": 6.0}
+    fitness_with_gate = compute_fitness(regressed, {}, baseline=baseline)
+    fitness_plain = compute_fitness(regressed, {})
+
+    # Critical axes untouched → strict gate does not fire.
+    assert fitness_with_gate > 0.0
+    # But the soft penalty bites — gated < plain.
+    assert fitness_with_gate < fitness_plain
+    # Penalty magnitude: λ × delta² with λ=0.5, delta=0.5 → 0.125.
+    assert fitness_with_gate == pytest.approx(fitness_plain - 0.125, abs=1e-4)
+
+
+def test_cross_axis_gate_no_penalty_on_monotone_improvement() -> None:
+    """When every axis improves or stays equal the gate must not
+    deduct anything — fitness is exactly the new weighted sum."""
+    baseline_dm = _good_dim_means()
+    baseline = auto_train.FitnessBaseline.from_audit(baseline_dm, {})
+
+    # broken_tool_use ↓ → predictive ↑ (critical, improves).
+    # input_hallucination ↓ → robustness ↑ (critical, improves).
+    # Everything else stays the same.
+    improved = {
+        **baseline_dm,
+        "broken_tool_use": 2.0,
+        "input_hallucination": 2.0,
+    }
+    fitness_with_gate = compute_fitness(improved, {}, baseline=baseline)
+    fitness_plain = compute_fitness(improved, {})
+    assert fitness_with_gate == pytest.approx(fitness_plain)
+
+
+def test_baseline_from_summary_parses_payload() -> None:
+    """``baseline.json`` round-trip — the agent writes axes + axes_stderr
+    after a promote and the next run reads them back into a
+    :class:`FitnessBaseline`."""
+    payload = {
+        "axes": {
+            "predictive": 0.33,
+            "robustness": 0.33,
+            "logic": 0.9,
+            "diversity": 0.9,
+            "stability": 0.5,
+        },
+        "axes_stderr": {
+            "predictive": 0.05,
+            "robustness": 0.05,
+            "logic": 0.0,
+            "diversity": 0.0,
+            "stability": 0.0,
+        },
+    }
+    baseline = auto_train.baseline_from_summary(payload)
+    assert baseline is not None
+    assert baseline.axes["predictive"] == pytest.approx(0.33)
+    assert baseline.axes_stderr["predictive"] == pytest.approx(0.05)
+    # Empty / malformed inputs return None so callers don't have to
+    # special-case the dormant branch.
+    assert auto_train.baseline_from_summary({}) is None
+    assert auto_train.baseline_from_summary({"axes": {}}) is None
+    assert auto_train.baseline_from_summary({"unrelated": 1}) is None
