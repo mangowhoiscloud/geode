@@ -10,11 +10,20 @@ in lockstep on output.
 worktree (``~/.geode/petri/logs/``) and writes a committable summary
 YAML so a routine ``git worktree remove`` no longer deletes the only
 copy of an audit's ground truth.
+
+When an audit run completes with an archived ``.eval``, the last
+non-empty line of stdout is a JSON dict ``{"dim_means": {...},
+"dim_stderr": {...}}`` derived from :func:`core.audit.dim_extractor.
+extract_dim_aggregates`. ``autoresearch/train.py`` grep-parses this
+line to compute fitness without re-reading the inspect_ai archive —
+the Karpathy ``grep "^val_bpb:"`` pattern adapted for multi-dim.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import logging
 import os
 import shlex
 from pathlib import Path
@@ -23,6 +32,8 @@ import typer
 from core.ui.console import console
 
 from plugins.petri_audit.runner import AuditReport, format_cost, run_audit
+
+log = logging.getLogger(__name__)
 
 __all__ = ["audit", "cmd_audit_slash", "petri_archive"]
 
@@ -56,6 +67,40 @@ def _render_report(report: AuditReport) -> None:
         if report.stderr:
             console.print(f"[red]{report.stderr}[/red]")
     console.print()
+    _emit_dim_aggregates(report)
+
+
+def _emit_dim_aggregates(report: AuditReport) -> None:
+    """Print a final JSON line with per-dim mean + stderr from the archive.
+
+    Best-effort: only fires when the audit succeeded and produced an
+    archive. Any failure inside the extractor is logged and swallowed —
+    the line just won't appear. ``autoresearch/train.py`` reads the
+    last ``{``-prefixed line of stdout, so an empty line plus the
+    surrounding console output is benign for the human reader.
+
+    Uses the builtin ``print`` (not ``console.print``) so the JSON
+    stays unwrapped and easy to grep — Karpathy ``grep "^val_bpb:"``
+    pattern adapted for the multi-dim Petri fitness signal.
+    """
+    if report.returncode != 0 or report.dry_run or report.aborted:
+        return
+    if not report.archived_raw:
+        return
+    try:
+        from core.audit.dim_extractor import extract_dim_aggregates
+
+        aggregates = extract_dim_aggregates(report.archived_raw)
+    except Exception:
+        log.warning(
+            "petri_audit: dim aggregate emission failed for %s",
+            report.archived_raw,
+            exc_info=True,
+        )
+        return
+    if not aggregates.get("dim_means"):
+        return
+    print(json.dumps(aggregates, separators=(",", ":")))
 
 
 def audit(
