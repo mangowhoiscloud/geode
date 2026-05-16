@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.96.0] — 2026-05-16
+
 ### Added
 
 - **CLI thinking collapse + Ctrl+O toggle.** CLI reasoning-summary lines now
