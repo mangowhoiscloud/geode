@@ -52,6 +52,23 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.96.0] — 2026-05-16
+
+### Added
+
+- **CLI thinking collapse + Ctrl+O toggle.** CLI reasoning-summary lines now
+  collapse at `thinking_end` into a single muted `✦ Thought for … · N items`
+  header, with the full reasoning history buffered for expansion. During an
+  active prompt execution, `Ctrl+O` toggles live thinking between expanded
+  streaming lines and a compact still-running header; non-TTY output keeps the
+  previous line-by-line behavior.
+- **CLI thinking collapse + Ctrl+O toggle.** CLI reasoning summary 라인이
+  `thinking_end` 에서 단일 muted `✦ Thought for … · N items` header 로
+  접히고, 전체 reasoning history 는 다시 펼칠 수 있도록 내부 buffer 에
+  보관됩니다. Prompt 실행 중에는 `Ctrl+O` 로 live thinking 을 streaming
+  line view 와 compact still-running header 사이에서 전환할 수 있으며,
+  non-TTY 출력은 기존 line-by-line 동작을 유지합니다.
+
 ## [0.95.5] — 2026-05-16
 
 ### Fixed
