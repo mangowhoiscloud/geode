@@ -106,6 +106,25 @@ _SUPERSCRIPT_MAP: Final[dict[str, str]] = {
     "7": "⁷",
     "8": "⁸",
     "9": "⁹",
+    "A": "ᴬ",
+    "B": "ᴮ",
+    "D": "ᴰ",
+    "E": "ᴱ",
+    "G": "ᴳ",
+    "H": "ᴴ",
+    "I": "ᴵ",
+    "J": "ᴶ",
+    "K": "ᴷ",
+    "L": "ᴸ",
+    "M": "ᴹ",
+    "N": "ᴺ",
+    "O": "ᴼ",
+    "P": "ᴾ",
+    "R": "ᴿ",
+    "T": "ᵀ",
+    "U": "ᵁ",
+    "V": "ⱽ",
+    "W": "ᵂ",
     "a": "ᵃ",
     "b": "ᵇ",
     "c": "ᶜ",
@@ -180,8 +199,11 @@ _GREEK_WORD_BASES: Final[frozenset[str]] = frozenset(
 _SCRIPT_CHAR_CLASS: Final = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-="
 _UNICODE_SCRIPT = re.compile(
     rf"(?P<marker>[_^])(?:\{{(?P<braced>[^{{}}\n]+)\}}|"
-    rf"(?P<parenthesized>\([{re.escape(_SCRIPT_CHAR_CLASS)}]+\))|"
+    r"\((?P<parenthesized>[^()\n]+)\)|"
     rf"(?P<bare>[{re.escape(_SCRIPT_CHAR_CLASS)}]+))"
+)
+_DIGIT_BASE_GROUPED_SUPERSCRIPT = re.compile(
+    r"(?P<base>\d+)\^(?:\{(?P<braced>[^{}\n]+)\}|\((?P<parenthesized>[^()\n]+)\))"
 )
 
 
@@ -201,7 +223,20 @@ def _apply_unicode_scripts(text: str) -> str:
 
     def replace(match: re.Match[str]) -> str:
         marker = match.group("marker")
-        token = match.group("braced") or match.group("parenthesized") or match.group("bare")
+        braced = match.group("braced")
+        parenthesized = match.group("parenthesized")
+        bare = match.group("bare")
+        if marker == "^" and (braced is not None or parenthesized is not None):
+            converted = _convert_grouped_superscript_payload(braced or parenthesized or "")
+            if converted is None:
+                return match.group(0)
+            if parenthesized is not None:
+                return f"{_SUPERSCRIPT_MAP['(']}{converted}{_SUPERSCRIPT_MAP[')']}"
+            return converted
+
+        token = braced or bare
+        if parenthesized is not None:
+            token = f"({parenthesized})"
         if not token:
             log.debug("Unexpected empty LaTeX script token in %r", match.group(0))
             return match.group(0)
@@ -218,6 +253,86 @@ def _apply_unicode_scripts(text: str) -> str:
     return _UNICODE_SCRIPT.sub(replace, text)
 
 
+def _prepare_digit_base_grouped_superscripts(src: str) -> tuple[str, dict[str, str]]:
+    """Pre-convert digit-base grouped superscripts before pylatexenc strips braces."""
+    protected: dict[str, str] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        parenthesized = match.group("parenthesized")
+        payload = match.group("braced") or parenthesized or ""
+        converted = _convert_grouped_superscript_payload(payload)
+        if converted is None:
+            sentinel = f"<<<GEODE_LATEX_SCRIPT_{len(protected)}>>>"
+            protected[sentinel] = match.group(0)
+            return sentinel
+        if parenthesized is not None:
+            converted = f"{_SUPERSCRIPT_MAP['(']}{converted}{_SUPERSCRIPT_MAP[')']}"
+        return f"{match.group('base')}{converted}"
+
+    return _DIGIT_BASE_GROUPED_SUPERSCRIPT.sub(replace, src), protected
+
+
+def _convert_grouped_superscript_payload(payload: str) -> str | None:
+    """Convert a braced/parenthesized superscript payload as one script unit.
+
+    Nested markers inside a superscript group inherit the outer superscript
+    direction: ``R_j`` in ``^(R_j)`` becomes ``ᴿʲ`` rather than ``ᴿⱼ``.
+    Whitespace inside the group is presentation-only and is dropped because
+    Unicode has no portable superscript space.
+    """
+    converted: list[str] = []
+    pos = 0
+    while pos < len(payload):
+        ch = payload[pos]
+        if ch.isspace():
+            pos += 1
+            continue
+        if ch in "_^":
+            token, next_pos = _read_script_token(payload, pos + 1)
+            if token is None:
+                return None
+            mapped_token = _map_script_chars(token, _SUPERSCRIPT_MAP)
+            if mapped_token is None:
+                return None
+            converted.append(mapped_token)
+            pos = next_pos
+            continue
+        mapped_ch = _SUPERSCRIPT_MAP.get(ch)
+        if mapped_ch is None:
+            return None
+        converted.append(mapped_ch)
+        pos += 1
+    return "".join(converted)
+
+
+def _read_script_token(payload: str, start: int) -> tuple[str | None, int]:
+    """Read a nested script token from ``payload`` starting after `_`/`^`."""
+    if start >= len(payload):
+        return None, start
+    opener = payload[start]
+    if opener in "({":
+        closer = ")" if opener == "(" else "}"
+        end = payload.find(closer, start + 1)
+        if end == -1:
+            return None, start
+        return payload[start + 1 : end], end + 1
+
+    end = start
+    while end < len(payload) and payload[end] in _SCRIPT_CHAR_CLASS:
+        end += 1
+    if end == start:
+        return None, start
+    return payload[start:end], end
+
+
+def _map_script_chars(token: str, script_map: dict[str, str]) -> str | None:
+    """Return ``token`` mapped through ``script_map`` or ``None`` atomically."""
+    mapped = [script_map.get(ch) for ch in token]
+    if any(ch is None for ch in mapped):
+        return None
+    return "".join(ch for ch in mapped if ch is not None)
+
+
 def _unsupported_script_presentation(
     text: str,
     match: re.Match[str],
@@ -225,9 +340,15 @@ def _unsupported_script_presentation(
     mapped: list[str | None],
 ) -> str | None:
     """Return a conservative no-raw-marker fallback for unsupported scripts."""
+    if match.group("marker") == "^" and (
+        match.group("braced") is not None or match.group("parenthesized") is not None
+    ):
+        return None
     if token.isascii() and token.isalpha() and token.islower() and len(token) > 1:
         return None
     has_partial_mapping = any(ch is not None for ch in mapped)
+    if has_partial_mapping and mapped.count(None) > len(mapped) // 2:
+        return None
     if not has_partial_mapping and not _script_base_looks_math(text, match.start()):
         return None
 
@@ -273,11 +394,14 @@ def _render_tier1(src: str) -> str:
         return src
     try:
         src = _DISPLAY_FRACTION_MACRO.sub(r"\\frac", src)
+        src, protected_scripts = _prepare_digit_base_grouped_superscripts(src)
         protected_src = _LATEX_LINEBREAK.sub(
             f" {_LATEX_LINEBREAK_SENTINEL} ",
             src,
         )
         raw: str = LatexNodes2Text().latex_to_text(protected_src).strip()
+        for sentinel, original in protected_scripts.items():
+            raw = raw.replace(sentinel, original)
         raw = _apply_unicode_scripts(raw)
         lines = [re.sub(r"\s+", " ", part).strip() for part in raw.split(_LATEX_LINEBREAK_SENTINEL)]
         return "\n".join(line for line in lines if line)
@@ -479,8 +603,8 @@ _UNICODE_TOKEN_HEAD = (
 )
 _DELIMITERLESS_MATH = re.compile(
     r"(?:"
-    # Braced subscript/superscript token (chained): r_{t-1}, P_{t+5}^{2}, ...
-    r"[A-Za-z][A-Za-z0-9]*"
+    # Braced subscript/superscript token (chained): r_{t-1}, 10^{2}, ...
+    r"(?:[A-Za-z][A-Za-z0-9]*|\d+)"
     r"(?:[_^]\{[^{}]+\})+"
     r"(?:[A-Za-z0-9]*[_^]\{[^{}]+\})*"
     r"|"
@@ -491,9 +615,10 @@ _DELIMITERLESS_MATH = re.compile(
     r"\\(?:" + "|".join(_MACRO_NAMES) + r")(?![A-Za-z])"
     r"(?:\{[^{}]*\}){0,3}"
     r"|"
-    # Bare script token in math-shaped context: y^ΔT_t,n, S^(i)_t,n,
-    # close_t,n, X_t-9:t,n,:. Filtered by _delimiterless_candidate_allowed.
-    r"[A-Za-z][A-Za-z0-9]*"
+    # Bare script token in math-shaped context: y^ΔT_t,n, 10^2,
+    # S^(i)_t,n, close_t,n, X_t-9:t,n,:. Filtered by
+    # _delimiterless_candidate_allowed.
+    r"(?:[A-Za-z][A-Za-z0-9]*|\d+)"
     rf"(?:[_^]{_SCRIPT_BODY})+"
     r"|"
     # Unicode math glyph adjacent to letters/digits/scripts: √x, α_i, ΔT,n.
@@ -597,6 +722,8 @@ def _delimiterless_candidate_allowed(text: str, start: int, end: int, token: str
     if any(ch in _UNICODE_MATH_GLYPHS for ch in token):
         return True
     if "_" in token or "^" in token:
+        if token[0].isdigit():
+            return "^" in token and _script_parts_look_index_like(token)
         return _script_parts_look_index_like(token) and _has_math_context(text, start, end, token)
     return False
 

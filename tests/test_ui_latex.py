@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from core.ui.latex import (
+    _apply_unicode_scripts,
     _has_tier2_construct,
     _render_tier1,
     extract_and_render_inline,
@@ -43,6 +44,10 @@ class TestTier1Unicode:
             ("w_{12}", "w₁₂"),
             ("x^{2}", "x²"),
             ("x^123", "x¹²³"),
+            ("10^(R_j - R_i)", "10⁽ᴿʲ⁻ᴿⁱ⁾"),
+            ("10^{R_j - R_i}", "10ᴿʲ⁻ᴿⁱ"),
+            ("e^{x+1}", "eˣ⁺¹"),
+            ("e^(x+1)", "e⁽ˣ⁺¹⁾"),
         ],
     )
     def test_unicode_script_postprocess_supported_tokens(
@@ -59,6 +64,12 @@ class TestTier1Unicode:
 
     def test_unsupported_subscript_token_stays_raw(self) -> None:
         assert _render_tier1("h_∞") == "h_∞"
+
+    def test_complex_grouped_superscript_never_uses_bracket_fallback(self) -> None:
+        source = "10^{C_j - R_i}"
+        assert _apply_unicode_scripts(source) == source
+        assert _render_tier1(source) == source
+        assert list(extract_and_render_inline(source)) == [("inline_math", source)]
 
     def test_unsupported_uppercase_subscript_uses_bracket_presentation(self) -> None:
         assert _render_tier1("τ_P") == "τ[P]"
@@ -132,8 +143,24 @@ class TestMixedContent:
         chunks = list(extract_and_render_inline("E_i = 1/1 + 10^(R_j - R_i)/400"))
         inline_payloads = [payload for kind, payload in chunks if kind == "inline_math"]
         text_payloads = [payload for kind, payload in chunks if kind == "text"]
-        assert inline_payloads == ["Eᵢ", "Rⱼ", "Rᵢ"]
+        assert inline_payloads == ["Eᵢ", "10⁽ᴿʲ⁻ᴿⁱ⁾"]
         assert not any("R_i" in payload for payload in text_payloads)
+
+    @pytest.mark.parametrize(
+        ("source", "expected"),
+        [
+            ("10^2", "10²"),
+            ("10^-3", "10⁻³"),
+            ("10^(R_j - R_i)", "10⁽ᴿʲ⁻ᴿⁱ⁾"),
+            ("10^{R_j - R_i}", "10ᴿʲ⁻ᴿⁱ"),
+        ],
+    )
+    def test_delimiterless_digit_base_superscripts_render_as_single_math_segment(
+        self,
+        source: str,
+        expected: str,
+    ) -> None:
+        assert list(extract_and_render_inline(source)) == [("inline_math", expected)]
 
     def test_delimiterless_elo_update_segments_all_subscripts(self) -> None:
         chunks = list(extract_and_render_inline("R_i' = R_i + K(S_i - E_i)"))
@@ -195,6 +222,7 @@ class TestDelimiterlessMathWidening:
         "source",
         [
             "snake_case_var",
+            "1_000",
             "foo/bar/baz.py",
             "src/main.tsx",
             "**bold**",
