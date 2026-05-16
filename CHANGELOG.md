@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.95.2] — 2026-05-16
+
 ### Added
 
 - **CLI system prompt math-formatting instruction.** GEODE 의 기본 LLM
