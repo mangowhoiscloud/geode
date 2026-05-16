@@ -52,6 +52,84 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.0] — 2026-05-17
+
+### Added
+
+- **`login_anthropic()` — owned-Anthropic OAuth PKCE flow (claude CLI
+  의존성 제거).** `/login anthropic` 가 더 이상 `claude /login`
+  subprocess 를 호출하지 않고 GEODE 가 직접 PKCE redirect flow 수행
+  — loopback callback server (랜덤 free port 54123-54199), PKCE
+  code_verifier/challenge 생성, `https://platform.claude.com/oauth/
+  authorize` browser open, `https://api.anthropic.com/v1/oauth/token`
+  토큰 교환, `~/.geode/auth.toml` 의 `providers.anthropic` section 에
+  저장. multi-candidate client_id 시도 path (`9d1c250a-...` 등 reverse-
+  engineered) + first-success-wins. macOS/Linux/Windows 모두 동작.
+  `read_geode_anthropic_credentials` 헬퍼가 `read_geode_openai_
+  credentials` 와 동일 shape 으로 반환. `claude_code_provider.
+  resolve_claude_oauth_token` / `get_claude_oauth_metadata` 가 auth.
+  toml 우선 read + macOS keychain backwards-compat fallback. ToS Tier
+  3 (impersonation) — `claude_code_provider` 의 module docstring 의
+  policy notice 가 SOT. failure 시 graceful fallback (`ANTHROPIC_API_KEY`
+  권장 message).
+- **`login_anthropic()` — owned-Anthropic OAuth PKCE flow (drops
+  `claude` CLI dependency).** `/login anthropic` no longer spawns
+  `claude /login`; GEODE drives the PKCE redirect flow itself —
+  loopback callback (free port 54123-54199), PKCE
+  `code_verifier`/`challenge` pair, browser open against
+  `platform.claude.com/oauth/authorize`, token exchange at
+  `api.anthropic.com/v1/oauth/token`, persist into
+  `~/.geode/auth.toml` `providers.anthropic`. Multi-candidate
+  `client_id` loop (`9d1c250a-...` first) with first-success-wins.
+  Cross-platform (macOS / Linux / Windows). `read_geode_anthropic_
+  credentials` mirrors the OpenAI helper shape.
+  `claude_code_provider.resolve_claude_oauth_token` and
+  `get_claude_oauth_metadata` now prefer the `auth.toml` source with
+  the macOS keychain kept as a backwards-compat fallback. ToS Tier 3
+  (impersonation) per `claude_code_provider` module docstring;
+  failure surfaces an `ANTHROPIC_API_KEY` fallback hint.
+
+
+- **`docs/architecture/provider-login.md` — provider login flow SOT.**
+  OpenAI (device-code) 와 Anthropic (PKCE redirect) 의 OAuth flow 의
+  정합 spec 신규. owned-credential 패턴 (auth.toml SOT + GEODE 가 직접
+  OAuth client) 의 architecture + 5-mismatch 정합 plan + ToS Tier
+  spectrum (0-4) 정의. PR C3 (owned-Anthropic PKCE 구현) 의 reference
+  SOT.
+- **`docs/architecture/provider-login.md` — provider login flow SOT.**
+  Architecture spec for the two-provider OAuth picture: OpenAI's
+  device-code flow plus Anthropic's PKCE redirect flow share an
+  owned-credential pattern (auth.toml as SOT, GEODE acts as OAuth
+  client directly). Covers the 5 mismatch points the upcoming PR C3
+  will close and pins down the ToS Tier (0-4) spectrum the choice
+  sits in.
+
+### Removed
+
+- **`/auth` 슬래시 명령 완전 제거 + `/login source` 신설.** `/auth` 의 잔존
+  surface (`add` / `remove` / `set <provider> <source>`) 가 모두 `/login`
+  으로 흡수. `/login source <provider> <type>` 신규 — 기존 `/auth set` 의
+  credential source picker. `routing.py` 의 `/auth` CommandSpec, `dispatcher.py`
+  의 cmd_auth dispatch, `core/cli/__init__.py` 의 TTY_LOCAL_COMMANDS 의
+  `/auth` 멤버, `_state.py` 의 `COMMAND_MAP` 의 `/auth` entry + help line,
+  `commands/__init__.py` 의 export, `core/cli/commands/auth.py` 파일 자체
+  모두 제거. `manage_auth` LLM tool 은 backwards-compat adapter 로 유지
+  — 호출 시 `manage_login` 로 forward (legacy prompts 호환). Plan vs
+  Profile 분리 의 historical 근거 (`PlanRegistry` vs `ProfileStore`) 는
+  유지되되, 사용자 진입점은 `/login` 단일 SOT.
+- **`/auth` slash command fully removed + `/login source` introduced.**
+  The remaining `/auth` surface (`add` / `remove` / `set <provider>
+  <source>`) was folded into `/login`. The new `/login source <provider>
+  <type>` is the migrated credential-source picker (was `/auth set`,
+  PR #1203). Removed: `routing.py` entry, `dispatcher.py` dispatch +
+  import, `_TTY_LOCAL_COMMANDS` membership, `_state.py` `COMMAND_MAP` +
+  help line, `commands/__init__.py` exports, and the
+  `core/cli/commands/auth.py` source file itself. The `manage_auth`
+  LLM tool is kept as a backwards-compat adapter that forwards to
+  `manage_login` so legacy prompts still work. The underlying Plan vs
+  Profile split (`PlanRegistry` vs `ProfileStore`) is unchanged — only
+  the user-facing entry point is unified.
+
 ## [0.98.0] — 2026-05-17
 
 ### Changed

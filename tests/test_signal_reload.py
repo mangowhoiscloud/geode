@@ -54,9 +54,10 @@ def test_cli_thin_dispatch_signals_daemon_refresh() -> None:
         "commands write to auth.toml. See core/cli/__init__.py THIN branch."
     )
     # And it must be gated by the auth-writing command set.
-    assert '("/login", "/key", "/auth")' in src, (
+    # PR #C (2026-05-17) — /auth removed; gating set narrowed to /login + /key.
+    assert '("/login", "/key")' in src, (
         "Refresh signal must fire only for THIN commands that mutate "
-        "auth.toml — gating set ('/login', '/key', '/auth') missing."
+        "auth.toml — gating set ('/login', '/key') missing."
     )
 
 

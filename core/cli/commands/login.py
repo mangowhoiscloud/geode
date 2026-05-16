@@ -24,6 +24,10 @@ from core.auth.profiles import AuthProfile
 log = logging.getLogger(__name__)
 
 
+_VALID_CREDENTIAL_SOURCES: tuple[str, ...] = ("auto", "oauth", "api_key", "none")
+_VALID_CREDENTIAL_PROVIDERS: tuple[str, ...] = ("anthropic", "openai")
+
+
 _PROVIDER_ALIASES: dict[str, str] = {
     "openai": "openai",
     "codex": "openai",
@@ -104,6 +108,9 @@ def cmd_login(args: str) -> None:
     if sub == "quota":
         _login_quota()
         return
+    if sub == "source":
+        _login_source(rest)
+        return
     if sub == "refresh":
         # v0.52 phase 3 — daemon-side reload of auth.toml after thin client
         # writes (e.g. /login openai completed in CLI process). When invoked
@@ -181,6 +188,7 @@ def _login_help() -> None:
         "  [label]/login openai[/label]                OAuth flow (Codex Plus quota)\n"
         "  [label]/login anthropic[/label]             OAuth flow (Claude subscription)\n"
         "  [label]/login add[/label]                   Interactive wizard\n"
+        "  [label]/login source[/label] <prov> <type>   Pick credential source per provider\n"
         "  [label]/login set-key[/label] <plan> <key>  Update a plan's API key\n"
         "  [label]/login use[/label] <plan>            Pin a plan as active for its provider\n"
         "  [label]/login route[/label] <model> <plan>… Bind a model to plan(s) in priority order\n"
@@ -544,88 +552,179 @@ def _login_oauth(target: str) -> None:
     )
 
 
-def _login_oauth_anthropic() -> None:
-    """Delegate to the local ``claude`` CLI's login flow, then sync
-    the keychain credential into the GEODE ``ProfileStore``.
+def _format_credential_source_label(provider: str, source: str) -> str:
+    """Human-readable label for the ``source`` picker — pulls live
+    subscription info from the credential blob rather than baking
+    plan names into the code."""
+    import os
 
-    GEODE does not implement Anthropic's OAuth device flow itself —
-    Claude Code's CLI owns the browser handoff and writes the token to
-    the macOS keychain (``security`` service ``Claude
-    Code-credentials``). We just wrap the call so the user gets one
-    consistent entry point.
+    if source == "auto":
+        return "auto-detect from env / keychain"
+    if source == "none":
+        return "disabled"
+    if source == "api_key":
+        env_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+        suffix = "(set)" if os.environ.get(env_var) else "(env not set)"
+        return f"{env_var} {suffix}"
+    if source == "oauth":
+        if provider == "anthropic":
+            try:
+                from plugins.petri_audit.claude_code_provider import get_claude_oauth_metadata
+
+                meta = get_claude_oauth_metadata()
+            except ImportError:
+                return "Claude subscription (audit extra not installed)"
+            if meta is None:
+                return "(no Claude credentials in keychain)"
+            plan = meta.get("subscription_type") or "unknown plan"
+            tier = meta.get("rate_limit_tier")
+            tier_label = f" · {tier}" if tier else ""
+            return f"Claude {plan}{tier_label}"
+        try:
+            from plugins.petri_audit.codex_provider import get_codex_oauth_metadata
+
+            meta = get_codex_oauth_metadata()
+        except ImportError:
+            return "ChatGPT subscription (audit extra not installed)"
+        if meta is None:
+            return "(no Codex auth.json detected)"
+        plan = meta.get("plan_type") or "unknown plan"
+        return f"ChatGPT {plan}"
+    return source
+
+
+def _persist_credential_source(provider: str, source: str) -> None:
+    """Persist the source choice — settings + .env + config.toml.
+
+    Mirrors :func:`core.cli.commands.model._apply_model` — same
+    three-location write so the choice survives env wipes (Hermes /
+    Codex / Claude Code precedent: durable settings outrank env).
     """
-    import shutil
-    import subprocess  # nosec — argv is module-controlled
+    from core.cli import commands as _pkg
+    from core.config import settings
+    from core.utils.env_io import upsert_config_toml
 
+    field = "anthropic_credential_source" if provider == "anthropic" else "openai_credential_source"
+    env_var = (
+        "GEODE_ANTHROPIC_CREDENTIAL_SOURCE"
+        if provider == "anthropic"
+        else "GEODE_OPENAI_CREDENTIAL_SOURCE"
+    )
+    try:
+        object.__setattr__(settings, field, source)
+    except Exception:
+        log.debug("login: settings.%s setattr failed", field, exc_info=True)
+    _pkg._upsert_env(env_var, source)
+    upsert_config_toml("llm", field, source)
+
+
+def _login_source(args: str) -> None:
+    """``/login source <provider> <type>`` — choose the credential source.
+
+    Migrated from the legacy ``/auth set`` (PR #1203, removed alongside
+    ``/auth`` in PR #C, 2026-05-17). The picker decides which provider
+    prefix ``plugins.petri_audit.models.to_inspect_model`` routes a
+    ``claude-*`` / ``gpt-5.*`` id through:
+
+    - ``auto``     — env / keychain auto-detect (default)
+    - ``oauth``    — subscription quota (claude-code / openai-codex)
+    - ``api_key``  — PAYG env (ANTHROPIC_API_KEY / OPENAI_API_KEY)
+    - ``none``     — disabled
+    """
     from core.cli import commands as _pkg
 
-    claude_bin = shutil.which("claude")
-    if not claude_bin:
+    parts = args.split()
+    if len(parts) != 2:
+        _pkg.console.print("  [warning]Usage: /login source <provider> <type>[/warning]")
         _pkg.console.print(
-            "  [warning]`claude` CLI not found on PATH.[/warning]  "
-            "[muted]Install Claude Code first, then re-run `/login anthropic`.[/muted]\n"
+            f"  [muted]providers: {', '.join(_VALID_CREDENTIAL_PROVIDERS)}   "
+            f"types: {', '.join(_VALID_CREDENTIAL_SOURCES)}[/muted]"
         )
+        _pkg.console.print()
         return
-
-    _pkg.console.print("  [muted]Delegating to `claude /login` (browser flow)…[/muted]\n")
-    try:
-        result = subprocess.run(  # noqa: S603  # nosec
-            [claude_bin, "/login"],
-            timeout=300,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        _pkg.console.print("  [warning]`claude /login` timed out (5 min)[/warning]\n")
-        return
-    except OSError as exc:
-        _pkg.console.print(f"  [red]`claude /login` failed: {exc}[/red]\n")
-        return
-
-    if result.returncode != 0:
+    provider, source = parts[0].lower(), parts[1].lower()
+    if provider not in _VALID_CREDENTIAL_PROVIDERS:
         _pkg.console.print(
-            f"  [warning]`claude /login` exited rc={result.returncode}[/warning]  "
-            "[muted](keychain may still hold a valid token from a previous session)[/muted]\n"
+            f"  [warning]unknown provider: {provider} "
+            f"(use one of {', '.join(_VALID_CREDENTIAL_PROVIDERS)})[/warning]"
         )
+        _pkg.console.print()
+        return
+    if source not in _VALID_CREDENTIAL_SOURCES:
+        _pkg.console.print(
+            f"  [warning]unknown type: {source} "
+            f"(use one of {', '.join(_VALID_CREDENTIAL_SOURCES)})[/warning]"
+        )
+        _pkg.console.print()
+        return
+    _persist_credential_source(provider, source)
+    label = _format_credential_source_label(provider, source)
+    _pkg.console.print(
+        f"  [success]✓[/success] {provider} credential source → "
+        f"[bold]{source}[/bold]  [muted]({label})[/muted]"
+    )
+    _pkg.console.print()
 
-    # Sync the resulting keychain blob into ProfileStore so /login status
-    # picks the OAuth route up immediately, regardless of `claude` exit code.
+
+def _login_oauth_anthropic() -> None:
+    """Drive Anthropic's PKCE OAuth flow natively — no ``claude`` CLI
+    subprocess, no macOS-only keychain dependency.
+
+    PR C3 (2026-05-17) replaced the prior ``claude /login`` subprocess
+    handoff with a GEODE-owned PKCE flow (loopback callback + token
+    exchange). The flow is implemented in
+    :func:`core.auth.oauth_login.login_anthropic`; this wrapper persists
+    the resulting credential into the ``ProfileStore`` so other parts of
+    the system (``/login status``, audit routing) pick it up
+    immediately. Cross-platform: works on macOS, Linux, Windows.
+    """
+    from core.auth.profiles import AuthProfile, CredentialType
+    from core.cli import commands as _pkg
+    from core.wiring.container import ensure_profile_store
+
     try:
-        from plugins.petri_audit.claude_code_provider import (
-            get_claude_oauth_metadata,
-            resolve_claude_oauth_token,
-        )
-
-        from core.auth.profiles import AuthProfile, CredentialType
-        from core.wiring.container import ensure_profile_store
+        from core.auth.oauth_login import login_anthropic
     except ImportError as exc:
         _pkg.console.print(
-            f"  [warning]Anthropic profile sync skipped — `{exc.name}` not available.[/warning]\n"
+            f"  [warning]Anthropic OAuth unavailable — `{exc.name}` missing.[/warning]\n"
+            "  [muted]Set ANTHROPIC_API_KEY env to use the PAYG path.[/muted]\n"
         )
         return
 
-    token = resolve_claude_oauth_token()
-    if not token:
+    _pkg.console.print()
+    try:
+        creds = login_anthropic()
+    except KeyboardInterrupt:
+        _pkg.console.print("  [muted]Cancelled.[/muted]\n")
+        return
+    except RuntimeError as exc:
         _pkg.console.print(
-            "  [warning]No Claude credential found in keychain after login.[/warning]\n"
+            f"  [red]Anthropic OAuth login failed: {exc}[/red]\n"
+            "  [muted]Fallback: set ANTHROPIC_API_KEY env to keep going on the PAYG path.[/muted]\n"
         )
         return
 
-    meta = get_claude_oauth_metadata() or {}
-    expires = meta.get("expires_at")
-    expires_seconds = float(expires) / 1000.0 if isinstance(expires, int | float) else 0.0
+    if not creds:
+        _pkg.console.print("  [muted]Anthropic OAuth aborted.[/muted]\n")
+        return
+
+    access_token = creds.get("access_token", "")
+    expires_at = float(creds.get("expires_at", 0) or 0)
+    scopes = creds.get("scopes") or []
     profile = AuthProfile(
-        name="anthropic:claude-code",
+        name="anthropic:oauth",
         provider="anthropic",
         credential_type=CredentialType.OAUTH,
-        key=token,
-        expires_at=expires_seconds,
-        managed_by="claude-code",
+        key=access_token,
+        expires_at=expires_at,
+        managed_by="geode-pkce",
     )
     ensure_profile_store().add(profile)
-    plan = meta.get("subscription_type") or "(plan: unknown)"
+
+    scope_summary = ", ".join(scopes) if scopes else "(no scopes returned)"
     _pkg.console.print(
-        f"  [success]Claude OAuth registered.[/success]  "
-        f"[muted]Plan: {plan} · Provider: anthropic[/muted]\n"
+        "  [success]Anthropic OAuth registered.[/success]  "
+        f"[muted]Scopes: {scope_summary} · Provider: anthropic[/muted]\n"
     )
 
 

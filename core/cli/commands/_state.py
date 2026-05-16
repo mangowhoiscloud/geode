@@ -103,7 +103,6 @@ COMMAND_MAP: dict[str, str] = {
     "/verbose": "verbose",
     "/key": "key",
     "/model": "model",
-    "/auth": "auth",
     "/schedule": "schedule",
     "/sched": "schedule",
     "/trigger": "trigger",
@@ -153,7 +152,7 @@ def show_help() -> None:
     console.print("  [label]/login add[/label]          — Interactive plan/key wizard")
     console.print("  [label]/key[/label] <value>        — Quick PAYG API key (legacy alias)")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
-    console.print("  [label]/auth[/label]               — Auth profile rotator (legacy)")
+    console.print("  [label]/login source[/label] <p> <t> — Pick credential source per provider")
     console.print("  [label]/schedule[/label]           — Manage scheduled automations")
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
     console.print("  [label]/status[/label]             — Show system status")
@@ -190,7 +189,7 @@ def _get_profile_store() -> ProfileStore:
     """Return the runtime ProfileStore singleton.
 
     Pre-v0.50.0 the CLI maintained its own parallel store, so credentials
-    added through `/auth add` were invisible to the LLM dispatch layer.
+    added through `/login add` were invisible to the LLM dispatch layer.
     Both layers now read from `runtime_wiring.infra` directly.
     """
     from core.wiring.container import ensure_profile_store

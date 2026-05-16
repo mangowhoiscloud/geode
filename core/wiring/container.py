@@ -36,7 +36,7 @@ DEFAULT_GLOBAL_CONCURRENCY = 8
 DEFAULT_GATEWAY_CONCURRENCY = 4
 
 # Module-level accessors set by build_auth().
-# Both runtime LLM dispatch and the CLI (`/login`, `/auth`) read from the
+# Both runtime LLM dispatch and the CLI (`/login`) read from the
 # same singletons so a credential added through the UI is immediately seen
 # by ProfileRotator.resolve(). Pre-v0.50.0 there were two parallel
 # ProfileStore instances and they drifted out of sync.

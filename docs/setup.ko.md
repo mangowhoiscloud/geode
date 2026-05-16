@@ -222,7 +222,6 @@ grep "Slack poller seeded" /tmp/geode-serve.log
 | `/context` | `/ctx` | Context 티어 표시 |
 | `/schedule` | `/sched` | Scheduler 관리 |
 | `/trigger` | | 이벤트 트리거 관리 |
-| `/auth` | | 인증 프로필 관리 |
 | `/tasks` | `/t` | 작업 목록 |
 | `/clear` | | 대화 초기화 |
 | `/compact` | | Context 압축 |
