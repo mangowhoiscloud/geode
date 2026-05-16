@@ -138,9 +138,7 @@ class TestEdgeCases:
         result = extract_dim_aggregates(path)
         assert result == {"dim_means": {}, "dim_stderr": {}}
 
-    def test_read_failure_swallowed(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_read_failure_swallowed(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """A broken ``.eval`` must not propagate exceptions — the
         outer-loop is best-effort scaffolding, not a blocker."""
         path = tmp_path / "fake.eval"

@@ -299,8 +299,7 @@ def compute_fitness(
     is forward-compatible with that addition.
     """
     return sum(
-        FITNESS_WEIGHTS[axis] * _axis_score(axis, dim_means, dim_stderr)
-        for axis in FITNESS_WEIGHTS
+        FITNESS_WEIGHTS[axis] * _axis_score(axis, dim_means, dim_stderr) for axis in FITNESS_WEIGHTS
     )
 
 
