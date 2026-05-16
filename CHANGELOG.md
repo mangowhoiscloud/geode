@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.95.3] — 2026-05-16
+
 ### Fixed
 
 - **CLI LaTeX bare script Unicode rendering.** Tier 1 LaTeX 렌더러가
