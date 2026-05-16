@@ -11,11 +11,16 @@ Pipeline panels render client-side from structured events (no raw stream).
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
 import re
+import select
+import shutil
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
 from core.ui.tool_tracker import ToolCallTracker
@@ -40,6 +45,15 @@ def _fmt_elapsed(seconds: float) -> str:
         return f"{s}s"
     m, sec = divmod(s, 60)
     return f"{m}m {sec}s"
+
+
+@dataclass
+class _ThinkingRegion:
+    start_ts: float
+    items: list[str] = field(default_factory=list)
+    visible_lines: list[str] = field(default_factory=list)
+    is_collapsed: bool = False
+    ended: bool = False
 
 
 class EventRenderer:
@@ -68,6 +82,11 @@ class EventRenderer:
         self._thinking_thread: threading.Thread | None = None
         self._thinking_model = ""
         self._thinking_round = 0
+        self._thinking_region: _ThinkingRegion | None = None
+        self._render_lock = threading.RLock()
+        self._tty = sys.stdout.isatty()
+        self._stdin_stop = threading.Event()
+        self._stdin_thread: threading.Thread | None = None
         self._round_header_printed = False
         self._out = sys.stdout
         # Persistent activity spinner state
@@ -143,6 +162,7 @@ class EventRenderer:
     def stop(self) -> None:
         """Stop all spinners and render turn status. Call when result arrives."""
         self._flush_repeat()
+        self._stop_stdin_reader()
         self._activity = False
         self._activity_suppressed = True
         self._stop_thinking()
@@ -169,14 +189,23 @@ class EventRenderer:
     def _handle_thinking_start(self, event: dict[str, Any]) -> None:
         self._activity_suppressed = True
         self._tool_tracker.stop()
-        self._thinking = True
-        self._thinking_model = str(event.get("model", ""))
-        self._thinking_round = int(event.get("round", 1))
+        with self._render_lock:
+            self._thinking_region = _ThinkingRegion(start_ts=time.monotonic())
+            self._thinking = True
+            self._thinking_model = str(event.get("model", ""))
+            self._thinking_round = int(event.get("round", 1))
+        self._start_stdin_reader()
         self._thinking_thread = threading.Thread(target=self._animate_thinking, daemon=True)
         self._thinking_thread.start()
 
     def _handle_thinking_end(self, _event: dict[str, Any]) -> None:
         self._stop_thinking()
+        with self._render_lock:
+            region = self._thinking_region
+            if region:
+                region.ended = True
+                if self._tty:
+                    self._collapse_thinking_region_locked(region, still_running=False)
         self._activity_suppressed = False  # resume activity spinner
 
     def _handle_tool_start(self, event: dict[str, Any]) -> None:
@@ -300,15 +329,23 @@ class EventRenderer:
         line; full text is in the IPC event payload for any client that
         wants to display the complete summary.
         """
-        self._clear_activity_line()
         text = str(event.get("text", "")).strip().replace("\n", " ")
         if len(text) > 240:
             text = text[:237] + "…"
         if not text:
             return
         # ANSI 90 = bright black (muted); matches console.print muted style.
-        self._out.write(f"  \033[90m∙ thinking · {text}\033[0m\n")
-        self._out.flush()
+        line = f"  \033[90m∙ thinking · {text}\033[0m\n"
+        with self._render_lock:
+            self._clear_activity_line()
+            region = self._thinking_region
+            if region:
+                region.items.append(line)
+                if region.is_collapsed and self._tty:
+                    return
+                region.visible_lines.append(line)
+            self._out.write(line)
+            self._out.flush()
 
     def _handle_retry_wait(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
@@ -774,22 +811,151 @@ class EventRenderer:
             time.sleep(0.08)
 
     def _render_thinking_frame(self) -> None:
-        if not self._thinking:
-            return
-        frame = self._FRAMES[int(time.monotonic() * 12) % len(self._FRAMES)]
-        r = self._thinking_round
-        label = "Thinking..." if r <= 1 else f"Thinking... (round {r})"
-        self._out.write(f"\r\033[2K  {frame} \033[2m\u2722 {label}\033[0m")
-        self._out.flush()
+        with self._render_lock:
+            if not self._thinking:
+                return
+            frame = self._FRAMES[int(time.monotonic() * 12) % len(self._FRAMES)]
+            r = self._thinking_round
+            label = "Thinking..." if r <= 1 else f"Thinking... (round {r})"
+            self._out.write(f"\r\033[2K  {frame} \033[2m\u2722 {label}\033[0m")
+            self._out.flush()
 
     def _stop_thinking(self) -> None:
         if self._thinking:
-            self._thinking = False
+            with self._render_lock:
+                self._thinking = False
             if self._thinking_thread:
                 self._thinking_thread.join(timeout=0.3)
                 self._thinking_thread = None
-            self._out.write("\r\033[2K")
+            with self._render_lock:
+                self._out.write("\r\033[2K")
+                self._out.flush()
+
+    # -- Thinking collapse / Ctrl+O -------------------------------------------
+
+    def _start_stdin_reader(self) -> None:
+        if not self._tty or (self._stdin_thread and self._stdin_thread.is_alive()):
+            return
+        try:
+            if not sys.stdin.isatty():
+                return
+            sys.stdin.fileno()
+        except (AttributeError, OSError, ValueError):
+            return
+
+        self._stdin_stop.clear()
+        self._stdin_thread = threading.Thread(target=self._read_ctrl_o, daemon=True)
+        self._stdin_thread.start()
+
+    def _stop_stdin_reader(self) -> None:
+        self._stdin_stop.set()
+        if self._stdin_thread:
+            self._stdin_thread.join(timeout=0.3)
+            self._stdin_thread = None
+
+    def _read_ctrl_o(self) -> None:
+        try:
+            fd = sys.stdin.fileno()
+        except (AttributeError, OSError, ValueError):
+            return
+
+        old_attrs: list[Any] | None = None
+        termios_mod: Any | None = None
+        try:
+            import termios
+            import tty
+        except ImportError:
+            termios_mod = None
+        else:
+            termios_mod = termios
+            try:
+                old_attrs = termios.tcgetattr(fd)
+                tty.setcbreak(fd)
+                attrs = termios.tcgetattr(fd)
+                if hasattr(termios, "IEXTEN"):
+                    attrs[3] &= ~termios.IEXTEN
+                    termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
+            except (OSError, termios.error):
+                if old_attrs is not None:
+                    with contextlib.suppress(OSError, termios.error):
+                        termios.tcsetattr(fd, termios.TCSADRAIN, old_attrs)
+                old_attrs = None
+        try:
+            while not self._stdin_stop.is_set() and self._activity:
+                try:
+                    readable, _, _ = select.select([fd], [], [], 0.05)
+                except (OSError, ValueError):
+                    break
+                if not readable:
+                    continue
+                try:
+                    data = os.read(fd, 1)
+                except OSError:
+                    break
+                if data == b"\x0f":
+                    self._toggle_thinking_collapse()
+        finally:
+            if old_attrs is not None and termios_mod is not None:
+                with contextlib.suppress(OSError, termios_mod.error):
+                    termios_mod.tcsetattr(fd, termios_mod.TCSADRAIN, old_attrs)
+
+    def _toggle_thinking_collapse(self) -> None:
+        if not self._tty:
+            return
+        with self._render_lock:
+            region = self._thinking_region
+            if not region:
+                return
+            if region.is_collapsed:
+                self._expand_thinking_region_locked(region)
+            else:
+                self._collapse_thinking_region_locked(region, still_running=not region.ended)
             self._out.flush()
+
+    def _collapse_thinking_region_locked(
+        self, region: _ThinkingRegion, *, still_running: bool
+    ) -> None:
+        self._erase_thinking_visible_locked(region)
+        header = self._thinking_header(region, still_running=still_running)
+        self._out.write(header)
+        region.visible_lines = [header]
+        region.is_collapsed = True
+
+    def _expand_thinking_region_locked(self, region: _ThinkingRegion) -> None:
+        self._erase_thinking_visible_locked(region)
+        for line in region.items:
+            self._out.write(line)
+        region.visible_lines = list(region.items)
+        region.is_collapsed = False
+
+    def _erase_thinking_visible_locked(self, region: _ThinkingRegion) -> None:
+        rows = self._thinking_visual_rows(region.visible_lines)
+        self._out.write("\r\033[2K")
+        if rows <= 0:
+            return
+        self._out.write(f"\033[{rows}A")
+        for idx in range(rows):
+            self._out.write("\r\033[2K")
+            if idx < rows - 1:
+                self._out.write("\033[1B")
+        if rows > 1:
+            self._out.write(f"\033[{rows - 1}A")
+
+    def _thinking_header(self, region: _ThinkingRegion, *, still_running: bool) -> str:
+        elapsed = time.monotonic() - region.start_ts
+        suffix = " \u2026 (still running)" if still_running else ""
+        return (
+            f"  \033[90m\u2726 Thought for {_fmt_elapsed(elapsed)} \u00b7 "
+            f"{len(region.items)} items{suffix}\033[0m\n"
+        )
+
+    def _thinking_visual_rows(self, lines: list[str]) -> int:
+        width = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
+        rows = 0
+        for line in lines:
+            plain = _ANSI_ESCAPE.sub("", line).rstrip("\n")
+            rows += max(1, (len(plain) + width - 1) // width)
+        return rows
 
     def _suppress_all_spinners(self) -> None:
         """Stop thinking + tool spinners, clear line for new content."""
