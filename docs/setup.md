@@ -222,7 +222,6 @@ grep "Slack poller seeded" /tmp/geode-serve.log
 | `/context` | `/ctx` | Context tiers display |
 | `/schedule` | `/sched` | Scheduler management |
 | `/trigger` | | Event trigger management |
-| `/auth` | | Auth profile management |
 | `/tasks` | `/t` | Task list |
 | `/clear` | | Clear conversation |
 | `/compact` | | Compact context |
