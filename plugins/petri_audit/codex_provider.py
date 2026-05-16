@@ -58,9 +58,60 @@ from typing import Any
 logger = getLogger(__name__)
 
 __all__ = [
+    "get_codex_oauth_metadata",
     "is_codex_oauth_available",
     "register",
 ]
+
+
+def get_codex_oauth_metadata() -> dict[str, Any] | None:
+    """Return the Codex OAuth token's plan + account info verbatim.
+
+    The Codex access token is a JWT whose ``https://api.openai.com/auth``
+    claim carries the user's ``chatgpt_plan_type`` (e.g. ``"plus"``,
+    ``"prolite"``, ``"team"`` — whatever ChatGPT issues), the
+    ``chatgpt_account_id``, and the token's ``exp`` timestamp. The
+    ``/auth`` picker UI surfaces these dynamically so the label
+    matches whatever subscription the user is actually logged into —
+    no plan enumeration is hardcoded.
+
+    Returns ``None`` when:
+
+    - no Codex OAuth token is reachable (``_resolve_codex_token``
+      empty)
+    - the token is not a valid JWT (parts != 3)
+    - the JWT payload cannot be decoded
+    """
+    import base64
+    import json
+
+    try:
+        from core.llm.providers.codex import _resolve_codex_token
+    except ImportError:
+        return None
+    try:
+        token = _resolve_codex_token()
+    except Exception:
+        return None
+    if not token:
+        return None
+    parts = token.split(".")
+    if len(parts) < 2:
+        return None
+    try:
+        padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
+        return None
+    auth_claim = payload.get("https://api.openai.com/auth", {})
+    if not isinstance(auth_claim, dict):
+        auth_claim = {}
+    return {
+        "plan_type": auth_claim.get("chatgpt_plan_type"),
+        "account_id": auth_claim.get("chatgpt_account_id"),
+        "user_id": auth_claim.get("chatgpt_user_id"),
+        "expires_at": payload.get("exp"),
+    }
 
 
 def is_codex_oauth_available() -> bool:

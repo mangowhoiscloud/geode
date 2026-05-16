@@ -35,11 +35,27 @@ def _auth_login_status() -> None:
     # -- Check current status --
     providers: list[dict[str, str | bool]] = []
 
-    # Anthropic — OAuth disabled (ToS violation since 2026-01-09)
-    _pkg.console.print(
-        "  [muted]—[/muted] Anthropic  [muted]OAuth disabled (ToS — API key only)[/muted]"
-    )
-    providers.append({"name": "Anthropic", "cli": "claude", "ok": True})  # skip login prompt
+    # Anthropic — Claude subscription OAuth path
+    # (Policy retracted 2026-05-17: see PR #1202 + #B for the third-party
+    # OAuth path verification; module docstring in
+    # ``plugins.petri_audit.claude_code_provider`` carries the ToS
+    # gray-area notice.)
+    anthropic_ok = False
+    try:
+        from plugins.petri_audit.claude_code_provider import get_claude_oauth_metadata
+
+        anthropic_meta = get_claude_oauth_metadata()
+        if anthropic_meta:
+            plan = anthropic_meta.get("subscription_type") or "(plan: unknown)"
+            tier = anthropic_meta.get("rate_limit_tier")
+            tier_label = f" · {tier}" if tier else ""
+            _pkg.console.print(f"  [success]✓[/success] Anthropic  Claude {plan} OAuth{tier_label}")
+            anthropic_ok = True
+    except Exception:  # noqa: S110
+        pass
+    if not anthropic_ok:
+        _pkg.console.print("  [error]✗[/error] Anthropic  [muted]not logged in[/muted]")
+    providers.append({"name": "Anthropic", "cli": "claude", "ok": anthropic_ok})
 
     # OpenAI
     codex_ok = False
@@ -129,7 +145,31 @@ def _sync_oauth_profile_after_login(cli_name: str) -> None:
     store = _pkg._get_profile_store()
 
     if cli_name == "claude":
-        # Anthropic OAuth disabled — ToS prohibits third-party use
+        # Anthropic OAuth — policy retracted 2026-05-17 (see PR #1202 +
+        # plugins.petri_audit.claude_code_provider module docstring).
+        # We re-read the keychain blob via the same path the provider
+        # uses, so the ProfileStore stays consistent with what
+        # ``ClaudeOAuthAPI`` would resolve at audit time.
+        from plugins.petri_audit.claude_code_provider import (
+            get_claude_oauth_metadata,
+            resolve_claude_oauth_token,
+        )
+
+        token = resolve_claude_oauth_token()
+        if not token:
+            return
+        meta = get_claude_oauth_metadata() or {}
+        expires = meta.get("expires_at")
+        expires_seconds = float(expires) / 1000.0 if isinstance(expires, int | float) else 0.0
+        profile = AuthProfile(
+            name="anthropic:claude-code",
+            provider="anthropic",
+            credential_type=CredentialType.OAUTH,
+            key=token,
+            expires_at=expires_seconds,
+            managed_by="claude-code",
+        )
+        store.add(profile)
         return
 
     if cli_name == "codex":
@@ -236,7 +276,120 @@ def cmd_auth(args: str) -> None:
         _pkg.console.print()
         return
 
-    _pkg.console.print("  [warning]Usage: /auth [login|add|remove <name>][/warning]")
+    if arg.startswith("set"):
+        set_args = arg[3:].strip()
+        _cmd_auth_set(set_args)
+        return
+
+    _pkg.console.print(
+        "  [warning]Usage: /auth [login|add|remove <name>|set <provider> <source>][/warning]"
+    )
+    _pkg.console.print()
+
+
+_VALID_CREDENTIAL_SOURCES: tuple[str, ...] = ("auto", "oauth", "api_key", "none")
+_VALID_CREDENTIAL_PROVIDERS: tuple[str, ...] = ("anthropic", "openai")
+
+
+def _format_credential_source_label(provider: str, source: str) -> str:
+    """Human-readable label for the picker — pulls live subscription
+    info from the credential blob rather than baking plan names in."""
+    import os
+
+    if source == "auto":
+        return "auto-detect from env / keychain"
+    if source == "none":
+        return "disabled"
+    if source == "api_key":
+        env_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+        suffix = "(set)" if os.environ.get(env_var) else "(env not set)"
+        return f"{env_var} {suffix}"
+    if source == "oauth":
+        if provider == "anthropic":
+            try:
+                from plugins.petri_audit.claude_code_provider import get_claude_oauth_metadata
+
+                meta = get_claude_oauth_metadata()
+            except ImportError:
+                return "Claude subscription (audit extra not installed)"
+            if meta is None:
+                return "(no Claude credentials in keychain)"
+            plan = meta.get("subscription_type") or "unknown plan"
+            tier = meta.get("rate_limit_tier")
+            tier_label = f" · {tier}" if tier else ""
+            return f"Claude {plan}{tier_label}"
+        try:
+            from plugins.petri_audit.codex_provider import get_codex_oauth_metadata
+
+            meta = get_codex_oauth_metadata()
+        except ImportError:
+            return "ChatGPT subscription (audit extra not installed)"
+        if meta is None:
+            return "(no Codex auth.json detected)"
+        plan = meta.get("plan_type") or "unknown plan"
+        return f"ChatGPT {plan}"
+    return source
+
+
+def _persist_credential_source(provider: str, source: str) -> None:
+    """Persist the source choice — settings + .env + config.toml."""
+    from core.cli import commands as _pkg
+    from core.config import settings
+    from core.utils.env_io import upsert_config_toml
+
+    field = "anthropic_credential_source" if provider == "anthropic" else "openai_credential_source"
+    env_var = (
+        "GEODE_ANTHROPIC_CREDENTIAL_SOURCE"
+        if provider == "anthropic"
+        else "GEODE_OPENAI_CREDENTIAL_SOURCE"
+    )
+    try:
+        object.__setattr__(settings, field, source)
+    except Exception:
+        log.debug("auth: settings.%s setattr failed", field, exc_info=True)
+    _pkg._upsert_env(env_var, source)
+    upsert_config_toml("llm", field, source)
+
+
+def _cmd_auth_set(args: str) -> None:
+    """``/auth set <provider> <source>`` — choose the credential source.
+
+    Available providers: ``anthropic`` / ``openai``.
+    Available sources:   ``auto`` (default) / ``oauth`` (subscription) /
+                         ``api_key`` (PAYG env) / ``none`` (disabled).
+    """
+    from core.cli import commands as _pkg
+
+    parts = args.split()
+    if len(parts) != 2:
+        _pkg.console.print("  [warning]Usage: /auth set <provider> <source>[/warning]")
+        _pkg.console.print(
+            f"  [muted]providers: {', '.join(_VALID_CREDENTIAL_PROVIDERS)}   "
+            f"sources: {', '.join(_VALID_CREDENTIAL_SOURCES)}[/muted]"
+        )
+        _pkg.console.print()
+        return
+    provider, source = parts[0].lower(), parts[1].lower()
+    if provider not in _VALID_CREDENTIAL_PROVIDERS:
+        _pkg.console.print(
+            f"  [warning]unknown provider: {provider} "
+            f"(use one of {', '.join(_VALID_CREDENTIAL_PROVIDERS)})[/warning]"
+        )
+        _pkg.console.print()
+        return
+    if source not in _VALID_CREDENTIAL_SOURCES:
+        _pkg.console.print(
+            f"  [warning]unknown source: {source} "
+            f"(use one of {', '.join(_VALID_CREDENTIAL_SOURCES)})[/warning]"
+        )
+        _pkg.console.print()
+        return
+    _persist_credential_source(provider, source)
+    label = _format_credential_source_label(provider, source)
+    _pkg.console.print(
+        f"  [success]✓[/success] {provider} credential source → "
+        f"[bold]{source}[/bold]  [muted]({label})[/muted]"
+    )
     _pkg.console.print()
 
 
