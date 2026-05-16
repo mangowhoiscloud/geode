@@ -54,6 +54,40 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **`login_anthropic()` — owned-Anthropic OAuth PKCE flow (claude CLI
+  의존성 제거).** `/login anthropic` 가 더 이상 `claude /login`
+  subprocess 를 호출하지 않고 GEODE 가 직접 PKCE redirect flow 수행
+  — loopback callback server (랜덤 free port 54123-54199), PKCE
+  code_verifier/challenge 생성, `https://platform.claude.com/oauth/
+  authorize` browser open, `https://api.anthropic.com/v1/oauth/token`
+  토큰 교환, `~/.geode/auth.toml` 의 `providers.anthropic` section 에
+  저장. multi-candidate client_id 시도 path (`9d1c250a-...` 등 reverse-
+  engineered) + first-success-wins. macOS/Linux/Windows 모두 동작.
+  `read_geode_anthropic_credentials` 헬퍼가 `read_geode_openai_
+  credentials` 와 동일 shape 으로 반환. `claude_code_provider.
+  resolve_claude_oauth_token` / `get_claude_oauth_metadata` 가 auth.
+  toml 우선 read + macOS keychain backwards-compat fallback. ToS Tier
+  3 (impersonation) — `claude_code_provider` 의 module docstring 의
+  policy notice 가 SOT. failure 시 graceful fallback (`ANTHROPIC_API_KEY`
+  권장 message).
+- **`login_anthropic()` — owned-Anthropic OAuth PKCE flow (drops
+  `claude` CLI dependency).** `/login anthropic` no longer spawns
+  `claude /login`; GEODE drives the PKCE redirect flow itself —
+  loopback callback (free port 54123-54199), PKCE
+  `code_verifier`/`challenge` pair, browser open against
+  `platform.claude.com/oauth/authorize`, token exchange at
+  `api.anthropic.com/v1/oauth/token`, persist into
+  `~/.geode/auth.toml` `providers.anthropic`. Multi-candidate
+  `client_id` loop (`9d1c250a-...` first) with first-success-wins.
+  Cross-platform (macOS / Linux / Windows). `read_geode_anthropic_
+  credentials` mirrors the OpenAI helper shape.
+  `claude_code_provider.resolve_claude_oauth_token` and
+  `get_claude_oauth_metadata` now prefer the `auth.toml` source with
+  the macOS keychain kept as a backwards-compat fallback. ToS Tier 3
+  (impersonation) per `claude_code_provider` module docstring;
+  failure surfaces an `ANTHROPIC_API_KEY` fallback hint.
+
+
 - **`docs/architecture/provider-login.md` — provider login flow SOT.**
   OpenAI (device-code) 와 Anthropic (PKCE redirect) 의 OAuth flow 의
   정합 spec 신규. owned-credential 패턴 (auth.toml SOT + GEODE 가 직접

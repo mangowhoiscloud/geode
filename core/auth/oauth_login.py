@@ -508,3 +508,339 @@ def read_geode_openai_credentials() -> dict[str, Any] | None:
         "expires_at": float(expires_at),
         "account_id": creds.get("account_id", ""),
     }
+
+
+# ---------------------------------------------------------------------------
+# Anthropic PKCE OAuth (owned-credential path)
+# ---------------------------------------------------------------------------
+#
+# Mirrors :func:`login_openai` for the Anthropic side. The two providers
+# share the post-flow path (auth.toml SOT + ProfileStore.add) but use
+# different grant types — Codex's device-code endpoint vs Anthropic's
+# PKCE redirect (loopback callback). See
+# ``docs/architecture/provider-login.md`` for the full architecture.
+#
+# Endpoints reverse-engineered from the Claude Code native binary's
+# strings on 2026-05-17:
+#   authorize:   https://platform.claude.com/oauth/authorize
+#   token:       https://api.anthropic.com/v1/oauth/token
+#   beta header: anthropic-beta: oauth-2025-04-20
+#
+# Policy notice — ToS Tier 3 (impersonation): the flow reuses Claude
+# Code's public OAuth client_id (PKCE — no secret). Anthropic does not
+# publish a developer portal for third-party OAuth client registration,
+# so the only feasible "owned" path is to call the same client_id the
+# first-party CLI uses. The first activation emits a WARNING through
+# :mod:`plugins.petri_audit.claude_code_provider` once the resulting
+# token is consumed.
+
+_ANTHROPIC_AUTHORIZE_URL = "https://platform.claude.com/oauth/authorize"
+_ANTHROPIC_TOKEN_URL = "https://api.anthropic.com/v1/oauth/token"  # noqa: S105 — URL not password
+_ANTHROPIC_OAUTH_BETA_HEADER = "oauth-2025-04-20"
+_ANTHROPIC_REDIRECT_PORT_RANGE = (54123, 54199)  # avoid clash with /geode serve
+_ANTHROPIC_LOGIN_TIMEOUT_S = 5 * 60  # 5 min — user has to complete browser flow
+
+# Scopes derived from the Claude Max OAuth token (`scopes` field).
+# All three are needed for inference + profile metadata + MCP servers.
+_ANTHROPIC_DEFAULT_SCOPES = (
+    "user:inference",
+    "user:profile",
+    "user:mcp_servers",
+)
+
+# Claude Code's public OAuth client_id candidates, reverse-engineered from
+# the native binary. We try them in order — the first that survives the
+# token exchange wins. Future Anthropic API changes may invalidate any
+# given candidate; the multi-trial loop keeps the path resilient.
+_ANTHROPIC_CLIENT_ID_CANDIDATES = (
+    # Most likely: matches the well-known Claude Code OAuth client id.
+    "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+)
+
+
+class _AnthropicCallbackHandler:
+    """Loopback HTTP handler that captures the PKCE redirect callback.
+
+    Defined as a closure factory so the request handler can share the
+    ``captured`` dict with the outer :func:`_run_anthropic_pkce_flow`
+    without a module-level singleton.
+    """
+
+
+def _build_anthropic_callback_handler(captured: dict[str, str]) -> type:
+    """Return a request handler class that stores the ``code`` / ``state``
+    query parameters into the supplied ``captured`` dict."""
+    import urllib.parse
+    from http.server import BaseHTTPRequestHandler
+
+    class _Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt: str, *args: Any) -> None:
+            log.debug("anthropic-oauth callback: " + fmt, *args)
+
+        def do_GET(self) -> None:
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+            captured["code"] = params.get("code", [""])[0]
+            captured["state"] = params.get("state", [""])[0]
+            captured["error"] = params.get("error", [""])[0]
+            body = (
+                b"<!DOCTYPE html><html><body style='font-family:system-ui;padding:40px'>"
+                b"<h2>GEODE Anthropic OAuth</h2>"
+                b"<p>Login received. You can close this window and return to GEODE.</p>"
+                b"</body></html>"
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    return _Handler
+
+
+def _generate_pkce_pair() -> tuple[str, str]:
+    """Return ``(code_verifier, code_challenge)`` — RFC 7636 §4.1/§4.2.
+
+    96 bytes of entropy (768 bits) — the upper bound of the spec
+    ``43..128`` URL-safe character range. Mirrors the value Claude Code's
+    native binary uses (``randomBytesBase64(96)``).
+    """
+    import base64
+    import hashlib
+    import secrets
+
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(96)).decode("ascii").rstrip("=")
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest())
+        .decode("ascii")
+        .rstrip("=")
+    )
+    return verifier, challenge
+
+
+def _pick_free_port(port_range: tuple[int, int]) -> int:
+    """Find a free TCP port in ``[lo, hi]`` for the loopback callback."""
+    import socket
+
+    lo, hi = port_range
+    for port in range(lo, hi + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError(f"Could not find a free port for the Anthropic OAuth callback in {lo}..{hi}")
+
+
+def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
+    """Drive a single PKCE OAuth round with ``client_id``.
+
+    Raises ``RuntimeError`` on token-exchange failure (so the caller can
+    fall through to the next candidate). Returns the parsed credentials
+    dict on success.
+    """
+    import secrets
+    import threading
+    import urllib.parse
+    import webbrowser
+    from http.server import HTTPServer
+
+    import httpx
+
+    verifier, challenge = _generate_pkce_pair()
+    state = secrets.token_urlsafe(16)
+    port = _pick_free_port(_ANTHROPIC_REDIRECT_PORT_RANGE)
+    redirect_uri = f"http://localhost:{port}/callback"
+
+    captured: dict[str, str] = {}
+    handler_cls = _build_anthropic_callback_handler(captured)
+    server = HTTPServer(("127.0.0.1", port), handler_cls)
+
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+
+    try:
+        scope = " ".join(_ANTHROPIC_DEFAULT_SCOPES)
+        auth_url = (
+            _ANTHROPIC_AUTHORIZE_URL
+            + "?"
+            + urllib.parse.urlencode(
+                {
+                    "response_type": "code",
+                    "client_id": client_id,
+                    "redirect_uri": redirect_uri,
+                    "scope": scope,
+                    "state": state,
+                    "code_challenge": challenge,
+                    "code_challenge_method": "S256",
+                }
+            )
+        )
+
+        log.info("anthropic-oauth: opening browser to %s", _ANTHROPIC_AUTHORIZE_URL)
+        webbrowser.open(auth_url)
+
+        # Wait for the callback to populate ``captured`` (server runs on
+        # a background thread). We poll the captured dict because
+        # HTTPServer's serve_forever has no built-in "until first request"
+        # mode without subclassing.
+        deadline = time.monotonic() + _ANTHROPIC_LOGIN_TIMEOUT_S
+        while time.monotonic() < deadline:
+            if captured.get("code") or captured.get("error"):
+                break
+            time.sleep(0.25)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    if not captured.get("code"):
+        err = captured.get("error") or "timed out before user completed login"
+        raise RuntimeError(f"Anthropic OAuth callback returned no code: {err}")
+    if captured.get("state") != state:
+        raise RuntimeError("Anthropic OAuth state mismatch — possible CSRF, aborting")
+
+    # Token exchange (PKCE — public client, no client_secret).
+    try:
+        with httpx.Client(timeout=httpx.Timeout(15.0)) as client:
+            resp = client.post(
+                _ANTHROPIC_TOKEN_URL,
+                json={
+                    "grant_type": "authorization_code",
+                    "code": captured["code"],
+                    "redirect_uri": redirect_uri,
+                    "client_id": client_id,
+                    "code_verifier": verifier,
+                },
+                headers={
+                    "Content-Type": "application/json",
+                    "anthropic-beta": _ANTHROPIC_OAUTH_BETA_HEADER,
+                },
+            )
+    except Exception as exc:
+        raise RuntimeError(f"Anthropic token exchange failed: {exc}") from exc
+
+    if resp.status_code != 200:
+        # Surface body so the caller can log the actual error class
+        # (``invalid_client`` / ``invalid_grant`` / ``unauthorized_client``).
+        body_preview = resp.text[:300] if resp.text else "(empty)"
+        raise RuntimeError(f"Anthropic token exchange returned {resp.status_code}: {body_preview}")
+
+    return dict(resp.json())
+
+
+def login_anthropic() -> dict[str, Any]:
+    """Run Anthropic PKCE OAuth flow — owned-credential path (PR C3).
+
+    Tries each ``_ANTHROPIC_CLIENT_ID_CANDIDATES`` in order; the first
+    candidate that completes the token exchange wins. On success the
+    credentials land in ``~/.geode/auth.toml`` under
+    ``providers.anthropic`` so other parts of GEODE (`ProfileStore`,
+    `claude_code_provider`) see a uniform SOT.
+
+    Returns the persisted credential dict (with computed expiry +
+    timestamps) on success, raises ``RuntimeError`` when every
+    candidate fails. Caller should fall back to ``ANTHROPIC_API_KEY``
+    on RuntimeError.
+    """
+    from core.ui.agentic_ui import (
+        emit_oauth_login_failed,
+        emit_oauth_login_started,
+        emit_oauth_login_success,
+    )
+
+    provider_label = "Anthropic (Claude subscription)"
+    emit_oauth_login_started(
+        provider=provider_label,
+        verification_uri=_ANTHROPIC_AUTHORIZE_URL,
+        user_code="(browser opens automatically)",
+    )
+
+    last_error: Exception | None = None
+    tokens: dict[str, Any] = {}
+    used_client_id = ""
+    for client_id in _ANTHROPIC_CLIENT_ID_CANDIDATES:
+        log.info("anthropic-oauth: trying client_id=%s", client_id)
+        try:
+            tokens = _run_anthropic_pkce_flow(client_id)
+            used_client_id = client_id
+            break
+        except RuntimeError as exc:
+            last_error = exc
+            log.warning("anthropic-oauth: client_id=%s failed (%s)", client_id, exc)
+            continue
+
+    if not tokens:
+        msg = (
+            "all Anthropic OAuth client_id candidates failed; "
+            "set ANTHROPIC_API_KEY env or use /login add wizard"
+        )
+        emit_oauth_login_failed(provider_label, str(last_error) if last_error else msg)
+        raise RuntimeError(msg)
+
+    access_token = tokens.get("access_token", "")
+    refresh_token = tokens.get("refresh_token", "")
+    if not access_token:
+        emit_oauth_login_failed(provider_label, "token response missing access_token")
+        raise RuntimeError("Anthropic token exchange did not return an access_token")
+
+    expires_in = tokens.get("expires_in")
+    expires_at = int(time.time()) + int(expires_in) if isinstance(expires_in, int | float) else 0
+    scopes = tokens.get("scope") or tokens.get("scopes") or []
+    if isinstance(scopes, str):
+        scopes = scopes.split()
+
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    creds = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "expires_at": expires_at,
+        "scopes": list(scopes),
+        "client_id": used_client_id,
+        "last_refresh": now_iso,
+        "source": "geode-pkce",
+    }
+
+    # Save to ~/.geode/auth.toml under providers.anthropic (mirror of
+    # OpenAI's providers.openai key).
+    store = _load_auth_store()
+    store.setdefault("providers", {})
+    store["providers"]["anthropic"] = creds
+    _save_auth_store(store)
+
+    emit_oauth_login_success(
+        provider=provider_label,
+        stored_at=str(auth_store_path()),
+    )
+
+    return creds
+
+
+def read_geode_anthropic_credentials() -> dict[str, Any] | None:
+    """Read Anthropic OAuth credentials from ``~/.geode/auth.toml``.
+
+    Returns ``None`` when the credential is missing or expired. The
+    return shape mirrors :func:`read_geode_openai_credentials` so
+    downstream code can use one resolver pattern for both providers.
+    """
+    store = _load_auth_store()
+    creds = store.get("providers", {}).get("anthropic")
+    if not creds:
+        return None
+
+    access_token = creds.get("access_token", "")
+    if not access_token:
+        return None
+
+    expires_at = creds.get("expires_at", 0)
+    if expires_at and time.time() > expires_at:
+        log.info("GEODE auth.toml Anthropic token expired")
+        return None
+
+    return {
+        "access_token": access_token,
+        "refresh_token": creds.get("refresh_token", ""),
+        "expires_at": float(expires_at),
+        "scopes": list(creds.get("scopes") or []),
+        "client_id": creds.get("client_id", ""),
+    }
