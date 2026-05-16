@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.98.0] — 2026-05-17
+
 ### Changed
 
 - **`/login <provider>` — provider 만 parameter 로 받는 OAuth picker
