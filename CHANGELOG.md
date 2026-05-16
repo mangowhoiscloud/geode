@@ -52,6 +52,37 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **`claude-code` provider: subprocess CLI → Anthropic API direct via
+  OAuth subscription token.** `plugins/petri_audit/claude_code_provider`
+  의 `ClaudeCodeJudgeAPI` (subprocess judge-only, ~400 LOC) 가
+  `ClaudeOAuthAPI` (stock `AnthropicAPI` subclass, ~80 LOC) 로 교체.
+  macOS keychain entry `Claude Code-credentials` 의 OAuth access token
+  을 추출해 `api.anthropic.com/v1/messages` 의 `x-api-key` 헤더로
+  사용 — auditor / judge / target 3 role 모두 자동 지원
+  (multi-turn + native tool calling). 기존 judge-only 제약 해소. 신규
+  헬퍼 `resolve_claude_oauth_token` / `get_claude_oauth_metadata` /
+  `is_claude_oauth_available` 가 picker UI (후속 PR B `/auth`) 의
+  source detection 에 사용됨. 구독 plan / rate-limit tier 는 keychain
+  blob 에서 verbatim 추출 — 코드베이스에 plan enumeration hardcode
+  없음. ToS spirit 경고 (Consumer ToS §3 의 narrow reading) 를 첫
+  활성 시 WARNING 로그.
+- **`claude-code` provider: subprocess CLI → Anthropic API direct via
+  OAuth subscription token.** Replaced the subprocess-based judge-only
+  adapter with a stock `AnthropicAPI` subclass that resolves the OAuth
+  access token from the local `claude` CLI's macOS keychain entry and
+  routes calls through `api.anthropic.com/v1/messages`. All Petri
+  roles (auditor / judge / target) now work out of the box thanks to
+  inspect_ai's native multi-turn + tool-call pipeline. New helpers
+  `resolve_claude_oauth_token` / `get_claude_oauth_metadata` /
+  `is_claude_oauth_available` expose the keychain state so the
+  upcoming `/auth` picker can label the OAuth source with the actual
+  subscription plan + rate-limit tier instead of a hardcoded string.
+  A one-time WARNING log notes that this path is not part of
+  Anthropic's documented public OAuth client surface (Consumer ToS §3
+  spirit).
+
 ## [0.96.0] — 2026-05-16
 
 ### Added

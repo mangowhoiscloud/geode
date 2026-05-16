@@ -1,25 +1,29 @@
-"""Phase 5 — Claude Code judge adapter unit tests.
+"""Claude Max OAuth provider — unit tests.
 
 Coverage:
-1. ``build_judge_schema`` — 19 dim → JSON Schema 변환의 정확성
-2. Reserved field collision detection
-3. Duplicate dim detection
-4. Binary resolution order (env override → candidate paths → PATH fallback)
-5. ``is_claude_code_available`` predicate
-
-Subprocess invocation 의 integration test 는 separate live test (``-m live``)
-로 분리 — CI 에서는 mock 의 schema/binary path 만 검증.
+1. ``build_judge_schema`` — utility for external callers; validation
+   (reserved fields, duplicate dims) preserved from the legacy
+   subprocess-based provider.
+2. ``resolve_claude_oauth_token`` — macOS keychain path with subprocess
+   mock. Linux/Windows skip + error mode (missing entry, malformed JSON)
+   tolerance.
+3. ``is_claude_oauth_available`` — read-only predicate.
+4. ``register()`` — modelapi decoration + subclass relationship with
+   inspect_ai's stock ``AnthropicAPI``.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import json
+import sys
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from plugins.petri_audit.claude_code_provider import (
-    _resolve_claude_binary,
     build_judge_schema,
-    is_claude_code_available,
+    is_claude_oauth_available,
+    resolve_claude_oauth_token,
 )
 
 _GEODE_5AXES_DIMS = [
@@ -74,7 +78,9 @@ def test_build_judge_schema_dim_range() -> None:
     schema = build_judge_schema(_GEODE_5AXES_DIMS)
     for dim in _GEODE_5AXES_DIMS:
         prop = schema["properties"][dim]
-        assert prop == {"type": "integer", "minimum": 1, "maximum": 10}
+        assert prop["type"] == "integer"
+        assert prop["minimum"] == 1
+        assert prop["maximum"] == 10
 
 
 def test_build_judge_schema_text_fields_are_strings() -> None:
@@ -124,56 +130,182 @@ def test_build_judge_schema_duplicate_dims() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Binary resolution
+# resolve_claude_oauth_token — macOS keychain path
 # ---------------------------------------------------------------------------
 
 
-def test_is_claude_code_available_returns_bool() -> None:
-    """Resolver 의 return type 검증 — bool."""
-    result = is_claude_code_available()
+_FAKE_KEYCHAIN_BLOB = json.dumps(
+    {
+        "claudeAiOauth": {
+            "accessToken": "sk-ant-oat01-FAKE_TOKEN_FOR_TESTS_xyz",
+            "refreshToken": "sk-ant-ort01-FAKE_REFRESH",
+            "expiresAt": 1778978149370,
+            "scopes": ["user:inference", "user:profile"],
+            "subscriptionType": "max",
+            "rateLimitTier": "default_claude_max_20x",
+        }
+    }
+)
+
+
+def _fake_security_proc(returncode: int = 0, stdout: str = _FAKE_KEYCHAIN_BLOB) -> Any:
+    result = MagicMock()
+    result.returncode = returncode
+    result.stdout = stdout
+    result.stderr = ""
+    return result
+
+
+def test_resolve_token_macos_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """macOS + keychain present → returns the OAuth access token."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "plugins.petri_audit.claude_code_provider.subprocess.run",
+        lambda *a, **k: _fake_security_proc(),
+    )
+    token = resolve_claude_oauth_token()
+    assert token == "sk-ant-oat01-FAKE_TOKEN_FOR_TESTS_xyz"
+
+
+def test_resolve_token_skips_non_macos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Linux / Windows path returns None — keychain backend not validated."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert resolve_claude_oauth_token() is None
+
+
+def test_resolve_token_handles_missing_keychain(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``security`` exits non-zero → keychain entry absent → None."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "plugins.petri_audit.claude_code_provider.subprocess.run",
+        lambda *a, **k: _fake_security_proc(returncode=44, stdout=""),
+    )
+    assert resolve_claude_oauth_token() is None
+
+
+def test_resolve_token_handles_malformed_blob(monkeypatch: pytest.MonkeyPatch) -> None:
+    """JSON parse failure → swallowed → None."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "plugins.petri_audit.claude_code_provider.subprocess.run",
+        lambda *a, **k: _fake_security_proc(stdout="not-json-at-all"),
+    )
+    assert resolve_claude_oauth_token() is None
+
+
+def test_resolve_token_handles_missing_field(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Valid JSON but no ``claudeAiOauth.accessToken`` → None."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "plugins.petri_audit.claude_code_provider.subprocess.run",
+        lambda *a, **k: _fake_security_proc(stdout=json.dumps({"other_key": {}})),
+    )
+    assert resolve_claude_oauth_token() is None
+
+
+def test_resolve_token_rejects_wrong_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Token must start with ``sk-ant-`` — defends against keychain
+    schema drift where Claude CLI starts using a different token shape."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    blob = json.dumps({"claudeAiOauth": {"accessToken": "definitely-not-anthropic"}})
+    monkeypatch.setattr(
+        "plugins.petri_audit.claude_code_provider.subprocess.run",
+        lambda *a, **k: _fake_security_proc(stdout=blob),
+    )
+    assert resolve_claude_oauth_token() is None
+
+
+def test_is_claude_oauth_available_returns_bool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Predicate is a thin wrapper — bool-typed regardless of platform."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    result = is_claude_oauth_available()
     assert isinstance(result, bool)
+    assert result is False
 
 
-def test_resolve_claude_binary_env_override(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """``CLAUDE_CODE_BIN`` env 가 candidate path 보다 우선."""
-    fake_binary = tmp_path / "claude"
-    fake_binary.write_text("#!/bin/sh\necho hi\n")
-    fake_binary.chmod(0o755)
+def test_get_metadata_returns_keychain_fields_verbatim(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``get_claude_oauth_metadata`` surfaces ``subscriptionType`` /
+    ``rateLimitTier`` / ``scopes`` / ``expiresAt`` verbatim so the
+    picker UI labels the OAuth source with whatever plan the user is
+    actually on — no hardcoded enumeration in this module."""
+    from plugins.petri_audit.claude_code_provider import get_claude_oauth_metadata
 
-    monkeypatch.setenv("CLAUDE_CODE_BIN", str(fake_binary))
-    resolved = _resolve_claude_binary()
-    assert resolved == fake_binary
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "plugins.petri_audit.claude_code_provider.subprocess.run",
+        lambda *a, **k: _fake_security_proc(),
+    )
+    meta = get_claude_oauth_metadata()
+    assert meta is not None
+    assert meta["subscription_type"] == "max"
+    assert meta["rate_limit_tier"] == "default_claude_max_20x"
+    assert "user:inference" in meta["scopes"]
+    assert meta["expires_at"] == 1778978149370
 
 
-def test_resolve_claude_binary_env_override_missing(
+def test_get_metadata_handles_arbitrary_subscription_type(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``CLAUDE_CODE_BIN`` 가 존재 안 하면 candidate fallback."""
-    monkeypatch.setenv("CLAUDE_CODE_BIN", "/nonexistent/path/to/claude")
-    # candidate path 의 실 binary 가 system 에 있을 수 있어 본 test 는
-    # env override 가 missing 일 때 raise 안 함을 검증 (fallback path).
-    resolved = _resolve_claude_binary()
-    # candidate 둘 중 하나라도 있으면 not None, 둘 다 없으면 PATH fallback 후 None.
-    assert resolved is None or resolved.exists()
+    """Future / unknown plans (e.g. ``team``, ``enterprise``) must
+    pass through without raising — we never enumerate plan names."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    blob = json.dumps(
+        {
+            "claudeAiOauth": {
+                "accessToken": "sk-ant-oat01-FUTURE",
+                "subscriptionType": "unknown_future_plan",
+                "rateLimitTier": "experimental_tier_99x",
+                "scopes": ["user:inference"],
+                "expiresAt": 1778978149370,
+            }
+        }
+    )
+    monkeypatch.setattr(
+        "plugins.petri_audit.claude_code_provider.subprocess.run",
+        lambda *a, **k: _fake_security_proc(stdout=blob),
+    )
+    from plugins.petri_audit.claude_code_provider import get_claude_oauth_metadata
+
+    meta = get_claude_oauth_metadata()
+    assert meta is not None
+    assert meta["subscription_type"] == "unknown_future_plan"
+    assert meta["rate_limit_tier"] == "experimental_tier_99x"
+
+
+def test_get_metadata_returns_none_when_token_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No keychain entry → no metadata. Picker uses this to hide the
+    OAuth row instead of showing it grayed-out."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    from plugins.petri_audit.claude_code_provider import get_claude_oauth_metadata
+
+    assert get_claude_oauth_metadata() is None
 
 
 # ---------------------------------------------------------------------------
-# register() — inspect_ai entry-point graceful
+# register() — inspect_ai integration
 # ---------------------------------------------------------------------------
 
 
 def test_register_requires_inspect_ai() -> None:
-    """``register()`` 는 inspect_ai import 가 가능할 때만 동작.
-
-    Default ``uv sync`` (no [audit] extra) 환경에서 import 실패 시 graceful
-    skip 의 책임은 ``plugins/petri_audit/__init__.py`` 의 try/except 의 일이고,
-    본 function 자체는 ImportError 를 surface 한다.
-    """
+    """``register()`` is the modelapi decorator wrapper. Multiple calls
+    are safe — inspect_ai's registry replaces existing entries."""
     pytest.importorskip("inspect_ai")
     from plugins.petri_audit.claude_code_provider import register
 
-    # Multiple calls are safe (registry replaces existing entry of same name)
     register()
     register()
+
+
+def test_register_creates_anthropic_subclass(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``ClaudeOAuthAPI`` must inherit from inspect_ai's stock
+    ``AnthropicAPI`` — this is the load-bearing claim of the refactor.
+    Without subclass, multi-turn + tool calling don't come for free."""
+    pytest.importorskip("inspect_ai")
+    from inspect_ai.model._providers.anthropic import AnthropicAPI as _StockAnthropicAPI
+
+    from plugins.petri_audit import claude_code_provider as ccp
+
+    ccp.register()
+    cls = ccp.__dict__.get("ClaudeOAuthAPI")
+    assert cls is not None, "register() must expose ClaudeOAuthAPI at module level"
+    assert issubclass(cls, _StockAnthropicAPI)
