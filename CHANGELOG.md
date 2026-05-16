@@ -147,6 +147,16 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Fixed
 
+- **CLI streaming Markdown cleanup.** Thin CLI raw `stream` output now tracks
+  plain daemon-console spans that look like assistant Markdown and clears that
+  transient region at turn stop, before the final `result.text` payload is
+  rendered through the existing Markdown + LaTeX renderer. ANSI/Rich stream
+  output and structured agentic events continue to render in place.
+- **CLI 스트리밍 Markdown 정리.** thin CLI 가 daemon-console 의 plain
+  `stream` 중 assistant Markdown 으로 보이는 구간을 추적하고, turn 종료 시
+  최종 `result.text` 를 기존 Markdown + LaTeX renderer 로 다시 그리기 전에
+  해당 임시 raw 구간을 지웁니다. ANSI/Rich stream 출력과 structured
+  agentic event 렌더링은 그대로 유지됩니다.
 - **CLI LaTeX 렌더링 — delimiter-less 매크로 누출 heuristic.** PR
   #1165/#1169 의 wiring 이 `\(...\)` / `$...$` / `\[...\]` 같은 명시적
   delimiter 가 있는 경우만 cover 하여 LLM 이 delimiter 없이 prose 안에
