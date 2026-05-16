@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.95.4] — 2026-05-16
+
 ### Added
 
 - **autoresearch cross-axis regression gate.** `compute_fitness` 가
