@@ -175,9 +175,22 @@ class TestStageAComponent:
         text = "E_i = 1/1 + 10^(R_j - R_i)/400"
         output = _render_through_helper(text)
         assert "Eᵢ" in output
-        assert "Rⱼ" in output
-        assert "Rᵢ" in output
+        assert "10⁽ᴿʲ⁻ᴿⁱ⁾" in output
         assert "R_i" not in output
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("10^2", "10²"),
+            ("10^-3", "10⁻³"),
+            ("10^(R_j - R_i)", "10⁽ᴿʲ⁻ᴿⁱ⁾"),
+            ("10^{R_j - R_i}", "10ᴿʲ⁻ᴿⁱ"),
+        ],
+    )
+    def test_delimiterless_digit_base_superscripts_render(self, text: str, expected: str) -> None:
+        output = _render_through_helper(text)
+        assert expected in output
+        assert "10[" not in output
 
     def test_delimiterless_elo_update_renders_each_subscript(self) -> None:
         text = "R_i' = R_i + K(S_i - E_i)"
@@ -194,8 +207,10 @@ class TestStageAComponent:
         assert "τ_P" not in output
 
     def test_delimiterless_plain_snake_case_stays_text(self) -> None:
-        output = _render_through_helper("snake_case_var")
+        output = _render_through_helper("snake_case_var and 1_000")
         assert "snake_case_var" in output
+        assert "1_000" in output
+        assert "1₀₀₀" not in output
 
     def test_delimiterless_macro_list(self) -> None:
         """Backslash macros from the allow-list render even without

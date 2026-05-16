@@ -52,6 +52,26 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.95.5] — 2026-05-16
+
+### Fixed
+
+- **CLI LaTeX digit-base superscripts + grouped scripts.** delimiter-less
+  수식 detector 가 `10^2`, `10^-3`, `10^(R_j - R_i)` 처럼 숫자 base 를
+  가진 superscript 표현을 inline math 로 승격합니다. `^(...)` /
+  `^{...}` 내부의 nested `_j` 는 바깥 superscript 방향을 따라 `ʲ` 로
+  변환되어 `10⁽ᴿʲ⁻ᴿⁱ⁾` / `10ᴿʲ⁻ᴿⁱ` 로 보이며, braced superscript 의
+  복합 payload 에 bracket fallback 이 잘못 적용되어 `10[...]` 로 깨지는
+  회귀를 막았습니다. `1_000`, `snake_case`, path false positive 는 계속
+  text 로 남습니다.
+- **CLI LaTeX digit-base superscripts + grouped scripts.** The
+  delimiter-less math detector now promotes digit-base superscripts such
+  as `10^2`, `10^-3`, and `10^(R_j - R_i)` to inline math. Nested `_j`
+  markers inside `^(...)` / `^{...}` inherit the outer superscript
+  direction, rendering as `10⁽ᴿʲ⁻ᴿⁱ⁾` / `10ᴿʲ⁻ᴿⁱ`, and complex braced
+  superscripts no longer hit the broken `10[...]` bracket fallback.
+  False positives such as `1_000`, `snake_case`, and paths stay as text.
+
 ## [0.95.4] — 2026-05-16
 
 ### Added
