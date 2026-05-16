@@ -54,6 +54,41 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **autoresearch cross-axis regression gate.** `compute_fitness` 가
+  새 인자 `baseline: FitnessBaseline | None = None` 을 받아 multi-axis
+  monotone 검사를 수행합니다. critical axis (predictive, robustness) 가
+  `baseline - stderr - margin` 아래로 떨어지면 fitness=0.0 으로 strict
+  reject; auxiliary axis (logic, diversity, stability) 의 회귀는
+  `λ × delta²` (default λ=0.5) squared penalty 로 weighted sum 에서
+  차감. `state/baseline.json` 으로 직전 promote audit 의 axes /
+  axes_stderr 를 보관하고 `train.py` 시작 시 자동 로드. `--no-baseline`
+  flag 로 gate 명시 비활성 가능. 기존 single-axis fitness aggregate 가
+  axis 간 trade-off 를 감춰 safety axis 의 회귀를 calibration 개선과
+  교환하던 Goodhart 경로를 차단.
+- **autoresearch cross-axis regression gate.** `compute_fitness` accepts
+  a new `baseline: FitnessBaseline | None = None` argument that enforces
+  per-axis monotone progress. Critical axes (predictive, robustness)
+  trigger a strict reject (fitness = 0.0) when the new score falls below
+  `baseline - stderr - margin`; auxiliary axes (logic, diversity,
+  stability) absorb regressions as a squared penalty
+  (`λ × delta²`, default λ=0.5). `state/baseline.json` carries the
+  parent promote's `axes` + `axes_stderr` between runs and `train.py`
+  loads it automatically (use `--no-baseline` to skip). Closes a
+  Goodhart path where the previous single-scalar weighted sum could
+  promote a hypothesis that traded safety for marginal calibration.
+- **autoresearch results.tsv 9-col schema + per-axis stdout.** TSV
+  schema 가 `commit / fitness / hallucination_mean / status /
+  description` 5 col → `commit / fitness / predictive / robustness /
+  logic / diversity / stability / verdict / description` 9 col 로 확장.
+  `train.py` 도 stdout 에 `^<axis>_score:` 라인 5 개를 추가 emit —
+  agent 가 `grep "^[a-z]*_score:"` 한 번으로 results.tsv 의 axis
+  column 5 개를 채울 수 있음.
+- **autoresearch results.tsv 9-column schema + per-axis stdout.** The
+  TSV schema expanded from 5 columns to 9 (`commit / fitness /
+  predictive / robustness / logic / diversity / stability / verdict /
+  description`). `train.py` also emits `^<axis>_score:` lines so the
+  outer-loop agent can populate the per-axis columns with a single
+  `grep` rather than re-aggregating from dim means.
 - **autoresearch closed-loop fitness extraction.** `geode audit` 이 archive
   된 `.eval` 에서 per-dim mean + stderr 를 집계해 stdout 마지막에 한 줄
   JSON 으로 emit 합니다 (`{"dim_means": ..., "dim_stderr": ...}`). 새 모듈
