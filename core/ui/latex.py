@@ -61,11 +61,118 @@ _TIER2_TOKENS: Final[tuple[str, ...]] = (
 _LATEX_LINEBREAK = re.compile(r"(?<!\\)\\\\(?:\s*\[[^\]]*\])?")
 _LATEX_LINEBREAK_SENTINEL: Final = "<<<GEODE_LATEX_LINEBREAK_4A7D1B>>>"
 _DISPLAY_FRACTION_MACRO = re.compile(r"\\[dt]frac(?=\{)")
+_SUBSCRIPT_MAP: Final[dict[str, str]] = {
+    "0": "₀",
+    "1": "₁",
+    "2": "₂",
+    "3": "₃",
+    "4": "₄",
+    "5": "₅",
+    "6": "₆",
+    "7": "₇",
+    "8": "₈",
+    "9": "₉",
+    "a": "ₐ",
+    "e": "ₑ",
+    "h": "ₕ",
+    "i": "ᵢ",
+    "j": "ⱼ",
+    "k": "ₖ",
+    "l": "ₗ",
+    "m": "ₘ",
+    "n": "ₙ",
+    "o": "ₒ",
+    "p": "ₚ",
+    "r": "ᵣ",
+    "s": "ₛ",
+    "t": "ₜ",
+    "u": "ᵤ",
+    "v": "ᵥ",
+    "x": "ₓ",
+    "+": "₊",
+    "-": "₋",
+    "=": "₌",
+    "(": "₍",
+    ")": "₎",
+}
+_SUPERSCRIPT_MAP: Final[dict[str, str]] = {
+    "0": "⁰",
+    "1": "¹",
+    "2": "²",
+    "3": "³",
+    "4": "⁴",
+    "5": "⁵",
+    "6": "⁶",
+    "7": "⁷",
+    "8": "⁸",
+    "9": "⁹",
+    "a": "ᵃ",
+    "b": "ᵇ",
+    "c": "ᶜ",
+    "d": "ᵈ",
+    "e": "ᵉ",
+    "f": "ᶠ",
+    "g": "ᵍ",
+    "h": "ʰ",
+    "i": "ⁱ",
+    "j": "ʲ",
+    "k": "ᵏ",
+    "l": "ˡ",
+    "m": "ᵐ",
+    "n": "ⁿ",
+    "o": "ᵒ",
+    "p": "ᵖ",
+    "r": "ʳ",
+    "s": "ˢ",
+    "t": "ᵗ",
+    "u": "ᵘ",
+    "v": "ᵛ",
+    "w": "ʷ",
+    "x": "ˣ",
+    "y": "ʸ",
+    "z": "ᶻ",
+    "+": "⁺",
+    "-": "⁻",
+    "=": "⁼",
+    "(": "⁽",
+    ")": "⁾",
+}
+_SCRIPT_CHAR_CLASS: Final = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-="
+_UNICODE_SCRIPT = re.compile(
+    rf"(?P<marker>[_^])(?:\{{(?P<braced>[^{{}}\n]+)\}}|"
+    rf"(?P<parenthesized>\([{re.escape(_SCRIPT_CHAR_CLASS)}]+\))|"
+    rf"(?P<bare>[{re.escape(_SCRIPT_CHAR_CLASS)}]+))"
+)
 
 
 def _has_tier2_construct(src: str) -> bool:
     """True when ``src`` contains a 2D math construct worth pretty-printing."""
     return any(tok in src for tok in _TIER2_TOKENS)
+
+
+def _apply_unicode_scripts(text: str) -> str:
+    """Rewrite fully-supported ``_`` / ``^`` script tokens to Unicode glyphs."""
+    if not text:
+        return text
+    if _LATEX_LINEBREAK_SENTINEL in text:
+        return _LATEX_LINEBREAK_SENTINEL.join(
+            _apply_unicode_scripts(part) for part in text.split(_LATEX_LINEBREAK_SENTINEL)
+        )
+
+    def replace(match: re.Match[str]) -> str:
+        marker = match.group("marker")
+        token = match.group("braced") or match.group("parenthesized") or match.group("bare")
+        if not token:
+            log.debug("Unexpected empty LaTeX script token in %r", match.group(0))
+            return match.group(0)
+
+        script_map = _SUBSCRIPT_MAP if marker == "_" else _SUPERSCRIPT_MAP
+        mapped = [script_map.get(ch) for ch in token]
+        if any(ch is None for ch in mapped):
+            return match.group(0)
+        return "".join(ch for ch in mapped if ch is not None)
+
+    return _UNICODE_SCRIPT.sub(replace, text)
 
 
 def _render_tier1(src: str) -> str:
@@ -92,6 +199,7 @@ def _render_tier1(src: str) -> str:
             src,
         )
         raw: str = LatexNodes2Text().latex_to_text(protected_src).strip()
+        raw = _apply_unicode_scripts(raw)
         lines = [re.sub(r"\s+", " ", part).strip() for part in raw.split(_LATEX_LINEBREAK_SENTINEL)]
         return "\n".join(line for line in lines if line)
     except Exception:
