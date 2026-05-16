@@ -17,7 +17,7 @@
 openai 분기          anthropic 분기        그 외 → warn
   ↓                     ↓
 login_openai()      login_anthropic()
-(device-code)       (PKCE redirect)
+(device-code)       (PKCE + manual-paste)
   ↓                     ↓
   POST /v1/oauth/token (모두)
             ↓
@@ -29,7 +29,7 @@ login_openai()      login_anthropic()
 ```
 
 두 provider 의 차이점은 **OAuth grant type** 만 — OpenAI = device-code,
-Anthropic = PKCE redirect. 그 외 (storage, refresh, client reset) 는
+Anthropic = PKCE + manual-paste. 그 외 (storage, refresh, client reset) 는
 모두 정합.
 
 ## 2. OpenAI flow (device-code grant) — 기존
@@ -46,21 +46,26 @@ Anthropic = PKCE redirect. 그 외 (storage, refresh, client reset) 는
 
 구현: `core/auth/oauth_login.py::login_openai`
 
-## 3. Anthropic flow (PKCE redirect grant) — 신규 (PR C3)
+## 3. Anthropic flow (PKCE + manual-paste) — PR C3 + v0.99.1 fix
+
+PR C3 의 초기 구현은 loopback callback (`http://localhost:54123/callback`)
+을 시도했으나, OAuth client `9d1c250a-…` 에 사전 등록된 redirect URI 는
+서버 측 `https://platform.claude.com/oauth/code/callback` 단 하나 — loopback
+은 authorize 단계에서 거절됨이 v0.99.1 에서 확인됐다. 우회는 불가하므로
+flow 를 Claude Code 의 manual-paste 패턴 1:1 미러로 교체.
 
 | 단계 | 동작 |
 |---|---|
 | 1 | `code_verifier = base64url(secrets.token_bytes(96))` |
 | 2 | `code_challenge = base64url(SHA256(code_verifier))` |
-| 3 | GEODE 가 loopback HTTP server `:3000` 시작 (callback 받기 위해) |
-| 4 | `webbrowser.open("https://platform.claude.com/oauth/authorize?response_type=code&client_id=<CLAUDE_OAUTH_CLIENT_ID>&redirect_uri=http://localhost:3000/callback&code_challenge=<challenge>&code_challenge_method=S256&scope=<space-separated>&state=<random>")` |
-| 5 | 사용자 browser 에서 Anthropic 로그인 + 동의 |
-| 6 | Anthropic 가 `GET http://localhost:3000/callback?code=...&state=...` |
-| 7 | GEODE callback server 가 `code` 수신, browser 에 "로그인 완료" HTML |
-| 8 | `POST https://api.anthropic.com/v1/oauth/token` (`anthropic-beta: oauth-2025-04-20` header) — grant_type=authorization_code, code, redirect_uri, client_id, code_verifier |
-| 9 | response: `access_token` (`sk-ant-oat01-...`), `refresh_token` (`sk-ant-ort01-...`), `expires_in`, `scopes` |
-| 10 | `~/.geode/auth.toml` 의 `[oauth.anthropic-claude-code]` section 에 저장 |
-| 11 | `reset_anthropic_client()` — `inspect_ai` stock `AnthropicAPI` per-request 라 cache 없음. claude-code provider 의 in-process state 만 invalidate |
+| 3 | `webbrowser.open("https://platform.claude.com/oauth/authorize?code=true&response_type=code&client_id=<CLAUDE_OAUTH_CLIENT_ID>&redirect_uri=https://platform.claude.com/oauth/code/callback&code_challenge=<challenge>&code_challenge_method=S256&scope=user:inference+user:profile+user:sessions:claude_code+user:mcp_servers&state=<random>")` |
+| 4 | 사용자 browser 에서 Anthropic 로그인 + 동의 |
+| 5 | Anthropic 가 `/oauth/code/callback` 페이지에서 `code#state` 형식 표시 |
+| 6 | 사용자가 CLI 의 `Paste authorization code:` 프롬프트에 paste (URL, `code#state`, 또는 bare code 모두 허용 — `_parse_pasted_code`) |
+| 7 | GEODE 가 state 검증 + `POST https://api.anthropic.com/v1/oauth/token` (`anthropic-beta: oauth-2025-04-20` header) — grant_type=authorization_code, code, redirect_uri, client_id, code_verifier, state |
+| 8 | response: `access_token` (`sk-ant-oat01-...`), `refresh_token` (`sk-ant-ort01-...`), `expires_in`, `scopes` |
+| 9 | `~/.geode/auth.toml` 의 `[providers.anthropic]` section 에 저장 |
+| 10 | `reset_anthropic_client()` — `inspect_ai` stock `AnthropicAPI` per-request 라 cache 없음. claude-code provider 의 in-process state 만 invalidate |
 
 ### 3.1 OAuth endpoints (Anthropic)
 
