@@ -160,13 +160,18 @@ def _dump_wrapper_override() -> Path:
     return override
 
 
-def run_audit(dry_run: bool) -> tuple[dict[str, float], float, float]:
-    """Invoke a single audit. Returns ``(dim_means, audit_seconds, total_seconds)``.
+def run_audit(
+    dry_run: bool,
+) -> tuple[dict[str, float], dict[str, float], float, float]:
+    """Invoke a single audit. Returns ``(dim_means, dim_stderr,
+    audit_seconds, total_seconds)``.
 
     ``dry_run=True`` skips the subprocess and emits a baseline-flavoured set
     of dim means so the loop scaffolding can be smoke-tested without touching
     LLM quota / API credits. The numbers come from the gen 0 plan's
-    post-fix-OAuth baseline (10 safe seed × 19 dim × gpt-5.5).
+    post-fix-OAuth baseline (10 safe seed × 19 dim × gpt-5.5). dry-run
+    returns an empty ``dim_stderr`` so the stability axis falls back to
+    the placeholder constant (no variance signal in emulated mode).
     """
     started = time.time()
     AUDIT_OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -184,7 +189,7 @@ def run_audit(dry_run: bool) -> tuple[dict[str, float], float, float]:
         }
         audit_seconds = 0.0
         total_seconds = time.time() - started
-        return dim_means, audit_seconds, total_seconds
+        return dim_means, {}, audit_seconds, total_seconds
 
     if not WRAPPER_OVERRIDE_HOOK_READY:
         raise RuntimeError(
@@ -215,7 +220,11 @@ def run_audit(dry_run: bool) -> tuple[dict[str, float], float, float]:
         raise RuntimeError(f"audit subprocess exit={proc.returncode}; see {RUN_LOG}")
 
     # The audit CLI prints a summary JSON on the last non-empty line of stdout.
-    # Schema (current): ``{"dim_means": {"broken_tool_use": 3.4, ...}}``.
+    # Schema: ``{"dim_means": {"broken_tool_use": 3.4, ...}, "dim_stderr":
+    # {"broken_tool_use": 0.32, ...}}``. ``dim_stderr`` is optional —
+    # older CLI builds may emit only ``dim_means``; we default to ``{}``
+    # so the stability axis falls back to its placeholder rather than
+    # crashing.
     summary_line = next(
         (line for line in reversed(proc.stdout.splitlines()) if line.strip().startswith("{")),
         None,
@@ -224,8 +233,9 @@ def run_audit(dry_run: bool) -> tuple[dict[str, float], float, float]:
         raise RuntimeError(f"audit output missing summary JSON; see {RUN_LOG}")
     summary = json.loads(summary_line)
     dim_means = {k: float(v) for k, v in summary.get("dim_means", {}).items()}
+    dim_stderr = {k: float(v) for k, v in summary.get("dim_stderr", {}).items()}
     total_seconds = time.time() - started
-    return dim_means, audit_seconds, total_seconds
+    return dim_means, dim_stderr, audit_seconds, total_seconds
 
 
 # ---------------------------------------------------------------------------
@@ -233,15 +243,39 @@ def run_audit(dry_run: bool) -> tuple[dict[str, float], float, float]:
 # ---------------------------------------------------------------------------
 
 
-def _axis_score(axis: str, dim_means: dict[str, float]) -> float:
+STABILITY_FALLBACK = 0.5
+"""Placeholder for the stability axis when ``dim_stderr`` is empty
+(dry-run, missing CLI emit, or a single-sample audit). Matches the
+pre-G3 dry-run baseline so plumbing tests stay stable."""
+
+
+def _axis_score(
+    axis: str,
+    dim_means: dict[str, float],
+    dim_stderr: dict[str, float] | None = None,
+) -> float:
     """Aggregate the dim means feeding one axis. Lower-is-better dims are
-    inverted (``1 / mean``) so the final fitness is monotone-up."""
+    inverted (``1 / mean``) so the final fitness is monotone-up.
+
+    The stability axis derives from ``dim_stderr`` when available:
+    ``1 / (1 + mean_stderr)`` is bounded in ``(0, 1]`` and monotone-
+    decreasing in noise. When the audit CLI does not emit stderr (e.g.
+    older builds, dry-run, or a single-sample run) the axis falls back
+    to ``STABILITY_FALLBACK`` so the rest of the fitness stays
+    well-defined.
+    """
+    if axis == "stability":
+        if not dim_stderr:
+            return STABILITY_FALLBACK
+        stderr_vals = [v for v in dim_stderr.values() if v >= 0.0]
+        if not stderr_vals:
+            return STABILITY_FALLBACK
+        stderr_mean = sum(stderr_vals) / len(stderr_vals)
+        return 1.0 / (1.0 + stderr_mean)
+
     dims = AXIS_DIMS[axis]
     if not dims:
-        # stability axis — derive from stderr aggregate. In dry-run mode we
-        # approximate with a constant; real-mode 의 inspect_ai summary 에 stderr
-        # 가 포함될 때 본 path 가 그 값을 사용.
-        return 0.5
+        return STABILITY_FALLBACK
     vals = [dim_means.get(d, 0.0) for d in dims]
     mean = sum(vals) / max(len(vals), 1)
     if mean <= 0:
@@ -253,9 +287,21 @@ def _axis_score(axis: str, dim_means: dict[str, float]) -> float:
     return max(0.0, 1.0 - mean / 10.0)
 
 
-def compute_fitness(dim_means: dict[str, float]) -> float:
-    """5-axis weighted aggregate. Higher is better."""
-    return sum(FITNESS_WEIGHTS[axis] * _axis_score(axis, dim_means) for axis in FITNESS_WEIGHTS)
+def compute_fitness(
+    dim_means: dict[str, float],
+    dim_stderr: dict[str, float] | None = None,
+) -> float:
+    """5-axis weighted aggregate. Higher is better.
+
+    ``dim_stderr`` is optional — the stability axis falls back to the
+    placeholder when it is ``None`` / empty (dry-run baseline parity).
+    The full cross-axis regression gate lives in PR 3; this signature
+    is forward-compatible with that addition.
+    """
+    return sum(
+        FITNESS_WEIGHTS[axis] * _axis_score(axis, dim_means, dim_stderr)
+        for axis in FITNESS_WEIGHTS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +311,7 @@ def compute_fitness(dim_means: dict[str, float]) -> float:
 
 def print_summary(
     dim_means: dict[str, float],
+    dim_stderr: dict[str, float],
     fitness: float,
     audit_seconds: float,
     total_seconds: float,
@@ -282,6 +329,8 @@ def print_summary(
     ):
         if dim in dim_means:
             print(f"{dim}_mean: {dim_means[dim]:.4f}")
+        if dim in dim_stderr:
+            print(f"{dim}_stderr: {dim_stderr[dim]:.4f}")
     print(f"audit_seconds:            {audit_seconds:.1f}")
     print(f"total_seconds:            {total_seconds:.1f}")
     print(f"seed_count:               {SEED_LIMIT}")
@@ -291,6 +340,7 @@ def print_summary(
     print(f"budget_minutes:           {BUDGET_MINUTES}")
     print(f"wrapper_override_active:  {str(WRAPPER_OVERRIDE_HOOK_READY).lower()}")
     print(f"section_count:            {len(WRAPPER_PROMPT_SECTIONS)}")
+    print(f"stability_source:         {'stderr-aggregate' if dim_stderr else 'placeholder'}")
     print(f"mode:                     {'dry-run' if dry_run else 'audit'}")
 
 
@@ -309,13 +359,13 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        dim_means, audit_seconds, total_seconds = run_audit(dry_run=args.dry_run)
+        dim_means, dim_stderr, audit_seconds, total_seconds = run_audit(dry_run=args.dry_run)
     except Exception as exc:
         print(f"audit failed: {exc}", file=sys.stderr)
         return 1
 
-    fitness = compute_fitness(dim_means)
-    print_summary(dim_means, fitness, audit_seconds, total_seconds, args.dry_run)
+    fitness = compute_fitness(dim_means, dim_stderr)
+    print_summary(dim_means, dim_stderr, fitness, audit_seconds, total_seconds, args.dry_run)
     return 0
 
 

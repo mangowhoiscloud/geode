@@ -52,6 +52,41 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **autoresearch closed-loop fitness extraction.** `geode audit` 이 archive
+  된 `.eval` 에서 per-dim mean + stderr 를 집계해 stdout 마지막에 한 줄
+  JSON 으로 emit 합니다 (`{"dim_means": ..., "dim_stderr": ...}`). 새 모듈
+  `core.audit.dim_extractor` 가 `inspect_ai.log.read_eval_log` 로 sample
+  scores 를 읽고 ddof=1 stderr 를 계산. `autoresearch/train.py::run_audit`
+  은 4-tuple `(dim_means, dim_stderr, audit_seconds, total_seconds)` 를
+  반환하도록 확장 — outer loop 가 fitness 만 grep 하는 Karpathy 패턴 유지.
+- **autoresearch closed-loop fitness extraction.** `geode audit` now
+  emits a final JSON line `{"dim_means": ..., "dim_stderr": ...}`
+  derived from the archived `.eval` so `autoresearch/train.py` can grep
+  it without re-reading inspect_ai's log format. A new module
+  `core.audit.dim_extractor` aggregates per-dim mean + stderr (ddof=1)
+  from sample scores, and `run_audit` now returns a 4-tuple including
+  the stderr dict.
+
+### Changed
+
+- **autoresearch stability axis derives from stderr.** 5-axis fitness 의
+  stability 항이 placeholder 0.5 대신 `1 / (1 + mean_stderr)` 로 계산됩니다
+  (실제 audit 의 ``dim_stderr`` 가 비어있을 때만 placeholder 로 fallback).
+  bounded (0, 1] + monotone-decreasing 한 값 — 단일 axis 가 fitness 를
+  3.13× 까지 끌어올렸던 old `1 / stderr_mean` 식의 Goodhart 위험을 차단.
+  dry-run baseline 은 placeholder 경로를 그대로 유지 (`fitness=0.535895`
+  변동 없음).
+- **autoresearch stability axis derived from stderr.** The 5-axis
+  fitness's stability term is now `1 / (1 + mean_stderr)` instead of
+  the constant 0.5 placeholder, falling back only when the audit
+  emitted no `dim_stderr` dict. Bounded in (0, 1] and monotone-
+  decreasing — the previous `1 / stderr_mean` formula was unbounded
+  and could swing one axis to 3.13× of all others, a Goodhart risk.
+  The dry-run baseline still uses the placeholder, so the
+  `fitness=0.535895` plumbing contract is unchanged.
+
 ## [0.95.3] — 2026-05-16
 
 ### Fixed
