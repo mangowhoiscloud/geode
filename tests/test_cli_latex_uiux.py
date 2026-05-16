@@ -164,11 +164,38 @@ class TestStageAComponent:
         """Bare-underscore identifiers (`snake_case`, file paths, Python
         variables) must never be promoted to math segments — that would
         mangle ordinary prose and code references."""
-        text = "use `snake_case` for vars and `path/to/file_name.py` for paths"
+        text = "use `snake_case` for vars and `path/to/file_name.py` plus foo/bar/baz.py"
         output = _render_through_helper(text)
         # Markdown code spans + identifier substrings survive.
         assert "snake_case" in output
         assert "file_name" in output
+        assert "foo/bar/baz.py" in output
+
+    def test_delimiterless_division_does_not_hide_subscript_math(self) -> None:
+        text = "E_i = 1/1 + 10^(R_j - R_i)/400"
+        output = _render_through_helper(text)
+        assert "Eᵢ" in output
+        assert "Rⱼ" in output
+        assert "Rᵢ" in output
+        assert "R_i" not in output
+
+    def test_delimiterless_elo_update_renders_each_subscript(self) -> None:
+        text = "R_i' = R_i + K(S_i - E_i)"
+        output = _render_through_helper(text)
+        assert output.count("Rᵢ") == 2
+        assert "Sᵢ" in output
+        assert "Eᵢ" in output
+
+    def test_delimiterless_uppercase_subscript_uses_bracket_presentation(self) -> None:
+        output = _render_through_helper("τ_P = τ_T + τ_A")
+        assert "τ[P]" in output
+        assert "τ[T]" in output
+        assert "τ[A]" in output
+        assert "τ_P" not in output
+
+    def test_delimiterless_plain_snake_case_stays_text(self) -> None:
+        output = _render_through_helper("snake_case_var")
+        assert "snake_case_var" in output
 
     def test_delimiterless_macro_list(self) -> None:
         """Backslash macros from the allow-list render even without
