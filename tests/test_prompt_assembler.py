@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.llm.prompt_assembler import AssembledPrompt, PromptAssembler
+from core.llm.prompt_assembler import (
+    MATH_OUTPUT_FORMATTING_INSTRUCTION,
+    AssembledPrompt,
+    PromptAssembler,
+)
 from core.llm.prompts import _hash_prompt
 from core.llm.skill_registry import SkillDefinition, SkillRegistry
 
@@ -98,12 +102,30 @@ class TestBasicAssembly:
             role_type="game_mechanics",
         )
 
+        expected_system = base_system + "\n\n" + MATH_OUTPUT_FORMATTING_INSTRUCTION
         assert isinstance(result, AssembledPrompt)
-        assert result.system == base_system
+        assert result.system == expected_system
         assert result.user == base_user
         assert result.fragment_count == 0
         assert result.fragments_used == []
-        assert result.total_chars == len(base_system) + len(base_user)
+        assert result.total_chars == len(expected_system) + len(base_user)
+
+    def test_math_formatting_instruction_included_by_default(
+        self, base_system: str, base_user: str, empty_state: dict[str, Any]
+    ) -> None:
+        assembler = PromptAssembler()
+        result = assembler.assemble(
+            base_system=base_system,
+            base_user=base_user,
+            state=empty_state,
+            node="analyst",
+            role_type="game_mechanics",
+        )
+
+        assert "<math_formatting>" in result.system
+        assert "Inline math: wrap with `$...$`" in result.system
+        assert "Display math: put `$$...$$` on its own lines" in result.system
+        assert "$r_t = (P_t - P_{t-1}) / P_{t-1}$" in result.system
 
     def test_no_assembler_fallback(self, empty_state: dict[str, Any]) -> None:
         """Verify state.get('_prompt_assembler') is None returns None (node-level fallback)."""
@@ -337,7 +359,8 @@ class TestHashing:
             role_type="game_mechanics",
         )
 
-        expected_base_hash = _hash_prompt(base_system + base_user)
+        expected_system = base_system + "\n\n" + MATH_OUTPUT_FORMATTING_INSTRUCTION
+        expected_base_hash = _hash_prompt(expected_system + base_user)
         expected_assembled_hash = _hash_prompt(result.system + result.user)
 
         assert result.base_template_hash == expected_base_hash
@@ -606,8 +629,12 @@ class TestWrapperOverrideHook:
             role_type="game_mechanics",
         )
 
-        assert first_result.base_template_hash == _hash_prompt("first mutation" + base_user)
-        assert second_result.base_template_hash == _hash_prompt("second mutation" + base_user)
+        assert first_result.base_template_hash == _hash_prompt(
+            "first mutation\n\n" + MATH_OUTPUT_FORMATTING_INSTRUCTION + base_user
+        )
+        assert second_result.base_template_hash == _hash_prompt(
+            "second mutation\n\n" + MATH_OUTPUT_FORMATTING_INSTRUCTION + base_user
+        )
         assert first_result.base_template_hash != second_result.base_template_hash
         assert first_result.assembled_hash != second_result.assembled_hash
 

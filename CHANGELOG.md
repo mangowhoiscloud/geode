@@ -54,6 +54,16 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **CLI system prompt math-formatting instruction.** GEODE 의 기본 LLM
+  prompt 가 수식 출력 규칙을 명시합니다: inline 수식은 `$...$`, display
+  수식은 독립 줄의 `$$...$$` 로 감싸도록 짧은 예시를 포함했습니다. 이
+  지시는 `PromptAssembler` 경로와 interactive CLI 의 `AgenticLoop`
+  system prompt 경로에 모두 적용됩니다.
+- **CLI system prompt math-formatting instruction.** The default LLM prompt
+  now tells the model to wrap inline math in `$...$` and display math in
+  standalone `$$...$$` blocks, with compact examples. The rule is wired into
+  both `PromptAssembler` and the interactive CLI `AgenticLoop` system prompt.
+
 - **CLI LaTeX Tier 3 (graphics inline) — capability detection scaffold.**
   CLI LaTeX 의 frontier 5-tier 조사 결과 LLM CLI 6 도구 (Claude Code /
   Codex CLI / Aider / glow / mdcat / bat) 모두 Tier 0 (raw), GEODE 만
@@ -147,6 +157,45 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Fixed
 
+- **CLI LaTeX 렌더링 — bare subscript/superscript + Unicode math 누출.**
+  delimiter 없는 fallback 이 기존에는 `P_{t-1}` 같은 braced script 와
+  allow-list macro 만 잡아 `y^ΔT_t,n`, `S^(i)_t,n`, `X_t-9:t,n,:`,
+  `√x` 같은 LLM 출력이 raw 로 남았습니다. `_DELIMITERLESS_MATH` 를
+  math-shaped line context + index-like bare script 로 확장하고, `√` /
+  Greek / comparison / arrow 등 Unicode math glyph token 을 inline math
+  segment 로 승격합니다. Markdown inline/fenced code, `snake_case`,
+  slash paths, `**bold**`, `*x*` 는 계속 text 로 유지됩니다.
+- **CLI LaTeX rendering — bare subscript/superscript + Unicode math leaks.**
+  The delimiter-less fallback now catches math-shaped bare scripts and
+  Unicode math glyph tokens such as `y^ΔT_t,n`, `S^(i)_t,n`, `X_t-9:t,n,:`,
+  and `√x`. The wider detector is guarded by code-span/path/snake-case/
+  Markdown-emphasis skips so ordinary prose and code remain untouched.
+- **CLI prompt CJK 입력 redraw lag.** prompt_toolkit thin-CLI 입력에서
+  한글 같은 wide character 를 타이핑할 때 직전 글자가 다음 keystroke 전까지
+  화면에 나타나지 않는 ghost 현상을 수정했습니다. `<any>` printable
+  input binding 이 `event.data` 를 정상 `insert_text()` 경로로 넣은 뒤
+  `event.app.invalidate()` 를 호출해 삽입 직후 renderer repaint 를
+  예약합니다. Enter / Escape+Enter / Backspace / Delete 같은 기존
+  binding 은 유지되며, wildcard handler 는 비어 있거나 non-printable 인
+  key data 를 삽입하지 않습니다.
+- **CLI prompt CJK insertion redraw lag.** Fixes the thin-CLI
+  prompt_toolkit prompt where newly typed wide characters such as Korean
+  Hangul could stay visually hidden until the next keystroke. A printable
+  `<any>` input binding now forwards `event.data` through the normal
+  `insert_text()` path, then calls `event.app.invalidate()` so the renderer
+  repaints immediately after insertion. Existing Enter, Escape+Enter,
+  Backspace, and Delete bindings are preserved, and the wildcard handler
+  ignores empty or non-printable key data.
+- **CLI streaming Markdown cleanup.** Thin CLI raw `stream` output now tracks
+  plain daemon-console spans that look like assistant Markdown and clears that
+  transient region at turn stop, before the final `result.text` payload is
+  rendered through the existing Markdown + LaTeX renderer. ANSI/Rich stream
+  output and structured agentic events continue to render in place.
+- **CLI 스트리밍 Markdown 정리.** thin CLI 가 daemon-console 의 plain
+  `stream` 중 assistant Markdown 으로 보이는 구간을 추적하고, turn 종료 시
+  최종 `result.text` 를 기존 Markdown + LaTeX renderer 로 다시 그리기 전에
+  해당 임시 raw 구간을 지웁니다. ANSI/Rich stream 출력과 structured
+  agentic event 렌더링은 그대로 유지됩니다.
 - **CLI LaTeX 렌더링 — delimiter-less 매크로 누출 heuristic.** PR
   #1165/#1169 의 wiring 이 `\(...\)` / `$...$` / `\[...\]` 같은 명시적
   delimiter 가 있는 경우만 cover 하여 LLM 이 delimiter 없이 prose 안에

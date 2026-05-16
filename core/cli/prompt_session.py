@@ -39,6 +39,19 @@ def _sigint_handler(signum: int, frame: Any) -> None:
 # ---------------------------------------------------------------------------
 # prompt_toolkit REPL input (arrow keys, history)
 # ---------------------------------------------------------------------------
+def _event_data_is_printable_character(event: Any, data: str | None) -> bool:
+    """Return True only for printable character key events."""
+    if not data or not data.isprintable():
+        return False
+
+    key_sequence = getattr(event, "key_sequence", ())
+    if not key_sequence:
+        return True
+
+    key = getattr(key_sequence[-1], "key", None)
+    return key == data
+
+
 def _build_prompt_session() -> Any:
     """Create a prompt_toolkit PromptSession with history + GEODE styling.
 
@@ -46,10 +59,10 @@ def _build_prompt_session() -> Any:
     instead of each newline triggering a separate submit. Enter submits,
     Escape+Enter inserts a real newline.
 
-    Includes a custom Backspace/Delete key binding that forces a full
-    renderer redraw after deletion — fixes wide-char (Korean jamo) ghost
-    artifacts where the display doesn't update even though the buffer is
-    correctly modified.
+    Includes custom printable-insert plus Backspace/Delete key bindings
+    that force a full renderer redraw after the buffer changes — fixes
+    wide-char (Korean jamo) ghost artifacts where the display doesn't
+    update even though the buffer is correctly modified.
     """
     from prompt_toolkit import PromptSession
     from prompt_toolkit.filters import is_done
@@ -68,6 +81,15 @@ def _build_prompt_session() -> Any:
     def _newline(event: Any) -> None:
         """Escape+Enter inserts a real newline for intentional multi-line."""
         event.current_buffer.insert_text("\n")
+
+    @kb.add("<any>")
+    def _insert_printable(event: Any) -> None:
+        data = event.data
+        if not _event_data_is_printable_character(event, data):
+            return
+
+        event.current_buffer.insert_text(data)
+        event.app.invalidate()
 
     @kb.add("backspace")
     def _backspace(event: Any) -> None:

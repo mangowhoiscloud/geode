@@ -21,6 +21,7 @@ import re
 from datetime import datetime
 from functools import lru_cache
 
+from core.llm.prompt_assembler import with_math_output_formatting
 from core.llm.prompts import ROUTER_SYSTEM
 from core.paths import get_project_root
 
@@ -132,7 +133,7 @@ def build_system_prompt(model: str = "") -> str:
     if not baseline:
         baseline = _generic_static_prefix()
 
-    static = baseline
+    static = with_math_output_formatting(baseline)
 
     # G10: Agent identity (opt-in via GEODE_PERSONA=on; default OFF so
     # GEODE behaves as a thin wrapper around the base model).

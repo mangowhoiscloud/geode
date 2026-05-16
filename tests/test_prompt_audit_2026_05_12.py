@@ -110,6 +110,20 @@ def test_g10_router_md_no_geode_name_in_baseline() -> None:
     assert "autonomous execution agent" in ROUTER_SYSTEM
 
 
+def test_math_formatting_instruction_reaches_agentic_system_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The interactive CLI prompt path tells the model to delimit math."""
+    monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+    monkeypatch.delenv("GEODE_PERSONA", raising=False)
+
+    out = build_system_prompt(model="")
+
+    assert "<math_formatting>" in out
+    assert "Inline math: wrap with `$...$`" in out
+    assert "Display math: put `$$...$$` on its own lines" in out
+
+
 # ---------------------------------------------------------------------------
 # G1 — XML section parsing
 # ---------------------------------------------------------------------------
