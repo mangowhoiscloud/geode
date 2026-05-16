@@ -124,6 +124,18 @@ class Settings(BaseSettings):
     # downgrades to ``"max"`` on Opus 4.6 / Sonnet 4.6).
     agentic_effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh"
 
+    # Credential source — chosen via the ``/auth`` picker. The picker
+    # reads available sources at runtime (local Claude OAuth keychain,
+    # Codex auth.json JWT, env-var API key) and persists the user's
+    # choice here so :mod:`plugins.petri_audit.models.to_inspect_model`
+    # routes ids through the matching provider prefix. ``"auto"`` =
+    # legacy behaviour (env / OAuth detection order); explicit values
+    # take precedence. No subscription-plan names are hardcoded — the
+    # picker labels each source with the plan info pulled from the
+    # active credential blob.
+    anthropic_credential_source: str = "auto"  # "auto" | "oauth" | "api_key" | "none"
+    openai_credential_source: str = "auto"  # "auto" | "oauth" | "api_key" | "none"
+
     # Cost guard — session-level cost limit (0 = no limit)
     cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%
 
