@@ -52,6 +52,35 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`login_anthropic()` — loopback redirect_uri → manual-paste 패턴 교체.**
+  v0.99.0 에서 도입된 loopback HTTP server (`http://localhost:54123/callback`)
+  는 OAuth client `9d1c250a-…` 에 등록된 redirect URI 가 아니라 authorize
+  단계에서 거절됐다 (사용자 보고 — 두 번 시도 모두 ~50초 만에 실패, auth.toml
+  미변경). Claude Code native binary 의 strings 분석으로 정답 redirect URI
+  가 `https://platform.claude.com/oauth/code/callback` 임을 확인 — 서버 측
+  callback 페이지가 사용자에게 `code#state` 형식을 표시하면 사용자가 CLI
+  로 paste 하는 manual-paste 패턴. `_run_anthropic_pkce_flow` 를 1:1
+  미러로 재작성: HTTPServer / `_pick_free_port` / 콜백 핸들러 제거, paste
+  파서 (`_parse_pasted_code` — URL/fragment/bare code 3 형식 수용) 도입,
+  scope 에 `user:sessions:claude_code` 추가 (binary hint 정합). Tier 3
+  impersonation 정책은 그대로.
+
+- **`login_anthropic()` — switched loopback redirect to manual-paste.**
+  v0.99.0's loopback HTTP server (`http://localhost:54123/callback`) was
+  rejected at the authorize step because the OAuth client `9d1c250a-…`
+  is registered with only one redirect URI:
+  `https://platform.claude.com/oauth/code/callback` (server-hosted).
+  Confirmed by `strings(8)` analysis of Claude Code's native binary +
+  user reports of two consecutive ~50s failures with no auth.toml write.
+  `_run_anthropic_pkce_flow` rewritten as a 1:1 mirror of Claude Code's
+  manual-paste flow: the loopback HTTP server, port picker, and request
+  handler are removed; a paste parser (`_parse_pasted_code`) accepts the
+  full callback URL, the `code#state` fragment, or the bare code; scope
+  set extended with `user:sessions:claude_code` per the binary's hint
+  string. Tier 3 impersonation posture unchanged.
+
 ## [0.99.0] — 2026-05-17
 
 ### Added

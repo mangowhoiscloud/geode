@@ -517,7 +517,8 @@ def read_geode_openai_credentials() -> dict[str, Any] | None:
 # Mirrors :func:`login_openai` for the Anthropic side. The two providers
 # share the post-flow path (auth.toml SOT + ProfileStore.add) but use
 # different grant types — Codex's device-code endpoint vs Anthropic's
-# PKCE redirect (loopback callback). See
+# manual-paste PKCE (browser → /oauth/code/callback page renders code →
+# user pastes it back into the CLI). See
 # ``docs/architecture/provider-login.md`` for the full architecture.
 #
 # Endpoints reverse-engineered from the Claude Code native binary's
@@ -537,14 +538,20 @@ def read_geode_openai_credentials() -> dict[str, Any] | None:
 _ANTHROPIC_AUTHORIZE_URL = "https://platform.claude.com/oauth/authorize"
 _ANTHROPIC_TOKEN_URL = "https://api.anthropic.com/v1/oauth/token"  # noqa: S105 — URL not password
 _ANTHROPIC_OAUTH_BETA_HEADER = "oauth-2025-04-20"
-_ANTHROPIC_REDIRECT_PORT_RANGE = (54123, 54199)  # avoid clash with /geode serve
-_ANTHROPIC_LOGIN_TIMEOUT_S = 5 * 60  # 5 min — user has to complete browser flow
+# The OAuth client `9d1c250a-...` is registered with this server-hosted
+# redirect URI only — loopback URIs (http://localhost:*) are rejected at
+# the authorize step. The /oauth/code/callback page renders the
+# authorization code so the user can copy & paste it back into the CLI.
+_ANTHROPIC_REDIRECT_URI = "https://platform.claude.com/oauth/code/callback"
 
-# Scopes derived from the Claude Max OAuth token (`scopes` field).
-# All three are needed for inference + profile metadata + MCP servers.
+# Scope set mirrors Claude Code's hint string in the native binary:
+#   "user:profile user:inference user:sessions:claude_code user:mcp_servers"
+# Anthropic rejects authorize requests asking for scopes outside the
+# set registered for the client, so we send the full superset.
 _ANTHROPIC_DEFAULT_SCOPES = (
     "user:inference",
     "user:profile",
+    "user:sessions:claude_code",
     "user:mcp_servers",
 )
 
@@ -556,46 +563,6 @@ _ANTHROPIC_CLIENT_ID_CANDIDATES = (
     # Most likely: matches the well-known Claude Code OAuth client id.
     "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
 )
-
-
-class _AnthropicCallbackHandler:
-    """Loopback HTTP handler that captures the PKCE redirect callback.
-
-    Defined as a closure factory so the request handler can share the
-    ``captured`` dict with the outer :func:`_run_anthropic_pkce_flow`
-    without a module-level singleton.
-    """
-
-
-def _build_anthropic_callback_handler(captured: dict[str, str]) -> type:
-    """Return a request handler class that stores the ``code`` / ``state``
-    query parameters into the supplied ``captured`` dict."""
-    import urllib.parse
-    from http.server import BaseHTTPRequestHandler
-
-    class _Handler(BaseHTTPRequestHandler):
-        def log_message(self, fmt: str, *args: Any) -> None:
-            log.debug("anthropic-oauth callback: " + fmt, *args)
-
-        def do_GET(self) -> None:
-            parsed = urllib.parse.urlparse(self.path)
-            params = urllib.parse.parse_qs(parsed.query)
-            captured["code"] = params.get("code", [""])[0]
-            captured["state"] = params.get("state", [""])[0]
-            captured["error"] = params.get("error", [""])[0]
-            body = (
-                b"<!DOCTYPE html><html><body style='font-family:system-ui;padding:40px'>"
-                b"<h2>GEODE Anthropic OAuth</h2>"
-                b"<p>Login received. You can close this window and return to GEODE.</p>"
-                b"</body></html>"
-            )
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-    return _Handler
 
 
 def _generate_pkce_pair() -> tuple[str, str]:
@@ -618,99 +585,109 @@ def _generate_pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-def _pick_free_port(port_range: tuple[int, int]) -> int:
-    """Find a free TCP port in ``[lo, hi]`` for the loopback callback."""
-    import socket
+def _parse_pasted_code(raw: str) -> tuple[str, str]:
+    """Extract ``(code, state)`` from a pasted authorization response.
 
-    lo, hi = port_range
-    for port in range(lo, hi + 1):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError(f"Could not find a free port for the Anthropic OAuth callback in {lo}..{hi}")
+    The /oauth/code/callback page shows the value in ``code#state`` fragment
+    form (Claude Code's native binary uses the same split). Users may also
+    paste the full callback URL or the bare code on its own — we accept
+    all three. An empty returned state lets the caller skip CSRF check;
+    that is acceptable for a public PKCE flow where the verifier already
+    binds the request.
+    """
+    import urllib.parse
+
+    if raw.startswith(("http://", "https://")):
+        parsed = urllib.parse.urlparse(raw)
+        params = urllib.parse.parse_qs(parsed.query)
+        return params.get("code", [""])[0], params.get("state", [""])[0]
+    if "#" in raw:
+        code, _, state = raw.partition("#")
+        return code, state
+    return raw, ""
 
 
 def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
-    """Drive a single PKCE OAuth round with ``client_id``.
+    """Drive a single manual-paste PKCE OAuth round with ``client_id``.
 
-    Raises ``RuntimeError`` on token-exchange failure (so the caller can
-    fall through to the next candidate). Returns the parsed credentials
-    dict on success.
+    Mirrors Claude Code's native flow: open the authorize URL, wait for
+    the user to paste back the ``code#state`` value rendered on
+    ``/oauth/code/callback``. Raises ``RuntimeError`` on token-exchange
+    failure (so the caller can fall through to the next candidate).
     """
     import secrets
-    import threading
     import urllib.parse
     import webbrowser
-    from http.server import HTTPServer
 
     import httpx
 
+    from core.ui import agentic_ui as _pkg
+
     verifier, challenge = _generate_pkce_pair()
     state = secrets.token_urlsafe(16)
-    port = _pick_free_port(_ANTHROPIC_REDIRECT_PORT_RANGE)
-    redirect_uri = f"http://localhost:{port}/callback"
+    scope = " ".join(_ANTHROPIC_DEFAULT_SCOPES)
+    auth_url = (
+        _ANTHROPIC_AUTHORIZE_URL
+        + "?"
+        + urllib.parse.urlencode(
+            {
+                "code": "true",
+                "response_type": "code",
+                "client_id": client_id,
+                "redirect_uri": _ANTHROPIC_REDIRECT_URI,
+                "scope": scope,
+                "state": state,
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+            }
+        )
+    )
 
-    captured: dict[str, str] = {}
-    handler_cls = _build_anthropic_callback_handler(captured)
-    server = HTTPServer(("127.0.0.1", port), handler_cls)
+    log.info("anthropic-oauth: opening browser (manual-paste flow)")
+    webbrowser.open(auth_url)
 
-    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-    server_thread.start()
+    _pkg.console.print()
+    _pkg.console.print(
+        "  [bold]A browser window has been opened to authorize with Anthropic.[/bold]"
+    )
+    _pkg.console.print(f"  [muted]If it didn't open, visit:[/muted] {auth_url}")
+    _pkg.console.print()
+    _pkg.console.print(
+        "  After approving, copy the code shown on the callback page and paste it below."
+    )
+    _pkg.console.print(
+        "  [muted]Accepted formats: 'code#state', the full callback URL, or just the code.[/muted]"
+    )
+    _pkg.console.print()
 
     try:
-        scope = " ".join(_ANTHROPIC_DEFAULT_SCOPES)
-        auth_url = (
-            _ANTHROPIC_AUTHORIZE_URL
-            + "?"
-            + urllib.parse.urlencode(
-                {
-                    "response_type": "code",
-                    "client_id": client_id,
-                    "redirect_uri": redirect_uri,
-                    "scope": scope,
-                    "state": state,
-                    "code_challenge": challenge,
-                    "code_challenge_method": "S256",
-                }
-            )
-        )
+        # /login is a THIN-handler command (see core.cli.routing — RunLocation.THIN),
+        # so this input() runs in the thin-client process where stdin is the user's
+        # terminal. Daemon never reaches this code path.
+        raw = input("  Paste authorization code: ").strip()  # allow-direct-io: thin handler
+    except (EOFError, KeyboardInterrupt) as exc:
+        raise RuntimeError("Anthropic OAuth cancelled — no code provided") from exc
 
-        log.info("anthropic-oauth: opening browser to %s", _ANTHROPIC_AUTHORIZE_URL)
-        webbrowser.open(auth_url)
+    if not raw:
+        raise RuntimeError("Anthropic OAuth: empty code")
 
-        # Wait for the callback to populate ``captured`` (server runs on
-        # a background thread). We poll the captured dict because
-        # HTTPServer's serve_forever has no built-in "until first request"
-        # mode without subclassing.
-        deadline = time.monotonic() + _ANTHROPIC_LOGIN_TIMEOUT_S
-        while time.monotonic() < deadline:
-            if captured.get("code") or captured.get("error"):
-                break
-            time.sleep(0.25)
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    if not captured.get("code"):
-        err = captured.get("error") or "timed out before user completed login"
-        raise RuntimeError(f"Anthropic OAuth callback returned no code: {err}")
-    if captured.get("state") != state:
+    auth_code, returned_state = _parse_pasted_code(raw)
+    if not auth_code:
+        raise RuntimeError("Anthropic OAuth: could not parse code from pasted value")
+    if returned_state and returned_state != state:
         raise RuntimeError("Anthropic OAuth state mismatch — possible CSRF, aborting")
 
-    # Token exchange (PKCE — public client, no client_secret).
     try:
         with httpx.Client(timeout=httpx.Timeout(15.0)) as client:
             resp = client.post(
                 _ANTHROPIC_TOKEN_URL,
                 json={
                     "grant_type": "authorization_code",
-                    "code": captured["code"],
-                    "redirect_uri": redirect_uri,
+                    "code": auth_code,
+                    "redirect_uri": _ANTHROPIC_REDIRECT_URI,
                     "client_id": client_id,
                     "code_verifier": verifier,
+                    "state": state,
                 },
                 headers={
                     "Content-Type": "application/json",
@@ -721,8 +698,6 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
         raise RuntimeError(f"Anthropic token exchange failed: {exc}") from exc
 
     if resp.status_code != 200:
-        # Surface body so the caller can log the actual error class
-        # (``invalid_client`` / ``invalid_grant`` / ``unauthorized_client``).
         body_preview = resp.text[:300] if resp.text else "(empty)"
         raise RuntimeError(f"Anthropic token exchange returned {resp.status_code}: {body_preview}")
 
