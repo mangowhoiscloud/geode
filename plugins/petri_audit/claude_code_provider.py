@@ -59,8 +59,8 @@ from __future__ import annotations
 
 import json
 import logging
+import platform
 import subprocess
-import sys
 import threading
 from typing import Any
 
@@ -119,8 +119,11 @@ def _read_keychain_blob() -> dict[str, Any] | None:
     fall back to ``ANTHROPIC_API_KEY`` or trigger ``inspect_ai``'s
     standard "missing credential" error.
     """
-    if sys.platform != "darwin":
-        log.debug("claude-code provider: macOS-only keychain path; got %s", sys.platform)
+    # ``platform.system()`` is preferred over ``sys.platform`` here because
+    # mypy narrows ``sys.platform`` based on its ``--platform`` setting and
+    # marks the subsequent subprocess block as unreachable on the CI runner.
+    if platform.system() != "Darwin":
+        log.debug("claude-code provider: macOS-only keychain path; got %s", platform.system())
         return None
     try:
         proc = subprocess.run(  # noqa: S603  # nosec — argv built from module constants
