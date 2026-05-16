@@ -2,7 +2,7 @@
 
 Pre-fix bug (production incident, 2026-04-26): user registered
 ``openai-codex-geode`` (OAuth Plus subscription, provider=``openai-codex``)
-via ``/login oauth openai`` BUT every ``gpt-5.4`` LLM call still hit
+via ``/login openai`` BUT every ``gpt-5.4`` LLM call still hit
 ``api.openai.com/v1/responses`` (PAYG, provider=``openai``) at $0.10/call
 because ``_resolve_provider("gpt-5.4")`` was a static map and the
 ``PlanRegistry.resolve_routing()`` resolver was never consulted by the

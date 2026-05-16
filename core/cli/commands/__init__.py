@@ -28,7 +28,6 @@ sites identified by the migration audit. ``console``, ``_upsert_env``,
 ``_mask_key``, ``_is_glm_key``, ``_check_provider_key``,
 ``_get_cost_budget``, ``_set_cost_budget``, ``_persist_auth_state``,
 ``_seed_payg_plan_from_key``, ``_mcp_add``, ``_skills_add``,
-``_auth_login_status``, ``_sync_oauth_profile_after_login``,
 ``_auth_add_interactive``, ``get_conversation_context``,
 ``set_conversation_context``, ``cmd_login`` are addressable on the
 package because tests monkey-patch them via the legacy dotted path
@@ -66,8 +65,6 @@ from ._state import (
 )
 from .auth import (
     _auth_add_interactive,
-    _auth_login_status,
-    _sync_oauth_profile_after_login,
     cmd_auth,
 )
 from .cost import _budget_bar, _get_cost_budget, _set_cost_budget, cmd_cost
@@ -98,7 +95,6 @@ __all__ = [
     "ModelProfile",
     "_apply_model",
     "_auth_add_interactive",
-    "_auth_login_status",
     "_budget_bar",
     "_check_provider_key",
     "_conversation_ctx",
@@ -121,7 +117,6 @@ __all__ = [
     "_seed_payg_plan_from_key",
     "_set_cost_budget",
     "_skills_add",
-    "_sync_oauth_profile_after_login",
     "_upsert_env",
     "cmd_apply",
     "cmd_auth",

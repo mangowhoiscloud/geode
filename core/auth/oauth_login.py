@@ -1,4 +1,4 @@
-"""OAuth login flows — `/login oauth openai` device code flow.
+"""OAuth login flows — `/login openai` device-code flow.
 
 Grounded from Hermes Agent hermes_cli/auth.py:3054-3196.
 

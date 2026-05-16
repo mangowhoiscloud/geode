@@ -1,6 +1,6 @@
 """Bug class B3 — model drift sync must check target health.
 
-The v0.52.1 incident: User completed `/login oauth openai` (Codex Plus
+The v0.52.1 incident: User completed `/login openai` (Codex Plus
 registered). Same session immediately started a new prompt. Settings
 store still pointed at the old `glm-4.7-flash`. Loop started with
 `glm-5.1`, detected drift, **silently overwrote loop's choice with

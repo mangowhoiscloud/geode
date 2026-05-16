@@ -44,7 +44,7 @@ class TestEmitOauthLoginStartedFallback:
     spawn the browser watcher — wiring regression for the thin-CLI flow."""
 
     def test_fallback_prints_press_enter_prompt(self, monkeypatch, capsys) -> None:
-        """`/login oauth openai` runs THIN; emit must render the Enter
+        """`/login openai` runs THIN; emit must render the Enter
         prompt and invoke the watcher even without an IPC writer."""
         from core.ui import agentic_ui
         from core.ui.agentic_ui import events
