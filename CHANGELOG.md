@@ -52,6 +52,22 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **`docs/architecture/provider-login.md` — provider login flow SOT.**
+  OpenAI (device-code) 와 Anthropic (PKCE redirect) 의 OAuth flow 의
+  정합 spec 신규. owned-credential 패턴 (auth.toml SOT + GEODE 가 직접
+  OAuth client) 의 architecture + 5-mismatch 정합 plan + ToS Tier
+  spectrum (0-4) 정의. PR C3 (owned-Anthropic PKCE 구현) 의 reference
+  SOT.
+- **`docs/architecture/provider-login.md` — provider login flow SOT.**
+  Architecture spec for the two-provider OAuth picture: OpenAI's
+  device-code flow plus Anthropic's PKCE redirect flow share an
+  owned-credential pattern (auth.toml as SOT, GEODE acts as OAuth
+  client directly). Covers the 5 mismatch points the upcoming PR C3
+  will close and pins down the ToS Tier (0-4) spectrum the choice
+  sits in.
+
 ### Removed
 
 - **`/auth` 슬래시 명령 완전 제거 + `/login source` 신설.** `/auth` 의 잔존
