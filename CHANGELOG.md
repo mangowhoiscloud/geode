@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.95.5] — 2026-05-16
+
 ### Fixed
 
 - **CLI LaTeX digit-base superscripts + grouped scripts.** delimiter-less
