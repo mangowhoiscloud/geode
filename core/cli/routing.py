@@ -89,13 +89,6 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         description="Quick PAYG API key (legacy alias for /login)",
         handler_path="core.cli.commands:cmd_key",
     ),
-    "/auth": CommandSpec(
-        name="/auth",
-        location=RunLocation.THIN,
-        description="Auth profile rotator (legacy alias for /login)",
-        handler_path="core.cli.commands:cmd_auth",
-        needs_tty=True,
-    ),
     "/model": CommandSpec(
         name="/model",
         location=RunLocation.THIN,

@@ -124,7 +124,7 @@ class Settings(BaseSettings):
     # downgrades to ``"max"`` on Opus 4.6 / Sonnet 4.6).
     agentic_effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh"
 
-    # Credential source — chosen via the ``/auth`` picker. The picker
+    # Credential source — chosen via the ``/login source`` picker. The picker
     # reads available sources at runtime (local Claude OAuth keychain,
     # Codex auth.json JWT, env-var API key) and persists the user's
     # choice here so :mod:`plugins.petri_audit.models.to_inspect_model`

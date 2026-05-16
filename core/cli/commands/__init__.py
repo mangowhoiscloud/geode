@@ -12,7 +12,6 @@ modules:
   ``resolve_action``, ``_get_profile_store``
 - :mod:`key`      — ``cmd_key`` + auth-state mirroring
 - :mod:`model`    — ``/model`` picker + ``_apply_model``
-- :mod:`auth`     — legacy ``/auth`` profile rotator
 - :mod:`mcp`      — ``/mcp`` server management
 - :mod:`skills`   — ``/skills`` + ``/skill`` invoke
 - :mod:`cost`     — ``/cost`` dashboard + budget helpers
@@ -20,7 +19,7 @@ modules:
   ``/clear``
 - :mod:`tasks`    — ``/tasks`` user task list
 - :mod:`trigger`  — ``/trigger`` event/cron manager
-- :mod:`login`    — unified ``/login`` (v0.50.0+) + ``_login_*`` helpers
+- :mod:`login`    — unified ``/login`` (PR #C, 2026-05-17 — replaces ``/auth``)
 
 Names re-exported at the package level keep the legacy import path
 (``from core.cli.commands import …``) intact for the 30+ external call
@@ -28,7 +27,7 @@ sites identified by the migration audit. ``console``, ``_upsert_env``,
 ``_mask_key``, ``_is_glm_key``, ``_check_provider_key``,
 ``_get_cost_budget``, ``_set_cost_budget``, ``_persist_auth_state``,
 ``_seed_payg_plan_from_key``, ``_mcp_add``, ``_skills_add``,
-``_auth_add_interactive``, ``get_conversation_context``,
+``get_conversation_context``,
 ``set_conversation_context``, ``cmd_login`` are addressable on the
 package because tests monkey-patch them via the legacy dotted path
 ``core.cli.commands.<name>``. Each submodule reaches the patched value
@@ -63,10 +62,6 @@ from ._state import (
     set_conversation_context,
     show_help,
 )
-from .auth import (
-    _auth_add_interactive,
-    cmd_auth,
-)
 from .cost import _budget_bar, _get_cost_budget, _set_cost_budget, cmd_cost
 from .key import _check_provider_key, _persist_auth_state, _seed_payg_plan_from_key, cmd_key
 from .login import (
@@ -94,7 +89,6 @@ __all__ = [
     "_MODEL_INDEX",
     "ModelProfile",
     "_apply_model",
-    "_auth_add_interactive",
     "_budget_bar",
     "_check_provider_key",
     "_conversation_ctx",
@@ -119,7 +113,6 @@ __all__ = [
     "_skills_add",
     "_upsert_env",
     "cmd_apply",
-    "cmd_auth",
     "cmd_clear",
     "cmd_compact",
     "cmd_context",

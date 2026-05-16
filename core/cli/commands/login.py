@@ -24,6 +24,10 @@ from core.auth.profiles import AuthProfile
 log = logging.getLogger(__name__)
 
 
+_VALID_CREDENTIAL_SOURCES: tuple[str, ...] = ("auto", "oauth", "api_key", "none")
+_VALID_CREDENTIAL_PROVIDERS: tuple[str, ...] = ("anthropic", "openai")
+
+
 _PROVIDER_ALIASES: dict[str, str] = {
     "openai": "openai",
     "codex": "openai",
@@ -104,6 +108,9 @@ def cmd_login(args: str) -> None:
     if sub == "quota":
         _login_quota()
         return
+    if sub == "source":
+        _login_source(rest)
+        return
     if sub == "refresh":
         # v0.52 phase 3 — daemon-side reload of auth.toml after thin client
         # writes (e.g. /login openai completed in CLI process). When invoked
@@ -181,6 +188,7 @@ def _login_help() -> None:
         "  [label]/login openai[/label]                OAuth flow (Codex Plus quota)\n"
         "  [label]/login anthropic[/label]             OAuth flow (Claude subscription)\n"
         "  [label]/login add[/label]                   Interactive wizard\n"
+        "  [label]/login source[/label] <prov> <type>   Pick credential source per provider\n"
         "  [label]/login set-key[/label] <plan> <key>  Update a plan's API key\n"
         "  [label]/login use[/label] <plan>            Pin a plan as active for its provider\n"
         "  [label]/login route[/label] <model> <plan>… Bind a model to plan(s) in priority order\n"
@@ -542,6 +550,120 @@ def _login_oauth(target: str) -> None:
         f"  [warning]OAuth not implemented for '{target}'.[/warning]\n"
         "  [muted]Available: openai (Codex Plus), anthropic (Claude subscription)[/muted]\n"
     )
+
+
+def _format_credential_source_label(provider: str, source: str) -> str:
+    """Human-readable label for the ``source`` picker — pulls live
+    subscription info from the credential blob rather than baking
+    plan names into the code."""
+    import os
+
+    if source == "auto":
+        return "auto-detect from env / keychain"
+    if source == "none":
+        return "disabled"
+    if source == "api_key":
+        env_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+        suffix = "(set)" if os.environ.get(env_var) else "(env not set)"
+        return f"{env_var} {suffix}"
+    if source == "oauth":
+        if provider == "anthropic":
+            try:
+                from plugins.petri_audit.claude_code_provider import get_claude_oauth_metadata
+
+                meta = get_claude_oauth_metadata()
+            except ImportError:
+                return "Claude subscription (audit extra not installed)"
+            if meta is None:
+                return "(no Claude credentials in keychain)"
+            plan = meta.get("subscription_type") or "unknown plan"
+            tier = meta.get("rate_limit_tier")
+            tier_label = f" · {tier}" if tier else ""
+            return f"Claude {plan}{tier_label}"
+        try:
+            from plugins.petri_audit.codex_provider import get_codex_oauth_metadata
+
+            meta = get_codex_oauth_metadata()
+        except ImportError:
+            return "ChatGPT subscription (audit extra not installed)"
+        if meta is None:
+            return "(no Codex auth.json detected)"
+        plan = meta.get("plan_type") or "unknown plan"
+        return f"ChatGPT {plan}"
+    return source
+
+
+def _persist_credential_source(provider: str, source: str) -> None:
+    """Persist the source choice — settings + .env + config.toml.
+
+    Mirrors :func:`core.cli.commands.model._apply_model` — same
+    three-location write so the choice survives env wipes (Hermes /
+    Codex / Claude Code precedent: durable settings outrank env).
+    """
+    from core.cli import commands as _pkg
+    from core.config import settings
+    from core.utils.env_io import upsert_config_toml
+
+    field = "anthropic_credential_source" if provider == "anthropic" else "openai_credential_source"
+    env_var = (
+        "GEODE_ANTHROPIC_CREDENTIAL_SOURCE"
+        if provider == "anthropic"
+        else "GEODE_OPENAI_CREDENTIAL_SOURCE"
+    )
+    try:
+        object.__setattr__(settings, field, source)
+    except Exception:
+        log.debug("login: settings.%s setattr failed", field, exc_info=True)
+    _pkg._upsert_env(env_var, source)
+    upsert_config_toml("llm", field, source)
+
+
+def _login_source(args: str) -> None:
+    """``/login source <provider> <type>`` — choose the credential source.
+
+    Migrated from the legacy ``/auth set`` (PR #1203, removed alongside
+    ``/auth`` in PR #C, 2026-05-17). The picker decides which provider
+    prefix ``plugins.petri_audit.models.to_inspect_model`` routes a
+    ``claude-*`` / ``gpt-5.*`` id through:
+
+    - ``auto``     — env / keychain auto-detect (default)
+    - ``oauth``    — subscription quota (claude-code / openai-codex)
+    - ``api_key``  — PAYG env (ANTHROPIC_API_KEY / OPENAI_API_KEY)
+    - ``none``     — disabled
+    """
+    from core.cli import commands as _pkg
+
+    parts = args.split()
+    if len(parts) != 2:
+        _pkg.console.print("  [warning]Usage: /login source <provider> <type>[/warning]")
+        _pkg.console.print(
+            f"  [muted]providers: {', '.join(_VALID_CREDENTIAL_PROVIDERS)}   "
+            f"types: {', '.join(_VALID_CREDENTIAL_SOURCES)}[/muted]"
+        )
+        _pkg.console.print()
+        return
+    provider, source = parts[0].lower(), parts[1].lower()
+    if provider not in _VALID_CREDENTIAL_PROVIDERS:
+        _pkg.console.print(
+            f"  [warning]unknown provider: {provider} "
+            f"(use one of {', '.join(_VALID_CREDENTIAL_PROVIDERS)})[/warning]"
+        )
+        _pkg.console.print()
+        return
+    if source not in _VALID_CREDENTIAL_SOURCES:
+        _pkg.console.print(
+            f"  [warning]unknown type: {source} "
+            f"(use one of {', '.join(_VALID_CREDENTIAL_SOURCES)})[/warning]"
+        )
+        _pkg.console.print()
+        return
+    _persist_credential_source(provider, source)
+    label = _format_credential_source_label(provider, source)
+    _pkg.console.print(
+        f"  [success]✓[/success] {provider} credential source → "
+        f"[bold]{source}[/bold]  [muted]({label})[/muted]"
+    )
+    _pkg.console.print()
 
 
 def _login_oauth_anthropic() -> None:
