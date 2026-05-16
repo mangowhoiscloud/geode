@@ -197,7 +197,8 @@ class TestPromptOverridesWire:
             node="analyst",
             role_type="game_mechanics",
         )
-        assert result.system == "You are an analyst."
+        assert result.system.startswith("You are an analyst.")
+        assert "<math_formatting>" in result.system
         assert result.fragment_count == 0
 
 
