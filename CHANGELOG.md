@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.0] — 2026-05-17
+
 ### Added
 
 - **`login_anthropic()` — owned-Anthropic OAuth PKCE flow (claude CLI
