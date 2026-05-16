@@ -154,14 +154,47 @@ def _read_keychain_blob() -> dict[str, Any] | None:
     return inner
 
 
-def resolve_claude_oauth_token() -> str | None:
-    """Return the OAuth access token from the local Claude CLI's keychain.
+def _read_authtoml_anthropic_creds() -> dict[str, Any] | None:
+    """Lazy import of :mod:`core.auth.oauth_login` so the audit plugin
+    stays loadable when the optional [audit] extra is absent.
 
-    Returns ``None`` for every non-success path (see :func:`
-    _read_keychain_blob`). The token shape is sanity-checked
-    (``sk-ant-`` prefix) so a future keychain schema drift fails
-    explicitly rather than producing a confusing 401.
+    Returns the GEODE-owned Anthropic OAuth credentials when the
+    ``/login anthropic`` PKCE flow (PR C3) has been completed and the
+    resulting token is still inside its expiry window. ``None`` for
+    every miss path (no credentials, expired, or import failure).
     """
+    try:
+        from core.auth.oauth_login import read_geode_anthropic_credentials
+    except ImportError:
+        return None
+    try:
+        return read_geode_anthropic_credentials()
+    except Exception:
+        log.debug("claude-code provider: auth.toml read failed", exc_info=True)
+        return None
+
+
+def resolve_claude_oauth_token() -> str | None:
+    """Return the OAuth access token, preferring the GEODE-owned source.
+
+    Resolution order:
+
+    1. ``~/.geode/auth.toml`` ``providers.anthropic`` (PR C3 PKCE flow).
+       Cross-platform, GEODE-owned SOT.
+    2. macOS keychain ``Claude Code-credentials`` (PR #1202 fallback).
+       Backwards-compat for users who still have the keychain entry
+       written by the legacy ``claude /login`` subprocess.
+
+    Returns ``None`` when neither source resolves a valid ``sk-ant-``
+    prefixed token.
+    """
+    authtoml_creds = _read_authtoml_anthropic_creds()
+    if authtoml_creds:
+        token = authtoml_creds.get("access_token")
+        if isinstance(token, str) and token.startswith("sk-ant-"):
+            return token
+
+    # Fall back to the macOS keychain (legacy PR #1202 path).
     blob = _read_keychain_blob()
     if blob is None:
         return None
@@ -173,16 +206,33 @@ def resolve_claude_oauth_token() -> str | None:
 
 
 def get_claude_oauth_metadata() -> dict[str, Any] | None:
-    """Return the keychain blob's subscription metadata for the picker UI.
+    """Return subscription metadata for the picker UI.
 
-    The dict mirrors the keychain blob's user-facing fields verbatim
-    (``subscriptionType``, ``rateLimitTier``, ``scopes``,
-    ``expiresAt``) — no enumeration is hardcoded. The picker uses
-    these to label the OAuth source dynamically, so any plan the user
-    is logged into surfaces with its real name instead of a baked-in
-    string. Returns ``None`` for the same reasons :func:
-    `resolve_claude_oauth_token` does.
+    Same resolution order as :func:`resolve_claude_oauth_token` — auth.
+    toml first (PR C3, owned), keychain fallback (PR #1202, borrowed).
+    The shape stays uniform so the picker can render either source
+    transparently:
+
+    - ``subscription_type``: plan name from the credential blob
+      (auth.toml's PKCE flow does not return one; falls back to a
+      "(via PKCE)" placeholder so the picker still has a non-empty
+      label).
+    - ``rate_limit_tier``: only present in the keychain blob.
+    - ``scopes``: token scopes (both sources surface this).
+    - ``expires_at``: unix epoch (seconds for auth.toml, millis for
+      keychain — normalised to seconds at the call site).
     """
+    # Prefer GEODE-owned auth.toml when present.
+    authtoml_creds = _read_authtoml_anthropic_creds()
+    if authtoml_creds:
+        return {
+            "subscription_type": None,  # PKCE flow does not return plan
+            "rate_limit_tier": None,
+            "scopes": list(authtoml_creds.get("scopes") or []),
+            "expires_at": authtoml_creds.get("expires_at"),
+            "source": "auth.toml",
+        }
+
     blob = _read_keychain_blob()
     if blob is None or not isinstance(blob.get("accessToken"), str):
         return None
@@ -191,6 +241,7 @@ def get_claude_oauth_metadata() -> dict[str, Any] | None:
         "rate_limit_tier": blob.get("rateLimitTier"),
         "scopes": list(blob.get("scopes", [])),
         "expires_at": blob.get("expiresAt"),
+        "source": "keychain",
     }
 
 

@@ -667,87 +667,64 @@ def _login_source(args: str) -> None:
 
 
 def _login_oauth_anthropic() -> None:
-    """Delegate to the local ``claude`` CLI's login flow, then sync
-    the keychain credential into the GEODE ``ProfileStore``.
+    """Drive Anthropic's PKCE OAuth flow natively — no ``claude`` CLI
+    subprocess, no macOS-only keychain dependency.
 
-    GEODE does not implement Anthropic's OAuth device flow itself —
-    Claude Code's CLI owns the browser handoff and writes the token to
-    the macOS keychain (``security`` service ``Claude
-    Code-credentials``). We just wrap the call so the user gets one
-    consistent entry point.
+    PR C3 (2026-05-17) replaced the prior ``claude /login`` subprocess
+    handoff with a GEODE-owned PKCE flow (loopback callback + token
+    exchange). The flow is implemented in
+    :func:`core.auth.oauth_login.login_anthropic`; this wrapper persists
+    the resulting credential into the ``ProfileStore`` so other parts of
+    the system (``/login status``, audit routing) pick it up
+    immediately. Cross-platform: works on macOS, Linux, Windows.
     """
-    import shutil
-    import subprocess  # nosec — argv is module-controlled
-
+    from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
+    from core.wiring.container import ensure_profile_store
 
-    claude_bin = shutil.which("claude")
-    if not claude_bin:
-        _pkg.console.print(
-            "  [warning]`claude` CLI not found on PATH.[/warning]  "
-            "[muted]Install Claude Code first, then re-run `/login anthropic`.[/muted]\n"
-        )
-        return
-
-    _pkg.console.print("  [muted]Delegating to `claude /login` (browser flow)…[/muted]\n")
     try:
-        result = subprocess.run(  # noqa: S603  # nosec
-            [claude_bin, "/login"],
-            timeout=300,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        _pkg.console.print("  [warning]`claude /login` timed out (5 min)[/warning]\n")
-        return
-    except OSError as exc:
-        _pkg.console.print(f"  [red]`claude /login` failed: {exc}[/red]\n")
-        return
-
-    if result.returncode != 0:
-        _pkg.console.print(
-            f"  [warning]`claude /login` exited rc={result.returncode}[/warning]  "
-            "[muted](keychain may still hold a valid token from a previous session)[/muted]\n"
-        )
-
-    # Sync the resulting keychain blob into ProfileStore so /login status
-    # picks the OAuth route up immediately, regardless of `claude` exit code.
-    try:
-        from plugins.petri_audit.claude_code_provider import (
-            get_claude_oauth_metadata,
-            resolve_claude_oauth_token,
-        )
-
-        from core.auth.profiles import AuthProfile, CredentialType
-        from core.wiring.container import ensure_profile_store
+        from core.auth.oauth_login import login_anthropic
     except ImportError as exc:
         _pkg.console.print(
-            f"  [warning]Anthropic profile sync skipped — `{exc.name}` not available.[/warning]\n"
+            f"  [warning]Anthropic OAuth unavailable — `{exc.name}` missing.[/warning]\n"
+            "  [muted]Set ANTHROPIC_API_KEY env to use the PAYG path.[/muted]\n"
         )
         return
 
-    token = resolve_claude_oauth_token()
-    if not token:
+    _pkg.console.print()
+    try:
+        creds = login_anthropic()
+    except KeyboardInterrupt:
+        _pkg.console.print("  [muted]Cancelled.[/muted]\n")
+        return
+    except RuntimeError as exc:
         _pkg.console.print(
-            "  [warning]No Claude credential found in keychain after login.[/warning]\n"
+            f"  [red]Anthropic OAuth login failed: {exc}[/red]\n"
+            "  [muted]Fallback: set ANTHROPIC_API_KEY env to keep going on the PAYG path.[/muted]\n"
         )
         return
 
-    meta = get_claude_oauth_metadata() or {}
-    expires = meta.get("expires_at")
-    expires_seconds = float(expires) / 1000.0 if isinstance(expires, int | float) else 0.0
+    if not creds:
+        _pkg.console.print("  [muted]Anthropic OAuth aborted.[/muted]\n")
+        return
+
+    access_token = creds.get("access_token", "")
+    expires_at = float(creds.get("expires_at", 0) or 0)
+    scopes = creds.get("scopes") or []
     profile = AuthProfile(
-        name="anthropic:claude-code",
+        name="anthropic:oauth",
         provider="anthropic",
         credential_type=CredentialType.OAUTH,
-        key=token,
-        expires_at=expires_seconds,
-        managed_by="claude-code",
+        key=access_token,
+        expires_at=expires_at,
+        managed_by="geode-pkce",
     )
     ensure_profile_store().add(profile)
-    plan = meta.get("subscription_type") or "(plan: unknown)"
+
+    scope_summary = ", ".join(scopes) if scopes else "(no scopes returned)"
     _pkg.console.print(
-        f"  [success]Claude OAuth registered.[/success]  "
-        f"[muted]Plan: {plan} · Provider: anthropic[/muted]\n"
+        "  [success]Anthropic OAuth registered.[/success]  "
+        f"[muted]Scopes: {scope_summary} · Provider: anthropic[/muted]\n"
     )
 
 
