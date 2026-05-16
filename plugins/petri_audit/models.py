@@ -132,11 +132,40 @@ def to_inspect_model(geode_id: str, *, use_oauth: bool | None = None) -> str:
     if "/" in geode_id:
         return geode_id
     if geode_id.startswith("claude-"):
+        # ``settings.anthropic_credential_source`` decides the prefix.
+        # ``oauth`` routes through ``claude-code/`` (subscription quota,
+        # zero per-token PAYG); ``api_key`` keeps the stock ``anthropic/``
+        # path. ``auto`` prefers OAuth when the keychain entry resolves.
+        # ``use_oauth`` (explicit caller override) wins over the setting
+        # so existing CLI flags keep working.
+        if use_oauth is True:
+            return f"claude-code/{geode_id}"
+        if use_oauth is False:
+            return f"anthropic/{geode_id}"
+        source = _credential_source("anthropic")
+        if source == "oauth":
+            return f"claude-code/{geode_id}"
+        if source == "api_key":
+            return f"anthropic/{geode_id}"
+        # auto / none → fall back to keychain detection
+        if source == "auto" and _claude_oauth_available():
+            return f"claude-code/{geode_id}"
         return f"anthropic/{geode_id}"
     if geode_id.startswith("gpt-") or geode_id in ("o3", "o4-mini"):
         if geode_id.startswith("gpt-5"):
-            route_oauth = use_oauth if use_oauth is not None else _codex_oauth_available()
-            if route_oauth:
+            # OAuth re-routing on the OpenAI side. Caller's ``use_oauth``
+            # still wins; otherwise consult settings, falling back to
+            # auto-detect by Codex token presence.
+            if use_oauth is True:
+                return f"openai-codex/{geode_id}"
+            if use_oauth is False:
+                return f"openai/{geode_id}"
+            source = _credential_source("openai")
+            if source == "oauth":
+                return f"openai-codex/{geode_id}"
+            if source == "api_key":
+                return f"openai/{geode_id}"
+            if source == "auto" and _codex_oauth_available():
                 return f"openai-codex/{geode_id}"
         return f"openai/{geode_id}"
     if geode_id.startswith("glm-"):
@@ -145,6 +174,32 @@ def to_inspect_model(geode_id: str, *, use_oauth: bool | None = None) -> str:
         f"Unknown model id {geode_id!r}. Use a MODEL_PRICING key (claude-*, "
         f"gpt-*, o3, o4-mini, glm-*) or a raw 'provider/model' string."
     )
+
+
+def _credential_source(provider: str) -> str:
+    """Read ``settings.{provider}_credential_source`` lazily so this
+    module remains importable on the default ``uv sync`` (no
+    pydantic-settings import on cold-start)."""
+    try:
+        from core.config import settings
+
+        field = (
+            "anthropic_credential_source" if provider == "anthropic" else "openai_credential_source"
+        )
+        return str(getattr(settings, field, "auto"))
+    except Exception:
+        return "auto"
+
+
+def _claude_oauth_available() -> bool:
+    """True when the Claude Code keychain entry resolves. Lazy import
+    matches the codex-side ``_codex_oauth_available`` helper."""
+    try:
+        from plugins.petri_audit.claude_code_provider import is_claude_oauth_available
+
+        return is_claude_oauth_available()
+    except Exception:
+        return False
 
 
 def is_oauth_routed(inspect_id: str) -> bool:

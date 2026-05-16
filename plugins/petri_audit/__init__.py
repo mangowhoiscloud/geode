@@ -70,12 +70,15 @@ except ImportError:
     )
 
 # Phase 5 (2026-05-15) — register the ``claude-code`` ModelAPI for the
-# Petri judge role. ``ClaudeCodeJudgeAPI`` shells out to the local Claude
-# Code CLI binary so judge calls consume the user's Claude Max subscription
-# quota (per-token PAYG = 0). Sibling of ``openai-codex`` — the two
-# subscription sources together close the cost frontier for the
-# autoresearch outer loop. Source pattern: ``~/workspace/crumb/src/adapters/
-# claude-local.ts``. Spec: ``docs/architecture/autoresearch.md`` § 9 Phase 5.
+# full Petri role set (auditor / judge / target). ``ClaudeMaxAPI`` is a
+# stock ``AnthropicAPI`` subclass that resolves the Claude Max OAuth
+# access token from the local ``claude`` CLI's macOS keychain entry,
+# so calls land on ``api.anthropic.com/v1/messages`` and consume the
+# user's Claude Max subscription quota (per-token PAYG = 0). Sibling of
+# ``openai-codex`` — the two subscription sources together close the
+# cost frontier for the autoresearch outer loop. Refactored from the
+# subprocess CLI invocation (judge-only) to API-direct after Path 2
+# verification on 2026-05-17.
 try:
     from plugins.petri_audit.claude_code_provider import register as _register_claude_code
 
