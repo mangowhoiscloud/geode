@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.97.0] — 2026-05-17
+
 ### Added
 
 - **`/auth set <provider> <source>` — credential source picker (settings
