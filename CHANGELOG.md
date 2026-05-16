@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.95.4] — 2026-05-16
+
 ### Added
 
 - **autoresearch cross-axis regression gate.** `compute_fitness` 가
@@ -121,6 +123,23 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   and could swing one axis to 3.13× of all others, a Goodhart risk.
   The dry-run baseline still uses the placeholder, so the
   `fitness=0.535895` plumbing contract is unchanged.
+
+### Fixed
+
+- **CLI LaTeX slash-division detector + uppercase subscript display.**
+  delimiter-less 수식 detector 가 `/` 하나만 보고 path 로 오판하던 문제를
+  수정했습니다. `E_i = 1/1 + 10^(R_j - R_i)/400` 의 마지막 `R_i` 는
+  이제 `Rᵢ` inline math 로 잡히고, `foo/bar/baz.py` / `src/main.tsx`
+  같은 실제 path 는 계속 text 로 남습니다. Unicode 아래첨자에 없는
+  대문자 Latin payload 는 raw `_` 대신 bracket fallback (`τ_P` → `τ[P]`)
+  으로 표시해 터미널에서 marker 누수를 피합니다.
+- **CLI LaTeX slash-division detector + uppercase subscript display.**
+  The delimiter-less math detector no longer treats any nearby `/` as
+  path evidence. `E_i = 1/1 + 10^(R_j - R_i)/400` now captures the final
+  `R_i` as `Rᵢ`, while real paths such as `foo/bar/baz.py` and
+  `src/main.tsx` remain plain text. Unsupported uppercase Latin subscript
+  payloads now use a bracket fallback (`τ_P` → `τ[P]`) instead of leaking
+  the raw `_` marker.
 
 ## [0.95.3] — 2026-05-16
 

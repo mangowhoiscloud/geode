@@ -137,6 +137,46 @@ _SUPERSCRIPT_MAP: Final[dict[str, str]] = {
     "(": "⁽",
     ")": "⁾",
 }
+_GREEK_WORD_BASES: Final[frozenset[str]] = frozenset(
+    {
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Delta",
+        "Epsilon",
+        "Lambda",
+        "Omega",
+        "Phi",
+        "Pi",
+        "Psi",
+        "Sigma",
+        "Theta",
+        "Xi",
+        "alpha",
+        "beta",
+        "chi",
+        "delta",
+        "epsilon",
+        "eta",
+        "gamma",
+        "iota",
+        "kappa",
+        "lambda",
+        "mu",
+        "nu",
+        "omega",
+        "phi",
+        "pi",
+        "psi",
+        "rho",
+        "sigma",
+        "tau",
+        "theta",
+        "upsilon",
+        "xi",
+        "zeta",
+    }
+)
 _SCRIPT_CHAR_CLASS: Final = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-="
 _UNICODE_SCRIPT = re.compile(
     rf"(?P<marker>[_^])(?:\{{(?P<braced>[^{{}}\n]+)\}}|"
@@ -151,7 +191,7 @@ def _has_tier2_construct(src: str) -> bool:
 
 
 def _apply_unicode_scripts(text: str) -> str:
-    """Rewrite fully-supported ``_`` / ``^`` script tokens to Unicode glyphs."""
+    """Rewrite terminal-friendly ``_`` / ``^`` script tokens."""
     if not text:
         return text
     if _LATEX_LINEBREAK_SENTINEL in text:
@@ -169,10 +209,49 @@ def _apply_unicode_scripts(text: str) -> str:
         script_map = _SUBSCRIPT_MAP if marker == "_" else _SUPERSCRIPT_MAP
         mapped = [script_map.get(ch) for ch in token]
         if any(ch is None for ch in mapped):
-            return match.group(0)
+            fallback = _unsupported_script_presentation(text, match, token, mapped)
+            if fallback is None:
+                return match.group(0)
+            return fallback
         return "".join(ch for ch in mapped if ch is not None)
 
     return _UNICODE_SCRIPT.sub(replace, text)
+
+
+def _unsupported_script_presentation(
+    text: str,
+    match: re.Match[str],
+    token: str,
+    mapped: list[str | None],
+) -> str | None:
+    """Return a conservative no-raw-marker fallback for unsupported scripts."""
+    if token.isascii() and token.isalpha() and token.islower() and len(token) > 1:
+        return None
+    has_partial_mapping = any(ch is not None for ch in mapped)
+    if not has_partial_mapping and not _script_base_looks_math(text, match.start()):
+        return None
+
+    # Unicode has no uppercase Latin subscript alphabet. Bracketing preserves
+    # the script as a unit (τ[P]) without pretending the base identifier is τP.
+    payload = "".join(
+        mapped_ch if mapped_ch is not None else raw_ch
+        for raw_ch, mapped_ch in zip(token, mapped, strict=True)
+    )
+    return f"[{payload}]"
+
+
+def _script_base_looks_math(text: str, marker_start: int) -> bool:
+    """True when an unsupported script is attached to a Greek/math base."""
+    if marker_start <= 0:
+        return False
+    prev = text[marker_start - 1]
+    if prev in _UNICODE_MATH_GLYPHS:
+        return True
+
+    left = marker_start
+    while left > 0 and text[left - 1].isalpha():
+        left -= 1
+    return text[left:marker_start] in _GREEK_WORD_BASES
 
 
 def _render_tier1(src: str) -> str:
@@ -388,6 +467,9 @@ _MACRO_NAMES = (
 _UNICODE_MATH_GLYPHS: Final = (
     "√∑∫∏≤≥→←⇒⇐↔∞≈≠±×÷∈∉⊂⊆∂∇ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψω"
 )
+_PATH_EXTENSION = re.compile(r"\.[A-Za-z0-9]{1,8}\b")
+_PATH_SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_MATH_SCRIPT_SEGMENT = re.compile(r"[A-Za-z]_[A-Za-z0-9](?:,[A-Za-z0-9]+)?")
 _SCRIPT_CHARS = "A-Za-z0-9" + re.escape(_UNICODE_MATH_GLYPHS + ",:-")
 _SCRIPT_BODY = rf"(?:\([^()`\n]+\)|[{_SCRIPT_CHARS}]+)"
 _UNICODE_TOKEN_HEAD = (
@@ -520,7 +602,7 @@ def _delimiterless_candidate_allowed(text: str, start: int, end: int, token: str
 
 
 def _looks_like_path_context(text: str, start: int, end: int) -> bool:
-    """Reject tokens embedded in slash paths or filename extensions."""
+    """Reject tokens embedded in filename or slash-path context."""
     left = start
     while left > 0 and not text[left - 1].isspace():
         left -= 1
@@ -528,9 +610,25 @@ def _looks_like_path_context(text: str, start: int, end: int) -> bool:
     while right < len(text) and not text[right].isspace():
         right += 1
     surrounding = text[left:right]
-    if "/" in surrounding:
+    if "/" not in surrounding:
+        return bool(_PATH_EXTENSION.search(surrounding))
+    if surrounding.startswith(("/", "./", "../", "~/")):
         return True
-    return bool(re.search(r"\.[A-Za-z0-9]{1,8}\b", surrounding))
+    if _PATH_EXTENSION.search(surrounding) and _slash_segments_look_pathish(surrounding):
+        return True
+    return surrounding.count("/") >= 2 and _slash_segments_look_pathish(surrounding)
+
+
+def _slash_segments_look_pathish(surrounding: str) -> bool:
+    """True for slash runs made of path segments, false for formula fractions."""
+    segments = [segment for segment in surrounding.split("/") if segment]
+    if len(segments) < 2:
+        return False
+    if not all(_PATH_SEGMENT.fullmatch(segment) for segment in segments):
+        return False
+    if all(_MATH_SCRIPT_SEGMENT.fullmatch(segment) for segment in segments):
+        return False
+    return any(any(ch.isalpha() for ch in segment) and len(segment) > 1 for segment in segments)
 
 
 def _script_parts_look_index_like(token: str) -> bool:

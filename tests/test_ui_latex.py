@@ -60,6 +60,10 @@ class TestTier1Unicode:
     def test_unsupported_subscript_token_stays_raw(self) -> None:
         assert _render_tier1("h_∞") == "h_∞"
 
+    def test_unsupported_uppercase_subscript_uses_bracket_presentation(self) -> None:
+        assert _render_tier1("τ_P") == "τ[P]"
+        assert _render_tier1("tau_P") == "tau[P]"
+
     def test_empty_string(self) -> None:
         assert render_latex("").plain == ""
 
@@ -124,6 +128,18 @@ class TestMixedContent:
         assert any("hⱼ" in payload for payload in inline_payloads)
         assert not any("h_i" in payload or "h_j" in payload for payload in inline_payloads)
 
+    def test_delimiterless_division_context_keeps_late_subscript_math(self) -> None:
+        chunks = list(extract_and_render_inline("E_i = 1/1 + 10^(R_j - R_i)/400"))
+        inline_payloads = [payload for kind, payload in chunks if kind == "inline_math"]
+        text_payloads = [payload for kind, payload in chunks if kind == "text"]
+        assert inline_payloads == ["Eᵢ", "Rⱼ", "Rᵢ"]
+        assert not any("R_i" in payload for payload in text_payloads)
+
+    def test_delimiterless_elo_update_segments_all_subscripts(self) -> None:
+        chunks = list(extract_and_render_inline("R_i' = R_i + K(S_i - E_i)"))
+        inline_payloads = [payload for kind, payload in chunks if kind == "inline_math"]
+        assert inline_payloads == ["Rᵢ", "Rᵢ", "Sᵢ", "Eᵢ"]
+
     def test_block_math(self) -> None:
         chunks = list(extract_and_render_inline(r"see $$\frac{a}{b}$$ here"))
         kinds = [k for k, _ in chunks]
@@ -180,6 +196,7 @@ class TestDelimiterlessMathWidening:
         [
             "snake_case_var",
             "foo/bar/baz.py",
+            "src/main.tsx",
             "**bold**",
             "*x*",
         ],
