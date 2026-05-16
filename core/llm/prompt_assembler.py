@@ -15,7 +15,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from core.hooks import HookEvent, HookSystem
 from core.llm.prompts import _hash_prompt
@@ -40,6 +40,21 @@ log = logging.getLogger(__name__)
 # cannot spend quota on an accidentally ignored mutation.
 
 _WRAPPER_OVERRIDE_ENV = "GEODE_WRAPPER_OVERRIDE"
+MATH_OUTPUT_FORMATTING_INSTRUCTION: Final[str] = """<math_formatting>
+When writing formulas, do not emit raw LaTeX-like text.
+- Inline math: wrap with `$...$` (예: 수익률은 $r_t = (P_t - P_{t-1}) / P_{t-1}$ 입니다).
+- Display math: put `$$...$$` on its own lines.
+$$
+IC_t = \\frac{\\sum_i S_i y_i}{\\sqrt{\\sum_i S_i^2}\\sqrt{\\sum_i y_i^2}}
+$$
+</math_formatting>"""
+
+
+def with_math_output_formatting(system: str) -> str:
+    """Append GEODE's math-output contract once."""
+    if "<math_formatting>" in system:
+        return system
+    return system + "\n\n" + MATH_OUTPUT_FORMATTING_INSTRUCTION
 
 
 def _load_wrapper_override() -> dict[str, str] | None:
@@ -167,6 +182,7 @@ class PromptAssembler:
             base_system = "\n\n".join(wrapper_override.values())
             fragments_used.append(f"wrapper-override:{len(wrapper_override)}sections")
 
+        base_system = with_math_output_formatting(base_system)
         base_hash = _hash_prompt(base_system + base_user)
 
         # --- Phase 1: Prompt Override ---
@@ -174,7 +190,7 @@ class PromptAssembler:
         system_key = f"{node}_system"
         if system_key in overrides:
             if self._allow_full_override:
-                system = overrides[system_key]
+                system = with_math_output_formatting(overrides[system_key])
                 fragments_used.append(f"override:{system_key}")
             else:
                 system = base_system + "\n\n" + overrides[system_key]

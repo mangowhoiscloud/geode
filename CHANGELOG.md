@@ -54,6 +54,16 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **CLI system prompt math-formatting instruction.** GEODE 의 기본 LLM
+  prompt 가 수식 출력 규칙을 명시합니다: inline 수식은 `$...$`, display
+  수식은 독립 줄의 `$$...$$` 로 감싸도록 짧은 예시를 포함했습니다. 이
+  지시는 `PromptAssembler` 경로와 interactive CLI 의 `AgenticLoop`
+  system prompt 경로에 모두 적용됩니다.
+- **CLI system prompt math-formatting instruction.** The default LLM prompt
+  now tells the model to wrap inline math in `$...$` and display math in
+  standalone `$$...$$` blocks, with compact examples. The rule is wired into
+  both `PromptAssembler` and the interactive CLI `AgenticLoop` system prompt.
+
 - **CLI LaTeX Tier 3 (graphics inline) — capability detection scaffold.**
   CLI LaTeX 의 frontier 5-tier 조사 결과 LLM CLI 6 도구 (Claude Code /
   Codex CLI / Aider / glow / mdcat / bat) 모두 Tier 0 (raw), GEODE 만
@@ -146,6 +156,20 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   supporting the auditor role.
 
 ### Fixed
+
+- **CLI LaTeX 렌더링 — bare subscript/superscript + Unicode math 누출.**
+  delimiter 없는 fallback 이 기존에는 `P_{t-1}` 같은 braced script 와
+  allow-list macro 만 잡아 `y^ΔT_t,n`, `S^(i)_t,n`, `X_t-9:t,n,:`,
+  `√x` 같은 LLM 출력이 raw 로 남았습니다. `_DELIMITERLESS_MATH` 를
+  math-shaped line context + index-like bare script 로 확장하고, `√` /
+  Greek / comparison / arrow 등 Unicode math glyph token 을 inline math
+  segment 로 승격합니다. Markdown inline/fenced code, `snake_case`,
+  slash paths, `**bold**`, `*x*` 는 계속 text 로 유지됩니다.
+- **CLI LaTeX rendering — bare subscript/superscript + Unicode math leaks.**
+  The delimiter-less fallback now catches math-shaped bare scripts and
+  Unicode math glyph tokens such as `y^ΔT_t,n`, `S^(i)_t,n`, `X_t-9:t,n,:`,
+  and `√x`. The wider detector is guarded by code-span/path/snake-case/
+  Markdown-emphasis skips so ordinary prose and code remain untouched.
 
 - **CLI streaming Markdown cleanup.** Thin CLI raw `stream` output now tracks
   plain daemon-console spans that look like assistant Markdown and clears that

@@ -129,6 +129,40 @@ class TestMixedContent:
         assert [k for k, _ in chunks] == expected_kinds
 
 
+class TestDelimiterlessMathWidening:
+    """Bare-script and Unicode-math fallback for LLM output that forgot delimiters."""
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "y^ΔT_t,n = close_t+ΔT,n - close_t,n / close_t,n",
+            "S^(i)_t,n = α_i ( X_t-L^(i)+1:t,n,: )",
+            "X_t-9:t,n,:",
+            "√x + 1",
+        ],
+    )
+    def test_user_reported_bare_script_and_unicode_math_segments(self, source: str) -> None:
+        chunks = list(extract_and_render_inline(source))
+        assert any(kind == "inline_math" for kind, _ in chunks), chunks
+        assert chunks != [("text", source)]
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "snake_case_var",
+            "foo/bar/baz.py",
+            "**bold**",
+            "*x*",
+        ],
+    )
+    def test_false_positive_guards_stay_text(self, source: str) -> None:
+        assert list(extract_and_render_inline(source)) == [("text", source)]
+
+    def test_inline_code_protects_math_shaped_text(self) -> None:
+        source = "`y^ΔT_t,n = close_t+ΔT,n`"
+        assert list(extract_and_render_inline(source)) == [("text", source)]
+
+
 class TestDelimiterExpansion:
     """PR #1165 — `\\[...\\]`, `\\(...\\)`, and `\\begin{equation}...\\end{equation}`
     are recognised in addition to the original `$`-based forms."""

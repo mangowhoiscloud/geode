@@ -173,8 +173,8 @@ _INLINE_PAREN = re.compile(r"(?<!\\)\\\(([\s\S]+?)(?<!\\)\\\)")
 # The default delimiter scanners cannot see those tokens and the bare macros
 # leak into the Markdown render. We conservatively catch two narrow forms,
 # each requiring explicit LaTeX syntax (braces or a known macro name) so
-# ordinary ``snake_case`` identifiers, file paths, and Markdown emphasis
-# remain untouched:
+# ordinary ``snake_case`` identifiers, file paths, Markdown code, and
+# Markdown emphasis remain untouched:
 #
 #   * **Braced subscript/superscript token** — ``r_{t-1}``, ``P_{t+5}``,
 #     ``x^{2}``, ``W_{i,j}^{T}``. Requires `{…}` directly after `_` or `^`.
@@ -183,10 +183,10 @@ _INLINE_PAREN = re.compile(r"(?<!\\)\\\(([\s\S]+?)(?<!\\)\\\)")
 #     allow-list of macro names keeps the pattern from over-firing on
 #     prose like ``\n`` escape sequences.
 #
-# Bare-underscore prose (``snake_case``, ``my_var``, ``some_word_here``)
-# never matches because there is no following ``{``. Bare letters with
-# subscripts in prose (``r_t``) are also skipped — the heuristic only
-# activates when the LaTeX intent is unambiguous.
+# Bare script forms (``r_t``, ``x^2``) are accepted only when the candidate
+# sits in a math-shaped line context and the script payload looks index-like
+# (``t``, ``i,j``, ``t-9:t``), not word-like (``case``, ``name``). This
+# catches LLM formula leaks while continuing to skip ordinary identifiers.
 
 _MACRO_NAMES = (
     "Alpha",
@@ -277,6 +277,16 @@ _MACRO_NAMES = (
     "xi",
     "zeta",
 )
+_UNICODE_MATH_GLYPHS: Final = (
+    "√∑∫∏≤≥→←⇒⇐↔∞≈≠±×÷∈∉⊂⊆∂∇ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψω"
+)
+_SCRIPT_CHARS = "A-Za-z0-9" + re.escape(_UNICODE_MATH_GLYPHS + ",:-")
+_SCRIPT_BODY = rf"(?:\([^()`\n]+\)|[{_SCRIPT_CHARS}]+)"
+_UNICODE_TOKEN_HEAD = (
+    rf"(?:[A-Za-z0-9]*[{re.escape(_UNICODE_MATH_GLYPHS)}][A-Za-z0-9]+"
+    rf"|[A-Za-z0-9]+[{re.escape(_UNICODE_MATH_GLYPHS)}][A-Za-z0-9]*"
+    rf"|[{re.escape(_UNICODE_MATH_GLYPHS)}](?:[_^]{_SCRIPT_BODY}))"
+)
 _DELIMITERLESS_MATH = re.compile(
     r"(?:"
     # Braced subscript/superscript token (chained): r_{t-1}, P_{t+5}^{2}, ...
@@ -290,8 +300,21 @@ _DELIMITERLESS_MATH = re.compile(
     # three so the pattern stays bounded.
     r"\\(?:" + "|".join(_MACRO_NAMES) + r")(?![A-Za-z])"
     r"(?:\{[^{}]*\}){0,3}"
+    r"|"
+    # Bare script token in math-shaped context: y^ΔT_t,n, S^(i)_t,n,
+    # close_t,n, X_t-9:t,n,:. Filtered by _delimiterless_candidate_allowed.
+    r"[A-Za-z][A-Za-z0-9]*"
+    rf"(?:[_^]{_SCRIPT_BODY})+"
+    r"|"
+    # Unicode math glyph adjacent to letters/digits/scripts: √x, α_i, ΔT,n.
+    rf"{_UNICODE_TOKEN_HEAD}"
+    rf"(?:[_^]{_SCRIPT_BODY})?"
+    r"(?:,[A-Za-z0-9]+)*"
     r")"
 )
+_SCRIPT_PART = re.compile(rf"[_^]({_SCRIPT_BODY})")
+_FENCED_CODE_BLOCK = re.compile(r"(?m)^(```|~~~)[^\n]*\n[\s\S]*?^\1\s*$")
+_INLINE_CODE_SPAN = re.compile(r"`[^`\n]*`")
 
 
 def extract_and_render_inline(text: str) -> Iterator[tuple[str, str]]:
@@ -332,10 +355,15 @@ def extract_and_render_inline(text: str) -> Iterator[tuple[str, str]]:
         if _overlaps(m.start(), m.end(), matches):
             continue
         matches.append((m.start(), m.end(), "inline_math", m.group(1)))
-    # Last-resort heuristic: catch bare LaTeX tokens (braced sub/sup or
-    # allow-listed macro) that arrived without surrounding delimiters.
+    code_spans = _markdown_code_spans(text)
+    # Last-resort heuristic: catch bare LaTeX tokens that arrived without
+    # surrounding delimiters.
     for m in _DELIMITERLESS_MATH.finditer(text):
         if _overlaps(m.start(), m.end(), matches):
+            continue
+        if _span_overlaps(m.start(), m.end(), code_spans):
+            continue
+        if not _delimiterless_candidate_allowed(text, m.start(), m.end(), m.group(0)):
             continue
         matches.append((m.start(), m.end(), "inline_math", m.group(0)))
     matches.sort(key=lambda t: t[0])
@@ -354,3 +382,89 @@ def extract_and_render_inline(text: str) -> Iterator[tuple[str, str]]:
 def _overlaps(start: int, end: int, matches: list[tuple[int, int, str, str]]) -> bool:
     """True when ``start``/``end`` intersects any accepted match span."""
     return any(start < e and s < end for s, e, _, _ in matches)
+
+
+def _span_overlaps(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
+    """True when ``start``/``end`` intersects any protected span."""
+    return any(start < span_end and span_start < end for span_start, span_end in spans)
+
+
+def _markdown_code_spans(text: str) -> list[tuple[int, int]]:
+    """Return fenced-code and inline-code spans protected from fallback math."""
+    spans: list[tuple[int, int]] = [(m.start(), m.end()) for m in _FENCED_CODE_BLOCK.finditer(text)]
+    for m in _INLINE_CODE_SPAN.finditer(text):
+        if not _span_overlaps(m.start(), m.end(), spans):
+            spans.append((m.start(), m.end()))
+    return spans
+
+
+def _delimiterless_candidate_allowed(text: str, start: int, end: int, token: str) -> bool:
+    """Filter broad fallback matches down to math-shaped delimiterless tokens."""
+    if _looks_like_path_context(text, start, end):
+        return False
+    if token.startswith("\\") or "{" in token:
+        return True
+    if any(ch in _UNICODE_MATH_GLYPHS for ch in token):
+        return True
+    if "_" in token or "^" in token:
+        return _script_parts_look_index_like(token) and _has_math_context(text, start, end, token)
+    return False
+
+
+def _looks_like_path_context(text: str, start: int, end: int) -> bool:
+    """Reject tokens embedded in slash paths or filename extensions."""
+    left = start
+    while left > 0 and not text[left - 1].isspace():
+        left -= 1
+    right = end
+    while right < len(text) and not text[right].isspace():
+        right += 1
+    surrounding = text[left:right]
+    if "/" in surrounding:
+        return True
+    return bool(re.search(r"\.[A-Za-z0-9]{1,8}\b", surrounding))
+
+
+def _script_parts_look_index_like(token: str) -> bool:
+    """Reject word-like bare subscripts such as ``snake_case`` and ``file_name``."""
+    for match in _SCRIPT_PART.finditer(token):
+        raw = match.group(1).strip("()")
+        for part in re.split(r"[,:-]+", raw):
+            if not part:
+                continue
+            if part.isascii() and part.isalpha() and part.islower() and len(part) > 1:
+                return False
+    return True
+
+
+def _has_math_context(text: str, start: int, end: int, token: str) -> bool:
+    """True when a bare script token is adjacent to formula punctuation."""
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    if line_end == -1:
+        line_end = len(text)
+    line = text[line_start:line_end]
+
+    prev_char = _previous_nonspace(text, line_start, start)
+    next_char = _next_nonspace(text, end, line_end)
+    if prev_char in "=+-*/(,":
+        return True
+    if next_char in "=+-*/),":
+        return True
+    if any(op in token for op in ("-", ":", ",")) and any(op in line for op in "=+-*/"):
+        return True
+    return "^" in token and "=" in line
+
+
+def _previous_nonspace(text: str, lower: int, start: int) -> str:
+    pos = start - 1
+    while pos >= lower and text[pos].isspace():
+        pos -= 1
+    return text[pos] if pos >= lower else ""
+
+
+def _next_nonspace(text: str, start: int, upper: int) -> str:
+    pos = start
+    while pos < upper and text[pos].isspace():
+        pos += 1
+    return text[pos] if pos < upper else ""
