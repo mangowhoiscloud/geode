@@ -95,7 +95,7 @@ def test_cmd_login_refresh_reloads_auth_toml(
 ) -> None:
     """Daemon-side: cmd_login("refresh") picks up a plan written out-of-band.
 
-    Simulates the v0.52 phase-3 flow: thin CLI completes /login oauth in its
+    Simulates the v0.52 phase-3 flow: thin CLI completes /login openai in its
     own process (writes auth.toml), then relays /login refresh to the daemon
     so its singletons see the new plan.
     """

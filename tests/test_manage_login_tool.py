@@ -29,8 +29,19 @@ class TestToolDefinition:
         assert entry["category"] == "model"
         # Subcommand enum must include the user-facing actions
         sub_enum = entry["input_schema"]["properties"]["subcommand"]["enum"]
-        for required in ("status", "add", "oauth", "set-key", "use", "route", "remove", "quota"):
+        for required in (
+            "status",
+            "openai",
+            "anthropic",
+            "add",
+            "set-key",
+            "use",
+            "route",
+            "remove",
+            "quota",
+        ):
             assert required in sub_enum, required
+        assert "oauth" not in sub_enum
 
 
 class TestHandlerWired:

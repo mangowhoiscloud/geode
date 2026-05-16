@@ -281,7 +281,7 @@ def emit_oauth_login_started(provider: str, verification_uri: str, user_code: st
 
       * IPC path — when an IPC writer is bound (event_renderer renders).
       * Direct path — when the OAuth flow runs in the thin CLI itself
-        (e.g. ``/login oauth openai`` is a ``RunLocation.THIN`` command),
+        (e.g. ``/login openai`` is a ``RunLocation.THIN`` command),
         no writer is set so we render via console.print here.
 
     Both paths call :func:`core.ui.oauth_browser.start_oauth_browser_watcher`

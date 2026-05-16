@@ -40,7 +40,15 @@ class TestSubcommandRouter:
                 str(call.args[0]) for call in mock_console.print.call_args_list if call.args
             )
             assert "/login add" in text
-            assert "/login oauth" in text
+            assert "/login openai" in text
+            removed_oauth_shape = "/login " + "oauth"
+            assert removed_oauth_shape not in text
+
+    def test_provider_parameter_dispatches_oauth(self) -> None:
+        _reset_state()
+        with patch("core.cli.commands.login._login_oauth") as mock_oauth:
+            cmd_login("openai")
+            mock_oauth.assert_called_once_with("openai")
 
     def test_unknown_subcommand_warns(self) -> None:
         _reset_state()
