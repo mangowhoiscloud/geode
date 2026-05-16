@@ -664,7 +664,7 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
         # /login is a THIN-handler command (see core.cli.routing — RunLocation.THIN),
         # so this input() runs in the thin-client process where stdin is the user's
         # terminal. Daemon never reaches this code path.
-        raw = input("  Paste authorization code: ").strip()  # allow-direct-io: thin-only OAuth manual-paste
+        raw = input("  Paste authorization code: ").strip()  # allow-direct-io: thin handler
     except (EOFError, KeyboardInterrupt) as exc:
         raise RuntimeError("Anthropic OAuth cancelled — no code provided") from exc
 
