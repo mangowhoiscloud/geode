@@ -12,6 +12,7 @@ Pipeline panels render client-side from structured events (no raw stream).
 from __future__ import annotations
 
 import logging
+import re
 import sys
 import threading
 import time
@@ -20,6 +21,11 @@ from typing import Any
 from core.ui.tool_tracker import ToolCallTracker
 
 log = logging.getLogger(__name__)
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_MARKDOWN_TEXT_MARKER = re.compile(
+    r"(\*\*[^*\n][\s\S]*?\*\*|__[^_\n][\s\S]*?__|`[^`\n]+`|^#{1,6}\s|\n#{1,6}\s)"
+)
 
 
 def _fmt_tokens(n: int) -> str:
@@ -81,6 +87,10 @@ class EventRenderer:
         self._turn_in_tokens: int = 0
         self._turn_out_tokens: int = 0
         self._turn_cost: float = 0.0
+        # Raw daemon console output is normally Rich/status UI. If the daemon
+        # accidentally streams plain assistant Markdown, keep enough state to
+        # erase that transient region before final Markdown rendering happens.
+        self._clearable_stream_parts: list[str] = []
 
     # -- Public API -----------------------------------------------------------
 
@@ -117,11 +127,16 @@ class EventRenderer:
 
         handler = getattr(self, f"_handle_{etype}", None)
         if handler:
+            self._reset_clearable_stream_region()
             handler(event)
 
     def on_stream(self, data: str) -> None:
         """Handle raw console stream (Rich panels, pipeline output)."""
         self._suppress_all_spinners()
+        if self._is_clearable_plain_stream(data):
+            self._clearable_stream_parts.append(data)
+        else:
+            self._reset_clearable_stream_region()
         self._out.write(data)
         self._out.flush()
 
@@ -137,6 +152,7 @@ class EventRenderer:
             self._activity_thread = None
         # Clear any leftover spinner line
         self._out.write("\r\033[2K")
+        self._clear_markdown_stream_region()
         self._out.flush()
         # Render accumulated turn status (Claude Code style)
         self._render_turn_status()
@@ -788,3 +804,27 @@ class EventRenderer:
         if self._activity and not self._activity_suppressed:
             self._out.write("\r\033[2K")
             self._out.flush()
+
+    @staticmethod
+    def _is_clearable_plain_stream(data: str) -> bool:
+        """Return True for plain text stream chunks that can be safely erased."""
+        if not data:
+            return False
+        if _ANSI_ESCAPE.search(data):
+            return False
+        return not any(ch in data for ch in "\b\f\v")
+
+    def _reset_clearable_stream_region(self) -> None:
+        self._clearable_stream_parts.clear()
+
+    def _clear_markdown_stream_region(self) -> None:
+        text = "".join(self._clearable_stream_parts)
+        self._reset_clearable_stream_region()
+        if not text or not _MARKDOWN_TEXT_MARKER.search(text):
+            return
+
+        visual_lines = len(text.splitlines()) or 1
+        self._out.write("\r\033[2K")
+        moves = visual_lines if text.endswith("\n") else max(visual_lines - 1, 0)
+        for _ in range(moves):
+            self._out.write("\033[1A\033[2K")

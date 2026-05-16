@@ -418,6 +418,34 @@ class TestEventRendererV2:
         assert renderer._tool_tracker._line_count == 0
         assert "Berserk" in renderer._out.getvalue()
 
+    def test_stop_clears_raw_markdown_stream_region(self, renderer) -> None:
+        """Plain markdown streamed raw is transient; final result renders it."""
+        renderer.on_stream("Intro\n**bold** answer\n")
+
+        renderer.stop()
+        out = renderer._out.getvalue()
+        assert "**bold** answer" in out  # was visible progressively
+        assert "\033[1A\033[2K" in out  # then erased before final Markdown render
+
+    def test_stop_preserves_non_markdown_plain_stream(self, renderer) -> None:
+        """Plain non-markdown console output should remain visible after stop()."""
+        renderer.on_stream("  Available IPs\n  - Berserk\n")
+
+        renderer.stop()
+        out = renderer._out.getvalue()
+        assert "Berserk" in out
+        assert "\033[1A\033[2K" not in out
+
+    def test_event_resets_clearable_stream_region(self, renderer) -> None:
+        """Do not erase earlier raw text once a structured event has followed it."""
+        renderer.on_stream("**bold** answer\n")
+        renderer.on_event({"type": "round_start", "round": 1})
+
+        renderer.stop()
+        out = renderer._out.getvalue()
+        assert "**bold** answer" in out
+        assert "\033[1A\033[2K" not in out
+
 
 class TestIPCClientEventWhitelist:
     """All 28 event types are in IPCClient's event whitelist."""
