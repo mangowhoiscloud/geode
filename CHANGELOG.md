@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.1] — 2026-05-17
+
 ### Fixed
 
 - **`login_anthropic()` — loopback redirect_uri → manual-paste 패턴 교체.**
