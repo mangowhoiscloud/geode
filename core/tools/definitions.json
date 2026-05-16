@@ -297,11 +297,12 @@
       "properties": {
         "subcommand": {
           "type": "string",
-          "description": "One of: status (default — show plans/profiles/routing/quota), add (interactive wizard), oauth (Codex OAuth device flow), set-key, use, route, remove, quota, help.",
+          "description": "One of: status (default — show plans/profiles/routing/quota), openai (Codex OAuth), anthropic (Claude subscription OAuth), add (interactive wizard), set-key, use, route, remove, quota, help.",
           "enum": [
             "status",
+            "openai",
+            "anthropic",
             "add",
-            "oauth",
             "set-key",
             "use",
             "route",
@@ -312,7 +313,7 @@
         },
         "args": {
           "type": "string",
-          "description": "Optional positional arguments for the subcommand. Examples: oauth → 'openai'; set-key → 'glm-coding-lite zai-xxxx'; use → 'glm-coding-lite'; route → 'glm-5.1 glm-coding-lite glm-payg'; remove → 'glm-coding-lite'."
+          "description": "Optional positional arguments for the subcommand. Examples: openai → ''; anthropic → ''; set-key → 'glm-coding-lite zai-xxxx'; use → 'glm-coding-lite'; route → 'glm-5.1 glm-coding-lite glm-payg'; remove → 'glm-coding-lite'."
         }
       },
       "required": []

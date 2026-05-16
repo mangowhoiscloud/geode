@@ -52,6 +52,57 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.98.0] — 2026-05-17
+
+### Changed
+
+- **`/login <provider>` — provider 만 parameter 로 받는 OAuth picker
+  + `/auth login` 제거.** 기존 `/login oauth <provider>` 의 2-단어 형태가
+  `/login openai` / `/login anthropic` (alias: `codex`, `chatgpt`,
+  `claude`, `claude-code`) 의 단일 토큰 진입으로 단순화. provider name
+  만으로 OAuth flow 가 즉시 동작 — picker surface 가 `/model` 의 mirror.
+  중복 진입점이던 `/auth login` (status display + browser login) 의 UI +
+  백엔드 두 helper (`_auth_login_status`, `_sync_oauth_profile_after_login`)
+  모두 제거. `/auth` 는 profile management 만 (`add` / `remove` /
+  `set <provider> <source>`). Anthropic OAuth path 가 새로 `_login_oauth`
+  안에 추가됨 — local `claude /login` subprocess 호출 후 macOS keychain
+  의 token 을 `ProfileStore` 에 sync. test 41 pass.
+- **`/login <provider>` — provider-only OAuth picker, `/auth login`
+  removed.** The legacy `/login oauth <provider>` two-word form is now
+  `/login openai` / `/login anthropic` (aliases: `codex`, `chatgpt`,
+  `claude`, `claude-code`) — a single provider token runs the OAuth
+  flow directly, mirroring the `/model` picker surface. The redundant
+  `/auth login` entry point (status display + browser handoff) and
+  its `_auth_login_status` / `_sync_oauth_profile_after_login`
+  helpers were removed from both UI and backend. `/auth` now hosts
+  only profile management (`add` / `remove` / `set <provider>
+  <source>`). The Anthropic OAuth path is now folded into
+  `_login_oauth` — it spawns `claude /login` and then syncs the
+  resulting keychain credential into `ProfileStore`. 41 tests pass.
+
+- **`/login <provider>` canonical OAuth entry point.** `/login openai`
+  now runs the Codex Plus device-code flow directly, while
+  `/login anthropic` delegates to the local Claude Code login flow and
+  syncs the resulting keychain credential into `ProfileStore`. The old
+  `/login oauth <provider>` spelling is no longer advertised by help,
+  onboarding, or tool schema.
+- **`/login <provider>`를 OAuth 단일 진입점으로 정리.** `/login openai`는
+  Codex Plus device-code flow를 직접 실행하고, `/login anthropic`은 로컬
+  Claude Code login flow에 위임한 뒤 keychain credential을 `ProfileStore`
+  로 동기화합니다. 기존 `/login oauth <provider>` 형태는 help, onboarding,
+  tool schema에서 더 이상 노출하지 않습니다.
+
+### Removed
+
+- **Legacy `/auth login` UI/backend path.** `/auth` now remains only as
+  profile management (`add`, `remove`, `set`); OAuth setup lives under
+  `/login <provider>`. The legacy auth-login status/sync helpers were
+  removed from the command package export surface.
+- **레거시 `/auth login` UI/backend 경로 제거.** `/auth`는 profile 관리
+  (`add`, `remove`, `set`)만 담당하고 OAuth 설정은 `/login <provider>`가
+  담당합니다. 기존 auth-login status/sync helper도 command package export
+  surface에서 제거했습니다.
+
 ## [0.97.0] — 2026-05-17
 
 ### Added

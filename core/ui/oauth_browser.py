@@ -6,7 +6,7 @@ Used by both render paths of the OAuth device-code prompt:
     (when the OAuth flow runs in serve and surfaces via IPC events).
   * Direct path — ``core.ui.agentic_ui.events.emit_oauth_login_started`` fallback
     (when the flow runs in the thin CLI process itself — e.g.
-    ``/login oauth openai`` slash command with no IPC writer set).
+    ``/login openai`` slash command with no IPC writer set).
 
 Both paths render the same Press [Enter] prompt and spawn the same daemon
 watcher so the user gets identical UX regardless of which process owns

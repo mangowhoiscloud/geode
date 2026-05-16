@@ -56,7 +56,7 @@ def _resolve_codex_token() -> str:
 
     v0.52.4 — checks two sources, GEODE-issued first:
       1. ProfileStore for an ``openai-codex`` profile (the one created
-         by ``/login oauth openai`` device flow). This is the token the
+         by ``/login openai`` device flow). This is the token the
          user just registered through GEODE.
       2. ~/.codex/auth.json (external Codex CLI store) — fallback for
          users who only have Codex CLI logged in.

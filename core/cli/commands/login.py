@@ -24,20 +24,44 @@ from core.auth.profiles import AuthProfile
 log = logging.getLogger(__name__)
 
 
+_PROVIDER_ALIASES: dict[str, str] = {
+    "openai": "openai",
+    "codex": "openai",
+    "chatgpt": "openai",
+    "anthropic": "anthropic",
+    "claude": "anthropic",
+    "claude-code": "anthropic",
+}
+"""User-facing provider names → canonical key. Accepts both the marketing
+name (``chatgpt``, ``claude``) and the CLI binary name (``codex``,
+``claude-code``) so the picker is forgiving of typos and habit."""
+
+
 def cmd_login(args: str) -> None:
-    """Handle /login — unified credentials/plans command (v0.50.0+).
+    """Handle /login — unified credentials/plans command.
 
-    Subcommands (mirrors Hermes `auth` + Claude Code `/login`/`/status`):
+    Parameter shape: ``/login [<provider>|<subcommand>]``. Providers run
+    the OAuth login flow directly (no extra subcommand), so the command
+    surface stays grep-able by provider name alone — this is the consolidated
+    replacement for the removed legacy auth-login subcommand (PR #B,
+    2026-05-17).
 
-      /login                — show plans, profiles, routing, quota
-      /login add            — interactive wizard (kind → provider → key/OAuth)
-      /login oauth <prov>   — OAuth device flow (currently: openai/codex)
-      /login set-key <plan> <key>
-      /login use <plan>     — pin a plan as the active one for its provider
-      /login remove <plan>
-      /login route <model> <plan> [<plan>...]
-      /login quota          — per-plan usage breakdown
-      /login status         — legacy alias of bare /login
+    Providers (case-insensitive, aliases accepted)::
+
+        /login openai      — Codex Plus device-code flow (aliases: codex, chatgpt)
+        /login anthropic   — Claude subscription login via local `claude` CLI
+                             (aliases: claude, claude-code)
+
+    Subcommands::
+
+        /login                — show plans, profiles, routing, quota
+        /login add            — interactive wizard (kind → provider → key/OAuth)
+        /login set-key <plan> <key>
+        /login use <plan>     — pin a plan as the active one for its provider
+        /login remove <plan>
+        /login route <model> <plan> [<plan>...]
+        /login quota          — per-plan usage breakdown
+        /login status         — legacy alias of bare /login
     """
     from core.cli import commands as _pkg
 
@@ -50,17 +74,20 @@ def cmd_login(args: str) -> None:
     sub = parts[0].lower()
     rest = parts[1] if len(parts) > 1 else ""
 
+    # Provider-as-parameter dispatch: ``/login openai`` /
+    # ``/login anthropic`` (+ aliases) run the OAuth flow directly. This
+    # path is reached before any subcommand match so a provider name and
+    # a subcommand never collide in practice — providers live in
+    # ``_PROVIDER_ALIASES``, subcommands are checked below.
+    if sub in _PROVIDER_ALIASES:
+        _login_oauth(_PROVIDER_ALIASES[sub])
+        return
+
     if sub in ("status", "list", "ls"):
         _login_show_status()
         return
     if sub in ("add", "new"):
         _login_add_interactive(rest)
-        return
-    if sub in ("oauth", "openai"):
-        # `/login openai` is preserved for backwards compatibility — it always
-        # ran the Codex device-code flow even before v0.50.0.
-        target = rest.strip().lower() or "openai"
-        _login_oauth(target)
         return
     if sub in ("set-key", "setkey", "key"):
         _login_set_key(rest)
@@ -79,7 +106,7 @@ def cmd_login(args: str) -> None:
         return
     if sub == "refresh":
         # v0.52 phase 3 — daemon-side reload of auth.toml after thin client
-        # writes (e.g. /login oauth completed in CLI process). When invoked
+        # writes (e.g. /login openai completed in CLI process). When invoked
         # in CLI process this is a no-op; the actual reload happens when the
         # CLI relays /login refresh to the daemon via IPC.
         #
@@ -151,8 +178,9 @@ def _login_help() -> None:
         "\n  [header]/login[/header] — credentials & subscription plans\n"
         "\n"
         "  [label]/login[/label]                       Show all plans, profiles, routing\n"
+        "  [label]/login openai[/label]                OAuth flow (Codex Plus quota)\n"
+        "  [label]/login anthropic[/label]             OAuth flow (Claude subscription)\n"
         "  [label]/login add[/label]                   Interactive wizard\n"
-        "  [label]/login oauth openai[/label]          OAuth device flow (Codex Plus)\n"
         "  [label]/login set-key[/label] <plan> <key>  Update a plan's API key\n"
         "  [label]/login use[/label] <plan>            Pin a plan as active for its provider\n"
         "  [label]/login route[/label] <model> <plan>… Bind a model to plan(s) in priority order\n"
@@ -471,34 +499,134 @@ def _login_add_interactive(_args: str) -> None:
 
 
 def _login_oauth(target: str) -> None:
-    """Run the OAuth device-code flow for an external CLI provider."""
+    """Run the OAuth login flow for a subscription provider.
+
+    ``target`` is the canonical key (``openai`` / ``anthropic``) — the
+    caller has already resolved aliases via :data:`_PROVIDER_ALIASES`.
+    Each branch is responsible for the provider-specific flow:
+
+    - ``openai``: GEODE-native device-code flow (Codex Plus quota).
+    - ``anthropic``: delegate to the local ``claude`` CLI's
+      ``claude /login`` browser flow, then sync the keychain blob into
+      ``ProfileStore`` so other parts of the system see the credential.
+    """
     from core.cli import commands as _pkg
 
     target = target.lower().strip()
-    if target not in ("openai", "codex"):
+    if target == "openai":
+        _pkg.console.print()
+        try:
+            from core.auth.oauth_login import login_openai
+
+            creds = login_openai()
+            if creds:
+                import contextlib
+
+                with contextlib.suppress(Exception):
+                    from core.llm.providers.codex import reset_codex_client
+
+                    reset_codex_client()
+                _pkg.console.print(
+                    "  [success]Codex OAuth registered.[/success]  "
+                    "[muted]Provider: openai-codex[/muted]\n"
+                )
+        except Exception as exc:
+            _pkg.console.print(f"  [red]Login failed: {exc}[/red]\n")
+        return
+
+    if target == "anthropic":
+        _login_oauth_anthropic()
+        return
+
+    _pkg.console.print(
+        f"  [warning]OAuth not implemented for '{target}'.[/warning]\n"
+        "  [muted]Available: openai (Codex Plus), anthropic (Claude subscription)[/muted]\n"
+    )
+
+
+def _login_oauth_anthropic() -> None:
+    """Delegate to the local ``claude`` CLI's login flow, then sync
+    the keychain credential into the GEODE ``ProfileStore``.
+
+    GEODE does not implement Anthropic's OAuth device flow itself —
+    Claude Code's CLI owns the browser handoff and writes the token to
+    the macOS keychain (``security`` service ``Claude
+    Code-credentials``). We just wrap the call so the user gets one
+    consistent entry point.
+    """
+    import shutil
+    import subprocess  # nosec — argv is module-controlled
+
+    from core.cli import commands as _pkg
+
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
         _pkg.console.print(
-            f"  [warning]OAuth not implemented for '{target}'.[/warning]\n"
-            "  [muted]Available: openai (Codex CLI Plus quota)[/muted]\n"
+            "  [warning]`claude` CLI not found on PATH.[/warning]  "
+            "[muted]Install Claude Code first, then re-run `/login anthropic`.[/muted]\n"
         )
         return
-    _pkg.console.print()
+
+    _pkg.console.print("  [muted]Delegating to `claude /login` (browser flow)…[/muted]\n")
     try:
-        from core.auth.oauth_login import login_openai
+        result = subprocess.run(  # noqa: S603  # nosec
+            [claude_bin, "/login"],
+            timeout=300,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        _pkg.console.print("  [warning]`claude /login` timed out (5 min)[/warning]\n")
+        return
+    except OSError as exc:
+        _pkg.console.print(f"  [red]`claude /login` failed: {exc}[/red]\n")
+        return
 
-        creds = login_openai()
-        if creds:
-            import contextlib
+    if result.returncode != 0:
+        _pkg.console.print(
+            f"  [warning]`claude /login` exited rc={result.returncode}[/warning]  "
+            "[muted](keychain may still hold a valid token from a previous session)[/muted]\n"
+        )
 
-            with contextlib.suppress(Exception):
-                from core.llm.providers.codex import reset_codex_client
+    # Sync the resulting keychain blob into ProfileStore so /login status
+    # picks the OAuth route up immediately, regardless of `claude` exit code.
+    try:
+        from plugins.petri_audit.claude_code_provider import (
+            get_claude_oauth_metadata,
+            resolve_claude_oauth_token,
+        )
 
-                reset_codex_client()
-            _pkg.console.print(
-                "  [success]Codex OAuth registered.[/success]  "
-                "[muted]Provider: openai-codex[/muted]\n"
-            )
-    except Exception as exc:
-        _pkg.console.print(f"  [red]Login failed: {exc}[/red]\n")
+        from core.auth.profiles import AuthProfile, CredentialType
+        from core.wiring.container import ensure_profile_store
+    except ImportError as exc:
+        _pkg.console.print(
+            f"  [warning]Anthropic profile sync skipped — `{exc.name}` not available.[/warning]\n"
+        )
+        return
+
+    token = resolve_claude_oauth_token()
+    if not token:
+        _pkg.console.print(
+            "  [warning]No Claude credential found in keychain after login.[/warning]\n"
+        )
+        return
+
+    meta = get_claude_oauth_metadata() or {}
+    expires = meta.get("expires_at")
+    expires_seconds = float(expires) / 1000.0 if isinstance(expires, int | float) else 0.0
+    profile = AuthProfile(
+        name="anthropic:claude-code",
+        provider="anthropic",
+        credential_type=CredentialType.OAUTH,
+        key=token,
+        expires_at=expires_seconds,
+        managed_by="claude-code",
+    )
+    ensure_profile_store().add(profile)
+    plan = meta.get("subscription_type") or "(plan: unknown)"
+    _pkg.console.print(
+        f"  [success]Claude OAuth registered.[/success]  "
+        f"[muted]Plan: {plan} · Provider: anthropic[/muted]\n"
+    )
 
 
 def _login_set_key(rest: str) -> None:
