@@ -17,7 +17,7 @@ def _build_system_handlers(
 ) -> dict[str, Any]:
     """Build system management tool handlers."""
     from core.cli import _set_readiness
-    from core.cli.commands import cmd_auth, cmd_key, cmd_model, show_help
+    from core.cli.commands import cmd_key, cmd_login, cmd_model, show_help
     from core.cli.onboarding import render_readiness
     from core.wiring.startup import check_readiness
 
@@ -129,28 +129,26 @@ def _build_system_handlers(
         }
 
     def handle_manage_auth(**kwargs: Any) -> dict[str, Any]:
-        sub_action = kwargs.get("sub_action", "")
-        cmd_auth(sub_action)
-        try:
-            from core.cli.commands import _get_profile_store
+        """Deprecated — redirects to ``manage_login``.
 
-            store = _get_profile_store()
-            profiles = [
-                {"name": p.name, "provider": p.provider, "type": p.credential_type.value}
-                for p in store.list_all()
-            ]
-        except Exception:
-            profiles = []
-        return {
-            "status": "ok",
-            "action": "auth",
-            "sub_action": sub_action,
-            "profiles": profiles,
-        }
+        PR #C (2026-05-17) removed the standalone ``/auth`` slash
+        command; this LLM tool entry stays as a backwards-compat
+        adapter so existing prompts that still call ``manage_auth``
+        keep working. The body forwards ``sub_action`` to
+        ``handle_manage_login`` as the ``subcommand`` argument.
+        """
+        sub_action = (kwargs.get("sub_action") or "").strip().lower()
+        # Map legacy /auth subactions to /login equivalents
+        legacy_to_login = {"": "status", "add": "add", "remove": "remove", "set": "source"}
+        first_token = sub_action.split(None, 1)[0] if sub_action else ""
+        login_sub = legacy_to_login.get(first_token, "status")
+        login_args = ""
+        if " " in sub_action:
+            login_args = sub_action.split(None, 1)[1]
+        return handle_manage_login(subcommand=login_sub, args=login_args)
 
     def handle_manage_login(**kwargs: Any) -> dict[str, Any]:
         """Natural-language entry to /login (Plans + Profiles + OAuth + Routing)."""
-        from core.cli.commands import cmd_login
 
         sub = (kwargs.get("subcommand") or "status").strip().lower()
         args = (kwargs.get("args") or "").strip()

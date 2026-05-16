@@ -11,7 +11,6 @@ from typing import Any
 
 from core.cli.commands import (
     cmd_apply,
-    cmd_auth,
     cmd_context,
     cmd_key,
     cmd_login,
@@ -105,8 +104,6 @@ def _handle_command(
         cmd_model(args)
     elif action == "login":
         cmd_login(args)
-    elif action == "auth":
-        cmd_auth(args)
     elif action == "generate":
         from plugins.game_ip.cli.commands import cmd_generate
 

@@ -52,6 +52,32 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Removed
+
+- **`/auth` 슬래시 명령 완전 제거 + `/login source` 신설.** `/auth` 의 잔존
+  surface (`add` / `remove` / `set <provider> <source>`) 가 모두 `/login`
+  으로 흡수. `/login source <provider> <type>` 신규 — 기존 `/auth set` 의
+  credential source picker. `routing.py` 의 `/auth` CommandSpec, `dispatcher.py`
+  의 cmd_auth dispatch, `core/cli/__init__.py` 의 TTY_LOCAL_COMMANDS 의
+  `/auth` 멤버, `_state.py` 의 `COMMAND_MAP` 의 `/auth` entry + help line,
+  `commands/__init__.py` 의 export, `core/cli/commands/auth.py` 파일 자체
+  모두 제거. `manage_auth` LLM tool 은 backwards-compat adapter 로 유지
+  — 호출 시 `manage_login` 로 forward (legacy prompts 호환). Plan vs
+  Profile 분리 의 historical 근거 (`PlanRegistry` vs `ProfileStore`) 는
+  유지되되, 사용자 진입점은 `/login` 단일 SOT.
+- **`/auth` slash command fully removed + `/login source` introduced.**
+  The remaining `/auth` surface (`add` / `remove` / `set <provider>
+  <source>`) was folded into `/login`. The new `/login source <provider>
+  <type>` is the migrated credential-source picker (was `/auth set`,
+  PR #1203). Removed: `routing.py` entry, `dispatcher.py` dispatch +
+  import, `_TTY_LOCAL_COMMANDS` membership, `_state.py` `COMMAND_MAP` +
+  help line, `commands/__init__.py` exports, and the
+  `core/cli/commands/auth.py` source file itself. The `manage_auth`
+  LLM tool is kept as a backwards-compat adapter that forwards to
+  `manage_login` so legacy prompts still work. The underlying Plan vs
+  Profile split (`PlanRegistry` vs `ProfileStore`) is unchanged — only
+  the user-facing entry point is unified.
+
 ## [0.98.0] — 2026-05-17
 
 ### Changed
