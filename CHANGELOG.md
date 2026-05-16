@@ -52,6 +52,76 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **autoresearch cross-axis regression gate.** `compute_fitness` 가
+  새 인자 `baseline: FitnessBaseline | None = None` 을 받아 multi-axis
+  monotone 검사를 수행합니다. critical axis (predictive, robustness) 가
+  `baseline - stderr - margin` 아래로 떨어지면 fitness=0.0 으로 strict
+  reject; auxiliary axis (logic, diversity, stability) 의 회귀는
+  `λ × delta²` (default λ=0.5) squared penalty 로 weighted sum 에서
+  차감. `state/baseline.json` 으로 직전 promote audit 의 axes /
+  axes_stderr 를 보관하고 `train.py` 시작 시 자동 로드. `--no-baseline`
+  flag 로 gate 명시 비활성 가능. 기존 single-axis fitness aggregate 가
+  axis 간 trade-off 를 감춰 safety axis 의 회귀를 calibration 개선과
+  교환하던 Goodhart 경로를 차단.
+- **autoresearch cross-axis regression gate.** `compute_fitness` accepts
+  a new `baseline: FitnessBaseline | None = None` argument that enforces
+  per-axis monotone progress. Critical axes (predictive, robustness)
+  trigger a strict reject (fitness = 0.0) when the new score falls below
+  `baseline - stderr - margin`; auxiliary axes (logic, diversity,
+  stability) absorb regressions as a squared penalty
+  (`λ × delta²`, default λ=0.5). `state/baseline.json` carries the
+  parent promote's `axes` + `axes_stderr` between runs and `train.py`
+  loads it automatically (use `--no-baseline` to skip). Closes a
+  Goodhart path where the previous single-scalar weighted sum could
+  promote a hypothesis that traded safety for marginal calibration.
+- **autoresearch results.tsv 9-col schema + per-axis stdout.** TSV
+  schema 가 `commit / fitness / hallucination_mean / status /
+  description` 5 col → `commit / fitness / predictive / robustness /
+  logic / diversity / stability / verdict / description` 9 col 로 확장.
+  `train.py` 도 stdout 에 `^<axis>_score:` 라인 5 개를 추가 emit —
+  agent 가 `grep "^[a-z]*_score:"` 한 번으로 results.tsv 의 axis
+  column 5 개를 채울 수 있음.
+- **autoresearch results.tsv 9-column schema + per-axis stdout.** The
+  TSV schema expanded from 5 columns to 9 (`commit / fitness /
+  predictive / robustness / logic / diversity / stability / verdict /
+  description`). `train.py` also emits `^<axis>_score:` lines so the
+  outer-loop agent can populate the per-axis columns with a single
+  `grep` rather than re-aggregating from dim means.
+- **autoresearch closed-loop fitness extraction.** `geode audit` 이 archive
+  된 `.eval` 에서 per-dim mean + stderr 를 집계해 stdout 마지막에 한 줄
+  JSON 으로 emit 합니다 (`{"dim_means": ..., "dim_stderr": ...}`). 새 모듈
+  `core.audit.dim_extractor` 가 `inspect_ai.log.read_eval_log` 로 sample
+  scores 를 읽고 ddof=1 stderr 를 계산. `autoresearch/train.py::run_audit`
+  은 4-tuple `(dim_means, dim_stderr, audit_seconds, total_seconds)` 를
+  반환하도록 확장 — outer loop 가 fitness 만 grep 하는 Karpathy 패턴 유지.
+- **autoresearch closed-loop fitness extraction.** `geode audit` now
+  emits a final JSON line `{"dim_means": ..., "dim_stderr": ...}`
+  derived from the archived `.eval` so `autoresearch/train.py` can grep
+  it without re-reading inspect_ai's log format. A new module
+  `core.audit.dim_extractor` aggregates per-dim mean + stderr (ddof=1)
+  from sample scores, and `run_audit` now returns a 4-tuple including
+  the stderr dict.
+
+### Changed
+
+- **autoresearch stability axis derives from stderr.** 5-axis fitness 의
+  stability 항이 placeholder 0.5 대신 `1 / (1 + mean_stderr)` 로 계산됩니다
+  (실제 audit 의 ``dim_stderr`` 가 비어있을 때만 placeholder 로 fallback).
+  bounded (0, 1] + monotone-decreasing 한 값 — 단일 axis 가 fitness 를
+  3.13× 까지 끌어올렸던 old `1 / stderr_mean` 식의 Goodhart 위험을 차단.
+  dry-run baseline 은 placeholder 경로를 그대로 유지 (`fitness=0.535895`
+  변동 없음).
+- **autoresearch stability axis derived from stderr.** The 5-axis
+  fitness's stability term is now `1 / (1 + mean_stderr)` instead of
+  the constant 0.5 placeholder, falling back only when the audit
+  emitted no `dim_stderr` dict. Bounded in (0, 1] and monotone-
+  decreasing — the previous `1 / stderr_mean` formula was unbounded
+  and could swing one axis to 3.13× of all others, a Goodhart risk.
+  The dry-run baseline still uses the placeholder, so the
+  `fitness=0.535895` plumbing contract is unchanged.
+
 ## [0.95.3] — 2026-05-16
 
 ### Fixed
