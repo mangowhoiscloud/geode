@@ -57,6 +57,7 @@ def _clear_model_card_cache() -> Any:
     yield
     _build_model_card.cache_clear()
 
+
 # ---------------------------------------------------------------------------
 # Contract 1 — model card asserts identity strongly
 # ---------------------------------------------------------------------------
