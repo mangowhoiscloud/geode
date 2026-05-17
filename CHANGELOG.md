@@ -52,6 +52,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.8] — 2026-05-17
+
+### Fixed
+
+- **`login_anthropic()` — scope set 을 Hermes 와 1:1 일치 (`org:create_api_key user:profile user:inference`).**
+  v0.99.7 의 `claude.ai/oauth/authorize` + `console.anthropic.com`
+  redirect_uri 조합이 production-tested Hermes 패턴과 정합인데도
+  사용자 시도 결과 또 "Invalid request format". dump 의
+  `authorize_url_full` 비교 결과 single 차이 = scope. 우리가 binary
+  의 hint string (`user:sessions:claude_code`, `user:mcp_servers`)
+  포함시켜 unregistered scope 거절. Hermes 의 narrower set 으로 좁힘
+  (`hermes-agent/agent/anthropic_adapter.py:1044`).
+
+- **`login_anthropic()` — narrowed scope set to Hermes parity.**
+  v0.99.7's authorize + redirect URI parity with Hermes still produced
+  "Invalid request format". Diffing dump's `authorize_url_full`
+  against Hermes's URL revealed the single remaining mismatch: scope.
+  Claude Code's binary advertises `user:sessions:claude_code` and
+  `user:mcp_servers` in a hint string, but the OAuth client only
+  accepts the smaller set Hermes ships. Now sending
+  `org:create_api_key user:profile user:inference` exactly.
+
+
+
 ## [0.99.7] — 2026-05-17
 
 ### Fixed
