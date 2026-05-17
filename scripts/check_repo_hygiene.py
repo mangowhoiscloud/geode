@@ -17,6 +17,7 @@ EXCLUDED_DIRS: frozenset[tuple[str, ...]] = frozenset(
     {
         (".git",),
         (".venv",),
+        (".release-venv",),
         ("node_modules",),
         (".claude", "worktrees"),
     }

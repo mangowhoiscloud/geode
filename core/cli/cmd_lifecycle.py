@@ -1,7 +1,7 @@
-"""Lifecycle commands — stop, status, clean, uninstall.
+"""Lifecycle commands — stop, status, clean, update, uninstall.
 
 Provides process management, disk usage reporting, selective cleanup,
-and complete system removal for GEODE installations.
+source-checkout updates, and complete system removal for GEODE installations.
 """
 
 from __future__ import annotations
@@ -612,6 +612,164 @@ def do_clean(
             pass
 
     console.print(f"  [success]Freed {_format_size(freed)}.[/success]")
+
+
+# ---------------------------------------------------------------------------
+# geode update
+# ---------------------------------------------------------------------------
+
+
+def _resolve_git_root(start: Path) -> Path | None:
+    """Return the enclosing git checkout root, if this is a source install."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],  # noqa: S607
+            cwd=start,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    root = result.stdout.strip()
+    return Path(root) if root else None
+
+
+def _has_dirty_worktree(repo_root: Path) -> bool:
+    """Return True when the checkout has uncommitted changes."""
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],  # noqa: S607
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return True
+    return bool(result.stdout.strip())
+
+
+def _run_update_step(
+    label: str,
+    command: list[str],
+    *,
+    cwd: Path,
+    dry_run: bool = False,
+    timeout: int = 300,
+) -> bool:
+    """Run one update command and print a compact lifecycle status line."""
+    quoted = " ".join(command)
+    if dry_run:
+        console.print(f"  [muted]Would run:[/muted] {quoted}")
+        return True
+
+    console.print(f"  {label}...")
+    try:
+        result = subprocess.run(  # noqa: S603
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        console.print(f"  [error]{label} failed: {exc}[/error]")
+        return False
+
+    if result.returncode == 0:
+        console.print(f"  [success]{label} complete.[/success]")
+        return True
+
+    detail = (result.stderr or result.stdout).strip()
+    console.print(f"  [error]{label} failed with exit code {result.returncode}.[/error]")
+    if detail:
+        console.print(f"  [muted]{detail}[/muted]")
+    return False
+
+
+def _start_serve_background(*, dry_run: bool = False) -> bool:
+    """Start ``geode serve`` detached after an update."""
+    if dry_run:
+        console.print("  [muted]Would restart serve: geode serve[/muted]")
+        return True
+    try:
+        with Path(os.devnull).open("w") as devnull:
+            subprocess.Popen(
+                ["geode", "serve"],  # noqa: S607
+                stdout=devnull,
+                stderr=devnull,
+                start_new_session=True,
+            )
+    except OSError as exc:
+        console.print(f"  [warning]Updated, but failed to restart serve: {exc}[/warning]")
+        return False
+    console.print("  [success]Serve restart requested.[/success]")
+    return True
+
+
+def do_update(
+    *,
+    dry_run: bool = False,
+    force: bool = False,
+    restart: bool = True,
+) -> bool:
+    """Update a source checkout and refresh the installed ``geode`` console script."""
+    mode_label = "[muted](dry-run)[/muted] " if dry_run else ""
+    console.print()
+    console.print(f"  {mode_label}[header]GEODE Update[/header]")
+    console.print()
+
+    repo_root = _resolve_git_root(Path.cwd())
+    if repo_root is None:
+        console.print(
+            "  [error]This update path requires a git source checkout.[/error]\n"
+            "  [muted]For packaged installs, use the package manager that installed GEODE.[/muted]"
+        )
+        return False
+
+    console.print(f"  Source: [muted]{repo_root}[/muted]")
+
+    dirty = _has_dirty_worktree(repo_root)
+    if dirty and not force and not dry_run:
+        console.print(
+            "  [error]Checkout has uncommitted changes.[/error]\n"
+            "  [muted]Commit, stash, or rerun with --force to let git decide "
+            "whether it can pull.[/muted]"
+        )
+        return False
+    if dirty:
+        reason = "dry-run was requested" if dry_run else "--force was passed"
+        console.print(f"  [warning]Checkout is dirty; continuing because {reason}.[/warning]")
+
+    from core.cli.ipc_client import is_serve_running
+
+    serve_was_running = is_serve_running()
+    steps = [
+        ("Pull latest source", ["git", "pull", "--ff-only"], 120),
+        ("Sync dependencies", ["uv", "sync"], 300),
+        ("Refresh CLI install", ["uv", "tool", "install", "-e", ".", "--force"], 300),
+        ("Verify CLI version", ["geode", "version"], 30),
+    ]
+    for label, command, timeout in steps:
+        if not _run_update_step(label, command, cwd=repo_root, dry_run=dry_run, timeout=timeout):
+            return False
+
+    if restart and serve_was_running:
+        console.print("  Restarting serve...")
+        if not dry_run:
+            stop_serve(force=True, timeout=10)
+        _start_serve_background(dry_run=dry_run)
+    elif serve_was_running:
+        console.print(
+            "  [warning]Serve was running; restart it manually to load new code.[/warning]"
+        )
+
+    console.print()
+    console.print("  [success]Update complete.[/success]")
+    return True
 
 
 # ---------------------------------------------------------------------------

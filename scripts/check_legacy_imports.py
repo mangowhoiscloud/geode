@@ -13,8 +13,10 @@ Usage:
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 LEGACY_PATTERNS: list[tuple[str, str]] = [
     (r"from core\.nodes\b", "external domain plugin nodes"),
@@ -105,21 +107,24 @@ def main() -> int:
         if idx + 1 < len(sys.argv):
             base = sys.argv[idx + 1]
 
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", base, "HEAD"],
+    git = shutil.which("git")
+    if git is None:
+        raise SystemExit("git executable not found")
+
+    result = subprocess.run(  # noqa: S603 - fixed git command; only base ref is user-provided.
+        [git, "diff", "--name-only", "--diff-filter=ACMR", base, "HEAD"],
         capture_output=True,
+        check=False,
         text=True,
     )
     changed = [
-        f
-        for f in result.stdout.strip().split("\n")
-        if f.endswith(".py") and f not in EXEMPT_FILES
+        f for f in result.stdout.strip().split("\n") if f.endswith(".py") and f not in EXEMPT_FILES
     ]
 
     violations: list[str] = []
     for filepath in changed:
         try:
-            content = open(filepath, encoding="utf-8").read()  # noqa: SIM115
+            content = Path(filepath).read_text(encoding="utf-8")
         except FileNotFoundError:
             continue
         for i, line in enumerate(content.split("\n"), 1):

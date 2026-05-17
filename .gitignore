@@ -6,6 +6,7 @@ dist/
 build/
 release-notes.md
 SHA256SUMS
+hf-release/
 
 # Virtual environment
 .venv/

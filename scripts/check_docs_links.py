@@ -92,6 +92,10 @@ def discover_links(root: Path) -> list[Link]:
                     target = match.group(1).strip()
                     if not target or target.startswith(_SKIP_SCHEMES):
                         continue
+                    if target.endswith("..."):
+                        # Changelog/example prose can contain placeholder links
+                        # such as `/docs/...`; these are not navigable routes.
+                        continue
                     if "${" in target:
                         # interpolated — record as unresolved (reported but
                         # not counted as broken)
@@ -223,9 +227,7 @@ def classify_and_check(
             route = "/" + "/".join(route_segs) if route_segs else "/"
             anchor = target[1:]
             if anchor and anchor not in page_ids.get(route, set()):
-                broken.append(
-                    f"  {link.file}:{link.line}  anchor #{anchor} not found on {route}"
-                )
+                broken.append(f"  {link.file}:{link.line}  anchor #{anchor} not found on {route}")
             continue
 
         # Internal absolute paths (incl. /geode/... basepath form)

@@ -234,7 +234,7 @@ class SkillLoader:
         dirs: list[Path] = [
             _PACKAGE_ROOT
             / ".geode"
-            / "skills",  # 1. Bundled (package source tree)  # noqa: paths-literal
+            / "skills",  # 1. Bundled (package source tree)  # paths-literal-ok
             GLOBAL_SKILLS_DIR,  # 2. User global (~/.geode/skills)
             cwd / PROJECT_SKILLS_DIR,  # 3. Project local ({cwd}/.geode/skills)
         ]

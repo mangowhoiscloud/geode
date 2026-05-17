@@ -157,6 +157,65 @@ def doctor(
         console.print(f"Unknown target: {target}. Available: bootstrap, slack")
 
 
+def update(
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview the update steps without changing files",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Continue even when the source checkout has uncommitted changes",
+    ),
+    restart: bool = typer.Option(
+        True,
+        "--restart/--no-restart",
+        help="Restart geode serve when it was running before the update",
+    ),
+) -> None:
+    """Update a source checkout and refresh the installed CLI."""
+    from core.cli.cmd_lifecycle import do_update
+
+    if not do_update(dry_run=dry_run, force=force, restart=restart):
+        raise typer.Exit(1)
+
+
+def uninstall(
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview files and tool environment removal without deleting anything",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Skip interactive confirmations",
+    ),
+    keep_config: bool = typer.Option(
+        False,
+        "--keep-config",
+        help="Preserve ~/.geode/.env and config.toml",
+    ),
+    keep_data: bool = typer.Option(
+        False,
+        "--keep-data",
+        help="Preserve vault, identity, and user profile data",
+    ),
+) -> None:
+    """Remove GEODE runtime data and the installed CLI."""
+    from core.cli.cmd_lifecycle import do_uninstall
+
+    do_uninstall(
+        dry_run=dry_run,
+        force=force,
+        keep_config=keep_config,
+        keep_data=keep_data,
+    )
+
+
 def history(
     limit: int = typer.Option(10, "--limit", "-n", help="Number of recent entries to show"),
     month: str = typer.Option(None, "--month", "-m", help="Month to show (YYYY-MM)"),

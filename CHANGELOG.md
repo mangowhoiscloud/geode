@@ -55,6 +55,40 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [0.99.11] — 2026-05-17
 
+### Added
+
+- **Source-checkout update command.** Added `geode update` to pull the current
+  git checkout with `--ff-only`, sync dependencies, refresh the editable
+  `uv tool` install, verify `geode version`, and restart `geode serve` when it
+  was already running. Also exposed `geode uninstall` as the top-level wrapper
+  for the existing lifecycle remover. `--dry-run`, `--force`, and
+  `--no-restart` cover CI, dirty checkout, and daemon-control workflows.
+- **소스 체크아웃 업데이트 명령.** `geode update`가 현재 git checkout을
+  `--ff-only`로 pull 하고, 의존성을 sync 하며, editable `uv tool` 설치를
+  갱신하고, `geode version`을 검증한 뒤 이미 실행 중이던 `geode serve`를
+  재시작합니다. 기존 lifecycle 제거기를 top-level `geode uninstall`로도
+  노출했습니다. `--dry-run`, `--force`, `--no-restart`로 CI, dirty checkout,
+  daemon 제어 workflow 를 지원합니다.
+- **Hugging Face release bundle.** Added a deterministic HF dataset bundle
+  generator and strengthened the manual release workflow so HF publishing
+  creates a versioned `releases/v<version>/` layout with repo card,
+  `latest.json`, checksums, release notes, manifest, wheel, and sdist, then
+  verifies the uploaded remote file list.
+- **Hugging Face 릴리즈 번들.** 결정적 HF dataset bundle 생성기를 추가하고
+  수동 release workflow 를 보강해 HF publish 가 repo card, `latest.json`,
+  checksum, release notes, manifest, wheel, sdist 를 포함한
+  `releases/v<version>/` 구조를 만들고 업로드된 remote file list 를
+  검증하도록 했습니다.
+- **Official docs generation gate.** Added a release-facing docs gate that
+  composes GEODE's existing site tools: regenerate SOT/changelog/`llms.txt`,
+  check docs links, lint render-gated Markdown, and build the Next.js static
+  docs site. The release workflow now runs the same gate after installing site
+  dependencies.
+- **공식 문서 생성 게이트.** 기존 site tool 을 조합한 release-facing docs
+  gate 를 추가. SOT/changelog/`llms.txt` 재생성, docs link 검사,
+  render-gated Markdown lint, Next.js static docs site build 를 한 번에
+  수행. release workflow 도 site dependency 설치 후 같은 gate 를 실행.
+
 ### Removed
 
 - **Bundled Game IP analysis plugin.** Removed `plugins/game_ip/`, the
@@ -68,6 +102,14 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   테스트를 제거. Game IP 분석은 별도 repository/package 에서 CLI, fixture,
   E2E gate, release cadence 를 독립적으로 소유. GEODE core 는 외부 도메인
   패키지를 위한 domain loader 계약만 유지.
+- **Out-of-scope audit helper removal.** Removed the one-off Eco² token-cost
+  calculator from `scripts/`; it was historical audit context, not a GEODE
+  release, Hugging Face, or OSS packaging asset. Remaining scripts are now
+  expected to pass the release ruff/format/mypy gates.
+- **스코프 밖 audit 보조 스크립트 제거.** `scripts/` 에서 일회성 Eco²
+  token-cost 계산기를 제거. 해당 파일은 과거 audit 문맥이지 GEODE release,
+  Hugging Face, OSS packaging 자산이 아니었음. 남은 scripts 는 release
+  ruff/format/mypy gate 를 통과해야 함.
 
 ### Architecture
 
@@ -328,16 +370,24 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   ~3min → ~1min. Draft PRs no longer trigger CI thanks to the new
   `types: [..., ready_for_review]` filter. `pytest-xdist>=3.6.0` added
   to the dev dependency group.
-- **v1.0.0 packaging plan.** Added a release packaging plan grounded in
+- **v0.99.11 packaging plan.** Added a release packaging plan grounded in
   Homebrew's Python application guidance, Hermes Agent's Homebrew formula,
   Hugging Face `ml-intern`, and OpenClaw's release validation/package
   acceptance patterns. The plan separates PyPI/uv CLI packaging, GitHub
   release assets, Homebrew, and Hugging Face artifact/demo surfaces.
-- **v1.0.0 패키징 계획.** Homebrew Python application 가이드, Hermes Agent
+- **v0.99.11 패키징 계획.** Homebrew Python application 가이드, Hermes Agent
   Homebrew formula, Hugging Face `ml-intern`, OpenClaw release validation /
   package acceptance 패턴을 기준으로 release packaging 계획을 추가. PyPI/uv
   CLI 패키징, GitHub release asset, Homebrew, Hugging Face artifact/demo
   surface 를 분리해 정리.
+- **Official docs generation plan.** Grounded GEODE's docs release path against
+  Hermes Agent's Docusaurus prebuild generators and OpenClaw's generated-docs,
+  MDX, formatting, and link-audit gates. The canonical GEODE command is now
+  `uv run python scripts/check_official_docs.py`.
+- **공식 문서 생성 계획.** GEODE docs release path 를 Hermes Agent 의
+  Docusaurus prebuild generator 와 OpenClaw 의 generated-docs / MDX /
+  formatting / link-audit gate 에 대조해 정리. GEODE canonical command 는
+  `uv run python scripts/check_official_docs.py`.
 
 ## [0.99.10] — 2026-05-17
 
@@ -3329,8 +3379,9 @@ renders as a single column with a `KR`-only or `EN`-only chip.
     — 정직 한 status (credit exhaust 명시) + cost 각주.
   - **시각화**: `scripts/petri_viz_summary.py` (matplotlib heatmap +
     Δ bar chart), `inspect view` CLI 의 native viewer 의 활용 path.
-  - **cost 추정 script**: `scripts/eco2_token_cost.py` — Eco² 의 13
-    posting 의 token usage 의 gpt-5.4 grounding (~$1,296 ≈ ~181만원).
+  - **cost 문맥**: Eco² 누적 비용은 당시 audit note 의 historical
+    estimate 로 유지. 관련 일회성 계산 스크립트는 GEODE v1 릴리즈
+    스코프에서 제외.
 
 ## [0.93.1] — 2026-05-12
 

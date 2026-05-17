@@ -18,7 +18,7 @@
 
 [English](README.md)
 
-# GEODE v1.0.0 — Long-running Autonomous Execution Harness
+# GEODE v0.99.11 — Long-running Autonomous Execution Harness
 
 탐색적 리서치와 시그널 예측을 위한 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게.
 
@@ -166,6 +166,8 @@ geode "오늘 AI 새 소식 뭐야?"                         # 1회성 프롬프
 ```bash
 geode about           # 버전, 모델, 등록된 auth, 경로, 데몬 상태
 geode doctor          # 7-항목 부트스트랩 진단 + fix 힌트
+geode update          # 소스 pull, 의존성 sync, 설치된 CLI 갱신
+geode uninstall       # 런타임 데이터와 설치된 CLI 제거
 geode setup --reset   # ~/.geode/.env 지우고 wizard 재실행
 ```
 
@@ -173,41 +175,36 @@ geode setup --reset   # ~/.geode/.env 지우고 wizard 재실행
 
 ### 업데이트
 
-최신 코드를 pull 한 뒤 의존성 sync + editable 바이너리 재설치 — 이러면 `geode` 명령이 새 소스를 가리킵니다.
+소스 체크아웃 설치라면 GEODE가 업데이트 절차를 직접 실행하게 할 수 있습니다.
 
 ```bash
-git pull                              # geode/ 디렉토리 안에서
-uv sync                               # 의존성 업데이트
-uv tool install -e . --force          # `geode` 콘솔 스크립트 재빌드
+geode update
 ```
 
-`geode serve` 데몬이 떠 있다면 재시작해서 새 코드를 로드하세요:
+이 명령은 `git pull --ff-only`, `uv sync`, `uv tool install -e . --force`, `geode version`을 순서대로 실행합니다.
+`geode serve` 데몬이 떠 있었다면 새 코드를 로드하도록 재시작합니다. 변경 없이 절차만 확인하려면:
 
 ```bash
-pgrep -f "geode serve" | xargs -r kill   # 데몬 정지
-geode serve &                            # 백그라운드 재시작
-geode version                            # 새 버전 확인
+geode update --dry-run
 ```
 
 ---
 
 ### 삭제
 
-`geode` 콘솔 스크립트와 전용 환경을 제거합니다. `geode/` 소스 폴더와 `~/.geode/` 설정 + 런타임 디렉터리는 그대로 남깁니다 — 완전히 지우려면 별도로 삭제하세요.
+GEODE 런타임 데이터와 설치된 CLI를 제거합니다. 먼저 어떤 항목이 지워질지 확인할 수 있습니다.
 
 ```bash
-# 1) 데몬 정지 (geode serve 안 띄웠다면 skip)
-pgrep -f "geode serve" | xargs -r kill
+geode uninstall --dry-run
+geode uninstall
+```
 
-# 2) 콘솔 스크립트 + 도구 환경 제거
-uv tool uninstall geode
+부분 삭제 모드:
 
-# 3) (선택) 설정 + 런타임 데이터 wipe
-rm -rf ~/.geode                                 # 모든 항목: .env, config.toml, auth.toml,
-                                                # diagnostics/, logs/, mcp/, projects/, runs/, …
-
-# 4) (선택) 소스 clone 도 제거
-rm -rf path/to/geode
+```bash
+geode uninstall --keep-config   # .env 와 config.toml 보존
+geode uninstall --keep-data     # vault, identity, user profile 보존
+geode uninstall --force         # 자동화용 확인 생략
 ```
 
 제거 확인:
@@ -283,9 +280,7 @@ Mac: `xcode-select --install` 후 `brew install python@3.12`. Windows: [python.o
 
 ```bash
 cd geode
-git pull origin main
-uv sync
-uv tool install -e . --force
+geode update
 ```
 </details>
 
@@ -309,7 +304,7 @@ uv tool install -e . --force
 
 ## GEODE 비교
 
-각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v1.0.0**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
+각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.11**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
 
 <details>
 <summary><strong>A. 런타임 자세</strong> — 에이전트가 어떻게 떠 있는가</summary>

@@ -12,7 +12,7 @@ on:
         required: true
         default: "main"
       version:
-        description: "Expected GEODE version, e.g. 1.0.0"
+        description: "Expected GEODE version, e.g. 0.99.11"
         required: true
       publish_github_release:
         description: "Create the GitHub release after validation"
@@ -23,13 +23,17 @@ on:
         type: boolean
         default: false
       publish_huggingface_artifacts:
-        description: "Upload dist artifacts to a Hugging Face dataset repo"
+        description: "Upload the versioned release bundle to a Hugging Face dataset repo"
         type: boolean
         default: false
       huggingface_repo_id:
-        description: "HF dataset repo id, e.g. mangowhoiscloud/geode-v1-artifacts"
+        description: "HF dataset repo id, e.g. mangowhoiscloud/geode-release-artifacts"
         required: false
-        default: ""
+        default: "mangowhoiscloud/geode-release-artifacts"
+      huggingface_private:
+        description: "Create the HF dataset repo as private if it does not exist"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -53,6 +57,12 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
       - id: rev
         name: Record release SHA
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -69,14 +79,21 @@ jobs:
       - name: Sync dependencies
         run: uv sync --extra audit
 
+      - name: Install site dependencies
+        run: npm ci
+        working-directory: site
+
       - name: Lint and hygiene
         run: |
-          uv run ruff check core plugins tests autoresearch
-          uv run ruff format --check core plugins tests autoresearch
+          uv run ruff check core plugins tests autoresearch scripts
+          uv run ruff format --check core plugins tests autoresearch scripts
           uv run deptry .
 
       - name: Type check
-        run: uv run mypy core plugins
+        run: >
+          uv run mypy core plugins scripts
+          tests/test_prepare_hf_release_bundle.py
+          tests/test_check_official_docs.py
 
       - name: Prompt integrity
         run: |
@@ -85,6 +102,9 @@ jobs:
 
           verify_prompt_integrity(raise_on_drift=True)
           PY
+
+      - name: Official docs generation gate
+        run: uv run python scripts/check_official_docs.py
 
       - name: Test
         run: uv run pytest -q
@@ -154,13 +174,34 @@ jobs:
           import hashlib
           from pathlib import Path
 
+          from scripts.prepare_hf_release_bundle import is_distribution_artifact
+
           lines = []
           for path in sorted(Path("dist").iterdir()):
-              if path.is_file():
+              if is_distribution_artifact(path):
                   digest = hashlib.sha256(path.read_bytes()).hexdigest()
                   lines.append(f"{digest}  {path.as_posix()}")
           Path("SHA256SUMS").write_text("\n".join(lines) + "\n")
           PY
+
+      - name: Prepare Hugging Face release bundle
+        run: |
+          version="${{ inputs.version }}"
+          repo="${{ inputs.huggingface_repo_id }}"
+          test -n "$repo"
+          uv run python scripts/prepare_hf_release_bundle.py \
+            --version "$version" \
+            --repo-id "$repo" \
+            --dist-dir dist \
+            --release-notes release-notes.md \
+            --checksums SHA256SUMS \
+            --output-dir hf-release \
+            --source-sha "${{ steps.rev.outputs.sha }}"
+          test -f "hf-release/README.md"
+          test -f "hf-release/latest.json"
+          test -f "hf-release/releases/v${version}/manifest.json"
+          test -f "hf-release/releases/v${version}/SHA256SUMS"
+          test -f "hf-release/releases/v${version}/release-notes.md"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -169,6 +210,7 @@ jobs:
             dist
             release-notes.md
             SHA256SUMS
+            hf-release
           if-no-files-found: error
 
   publish-github-release:
@@ -226,10 +268,73 @@ jobs:
       - name: Upload to Hugging Face dataset repo
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_REPO_ID: ${{ inputs.huggingface_repo_id }}
+          HF_PRIVATE: ${{ inputs.huggingface_private }}
+          GEODE_VERSION: ${{ inputs.version }}
+          GEODE_SHA: ${{ needs.validate-build.outputs.sha }}
         run: |
-          repo="${{ inputs.huggingface_repo_id }}"
-          test -n "$repo"
-          python -m pip install --upgrade huggingface_hub
-          hf upload "$repo" release-artifacts/dist "/dist" \
-            --repo-type=dataset \
-            --commit-message="Upload GEODE v${{ inputs.version }} release artifacts"
+          test -n "$HF_REPO_ID"
+          test -n "$HF_TOKEN"
+          python -m pip install --upgrade "huggingface_hub>=1.0"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          from huggingface_hub import HfApi
+          from huggingface_hub import hf_hub_download
+
+          repo_id = os.environ["HF_REPO_ID"]
+          version = os.environ["GEODE_VERSION"]
+          source_sha = os.environ["GEODE_SHA"]
+          private = os.environ.get("HF_PRIVATE", "true").lower() == "true"
+          bundle = Path("release-artifacts/hf-release")
+          if not bundle.exists():
+              raise SystemExit(f"missing HF release bundle: {bundle}")
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          whoami = api.whoami()
+          username = whoami.get("name") or whoami.get("fullname") or "(unknown)"
+          print(f"Authenticated to Hugging Face as {username}")
+
+          api.create_repo(
+              repo_id=repo_id,
+              repo_type="dataset",
+              private=private,
+              exist_ok=True,
+          )
+          api.upload_folder(
+              repo_id=repo_id,
+              repo_type="dataset",
+              folder_path=str(bundle),
+              path_in_repo=".",
+              commit_message=f"Upload GEODE v{version} release bundle ({source_sha[:12]})",
+          )
+
+          required = {
+              "README.md",
+              "latest.json",
+              f"releases/v{version}/manifest.json",
+              f"releases/v{version}/SHA256SUMS",
+              f"releases/v{version}/release-notes.md",
+              f"releases/v{version}/dist/geode-{version}.tar.gz",
+              f"releases/v{version}/dist/geode-{version}-py3-none-any.whl",
+          }
+          remote_files = set(api.list_repo_files(repo_id=repo_id, repo_type="dataset"))
+          missing = sorted(required - remote_files)
+          if missing:
+              raise SystemExit(f"HF upload verification failed; missing: {missing}")
+
+          local_manifest = (bundle / f"releases/v{version}/manifest.json").read_text(
+              encoding="utf-8"
+          )
+          remote_manifest_path = hf_hub_download(
+              repo_id=repo_id,
+              repo_type="dataset",
+              filename=f"releases/v{version}/manifest.json",
+              token=os.environ["HF_TOKEN"],
+          )
+          remote_manifest = Path(remote_manifest_path).read_text(encoding="utf-8")
+          if remote_manifest != local_manifest:
+              raise SystemExit("HF upload verification failed; remote manifest differs")
+          print(f"Uploaded GEODE v{version} release bundle to hf://datasets/{repo_id}")
+          PY

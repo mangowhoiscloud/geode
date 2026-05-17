@@ -172,6 +172,8 @@ If you see this, you're done. If you see an error, run `geode doctor` for a diag
 ```bash
 geode about           # version, model, registered auth, paths, daemon status
 geode doctor          # 7-check bootstrap diagnosis with fix hints
+geode update          # pull source, sync deps, refresh the installed CLI
+geode uninstall       # remove runtime data and the installed CLI
 geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 ```
 
@@ -179,44 +181,41 @@ geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 
 ### Updating
 
-Pull the latest code, sync dependencies, then re-install the editable binary so `geode` resolves to the new source:
+For a source checkout install, let GEODE run the same update sequence it uses in smoke tests:
 
 ```bash
-git pull                              # from inside the geode/ directory
-uv sync                               # update dependencies
-uv tool install -e . --force          # rebuild the `geode` console-script
+geode update
 ```
 
-If `geode serve` was running, restart it so the daemon loads the new code:
+This runs `git pull --ff-only`, `uv sync`, `uv tool install -e . --force`, then `geode version`.
+If `geode serve` was running, GEODE restarts it so the daemon loads the new code. Preview the
+steps without changing files with:
 
 ```bash
-pgrep -f "geode serve" | xargs -r kill   # stop the running daemon
-geode serve &                            # restart in the background
-geode version                            # confirm the new version
+geode update --dry-run
 ```
 
 ---
 
 ### Uninstalling
 
-Removes the `geode` console-script and its tool environment. The `geode/` source folder and `~/.geode/` config + runtime directory are kept — delete them separately if you want a clean wipe.
+Removes GEODE runtime data and the installed CLI. Preview first if you want to see exactly what
+would be removed:
 
 ```bash
-# 1) Stop the daemon (skip if you never ran `geode serve`)
-pgrep -f "geode serve" | xargs -r kill
-
-# 2) Remove the console-script + tool environment
-uv tool uninstall geode
-
-# 3) (optional) wipe config + runtime data
-rm -rf ~/.geode                                 # everything: .env, config.toml, auth.toml,
-                                                # diagnostics/, logs/, mcp/, projects/, runs/, …
-
-# 4) (optional) drop the source clone
-rm -rf path/to/geode
+geode uninstall --dry-run
+geode uninstall
 ```
 
-Verify the removal:
+Useful partial removal modes:
+
+```bash
+geode uninstall --keep-config   # keep .env and config.toml
+geode uninstall --keep-data     # keep vault, identity, and user profile data
+geode uninstall --force         # skip confirmations for automation
+```
+
+Verify removal:
 
 ```bash
 which geode               # should print nothing
@@ -289,9 +288,7 @@ Check `geode model` — some models are better at tool use than others. Default 
 
 ```bash
 cd geode
-git pull origin main
-uv sync
-uv tool install -e . --force
+geode update
 ```
 </details>
 

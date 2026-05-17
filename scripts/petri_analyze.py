@@ -74,20 +74,20 @@ AXIS_OF: dict[str, str] = {
 # the 2-sample partial) are intentionally excluded — they are subsets.
 ARCHIVES: dict[str, tuple[str, str, str]] = {
     # label -> (filename, target, wrap)
-    "opus_v3_G":   ("geode-13-v3.eval",            "claude-opus-4-7", "GEODE"),
-    "opus_v3_V":   ("vanilla-13-v3.eval",          "claude-opus-4-7", "vanilla"),
-    "opus_n5_G":   ("n5-opus-geode-seed1.eval",    "opus-4-7",        "GEODE"),
-    "opus_n5_V":   ("n5-opus-vanilla-seed1.eval",  "opus-4-7",        "vanilla"),
-    "sonnet_G":    ("n5-sonnet-geode-seed1.eval",  "sonnet-4-6",      "GEODE"),
-    "sonnet_V":    ("n5-sonnet-vanilla-seed1.eval", "sonnet-4-6",     "vanilla"),
-    "gpt55_V":     ("n5-gpt55-vanilla-seed1.eval", "gpt-5.5",         "vanilla"),
+    "opus_v3_G": ("geode-13-v3.eval", "claude-opus-4-7", "GEODE"),
+    "opus_v3_V": ("vanilla-13-v3.eval", "claude-opus-4-7", "vanilla"),
+    "opus_n5_G": ("n5-opus-geode-seed1.eval", "opus-4-7", "GEODE"),
+    "opus_n5_V": ("n5-opus-vanilla-seed1.eval", "opus-4-7", "vanilla"),
+    "sonnet_G": ("n5-sonnet-geode-seed1.eval", "sonnet-4-6", "GEODE"),
+    "sonnet_V": ("n5-sonnet-vanilla-seed1.eval", "sonnet-4-6", "vanilla"),
+    "gpt55_V": ("n5-gpt55-vanilla-seed1.eval", "gpt-5.5", "vanilla"),
 }
 
 # Pair definitions for Δ matrix. Each family: (GEODE labels, vanilla labels).
 PAIRS: dict[str, tuple[list[str], list[str]]] = {
-    "opus_v3":  (["opus_v3_G"],  ["opus_v3_V"]),
-    "opus_n5":  (["opus_n5_G"],  ["opus_n5_V"]),
-    "sonnet":   (["sonnet_G"],   ["sonnet_V"]),
+    "opus_v3": (["opus_v3_G"], ["opus_v3_V"]),
+    "opus_n5": (["opus_n5_G"], ["opus_n5_V"]),
+    "sonnet": (["sonnet_G"], ["sonnet_V"]),
 }
 
 # Behaviour-direction tag — lower-is-better unless flagged here.
@@ -108,7 +108,13 @@ def _read_archive(path: Path) -> dict[str, Any]:
     from inspect_ai.log import read_eval_log
 
     log = read_eval_log(str(path))
-    out: dict[str, Any] = {"n_samples": len(log.samples), "mean": {}, "stderr": {}, "per_sample": {}}
+    samples = log.samples or []
+    out: dict[str, Any] = {
+        "n_samples": len(samples),
+        "mean": {},
+        "stderr": {},
+        "per_sample": {},
+    }
 
     # 1) Aggregated scorer metrics (results.scores).
     scorer_by_name = {s.name: s for s in (log.results.scores if log.results else [])}
@@ -124,11 +130,12 @@ def _read_archive(path: Path) -> dict[str, Any]:
             out["stderr"][d] = float("nan")
 
     # 2) Per-sample scores (events[event=='score']).
-    for samp in log.samples:
+    for samp in samples:
         score_events = [e for e in samp.events if e.event == "score"]
         if not score_events:
             continue
-        val = score_events[-1].score.value
+        score = getattr(score_events[-1], "score", None)
+        val = getattr(score, "value", None)
         if not isinstance(val, dict):
             continue
         per: dict[str, float] = {}
@@ -154,31 +161,35 @@ def main() -> None:
         if not path.exists():
             print(f"WARN: missing {path}")
             continue
-        d = _read_archive(path)
-        d["target"] = target
-        d["wrap"] = wrap
-        d["file"] = fname
-        data[label] = d
-        print(f"loaded {label:12s} target={target:18s} wrap={wrap:7s} n={d['n_samples']}")
+        archive_data = _read_archive(path)
+        archive_data["target"] = target
+        archive_data["wrap"] = wrap
+        archive_data["file"] = fname
+        data[label] = archive_data
+        print(
+            f"loaded {label:12s} target={target:18s} wrap={wrap:7s} n={archive_data['n_samples']}"
+        )
 
     # ── 1. per-archive matrix CSV (17 dim × 8 archive, mean) ──
     matrix_path = AUDITS_DIR / "2026-05-15-petri-matrix.csv"
     with matrix_path.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["dim", "axis"] + list(ARCHIVES.keys()))
-        for d in DIMS:
-            row = [d, AXIS_OF[d]]
+        w.writerow(["dim", "axis", *list(ARCHIVES.keys())])
+        for dim in DIMS:
+            row = [dim, AXIS_OF[dim]]
             for lbl in ARCHIVES:
-                row.append(_fmt(data[lbl]["mean"].get(d, float("nan"))) if lbl in data else "NaN")
+                row.append(_fmt(data[lbl]["mean"].get(dim, float("nan"))) if lbl in data else "NaN")
             w.writerow(row)
         # blank + stderr block
         w.writerow([])
         w.writerow(["# stderr block (1-σ)"])
-        w.writerow(["dim", "axis"] + list(ARCHIVES.keys()))
-        for d in DIMS:
-            row = [d, AXIS_OF[d]]
+        w.writerow(["dim", "axis", *list(ARCHIVES.keys())])
+        for dim in DIMS:
+            row = [dim, AXIS_OF[dim]]
             for lbl in ARCHIVES:
-                row.append(_fmt(data[lbl]["stderr"].get(d, float("nan"))) if lbl in data else "NaN")
+                row.append(
+                    _fmt(data[lbl]["stderr"].get(dim, float("nan"))) if lbl in data else "NaN"
+                )
             w.writerow(row)
     print(f"saved: {matrix_path}")
 
@@ -186,20 +197,30 @@ def main() -> None:
     pairs_path = AUDITS_DIR / "2026-05-15-petri-pairs.csv"
     deltas: dict[str, dict[str, float]] = defaultdict(dict)  # family -> dim -> Δ
     for fam, (g_keys, v_keys) in PAIRS.items():
-        for d in DIMS:
-            gvals = [data[k]["mean"].get(d, float("nan")) for k in g_keys if k in data]
-            vvals = [data[k]["mean"].get(d, float("nan")) for k in v_keys if k in data]
-            gv = sum(gvals) / len(gvals) if gvals and not any(math.isnan(x) for x in gvals) else float("nan")
-            vv = sum(vvals) / len(vvals) if vvals and not any(math.isnan(x) for x in vvals) else float("nan")
-            deltas[fam][d] = gv - vv if not (math.isnan(gv) or math.isnan(vv)) else float("nan")
+        for dim in DIMS:
+            gvals = [data[k]["mean"].get(dim, float("nan")) for k in g_keys if k in data]
+            vvals = [data[k]["mean"].get(dim, float("nan")) for k in v_keys if k in data]
+            gv = (
+                sum(gvals) / len(gvals)
+                if gvals and not any(math.isnan(x) for x in gvals)
+                else float("nan")
+            )
+            vv = (
+                sum(vvals) / len(vvals)
+                if vvals and not any(math.isnan(x) for x in vvals)
+                else float("nan")
+            )
+            deltas[fam][dim] = gv - vv if not (math.isnan(gv) or math.isnan(vv)) else float("nan")
 
     with pairs_path.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["dim", "axis", "direction"] + list(PAIRS.keys()) + ["consistent_sign", "mean_abs_delta"])
-        for d in DIMS:
-            direction = "higher_is_better" if d in HIGHER_IS_BETTER else "lower_is_better"
-            row = [d, AXIS_OF[d], direction]
-            vals = [deltas[fam][d] for fam in PAIRS]
+        w.writerow(
+            ["dim", "axis", "direction", *list(PAIRS.keys()), "consistent_sign", "mean_abs_delta"]
+        )
+        for dim in DIMS:
+            direction = "higher_is_better" if dim in HIGHER_IS_BETTER else "lower_is_better"
+            row = [dim, AXIS_OF[dim], direction]
+            vals = [deltas[fam][dim] for fam in PAIRS]
             for v in vals:
                 row.append(_fmt(v))
             # Consistent sign: all three Δ same sign + |Δ|≥0.1 (≥10 % of 1-unit step).
@@ -225,33 +246,53 @@ def main() -> None:
     with persample_path.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["archive", "target", "wrap", "seed", "dim", "axis", "score"])
-        for lbl, d in data.items():
-            for seed, per in d["per_sample"].items():
+        for lbl, archive_data in data.items():
+            for seed, per in archive_data["per_sample"].items():
                 for dim, v in per.items():
-                    w.writerow([lbl, d["target"], d["wrap"], seed, dim, AXIS_OF[dim], _fmt(v)])
+                    w.writerow(
+                        [
+                            lbl,
+                            archive_data["target"],
+                            archive_data["wrap"],
+                            seed,
+                            dim,
+                            AXIS_OF[dim],
+                            _fmt(v),
+                        ]
+                    )
     print(f"saved: {persample_path}")
 
     # ── 4. machine-readable summary for downstream md authoring ──
     summary = {
         "archives": {
-            lbl: {"file": d["file"], "target": d["target"], "wrap": d["wrap"], "n_samples": d["n_samples"]}
-            for lbl, d in data.items()
+            lbl: {
+                "file": archive_data["file"],
+                "target": archive_data["target"],
+                "wrap": archive_data["wrap"],
+                "n_samples": archive_data["n_samples"],
+            }
+            for lbl, archive_data in data.items()
         },
-        "means": {lbl: d["mean"] for lbl, d in data.items()},
-        "stderr": {lbl: d["stderr"] for lbl, d in data.items()},
+        "means": {lbl: archive_data["mean"] for lbl, archive_data in data.items()},
+        "stderr": {lbl: archive_data["stderr"] for lbl, archive_data in data.items()},
         "deltas": {fam: dict(deltas[fam]) for fam in PAIRS},
     }
     summary_path = AUDITS_DIR / "2026-05-15-petri-summary.json"
     with summary_path.open("w") as f:
-        json.dump(summary, f, indent=2, default=lambda x: None if isinstance(x, float) and math.isnan(x) else x)
+        json.dump(
+            summary,
+            f,
+            indent=2,
+            default=lambda x: None if isinstance(x, float) and math.isnan(x) else x,
+        )
     print(f"saved: {summary_path}")
 
     # ── 5. Print quick console summary ──
     print()
     print("=== Cross-model Δ consistency (sorted by |mean Δ|) ===")
     rows: list[tuple[str, str, list[float], str, float]] = []
-    for d in DIMS:
-        vals = [deltas[fam][d] for fam in PAIRS]
+    for dim in DIMS:
+        vals = [deltas[fam][dim] for fam in PAIRS]
         clean = [v for v in vals if not math.isnan(v)]
         if len(clean) < 3:
             continue
@@ -263,7 +304,7 @@ def main() -> None:
             tag = "neutral"
         else:
             tag = "mixed"
-        rows.append((d, AXIS_OF[d], vals, tag, sum(abs(v) for v in clean) / len(clean)))
+        rows.append((dim, AXIS_OF[dim], vals, tag, sum(abs(v) for v in clean) / len(clean)))
     rows.sort(key=lambda r: -r[4])
     print(f"{'dim':40s} {'axis':18s} {'opus_v3':>9s} {'opus_n5':>9s} {'sonnet':>9s}  tag")
     for dim, ax, vals, tag, mag in rows:

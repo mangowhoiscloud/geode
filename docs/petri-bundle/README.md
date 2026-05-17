@@ -181,7 +181,9 @@ Cursor API 1,000만원 + 검증 토큰 ~181만원 + 구독 200만원 + Autonomou
 검증 500만원) 의 **0.065%** 의 비중. 본 Anthropic credit balance 초과
 의 mid-run abort 의 정직 한 명시.
 
-본 cost 의 추정 script: [`scripts/eco2_token_cost.py`](https://github.com/mangowhoiscloud/geode/blob/main/scripts/eco2_token_cost.py)
+본 Eco² 누적 비용 문맥은 당시 audit note 의 historical estimate 로만
+유지한다. 해당 일회성 계산 스크립트는 GEODE v1 OSS/HF 릴리즈 스코프에
+속하지 않아 제거했다.
 
 ## 본 audit 의 license + ToS
 

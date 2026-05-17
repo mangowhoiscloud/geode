@@ -65,6 +65,8 @@ from core.cli.typer_commands import (
     doctor,
     history,
     setup,
+    uninstall,
+    update,
     version,
 )
 from core.cli.typer_init import _ensure_gitignore_entry as _ensure_gitignore_entry
@@ -334,6 +336,8 @@ app.command()(version)
 app.command()(about)
 app.command()(setup)
 app.command()(doctor)
+app.command()(update)
+app.command()(uninstall)
 app.command()(init)
 app.command()(history)
 app.command()(serve)

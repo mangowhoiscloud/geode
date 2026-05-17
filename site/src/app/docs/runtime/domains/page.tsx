@@ -33,7 +33,7 @@ export default function Page() {
               엔트리를 등록합니다.
             </p>
 
-            <h2>v1.0.0 분리</h2>
+            <h2>v0.99.11 분리</h2>
             <p>
               도메인 분석 코드는 GEODE core 배포물에서 빠져나왔습니다. 현재 매핑은 다음과 같습니다.
             </p>
@@ -81,7 +81,7 @@ export default function Page() {
               entries at import time.
             </p>
 
-            <h2>v1.0.0 split</h2>
+            <h2>v0.99.11 split</h2>
             <p>
               Domain analysis code moved out of the GEODE core distribution.
               The mapping today:

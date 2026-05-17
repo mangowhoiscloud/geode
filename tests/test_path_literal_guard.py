@@ -12,7 +12,7 @@ it runs in the same gate as everything else and reports violations
 with file paths the developer can jump to in their editor.
 
 Mirrors ``tests/test_no_daemon_print.py``'s pattern — file allowlist
-+ per-line ``# noqa`` opt-out + regex scan, no AST overhead.
++ per-line ``# paths-literal-ok`` opt-out + regex scan, no AST overhead.
 """
 
 from __future__ import annotations
@@ -53,8 +53,9 @@ _LITERAL_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"Path\(\s*'\.geode'\s*\)"),
 ]
 
-# Per-line opt-out annotation.
-_NOQA_RE = re.compile(r"#\s*noqa:\s*paths-literal\b")
+# Per-line opt-out annotation. Avoid Ruff's suppression-comment spelling so
+# this project-specific marker is not parsed as a lint directive.
+_NOQA_RE = re.compile(r"#\s*paths-literal-ok\b")
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CORE_ROOT = _REPO_ROOT / "core"
@@ -84,7 +85,7 @@ def _strip_inline_comment(line: str) -> str:
 
 def _is_violation_line(code_part: str) -> bool:
     """Return True iff the *code* portion of a line contains a forbidden
-    literal and is not annotated with ``# noqa: paths-literal``."""
+    literal and is not annotated with ``# paths-literal-ok``."""
     return any(p.search(code_part) for p in _LITERAL_PATTERNS)
 
 
@@ -96,7 +97,7 @@ def _scan_file(path: Path) -> list[tuple[int, str]]:
         return []
     violations: list[tuple[int, str]] = []
     for lineno, raw_line in enumerate(text.splitlines(), start=1):
-        # Per-line opt-out — the trailing ``# noqa: paths-literal`` lives in
+        # Per-line opt-out — the trailing ``# paths-literal-ok`` lives in
         # the comment, so check the full line for the annotation.
         if _NOQA_RE.search(raw_line):
             continue
@@ -116,7 +117,7 @@ def test_no_hardcoded_geode_path_literals_in_core() -> None:
     ``core.paths`` (e.g. ``GLOBAL_USAGE_DIR``, ``PROJECT_CONFIG_TOML``),
     or — if the literal is truly required (e.g. test fixture inside
     runtime code, legacy migration detection) — annotate with
-    ``# noqa: paths-literal`` and explain why.
+    ``# paths-literal-ok`` and explain why.
 
     See ``docs/architecture/storage-hierarchy.md`` for the SoT policy.
     """

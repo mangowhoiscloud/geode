@@ -8,7 +8,7 @@
  */
 
 export const GEODE_SOT = {
-  version: "1.0.0",
+  version: "0.99.11",
   modules: {
     core: 322,
     plugins: 17,
@@ -19,7 +19,7 @@ export const GEODE_SOT = {
     live: 24,
     total: 4921,
   },
-  releases: 147,
+  releases: 154,
   since: "2026-02",
   syncedAt: "2026-05-17",
 } as const;

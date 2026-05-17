@@ -228,12 +228,11 @@ ignore_imports = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["core", "plugins", "tests", "autoresearch"]
+src = ["core", "plugins", "tests", "autoresearch", "scripts"]
 extend-exclude = [
     ".geode",        # runtime config + skill scripts (not part of codebase)
     ".claude",       # Claude Code session artifacts
     "experimental",  # opt-in prototypes — own pyproject testpaths
-    "scripts",       # one-off CI / migration utilities
 ]
 
 [tool.ruff.lint]
