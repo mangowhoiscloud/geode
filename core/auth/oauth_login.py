@@ -659,17 +659,35 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
     log.info("anthropic-oauth: opening browser (manual-paste flow)")
     webbrowser.open(auth_url)
 
+    # rich.Padding preserves the left indent when the terminal wraps a long
+    # line (e.g. the auth_url at ~250 chars). Hard-coded ``"  "`` prefixes
+    # only apply to the first wrapped line and produce a column-0 jag on
+    # the rest. ``(top, right, bottom, left) = (0, 0, 0, 2)`` mirrors the
+    # 2-space indent the rest of the OAuth UX uses.
+    from rich.padding import Padding as _Padding
+
+    _indent = (0, 0, 0, 2)
     _pkg.console.print()
     _pkg.console.print(
-        "  [bold]A browser window has been opened to authorize with Anthropic.[/bold]"
+        _Padding(
+            "[bold]A browser window has been opened to authorize with Anthropic.[/bold]",
+            _indent,
+        )
     )
-    _pkg.console.print(f"  [muted]If it didn't open, visit:[/muted] {auth_url}")
+    _pkg.console.print(_Padding(f"[muted]If it didn't open, visit:[/muted] {auth_url}", _indent))
     _pkg.console.print()
     _pkg.console.print(
-        "  After approving, copy the code shown on the callback page and paste it below."
+        _Padding(
+            "After approving, copy the code shown on the callback page and paste it below.",
+            _indent,
+        )
     )
     _pkg.console.print(
-        "  [muted]Accepted formats: 'code#state', the full callback URL, or just the code.[/muted]"
+        _Padding(
+            "[muted]Accepted formats: 'code#state', the full callback URL, "
+            "or just the code.[/muted]",
+            _indent,
+        )
     )
     _pkg.console.print()
 
