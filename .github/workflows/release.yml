@@ -233,6 +233,7 @@ jobs:
           gh release create "v${version}" \
             release-artifacts/dist/* \
             release-artifacts/SHA256SUMS \
+            --repo "${{ github.repository }}" \
             --target "${{ needs.validate-build.outputs.sha }}" \
             --title "GEODE v${version}" \
             --notes-file release-artifacts/release-notes.md
