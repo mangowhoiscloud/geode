@@ -1,0 +1,219 @@
+# ADR — Seed Pipeline UI/UX × 4-auth path
+
+> **Status**: Accepted (2026-05-18)
+> **Scope**: seed-pipeline + Petri 의 user-facing surface — credential picker, cost preview, ToS notice, pre-flight check, slash command.
+
+## Context
+
+GEODE 의 4 auth path:
+
+- **A**: local `claude` CLI (Claude subscription via macOS keychain) — `claude_code_provider`
+- **B**: local `codex` CLI (ChatGPT Plus OAuth, device-code) — `codex_provider`
+- **C**: OpenAI PAYG (sk-…) — `openai-payg`
+- **D**: Anthropic PAYG (sk-ant-…) — `anthropic-payg-geode`
+
+Petri 는 4-path 모두 받침 (P1-C 5-adapter split). seed-pipeline (ADR-001) 도 동일 coverage 필요. 추가로:
+
+- 3-judge panel 의 **provider diversity 강제** (최소 2 family) — single-provider panel bias 방지.
+- subscription path (A, B) 의 **ToS 회색지대** 안내 — 외부 배포 부적합 경고.
+- **cost preview** — PAYG 부담 + subscription quota % 추정 후 user confirm.
+- **auth expiry pre-flight** — OAuth token TTL 검사 + 부족 시 abort + 보수안.
+
+## Decision
+
+**6-role × 4-path manifest + TUI picker + cost preview + ToS notice + pre-flight + slash command**.
+
+### 1. Manifest pattern (P1-A 차용)
+
+`plugins/seed_pipeline/seed_pipeline.plugin.toml`:
+
+```toml
+[seed_pipeline.role.generator]
+default_family = "anthropic"
+default_source = "claude-cli"
+allowed_families = ["anthropic", "openai"]
+allowed_sources = ["claude-cli", "codex-cli", "openai-payg", "anthropic-payg"]
+preferred_kind = "SUBSCRIPTION"
+fallback_kind = "PAYG"
+
+[seed_pipeline.role.critic]
+# ... 같은 schema
+
+[seed_pipeline.role.judge_panel]
+required_diversity_families = 2          # 최소 2 family
+default_panel = [
+    "anthropic.claude-cli",
+    "openai.codex-cli",
+    "anthropic.anthropic-payg",
+]
+allowed_combinations = "any-2-families"
+```
+
+manifest schema + loader — `plugins/seed_pipeline/manifest.py` (Petri 의 `plugins/petri_audit/manifest.py` 패턴 재사용, pydantic + drift validator + lazy yaml import).
+
+### 2. 6-agent × 4-path picker (TUI)
+
+`plugins/seed_pipeline/picker.py` — TerminalMenu 기반. `/petri` 2-axis picker 의 시각 패턴 차용.
+
+```
+╭─ Seed-pipeline 6-role binding ────────────────────────────────────────────╮
+│ Role           Family    Source         Plan ID              Status       │
+│ ──────────────────────────────────────────────────────────────────────── │
+│ Generator      anthropic claude-cli     claude-max-<user>    ✓            │
+│ Critic         anthropic claude-cli     claude-max-<user>    ✓            │
+│ Pilot judge    openai    openai-codex   chatgpt-plus-<user>  ⚠ expired   │
+│ Tournament A   anthropic claude-cli     claude-max-<user>    ✓ diversity! │
+│ Tournament B   openai    openai-codex   chatgpt-plus-<user>  ⚠ expired   │
+│ Tournament C   anthropic anthropic-payg anthropic-payg-geode ✓            │
+│ Evolution      anthropic claude-cli     claude-max-<user>    ✓            │
+│ Meta-review    anthropic claude-cli     claude-max-<user>    ✓            │
+│                                                                            │
+│ Cost preview:  $0.30 PAYG + ~12% Plus + ~8% Max                           │
+│ Diversity:     Tournament A/B/C = 2 family ✓                              │
+│                                                                            │
+│ [1-8] Edit  [a] Auto  [r] Refresh OAuth  [s] Save & exit  [q] Cancel      │
+╰────────────────────────────────────────────────────────────────────────────╯
+```
+
+`required_diversity_families` 위반 시 picker 가 save reject + 재선택 요구.
+
+### 3. ToS notice (subscription path 첫 활성화)
+
+`claude_code_provider.py:38-56` 의 policy notice 패턴 재사용. 본 ADR 에서 picker 의 inline notice 로 통합 — manifest 의 source 마다 first-activation hook:
+
+```
+첫 Claude subscription path 활성화 — ToS 회색지대:
+
+Anthropic Consumer ToS §3 (Acceptable Use) 의 "automated access"
+정의가 OAuth-routed subprocess 호출에 적용되는지 모호. 문자 그대로
+위반 X, 정신적 위반 가능 (좁은 해석). 외부 배포 / 공개 호스팅 부적합.
+
+Petri / seed-pipeline 한정 사용 권장.
+Production chat 은 sk-ant-PAYG 만 사용.
+
+활성화하시겠습니까? [y/N]:
+```
+
+ChatGPT Plus subscription (B path) 도 동등 notice.
+
+### 4. Cost preview (`geode audit-seeds quota`)
+
+`plugins/seed_pipeline/cost_preview.py` — `core/llm/pricing_loader.py` (P3-A) + `core/cli/commands/login.py:_login_quota` 의 quota 추정 결합.
+
+```
+$ geode audit-seeds quota --pipeline-config seed-pipeline.toml --candidates 15
+
+추정 cost:
+
+  Generation (15 × 8k in / 4k out, claude-cli):  ~180k tok    quota: ~4%
+  Reflection (15 × 6k in / 2k out, claude-cli):  ~120k tok    quota: ~3%
+  Proximity (1 batch, openai embed-3-small):     ~120k tok    PAYG: $0.0024
+  Pilot (15 × 2 model × 1 paraphrase):           ~450k tok    quota: ~8% + $0.18 PAYG
+  Tournament (60 match × 3 judge):               ~360k tok    quota: ~9% + $0.12 PAYG
+  Evolution (top-5 × 1 round):                   ~80k tok     quota: ~2%
+  Meta-review (1 batch):                         ~30k tok     quota: ~1%
+  ─────────────────────────────────────────────  ──────────    ──────────────
+  Total:                                         ~1.34M tok    ~$0.30 PAYG +
+                                                              ~12% Plus + ~8% Max
+
+예상 wall-time: ~25 min (Lane max=16)
+
+Continue? [y/N]:
+```
+
+**Budget guard**: soft warning at $0.30/gen, hard cap at $1.00 (config 가능). 초과 시 pipeline abort.
+
+### 5. Pre-flight check (`geode audit-seeds generate` 진입 시)
+
+```
+Pre-flight check…
+  Generator (claude-cli):    ✓ token expires in 14 days
+  Critic (claude-cli):       ✓ token expires in 14 days
+  Pilot judge (codex-cli):   ✗ token EXPIRED 24h ago
+
+[ERROR] codex-cli token expired. Run `geode login openai` to refresh.
+[option] Or override pilot judge to openai-payg via `geode audit-seeds picker`.
+
+Aborting.
+```
+
+검사 항목: token expiry / quota 잔량 / 3-judge diversity / Lane 가용 capacity / budget guard.
+
+### 6. CLI / Slash 진입점
+
+**Typer** (`plugins/seed_pipeline/cli.py`):
+
+| Sub-command | 책임 |
+|---|---|
+| `geode audit-seeds login` | 4-path status view |
+| `geode audit-seeds picker` | per-role binding 편집 |
+| `geode audit-seeds quota` | cost preview |
+| `geode audit-seeds generate` | pipeline 시작 (pre-flight 포함) |
+| `geode audit-seeds revoke <plan_id>` | 특정 plan disable |
+
+**Slash** (`core/cli/routing.py` 등록):
+
+- `/audit-seeds <sub>` — REPL inside-loop 진입점, Typer sub-app 와 같은 dispatch.
+
+`/petri` 와 별도 slash. seed-pipeline 이 pre-experiment phase 로 conceptually 분리되어 있고, `/petri seed-gen` 같은 nested form 은 menu 깊이 ↑ — UX 손해. 결정: **별도 `/audit-seeds`**.
+
+### 7. `/login` flow 의 4-path 표면
+
+기존 `_login_oauth(openai|anthropic)` + `_login_set_key` 그대로 유지. 단 status view 일관성 위해:
+
+- `_login_show_status` 가 seed-pipeline manifest 의 role binding 도 함께 표시 (선택, S11).
+- `geode login claude-cli status` (keychain inspect) 신규 sub-action — seed-pipeline picker 가 status 의존.
+
+## Decision Drivers
+
+- **Petri 패턴 재사용**: manifest + adapter + credential_source + picker — 같은 PR 단위 (P1-A~G) 동일.
+- **Co-evolution bias 회피**: 3-judge panel 의 provider diversity 강제 (최소 2 family) — single-provider 매니징 시 ranker 가 한 model 편향.
+- **외부 배포 안전망**: subscription path 사용 시 ToS 회색지대 명시. user 가 production 외부 배포 시 PAYG 단일화 선택 가능하도록.
+- **Cost 가시성**: pipeline 1 회 ≈ $0.30 PAYG + quota — 무인 진화 시 누적 비용 회피 위한 confirmation step.
+- **Auth fragility 완화**: OAuth token expiry 가 silent fail → pre-flight 가 명시적 abort + 복구안 제시.
+
+## Considered Options
+
+1. **Manifest + picker + cost + ToS + pre-flight + `/audit-seeds`** (✓ Accepted): 본 ADR.
+2. Hardcoded all-claude-cli (Option γ, picker 없음): Rejected — diversity 손실, ToS 외 noise 0.
+3. `/petri seed-gen` extension (nested): Rejected — menu depth.
+4. `/login` 에 picker 통합 (sub-pipeline 별 별도 binding 표현 없음): Rejected — login 의 책임 비대화.
+5. Cost guard 없이 generate 즉시 실행: Rejected — 누적 비용 위험.
+
+## Consequences
+
+### 긍정
+
+- 4-path 모두 first-class. user 가 claude-cli / codex-cli / PAYG 자유롭게 조합.
+- 3-judge panel 의 provider diversity 자동 강제 — bias 회피.
+- ToS 회색지대 명시 — 외부 배포 시 user 가 의식적으로 PAYG 단일화 선택 가능.
+- Cost 가시성 — pipeline 1회 비용 + quota 사용량 사전 확인.
+- Auth fragility 완화 — token expiry 가 silent fail 안 함.
+
+### 부정
+
+- ~1,000 LOC UI/UX 추가 (이전 평가). 16 PR 중 S2.5 + S5.5 + S6.5 + S11 4 개 PR.
+- Picker UX 의 시각 디자인 / TerminalMenu 한계 — color / 멀티 column 정렬 등 platform 의존성.
+- Cost preview 의 token 추정이 사전 합산 — 실제 cost 와 차이 가능 (~20% 오차).
+- ToS notice 가 매 첫 활성화 시 user 인지 부담 — 1회 dismissal 후 안 나타나도록 user-config 추가 가능 (별도 PR).
+
+### 중립
+
+- `_login_show_status` 에 seed-pipeline binding 표시는 S11 선택 사항. 본 ADR 의 hard requirement 아님.
+
+## Implementation pointers
+
+- S2.5: `plugins/seed_pipeline/{manifest.py, seed_pipeline.plugin.toml}` (~220 LOC)
+- S5.5: `plugins/seed_pipeline/{picker.py, pre_flight.py}` + ToS notice 통합 (~410 LOC)
+- S6.5: `plugins/seed_pipeline/cost_preview.py` + budget guard (~250 LOC)
+- S11: `plugins/seed_pipeline/cli.py` Typer sub-app + `core/cli/routing.py` slash 등록 (~280 LOC)
+
+## References
+
+- ADR-001 — seed-pipeline architecture
+- Petri P1-A~G manifest pattern — `plugins/petri_audit/{petri.plugin.toml, manifest.py, cli.py:264,309}`
+- 4-auth path 정의 — `core/llm/routing/plans.py:PlanKind`
+- ToS notice pattern — `plugins/petri_audit/claude_code_provider.py:38-56`
+- Quota 추정 base — `core/cli/commands/login.py:_login_quota` (line 886)
+- Pricing loader (P3-A) — `core/llm/model_pricing.toml`
+- `_login_oauth` flow — `core/cli/commands/login.py:509-700`
