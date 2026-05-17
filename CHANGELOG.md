@@ -54,6 +54,32 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **`/petri` 슬래시 명령 + 2-axis picker (P1-F).**
+  새 사용자-facing 명령 추가 — `/petri` (status table) / `/petri <role>`
+  (multi-step picker — model → source) / `/petri model <role> <name>`
+  / `/petri source <role> <src>` / `/petri reset [<role>]`. user override
+  는 `~/.geode/petri.toml` 에 영구화 (별도 파일 — config.toml 와 분리).
+  registry.get_binding 이 manifest default 와 caller override 사이
+  layer 로 user override 를 자동 적용. family 변경 시 (`/petri model
+  auditor gpt-5.5`) source 는 'auto' 로 리셋 (incompat 방지). non-TTY
+  fallback (`/petri <role>` in pipe) → status + usage hint. 신설 모듈:
+  `plugins/petri_audit/cli.py`, `plugins/petri_audit/user_overrides.py`,
+  `core/cli/commands/petri.py` (shim). `core/paths.py` 에
+  `GLOBAL_PETRI_TOML` 상수. show_help / COMMAND_MAP / dispatcher 등록.
+
+- **`/petri` slash command + 2-axis picker (P1-F).**
+  New user-facing command: `/petri` (status), `/petri <role>` (multi-step
+  picker), `/petri model <role> <name>`, `/petri source <role> <src>`,
+  `/petri reset [<role>]`. User overrides persist to `~/.geode/petri.
+  toml` (kept separate from main `config.toml`). The registry's
+  `get_binding` now reads this override layer between manifest defaults
+  and explicit caller arguments. Switching family via `/petri model
+  <role> ...` automatically clears an incompatible source. Non-TTY
+  fallback prints the status + usage hint instead of attempting the
+  picker. Added `plugins/petri_audit/{cli,user_overrides}.py`,
+  `core/cli/commands/petri.py`, `core/paths.py::GLOBAL_PETRI_TOML`, +
+  COMMAND_MAP / dispatcher / help wiring.
+
 - **Petri registry — role × model × source binding (P1-E).**
   `plugins/petri_audit/registry.py` 신설 — manifest + credential_source
   를 결합해 `PetriBinding(role, model, source, family, adapter_module,
