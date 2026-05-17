@@ -41,8 +41,9 @@ def test_load_default_catalogue():
 
 def test_parity_with_legacy_pricing():
     """Loader output must match the legacy ``MODEL_PRICING`` dict P3-B replaces."""
-    from core.llm.token_tracker import MODEL_PRICING as legacy
+    from core.llm.token_tracker import MODEL_PRICING
 
+    legacy = MODEL_PRICING
     cat = load_pricing_catalogue()
     assert set(cat.pricing) == set(legacy), (
         f"Model id sets differ — loader extras: "
@@ -62,8 +63,9 @@ def test_parity_with_legacy_pricing():
 
 
 def test_parity_with_legacy_context_windows():
-    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW as legacy
+    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
+    legacy = MODEL_CONTEXT_WINDOW
     cat = load_pricing_catalogue()
     assert set(cat.context_windows) == set(legacy), (
         f"Context window id sets differ — loader extras: "
