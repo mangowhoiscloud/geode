@@ -44,9 +44,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from core.auth.plan_registry import resolve_routing
-from core.auth.plans import Plan, PlanKind
 from core.auth.profiles import AuthProfile, CredentialType
+from core.llm.routing.plan_registry import resolve_routing
+from core.llm.routing.plans import Plan, PlanKind
 
 # ---------------------------------------------------------------------------
 # Fixtures — register Plans for each provider/kind combination
@@ -54,7 +54,7 @@ from core.auth.profiles import AuthProfile, CredentialType
 
 
 def _reset_singletons() -> None:
-    from core.auth import plan_registry as _pr
+    from core.llm.routing import plan_registry as _pr
     from core.wiring import container as _infra
 
     _infra._profile_store = None
@@ -63,7 +63,7 @@ def _reset_singletons() -> None:
 
 
 def _register_codex_oauth() -> Plan:
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
 
     plan = Plan(
@@ -88,7 +88,7 @@ def _register_codex_oauth() -> Plan:
 
 
 def _register_openai_payg() -> Plan:
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
 
     plan = Plan(
@@ -112,7 +112,7 @@ def _register_openai_payg() -> Plan:
 
 
 def _register_anthropic_payg() -> Plan:
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
 
     plan = Plan(
@@ -137,7 +137,7 @@ def _register_anthropic_payg() -> Plan:
 
 
 def _register_glm_coding() -> Plan:
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
 
     plan = Plan(
@@ -161,7 +161,7 @@ def _register_glm_coding() -> Plan:
 
 
 def _register_glm_payg() -> Plan:
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
 
     plan = Plan(
@@ -305,7 +305,7 @@ def test_path_d_codex_oauth_to_openai_payg_within_provider(isolated_auth) -> Non
     explicit override the same model must route to PAYG."""
     _register_codex_oauth()
     _register_openai_payg()
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
 
     # Default — kind-priority wins (Codex OAuth).
     default = resolve_routing("gpt-5.4")
@@ -348,7 +348,7 @@ def test_path_e_glm_coding_to_glm_payg_within_provider(isolated_auth) -> None:
     default. ``/login route glm-5.1 glm-payg`` flips it."""
     _register_glm_coding()
     _register_glm_payg()
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
 
     default = resolve_routing("glm-5.1")
     assert default is not None

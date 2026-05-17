@@ -1,8 +1,8 @@
-"""PlanRegistry — runtime store for Plan instances + routing resolution.
+"""PlanRegistry — runtime store for LLM credential plans and routing.
 
-Sits next to ProfileStore. The CLI (`/login`) creates Plans here and
-binds AuthProfiles to them via `plan_id`. Provider modules query this
-registry through `resolve_routing(model)` to pick the active endpoint
+The CLI (`/login`) and the LLM-facing ``manage_login`` tool create Plans
+here and bind AuthProfiles to them via ``plan_id``. Provider modules query
+this registry through ``resolve_routing(model)`` to pick the active endpoint
 and credential.
 """
 
@@ -12,8 +12,8 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from core.auth.plans import Plan, PlanUsage, default_plan_for_payg
 from core.auth.profiles import AuthProfile
+from core.llm.routing.plans import Plan, PlanUsage, default_plan_for_payg
 
 if TYPE_CHECKING:
     from core.auth.profiles import ProfileStore
@@ -212,8 +212,8 @@ def _equivalence_class_plans(registry: PlanRegistry, base_provider: str) -> list
     Sort key: ``PLAN_KIND_PRIORITY[plan.kind]`` (lower wins).
     Within tier, preserve registry insertion order (stable sort).
     """
-    from core.auth.plans import PLAN_KIND_PRIORITY
     from core.llm.registry import equivalent_providers
+    from core.llm.routing.plans import PLAN_KIND_PRIORITY
 
     candidates: list[Plan] = []
     for sibling in equivalent_providers(base_provider):
@@ -243,8 +243,8 @@ def _apply_forced_login_method(plans: list[Plan], base_provider: str) -> list[Pl
       - ``"apikey"`` — promote PAYG plans to the front
       - ``"auto"`` — alias for default
     """
-    from core.auth.plans import PlanKind
     from core.config import settings
+    from core.llm.routing.plans import PlanKind
 
     forced = (getattr(settings, "forced_login_method", {}) or {}).get(base_provider, "subscription")
     forced = str(forced).strip().lower()

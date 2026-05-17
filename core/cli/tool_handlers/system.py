@@ -154,7 +154,7 @@ def _build_system_handlers(
         cmd_login(login_input)
 
         try:
-            from core.auth.plan_registry import get_plan_registry
+            from core.llm.routing.plan_registry import get_plan_registry
             from core.wiring.container import ensure_profile_store
 
             store = ensure_profile_store()
