@@ -5,57 +5,116 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+    types: [opened, reopened, synchronize, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Phase 1 (v0.99.x) — path-filter dispatch so docs-only / blog-only PRs
+  # skip the heavy lint/type/test steps below. Required-status-check names
+  # stay stable (Lint & Format / Type Check / Test / Security Scan / Gate)
+  # so branch protection keeps passing; only the inner steps short-circuit
+  # when ``changes.code != 'true'``. Pattern mirrored from OpenClaw +
+  # Hermes (frontier survey 2026-05-17).
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft != true
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'core/**'
+              - 'plugins/**'
+              - 'tests/**'
+              - 'autoresearch/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/**'
+
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
+    needs: changes
     steps:
+      - name: Skip — no code change
+        if: needs.changes.outputs.code != 'true'
+        run: echo "::notice::Docs-only PR — skipping lint."
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.code == 'true'
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
-      - run: uv run ruff check core/ tests/ plugins/ autoresearch/
-      - run: uv run ruff format --check core/ tests/ plugins/ autoresearch/
+        if: needs.changes.outputs.code == 'true'
+      - if: needs.changes.outputs.code == 'true'
+        run: uv sync
+      - if: needs.changes.outputs.code == 'true'
+        run: uv run ruff check core/ tests/ plugins/ autoresearch/
+      - if: needs.changes.outputs.code == 'true'
+        run: uv run ruff format --check core/ tests/ plugins/ autoresearch/
       - name: Dependency drift (deptry)
+        if: needs.changes.outputs.code == 'true'
         run: uv run deptry .
       - name: Legacy import ratchet
+        if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/check_legacy_imports.py --base-ref origin/develop
       - name: Repo hygiene ratchet
+        if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/check_repo_hygiene.py
       - name: Petri bundle ratchet
+        if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/validate_petri_bundle.py
 
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
+    needs: changes
     steps:
+      - name: Skip — no code change
+        if: needs.changes.outputs.code != 'true'
+        run: echo "::notice::Docs-only PR — skipping typecheck."
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.code == 'true'
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
-      - run: uv run mypy core/ plugins/ autoresearch/
+        if: needs.changes.outputs.code == 'true'
+      - if: needs.changes.outputs.code == 'true'
+        run: uv sync
+      - if: needs.changes.outputs.code == 'true'
+        run: uv run mypy core/ plugins/ autoresearch/
       - name: Prompt integrity check
+        if: needs.changes.outputs.code == 'true'
         run: uv run python -c "from core.llm.prompts import verify_prompt_integrity; verify_prompt_integrity(raise_on_drift=True)"
 
   test:
     name: Test
     runs-on: ubuntu-latest
+    needs: changes
     steps:
+      - name: Skip — no code change
+        if: needs.changes.outputs.code != 'true'
+        run: echo "::notice::Docs-only PR — skipping tests."
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.code == 'true'
       - uses: astral-sh/setup-uv@v5
+        if: needs.changes.outputs.code == 'true'
       # [audit] extra installs inspect_ai so tests/audit/ runs (otherwise
       # ``pytest.importorskip("inspect_ai.log")`` skips those modules
       # and the petri-bookkeeping code in core/audit/ shows up as 0%
       # covered — pushing total coverage below the 75% ratchet).
-      - run: uv sync --extra audit
-      - name: Run tests with coverage
-        run: uv run pytest --cov=core --cov-report=term-missing
+      - if: needs.changes.outputs.code == 'true'
+        run: uv sync --extra audit
+      - name: Run tests with coverage (xdist parallel)
+        if: needs.changes.outputs.code == 'true'
+        run: uv run pytest -n auto --cov=core --cov-report=term-missing
       - name: Ratchet — minimum test count
+        if: needs.changes.outputs.code == 'true'
         run: |
           count=$(uv run pytest --co -q 2>/dev/null | tail -1 | grep -oE '[0-9]+' | head -1)
           echo "Test count: $count"
@@ -67,11 +126,19 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    needs: changes
     steps:
+      - name: Skip — no code change
+        if: needs.changes.outputs.code != 'true'
+        run: echo "::notice::Docs-only PR — skipping security scan."
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.code == 'true'
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
-      - run: uv run bandit -r core/ -c pyproject.toml
+        if: needs.changes.outputs.code == 'true'
+      - if: needs.changes.outputs.code == 'true'
+        run: uv sync
+      - if: needs.changes.outputs.code == 'true'
+        run: uv run bandit -r core/ -c pyproject.toml
 
   gate:
     name: Gate
