@@ -174,7 +174,10 @@ def make_llm_extract_handler() -> tuple[str, Callable[..., None]]:
     """
     turn_count = 0
     session_extractions = 0
-    last_extract_ts = 0.0
+    # ``float("-inf")`` so the first call always passes the cooldown gate.
+    # Mirrors the auto_learn fix — fresh xdist worker processes have small
+    # ``time.monotonic()`` values that would otherwise trip the cooldown.
+    last_extract_ts: float = float("-inf")
     _seen_inputs: set[int] = set()  # hash of already-extracted user inputs
 
     def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
