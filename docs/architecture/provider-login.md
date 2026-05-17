@@ -62,7 +62,7 @@ flow 를 Claude Code 의 manual-paste 패턴 1:1 미러로 교체.
 | 4 | 사용자 browser 에서 Anthropic 로그인 + 동의 |
 | 5 | Anthropic 가 `/oauth/code/callback` 페이지에서 `code#state` 형식 표시 |
 | 6 | 사용자가 CLI 의 `Paste authorization code:` 프롬프트에 paste (URL, `code#state`, 또는 bare code 모두 허용 — `_parse_pasted_code`) |
-| 7 | GEODE 가 state 검증 + `POST https://api.anthropic.com/v1/oauth/token` (`anthropic-beta: oauth-2025-04-20` header) — grant_type=authorization_code, code, redirect_uri, client_id, code_verifier, state |
+| 7 | GEODE 가 state 검증 + `POST https://platform.claude.com/v1/oauth/token` (`anthropic-beta: oauth-2025-04-20` header) — grant_type=authorization_code, code, redirect_uri, client_id, code_verifier, state |
 | 8 | response: `access_token` (`sk-ant-oat01-...`), `refresh_token` (`sk-ant-ort01-...`), `expires_in`, `scopes` |
 | 9 | `~/.geode/auth.toml` 의 `[providers.anthropic]` section 에 저장 |
 | 10 | `reset_anthropic_client()` — `inspect_ai` stock `AnthropicAPI` per-request 라 cache 없음. claude-code provider 의 in-process state 만 invalidate |
@@ -74,8 +74,8 @@ flow 를 Claude Code 의 manual-paste 패턴 1:1 미러로 교체.
 | Endpoint | URL |
 |---|---|
 | Authorize | `https://platform.claude.com/oauth/authorize` |
-| Token | `https://api.anthropic.com/v1/oauth/token` |
-| Hello (validation) | `https://api.anthropic.com/v1/oauth/hello` |
+| Token | `https://platform.claude.com/v1/oauth/token` |
+| Manual redirect | `https://platform.claude.com/oauth/code/callback` |
 | Override env | `CLAUDE_CODE_CUSTOM_OAUTH_URL` |
 
 ### 3.2 client_id

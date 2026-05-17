@@ -52,6 +52,33 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.2] — 2026-05-17
+
+### Fixed
+
+- **`login_anthropic()` — token endpoint host + Content-Type + timeout 정정.**
+  v0.99.1 manual-paste fix 후에도 `/login anthropic` 가 `invalid_request`
+  로 거절. 사용자 콘솔 신호 + Claude Code native binary 의 prod env 객체
+  `K3q` 전체 추출 + 공식 문서 cross-check 로 3 가지 root cause 확정:
+  ① token endpoint host 가 `https://platform.claude.com/v1/oauth/token`
+  (`api.anthropic.com` 은 inference API 전용); ② Content-Type 은
+  `application/x-www-form-urlencoded` 만 허용 — `application/json` 으로
+  보내면 응답 지연/timeout 가능; ③ 응답 시간 40-60s 보고가 있어 client
+  timeout 을 15s → 60s 로 완화. `_ANTHROPIC_TOKEN_URL` 정정 + `json=` →
+  `data=` body 형식 변경 + httpx timeout 60s.
+
+- **`login_anthropic()` — corrected token endpoint host, Content-Type, and
+  timeout.** Post-v0.99.1 the manual-paste flow still failed with
+  `invalid_request`. Three root causes pinned down via the prod env object
+  `K3q` extracted from Claude Code's native binary plus cross-check with
+  official docs: ① OAuth audience lives on
+  `platform.claude.com/v1/oauth/token` (`api.anthropic.com` only serves
+  the inference API); ② endpoint accepts only
+  `application/x-www-form-urlencoded` — `application/json` causes hang/
+  timeout; ③ reported 40-60s response time under load, so client timeout
+  relaxed from 15s to 60s. Fixed `_ANTHROPIC_TOKEN_URL`, switched httpx
+  body from `json=` to `data=`, set Timeout(60).
+
 ## [0.99.1] — 2026-05-17
 
 ### Fixed
