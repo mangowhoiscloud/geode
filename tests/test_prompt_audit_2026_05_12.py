@@ -14,6 +14,7 @@ Each test pins a specific behaviour discovered or established by the audit:
 from __future__ import annotations
 
 import pytest
+from core.agent.system_injection import prepend_system_reminder
 from core.agent.system_prompt import (
     _audit_mode_active,
     _persona_on,
@@ -108,6 +109,14 @@ def test_g10_router_md_no_geode_name_in_baseline() -> None:
 
     assert "You are GEODE" not in ROUTER_SYSTEM
     assert "autonomous execution agent" in ROUTER_SYSTEM
+
+
+def test_sandwich_system_reminder_uses_xml_tags() -> None:
+    messages = [{"role": "user", "content": "hello"}]
+    out = prepend_system_reminder(messages, round_idx=1)
+    assert out[0]["content"].startswith("<system-reminder>")
+    assert out[0]["content"].endswith("</system-reminder>")
+    assert "[system-reminder]" not in out[0]["content"]
 
 
 def test_math_formatting_instruction_reaches_agentic_system_prompt(

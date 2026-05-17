@@ -74,7 +74,7 @@ def build_system_prompt(loop: AgenticLoop) -> str:
     skill_ctx = ""
     if loop._skill_registry is not None:
         skill_ctx = loop._skill_registry.get_context_block()
-    base = base.replace("{skill_context}", skill_ctx or "No skills loaded.")
+    base = base.replace("{skill_context}", skill_ctx or '<available_skills status="empty" />')
     prompt = base + "\n" + AGENTIC_SUFFIX
     if loop._system_suffix:
         prompt += "\n\n" + loop._system_suffix

@@ -110,6 +110,16 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   token-cost 계산기를 제거. 해당 파일은 과거 audit 문맥이지 GEODE release,
   Hugging Face, OSS packaging 자산이 아니었음. 남은 scripts 는 release
   ruff/format/mypy gate 를 통과해야 함.
+- **Outdated Game IP skills and rules.** Removed bundled Game-IP-specific
+  project rules, analyst prompt fragments, and stale portfolio/frontend skills
+  from `.geode/skills` and `.geode/rules`; the remaining `geode-context` skill
+  now describes GEODE v0.99.11, async runtime boundaries, release packaging,
+  and external plugin ownership.
+- **오래된 Game IP 스킬/룰 정리.** `.geode/skills` 와 `.geode/rules` 에서
+  내장 Game IP 전용 프로젝트 룰, analyst prompt fragment, 오래된
+  portfolio/frontend 스킬을 제거. 남은 `geode-context` 스킬은 GEODE
+  v0.99.11, async runtime 경계, release packaging, 외부 plugin 소유권 기준으로
+  갱신했습니다.
 
 ### Architecture
 
@@ -140,6 +150,14 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   노출하고 `ToolContext.cancellation` 을 `BashTool.aexecute()` 로 전달. timeout
   또는 cancellation 시 shell process group 을 정리한 뒤 `timed_out` /
   `interrupted` 결과를 반환.
+- **XML prompt injection alignment.** Runtime skill summaries now inject as an
+  `<available_skills>` XML block, empty skill context is represented as an XML
+  empty element, and sandwich reminders now use `<system-reminder>` tags instead
+  of legacy bracket markers.
+- **XML 프롬프트 주입 정렬.** runtime skill 요약은 이제
+  `<available_skills>` XML block 으로 주입되고, 빈 skill context 는 XML empty
+  element 로 표현하며, sandwich reminder 는 legacy bracket marker 대신
+  `<system-reminder>` tag 를 사용합니다.
 - **AgenticLoop canonical file rename + async migration plan.** `core/agent/loop/loop.py`
   is now a compatibility shim, while the implementation lives in
   `core/agent/loop/agent_loop.py`. This prepares the runtime for a staged

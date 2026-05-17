@@ -97,18 +97,21 @@ class TestProgressiveDisclosure:
         assert "Analyze" not in ctx
 
     def test_context_block_fork_tag(self, tmp_skills: Path) -> None:
-        """Forked skills should be tagged [fork] in context block."""
+        """Forked skills should be tagged in XML context block."""
         reg = SkillRegistry()
         SkillLoader(skills_dir=tmp_skills, lazy=True).load_all(registry=reg)
         ctx = reg.get_context_block()
-        assert "[fork]" in ctx
+        assert "<available_skills>" in ctx
+        assert 'name="heavy-analysis"' in ctx
+        assert 'context="fork"' in ctx
 
     def test_context_block_background_tag(self, tmp_skills: Path) -> None:
-        """Background skills should be tagged [background]."""
+        """Background skills should be tagged in XML context block."""
         reg = SkillRegistry()
         SkillLoader(skills_dir=tmp_skills, lazy=True).load_all(registry=reg)
         ctx = reg.get_context_block()
-        assert "[background]" in ctx
+        assert 'name="bg-knowledge"' in ctx
+        assert 'user_invocable="false"' in ctx
 
 
 class TestUserInvocable:
