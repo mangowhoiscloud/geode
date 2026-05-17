@@ -59,7 +59,7 @@ def _build_system_handlers(
         console.print(f"  Anthropic API: {ant_status}")
         console.print(f"  OpenAI API: {oai_status}")
         console.print(f"  Mode: [bold]{mode}[/bold]")
-        console.print(f"  Fixtures: [bold]{fixture_count} IPs[/bold]")
+        console.print(f"  Fixtures: [bold]{fixture_count} subjects[/bold]")
 
         # MCP status
         mcp_status = (

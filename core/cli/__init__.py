@@ -38,18 +38,6 @@ from core.cli.prompt_session import _get_prompt_session as _get_prompt_session
 from core.cli.prompt_session import _read_multiline_input as _read_multiline_input
 from core.cli.prompt_session import _restore_terminal as _restore_terminal
 from core.cli.prompt_session import _sigint_handler as _sigint_handler
-from core.cli.report_renderer import (
-    _build_skill_narrative as _build_skill_narrative,
-)
-from core.cli.report_renderer import (
-    _generate_report as _generate_report,
-)
-from core.cli.report_renderer import (
-    _parse_report_args as _parse_report_args,
-)
-from core.cli.report_renderer import (
-    _state_to_report_dict as _state_to_report_dict,
-)
 from core.cli.session_state import _get_last_result as _get_last_result
 from core.cli.session_state import _get_readiness as _get_readiness
 from core.cli.session_state import _result_cache as _result_cache

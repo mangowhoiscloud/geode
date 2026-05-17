@@ -4,8 +4,8 @@ Registers hook handlers for key lifecycle events and sends notifications
 via the NotificationPort adapter (Slack, Discord, Telegram).
 
 Event → Notification mapping:
-  PIPELINE_END      → info     "Pipeline completed: {ip_name} — {tier} ({score})"
-  PIPELINE_ERROR    → critical "Pipeline error: {ip_name} — {error}"
+  PIPELINE_END      → info     "Pipeline completed: {subject_id}"
+  PIPELINE_ERROR    → critical "Pipeline error: {subject_id} — {error}"
   DRIFT_DETECTED    → warning  "Drift detected: {metric}"
   SUBAGENT_FAILED   → warning  "Sub-agent failed: {task_id}"
 """
@@ -30,16 +30,17 @@ _SEVERITY_MAP: dict[HookEvent, str] = {
 
 def _format_message(event: HookEvent, data: dict[str, Any]) -> str:
     """Format a notification message from hook event data."""
-    ip_name = data.get("ip_name", "unknown")
+    subject_id = data.get("subject_id", "unknown")
 
     if event == HookEvent.PIPELINE_ENDED:
-        tier = data.get("tier", "?")
-        score = data.get("final_score", data.get("score", 0))
-        return f"Pipeline completed: {ip_name} — {tier} ({score:.1f})"
+        score = data.get("final_score", data.get("score"))
+        if isinstance(score, int | float):
+            return f"Pipeline completed: {subject_id} ({score:.1f})"
+        return f"Pipeline completed: {subject_id}"
 
     if event == HookEvent.PIPELINE_ERROR:
         error = data.get("error", data.get("message", "unknown error"))
-        return f"Pipeline error: {ip_name} — {error}"
+        return f"Pipeline error: {subject_id} — {error}"
 
     if event == HookEvent.DRIFT_DETECTED:
         metric = data.get("metric", data.get("field", "unknown"))

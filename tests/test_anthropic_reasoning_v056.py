@@ -113,7 +113,7 @@ class TestThinkingDisplaySummarized:
         assert effective == "max"
 
 
-class TestSignatureRoundTrip:
+class TestSignatureRoundTrsubject:
     """C2 — Anthropic thinking-block ``signature`` field must survive
     multi-turn tool-use round-trips. Without it the next call returns
     400 (Claude Code: "mismatched thinking block signatures cause API

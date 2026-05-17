@@ -32,7 +32,7 @@ class Lane:
 
     Usage:
         lane = Lane("global", max_concurrent=8)
-        with lane.acquire("ip:berserk:analysis"):
+        with lane.acquire("subject:demo:analysis"):
             # ... do work ...
     """
 

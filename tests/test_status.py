@@ -107,11 +107,11 @@ class TestGeodeStatusContextManager:
         mock_acc_fn.return_value = LLMUsageAccumulator()
 
         with GeodeStatus("Working...") as status:
-            status.stop("analyze · Berserk")
+            status.stop("analyze · Project Atlas")
 
         # Find the console.print call with our summary
         printed = [str(c) for c in mock_console.print.call_args_list]
-        summary_found = any("analyze · Berserk" in p for p in printed)
+        summary_found = any("analyze · Project Atlas" in p for p in printed)
         assert summary_found, f"Summary not found in prints: {printed}"
 
     @patch("core.ui.status.console")
@@ -205,7 +205,7 @@ class TestSummaryFormatting:
 
         with GeodeStatus("Test") as status:
             acc.record(LLMUsage(model="m", input_tokens=150, output_tokens=30, cost_usd=0.004))
-            status.stop("analyze · Berserk")
+            status.stop("analyze · Project Atlas")
 
         # Inspect the printed line
         print_args = [str(c) for c in mock_console.print.call_args_list]

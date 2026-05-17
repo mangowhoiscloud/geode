@@ -8,12 +8,12 @@ into one file per concern while preserving the public API surface
 (every name listed in ``__all__``) and the names imported by external
 callers (``OperationLogger``, ``SessionMeter``, the ``render_*``,
 ``emit_*``, and ``init_session_meter``/``mark_turn_start`` accessors,
-plus the thread-local globals ``_ipc_writer_local``, ``_meter_local``,
-``_pipeline_ip_local``, and ``_turn_snapshot``).
+plus the context-local globals ``_ipc_writer_local``, ``_meter_local``,
+``_pipeline_subject_local``, and ``_turn_snapshot``).
 
 Sub-modules:
 
-- :mod:`_state`             — pipeline IP context + ``SessionMeter`` + meter accessors
+- :mod:`_state`             — pipeline subject context + ``SessionMeter`` + meter accessors
 - :mod:`_operation_logger`  — ``OperationLogger`` progressive tree log
 - :mod:`render`             — ``render_*`` functions (tool call/result, tokens,
                               plan, sub-agent, status, context event)
@@ -46,13 +46,13 @@ from typing import Any
 from core.ui.agentic_ui._operation_logger import OperationLogger
 from core.ui.agentic_ui._state import (
     SessionMeter,
-    _get_pipeline_ip,
+    _get_pipeline_subject,
     _ipc_writer_local,
     _meter_local,
-    _pipeline_ip_local,
+    _pipeline_subject_local,
     get_session_meter,
     init_session_meter,
-    set_pipeline_ip,
+    set_pipeline_subject,
     update_session_model,
 )
 from core.ui.agentic_ui.events import (
@@ -118,10 +118,10 @@ __all__ = [
     "OperationLogger",
     "SessionMeter",
     "_fmt_tokens",
-    "_get_pipeline_ip",
+    "_get_pipeline_subject",
     "_ipc_writer_local",
     "_meter_local",
-    "_pipeline_ip_local",
+    "_pipeline_subject_local",
     "_turn_snapshot",
     "console",
     "emit_billing_error",
@@ -166,6 +166,6 @@ __all__ = [
     "render_tool_call",
     "render_tool_result",
     "render_turn_summary",
-    "set_pipeline_ip",
+    "set_pipeline_subject",
     "update_session_model",
 ]

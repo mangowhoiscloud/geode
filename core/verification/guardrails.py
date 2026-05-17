@@ -1,4 +1,4 @@
-"""Guardrails G1-G4: Schema, Range, Grounding, Consistency checks."""
+"""Generic guardrails G1-G4: schema, range, grounding, consistency checks."""
 
 from __future__ import annotations
 
@@ -6,157 +6,168 @@ from typing import Any
 
 import numpy as np
 
-from core.state import AnalysisResult, EvaluatorResult, GeodeState, GuardrailResult
+from core.state import GeodeState, GuardrailResult
+
+
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _item_field(item: Any, key: str, default: Any = None) -> Any:
+    if isinstance(item, dict):
+        return item.get(key, default)
+    return getattr(item, key, default)
 
 
 def _g1_schema(state: GeodeState) -> tuple[bool, str]:
-    """G1: Validate required fields exist and have correct types."""
-    required = ["analyses", "evaluations", "psm_result", "tier"]
-    errors = [f"Missing {f}" for f in required if not state.get(f)]
-    if state.get("final_score") is None:
-        errors.append("Missing final_score")
-    return not errors, "; ".join(errors) or "Schema OK"
+    """G1: core state must contain at least a subject or result payload."""
+    if state.get("subject_id") or state.get("result") or state.get("analyses"):
+        return True, "Schema OK"
+    return False, "Missing subject_id, result, or analyses"
 
 
-def _validate_analyst_ranges(analyses: list[AnalysisResult]) -> list[str]:
-    """Check analyst score ranges [1, 5]."""
-    return [
-        f"Analyst {a.analyst_type} score {a.score} out of range [1,5]"
-        for a in analyses
-        if isinstance(a, AnalysisResult) and not (1.0 <= a.score <= 5.0)
-    ]
-
-
-def _validate_evaluator_ranges(evaluations: dict[str, Any]) -> list[str]:
-    """Check evaluator composite [0,100] and axis [1,5] ranges."""
+def _validate_analysis_ranges(analyses: list[Any]) -> list[str]:
+    """Check optional analysis score ranges when callers provide scores."""
     errors: list[str] = []
-    for key, ev in evaluations.items():
-        if not isinstance(ev, EvaluatorResult):
-            continue
-        if not (0 <= ev.composite_score <= 100):
-            errors.append(f"Evaluator {key} composite {ev.composite_score} out of range [0,100]")
-        errors.extend(
-            f"Evaluator {key} axis {axis}={val} out of range [1,5]"
-            for axis, val in ev.axes.items()
-            if not (1.0 <= val <= 5.0)
-        )
+    for index, analysis in enumerate(analyses):
+        score = _as_float(_item_field(analysis, "score"))
+        if score is not None and not (0.0 <= score <= 100.0):
+            name = _item_field(analysis, "name", _item_field(analysis, "analyst_type", index))
+            errors.append(f"Analysis {name} score {score} out of range [0,100]")
+        confidence = _as_float(_item_field(analysis, "confidence"))
+        if confidence is not None and not (0.0 <= confidence <= 100.0):
+            name = _item_field(analysis, "name", _item_field(analysis, "analyst_type", index))
+            errors.append(f"Analysis {name} confidence {confidence} out of range [0,100]")
+    return errors
+
+
+def _validate_evaluation_ranges(evaluations: dict[str, Any]) -> list[str]:
+    """Check optional evaluation score and axis ranges."""
+    errors: list[str] = []
+    for key, evaluation in evaluations.items():
+        composite = _as_float(_item_field(evaluation, "composite_score"))
+        if composite is not None and not (0.0 <= composite <= 100.0):
+            errors.append(f"Evaluation {key} composite {composite} out of range [0,100]")
+        axes = _item_field(evaluation, "axes", {})
+        if isinstance(axes, dict):
+            for axis, value in axes.items():
+                axis_score = _as_float(value)
+                if axis_score is not None and not (0.0 <= axis_score <= 100.0):
+                    errors.append(f"Evaluation {key} axis {axis}={axis_score} out of range [0,100]")
     return errors
 
 
 def _g2_range(state: GeodeState) -> tuple[bool, str]:
-    """G2: Validate numeric ranges."""
+    """G2: validate common numeric ranges without assuming a domain schema."""
     errors: list[str] = []
-    errors.extend(_validate_analyst_ranges(state.get("analyses", [])))
-    errors.extend(_validate_evaluator_ranges(state.get("evaluations", {})))
+    errors.extend(_validate_analysis_ranges(list(state.get("analyses", []))))
+    errors.extend(_validate_evaluation_ranges(dict(state.get("evaluations", {}))))
 
-    fs = state.get("final_score", 0)
-    if not (0 <= fs <= 100):
-        errors.append(f"Final score {fs} out of range [0,100]")
+    result = state.get("result", {})
+    if isinstance(result, dict):
+        for key in ("score", "final_score", "confidence"):
+            value = _as_float(result.get(key))
+            if value is not None and not (0.0 <= value <= 100.0):
+                errors.append(f"Result {key} {value} out of range [0,100]")
 
     return not errors, "; ".join(errors) or "Range OK"
 
 
 def _check_evidence_grounding(evidence: str, signals: dict[str, Any]) -> bool:
-    """Check that evidence is grounded in signal data.
-
-    Checks key presence (with common abbreviations) and numeric value
-    presence for stronger grounding.  Handles abbreviated numbers like
-    "25M views" matching key ``youtube_views``.
-    """
-    ev_lower = evidence.lower()
-
-    # Key presence — match signal key words (split on _ for partial match)
+    """Check that evidence references provided signal keys or numeric values."""
+    evidence_lower = evidence.lower()
     for key in signals:
         key_lower = key.lower()
-        # Exact key match
-        if key_lower in ev_lower:
+        if key_lower in evidence_lower:
             return True
-        # Partial word match: "youtube_views" → check "youtube" and "views"
         for part in key_lower.split("_"):
-            if len(part) >= 4 and part in ev_lower:
+            if len(part) >= 4 and part in evidence_lower:
                 return True
-
-    # Value presence — match numeric values (exact or abbreviated)
-    for v in signals.values():
-        if isinstance(v, (int, float)) and v != 0 and str(int(v)) in evidence:
+    for value in signals.values():
+        if isinstance(value, int | float) and value != 0 and str(int(value)) in evidence:
             return True
     return False
+
+
+def _flatten_signals(signal_data: dict[str, Any] | None) -> dict[str, Any] | None:
+    if signal_data is None:
+        return None
+    flat: dict[str, Any] = {}
+    for key, value in signal_data.items():
+        flat[key] = value
+        if isinstance(value, dict):
+            flat.update(value)
+    return flat
 
 
 def _g3_grounding(
     state: GeodeState,
     signal_data: dict[str, Any] | None = None,
 ) -> tuple[bool, str, float]:
-    """G3: Verify analyses are grounded in evidence.
-
-    Returns (passed, message, grounding_ratio).
-
-    When ``signal_data`` is provided, each evidence string is
-    cross-referenced against signal data keys AND values.  Evidence
-    items that do not match any signal key or value are flagged as
-    potentially hallucinated.
-
-    Quantitative analysts (growth_potential, discovery) with zero
-    grounded evidence now trigger a hard G3 failure.
-    """
+    """G3: verify optional evidence strings against optional signals."""
     errors: list[str] = []
-    details_only: list[str] = []
+    details: list[str] = []
     total_evidence = 0
     grounded_evidence = 0
+    flat_signals = _flatten_signals(signal_data)
 
-    flat_signals: dict[str, Any] | None = None
-    if signal_data is not None:
-        flat_signals = {}
-        for k, v in signal_data.items():
-            flat_signals[k] = v
-            if isinstance(v, dict):
-                for sub_k, sub_v in v.items():
-                    flat_signals[sub_k] = sub_v
+    for index, analysis in enumerate(state.get("analyses", [])):
+        evidence = _item_field(analysis, "evidence", [])
+        reasoning = _item_field(analysis, "reasoning", "")
+        name = _item_field(analysis, "name", _item_field(analysis, "analyst_type", index))
+        if isinstance(evidence, str):
+            evidence = [evidence]
+        if not isinstance(evidence, list):
+            evidence = []
 
-    for a in state.get("analyses", []):
-        if not a.evidence:
-            errors.append(f"Analyst {a.analyst_type} has no evidence")
-        elif flat_signals is not None:
-            ev_count = len(a.evidence)
-            g_count = sum(1 for ev in a.evidence if _check_evidence_grounding(ev, flat_signals))
-            total_evidence += ev_count
-            grounded_evidence += g_count
-
-            if g_count == 0:
-                # Soft warning for all analysts — domain guardrails are
-                # already strong enough; hard failures here caused
-                # false positives in dry-run fixtures.
-                details_only.append(
-                    f"Analyst {a.analyst_type}: 0/{ev_count} evidence grounded (review recommended)"
-                )
+        if not evidence:
+            details.append(f"Analysis {name} has no evidence")
+        elif flat_signals is None:
+            total_evidence += len(evidence)
+            grounded_evidence += len(evidence)
         else:
-            total_evidence += len(a.evidence)
-            grounded_evidence += len(a.evidence)  # assume grounded if no signals
+            total_evidence += len(evidence)
+            grounded = sum(
+                1 for item in evidence if _check_evidence_grounding(str(item), flat_signals)
+            )
+            grounded_evidence += grounded
+            if grounded == 0:
+                details.append(f"Analysis {name}: 0/{len(evidence)} evidence grounded")
 
-        if not a.reasoning:
-            errors.append(f"Analyst {a.analyst_type} has no reasoning")
+        if evidence and not reasoning:
+            errors.append(f"Analysis {name} has evidence but no reasoning")
 
-    ratio = grounded_evidence / total_evidence if total_evidence > 0 else 0.0
-    unique_details = list(dict.fromkeys(details_only))
-    msg_parts = errors + unique_details
-    if total_evidence > 0 and flat_signals is not None:
-        msg_parts.append(f"Grounding: {grounded_evidence}/{total_evidence} ({ratio:.0%})")
-    return not errors, "; ".join(msg_parts) or "Grounding OK", ratio
+    ratio = grounded_evidence / total_evidence if total_evidence else 0.0
+    if total_evidence and flat_signals is not None:
+        details.append(f"Grounding: {grounded_evidence}/{total_evidence} ({ratio:.0%})")
+    messages = errors + list(dict.fromkeys(details))
+    return not errors, "; ".join(messages) or "Grounding OK", ratio
 
 
 def _g4_consistency(state: GeodeState) -> tuple[bool, str]:
-    """G4: Check score-text consistency (flag outliers >2σ from mean)."""
-    analyses = state.get("analyses", [])
-    scores = [a.score for a in analyses if isinstance(a, AnalysisResult)]
+    """G4: flag score outliers when multiple analyses provide scores."""
+    scores: list[tuple[str, float]] = []
+    for index, analysis in enumerate(state.get("analyses", [])):
+        score = _as_float(_item_field(analysis, "score"))
+        if score is not None:
+            name = str(_item_field(analysis, "name", _item_field(analysis, "analyst_type", index)))
+            scores.append((name, score))
     if len(scores) < 2:
         return True, "Consistency OK"
 
-    mean = float(np.mean(scores))
-    std = float(np.std(scores, ddof=1))
+    values = [score for _, score in scores]
+    mean = float(np.mean(values))
+    std = float(np.std(values, ddof=1))
+    if std == 0:
+        return True, "Consistency OK"
     errors = [
-        f"Analyst {a.analyst_type} score {a.score:.1f} is >2σ from mean {mean:.1f}"
-        for a in analyses
-        if isinstance(a, AnalysisResult) and abs(a.score - mean) > 2 * std
+        f"Analysis {name} score {score:.1f} is >2σ from mean {mean:.1f}"
+        for name, score in scores
+        if abs(score - mean) > 2 * std
     ]
     return not errors, "; ".join(errors) or "Consistency OK"
 
@@ -166,33 +177,23 @@ def run_guardrails(
     *,
     signal_data: dict[str, Any] | None = None,
 ) -> GuardrailResult:
-    """Run all 4 guardrails in order.
-
-    Args:
-        state: Current pipeline state.
-        signal_data: Optional signal data dict for G3 grounding
-            cross-reference.  When provided, evidence strings are
-            validated against actual signal keys.
-    """
-    # G1, G2, G4 are simple (passed, msg) checks
-    checks_2: list[tuple[str, Any]] = [
-        ("G1(Schema)", _g1_schema),
-        ("G2(Range)", _g2_range),
-        ("G4(Consist)", _g4_consistency),
-    ]
+    """Run generic G1-G4 checks without depending on a domain schema."""
     results: dict[str, bool] = {}
     details: list[str] = []
 
-    for label, check_fn in checks_2:
-        passed, msg = check_fn(state)
+    for label, check_fn in (
+        ("G1(Schema)", _g1_schema),
+        ("G2(Range)", _g2_range),
+        ("G4(Consist)", _g4_consistency),
+    ):
+        passed, message = check_fn(state)
         key = label.split("(")[0].lower()
         results[key] = passed
-        details.append(f"{label}: {'PASS' if passed else 'FAIL'} — {msg}")
+        details.append(f"{label}: {'PASS' if passed else 'FAIL'} - {message}")
 
-    # G3 returns (passed, msg, grounding_ratio)
-    g3_passed, g3_msg, grounding_ratio = _g3_grounding(state, signal_data=signal_data)
+    g3_passed, g3_message, grounding_ratio = _g3_grounding(state, signal_data=signal_data)
     results["g3"] = g3_passed
-    details.insert(2, f"G3(Ground): {'PASS' if g3_passed else 'FAIL'} — {g3_msg}")
+    details.insert(2, f"G3(Ground): {'PASS' if g3_passed else 'FAIL'} - {g3_message}")
 
     return GuardrailResult(
         g1_schema=results["g1"],

@@ -1,7 +1,7 @@
 """Output/Export Tools — LLM-callable tools for results export.
 
 Layer 5 tools for output generation:
-- GenerateReportTool: Generate analysis report (stub for ReportGenerator)
+- GenerateReportTool: Generate a lightweight report artifact
 - ExportJsonTool: Export analysis result as JSON file
 - SendNotificationTool: Stub notification sender
 
@@ -42,8 +42,8 @@ def _save_to_vault(
 class GenerateReportTool:
     """Tool for generating structured reports.
 
-    Wraps ReportGenerator when available; returns a stub report
-    structure in demo mode.
+    Produces a lightweight artifact from caller-provided structured data.
+    Domain-specific report generators belong in external plugins.
     """
 
     @property
@@ -81,7 +81,7 @@ class GenerateReportTool:
         }
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
-        subject: str = kwargs.get("subject") or kwargs.get("ip_name") or "Untitled"
+        subject: str = kwargs.get("subject") or kwargs.get("subject_id") or "Untitled"
         analysis_data: dict[str, Any] = kwargs.get("analysis_data", {})
         fmt: str = kwargs.get("format", "markdown")
 

@@ -52,7 +52,7 @@ def create_mcp_server() -> Any:
             from core.memory.project import ProjectMemory
 
             _project_memory = ProjectMemory()
-        context = _project_memory.get_context_for_ip(query)
+        context = _project_memory.get_context_for_subject(query)
         return {"query": query, "context": context}
 
     @mcp.tool(description=_TOOL_DESCRIPTIONS["get_health"])

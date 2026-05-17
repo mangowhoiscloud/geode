@@ -133,7 +133,7 @@ class TestDefinitionsJsonMetadata:
 # ===================================================================
 
 
-class TestCategoryMembership:
+class TestCategoryMembershsubject:
     """Verify the category mapping matches the task specification."""
 
     def _category_map(self) -> dict[str, str]:
@@ -179,7 +179,7 @@ class TestCategoryMembership:
             assert m.get(name) == "scheduling", f"{name} should be scheduling"
 
 
-class TestCostTierMembership:
+class TestCostTierMembershsubject:
     """Verify the cost_tier mapping matches the task specification."""
 
     def _tier_map(self) -> dict[str, str]:

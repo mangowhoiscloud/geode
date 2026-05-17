@@ -18,7 +18,7 @@ def _build_hitl_handlers() -> dict[str, Any]:
     _result_feedback: dict[str, str] = {}
 
     def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
-        subject = kwargs.get("subject") or kwargs.get("ip_name") or ""
+        subject = kwargs.get("subject") or kwargs.get("subject_id") or ""
         rating = kwargs.get("rating", 0)
         if not subject:
             return _clarify("rate_result", ["subject"], "어떤 대상에 평점을 매길까요?")
@@ -43,7 +43,7 @@ def _build_hitl_handlers() -> dict[str, Any]:
         }
 
     def handle_accept_result(**kwargs: Any) -> dict[str, Any]:
-        subject = kwargs.get("subject") or kwargs.get("ip_name") or ""
+        subject = kwargs.get("subject") or kwargs.get("subject_id") or ""
         if not subject:
             return _clarify("accept_result", ["subject"], "어떤 결과를 수락할까요?")
         _result_feedback[subject] = "accepted"
@@ -56,7 +56,7 @@ def _build_hitl_handlers() -> dict[str, Any]:
         }
 
     def handle_reject_result(**kwargs: Any) -> dict[str, Any]:
-        subject = kwargs.get("subject") or kwargs.get("ip_name") or ""
+        subject = kwargs.get("subject") or kwargs.get("subject_id") or ""
         if not subject:
             return _clarify("reject_result", ["subject"], "어떤 결과를 거부할까요?")
         reason = kwargs.get("reason", "")
@@ -77,7 +77,7 @@ def _build_hitl_handlers() -> dict[str, Any]:
 
     def handle_rerun_node(**kwargs: Any) -> dict[str, Any]:
         node_name = kwargs.get("node_name", "")
-        subject = kwargs.get("subject") or kwargs.get("ip_name") or ""
+        subject = kwargs.get("subject") or kwargs.get("subject_id") or ""
         if not node_name or not subject:
             missing = [k for k, v in {"node_name": node_name, "subject": subject}.items() if not v]
             return _clarify("rerun_node", missing, "재실행할 노드와 대상을 알려주세요.")

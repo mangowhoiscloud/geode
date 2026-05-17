@@ -13,8 +13,8 @@ from core.memory.hybrid_session import (
 class TestRedisSessionStore:
     def test_set_and_get(self):
         store = RedisSessionStore()
-        store.set("s1", {"ip": "Berserk"})
-        assert store.get("s1") == {"ip": "Berserk"}
+        store.set("s1", {"subject": "Project Atlas"})
+        assert store.get("s1") == {"subject": "Project Atlas"}
 
     def test_get_missing(self):
         store = RedisSessionStore()
@@ -57,8 +57,8 @@ class TestRedisSessionStore:
 class TestPostgreSQLSessionStore:
     def test_set_and_get(self, tmp_path: Path):
         store = PostgreSQLSessionStore(tmp_path / "pg")
-        store.set("s1", {"ip": "Berserk"})
-        assert store.get("s1") == {"ip": "Berserk"}
+        store.set("s1", {"subject": "Project Atlas"})
+        assert store.get("s1") == {"subject": "Project Atlas"}
 
     def test_get_missing(self, tmp_path: Path):
         store = PostgreSQLSessionStore(tmp_path / "pg")
@@ -99,9 +99,9 @@ class TestHybridSessionStore:
 
     def test_write_through(self, tmp_path: Path):
         hybrid = self._make_hybrid(tmp_path)
-        hybrid.set("s1", {"ip": "Berserk"})
-        assert hybrid.l1.get("s1") == {"ip": "Berserk"}
-        assert hybrid.l2.get("s1") == {"ip": "Berserk"}
+        hybrid.set("s1", {"subject": "Project Atlas"})
+        assert hybrid.l1.get("s1") == {"subject": "Project Atlas"}
+        assert hybrid.l2.get("s1") == {"subject": "Project Atlas"}
 
     def test_read_l1_hit(self, tmp_path: Path):
         hybrid = self._make_hybrid(tmp_path)

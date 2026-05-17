@@ -47,7 +47,7 @@ const taskNodes = [
   { id: "analyst_gp", label: "Growth", color: "#818CF8", col: 2, row: 2 },
   { id: "analyst_d", label: "Discovery", color: "#818CF8", col: 2, row: 3 },
   { id: "evaluators", label: "Evaluators", color: "#C084FC", col: 3 },
-  { id: "scoring", label: "Scoring\n+PSM", color: "#F5C542", col: 4 },
+  { id: "scoring", label: "Scoring\n+composite scoring", color: "#F5C542", col: 4 },
   { id: "verify", label: "Verify\n+Cross", color: "#34D399", col: 5 },
   { id: "synthesis", label: "Synthesis\n+Report", color: "#F4B8C8", col: 6 },
 ];
@@ -215,77 +215,35 @@ export function AgentsTasksSection() {
               transition={{ duration: 0.25 }}
             >
             <div className="space-y-8">
-              {/* 1. Pipeline DAG (Game IP) — DagRenderer */}
+              {/* 1. Generic TaskGraph — DagRenderer */}
               <div>
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#818CF8]/10 text-[#818CF8]/80 border border-[#818CF8]/15">PIPELINE</span>
-                  <span className="text-sm font-semibold text-white/80">{t(locale, "TaskGraph. Game IP 가치추론", "TaskGraph. Game IP Valuation")}</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#818CF8]/10 text-[#818CF8]/80 border border-[#818CF8]/15">TASKGRAPH</span>
+                  <span className="text-sm font-semibold text-white/80">{t(locale, "TaskGraph. 일반 실행 계획", "TaskGraph. Generic Execution Plan")}</span>
                 </div>
                 <DagRenderer
                   nodes={[
-                    { id: "router", label: "Router", color: "#4ECDC4", column: 0 },
-                    { id: "signals", label: "Signals", color: "#F5C542", column: 1 },
-                    { id: "a0", label: "Market", color: "#818CF8", column: 2, row: -1.5 },
-                    { id: "a1", label: "Creative", color: "#818CF8", column: 2, row: -0.5 },
-                    { id: "a2", label: "Audience", color: "#818CF8", column: 2, row: 0.5 },
-                    { id: "a3", label: "Risk", color: "#818CF8", column: 2, row: 1.5 },
-                    { id: "eval", label: "Eval ×3", color: "#C084FC", column: 3 },
-                    { id: "score", label: "Scoring", color: "#F5C542", column: 4 },
-                    { id: "verify", label: "Verify", color: "#34D399", column: 5 },
+                    { id: "scope", label: "Scope", color: "#4ECDC4", column: 0 },
+                    { id: "context", label: "Context", color: "#F5C542", column: 1 },
+                    { id: "search", label: "Search", color: "#818CF8", column: 2, row: -0.75 },
+                    { id: "inspect", label: "Inspect", color: "#818CF8", column: 2, row: 0.75 },
+                    { id: "synthesize", label: "Synthesize", color: "#C084FC", column: 3 },
+                    { id: "verify", label: "Verify", color: "#34D399", column: 4 },
                   ]}
                   edges={[
-                    { from: "router", to: "signals" },
-                    { from: "signals", to: "a0", label: "Send API" },
-                    { from: "signals", to: "a1" },
-                    { from: "signals", to: "a2" },
-                    { from: "signals", to: "a3" },
-                    { from: "a0", to: "eval" },
-                    { from: "a1", to: "eval" },
-                    { from: "a2", to: "eval" },
-                    { from: "a3", to: "eval" },
-                    { from: "eval", to: "score" },
-                    { from: "score", to: "verify" },
+                    { from: "scope", to: "context" },
+                    { from: "context", to: "search" },
+                    { from: "context", to: "inspect" },
+                    { from: "search", to: "synthesize" },
+                    { from: "inspect", to: "synthesize" },
+                    { from: "synthesize", to: "verify" },
                   ]}
-                  loopback={{ from: "verify", to: "signals", label: "confidence < 0.7 loopback", color: "#E87080" }}
                   nodeRadius={24}
                 />
                 <p className="text-sm text-[#A0B4D4] leading-relaxed mt-2">
                   {t(locale,
-                    "TaskGraphHookBridge가 NODE_ENTER/EXIT/ERROR를 수신하여 ~13개 Task 상태를 자동 갱신합니다. 실패 시 하류 Task를 자동 SKIP.",
-                    "TaskGraphHookBridge receives NODE_ENTER/EXIT/ERROR to auto-update ~13 task states. On failure, downstream tasks are auto-SKIPped."
-                  )}
-                </p>
-              </div>
-
-              {/* 1.5 REODE Migration Pipeline — DagRenderer */}
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#34D399]/10 text-[#34D399]/80 border border-[#34D399]/15">REODE</span>
-                  <span className="text-sm font-semibold text-white/80">TaskGraph. Migration Pipeline</span>
-                </div>
-                <DagRenderer
-                  nodes={[
-                    { id: "assess", label: "Assess", color: "#60A5FA", column: 0 },
-                    { id: "plan", label: "Plan", color: "#818CF8", column: 1 },
-                    { id: "transform", label: "Transform", color: "#4ECDC4", column: 2 },
-                    { id: "validate", label: "Validate", color: "#F5C542", column: 3 },
-                    { id: "fix", label: "Fix", color: "#E87080", column: 4 },
-                    { id: "measure", label: "Measure", color: "#34D399", column: 5 },
-                  ]}
-                  edges={[
-                    { from: "assess", to: "plan" },
-                    { from: "plan", to: "transform" },
-                    { from: "transform", to: "validate" },
-                    { from: "validate", to: "fix" },
-                    { from: "validate", to: "measure", color: "#34D399" },
-                  ]}
-                  loopback={{ from: "fix", to: "validate", label: "fix loop (4-class routing)", color: "#E87080" }}
-                  nodeRadius={24}
-                />
-                <p className="text-sm text-[#A0B4D4] leading-relaxed mt-2">
-                  {t(locale,
-                    "Java 1.8→22 자동 마이그레이션. 4분류 에러 라우팅(CONFIG/CODE/BEHAVIOR/ENV) + Architect/Editor 분리.",
-                    "Automated Java 1.8→22 migration. 4-class error routing (CONFIG/CODE/BEHAVIOR/ENV) + Architect/Editor separation."
+                    "TaskGraphHookBridge가 NODE_ENTER/EXIT/ERROR를 수신하여 Task 상태를 자동 갱신합니다. 실패 시 하류 Task를 자동 SKIP.",
+                    "TaskGraphHookBridge receives NODE_ENTER/EXIT/ERROR to auto-update task states. On failure, downstream tasks are auto-SKIPped."
                   )}
                 </p>
               </div>

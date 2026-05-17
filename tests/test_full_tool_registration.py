@@ -48,7 +48,7 @@ class TestFullToolRegistration:
         assert registered == ALL_TOOL_NAMES
 
     def test_runtime_registry_count(self, tmp_path: Path) -> None:
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert len(runtime.tool_registry) == len(ALL_TOOL_NAMES)
 
 
@@ -99,26 +99,26 @@ class TestPolicyFilterIntegration:
     """Integration: registry + policy chain filtering via runtime."""
 
     def test_runtime_dry_run_filtering(self, tmp_path: Path) -> None:
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         dry_tools = runtime.get_available_tools(mode="dry_run")
         assert "send_notification" not in dry_tools
         assert "memory_search" in dry_tools
         assert "cortex_search" in dry_tools
 
     def test_runtime_full_pipeline_filtering(self, tmp_path: Path) -> None:
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         full_tools = runtime.get_available_tools(mode="full_pipeline")
         assert "send_notification" not in full_tools
         assert len(full_tools) == len(ALL_TOOL_NAMES) - 1
 
     def test_unknown_mode_allows_all(self, tmp_path: Path) -> None:
         """Modes with no matching policies allow all tools."""
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="custom_mode")
         assert len(tools) == len(ALL_TOOL_NAMES)
 
     def test_anthropic_tool_defs_respect_policy(self, tmp_path: Path) -> None:
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         defs = runtime.tool_registry.to_anthropic_tools(
             policy=runtime.policy_chain,
             mode="dry_run",

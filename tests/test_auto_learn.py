@@ -75,7 +75,7 @@ class TestDetectLanguagePref:
 
 class TestDetectDomainInterest:
     def test_interested_in(self):
-        r = detect_patterns("I'm interested in dark fantasy game IPs", [], Counter())
+        r = detect_patterns("I'm interested in dark fantasy domain workflows", [], Counter())
         # self-intro ("I'm") wins over domain interest (first-match)
         assert len(r) == 1
         assert "self-intro" in r[0][0].lower()
@@ -128,7 +128,7 @@ class TestNoiseControl:
     def test_first_match_wins(self):
         # Contains both self-intro and domain interest, self-intro wins
         r = detect_patterns(
-            "I'm focused on researching game IP potential",
+            "I'm focused on researching domain workflow potential",
             [],
             Counter(),
         )
@@ -225,7 +225,7 @@ class TestAutoLearnHandler:
             )
             handler(
                 HookEvent.TURN_COMPLETED,
-                {"user_input": "I prefer dark fantasy game IPs", "tool_calls": []},
+                {"user_input": "I prefer dark fantasy domain workflows", "tool_calls": []},
             )
 
         # Both attempted, neither counted toward session cap

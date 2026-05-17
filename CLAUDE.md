@@ -316,9 +316,9 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | Skill | Triggers | Content |
 |-------|----------|---------|
 | `geode-pipeline` | pipeline, graph, topology, send api | StateGraph patterns, node contracts |
-| `geode-scoring` | score, psm, tier, rubric, formula | Scoring formulas, 14-axis rubric |
+| `geode-scoring` | score, tier, rubric, formula | Generic scoring formulas and rubric patterns |
 | `geode-analysis` | analyst, evaluator, clean context | Analyst/Evaluator patterns, prompts |
-| `geode-verification` | guardrail, bias, cause, decision tree | G1-G4, BiasBuster, Decision Tree |
+| `geode-verification` | guardrail, bias, cause, decision tree | G1-G4, panel guard, Decision Tree |
 | `geode-e2e` | e2e, live test, verification, tracing | Live E2E patterns, native observability verification, quality checks |
 | `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
 | `geode-changelog` | changelog, release, version, release | CHANGELOG management, SemVer versioning |
@@ -327,12 +327,12 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | `frontier-harness-research` | research, gap, frontier, harness, case study | Frontier harness 4-system comparative research process |
 | `verification-team` | verification, review, verify, inspect | 5-persona verification (Beck/Karpathy/Steinberger/Cherny + Anti-Deception) |
 | `tech-blog-writer` | blog, posting, tech blog | Technical blog writing guide |
-| `explore-reason-act` | explore, reason, root cause, read before write | 3-phase explore-reason-act before code modification (REODE backport) |
-| `anti-deception-checklist` | deception, fake success, regression | Fake success prevention verification checklist (REODE backport) |
-| `code-review-quality` | quality, SOLID, dead code, resource leak | Python code quality 6-lens review (REODE backport) |
-| `dependency-review` | dependency, import, layer, circular, lazy | 6-Layer dependency health review (REODE backport) |
-| `kent-beck-review` | kent beck, simple design, simplify, god object, SRP | Simple Design 4-rule code review (REODE backport) |
+| `explore-reason-act` | explore, reason, root cause, read before write | 3-phase explore-reason-act before code modification |
+| `anti-deception-checklist` | deception, fake success, regression | Fake success prevention verification checklist |
+| `code-review-quality` | quality, SOLID, dead code, resource leak | Python code quality 6-lens review |
+| `dependency-review` | dependency, import, layer, circular, lazy | 6-Layer dependency health review |
+| `kent-beck-review` | kent beck, simple design, simplify, god object, SRP | Simple Design 4-rule code review |
 | `codebase-audit` | audit, dead code, refactor, god object, duplication | Code audit + refactoring workflow (v0.24.0 proven) |
 | `geode-serve` | serve, gateway, slack, binding, poller, config.toml | Slack Gateway operations + debugging guide |
-| `long-task-watcher` | monitor, tail -F, progress, background, live audit, stdbuf, buffering | Long-running task watching patterns. Petri × GEODE 의 N7' Monitor 타임아웃 사례 + 안정 패턴 (cat-and-grep / stdbuf streaming / polling) |
-| `docs-link-audit` | broken link, 404, docs link, hyperlink, 링크 점검, 링크 깨짐, audit links, link checker | Docs 사이트 (`site/` Next.js) 본문/JSX/markdown 링크 audit. `scripts/check_docs_links.py` 가 4 카테고리 (internal /docs / internal /other / anchor / external) 검증, build-time copy 인지, exit code 기반 CI guard 가능. PR #1157/#1161 케이스 스터디 포함 |
+| `long-task-watcher` | monitor, tail -F, progress, background, live audit, stdbuf, buffering | Long-running task watching patterns. Covers the Petri × GEODE N7' Monitor timeout case and stable watch patterns (cat-and-grep / stdbuf streaming / polling). |
+| `docs-link-audit` | broken link, 404, docs link, hyperlink, 링크 점검, 링크 깨짐, audit links, link checker | Docs-site (`site/` Next.js) body / JSX / markdown link audit. `scripts/check_docs_links.py` validates 4 categories (internal /docs / internal /other / anchor / external), build-time copy awareness, and exit-code-based CI guard wiring. Includes PR #1157/#1161 case studies. |

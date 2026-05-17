@@ -37,7 +37,7 @@ const openclawFixes = [
 const usagePatterns = [
   { name: "Gateway (Slack)", nameEn: "Gateway (Slack)", key: "gateway:slack:C12345:U789:thread_A", descKo: "같은 쓰레드 = serial, 다른 쓰레드 = parallel", descEn: "Same thread = serial, different threads = parallel", color: "#4ECDC4" },
   { name: "Scheduler", nameEn: "Scheduler", key: "scheduler:weekly_scan", descKo: "non-blocking try_acquire. 실패 시 rollback", descEn: "Non-blocking try_acquire. Rollback on failure", color: "#F5C542" },
-  { name: "SubAgent", nameEn: "SubAgent", key: "ip:berserk:pipeline:subagent:reddit", descKo: "유니크 key → 항상 즉시 획득. global Lane이 병렬 제어", descEn: "Unique key = always immediate acquire. global Lane controls parallelism", color: "#C084FC" },
+  { name: "SubAgent", nameEn: "SubAgent", key: "subject:demo:pipeline:subagent:reddit", descKo: "유니크 key → 항상 즉시 획득. global Lane이 병렬 제어", descEn: "Unique key = always immediate acquire. global Lane controls parallelism", color: "#C084FC" },
 ];
 
 export function ConcurrencySection() {

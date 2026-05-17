@@ -462,26 +462,22 @@ def emit_quota_exhausted(
 
 
 def emit_pipeline_gather(
-    ip_info: dict[str, Any],
-    monolake: dict[str, Any],
+    subject: dict[str, Any],
+    metrics: dict[str, Any],
     signals: dict[str, Any] | None = None,
 ) -> None:
-    """Emit pipeline_gather event with structured IP metadata + signals."""
+    """Emit pipeline_gather event with structured subject metadata."""
     writer = getattr(_ipc_writer_local, "writer", None)
     if writer is None:
         return
     sig = signals or {}
     writer.send_event(
         "pipeline_gather",
-        ip_name=ip_info.get("ip_name", ""),
-        media_type=ip_info.get("media_type", ""),
-        release_year=ip_info.get("release_year", 0),
-        studio=ip_info.get("studio", ""),
-        dau=monolake.get("dau_current", 0),
-        revenue=monolake.get("revenue_ltm", 0),
-        youtube_views=sig.get("youtube_views", 0),
-        reddit_subscribers=sig.get("reddit_subscribers", 0),
-        fan_art_yoy_pct=sig.get("fan_art_yoy_pct", 0),
+        subject_id=subject.get("subject_id", ""),
+        subject_type=subject.get("subject_type", ""),
+        source=subject.get("source", ""),
+        metrics=metrics,
+        signals=sig,
     )
 
 
@@ -520,11 +516,8 @@ def emit_pipeline_score(
     final_score: float,
     subscores: dict[str, float],
     confidence: float,
-    tier: str,
-    *,
-    psm: Any | None = None,
 ) -> None:
-    """Emit pipeline_score event with PSM results."""
+    """Emit pipeline_score event with generic score results."""
     writer = getattr(_ipc_writer_local, "writer", None)
     if writer is None:
         return
@@ -533,10 +526,6 @@ def emit_pipeline_score(
         final_score=final_score,
         subscores=subscores,
         confidence=confidence,
-        tier=tier,
-        att_pct=getattr(psm, "att_pct", 0) if psm else 0,
-        z_value=getattr(psm, "z_value", 0) if psm else 0,
-        rosenbaum_gamma=getattr(psm, "rosenbaum_gamma", 0) if psm else 0,
     )
 
 

@@ -30,7 +30,7 @@ Example (quality_judge):
     "m_score": 3.7, "n_score": 4.0
   }},
   "composite_score": 78.0,
-  "rationale": "Strong core mechanics and engagement hooks. IP integration is solid but trailer metrics lag behind."
+  "rationale": "Strong core mechanics and engagement hooks. Workflow integration is solid but onboarding metrics lag behind."
 }}
 
 Example (hidden_value):

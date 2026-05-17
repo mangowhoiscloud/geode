@@ -412,7 +412,7 @@ graph LR
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
 | **Runtime** | ToolRegistry(61), MCP Catalog (200 via Anthropic registry, 5 locally configured by default), Skills(14), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
-| **⊥ Domain** | `DomainPort` Protocol — 도메인-specific DAG 가 Port 통해 plug-in (cross-cutting). 레퍼런스 DAG 1개 동봉. 어떤 탐색적 리서치 / 시그널 예측 도메인이든 교체해 사용 | `core/domains/` |
+| **⊥ Domain** | `DomainPort` Protocol — 도메인-specific DAG 는 외부 패키지가 port 를 통해 plug-in. GEODE core 는 port/loader 만 제공하고, 도메인 DAG, CLI 명령, fixture, report 는 이 repo 밖에서 소유 | `core/domains/` |
 
 `.geode/` — 에이전트 컨텍스트 라이프사이클 (모든 LLM 호출에 5-tier 계층 어셈블):
 

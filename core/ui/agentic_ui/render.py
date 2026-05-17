@@ -113,12 +113,12 @@ def render_session_cost_summary() -> None:
         return  # accumulator not available yet
 
 
-def render_plan_steps(ip_name: str, steps: list[str]) -> None:
+def render_plan_steps(subject_id: str, steps: list[str]) -> None:
     """Render a plan summary (Claude Code ● style)."""
     from core.ui import agentic_ui as _pkg
 
     _pkg.console.print()
-    _pkg.console.print(f"  [header]● Plan: {ip_name}[/header]")
+    _pkg.console.print(f"  [header]● Plan: {subject_id}[/header]")
     for i, step in enumerate(steps, 1):
         _pkg.console.print(f"    [plan_step]{i}. {step}[/plan_step]")
     _pkg.console.print()

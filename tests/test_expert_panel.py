@@ -152,7 +152,7 @@ class TestExpertPanel:
     def test_collect_ratings(self):
         panel = ExpertPanel()
         panel.add_expert(Expert(expert_id="e1", name="Alice"))
-        ratings = panel.collect_ratings("berserk", {"e1": 4.5})
+        ratings = panel.collect_ratings("demo", {"e1": 4.5})
         assert len(ratings) == 1
         assert ratings[0].score == 4.5
         assert panel.stats.ratings_collected == 1

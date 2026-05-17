@@ -86,7 +86,7 @@ class FileBasedUserProfile:
         profile = FileBasedUserProfile()
         profile.load_profile()  # loads ~/.geode/user_profile/ + .geode/user_profile/
         profile.set_preference("language", "ko")
-        profile.add_learned_pattern("User prefers dark fantasy IPs", "domain")
+        profile.add_learned_pattern("User prefers detailed research subjects", "domain")
     """
 
     def __init__(

@@ -15,13 +15,13 @@ from core.llm.commentary import generate_commentary
 class TestGenerateCommentary:
     @patch("core.llm.commentary.call_llm")
     def test_success_returns_text(self, mock_call: MagicMock):
-        mock_call.return_value = "  This is a great IP.  "
+        mock_call.return_value = "  This is a great subject.  "
         result = generate_commentary(
-            user_query="Berserk 분석해줘",
+            user_query="Project Atlas 분석해줘",
             action="analyze",
             context={"tier": "S", "final_score": 82.2},
         )
-        assert result == "This is a great IP."
+        assert result == "This is a great subject."
         mock_call.assert_called_once()
 
     @patch("core.llm.commentary.call_llm")

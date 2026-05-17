@@ -26,9 +26,9 @@ from core.tools.registry import ToolRegistry
 
 class TestGeodeRuntimeCreate:
     def test_create_basic(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        assert runtime.ip_name == "Berserk"
-        assert runtime.session_key == "ip:berserk:analysis"
+        runtime = GeodeRuntime.create("demo", log_dir=tmp_path)
+        assert runtime.subject_id == "demo"
+        assert runtime.session_key == "subject:demo:analysis"
         assert isinstance(runtime.hooks, HookSystem)
         assert isinstance(runtime.session_store, InMemorySessionStore)
         assert isinstance(runtime.policy_chain, PolicyChain)
@@ -36,29 +36,29 @@ class TestGeodeRuntimeCreate:
         assert isinstance(runtime.run_log, RunLog)
 
     def test_create_custom_phase(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Cowboy Bebop", phase="scoring", log_dir=tmp_path)
-        assert runtime.session_key == "ip:cowboy_bebop:scoring"
+        runtime = GeodeRuntime.create("Demo Subject", phase="scoring", log_dir=tmp_path)
+        assert runtime.session_key == "subject:demo_subject:scoring"
 
     def test_thread_config(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("demo", log_dir=tmp_path)
         config = runtime.thread_config
-        assert config["configurable"] == {"thread_id": "ip:berserk:analysis"}
-        assert config["run_name"] == "geode:Berserk:analysis"
-        assert "ip:Berserk" in config["tags"]
+        assert config["configurable"] == {"thread_id": "subject:demo:analysis"}
+        assert config["run_name"] == "geode:demo:analysis"
+        assert "subject:demo" in config["tags"]
 
 
 class TestRuntimeHooksRunLog:
     def test_hooks_write_to_run_log(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
         # Trigger a pipeline event
         runtime.hooks.trigger(
             HookEvent.NODE_ENTERED,
-            {"node": "router", "ip_name": "Berserk"},
+            {"node": "router", "subject_id": "demo"},
         )
         runtime.hooks.trigger(
             HookEvent.NODE_EXITED,
-            {"node": "router", "ip_name": "Berserk", "duration_ms": 42.0},
+            {"node": "router", "subject_id": "demo", "duration_ms": 42.0},
         )
 
         # Verify our events exist in the run log
@@ -73,7 +73,7 @@ class TestRuntimeHooksRunLog:
         assert enter_entry.node == "router"
 
     def test_all_hook_events_logged(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
         # Trigger each event type
         for event in HookEvent:
@@ -84,7 +84,7 @@ class TestRuntimeHooksRunLog:
         assert len(entries) >= len(HookEvent)
 
     def test_error_events_logged_with_error_status(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
         runtime.hooks.trigger(
             HookEvent.NODE_ERROR,
@@ -101,21 +101,21 @@ class TestRuntimeHooksRunLog:
 
 class TestRuntimeSessionStore:
     def test_store_and_retrieve(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
-        runtime.store_session_data({"ip_name": "Berserk", "mode": "full_pipeline"})
+        runtime.store_session_data({"subject_id": "Project Atlas", "mode": "full_pipeline"})
         data = runtime.get_session_data()
         assert data is not None
-        assert data["ip_name"] == "Berserk"
+        assert data["subject_id"] == "Project Atlas"
 
     def test_no_session_returns_none(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert runtime.get_session_data() is None
 
 
 class TestRuntimePolicyChain:
     def test_dry_run_blocks_notification(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
         full_tools = runtime.get_available_tools(mode="full_pipeline")
         dry_tools = runtime.get_available_tools(mode="dry_run")
@@ -124,7 +124,7 @@ class TestRuntimePolicyChain:
         assert "send_notification" not in full_tools
 
     def test_full_pipeline_blocks_notification(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="full_pipeline")
         assert len(tools) == 14
         assert "send_notification" not in tools
@@ -132,7 +132,7 @@ class TestRuntimePolicyChain:
 
 class TestRuntimeToolRegistry:
     def test_registry_has_all_tools(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert len(runtime.tool_registry) == 15
         # Data tools
         assert "cortex_analyst" in runtime.tool_registry
@@ -156,19 +156,19 @@ class TestRuntimeToolRegistry:
 
 class TestRuntimeCompileGraph:
     def test_compile_without_checkpoint(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         with pytest.raises(RuntimeError, match="no longer ships"):
             runtime.compile_graph()
 
     def test_compile_with_checkpoint(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         with pytest.raises(RuntimeError, match="no longer ships"):
             runtime.compile_graph(enable_checkpoint=True)
 
 
 class TestRunLogPruning:
     def test_prune_logs(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         # Just verify it doesn't error on empty log
         removed = runtime.prune_logs()
         assert removed == 0
@@ -214,46 +214,46 @@ class TestDefaultBuilders:
 
 class TestRuntimeNewComponents:
     def test_config_watcher_wired(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert isinstance(runtime.config_watcher, ConfigWatcher)
 
     def test_stuck_detector_wired(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert isinstance(runtime.stuck_detector, StuckDetector)
 
     def test_lane_queue_wired(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert isinstance(runtime.lane_queue, LaneQueue)
         assert "session" in runtime.lane_queue.list_lanes()
         assert "global" in runtime.lane_queue.list_lanes()
 
     def test_stuck_detector_hooks_wired(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
         # Trigger PIPELINE_START → should mark running
         runtime.hooks.trigger(
             HookEvent.PIPELINE_STARTED,
-            {"node": "router", "ip_name": "Berserk"},
+            {"node": "router", "subject_id": "Project Atlas"},
         )
         assert runtime.stuck_detector.running_count == 1
 
         # Trigger PIPELINE_END → should mark completed
         runtime.hooks.trigger(
             HookEvent.PIPELINE_ENDED,
-            {"node": "synthesizer", "ip_name": "Berserk"},
+            {"node": "synthesizer", "subject_id": "Project Atlas"},
         )
         assert runtime.stuck_detector.running_count == 0
 
     def test_shutdown(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         runtime.shutdown()  # Should not raise
 
 
 class TestGetHealth:
     def test_get_health_has_all_components(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("demo", log_dir=tmp_path)
         health = runtime.get_health()
-        assert health["ip_name"] == "Berserk"
+        assert health["subject_id"] == "demo"
         assert "drift" in health
         assert "model_registry" in health
         assert "expert_panel" in health
@@ -265,7 +265,7 @@ class TestGetHealth:
         assert "scheduler_running" in health
 
     def test_get_health_stats_types(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         health = runtime.get_health()
         assert isinstance(health["drift"], dict)
         assert isinstance(health["model_registry"], dict)
@@ -280,7 +280,7 @@ class TestReactiveChains:
             "core.config.settings.snapshot_dir",
             str(tmp_path / "snapshots"),
         )
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         initial_snaps = runtime.snapshot_manager.list_snapshots()
 
         runtime.hooks.trigger(
@@ -298,12 +298,12 @@ class TestReactiveChains:
             "core.config.settings.snapshot_dir",
             str(tmp_path / "snapshots"),
         )
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         initial_snaps = runtime.snapshot_manager.list_snapshots()
 
         runtime.hooks.trigger(
             HookEvent.PIPELINE_ENDED,
-            {"node": "synthesizer", "ip_name": "Berserk"},
+            {"node": "synthesizer", "subject_id": "Project Atlas"},
         )
 
         after_snaps = runtime.snapshot_manager.list_snapshots()
@@ -312,41 +312,41 @@ class TestReactiveChains:
 
 class TestRuntimeTaskGraph:
     def test_task_graph_created_on_init(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert runtime.task_graph is not None
         assert isinstance(runtime.task_graph, TaskGraph)
         assert runtime.task_graph.task_count == 0
 
     def test_task_bridge_created(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert runtime._task_bridge is not None
         assert isinstance(runtime._task_bridge, TaskGraphHookBridge)
 
     def test_get_health_includes_task_graph(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         health = runtime.get_health()
         assert "task_graph" in health
         assert health["task_graph"]["total"] == 0
         assert health["task_graph"]["is_complete"] is True
 
     def test_get_task_status_summary(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         status = runtime.get_task_status()
         assert status["total_tasks"] == 0
         assert status["is_complete"] is True
 
     def test_get_task_status_single(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        status = runtime.get_task_status("berserk_router")
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
+        status = runtime.get_task_status("demo_router")
         assert "error" in status
 
     def test_get_task_status_missing(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         status = runtime.get_task_status("nonexistent")
         assert "error" in status
 
     def test_reset_task_graph(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         old_graph = runtime.task_graph
 
         runtime.reset_task_graph()
@@ -354,7 +354,7 @@ class TestRuntimeTaskGraph:
         assert runtime.task_graph.task_count == 0
 
     def test_hook_events_update_task_graph(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        runtime.hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
-        runtime.hooks.trigger(HookEvent.NODE_EXITED, {"node": "router", "ip_name": "berserk"})
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
+        runtime.hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "subject_id": "demo"})
+        runtime.hooks.trigger(HookEvent.NODE_EXITED, {"node": "router", "subject_id": "demo"})
         assert runtime.task_graph.task_count == 0

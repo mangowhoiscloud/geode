@@ -158,7 +158,7 @@ class GeodeRuntime:
     """Production runtime that wires all infrastructure components.
 
     Usage:
-        runtime = GeodeRuntime.create("Berserk")
+        runtime = GeodeRuntime.create("subject")
         graph = runtime.compile_graph()
         async for event in graph.astream(state, config=runtime.thread_config):
             ...
@@ -187,7 +187,6 @@ class GeodeRuntime:
         self.project_memory = core.project_memory
         self.session_key = core.session_key
         self.subject_id = core.subject_id
-        self.ip_name = core.subject_id
         self.run_id = ""
         self.is_subagent: bool = False
         # Unified bootstrap resources
@@ -222,7 +221,7 @@ class GeodeRuntime:
     @classmethod
     def create(
         cls,
-        ip_name: str,
+        subject_id: str,
         *,
         phase: str = "analysis",
         domain_name: str = "",
@@ -248,7 +247,7 @@ class GeodeRuntime:
         if domain_name:
             domain = load_domain_adapter(domain_name)
             set_domain(domain)
-        session_key = build_session_key(ip_name, phase)
+        session_key = build_session_key(subject_id, phase)
         run_id = uuid.uuid4().hex[:12]
 
         # Stage 1: Core sub-systems
@@ -271,12 +270,12 @@ class GeodeRuntime:
             core["hooks"],
             core["session_store"],
             session_key=session_key,
-            ip_name=ip_name,
+            subject_id=subject_id,
         )
 
         log.info(
-            "GeodeRuntime created: ip=%s, key=%s, tools=%d, lanes=%s",
-            ip_name,
+            "GeodeRuntime created: subject=%s, key=%s, tools=%d, lanes=%s",
+            subject_id,
             session_key,
             len(core["tool_registry"]),
             core["lane_queue"].list_lanes(),
@@ -295,7 +294,7 @@ class GeodeRuntime:
             lane_queue=core["lane_queue"],
             project_memory=memory["project_memory"],
             session_key=session_key,
-            subject_id=ip_name,
+            subject_id=subject_id,
             secondary_adapter=core["secondary_adapter"],
             profile_store=core["profile_store"],
             profile_rotator=core["profile_rotator"],
@@ -391,7 +390,7 @@ class GeodeRuntime:
         session_store: Any,
         *,
         session_key: str,
-        ip_name: str,
+        subject_id: str,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Stage 3: Build memory, automation, and optional components."""
         from core.wiring import automation as automation_wiring
@@ -406,7 +405,7 @@ class GeodeRuntime:
         automation = automation_wiring.build_automation(
             hooks=hooks,
             session_key=session_key,
-            ip_name=ip_name,
+            subject_id=subject_id,
             project_memory=project_memory,
         )
 
@@ -417,7 +416,7 @@ class GeodeRuntime:
             prompt_assembler = None
         task_graph, task_bridge = bootstrap.build_task_graph(
             hooks=hooks,
-            ip_name=ip_name,
+            subject_id=subject_id,
         )
 
         memory = {
@@ -437,7 +436,7 @@ class GeodeRuntime:
     @property
     def thread_config(self) -> dict[str, Any]:
         """LangGraph thread config for this session."""
-        return build_thread_config(self.ip_name, "analysis")
+        return build_thread_config(self.subject_id, "analysis")
 
     @property
     def checkpoint_db(self) -> str | None:
@@ -478,17 +477,17 @@ class GeodeRuntime:
         """Retrieve session data for the current session key."""
         return self.session_store.get(self.session_key)
 
-    def get_ip_context(self) -> dict[str, Any]:
-        """Get project memory + rules context for the current IP."""
-        return self.project_memory.get_context_for_ip(self.ip_name)
+    def get_subject_context(self) -> dict[str, Any]:
+        """Get project memory + rules context for the current subject."""
+        return self.project_memory.get_context_for_subject(self.subject_id)
 
     def assemble_context(self) -> dict[str, Any]:
         """Assemble full 3-tier context (Org -> Project -> Session)."""
         if self.context_assembler:
-            ctx = self.context_assembler.assemble(self.session_key, self.ip_name)
+            ctx = self.context_assembler.assemble(self.session_key, self.subject_id)
             self.context_assembler.mark_assembled(ctx.get("_assembled_at"))
             return ctx
-        return self.get_ip_context()
+        return self.get_subject_context()
 
     def get_task_status(self, task_id: str | None = None) -> dict[str, Any]:
         """Get task graph status. If task_id given, return single task; else summary."""
@@ -513,7 +512,7 @@ class GeodeRuntime:
 
         if self._task_bridge is not None:
             self._task_bridge.unregister()
-        graph, bridge = build_task_graph(hooks=self.hooks, ip_name=self.ip_name)
+        graph, bridge = build_task_graph(hooks=self.hooks, subject_id=self.subject_id)
         self.task_graph = graph
         self._task_bridge = bridge
 
@@ -561,7 +560,7 @@ class GeodeRuntime:
 
         Returns a dict of component_name -> stats_dict for dashboarding.
         """
-        health: dict[str, Any] = {"ip_name": self.ip_name, "session_key": self.session_key}
+        health: dict[str, Any] = {"subject_id": self.subject_id, "session_key": self.session_key}
 
         if self.drift_detector:
             health["drift"] = self.drift_detector.stats.to_dict()

@@ -21,7 +21,7 @@ class TestPipelineEndMemoryWrite:
         build_automation(
             hooks=hooks,
             session_key="test-session",
-            ip_name="Berserk",
+            subject_id="demo-subject",
             project_memory=None,
         )
 
@@ -30,9 +30,8 @@ class TestPipelineEndMemoryWrite:
             HookEvent.PIPELINE_ENDED,
             {
                 "node": "synthesizer",
-                "ip_name": "Berserk",
+                "subject_id": "demo-subject",
                 "final_score": 0.85,
-                "tier": "S",
                 "dry_run": False,
             },
         )

@@ -94,9 +94,9 @@ class ProjectJournal:
     Usage::
 
         journal = ProjectJournal()
-        journal.record_run("s1", "analysis", "Berserk S/81.3", cost_usd=0.15)
+        journal.record_run("s1", "analysis", "Repository audit complete", cost_usd=0.15)
         journal.record_cost("claude-opus-4-6", 1200, 350, 0.015)
-        journal.add_learned("Dark fantasy IPs tend to score S tier", "domain")
+        journal.add_learned("Detailed research subjects tend to score S tier", "domain")
         recent = journal.get_recent_runs(5)
     """
 
@@ -269,7 +269,7 @@ class ProjectJournal:
     def get_context_summary(self, max_runs: int = 3) -> str:
         """Build a 1-line summary for system prompt injection (P6 L2 extraction).
 
-        Format: "Project history: Berserk S/81.3 (2h ago) | Research done (1d ago)"
+        Format: "Project history: Repository audit complete (2h ago) | Research done (1d ago)"
         """
         runs = self.get_recent_runs(max_runs)
         if not runs:

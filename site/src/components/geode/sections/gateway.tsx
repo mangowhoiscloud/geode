@@ -254,7 +254,7 @@ export function GatewaySection() {
                     <pre className="text-white/20 whitespace-pre">{`                       /Users/mango/workspace/resume`}</pre>
                     <pre className="text-white/25 whitespace-pre mt-2">{`  `}<span className="text-white/30">harness:</span>{` GEODE`}</pre>
                     <pre className="text-white/40 whitespace-pre">{`  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` LLM Analysis  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Project Memory  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` User Profile`}</pre>
-                    <pre className="text-white/40 whitespace-pre">{`  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Dry-Run Analysis  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` IP Search`}</pre>
+                    <pre className="text-white/40 whitespace-pre">{`  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Dry-Run Analysis  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` subject Search`}</pre>
                     <pre className="text-white/20 whitespace-pre mt-2">{`  /help for commands  ·  type naturally`}</pre>
                     <pre className="text-white/25 whitespace-pre mt-2">{`  Connected to serve via IPC`}</pre>
                     <pre className="whitespace-pre" style={{color:"#22c55e",fontWeight:700}}>{`  Session: cli-6b55b450`}</pre>

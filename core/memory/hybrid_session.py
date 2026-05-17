@@ -193,7 +193,7 @@ class HybridSessionStore:
         l1 = RedisSessionStore(ttl_hours=4)
         l2 = PostgreSQLSessionStore(Path("/tmp/sessions"))
         hybrid = HybridSessionStore(l1, l2)
-        hybrid.set("s1", {"ip": "Berserk"})
+        hybrid.set("s1", {"subject_id": "demo"})
         data = hybrid.get("s1")  # L1 hit
     """
 

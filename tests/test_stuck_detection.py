@@ -53,7 +53,7 @@ class TestStuckDetector:
 
     def test_metadata_stored(self):
         d = StuckDetector()
-        d.mark_running("s1", metadata={"ip": "Berserk"})
+        d.mark_running("s1", metadata={"subject": "Project Atlas"})
         assert d.running_count == 1
 
     def test_monitor_start_stop(self):

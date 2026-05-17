@@ -161,7 +161,6 @@ class TestCheckReadiness:
 
         names = [c.name for c in report.capabilities]
         assert "Dry-Run Analysis" in names
-        assert "IP Search" in names
 
         dry_run_cap = next(c for c in report.capabilities if c.name == "Dry-Run Analysis")
         assert dry_run_cap.available is True
@@ -194,7 +193,7 @@ class TestDetectApiKey:
 
     def test_normal_text_not_detected(self):
         assert detect_api_key("Hello world") is None
-        assert detect_api_key("Berserk 분석해줘") is None
+        assert detect_api_key("Project Atlas 분석해줘") is None
         assert detect_api_key("") is None
 
     def test_short_key_not_detected(self):

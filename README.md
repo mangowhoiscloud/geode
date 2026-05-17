@@ -420,7 +420,7 @@ graph LR
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
 | **Runtime** | ToolRegistry(61), MCP Catalog (200 via Anthropic registry, 5 locally configured by default), Skills(14), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
-| **⊥ Domain** | `DomainPort` Protocol — domain-specific DAG plugged in via Port (cross-cutting). One reference DAG ships in the repo; replace for any exploratory-research / signal-prediction domain | `core/domains/` |
+| **⊥ Domain** | `DomainPort` Protocol — domain-specific DAGs plug in through an external package. GEODE core ships the port/loader only; domain DAGs, CLI commands, fixtures, and reports live outside this repo | `core/domains/` |
 
 `.geode/` — agent context lifecycle (5-tier hierarchy assembled into every LLM call):
 

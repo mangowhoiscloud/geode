@@ -359,7 +359,7 @@ class TestContextAssemblerCareer:
 
         profile = FileBasedUserProfile(global_dir=gdir)
         assembler = ContextAssembler(user_profile=profile)
-        ctx = assembler.assemble("test-session", "test-ip")
+        ctx = assembler.assemble("test-session", "test-subject")
 
         assert "_career_summary" in ctx
         assert "AI Engineer" in ctx["_career_summary"]

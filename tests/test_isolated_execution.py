@@ -101,8 +101,8 @@ class TestIsolationResult:
         assert r.completed_at - r.started_at == pytest.approx(0.5)
 
     def test_metadata(self) -> None:
-        r = IsolationResult(session_id="m", success=True, metadata={"ip": "Berserk"})
-        assert r.metadata["ip"] == "Berserk"
+        r = IsolationResult(session_id="m", success=True, metadata={"subject": "Project Atlas"})
+        assert r.metadata["subject"] == "Project Atlas"
 
 
 # ---------------------------------------------------------------------------
@@ -172,9 +172,9 @@ class TestIsolatedRunnerSync:
 
     def test_metadata_preserved(self) -> None:
         runner = IsolatedRunner()
-        cfg = IsolationConfig(metadata={"ip": "Naruto", "tier": 1})
+        cfg = IsolationConfig(metadata={"subject": "Naruto", "tier": 1})
         result = asyncio.run(runner.arun(lambda: "ok", config=cfg))
-        assert result.metadata == {"ip": "Naruto", "tier": 1}
+        assert result.metadata == {"subject": "Naruto", "tier": 1}
 
     def test_timestamps(self) -> None:
         runner = IsolatedRunner()

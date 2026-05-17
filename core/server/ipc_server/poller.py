@@ -8,7 +8,7 @@ serialization ensures same-session ordering; different sessions run in parallel.
 Protocol: line-delimited JSON over Unix domain socket.
 
 Client → Server:
-    {"type": "prompt", "text": "analyze Berserk", "session_id": "..."}
+    {"type": "prompt", "text": "summarize this repository", "session_id": "..."}
     {"type": "command", "cmd": "/model", "args": "sonnet"}
     {"type": "exit"}
 

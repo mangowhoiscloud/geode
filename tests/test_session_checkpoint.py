@@ -159,7 +159,7 @@ class TestPhase1bDbFirst:
     fallback for pre-migration sessions and dual-write race losers."""
 
     def test_load_reads_messages_from_db_after_save(self, tmp_path):
-        """Round-trip: save() writes to DB, load() reads from DB."""
+        """Round-trsubject: save() writes to DB, load() reads from DB."""
         cp = SessionCheckpoint(tmp_path / "session")
         messages = [
             {"role": "user", "content": "hello"},

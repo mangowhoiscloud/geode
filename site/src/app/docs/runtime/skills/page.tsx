@@ -57,12 +57,8 @@ priority: 100
             <table>
               <thead><tr><th>모듈</th><th>역할</th></tr></thead>
               <tbody>
-                <tr><td><code>analyst_reasoning.py</code></td><td>Analyst가 생성하는 reasoning trail의 schema.</td></tr>
                 <tr><td><code>cross_llm.py</code></td><td>Cross-LLM 교차 검증 출력.</td></tr>
-                <tr><td><code>decision_tree.py</code></td><td>6-cause 분류 결정 트리.</td></tr>
-                <tr><td><code>evaluators.py</code></td><td>3-evaluator 점수 통합.</td></tr>
-                <tr><td><code>psm.py</code></td><td>14축 PSM scoring (ATT, Z-value, Rosenbaum Γ).</td></tr>
-                <tr><td><code>generator.py</code></td><td>위 모듈들을 조합한 최종 보고서 생성.</td></tr>
+                <tr><td><code>generator.py</code></td><td>구조화된 산출물을 조합한 최종 보고서 생성.</td></tr>
                 <tr><td><code>models.py</code></td><td>공유 데이터 모델 (Pydantic).</td></tr>
               </tbody>
             </table>
@@ -132,12 +128,8 @@ priority: 100
             <table>
               <thead><tr><th>Module</th><th>Role</th></tr></thead>
               <tbody>
-                <tr><td><code>analyst_reasoning.py</code></td><td>Schema for the reasoning trail an Analyst emits.</td></tr>
                 <tr><td><code>cross_llm.py</code></td><td>Cross-LLM verification output.</td></tr>
-                <tr><td><code>decision_tree.py</code></td><td>6-cause classification decision tree.</td></tr>
-                <tr><td><code>evaluators.py</code></td><td>Three-evaluator score aggregation.</td></tr>
-                <tr><td><code>psm.py</code></td><td>14-axis PSM scoring (ATT, Z-value, Rosenbaum Γ).</td></tr>
-                <tr><td><code>generator.py</code></td><td>Composes the modules above into the final report.</td></tr>
+                <tr><td><code>generator.py</code></td><td>Composes structured artifacts into the final report.</td></tr>
                 <tr><td><code>models.py</code></td><td>Shared data models (Pydantic).</td></tr>
               </tbody>
             </table>

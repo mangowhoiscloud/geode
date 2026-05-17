@@ -36,8 +36,8 @@ class InMemorySessionStore:
 
     Usage:
         store = InMemorySessionStore(ttl=3600)  # 1 hour
-        store.set("session-1", {"ip_name": "Berserk", "mode": "full_pipeline"})
-        data = store.get("session-1")  # {"ip_name": "Berserk", ...}
+        store.set("session-1", {"subject_id": "demo", "mode": "analysis"})
+        data = store.get("session-1")  # {"subject_id": "demo", ...}
     """
 
     def __init__(

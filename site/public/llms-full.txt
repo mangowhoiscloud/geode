@@ -32,11 +32,6 @@ URL: https://mangowhoiscloud.github.io/geode/docs/run/providers
 EN: Anthropic, OpenAI, Codex, GLM. Where keys go, what fallback chain you get.
 KO: Anthropic, OpenAI, Codex, GLM. 키를 어디에 두고 어떤 폴백 체인이 동작하는지.
 
-### Run an Analysis (분석 실행)
-URL: https://mangowhoiscloud.github.io/geode/docs/run/analyze
-EN: Run the Game IP pipeline end to end, dry-run or live.
-KO: Game IP 파이프라인을 dry-run 또는 라이브로 끝까지 돌리기.
-
 ### Schedule Tasks (작업 예약)
 URL: https://mangowhoiscloud.github.io/geode/docs/run/schedule
 EN: Natural language plus cron, with jitter. Daily reports as a single command.
@@ -157,11 +152,6 @@ URL: https://mangowhoiscloud.github.io/geode/docs/verification/guardrails
 EN: Schema, Range, Grounding, Coherence. Fail-fast ladder.
 KO: Schema, Range, Grounding, Coherence. fail-fast 사다리.
 
-### BiasBuster (BiasBuster)
-URL: https://mangowhoiscloud.github.io/geode/docs/verification/biasbuster
-EN: Six bias detectors. Confirmation, recency, anchoring, and three more.
-KO: 6종 편향 검사기. Confirmation, recency, anchoring 외 3종.
-
 ### Observability (관측성)
 URL: https://mangowhoiscloud.github.io/geode/docs/verification/observability
 EN: Four lenses: hooks, RunLog, audit diagnostics, Petri. The native observability stack.
@@ -196,11 +186,6 @@ KO: 최신 GEODE 감사 run의 라이브 inspect_ai 트랜스크립트 뷰어.
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/domains
 EN: DomainPort protocol. plugin loader. Add a domain in 30 lines.
 KO: DomainPort 프로토콜. 플러그인 로더. 30 라인으로 도메인 추가.
-
-### Game IP Plugin (Game IP 플러그인)
-URL: https://mangowhoiscloud.github.io/geode/docs/plugins/game-ip
-EN: 4 Analysts plus 3 Evaluators plus Synthesizer. 14-axis PSM scoring.
-KO: Analyst 4 + Evaluator 3 + Synthesizer. 14-axis PSM 점수.
 
 ### Long-running Safety (장기 실행 안전)
 URL: https://mangowhoiscloud.github.io/geode/docs/ops/long-running

@@ -3,7 +3,7 @@
 Public utilities shared by any plugin's signal layer that wants to try an
 MCP server first and fall back to fixture/stub data on failure. Extracted
 from ``core/tools/signal_tools.py`` during the v0.66.2 step-5 split so
-non-game-IP plugins can adopt the same MCP-first / fixture-fallback shape
+external plugins can adopt the same MCP-first / fixture-fallback shape
 without copying the helpers.
 """
 

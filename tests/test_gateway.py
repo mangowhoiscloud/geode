@@ -28,11 +28,11 @@ class TestInboundMessage:
             channel_id="C12345",
             sender_id="U67890",
             sender_name="Alice",
-            content="analyze Berserk",
+            content="analyze Project Atlas",
             timestamp=time.time(),
         )
         assert msg.channel == "slack"
-        assert msg.content == "analyze Berserk"
+        assert msg.content == "analyze Project Atlas"
         assert msg.thread_id == ""
 
 
@@ -365,7 +365,7 @@ class TestAllowedToolsEnforcement:
             ChannelBinding(
                 channel="slack",
                 channel_id="C1",
-                allowed_tools=["list_ips", "search_ips"],
+                allowed_tools=["list_subjects", "search_subjects"],
             )
         )
 
@@ -374,12 +374,12 @@ class TestAllowedToolsEnforcement:
             channel_id="C1",
             sender_id="U1",
             sender_name="Alice",
-            content="show IPs",
+            content="show subjects",
             timestamp=time.time(),
         )
         asyncio.run(manager.aroute_message(msg))
         assert "[allowed_tools:" in received_content[0]
-        assert "list_ips" in received_content[0]
+        assert "list_subjects" in received_content[0]
 
     def test_no_allowed_tools_no_prefix(self):
         """Without allowed_tools, content passes through unchanged."""

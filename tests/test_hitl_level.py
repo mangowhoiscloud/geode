@@ -132,17 +132,17 @@ class TestAlwaysApproval:
             patch.object(executor._approval, "prompt_with_always", return_value="a"),
             patch("core.agent.approval.console"),
         ):
-            approved = executor._approval.confirm_cost("analyze_ip", 1.50)
+            approved = executor._approval.confirm_cost("analyze_subject", 1.50)
         assert approved is True
         assert "cost" in executor._always_approved_categories
 
     def test_cost_always_skips_subsequent_approval(self) -> None:
         """After 'A' for cost, subsequent expensive tools auto-approve."""
         handler = MagicMock(return_value={"status": "ok"})
-        executor = ToolExecutor(action_handlers={"analyze_ip": handler})
+        executor = ToolExecutor(action_handlers={"analyze_subject": handler})
         executor._always_approved_categories.add("cost")
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            result = _run_executor(executor, "analyze_ip", {"ip_name": "test"})
+            result = _run_executor(executor, "analyze_subject", {"subject_id": "test"})
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 
@@ -217,9 +217,9 @@ class TestHITLLevel:
     def test_hitl_level_0_skips_cost_approval(self) -> None:
         """hitl_level=0 auto-approves expensive operations."""
         handler = MagicMock(return_value={"status": "ok"})
-        executor = ToolExecutor(action_handlers={"analyze_ip": handler}, hitl_level=0)
+        executor = ToolExecutor(action_handlers={"analyze_subject": handler}, hitl_level=0)
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            result = _run_executor(executor, "analyze_ip", {"ip_name": "test"})
+            result = _run_executor(executor, "analyze_subject", {"subject_id": "test"})
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 

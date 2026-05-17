@@ -53,11 +53,7 @@ class MonoLakeOrganizationMemory:
         for json_file in sorted(self._fixture_dir.glob("*.json")):
             try:
                 data = json.loads(json_file.read_text(encoding="utf-8"))
-                subject = (
-                    data.get("subject", {}).get("name")
-                    or data.get("ip_info", {}).get("ip_name")
-                    or json_file.stem
-                )
+                subject = data.get("subject", {}).get("name") or json_file.stem
                 self._cache[subject.lower()] = data
             except (json.JSONDecodeError, OSError) as e:
                 log.warning("Failed to load fixture %s: %s", json_file.name, e)
@@ -123,7 +119,6 @@ class MonoLakeOrganizationMemory:
     def list_subjects(self) -> list[str]:
         """List all known subject names from fixtures."""
         return [
-            self._cache[k].get("subject", {}).get("name")
-            or self._cache[k].get("ip_info", {}).get("ip_name", k)
+            self._cache[k].get("subject", {}).get("name") or k
             for k in sorted(self._cache.keys())
         ]

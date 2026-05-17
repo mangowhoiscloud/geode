@@ -266,7 +266,7 @@ export function ArchitectureSection() {
               <span className="text-[#C084FC] text-sm">⟂</span>
               <span className="text-xs text-[#9BB0CC]">
                 <span className="font-medium text-[#C084FC]/70">DomainPort</span>
-                {" "}{t(locale, "Protocol 직교. GameIP, REODE 교체 가능", "Orthogonal protocol. Swappable: GameIP, REODE")}
+                {" "}{t(locale, "Protocol 직교. 외부 도메인 교체 가능", "Orthogonal protocol. External domains are swappable")}
               </span>
             </div>
           </div>

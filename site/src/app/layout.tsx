@@ -22,11 +22,11 @@ const firaCode = Fira_Code({
 export const metadata: Metadata = {
   title: "Jihwan Ryu — Portfolio",
   description:
-    "GEODE · REODE · ECO2 — Agentic AI, Migration Harness, Distributed Systems",
+    "GEODE · ECO2 — Agentic AI, Autonomous Harness, Distributed Systems",
   authors: [{ name: "Jihwan Ryu", url: "https://github.com/mangowhoiscloud" }],
   openGraph: {
     title: "Jihwan Ryu — Portfolio",
-    description: "GEODE · REODE · ECO2",
+    description: "GEODE · ECO2",
     type: "website",
   },
 };

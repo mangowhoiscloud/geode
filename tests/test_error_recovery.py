@@ -270,13 +270,13 @@ class TestAgenticLoopRecovery:
             call_count += 1
             if call_count <= 2:
                 return {"error": "timeout"}
-            return {"status": "ok", "ips": []}
+            return {"status": "ok", "subjects": []}
 
-        executor = ToolExecutor(action_handlers={"list_ips": sometimes_fails}, auto_approve=True)
+        executor = ToolExecutor(action_handlers={"list_subjects": sometimes_fails}, auto_approve=True)
         loop = AgenticLoop(context, executor, hooks=hooks)
-        loop._tool_processor._consecutive_failures = {"list_ips": 2}  # simulate 2 prior failures
+        loop._tool_processor._consecutive_failures = {"list_subjects": 2}  # simulate 2 prior failures
 
-        response = self._make_tool_response("list_ips", {})
+        response = self._make_tool_response("list_subjects", {})
         results = asyncio.run(loop._tool_processor.process(response))
 
         assert len(results) == 1
@@ -288,19 +288,19 @@ class TestAgenticLoopRecovery:
         """Successful recovery resets the consecutive failure counter."""
         executor = ToolExecutor(
             action_handlers={
-                "list_ips": MagicMock(return_value={"status": "ok"}),
-                "search_ips": MagicMock(return_value={"status": "ok"}),
+                "list_subjects": MagicMock(return_value={"status": "ok"}),
+                "search_subjects": MagicMock(return_value={"status": "ok"}),
             },
             auto_approve=True,
         )
         loop = AgenticLoop(context, executor)
-        loop._tool_processor._consecutive_failures = {"list_ips": 2}
+        loop._tool_processor._consecutive_failures = {"list_subjects": 2}
 
-        response = self._make_tool_response("list_ips", {})
+        response = self._make_tool_response("list_subjects", {})
         asyncio.run(loop._tool_processor.process(response))
 
         # After successful recovery, counter should be reset
-        assert loop._tool_processor._consecutive_failures.get("list_ips", 0) == 0
+        assert loop._tool_processor._consecutive_failures.get("list_subjects", 0) == 0
 
     def test_hook_events_emitted_on_recovery(
         self, context: ConversationContext, hooks: HookSystem
@@ -317,14 +317,14 @@ class TestAgenticLoopRecovery:
 
         executor = ToolExecutor(
             action_handlers={
-                "list_ips": MagicMock(return_value={"status": "ok"}),
+                "list_subjects": MagicMock(return_value={"status": "ok"}),
             },
             auto_approve=True,
         )
         loop = AgenticLoop(context, executor, hooks=hooks)
-        loop._tool_processor._consecutive_failures = {"list_ips": 2}
+        loop._tool_processor._consecutive_failures = {"list_subjects": 2}
 
-        response = self._make_tool_response("list_ips", {})
+        response = self._make_tool_response("list_subjects", {})
         asyncio.run(loop._tool_processor.process(response))
 
         assert HookEvent.TOOL_RECOVERY_ATTEMPTED in events_received
@@ -353,14 +353,14 @@ class TestAgenticLoopRecovery:
         """Below _MAX_CONSECUTIVE_FAILURES, no recovery is triggered."""
         executor = ToolExecutor(
             action_handlers={
-                "list_ips": MagicMock(return_value={"error": "timeout"}),
+                "list_subjects": MagicMock(return_value={"error": "timeout"}),
             },
             auto_approve=True,
         )
         loop = AgenticLoop(context, executor)
-        loop._tool_processor._consecutive_failures = {"list_ips": 0}  # first failure
+        loop._tool_processor._consecutive_failures = {"list_subjects": 0}  # first failure
 
-        response = self._make_tool_response("list_ips", {})
+        response = self._make_tool_response("list_subjects", {})
         results = asyncio.run(loop._tool_processor.process(response))
 
         content = results[0]["content"]
@@ -371,21 +371,21 @@ class TestAgenticLoopRecovery:
         """Recovery still produces a usable tool_result for the LLM."""
         executor = ToolExecutor(
             action_handlers={
-                "list_ips": MagicMock(return_value={"error": "broken"}),
-                "search_ips": MagicMock(return_value={"error": "also broken"}),
+                "list_subjects": MagicMock(return_value={"error": "broken"}),
+                "search_subjects": MagicMock(return_value={"error": "also broken"}),
             },
             auto_approve=True,
         )
         loop = AgenticLoop(context, executor)
-        loop._tool_processor._consecutive_failures = {"list_ips": 3}
+        loop._tool_processor._consecutive_failures = {"list_subjects": 3}
 
-        response = self._make_tool_response("list_ips", {})
+        response = self._make_tool_response("list_subjects", {})
         results = asyncio.run(loop._tool_processor.process(response))
 
         # Must produce exactly 1 tool_result
         assert len(results) == 1
         assert results[0]["type"] == "tool_result"
-        assert results[0]["tool_use_id"] == "toolu_list_ips_123"
+        assert results[0]["tool_use_id"] == "toolu_list_subjects_123"
         # Content must be valid JSON string
         import json
 
@@ -424,11 +424,11 @@ class TestRecoveryHookEvents:
         hooks.register(HookEvent.TOOL_RECOVERY_ATTEMPTED, on_recovery)
         hooks.trigger(
             HookEvent.TOOL_RECOVERY_ATTEMPTED,
-            {"tool_name": "list_ips", "fail_count": 2},
+            {"tool_name": "list_subjects", "fail_count": 2},
         )
 
         assert len(received) == 1
-        assert received[0]["tool_name"] == "list_ips"
+        assert received[0]["tool_name"] == "list_subjects"
 
     def test_total_hook_event_count(self) -> None:
         """Verify total hook event count after H6 orphan pruning."""
@@ -454,9 +454,9 @@ class TestRecoveryEdgeCases:
     def test_recovery_with_zero_max_attempts(self) -> None:
         """max_recovery_attempts=0 means no recovery attempted."""
         handler = MagicMock(return_value={"status": "ok"})
-        executor = ToolExecutor(action_handlers={"list_ips": handler}, auto_approve=True)
+        executor = ToolExecutor(action_handlers={"list_subjects": handler}, auto_approve=True)
         strategy = ErrorRecoveryStrategy(executor, max_recovery_attempts=0, retry_base_delay=0.0)
-        result = _run_recovery(strategy, "list_ips", {}, failure_count=2)
+        result = _run_recovery(strategy, "list_subjects", {}, failure_count=2)
         assert result.recovered is False
         assert len(result.attempts) == 0
 
@@ -468,26 +468,26 @@ class TestRecoveryEdgeCases:
             captured_kwargs.update(kwargs)
             return {"status": "ok"}
 
-        executor = ToolExecutor(action_handlers={"analyze_ip": capture_handler}, auto_approve=True)
+        executor = ToolExecutor(action_handlers={"analyze_subject": capture_handler}, auto_approve=True)
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
         _run_recovery(
-            strategy, "analyze_ip", {"ip_name": "Berserk", "dry_run": True}, failure_count=1
+            strategy, "analyze_subject", {"subject_id": "Project Atlas", "dry_run": True}, failure_count=1
         )
-        assert captured_kwargs.get("ip_name") == "Berserk"
+        assert captured_kwargs.get("subject_id") == "Project Atlas"
         assert captured_kwargs.get("dry_run") is True
 
     def test_is_recoverable_for_safe_tools(self) -> None:
         """Safe tools are recoverable."""
         executor = ToolExecutor(auto_approve=True)
         strategy = ErrorRecoveryStrategy(executor)
-        assert strategy.is_recoverable("list_ips") is True
-        assert strategy.is_recoverable("analyze_ip") is True
-        assert strategy.is_recoverable("search_ips") is True
+        assert strategy.is_recoverable("list_subjects") is True
+        assert strategy.is_recoverable("analyze_subject") is True
+        assert strategy.is_recoverable("search_subjects") is True
 
     def test_recovery_attempt_records_duration(self) -> None:
         """Each recovery attempt records duration_ms."""
         handler = MagicMock(return_value={"status": "ok"})
-        executor = ToolExecutor(action_handlers={"list_ips": handler}, auto_approve=True)
+        executor = ToolExecutor(action_handlers={"list_subjects": handler}, auto_approve=True)
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
-        result = _run_recovery(strategy, "list_ips", {}, failure_count=1)
+        result = _run_recovery(strategy, "list_subjects", {}, failure_count=1)
         assert result.attempts[0].duration_ms >= 0

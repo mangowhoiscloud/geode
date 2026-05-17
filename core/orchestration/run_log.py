@@ -52,9 +52,9 @@ class RunLog:
     """JSONL run log with auto-pruning.
 
     Usage:
-        run_log = RunLog("ip:berserk:full_pipeline")
+        run_log = RunLog("subject:demo:full_pipeline")
         run_log.append(RunLogEntry(
-            session_key="ip:berserk:full_pipeline",
+            session_key="subject:demo:full_pipeline",
             event="pipeline_start",
         ))
         entries = run_log.read(limit=10)

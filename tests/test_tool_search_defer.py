@@ -299,7 +299,7 @@ class TestToolSearchToolMCP:
         assert "steam_mcp" in names
 
     def test_search_finds_native_tool(self) -> None:
-        reg = _make_registry("analyze_ip")
+        reg = _make_registry("analyze_subject")
         search_tool = ToolSearchTool(reg)
         reg.register(search_tool)  # type: ignore[arg-type]
         search_tool.set_mcp_tools([_make_mcp_tool("mcp_tool")])
@@ -307,7 +307,7 @@ class TestToolSearchToolMCP:
         result = asyncio.run(search_tool.aexecute(query="analyze"))
         assert result["matched"] is True
         names = [t["name"] for t in result["tools"]]
-        assert "analyze_ip" in names
+        assert "analyze_subject" in names
 
     def test_search_returns_both_sources(self) -> None:
         reg = _make_registry("steam_native")

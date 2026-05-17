@@ -29,8 +29,7 @@ def make_journal_handlers(
     def _on_pipeline_end(event: HookEvent, data: dict[str, Any]) -> None:
         if event != HookEvent.PIPELINE_ENDED:
             return
-        ip_name = data.get("ip_name", "")
-        tier = data.get("tier", "")
+        subject_id = data.get("subject_id", "")
         score = data.get("score")
         cause = data.get("cause", "")
         status = data.get("status", "ok")
@@ -39,12 +38,12 @@ def make_journal_handlers(
         session_id = data.get("session_id", "")
 
         # Build 1-line summary
-        if tier and score is not None:
-            summary = f"{ip_name} {tier}/{score:.1f}"
+        if subject_id and score is not None:
+            summary = f"{subject_id} score={score:.1f}"
             if cause:
                 summary += f" ({cause})"
-        elif ip_name:
-            summary = f"{ip_name} completed"
+        elif subject_id:
+            summary = f"{subject_id} completed"
         else:
             summary = data.get("summary", "pipeline completed")
 
@@ -58,8 +57,7 @@ def make_journal_handlers(
             metadata={
                 k: v
                 for k, v in {
-                    "ip_name": ip_name,
-                    "tier": tier,
+                    "subject_id": subject_id,
                     "score": score,
                     "cause": cause,
                 }.items()
@@ -67,33 +65,32 @@ def make_journal_handlers(
             },
         )
 
-        # Learn from tier results (Karpathy P4)
-        if tier and score is not None:
+        if subject_id and score is not None:
             journal.add_learned(
-                f"[{ip_name}] Tier {tier} / {score:.1f} — {cause}",
+                f"[{subject_id}] score={score:.1f} - {cause}",
                 "analysis",
             )
 
     def _on_pipeline_error(event: HookEvent, data: dict[str, Any]) -> None:
         if event != HookEvent.PIPELINE_ERROR:
             return
-        ip_name = data.get("ip_name", "unknown")
+        subject_id = data.get("subject_id", "unknown")
         error_msg = data.get("error", "unknown error")
         session_id = data.get("session_id", "")
 
         journal.record_error(
             session_id=session_id,
             error_type=data.get("error_type", "pipeline_error"),
-            message=f"[{ip_name}] {error_msg}",
-            metadata={"ip_name": ip_name},
+            message=f"[{subject_id}] {error_msg}",
+            metadata={"subject_id": subject_id},
         )
 
         journal.record_run(
             session_id=session_id,
             run_type="analysis",
-            summary=f"{ip_name} FAILED: {error_msg[:80]}",
+            summary=f"{subject_id} FAILED: {error_msg[:80]}",
             status="error",
-            metadata={"ip_name": ip_name, "error": error_msg[:200]},
+            metadata={"subject_id": subject_id, "error": error_msg[:200]},
         )
 
     def _on_subagent_completed(event: HookEvent, data: dict[str, Any]) -> None:

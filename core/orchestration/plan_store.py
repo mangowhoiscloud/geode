@@ -10,7 +10,7 @@ Storage shape (``.geode/plans.json``):
     {
       "plan_<hex>": {
         "plan_id": "plan_<hex>",
-        "ip_name": "...",
+        "subject_id": "...",
         "steps": [{"step_id":..., "description":..., ...}, ...],
         "status": "draft" | "presented" | "approved" | ...,
         "created_at": <epoch float>,
@@ -140,7 +140,7 @@ class PlanStore:
 def _plan_to_dict(plan: AnalysisPlan) -> dict[str, Any]:
     return {
         "plan_id": plan.plan_id,
-        "ip_name": plan.ip_name,
+        "subject_id": plan.subject_id,
         "steps": [_step_to_dict(s) for s in plan.steps],
         "status": plan.status.value,
         "created_at": plan.created_at,
@@ -165,7 +165,7 @@ def _plan_from_dict(raw: dict[str, Any]) -> AnalysisPlan:
     steps = [_step_from_dict(s) for s in (raw.get("steps") or [])]
     return AnalysisPlan(
         plan_id=str(raw["plan_id"]),
-        ip_name=str(raw.get("ip_name", "")),
+        subject_id=str(raw.get("subject_id", "")),
         steps=steps,
         status=PlanStatus(raw.get("status", "draft")),
         created_at=float(raw.get("created_at", 0.0)),

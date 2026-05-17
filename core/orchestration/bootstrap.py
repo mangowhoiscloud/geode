@@ -1,9 +1,4 @@
-"""Bootstrap Hook — pre-execution node configuration system.
-
-Allows hooks to modify node configuration (prompts, parameters) before
-each node executes, enabling per-IP or per-genre customization without
-modifying core node code.
-"""
+"""Bootstrap hook — pre-execution node configuration system."""
 
 from __future__ import annotations
 
@@ -21,12 +16,11 @@ log = logging.getLogger(__name__)
 class BootstrapContext:
     """Configuration context prepared before node execution.
 
-    Hooks modify this context in-place via the NODE_BOOTSTRAP event
-    to customize node behavior per-IP or per-genre.
+    Hooks modify this context in-place via the NODE_BOOTSTRAP event.
     """
 
     node_name: str
-    ip_name: str
+    subject_id: str
     prompt_overrides: dict[str, str] = field(default_factory=dict)
     extra_instructions: list[str] = field(default_factory=list)
     parameters: dict[str, Any] = field(default_factory=dict)
@@ -39,7 +33,7 @@ class BootstrapManager:
     Usage:
         mgr = BootstrapManager(hooks)
         mgr.register_override("router", lambda ctx: ctx.extra_instructions.append("Focus on RPG"))
-        ctx = mgr.prepare_node("router", "Berserk", state)
+        ctx = mgr.prepare_node("router", "subject", state)
         if not ctx.skip:
             state = mgr.apply_context(state, ctx)
             # ... execute node
@@ -48,7 +42,9 @@ class BootstrapManager:
     def __init__(self, hooks: HookSystem) -> None:
         self._hooks = hooks
 
-    def prepare_node(self, node_name: str, ip_name: str, state: dict[str, Any]) -> BootstrapContext:
+    def prepare_node(
+        self, node_name: str, subject_id: str, state: dict[str, Any]
+    ) -> BootstrapContext:
         """Create a BootstrapContext and trigger NODE_BOOTSTRAP.
 
         Hooks registered for NODE_BOOTSTRAP can modify the context in-place
@@ -56,17 +52,17 @@ class BootstrapManager:
 
         Args:
             node_name: Name of the node about to execute.
-            ip_name: IP name from pipeline state.
+            subject_id: Subject identifier from pipeline state.
             state: Current pipeline state dict (read-only reference for hooks).
 
         Returns:
             The (possibly modified) BootstrapContext.
         """
-        ctx = BootstrapContext(node_name=node_name, ip_name=ip_name)
+        ctx = BootstrapContext(node_name=node_name, subject_id=subject_id)
 
         hook_data: dict[str, Any] = {
             "node": node_name,
-            "ip_name": ip_name,
+            "subject_id": subject_id,
             "bootstrap_context": ctx,
         }
 

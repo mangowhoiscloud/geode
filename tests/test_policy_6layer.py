@@ -118,7 +118,7 @@ class TestBuild6LayerChain:
             name="mode:dry_run",
             mode="dry_run",
             priority=100,
-            denied_tools={"analyze_ip"},
+            denied_tools={"analyze_subject"},
         )
         chain = build_6layer_chain(mode_policies=[mode_pol])
         assert len(chain._policies) == 1
@@ -130,7 +130,7 @@ class TestBuild6LayerChain:
             name="mode:dry_run",
             mode="dry_run",
             priority=100,
-            denied_tools={"analyze_ip"},
+            denied_tools={"analyze_subject"},
         )
         chain = build_6layer_chain(
             profile=profile,

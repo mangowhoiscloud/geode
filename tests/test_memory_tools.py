@@ -20,8 +20,8 @@ from core.tools.memory_tools import (
 def _make_store_with_data() -> InMemorySessionStore:
     """Create a session store pre-populated with test data."""
     store = InMemorySessionStore(ttl=3600)
-    store.set("session-1", {"ip_name": "Berserk", "mode": "full_pipeline", "score": 82.2})
-    store.set("session-2", {"ip_name": "Cowboy Bebop", "mode": "dry_run", "score": 76.2})
+    store.set("session-1", {"subject_id": "Project Atlas", "mode": "full_pipeline", "score": 82.2})
+    store.set("session-2", {"subject_id": "Project Orion", "mode": "dry_run", "score": 76.2})
     return store
 
 
@@ -35,7 +35,7 @@ class TestMemorySearchTool:
     def test_search_finds_matching_session(self):
         store = _make_store_with_data()
         tool = MemorySearchTool(session_store=store)
-        result = asyncio.run(tool.aexecute(query="Berserk"))
+        result = asyncio.run(tool.aexecute(query="Project Atlas"))
         matches = result["result"]["matches"]
         assert len(matches) >= 1
         assert matches[0]["session_id"] == "session-1"
@@ -77,7 +77,7 @@ class TestMemoryGetTool:
         tool = MemoryGetTool(session_store=store)
         result = asyncio.run(tool.aexecute(session_id="session-1"))
         assert result["result"]["found"] is True
-        assert result["result"]["data"]["ip_name"] == "Berserk"
+        assert result["result"]["data"]["subject_id"] == "Project Atlas"
 
     def test_get_nonexistent_session(self):
         store = _make_store_with_data()
@@ -97,31 +97,31 @@ class TestMemorySaveTool:
     def test_save_new_session(self):
         store = InMemorySessionStore()
         tool = MemorySaveTool(session_store=store)
-        result = asyncio.run(tool.aexecute(session_id="new-session", data={"ip_name": "Test"}))
+        result = asyncio.run(tool.aexecute(session_id="new-session", data={"subject_id": "Test"}))
         assert result["result"]["saved"] is True
         # Verify stored
-        assert store.get("new-session") == {"ip_name": "Test"}
+        assert store.get("new-session") == {"subject_id": "Test"}
 
     def test_save_merge_mode(self):
         store = InMemorySessionStore()
-        store.set("session-x", {"ip_name": "Berserk", "score": 80})
+        store.set("session-x", {"subject_id": "Project Atlas", "score": 80})
         tool = MemorySaveTool(session_store=store)
         result = asyncio.run(tool.aexecute(session_id="session-x", data={"tier": "S"}, merge=True))
         assert result["result"]["merged"] is True
         data = store.get("session-x")
         assert data is not None
-        assert data["ip_name"] == "Berserk"  # preserved
+        assert data["subject_id"] == "Project Atlas"  # preserved
         assert data["tier"] == "S"  # added
 
     def test_save_replace_mode(self):
         store = InMemorySessionStore()
-        store.set("session-x", {"ip_name": "Berserk", "score": 80})
+        store.set("session-x", {"subject_id": "Project Atlas", "score": 80})
         tool = MemorySaveTool(session_store=store)
         result = asyncio.run(tool.aexecute(session_id="session-x", data={"tier": "S"}, merge=False))
         assert result["result"]["merged"] is False
         data = store.get("session-x")
         assert data is not None
-        assert "ip_name" not in data  # replaced, not merged
+        assert "subject_id" not in data  # replaced, not merged
         assert data["tier"] == "S"
 
     def test_save_persistent_no_project_memory(self):

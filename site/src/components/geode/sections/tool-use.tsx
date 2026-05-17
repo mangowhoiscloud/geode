@@ -12,15 +12,15 @@ const routes = [
   { id: "native", label: "Tool",  count: "43 native",        color: "#4ECDC4", descKo: "43개 고유 도구 클래스. 12개 카테고리(Analysis, Memory, Planning 등). 초기 52에서 중복/불용을 지속 정리. ToolExecutor가 handler dict에서 디스패치.", descEn: "43 unique tool classes. 12 categories (Analysis, Memory, Planning, etc.). Continuously trimmed from initial 52. ToolExecutor dispatches from handler dict." },
   { id: "mcp",    label: "MCP",   count: "44 catalog",       color: "#818CF8", descKo: "MCPServerManager auto-discovery. Anthropic format 자동 정규화. steam/arxiv/linkedin은 사전 승인, 나머지는 서버별 1회 승인. install_mcp_server로 NL 설치.", descEn: "MCPServerManager auto-discovery. Auto-normalizes to Anthropic format. steam/arxiv/linkedin pre-approved, rest requires one-time per-server approval. NL install via install_mcp_server." },
   { id: "skill",  label: "Skill", count: "3-tier disclosure", color: "#C084FC", descKo: "Progressive Disclosure: T1 메타데이터(system prompt) → T2 본문(lazy load) → T3 context:fork(격리 서브에이전트). 4 scope 우선순위.", descEn: "Progressive Disclosure: T1 metadata (system prompt) → T2 body (lazy load) → T3 context:fork (isolated sub-agent). 4-scope priority." },
-  { id: "dag",    label: "DAG",   count: "13-node pipeline",  color: "#F5C542", descKo: "analyze_ip 호출 시 LangGraph StateGraph 13노드 파이프라인 실행. Router → Analyst×4(Send API) → Evaluator×3 → Scoring → Synthesizer.", descEn: "On analyze_ip call, runs LangGraph StateGraph 13-node pipeline. Router → Analyst×4 (Send API) → Evaluator×3 → Scoring → Synthesizer." },
+  { id: "task",   label: "Task",  count: "TaskGraph",         color: "#F5C542", descKo: "복합 요청은 task_create/delegate_task 경로로 분해되고 TaskGraph가 의존성, 상태, 실패 전파를 추적합니다.", descEn: "Compound requests flow through task_create/delegate_task. TaskGraph tracks dependencies, state, and failure propagation." },
 ];
 
 /* ── 5-Tier Safety ── */
 const tiers = [
-  { tier: "T0", name: "SAFE",      count: 13, color: "#34D399", gateKo: "없음", gateEn: "None",              execKo: "asyncio.gather 즉시 병렬", execEn: "Immediate parallel via asyncio.gather", examples: "list_ips, search_ips, memory_search, web_fetch" },
+  { tier: "T0", name: "SAFE",      count: 13, color: "#34D399", gateKo: "없음", gateEn: "None",              execKo: "asyncio.gather 즉시 병렬", execEn: "Immediate parallel via asyncio.gather", examples: "memory_search, web_fetch, glob_files, grep_files" },
   { tier: "T1", name: "STANDARD",  count: 25, color: "#60A5FA", gateKo: "없음", gateEn: "None",              execKo: "자동 실행. 서브에이전트 위임 가능", execEn: "Auto-execute. Can delegate to sub-agent", examples: "schedule_job, delegate_task, create_plan" },
   { tier: "T2", name: "WRITE",     count: 10, color: "#F5C542", gateKo: "HITL 승인", gateEn: "HITL approval",    execKo: "영속 상태 변경. 명시적 확인 필요", execEn: "Persistent state change. Explicit confirmation required", examples: "memory_save, set_api_key, profile_update" },
-  { tier: "T3", name: "EXPENSIVE", count: 3,  color: "#F4B8C8", gateKo: "비용 확인", gateEn: "Cost confirm",    execKo: "실행 전 비용 표시. Always 가능", execEn: "Shows cost before execution. 'Always' option available", examples: "analyze_ip($1.50), batch($5.00), compare($3.00)" },
+  { tier: "T3", name: "EXPENSIVE", count: 3,  color: "#F4B8C8", gateKo: "비용 확인", gateEn: "Cost confirm",    execKo: "실행 전 비용 표시. Always 가능", execEn: "Shows cost before execution. 'Always' option available", examples: "petri_audit, eval_dspy_optimize, obs_otel_export" },
   { tier: "T4", name: "DANGEROUS", count: 1,  color: "#E87080", gateKo: "패턴+HITL", gateEn: "Pattern+HITL",    execKo: "safe prefix만 자동. 나머지 항상 승인", execEn: "Only safe prefixes auto-run. Rest always requires approval", examples: "run_bash" },
 ];
 
@@ -43,7 +43,7 @@ const categories = [
 /* ── Deferred Loading ── */
 const deferredSpec = {
   threshold: 10,
-  alwaysLoaded: ["list_ips", "search_ips", "analyze_ip", "memory_search", "show_help", "general_web_search"],
+  alwaysLoaded: ["show_help", "memory_search", "general_web_search", "web_fetch", "task_create", "delegate_task"],
   saving: "~85%",
   categories: ["analysis", "data", "signals", "memory", "output", "mcp", "other"],
 };
@@ -67,8 +67,8 @@ export function ToolUseSection() {
           </h2>
           <p className="text-sm sm:text-base text-[#A0B4D4] max-w-xl mb-8 leading-relaxed">
             {t(locale,
-              "LLM이 도구를 선택하면 ToolExecutor가 5개 경로(Bash, Native, MCP, Skill, DAG)로 디스패치합니다. 43+ 도구 전체 스키마를 매 턴 전송하면 2-3K 토큰을 소모하므로, tool_search로 지연 로딩하여 85% 절감합니다. 5-Tier 안전 분류(T0 SAFE는 병렬, T4 DANGEROUS는 패턴+HITL)가 실행 전략을 결정합니다.",
-              "When the LLM selects a tool, ToolExecutor dispatches across 5 routes (Bash, Native, MCP, Skill, DAG). Sending full schemas for 43+ tools every turn costs 2-3K tokens, so deferred loading via tool_search saves 85%. 5-Tier safety classification (T0 SAFE = parallel, T4 DANGEROUS = pattern+HITL) determines execution strategy."
+              "LLM이 도구를 선택하면 ToolExecutor가 5개 경로(Bash, Native, MCP, Skill, Task)로 디스패치합니다. 43+ 도구 전체 스키마를 매 턴 전송하면 2-3K 토큰을 소모하므로, tool_search로 지연 로딩하여 85% 절감합니다. 5-Tier 안전 분류(T0 SAFE는 병렬, T4 DANGEROUS는 패턴+HITL)가 실행 전략을 결정합니다.",
+              "When the LLM selects a tool, ToolExecutor dispatches across 5 routes (Bash, Native, MCP, Skill, Task). Sending full schemas for 43+ tools every turn costs 2-3K tokens, so deferred loading via tool_search saves 85%. 5-Tier safety classification (T0 SAFE = parallel, T4 DANGEROUS = pattern+HITL) determines execution strategy."
             )}
           </p>
         </ScrollReveal>

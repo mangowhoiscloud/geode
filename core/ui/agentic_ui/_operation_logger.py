@@ -142,7 +142,7 @@ class OperationLogger:
         if result.get("error"):
             return str(result["error"])
         summary_parts: list[str] = []
-        # Domain-specific keys (Game IP pipeline)
+        # Optional domain-pipeline summary keys.
         if "tier" in result:
             summary_parts.append(result["tier"])
         if "score" in result:

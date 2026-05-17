@@ -145,31 +145,26 @@ class TestPipelineEmitters:
 
         emit_pipeline_gather(
             {
-                "ip_name": "Berserk",
-                "media_type": "manga",
-                "release_year": 1989,
-                "studio": "Hakusensha",
+                "subject_id": "demo-subject",
+                "subject_type": "repository",
+                "source": "local",
             },
-            {"dau_current": 0, "revenue_ltm": 0},
+            {"files": 12, "tests": 8},
         )
         self.mock_writer.send_event.assert_called_once()
         call_args = self.mock_writer.send_event.call_args
         assert call_args[0][0] == "pipeline_gather"
-        assert call_args[1]["ip_name"] == "Berserk"
+        assert call_args[1]["subject_id"] == "demo-subject"
 
     def test_emit_pipeline_score(self) -> None:
         from core.ui.agentic_ui import emit_pipeline_score
 
-        emit_pipeline_score(81.2, {"psm": 85.0}, 92.0, "S")
+        emit_pipeline_score(81.2, {"quality": 85.0}, 92.0)
         self.mock_writer.send_event.assert_called_once_with(
             "pipeline_score",
             final_score=81.2,
-            subscores={"psm": 85.0},
+            subscores={"quality": 85.0},
             confidence=92.0,
-            tier="S",
-            att_pct=0,
-            z_value=0,
-            rosenbaum_gamma=0,
         )
 
     def test_emit_feedback_loop(self) -> None:
@@ -210,7 +205,7 @@ class TestPipelineEmitters:
         _ipc_writer_local.writer = None
         from core.ui.agentic_ui import emit_pipeline_gather
 
-        emit_pipeline_gather({"ip_name": "X"}, {"dau_current": 0})  # no crash
+        emit_pipeline_gather({"subject_id": "X"}, {"count": 0})  # no crash
 
 
 class TestEventRendererV2:
@@ -274,24 +269,21 @@ class TestEventRendererV2:
         assert renderer._out.getvalue() == ""  # silent
 
     def test_pipeline_gather(self, renderer) -> None:
-        renderer.on_event({"type": "pipeline_gather", "ip_name": "Berserk", "release_year": 1989})
-        assert "Berserk" in renderer._out.getvalue()
+        renderer.on_event({"type": "pipeline_gather", "subject_id": "demo-subject"})
+        assert "demo-subject" in renderer._out.getvalue()
 
     def test_pipeline_gather_signals(self, renderer) -> None:
-        """G1: Signals (YouTube/Reddit/FanArt) rendered in gather event."""
+        """Structured signals render in gather events."""
         renderer.on_event(
             {
                 "type": "pipeline_gather",
-                "ip_name": "Berserk",
-                "youtube_views": 15_000_000,
-                "reddit_subscribers": 89_000,
-                "fan_art_yoy_pct": 12.5,
+                "subject_id": "demo-subject",
+                "signals": {"coverage": "high", "risk": "low"},
             }
         )
         out = renderer._out.getvalue()
-        assert "YouTube 15M" in out
-        assert "Reddit 89K" in out
-        assert "+12%" in out
+        assert "coverage=high" in out
+        assert "risk=low" in out
 
     def test_pipeline_analysis(self, renderer) -> None:
         renderer.on_event(
@@ -315,27 +307,21 @@ class TestEventRendererV2:
         assert "85" in out
 
     def test_pipeline_score(self, renderer) -> None:
-        renderer.on_event(
-            {"type": "pipeline_score", "final_score": 81.2, "tier": "S", "confidence": 92}
-        )
-        assert "S" in renderer._out.getvalue()
+        renderer.on_event({"type": "pipeline_score", "final_score": 81.2, "confidence": 92})
+        assert "81.2/100" in renderer._out.getvalue()
 
-    def test_pipeline_score_psm(self, renderer) -> None:
-        """G2: PSM details (ATT/Z/Gamma) rendered in score event."""
+    def test_pipeline_score_subscores(self, renderer) -> None:
+        """Subscores render in score event."""
         renderer.on_event(
             {
                 "type": "pipeline_score",
                 "final_score": 81.2,
-                "tier": "S",
-                "att_pct": 31.2,
-                "z_value": 2.45,
-                "rosenbaum_gamma": 1.8,
+                "subscores": {"quality": 82.0, "coverage": 77.5},
             }
         )
         out = renderer._out.getvalue()
-        assert "ATT=+31.2%" in out
-        assert "Z=2.45" in out
-        assert "1.8" in out
+        assert "quality=82.0" in out
+        assert "coverage=77.5" in out
 
     def test_pipeline_verification(self, renderer) -> None:
         renderer.on_event({"type": "pipeline_verification", "guardrails_pass": True})
@@ -382,9 +368,9 @@ class TestEventRendererV2:
 
     def test_pipeline_event_suspends_tracker(self, renderer) -> None:
         """Pipeline events suspend the tool tracker to prevent cursor-up interference."""
-        # Simulate tool_start for analyze_ip
+        # Simulate tool_start for a generic tool
         renderer._tool_tracker.on_tool_start(
-            {"name": "analyze_ip", "args_preview": 'ip_name="Berserk"'}
+            {"name": "web_search", "args_preview": 'query="release notes"'}
         )
         assert renderer._tool_tracker._line_count > 0
 
@@ -392,8 +378,8 @@ class TestEventRendererV2:
         renderer.on_event(
             {
                 "type": "pipeline_header",
-                "ip_name": "Berserk",
-                "pipeline_mode": "full_pipeline",
+                "subject_id": "demo-subject",
+                "pipeline_mode": "analysis",
                 "model": "claude-opus-4-6",
                 "version": "0.38.0",
             }
@@ -402,16 +388,16 @@ class TestEventRendererV2:
         assert renderer._tool_tracker._line_count == 0
         assert not renderer._tool_tracker._running
         # Pipeline output was written
-        assert "Berserk" in renderer._out.getvalue()
+        assert "demo-subject" in renderer._out.getvalue()
 
     def test_stream_suspends_tracker(self, renderer) -> None:
         """on_stream() suspends the tool tracker before writing stream data."""
-        renderer._tool_tracker.on_tool_start({"name": "list_ips", "args_preview": ""})
+        renderer._tool_tracker.on_tool_start({"name": "memory_search", "args_preview": ""})
         assert renderer._tool_tracker._line_count > 0
 
-        renderer.on_stream("  Available IPs\n  - Berserk\n")
+        renderer.on_stream("  Available subjects\n  - demo-subject\n")
         assert renderer._tool_tracker._line_count == 0
-        assert "Berserk" in renderer._out.getvalue()
+        assert "demo-subject" in renderer._out.getvalue()
 
     def test_stop_clears_raw_markdown_stream_region(self, renderer) -> None:
         """Plain markdown streamed raw is transient; final result renders it."""
@@ -424,11 +410,11 @@ class TestEventRendererV2:
 
     def test_stop_preserves_non_markdown_plain_stream(self, renderer) -> None:
         """Plain non-markdown console output should remain visible after stop()."""
-        renderer.on_stream("  Available IPs\n  - Berserk\n")
+        renderer.on_stream("  Available subjects\n  - demo-subject\n")
 
         renderer.stop()
         out = renderer._out.getvalue()
-        assert "Berserk" in out
+        assert "demo-subject" in out
         assert "\033[1A\033[2K" not in out
 
     def test_event_resets_clearable_stream_region(self, renderer) -> None:

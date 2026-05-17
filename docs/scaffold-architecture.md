@@ -49,7 +49,7 @@
 #### 2.1 3-Tier 아키텍처
 ```
 Orchestration → Agent → Pipeline
-(에이전트는 파이프라인을 모름. analyze_ip 도구를 호출할 뿐)
+(에이전트는 외부 도메인 파이프라인을 모름. 등록된 도구/포트만 호출할 뿐)
 ```
 
 #### 2.2 에이전틱 루프
@@ -103,18 +103,13 @@ cli/
 ├── _helpers.py          # CLI 유틸리티
 ├── agentic_response.py  # 에이전틱 응답 처리
 ├── bash_tool.py         # 쉘 명령 실행
-├── batch.py             # 배치 분석
 ├── bootstrap.py         # CLI 부트스트랩
 ├── cmd_schedule.py      # 스케줄 명령
 ├── commands.py          # Typer 명령 정의 (진입점)
-├── ip_names.py          # IP 이름 매핑
 ├── ipc_client.py        # IPC 클라이언트
-├── pipeline_executor.py # 파이프라인 실행기
 ├── project_detect.py    # 프로젝트 감지
 ├── redaction.py         # 민감정보 마스킹
-├── report_renderer.py   # 리포트 렌더링
 ├── result_cache.py      # 결과 캐시
-├── search.py            # 검색 기능
 ├── session_checkpoint.py # 세션 체크포인트
 ├── session_state.py     # 세션 상태
 ├── startup.py           # 시작 시퀀스
@@ -244,23 +239,16 @@ tools/
 └── web_tools.py         # 웹 도구
 ```
 
-### Layer 6 — Domain Plugin (`core/domains/`)
+### Layer 6 — Domain Extension Boundary (`core/domains/`)
 ```
 domains/
 ├── loader.py            # 도메인 로더
 ├── port.py              # DomainPort 인터페이스
-└── game_ip/             # 게임 IP 분석 플러그인
-    ├── adapter.py       # DomainPort 구현체
-    ├── config/          # 평가 축, 원인-행동 매핑
-    ├── fixtures/        # 골든셋 + Steam 데이터 (200+)
-    └── nodes/           # LangGraph 노드
-        ├── router.py    # IP 라우터
-        ├── signals.py   # 시그널 수집
-        ├── analysts.py  # 4인 분석가
-        ├── evaluators.py # 3인 평가자
-        ├── scoring.py   # PSM 스코어링
-        └── synthesizer.py # 종합 리포트
 ```
+
+Domain implementations now ship outside GEODE core. External packages
+register their adapter through `core.domains.loader.register_domain()` and own
+their DAG, CLI commands, fixtures, reports, and MCP/tool extensions.
 
 ### Cross-cutting (`core/gateway/`, `core/automation/`, `core/verification/`)
 ```
@@ -292,7 +280,6 @@ verification/
 ├── calibration.py       # 캘리브레이션
 ├── cross_llm.py         # Cross-LLM 검증
 ├── guardrails.py        # 가드레일
-├── rights_risk.py       # 권리 리스크
 └── stats.py             # 통계
 ```
 
@@ -353,19 +340,15 @@ agent/agentic_loop.py
     8. if no more tool_use: break → 최종 응답
 ```
 
-### 3.3 도메인 파이프라인 (analyze_ip 호출 시)
+### 3.3 외부 도메인 파이프라인
 ```
-tools/analysis.py (analyze_ip 핸들러)
-  → domains/loader.py → domains/game_ip/adapter.py
-    → graph.py (LangGraph StateGraph 실행)
-      → nodes/router.py (IP 분류)
-      → nodes/signals.py (시그널 수집: Steam, YouTube, Reddit, Trends)
-      → nodes/analysts.py (4인 분석가 병렬 실행)
-      → nodes/evaluators.py (3인 평가자)
-      → nodes/scoring.py (PSM 스코어링)
+external plugin package
+  → core.domains.loader.register_domain(...)
+    → DomainPort.build_task_graph(...)
+      → plugin-owned LangGraph / CLI / fixtures / reports
       → verification/cross_llm.py (Cross-LLM 검증)
-      → verification/biasbuster.py (편향 감지)
-      → nodes/synthesizer.py (종합 리포트)
+      → plugin-owned verification extensions
+      → plugin-owned synthesizer/reporting
     → hooks/system.py (PIPELINE_END 이벤트)
     → memory/project.py (MEMORY.md 자동 학습)
 ```
@@ -465,7 +448,7 @@ core/
 ├── hooks/        # L5a: Extensibility - Hooks (36 events, plugins)
 ├── skills/       # L5b: Extensibility - Skills (loader, templates)
 ├── tools/        # L5c: Extensibility - Tools (46 tools, registry, policy)
-├── domains/      # L6: Domain Plugins (game_ip)
+├── domains/      # L6: Domain extension port/loader
 ├── gateway/      # Cross: Gateway (Channel routing, pollers, auth)
 ├── automation/   # Cross: Automation (scheduler, triggers, drift)
 ├── verification/ # Cross: Verification (cross-llm, bias, calibration)

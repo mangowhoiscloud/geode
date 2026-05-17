@@ -20,9 +20,9 @@ class TestGenerateReportTool:
 
     def test_execute_basic(self):
         tool = GenerateReportTool()
-        result = asyncio.run(tool.aexecute(ip_name="Berserk"))
+        result = asyncio.run(tool.aexecute(subject="demo-subject"))
         report = result["result"]
-        assert report["title"] == "GEODE Analysis Report: Berserk"
+        assert report["title"] == "GEODE Analysis Report: demo-subject"
         assert "generated_at" in report
         assert "sections" in report
 
@@ -30,7 +30,7 @@ class TestGenerateReportTool:
         tool = GenerateReportTool()
         result = asyncio.run(
             tool.aexecute(
-                ip_name="Cowboy Bebop",
+                subject="demo-subject",
                 analysis_data={"tier": "A", "final_score": 76.2, "subscores": {"quality": 82}},
                 format="json",
             )
@@ -42,7 +42,7 @@ class TestGenerateReportTool:
 
     def test_execute_default_format_markdown(self):
         tool = GenerateReportTool()
-        result = asyncio.run(tool.aexecute(ip_name="Test"))
+        result = asyncio.run(tool.aexecute(subject="demo-subject"))
         assert result["result"]["format"] == "markdown"
 
 
@@ -55,7 +55,7 @@ class TestExportJsonTool:
 
     def test_execute_writes_file(self, tmp_path: Path):
         tool = ExportJsonTool()
-        data = {"ip_name": "Berserk", "score": 82.2}
+        data = {"subject_id": "demo-subject", "score": 82.2}
         result = asyncio.run(
             tool.aexecute(
                 data=data,
@@ -67,7 +67,7 @@ class TestExportJsonTool:
         path = Path(result["result"]["path"])
         assert path.exists()
         content = json.loads(path.read_text())
-        assert content["ip_name"] == "Berserk"
+        assert content["subject_id"] == "demo-subject"
         assert content["score"] == 82.2
 
     def test_execute_creates_parent_dirs(self, tmp_path: Path):
@@ -106,7 +106,7 @@ class TestSendNotificationTool:
         result = asyncio.run(
             tool.aexecute(
                 channel="slack",
-                message="Pipeline completed for Berserk",
+                message="Pipeline completed for Project Atlas",
                 severity="info",
                 recipient="#geode-alerts",
             )

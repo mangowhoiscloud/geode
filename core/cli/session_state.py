@@ -36,7 +36,7 @@ def get_current_loop() -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Multi-IP LRU analysis result cache
+# Multi-subject LRU analysis result cache
 # ---------------------------------------------------------------------------
 
 
@@ -59,8 +59,8 @@ class _ResultCache:
         self._lock = threading.Lock()
         self._load_from_disk()
 
-    def get(self, ip_name: str) -> dict[str, Any] | None:
-        key = ip_name.lower()
+    def get(self, subject_id: str) -> dict[str, Any] | None:
+        key = subject_id.lower()
         with self._lock:
             if key not in self._cache:
                 return None
@@ -70,10 +70,10 @@ class _ResultCache:
     def put(self, result: dict[str, Any] | None) -> None:
         if result is None:
             return
-        ip_name = result.get("ip_name", "")
-        if not ip_name:
+        subject_id = result.get("subject_id", "")
+        if not subject_id:
             return
-        key = ip_name.lower()
+        key = subject_id.lower()
         with self._lock:
             self._cache[key] = result
             self._cache.move_to_end(key)
@@ -106,8 +106,8 @@ class _ResultCache:
         for fpath in sorted(_RESULT_CACHE_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime):
             try:
                 data = _json.loads(fpath.read_text(encoding="utf-8"))
-                ip = data.get("ip_name", fpath.stem)
-                self._cache[ip.lower()] = data
+                subject = data.get("subject_id", fpath.stem)
+                self._cache[subject.lower()] = data
             except Exception:
                 log.debug("Failed to load result cache %s", fpath.name, exc_info=True)
         # Trim to max
@@ -129,7 +129,7 @@ def _set_readiness(report: ReadinessReport) -> None:
 
 
 def _get_last_result() -> dict[str, Any] | None:
-    """Get the most recently cached pipeline result (any IP)."""
+    """Get the most recently cached pipeline result."""
     if not _result_cache._cache:
         return None
     # Last item in OrderedDict = most recent
@@ -138,7 +138,7 @@ def _get_last_result() -> dict[str, Any] | None:
 
 
 def _set_last_result(result: dict[str, Any] | None) -> None:
-    """Cache a pipeline result (multi-IP LRU)."""
+    """Cache a pipeline result."""
     _result_cache.put(result)
 
 

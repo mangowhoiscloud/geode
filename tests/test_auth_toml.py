@@ -36,7 +36,7 @@ def _reset_state() -> None:
     reset_plan_registry()
 
 
-class TestRoundtrip:
+class TestRoundtrsubject:
     def test_save_then_load_preserves_plan(self) -> None:
         _reset_state()
         from core.wiring.container import ensure_profile_store
