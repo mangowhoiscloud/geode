@@ -667,65 +667,223 @@ def _login_source(args: str) -> None:
 
 
 def _login_oauth_anthropic() -> None:
-    """Drive Anthropic's PKCE OAuth flow natively — no ``claude`` CLI
-    subprocess, no macOS-only keychain dependency.
+    """Anthropic credential setup — picker between API key and claude CLI.
 
-    PR C3 (2026-05-17) replaced the prior ``claude /login`` subprocess
-    handoff with a GEODE-owned PKCE flow (loopback callback + token
-    exchange). The flow is implemented in
-    :func:`core.auth.oauth_login.login_anthropic`; this wrapper persists
-    the resulting credential into the ``ProfileStore`` so other parts of
-    the system (``/login status``, audit routing) pick it up
-    immediately. Cross-platform: works on macOS, Linux, Windows.
+    v0.99.9 dropped the owned-PKCE flow (six attempts v0.99.0–0.99.8 all
+    returned ``Invalid request format`` from Anthropic's authorize step;
+    the public OAuth client ``9d1c250a-…`` is registered to first-party
+    Claude Code only, server-side third-party traffic block since
+    2026-04-04). Two supported paths now:
+
+      1. **API key** — Anthropic Console PAYG (``sk-ant-api…``). Tier 0,
+         clean ToS, billed separately from a Claude subscription.
+
+      2. **claude CLI subprocess** — paperclip ACP-style delegation.
+         ``claude /login`` runs in the user's TTY, drives OAuth via the
+         first-party CLI, and persists to the system keychain. GEODE then
+         imports the resulting token. Tier 2, reuses the Claude Pro/Max
+         subscription quota.
     """
+    from core.cli import commands as _pkg
+
+    _pkg.console.print()
+    _pkg.console.print("  [bold]Anthropic provider — select credential source:[/bold]")
+    _pkg.console.print()
+    _pkg.console.print("    [bold cyan]1)[/bold cyan] API key      (Anthropic Console PAYG)")
+    _pkg.console.print(
+        "    [bold cyan]2)[/bold cyan] claude CLI   (subprocess — uses Claude subscription)"
+    )
+    _pkg.console.print("    [muted]q)[/muted]  skip")
+    _pkg.console.print()
+
+    try:
+        # allow-direct-io: thin handler
+        choice = input("  Choice [1-2/q]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        _pkg.console.print("  [muted]Cancelled.[/muted]\n")
+        return
+
+    if choice in ("", "q", "quit", "exit", "skip"):
+        _pkg.console.print("  [muted]Skipped.[/muted]\n")
+        return
+
+    if choice in ("1", "api", "api-key", "key"):
+        _login_anthropic_api_key()
+    elif choice in ("2", "claude", "claude-cli", "cli"):
+        _login_anthropic_via_claude_cli()
+    else:
+        _pkg.console.print(f"  [warning]Unknown choice: {choice!r}[/warning]\n")
+
+
+def _login_anthropic_api_key() -> None:
+    """Branch 1 — Anthropic Console PAYG API key.
+
+    Prompts for ``sk-ant-…`` and persists to ``~/.geode/auth.toml`` under
+    ``[providers.anthropic]`` as a Plan + Profile pair, mirroring the
+    OpenAI Codex device-code flow's storage shape. The key is treated
+    as a single-Tier-0 credential — no refresh logic, no expiry.
+    """
+    import getpass
+    from datetime import UTC, datetime
+
+    from core.auth.plan_registry import get_plan_registry
+    from core.auth.plans import Plan, PlanKind
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
     from core.wiring.container import ensure_profile_store
 
+    _pkg.console.print()
+    _pkg.console.print("  [bold]Anthropic Console PAYG[/bold]")
+    _pkg.console.print("  [muted]Get a key at: https://console.anthropic.com/keys[/muted]")
+    _pkg.console.print()
+
     try:
-        from core.auth.oauth_login import login_anthropic
-    except ImportError as exc:
-        _pkg.console.print(
-            f"  [warning]Anthropic OAuth unavailable — `{exc.name}` missing.[/warning]\n"
-            "  [muted]Set ANTHROPIC_API_KEY env to use the PAYG path.[/muted]\n"
-        )
+        # allow-direct-io: thin handler — getpass hides typed input from screen.
+        api_key = getpass.getpass("  Paste sk-ant-… key (hidden): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        _pkg.console.print("  [muted]Cancelled.[/muted]\n")
+        return
+
+    if not api_key:
+        _pkg.console.print("  [warning]Empty key — aborted.[/warning]\n")
+        return
+    if not api_key.startswith("sk-ant-"):
+        _pkg.console.print("  [warning]Key does not look like sk-ant-… — saving anyway.[/warning]")
+
+    plan_id = "anthropic-payg-geode"
+    registry = get_plan_registry()
+    plan = registry.get(plan_id) or Plan(
+        id=plan_id,
+        provider="anthropic",
+        kind=PlanKind.PAYG,
+        display_name="Anthropic (PAYG)",
+        base_url="https://api.anthropic.com",
+        auth_type="x-api-key",
+    )
+    registry.add(plan)
+
+    profile = AuthProfile(
+        name=f"{plan_id}:user",
+        provider="anthropic",
+        credential_type=CredentialType.API_KEY,
+        key=api_key,
+        plan_id=plan.id,
+        expires_at=0.0,
+        managed_by="geode-api-key",
+        metadata={"last_refresh": datetime.now(UTC).isoformat().replace("+00:00", "Z")},
+    )
+    ensure_profile_store().add(profile)
+    try:
+        from core.auth.auth_toml import save_auth_toml
+
+        save_auth_toml()
+    except Exception:
+        log.debug("auth.toml persist after anthropic login failed", exc_info=True)
+
+    _pkg.console.print()
+    _pkg.console.print("  [success]✓ Anthropic API key saved.[/success]")
+    _pkg.console.print("  [muted]Stored: ~/.geode/auth.toml[/muted]\n")
+
+
+def _login_anthropic_via_claude_cli() -> None:
+    """Branch 2 — claude CLI subprocess (paperclip ACP-style delegation).
+
+    Spawns ``claude /login`` in the user's TTY; the first-party CLI drives
+    its own OAuth flow (browser → claude.ai consent → keychain persist).
+    On exit we re-read the keychain via :mod:`plugins.petri_audit.claude_code_provider`
+    and mirror the token into ``~/.geode/auth.toml`` so GEODE picks it up
+    without going through claude CLI on every call.
+    """
+    import shutil
+    import subprocess
+    from datetime import UTC, datetime
+
+    from core.auth.plan_registry import get_plan_registry
+    from core.auth.plans import Plan, PlanKind
+    from core.auth.profiles import AuthProfile, CredentialType
+    from core.cli import commands as _pkg
+    from core.wiring.container import ensure_profile_store
+
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
+        _pkg.console.print()
+        _pkg.console.print("  [warning]`claude` CLI not found in PATH.[/warning]")
+        _pkg.console.print("  [muted]Install: npm install -g @anthropic-ai/claude-code[/muted]\n")
         return
 
     _pkg.console.print()
+    _pkg.console.print(f"  [muted]Found claude CLI: {claude_bin}[/muted]")
+    _pkg.console.print("  [bold]Spawning `claude /login`[/bold] — browser will open via the CLI.")
+    _pkg.console.print("  [muted]Finish OAuth in your browser, then return here.[/muted]\n")
+
     try:
-        creds = login_anthropic()
-    except KeyboardInterrupt:
+        proc = subprocess.run(  # noqa: S603 — explicit binary from shutil.which
+            [claude_bin, "/login"],
+            check=False,
+            timeout=600,
+        )
+    except (KeyboardInterrupt, subprocess.TimeoutExpired):
         _pkg.console.print("  [muted]Cancelled.[/muted]\n")
         return
-    except RuntimeError as exc:
+
+    if proc.returncode != 0:
         _pkg.console.print(
-            f"  [red]Anthropic OAuth login failed: {exc}[/red]\n"
-            "  [muted]Fallback: set ANTHROPIC_API_KEY env to keep going on the PAYG path.[/muted]\n"
+            f"  [warning]claude /login exited with code {proc.returncode}.[/warning]\n"
         )
         return
 
-    if not creds:
-        _pkg.console.print("  [muted]Anthropic OAuth aborted.[/muted]\n")
+    try:
+        from plugins.petri_audit.claude_code_provider import (
+            get_claude_oauth_metadata,
+            resolve_claude_oauth_token,
+        )
+    except ImportError:
+        _pkg.console.print(
+            "  [warning]Cannot read claude keychain — `plugins.petri_audit` missing.[/warning]\n"
+        )
         return
 
-    access_token = creds.get("access_token", "")
-    expires_at = float(creds.get("expires_at", 0) or 0)
-    scopes = creds.get("scopes") or []
+    token = resolve_claude_oauth_token()
+    if not token:
+        _pkg.console.print("  [warning]claude /login completed but keychain is empty.[/warning]\n")
+        return
+
+    meta = get_claude_oauth_metadata() or {}
+    expires_at = float(meta.get("expires_at", 0) or 0)
+
+    plan_id = "anthropic-claude-cli"
+    registry = get_plan_registry()
+    plan = registry.get(plan_id) or Plan(
+        id=plan_id,
+        provider="anthropic",
+        kind=PlanKind.OAUTH_BORROWED,
+        display_name="Anthropic (Claude CLI subprocess)",
+        base_url="https://api.anthropic.com",
+        auth_type="oauth_external",
+    )
+    registry.add(plan)
+
     profile = AuthProfile(
-        name="anthropic:oauth",
+        name=f"{plan_id}:user",
         provider="anthropic",
         credential_type=CredentialType.OAUTH,
-        key=access_token,
+        key=token,
+        plan_id=plan.id,
         expires_at=expires_at,
-        managed_by="geode-pkce",
+        managed_by="claude-cli",
+        metadata={"last_refresh": datetime.now(UTC).isoformat().replace("+00:00", "Z")},
     )
     ensure_profile_store().add(profile)
+    try:
+        from core.auth.auth_toml import save_auth_toml
 
-    scope_summary = ", ".join(scopes) if scopes else "(no scopes returned)"
-    _pkg.console.print(
-        "  [success]Anthropic OAuth registered.[/success]  "
-        f"[muted]Scopes: {scope_summary} · Provider: anthropic[/muted]\n"
-    )
+        save_auth_toml()
+    except Exception:
+        log.debug("auth.toml persist after anthropic login failed", exc_info=True)
+
+    _pkg.console.print()
+    _pkg.console.print("  [success]✓ Imported from claude CLI keychain.[/success]")
+    _pkg.console.print("  [muted]Stored: ~/.geode/auth.toml[/muted]\n")
 
 
 def _login_set_key(rest: str) -> None:
