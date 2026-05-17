@@ -21,7 +21,7 @@ Petri 는 4-path 모두 받침 (P1-C 5-adapter split). seed-pipeline (ADR-001) �
 
 ## Decision
 
-**6-role × 4-path manifest + TUI picker + cost preview + ToS notice + pre-flight + slash command**.
+**7-role × 4-path manifest + TUI picker + cost preview + ToS notice + pre-flight + slash command**.
 
 ### 1. Manifest pattern (Petri P1-A 4-layer 차용)
 
@@ -41,8 +41,11 @@ Petri 의 `plugins/petri_audit/petri.plugin.toml` 의 schema (`[petri]` / `[petr
 [seed_pipeline]
 enabled_roles = [
     "generator", "critic", "proximity", "pilot",
-    "judge_a", "judge_b", "judge_c", "evolver", "meta_reviewer",
+    "ranker", "evolver", "meta_reviewer",
 ]
+# 7 role = co-scientist paper 6 agent (generation/reflection/ranking/evolution/
+# proximity/meta-review) + GEODE 추가 pilot (paper 의 scientist-in-the-loop
+# 자리를 automated Petri audit 으로 치환).
 
 [seed_pipeline.role.generator]
 default_model = "claude-sonnet-4-6"
@@ -56,6 +59,9 @@ role_contract = "roles/critic.md"
 
 [seed_pipeline.role.proximity]
 # Embedding-based, not LLM-completion. text_embed tool 호출.
+# default_model = embedding model (Petri 의 family inference 우회 — manifest
+# loader 가 본 role 을 special-case 로 표시, plan_registry 대신 OpenAI PAYG
+# 직 binding).
 default_model = "text-embedding-3-small"
 allowed_models = ["text-embedding-3-small"]
 role_contract = "roles/proximity.md"
@@ -65,20 +71,12 @@ default_model = "claude-haiku-4-5"
 allowed_models = ["claude-haiku-4-5", "gpt-5.4-mini"]
 role_contract = "roles/pilot.md"
 
-[seed_pipeline.role.judge_a]
-default_model = "claude-sonnet-4-6"
+[seed_pipeline.role.ranker]
+# 3-judge panel orchestrator. 본 role 의 default_model 은 의미 없음 —
+# panel 의 3 voter 가 [seed_pipeline.judge_panel] 에서 별도 binding.
+default_model = "claude-sonnet-4-6"   # placeholder, panel 이 실제 호출
 allowed_models = ["claude-opus-4-7", "claude-sonnet-4-6"]
-role_contract = "roles/judge.md"
-
-[seed_pipeline.role.judge_b]
-default_model = "gpt-5.5"
-allowed_models = ["gpt-5.5", "gpt-5.4"]
-role_contract = "roles/judge.md"
-
-[seed_pipeline.role.judge_c]
-default_model = "claude-haiku-4-5"
-allowed_models = ["claude-haiku-4-5", "gpt-5.4-mini"]
-role_contract = "roles/judge.md"
+role_contract = "roles/ranker.md"
 
 [seed_pipeline.role.evolver]
 default_model = "claude-sonnet-4-6"
@@ -90,9 +88,16 @@ default_model = "claude-opus-4-7"
 allowed_models = ["claude-opus-4-7", "claude-sonnet-4-6"]
 role_contract = "roles/meta_reviewer.md"
 
-# 3-judge panel diversity validator — manifest loader 가 enabled_roles 의
-# judge_a/b/c 의 default_model 가 최소 2 family 인지 검사. 위반 시 reject.
+# 3-judge panel — Ranker role 의 tournament 안에서 호출되는 3 voter 의
+# binding. enabled_roles 에 들어가지 않는 별도 sub-section.
+# manifest loader 가 본 section 의 voter 3 의 family 가 최소 2 인지 검사.
+# 위반 시 reject.
 [seed_pipeline.judge_panel]
+voters = [
+    { model = "claude-sonnet-4-6", family = "anthropic", source = "claude-cli" },
+    { model = "gpt-5.5",           family = "openai",    source = "openai-codex" },
+    { model = "claude-haiku-4-5",  family = "anthropic", source = "api_key" },
+]
 required_diversity_families = 2
 ```
 
@@ -119,27 +124,33 @@ manifest schema + loader — `plugins/seed_pipeline/manifest.py` (Petri 의 `plu
 - routing.toml 의 `[embedding]` section 으로 user override 가능 (별도 sub-PR 의 enhancement).
 - credential — OpenAI PAYG (sk-…) 만 사용. ChatGPT Plus OAuth 는 embeddings API 미지원.
 
-### 2. 6-agent × 4-path picker (TUI)
+### 2. 7-role × 4-path picker (TUI)
 
 `plugins/seed_pipeline/picker.py` — TerminalMenu 기반. `/petri` 2-axis picker 의 시각 패턴 차용.
 
 ```
-╭─ Seed-pipeline 6-role binding ────────────────────────────────────────────╮
-│ Role           Family    Source         Plan ID              Status       │
-│ ──────────────────────────────────────────────────────────────────────── │
-│ Generator      anthropic claude-cli     claude-max-<user>    ✓            │
-│ Critic         anthropic claude-cli     claude-max-<user>    ✓            │
-│ Pilot judge    openai    openai-codex   chatgpt-plus-<user>  ⚠ expired   │
-│ Tournament A   anthropic claude-cli     claude-max-<user>    ✓ diversity! │
-│ Tournament B   openai    openai-codex   chatgpt-plus-<user>  ⚠ expired   │
-│ Tournament C   anthropic anthropic-payg anthropic-payg-geode ✓            │
-│ Evolution      anthropic claude-cli     claude-max-<user>    ✓            │
-│ Meta-review    anthropic claude-cli     claude-max-<user>    ✓            │
+╭─ Seed-pipeline 7-role + 3-judge panel binding ─────────────────────────────╮
+│ Role / Voter    Family    Source         Plan ID              Status       │
+│ ───────────────────────────────────────────────────────────────────────── │
+│ Generator       anthropic claude-cli     claude-max-<user>    ✓            │
+│ Critic          anthropic claude-cli     claude-max-<user>    ✓            │
+│ Proximity       openai    api_key        openai-payg          ✓ (embed)    │
+│ Pilot           anthropic claude-cli     claude-max-<user>    ✓            │
+│ Ranker          anthropic claude-cli     claude-max-<user>    ✓            │
+│   ├ Voter A     anthropic claude-cli     claude-max-<user>    ✓            │
+│   ├ Voter B     openai    openai-codex   chatgpt-plus-<user>  ⚠ expired   │
+│   └ Voter C     anthropic api_key        anthropic-payg-geode ✓ diversity! │
+│ Evolver         anthropic claude-cli     claude-max-<user>    ✓            │
+│ Meta-review     anthropic claude-cli     claude-max-<user>    ✓            │
 │                                                                            │
-│ Cost preview:  $0.30 PAYG + ~12% Plus + ~8% Max                           │
-│ Diversity:     Tournament A/B/C = 2 family ✓                              │
+│ Source values match plugins/petri_audit/petri.plugin.toml:                 │
+│   anthropic.allowed = [claude-cli, api_key, auto]                          │
+│   openai.allowed    = [openai-codex, api_key, auto]                        │
 │                                                                            │
-│ [1-8] Edit  [a] Auto  [r] Refresh OAuth  [s] Save & exit  [q] Cancel      │
+│ Cost preview:  $0.30 PAYG + ~12% Plus + ~8% Max                            │
+│ Diversity:     Voter A/B/C = 2 family (anthropic + openai) ✓               │
+│                                                                            │
+│ [1-9] Edit  [a] Auto  [r] Refresh OAuth  [s] Save & exit  [q] Cancel       │
 ╰────────────────────────────────────────────────────────────────────────────╯
 ```
 

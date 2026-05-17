@@ -12,7 +12,7 @@ Petri × autoresearch closed-loop (PR #1187+#1189+#1190) 의 frozen seed pool (`
 
 ## Scope (Option α, MVP 건너뜀)
 
-- 6-agent topology (Generation / Reflection / Proximity / Pilot / Ranking / Evolution / Meta-review) — full fidelity
+- 7-role topology (Generation / Reflection / Proximity / Pilot / Ranking / Evolution / Meta-review) — full fidelity. Paper's 6 agents + Pilot (GEODE addition, scientist-in-the-loop 자리)
 - Elo tournament + 3-judge panel + provider diversity 강제
 - 4 auth path (claude-cli / codex-cli / openai-payg / anthropic-payg) × per-role manifest
 - 15-axis raw fitness (AXIS_TIERS + DIM_WEIGHTS, AlphaEval parity 폐기)
@@ -31,7 +31,7 @@ S2.5 — seed-pipeline manifest schema + loader + auth validator
 S3  — Reflection (dim-level critique JSON)
 S4  — text_embed tool 신규 + Proximity 3-track dedup
 S5  — Pilot run (Petri inner-loop subset)
-S5.5 — 6-role × 4-path picker + ToS notice + diversity validator
+S5.5 — 7-role × 4-path picker + ToS notice + diversity validator
 S6  — Elo tournament + 3-judge panel + plan_registry binding
 S6.5 — cost preview + quota estimator + pre-flight auth check
 S7  — Evolution (Reflection-driven section rewrite)
@@ -53,7 +53,7 @@ S12 — First seeds_gen1 generation run + 첫 baseline autoresearch
 | S3 | feat(seed-pipeline): Reflection agent | ~150 | `plugins/seed_pipeline/agents/critic.py` | S2 |
 | S4 | feat(seed-pipeline): text_embed tool + Proximity 3-track | ~280 | `core/tools/text_embed.py`, `core/tools/definitions.json`, `plugins/seed_pipeline/agents/proximity.py` | S1, S3 |
 | S5 | feat(seed-pipeline): Pilot run | ~120 | `plugins/seed_pipeline/agents/pilot.py` | S1 |
-| S5.5 | feat(seed-pipeline): 6-role picker + ToS notice + diversity validator | ~410 | `plugins/seed_pipeline/picker.py` | S2.5 |
+| S5.5 | feat(seed-pipeline): 7-role picker + ToS notice + diversity validator | ~410 | `plugins/seed_pipeline/picker.py` | S2.5 |
 | S6 | feat(seed-pipeline): Elo tournament + 3-judge panel | ~330 | `plugins/seed_pipeline/{tournament.py, agents/ranker.py}` | S5, S5.5 |
 | S6.5 | feat(seed-pipeline): cost preview + budget guard + pre-flight | ~250 | `plugins/seed_pipeline/{cost_preview.py, pre_flight.py}` | S5.5, S6 |
 | S7 | feat(seed-pipeline): Evolution agent | ~190 | `plugins/seed_pipeline/agents/evolver.py` | S6 |

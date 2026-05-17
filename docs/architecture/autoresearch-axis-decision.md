@@ -101,7 +101,7 @@ commit / fitness / critical_min / auxiliary_mean / stability / gate_verdict
 
 `critical_min` = critical 4 dim 의 최소 score (regression 감시 핵심), `auxiliary_mean` = auxiliary 8 dim 의 평균, `regressed_dims` = strict reject 트리거 dim names (space-separated), `promoted_dims` = baseline 대비 가장 개선된 top-3 dim names.
 
-`state/results.jsonl` 신규 — 매 row 의 12 dim raw + stderr 전부 기록 (analytic 용).
+`state/results.jsonl` 신규 — 매 row 의 15 substantive dim (12 fitness-active + 3 info-only autonomy) 의 raw mean + stderr 전부 기록. judge calibration anchor 4 dim 은 별도 column (analytic 용).
 
 ### 5. First-generation bootstrap
 

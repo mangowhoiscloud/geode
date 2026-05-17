@@ -11,11 +11,11 @@ AI co-scientist paper 의 6-agent topology (Generation / Reflection / Ranking / 
 
 ## Decision
 
-**Port (자체 구현), vendor 안 함**. GEODE 의 `SubAgentManager` + `IsolatedRunner` + `AgentRegistry` + `HookSystem` + `TaskGraph` 인프라 위에 6-agent topology 자체 구현. LangGraph / litellm / LangSmith 의존성 추가 없음.
+**Port (자체 구현), vendor 안 함**. GEODE 의 `SubAgentManager` + `IsolatedRunner` + `AgentRegistry` + `HookSystem` + `TaskGraph` 인프라 위에 **7-role topology** (paper 의 6-agent + Pilot — paper 의 scientist-in-the-loop 자리를 automated Petri audit 으로 치환) 자체 구현. LangGraph / litellm / LangSmith 의존성 추가 없음.
 
 **위치**: `plugins/seed_pipeline/` (sibling to `plugins/petri_audit/`, not nested). 명시적 `depends = ["petri-audit"]` 으로 sibling 의존 표명.
 
-**Full-fidelity**: 6 agent 모두 실제 구현 (Meta-review stub 금지). Elo tournament + 3-judge panel + provider diversity 강제. CLAUDE.md 의 Socratic Q4 simplicity 제약은 본 sprint 한정 해제 (별도 fidelity amendment doc 참조).
+**Full-fidelity**: 7 role 모두 실제 구현 (Meta-review stub 금지). Elo tournament + 3-judge panel + provider diversity 강제. CLAUDE.md 의 Socratic Q4 simplicity 제약은 본 sprint 한정 해제 (별도 fidelity amendment doc 참조).
 
 ### Operational defaults (settled, 본 ADR 의 binding)
 
@@ -82,7 +82,7 @@ Parent `AgenticLoop` 가 central orchestrator. `depth=1` 한계 내에서 phase 
 
 ### 중립
 
-- 6-agent topology 의 BaseSeedAgent 추상화 도입. premature abstraction 으로 보일 수 있으나 paper 의 6-way symmetry 가 정당화. fidelity amendment doc 에 명시.
+- 7-role topology 의 BaseSeedAgent 추상화 도입 (paper 6-agent symmetry + GEODE Pilot). premature abstraction 으로 보일 수 있으나 paper 의 multi-way role symmetry 가 정당화. fidelity amendment doc 에 명시.
 
 ## Implementation pointers
 
