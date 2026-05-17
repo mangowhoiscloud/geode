@@ -8,14 +8,15 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from inspect import isawaitable
 from typing import Any
 
 from core.channels.models import ChannelBinding, InboundMessage
 from core.memory.session_key import build_gateway_session_key
 from core.server.supervised.poller_base import BasePoller
 
-MessageProcessor = Callable[[str, dict[str, Any]], str]
+MessageProcessor = Callable[[str, dict[str, Any]], Awaitable[str] | str]
 
 _gateway: ChannelManager | None = None
 
@@ -69,8 +70,8 @@ class ChannelManager:
         for poller in self._pollers:
             poller.stop()
 
-    def set_processor(self, processor: MessageProcessor) -> None:
-        """Set the message processor for sync channel adapters."""
+    def set_async_processor(self, processor: MessageProcessor) -> None:
+        """Set the async message processor for channel adapters."""
         self._processor = processor
 
     def add_binding(self, binding: ChannelBinding) -> None:
@@ -97,7 +98,7 @@ class ChannelManager:
             ]
             return len(self._bindings) < before
 
-    def route_message(self, message: InboundMessage) -> str | None:
+    async def aroute_message(self, message: InboundMessage) -> str | None:
         """Route an inbound message through bindings.
 
         OpenClaw pattern: Session Lane → Global Lane → execution.
@@ -151,16 +152,27 @@ class ChannelManager:
         try:
             # Route through SessionLane → Gateway Lane → Global Lane
             if self._lane_queue is not None:
-                with self._lane_queue.acquire_all(session_key, ["session", "gateway", "global"]):
-                    response = self._processor(content, metadata)
+                async with self._lane_queue.acquire_all_async(
+                    session_key,
+                    ["session", "gateway", "global"],
+                ):
+                    response = await self._call_processor(content, metadata)
             else:
-                response = self._processor(content, metadata)
+                response = await self._call_processor(content, metadata)
 
             self._stats["processed"] += 1
             return response
         except Exception as exc:
             log.error("Message processing failed: %s", exc)
             return f"Error processing message: {exc}"
+
+    async def _call_processor(self, content: str, metadata: dict[str, Any]) -> str:
+        if self._processor is None:
+            return ""
+        result = self._processor(content, metadata)
+        if isawaitable(result):
+            return await result
+        return result
 
     def _match_binding(self, message: InboundMessage) -> ChannelBinding | None:
         """Find the matching binding for a message.

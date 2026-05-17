@@ -158,7 +158,7 @@ class SlackPoller(BasePoller):
                     await self._add_reaction(channel_id, ts, "eyes")
 
                 try:
-                    response = self._manager.route_message(inbound)
+                    response = await self._manager.aroute_message(inbound)
                     log.info("Processor returned: %s", (response or "")[:80])
                     if is_mention:
                         await self._add_reaction(channel_id, ts, "white_check_mark")

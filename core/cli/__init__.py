@@ -345,15 +345,29 @@ app.command()(audit)
 app.command(name="petri-archive")(petri_archive)
 
 
+def _version_option(value: bool) -> None:
+    if value:
+        console.print(f"GEODE v{__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
+    show_version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_option,
+        is_eager=True,
+        help="Show GEODE version and exit.",
+    ),
     continue_session: bool = typer.Option(
         False, "--continue", help="Resume the most recent session"
     ),
     resume: str = typer.Option("", "--resume", help="Resume a specific session by ID"),
 ) -> None:
     """GEODE — Autonomous Research Harness."""
+    _ = show_version
     if ctx.invoked_subcommand is None:
         _welcome_screen()
 

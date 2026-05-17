@@ -150,9 +150,6 @@ class TestCLIPoller:
         entered: list[tuple[str, list[str]]] = []
 
         class AsyncLaneQueue:
-            def acquire_all(self, *_args: Any, **_kwargs: Any) -> Any:
-                raise AssertionError("sync lane acquire_all path used")
-
             @asynccontextmanager
             async def acquire_all_async(self, key: str, lanes: list[str]) -> Any:
                 entered.append((key, lanes))

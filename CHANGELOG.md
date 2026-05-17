@@ -52,6 +52,40 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.12] — 2026-05-17
+
+### Added
+
+- **Global CLI version option.** Added `geode --version` as a top-level eager
+  option so package managers and release smoke tests can verify the installed
+  executable without invoking the interactive CLI.
+
+- **전역 CLI version option 추가.** package manager 와 release smoke test 가
+  interactive CLI 를 띄우지 않고 설치된 실행 파일을 검증할 수 있도록
+  top-level eager option `geode --version` 을 추가했습니다.
+
+### Architecture
+
+- **Gateway lane async-only boundary.** Removed the public
+  `LaneQueue.acquire_all()` sync facade and moved gateway routing to
+  `ChannelManager.aroute_message()` plus `LaneQueue.acquire_all_async()`.
+  Slack, Discord, and Telegram pollers now await the async channel path, while
+  the stdlib webhook server keeps the only process-edge sync bridge.
+
+- **Gateway lane async-only 경계 정리.** public `LaneQueue.acquire_all()` sync
+  facade 를 제거하고 gateway routing 을 `ChannelManager.aroute_message()` 와
+  `LaneQueue.acquire_all_async()` 로 이동했습니다. Slack / Discord /
+  Telegram poller 는 async channel path 를 await 하며, stdlib webhook
+  server 만 process-edge sync bridge 를 유지합니다.
+
+- **MCP base client abstraction tightened.** `MCPClientBase.acall_tool()` is
+  now an abstract async contract instead of a runtime `NotImplementedError`
+  stub, so concrete MCP transports own their async call implementation.
+
+- **MCP base client 추상화 정리.** `MCPClientBase.acall_tool()` 을 runtime
+  `NotImplementedError` stub 대신 abstract async contract 로 바꿨습니다.
+  구체 MCP transport 가 async call 구현을 명시적으로 소유합니다.
+
 ### Removed
 
 - **Game IP verification remnants removed from core.** `BiasBuster`,

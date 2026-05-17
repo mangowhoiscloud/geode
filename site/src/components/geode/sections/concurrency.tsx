@@ -25,7 +25,7 @@ const dots = [
 const cards = [
   { color: "#E87080", headKo: "11건 → 0건", headEn: "11 → 0 defects", bodyKo: "globals race, semaphore leak, zombie thread, 이중 publish 등 전수 해소", bodyEn: "globals race, semaphore leak, zombie thread, double publish all resolved" },
   { color: "#4ECDC4", headKo: "3 bootstrap → 1 Runtime", headEn: "3 bootstrap → 1 Runtime", bodyKo: "GeodeRuntime.create_session(mode). ONE Hook, ONE MCP, ONE Skills", bodyEn: "GeodeRuntime.create_session(mode). ONE Hook, ONE MCP, ONE Skills" },
-  { color: "#F5C542", headKo: "4-lane → acquire_all()", headEn: "4-lane → acquire_all()", bodyKo: "SessionLane(per-key) + Lane(global, max=8). 단일 코드 패스", bodyEn: "SessionLane(per-key) + Lane(global, max=8). Single code path" },
+  { color: "#F5C542", headKo: "4-lane → acquire_all_async()", headEn: "4-lane → acquire_all_async()", bodyKo: "SessionLane(per-key) + Lane(global, max=8). async 단일 코드 패스", bodyEn: "SessionLane(per-key) + Lane(global, max=8). Single async code path" },
 ];
 
 /* SessionLane deep dive data */

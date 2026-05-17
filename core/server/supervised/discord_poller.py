@@ -84,7 +84,7 @@ class DiscordPoller(BasePoller):
                     metadata={"guild_id": msg.get("guild_id", "")},
                 )
 
-                response = self._manager.route_message(inbound)
+                response = await self._manager.aroute_message(inbound)
 
                 if response and self._notification:
                     await self._notification.asend_message("discord", channel_id, response)
