@@ -28,7 +28,7 @@ export default function Page() {
             </table>
 
             <h2>경계가 명확한 이유</h2>
-            <p>도메인 어댑터를 교체할 때 어떤 계층이 영향받는지가 즉시 보입니다. Game IP 플러그인을 REODE 마이그레이션 에이전트로 바꿀 때 변경된 것은 어댑터(L4 위)뿐, L1-L3는 한 줄도 안 바뀌었습니다. 이 사실이 4-계층 분리가 진짜로 작동한다는 증거입니다.</p>
+            <p>도메인 어댑터를 교체할 때 어떤 계층이 영향받는지가 즉시 보입니다. 외부 도메인 패키지를 다른 작업 하네스로 바꿀 때 변경되는 것은 어댑터(L4 위)뿐이어야 하고, L1-L3는 동일하게 유지됩니다. 이 사실이 4-계층 분리가 진짜로 작동한다는 증거입니다.</p>
 
             <h2>왜 3개나 5개가 아닌가</h2>
             <ul>
@@ -56,7 +56,7 @@ export default function Page() {
             </table>
 
             <h2>Why the boundaries hold</h2>
-            <p>When swapping a domain adapter, the layer impact is immediately visible. When the Game IP plugin was replaced by the REODE migration agent, only the adapter above L4 changed. L1-L3 stayed identical. That fact is the proof that the 4-layer split is real, not decorative.</p>
+            <p>When swapping a domain adapter, the layer impact is immediately visible. Replacing one external domain package with another task harness should only change the adapter above L4. L1-L3 stay identical. That fact is the proof that the 4-layer split is real, not decorative.</p>
 
             <h2>Why not 3 or 5</h2>
             <ul>

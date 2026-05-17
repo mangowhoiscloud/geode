@@ -111,7 +111,7 @@ class IPCClient:
 
         client = IPCClient()
         client.connect()
-        result = client.send_prompt("analyze Berserk")
+        result = client.send_prompt("summarize this repository")
         client.close()
     """
 

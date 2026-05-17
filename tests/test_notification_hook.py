@@ -24,17 +24,16 @@ class TestFormatMessage:
     def test_pipeline_end(self):
         msg = _format_message(
             HookEvent.PIPELINE_ENDED,
-            {"ip_name": "Berserk", "tier": "S", "final_score": 81.3},
+            {"subject_id": "demo-subject", "final_score": 81.3},
         )
         assert "Pipeline completed" in msg
-        assert "Berserk" in msg
-        assert "S" in msg
+        assert "demo-subject" in msg
         assert "81.3" in msg
 
     def test_pipeline_error(self):
         msg = _format_message(
             HookEvent.PIPELINE_ERROR,
-            {"ip_name": "Test", "error": "timeout"},
+            {"subject_id": "demo-subject", "error": "timeout"},
         )
         assert "Pipeline error" in msg
         assert "timeout" in msg
@@ -42,10 +41,10 @@ class TestFormatMessage:
     def test_drift_detected(self):
         msg = _format_message(
             HookEvent.DRIFT_DETECTED,
-            {"metric": "psm_score"},
+            {"metric": "scoring_score"},
         )
         assert "Drift detected" in msg
-        assert "psm_score" in msg
+        assert "scoring_score" in msg
 
     def test_subagent_failed(self):
         msg = _format_message(
@@ -97,7 +96,7 @@ class TestNotificationHookRegistration:
         asyncio.run(
             hooks.trigger_async(
                 HookEvent.PIPELINE_ENDED,
-                {"ip_name": "Berserk", "tier": "S", "final_score": 81.3},
+                {"subject_id": "demo-subject", "final_score": 81.3},
             )
         )
 
@@ -120,7 +119,7 @@ class TestNotificationHookRegistration:
         results = asyncio.run(
             hooks.trigger_async(
                 HookEvent.PIPELINE_ENDED,
-                {"ip_name": "Test", "tier": "A", "final_score": 65.0},
+                {"subject_id": "demo-subject", "final_score": 65.0},
             )
         )
         assert all(r.success for r in results)
@@ -141,7 +140,7 @@ class TestNotificationHookRegistration:
         results = asyncio.run(
             hooks.trigger_async(
                 HookEvent.PIPELINE_ERROR,
-                {"ip_name": "Test", "error": "critical failure"},
+                {"subject_id": "demo-subject", "error": "critical failure"},
             )
         )
         assert all(r.success for r in results)
@@ -160,7 +159,7 @@ class TestNotificationHookRegistration:
         hooks = HookSystem()
         register_notification_hooks(hooks, channel="discord", recipient="123456")
 
-        asyncio.run(hooks.trigger_async(HookEvent.DRIFT_DETECTED, {"metric": "psm_score"}))
+        asyncio.run(hooks.trigger_async(HookEvent.DRIFT_DETECTED, {"metric": "scoring_score"}))
 
         call_args = mock_adapter.asend_message.call_args
         assert call_args[0][0] == "discord"

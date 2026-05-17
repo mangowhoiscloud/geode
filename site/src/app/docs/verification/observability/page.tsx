@@ -67,8 +67,8 @@ export default function Page() {
 
 # 한 줄 record
 {"ts": "...", "kind": "llm_call_start", "model": "claude-opus-4-7", "input_tokens": 1284, ...}
-{"ts": "...", "kind": "tool_exec_start", "name": "search_ips", ...}
-{"ts": "...", "kind": "tool_exec_end", "name": "search_ips", "duration_ms": 312, ...}
+{"ts": "...", "kind": "tool_exec_start", "name": "search_subjects", ...}
+{"ts": "...", "kind": "tool_exec_end", "name": "search_subjects", "duration_ms": 312, ...}
 {"ts": "...", "kind": "llm_call_end", "output_tokens": 482, "cache_read_tokens": 28000, ...}
 {"ts": "...", "kind": "run_end", "total_cost_usd": 0.0127, ...}`}</pre>
             <p>
@@ -214,8 +214,8 @@ $ jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/2026-05-12.jsonl  # 캐�
 
 # A single record
 {"ts": "...", "kind": "llm_call_start", "model": "claude-opus-4-7", "input_tokens": 1284, ...}
-{"ts": "...", "kind": "tool_exec_start", "name": "search_ips", ...}
-{"ts": "...", "kind": "tool_exec_end", "name": "search_ips", "duration_ms": 312, ...}
+{"ts": "...", "kind": "tool_exec_start", "name": "search_subjects", ...}
+{"ts": "...", "kind": "tool_exec_end", "name": "search_subjects", "duration_ms": 312, ...}
 {"ts": "...", "kind": "llm_call_end", "output_tokens": 482, "cache_read_tokens": 28000, ...}
 {"ts": "...", "kind": "run_end", "total_cost_usd": 0.0127, ...}`}</pre>
             <p>

@@ -236,7 +236,7 @@ def test_path_a_codex_oauth_to_anthropic_apikey(isolated_auth) -> None:
     a_dest = resolve_agentic_adapter("anthropic")
     assert type(a_origin).__name__ == "CodexAgenticAdapter"
     assert type(a_dest).__name__ == "ClaudeAgenticAdapter"
-    # Round-trip: switching back returns a Codex adapter again
+    # Round-trsubject: switching back returns a Codex adapter again
     a_back = resolve_agentic_adapter("openai-codex")
     assert type(a_back).__name__ == "CodexAgenticAdapter"
 

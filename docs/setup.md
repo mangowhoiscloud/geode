@@ -18,9 +18,6 @@ uv run geode
 # One-shot prompt
 uv run geode "summarize the latest AI research trends"
 
-# Domain Plugin: Game IP (dry-run, no LLM)
-uv run geode analyze "Cowboy Bebop" --dry-run
-
 # Headless daemon (Slack/Discord/Telegram + scheduler)
 uv run geode serve
 ```
@@ -225,13 +222,6 @@ grep "Slack poller seeded" /tmp/geode-serve.log
 | `/tasks` | `/t` | Task list |
 | `/clear` | | Clear conversation |
 | `/compact` | | Compact context |
-| `/analyze <IP>` | `/a` | IP analysis (Domain Plugin) |
-| `/run <IP>` | `/r` | Analysis with LLM |
-| `/search <query>` | `/s` | IP search |
-| `/list` | | Available IPs |
-| `/report <IP> [fmt]` | `/rpt` | Generate report (md/html/json) |
-| `/batch <IPs>` | `/b` | Batch analysis |
-| `/compare <A> <B>` | | Compare two IPs |
 | `/quit` | `/q` | Exit |
 
 ---
@@ -244,11 +234,6 @@ geode "prompt"                         # One-shot prompt via IPC
 geode --continue                       # Resume last session
 geode --resume <session_id>            # Resume specific session
 
-geode analyze "Berserk" --dry-run      # Domain Plugin analysis
-geode search "cyberpunk"               # IP search
-geode report "Berserk" -f html         # Report generation
-geode batch --top 5                    # Batch analysis
-geode list                             # Available IPs
 geode version                          # Version info
 geode init                             # Initialize .geode/ structure
 geode history                          # Execution history + cost
@@ -287,5 +272,5 @@ geode serve [-p 3.0]                   # Headless daemon
 uv run pytest tests/ -m "not live" -q     # 3,422+ tests
 uv run ruff check core/ tests/            # Lint
 uv run mypy core/                         # Type check (190 modules)
-uv run geode analyze "Cowboy Bebop" --dry-run  # E2E invariant: A (68.4)
+uv run geode version                      # CLI smoke
 ```

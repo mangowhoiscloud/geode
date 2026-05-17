@@ -108,36 +108,42 @@ class TestLaneQueue:
         q.set_session_lane(sl)
         assert q.session_lane is sl
 
-    def test_acquire_all_session_and_global(self):
+    def test_acquire_all_async_session_and_global(self):
         q = LaneQueue()
         q.set_session_lane(SessionLane(max_sessions=10))
         q.add_lane("global", max_concurrent=8)
 
-        with q.acquire_all("gateway:slack:C123", ["session", "global"]):
-            assert q.session_lane is not None and q.session_lane.active_count == 1
-            gl = q.get_lane("global")
-            assert gl is not None and gl.active_count == 1
+        async def scenario() -> None:
+            async with q.acquire_all_async("gateway:slack:C123", ["session", "global"]):
+                assert q.session_lane is not None and q.session_lane.active_count == 1
+                gl = q.get_lane("global")
+                assert gl is not None and gl.active_count == 1
 
-        assert q.session_lane.active_count == 0
+        asyncio.run(scenario())
+
+        assert q.session_lane is not None and q.session_lane.active_count == 0
         gl = q.get_lane("global")
         assert gl is not None and gl.active_count == 0
 
-    def test_acquire_all_session_gateway_global(self):
+    def test_acquire_all_async_session_gateway_global(self):
         """Gateway path acquires session → gateway → global (3 lanes)."""
         q = LaneQueue()
         q.set_session_lane(SessionLane(max_sessions=10))
         q.add_lane("gateway", max_concurrent=4)
         q.add_lane("global", max_concurrent=8)
 
-        with q.acquire_all("slack:C01:U01", ["session", "gateway", "global"]):
-            assert q.session_lane is not None and q.session_lane.active_count == 1
-            gw = q.get_lane("gateway")
-            assert gw is not None and gw.active_count == 1
-            gl = q.get_lane("global")
-            assert gl is not None and gl.active_count == 1
+        async def scenario() -> None:
+            async with q.acquire_all_async("slack:C01:U01", ["session", "gateway", "global"]):
+                assert q.session_lane is not None and q.session_lane.active_count == 1
+                gw = q.get_lane("gateway")
+                assert gw is not None and gw.active_count == 1
+                gl = q.get_lane("global")
+                assert gl is not None and gl.active_count == 1
+
+        asyncio.run(scenario())
 
         # All released
-        assert q.session_lane.active_count == 0
+        assert q.session_lane is not None and q.session_lane.active_count == 0
         gw = q.get_lane("gateway")
         assert gw is not None and gw.active_count == 0
         gl = q.get_lane("global")
@@ -150,19 +156,20 @@ class TestLaneQueue:
         q.add_lane("gateway", max_concurrent=2, timeout_s=0.1)
         q.add_lane("global", max_concurrent=8, timeout_s=1.0)
 
-        # Fill gateway lane with 2 requests
-        with (
-            q.acquire_all("gw:1", ["session", "gateway", "global"]),
-            q.acquire_all("gw:2", ["session", "gateway", "global"]),
-        ):
-            gw = q.get_lane("gateway")
-            assert gw is not None and gw.active_count == 2
-            # 3rd gateway request should timeout
-            with (
-                pytest.raises(TimeoutError, match="gateway"),
-                q.acquire_all("gw:3", ["session", "gateway", "global"]),
+        async def scenario() -> None:
+            # Fill gateway lane with 2 requests
+            async with (
+                q.acquire_all_async("gw:1", ["session", "gateway", "global"]),
+                q.acquire_all_async("gw:2", ["session", "gateway", "global"]),
             ):
-                pass  # should not reach
+                gw = q.get_lane("gateway")
+                assert gw is not None and gw.active_count == 2
+                # 3rd gateway request should timeout
+                with pytest.raises(TimeoutError, match="gateway"):
+                    async with q.acquire_all_async("gw:3", ["session", "gateway", "global"]):
+                        pass
+
+        asyncio.run(scenario())
 
     def test_cli_bypasses_gateway_lane(self):
         """CLI path uses only session + global, not gateway."""
@@ -171,29 +178,41 @@ class TestLaneQueue:
         q.add_lane("gateway", max_concurrent=2, timeout_s=0.1)
         q.add_lane("global", max_concurrent=8, timeout_s=1.0)
 
-        # Fill gateway lane, then prove CLI still works (bypasses gateway)
-        with (  # noqa: SIM117
-            q.acquire_all("gw:1", ["session", "gateway", "global"]),
-            q.acquire_all("gw:2", ["session", "gateway", "global"]),
-        ):
-            with q.acquire_all("cli:1", ["session", "global"]):
+        async def scenario() -> None:
+            # Fill gateway lane, then prove CLI still works (bypasses gateway)
+            async with (
+                q.acquire_all_async("gw:1", ["session", "gateway", "global"]),
+                q.acquire_all_async("gw:2", ["session", "gateway", "global"]),
+                q.acquire_all_async("cli:1", ["session", "global"]),
+            ):
                 gl = q.get_lane("global")
                 assert gl is not None and gl.active_count == 3  # 2 gw + 1 cli
 
-    def test_acquire_all_unknown_lane(self):
-        q = LaneQueue()
-        with pytest.raises(KeyError, match="not found"), q.acquire_all("job-1", ["nonexistent"]):
-            pass
+        asyncio.run(scenario())
 
-    def test_acquire_all_no_session_lane_skips(self):
+    def test_acquire_all_async_unknown_lane(self):
+        q = LaneQueue()
+
+        async def scenario() -> None:
+            with pytest.raises(KeyError, match="not found"):
+                async with q.acquire_all_async("job-1", ["nonexistent"]):
+                    pass
+
+        asyncio.run(scenario())
+
+    def test_acquire_all_async_no_session_lane_skips(self):
         """If no session lane registered, 'session' in lane_names is skipped."""
         q = LaneQueue()
         q.add_lane("global", max_concurrent=8)
-        with q.acquire_all("key", ["session", "global"]):
-            gl = q.get_lane("global")
-            assert gl is not None and gl.active_count == 1
 
-    def test_acquire_all_partial_failure_releases_session(self):
+        async def scenario() -> None:
+            async with q.acquire_all_async("key", ["session", "global"]):
+                gl = q.get_lane("global")
+                assert gl is not None and gl.active_count == 1
+
+        asyncio.run(scenario())
+
+    def test_acquire_all_async_partial_failure_releases_session(self):
         """If global times out, session lane must be released."""
         q = LaneQueue()
         q.set_session_lane(SessionLane(max_sessions=10))
@@ -204,8 +223,12 @@ class TestLaneQueue:
         assert gl is not None
         gl._semaphore.acquire()
 
-        with pytest.raises(TimeoutError), q.acquire_all("key", ["session", "global"]):
-            pass
+        async def scenario() -> None:
+            with pytest.raises(TimeoutError):
+                async with q.acquire_all_async("key", ["session", "global"]):
+                    pass
+
+        asyncio.run(scenario())
 
         # Session lane must be released
         assert q.session_lane is not None and q.session_lane.active_count == 0
@@ -221,7 +244,7 @@ class TestLaneQueue:
         assert status["session"]["max_sessions"] == 256
         assert status["global"]["max"] == 8
 
-    def test_acquire_all_async_session_and_global(self):
+    def test_acquire_all_async_blocks_sync_try_acquire(self):
         q = LaneQueue()
         q.set_session_lane(SessionLane(max_sessions=10))
         q.add_lane("global", max_concurrent=1)
@@ -247,7 +270,7 @@ class TestLaneQueue:
 class TestAcquireAllPartialFailure:
     """Verify partial failure releases only acquired lanes."""
 
-    def test_second_lane_timeout_releases_first(self) -> None:
+    def test_second_lane_timeout_releases_first_async(self) -> None:
         """If 2nd lane times out, 1st lane must be released."""
         q = LaneQueue()
         q.add_lane("fast", max_concurrent=1, timeout_s=5.0)
@@ -260,8 +283,12 @@ class TestAcquireAllPartialFailure:
         fast = q.get_lane("fast")
         assert fast is not None
 
-        with pytest.raises(TimeoutError, match="slow"), q.acquire_all("job-x", ["fast", "slow"]):
-            pass
+        async def scenario() -> None:
+            with pytest.raises(TimeoutError, match="slow"):
+                async with q.acquire_all_async("job-x", ["fast", "slow"]):
+                    pass
+
+        asyncio.run(scenario())
 
         # Fast lane must be released (no leak)
         assert fast.active_count == 0

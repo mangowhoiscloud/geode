@@ -174,7 +174,7 @@ class TriggerManager:
             trigger_type=TriggerType.MANUAL,
             callback=lambda data: print("Fired!", data),
         ))
-        result = mgr.fire_manual("t1", {"ip_name": "Berserk"})
+        result = mgr.fire_manual("t1", {"subject_id": "subject"})
     """
 
     MAX_RESULTS = 1000  # Prune oldest results when exceeded
@@ -461,7 +461,7 @@ class TriggerManager:
     def register_pipeline_trigger(
         self,
         trigger_id: str,
-        ip_name: str,
+        subject_id: str,
         *,
         trigger_type: TriggerType = TriggerType.MANUAL,
         cron_expr: str = "",
@@ -470,18 +470,18 @@ class TriggerManager:
         """Register a trigger that initiates a pipeline analysis.
 
         Convenience method bridging TriggerManager → pipeline planner.
-        The callback receives {"ip_name": ..., "trigger_id": ...} when fired.
+        The callback receives {"subject_id": ..., "trigger_id": ...} when fired.
         """
         config = TriggerConfig(
             trigger_id=trigger_id,
             trigger_type=trigger_type,
-            name=f"pipeline:{ip_name}",
+            name=f"pipeline:{subject_id}",
             cron_expr=cron_expr,
             callback=callback,
-            metadata={"ip_name": ip_name, "source": "pipeline_trigger"},
+            metadata={"subject_id": subject_id, "source": "pipeline_trigger"},
         )
         self.register(config)
-        log.info("Pipeline trigger registered: %s for IP '%s'", trigger_id, ip_name)
+        log.info("Pipeline trigger registered: %s for subject '%s'", trigger_id, subject_id)
         return config
 
     def get_results(self, trigger_id: str | None = None, limit: int = 100) -> list[TriggerResult]:

@@ -322,7 +322,7 @@ class SubAgentManager:
             from core.memory.session_key import build_subagent_session_key
 
             child_key = build_subagent_session_key(
-                task.args.get("ip_name", "unknown"), task.task_id
+                task.args.get("subject_id", task.args.get("subject", "unknown")), task.task_id
             )
 
             # Track parent-child relationship (OpenClaw Spawn pattern)
@@ -633,7 +633,9 @@ class SubAgentManager:
 
         from core.memory.session_key import build_subagent_session_key
 
-        child_key = build_subagent_session_key(task.args.get("ip_name", "unknown"), task.task_id)
+        child_key = build_subagent_session_key(
+            task.args.get("subject_id", task.args.get("subject", "unknown")), task.task_id
+        )
         _subagent_context.is_subagent = True
         _subagent_context.child_session_key = child_key
         try:
@@ -760,83 +762,6 @@ class SubAgentManager:
         if "depth" in lower:
             return ErrorCategory.DEPTH_EXCEEDED
         return ErrorCategory.UNKNOWN
-
-
-# ---------------------------------------------------------------------------
-# Pipeline Handler Factory (Phase 1 — G2 fix)
-# ---------------------------------------------------------------------------
-
-
-def make_pipeline_handler(
-    *,
-    run_analysis_fn: Callable[..., dict[str, Any] | None],
-    search_fn: Callable[..., dict[str, Any]] | None = None,
-    compare_fn: Callable[..., dict[str, Any]] | None = None,
-    report_fn: Callable[..., tuple[str, str] | None] | None = None,
-    force_dry_run: bool = True,
-) -> Callable[..., dict[str, Any]]:
-    """Create a task_handler routing task_type to pipeline functions."""
-
-    def handler(
-        task_type: str,
-        args: dict[str, Any],
-        *,
-        agent_context: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        if task_type == "analyze":
-            ip_name = args.get("ip_name", "")
-            if not ip_name:
-                return {"error": "ip_name required for analyze task"}
-            dry_run = args.get("dry_run", force_dry_run)
-            result = run_analysis_fn(ip_name, dry_run=dry_run)
-            if result is None:
-                return {"error": f"Analysis failed for '{ip_name}'"}
-            return _extract_analysis_summary(result, ip_name)
-        if task_type == "search":
-            if search_fn is None:
-                return {"error": "Search not configured"}
-            query = args.get("query", "")
-            return search_fn(query=query)
-        if task_type == "compare":
-            if compare_fn is None:
-                return {"error": "Compare not configured"}
-            return compare_fn(**args)
-        if task_type == "report":
-            if report_fn is None:
-                return {"error": "Report generation not configured"}
-            ip_name = args.get("ip_name", "")
-            if not ip_name:
-                return {"error": "ip_name required for report task"}
-            report_result = report_fn(
-                ip_name,
-                fmt=args.get("format", "markdown"),
-                template=args.get("template", "summary"),
-                dry_run=args.get("dry_run", force_dry_run),
-            )
-            if report_result is None:
-                return {"error": f"Report generation failed for '{ip_name}'"}
-            file_path, content = report_result
-            return {
-                "status": "ok",
-                "action": "report",
-                "ip_name": ip_name,
-                "file_path": file_path,
-                "content_length": len(content),
-            }
-        return {"error": f"Unknown task_type: {task_type}"}
-
-    return handler
-
-
-def _extract_analysis_summary(result: dict[str, Any], ip_name: str) -> dict[str, Any]:
-    """Extract a compact summary from a pipeline analysis result."""
-    return {
-        "ip_name": ip_name,
-        "tier": result.get("tier", "N/A"),
-        "final_score": result.get("final_score", 0),
-        "cause": result.get("cause", "unknown"),
-        "confidence": result.get("confidence", 0),
-    }
 
 
 DELEGATE_TOOL_DEFINITION: dict[str, Any] = load_tool_definition("delegate_task")

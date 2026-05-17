@@ -42,7 +42,7 @@ TRACKING_SLA: dict[TrackingPoint, int] = {
 class OutcomeData:
     """Collected outcome measurements."""
 
-    ip_name: str
+    subject_id: str
     tracking_point: TrackingPoint
     revenue_delta_pct: float = 0.0
     dau_delta_pct: float = 0.0
@@ -52,7 +52,7 @@ class OutcomeData:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "ip_name": self.ip_name,
+            "subject_id": self.subject_id,
             "tracking_point": self.tracking_point.value,
             "revenue_delta_pct": self.revenue_delta_pct,
             "dau_delta_pct": self.dau_delta_pct,
@@ -76,7 +76,7 @@ class OutcomeJob:
     """A scheduled outcome collection job."""
 
     job_id: str
-    ip_name: str
+    subject_id: str
     tracking_point: TrackingPoint
     status: JobStatus = JobStatus.PENDING
     scheduled_at: float = field(default_factory=time.time)
@@ -91,7 +91,7 @@ class OutcomeJob:
     def to_dict(self) -> dict[str, Any]:
         return {
             "job_id": self.job_id,
-            "ip_name": self.ip_name,
+            "subject_id": self.subject_id,
             "tracking_point": self.tracking_point.value,
             "status": self.status.value,
             "scheduled_at": self.scheduled_at,
@@ -130,7 +130,7 @@ class OutcomeTracker:
 
     Usage:
         tracker = OutcomeTracker()
-        job = tracker.schedule("Berserk", TrackingPoint.T_PLUS_30)
+        job = tracker.schedule("subject", TrackingPoint.T_PLUS_30)
         tracker.execute_job(job.job_id, outcome_data)
     """
 
@@ -139,7 +139,7 @@ class OutcomeTracker:
 
     def __init__(self, *, hooks: HookSystem | None = None) -> None:
         self._jobs: dict[str, OutcomeJob] = {}
-        self._outcomes: dict[str, list[OutcomeData]] = {}  # ip_name → outcomes
+        self._outcomes: dict[str, list[OutcomeData]] = {}
         self._next_id = 0
         self._lock = threading.Lock()
         self._stats = _TrackerStats()
@@ -151,7 +151,7 @@ class OutcomeTracker:
 
     def schedule(
         self,
-        ip_name: str,
+        subject_id: str,
         tracking_point: TrackingPoint,
         *,
         max_retries: int = 3,
@@ -162,13 +162,13 @@ class OutcomeTracker:
             job_id = f"outcome-{self._next_id:04d}"
             job = OutcomeJob(
                 job_id=job_id,
-                ip_name=ip_name,
+                subject_id=subject_id,
                 tracking_point=tracking_point,
                 max_retries=max_retries,
             )
             self._jobs[job_id] = job
             self._stats.jobs_scheduled += 1
-        log.info("Scheduled outcome job %s: %s @ %s", job_id, ip_name, tracking_point.value)
+        log.info("Scheduled outcome job %s: %s @ %s", job_id, subject_id, tracking_point.value)
         return job
 
     def execute_job(self, job_id: str, outcome: OutcomeData) -> OutcomeJob:
@@ -193,9 +193,9 @@ class OutcomeTracker:
             self._stats.jobs_completed += 1
 
             # Store outcome
-            if job.ip_name not in self._outcomes:
-                self._outcomes[job.ip_name] = []
-            self._outcomes[job.ip_name].append(outcome)
+            if job.subject_id not in self._outcomes:
+                self._outcomes[job.subject_id] = []
+            self._outcomes[job.subject_id].append(outcome)
 
         log.info("Job %s completed successfully", job_id)
 
@@ -206,7 +206,7 @@ class OutcomeTracker:
                 HookEvent.OUTCOME_COLLECTED,
                 {
                     "job_id": job_id,
-                    "ip_name": job.ip_name,
+                    "subject_id": job.subject_id,
                     "tracking_point": job.tracking_point.value,
                 },
             )
@@ -304,7 +304,7 @@ class OutcomeTracker:
                 {
                     "source": "sla_breach",
                     "job_id": job_id,
-                    "ip_name": job.ip_name,
+                    "subject_id": job.subject_id,
                     "tracking_point": job.tracking_point.value,
                     "sla_days": sla_days,
                 },
@@ -317,27 +317,27 @@ class OutcomeTracker:
 
     def list_jobs(
         self,
-        ip_name: str | None = None,
+        subject_id: str | None = None,
         status: JobStatus | None = None,
     ) -> list[OutcomeJob]:
         """List jobs, optionally filtered."""
         with self._lock:
             jobs = list(self._jobs.values())
-        if ip_name:
-            jobs = [j for j in jobs if j.ip_name == ip_name]
+        if subject_id:
+            jobs = [j for j in jobs if j.subject_id == subject_id]
         if status:
             jobs = [j for j in jobs if j.status == status]
         return sorted(jobs, key=lambda j: j.scheduled_at)
 
     def schedule_tracking(
         self,
-        ip_name: str,
+        subject_id: str,
         checkpoints: list[TrackingPoint] | None = None,
     ) -> list[OutcomeJob]:
         """Schedule outcome collection at standard checkpoints.
 
         Args:
-            ip_name: IP to track.
+            subject_id: Subject to track.
             checkpoints: Tracking points to schedule. Defaults to all three
                 (T+30, T+90, T+180).
 
@@ -350,13 +350,13 @@ class OutcomeTracker:
                 TrackingPoint.T_PLUS_90,
                 TrackingPoint.T_PLUS_180,
             ]
-        return [self.schedule(ip_name, tp) for tp in checkpoints]
+        return [self.schedule(subject_id, tp) for tp in checkpoints]
 
-    def get_outcomes(self, ip_name: str) -> list[OutcomeData]:
-        """Get all collected outcomes for an IP."""
-        return self._outcomes.get(ip_name, [])
+    def get_outcomes(self, subject_id: str) -> list[OutcomeData]:
+        """Get all collected outcomes for a subject."""
+        return self._outcomes.get(subject_id, [])
 
-    def outcomes_to_metrics(self, ip_name: str) -> dict[str, float]:
+    def outcomes_to_metrics(self, subject_id: str) -> dict[str, float]:
         """Transform collected outcomes into feedback metrics.
 
         Bridges OutcomeData (revenue/DAU/retention deltas) to metric values
@@ -366,7 +366,7 @@ class OutcomeTracker:
             Dict of metric_name → metric_value suitable for drift detection
             or correlation analysis.
         """
-        outcomes = self.get_outcomes(ip_name)
+        outcomes = self.get_outcomes(subject_id)
         if not outcomes:
             return {}
 

@@ -5,6 +5,7 @@ Phase 6 validation: ChannelManager, Bindings, Pollers.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from unittest.mock import MagicMock, patch
 
@@ -27,11 +28,11 @@ class TestInboundMessage:
             channel_id="C12345",
             sender_id="U67890",
             sender_name="Alice",
-            content="analyze Berserk",
+            content="analyze Project Atlas",
             timestamp=time.time(),
         )
         assert msg.channel == "slack"
-        assert msg.content == "analyze Berserk"
+        assert msg.content == "analyze Project Atlas"
         assert msg.thread_id == ""
 
 
@@ -65,9 +66,9 @@ class TestChannelBinding:
 
 
 class TestChannelManager:
-    def test_route_message_with_binding(self):
+    def test_aroute_message_with_binding(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content, meta: f"Response to: {content}")
+        manager.set_async_processor(lambda content, meta: f"Response to: {content}")
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C12345"))
 
         msg = InboundMessage(
@@ -78,12 +79,12 @@ class TestChannelManager:
             content="hello",
             timestamp=time.time(),
         )
-        response = manager.route_message(msg)
+        response = asyncio.run(manager.aroute_message(msg))
         assert response == "Response to: hello"
 
-    def test_route_message_no_binding(self):
+    def test_aroute_message_no_binding(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content, meta: "response")
+        manager.set_async_processor(lambda content, meta: "response")
 
         msg = InboundMessage(
             channel="telegram",
@@ -93,13 +94,13 @@ class TestChannelManager:
             content="hello",
             timestamp=time.time(),
         )
-        response = manager.route_message(msg)
+        response = asyncio.run(manager.aroute_message(msg))
         assert response is None
 
     def test_unbound_channel_ignored(self):
         """Messages from channels without a binding are ignored."""
         manager = ChannelManager()
-        manager.set_processor(lambda content, meta: "processed")
+        manager.set_async_processor(lambda content, meta: "processed")
 
         # Only bind C12345
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C12345"))
@@ -113,7 +114,7 @@ class TestChannelManager:
             content="hello",
             timestamp=time.time(),
         )
-        assert manager.route_message(msg_bound) == "processed"
+        assert asyncio.run(manager.aroute_message(msg_bound)) == "processed"
 
         # Message from unbound channel → ignored (no catch-all)
         msg_unbound = InboundMessage(
@@ -124,11 +125,11 @@ class TestChannelManager:
             content="hello",
             timestamp=time.time(),
         )
-        assert manager.route_message(msg_unbound) is None
+        assert asyncio.run(manager.aroute_message(msg_unbound)) is None
 
     def test_require_mention_filter(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content, meta: "processed")
+        manager.set_async_processor(lambda content, meta: "processed")
         manager.add_binding(
             ChannelBinding(channel="discord", channel_id="D1", require_mention=True)
         )
@@ -142,11 +143,11 @@ class TestChannelManager:
             content="hello",
             timestamp=time.time(),
         )
-        assert manager.route_message(msg) is None
+        assert asyncio.run(manager.aroute_message(msg)) is None
 
         # With mention — should be processed
         msg.content = "hey @geode analyze this"
-        assert manager.route_message(msg) == "processed"
+        assert asyncio.run(manager.aroute_message(msg)) == "processed"
 
     def test_remove_binding(self):
         manager = ChannelManager()
@@ -166,11 +167,11 @@ class TestChannelManager:
             content="hello",
             timestamp=time.time(),
         )
-        assert manager.route_message(msg) is None
+        assert asyncio.run(manager.aroute_message(msg)) is None
 
     def test_stats(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content, meta: "ok")
+        manager.set_async_processor(lambda content, meta: "ok")
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
@@ -181,7 +182,7 @@ class TestChannelManager:
             content="hello",
             timestamp=time.time(),
         )
-        manager.route_message(msg)
+        asyncio.run(manager.aroute_message(msg))
 
         stats = manager.get_stats()
         assert stats["received"] == 1
@@ -197,7 +198,7 @@ class TestChannelManager:
 
     def test_processor_exception(self):
         manager = ChannelManager()
-        manager.set_processor(lambda content, meta: 1 / 0)
+        manager.set_async_processor(lambda content, meta: 1 / 0)
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
@@ -208,7 +209,7 @@ class TestChannelManager:
             content="crash",
             timestamp=time.time(),
         )
-        response = manager.route_message(msg)
+        response = asyncio.run(manager.aroute_message(msg))
         assert "Error" in response
 
 
@@ -359,12 +360,12 @@ class TestAllowedToolsEnforcement:
         """Binding's allowed_tools should be prefixed to content."""
         received_content = []
         manager = ChannelManager()
-        manager.set_processor(lambda c, m: (received_content.append(c), "ok")[1])
+        manager.set_async_processor(lambda c, m: (received_content.append(c), "ok")[1])
         manager.add_binding(
             ChannelBinding(
                 channel="slack",
                 channel_id="C1",
-                allowed_tools=["list_ips", "search_ips"],
+                allowed_tools=["list_subjects", "search_subjects"],
             )
         )
 
@@ -373,18 +374,18 @@ class TestAllowedToolsEnforcement:
             channel_id="C1",
             sender_id="U1",
             sender_name="Alice",
-            content="show IPs",
+            content="show subjects",
             timestamp=time.time(),
         )
-        manager.route_message(msg)
+        asyncio.run(manager.aroute_message(msg))
         assert "[allowed_tools:" in received_content[0]
-        assert "list_ips" in received_content[0]
+        assert "list_subjects" in received_content[0]
 
     def test_no_allowed_tools_no_prefix(self):
         """Without allowed_tools, content passes through unchanged."""
         received_content = []
         manager = ChannelManager()
-        manager.set_processor(lambda c, m: (received_content.append(c), "ok")[1])
+        manager.set_async_processor(lambda c, m: (received_content.append(c), "ok")[1])
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
@@ -395,7 +396,7 @@ class TestAllowedToolsEnforcement:
             content="hello",
             timestamp=time.time(),
         )
-        manager.route_message(msg)
+        asyncio.run(manager.aroute_message(msg))
         assert received_content[0] == "hello"
 
 
@@ -410,7 +411,7 @@ class TestLaneQueueIntegration:
         lq.add_lane("global", max_concurrent=8)
 
         manager = ChannelManager(lane_queue=lq)
-        manager.set_processor(lambda c, m: f"processed: {c}")
+        manager.set_async_processor(lambda c, m: f"processed: {c}")
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
@@ -421,13 +422,13 @@ class TestLaneQueueIntegration:
             content="test",
             timestamp=time.time(),
         )
-        response = manager.route_message(msg)
+        response = asyncio.run(manager.aroute_message(msg))
         assert response == "processed: test"
 
     def test_route_without_lane_queue(self):
         """Messages should still work without lane queue."""
         manager = ChannelManager(lane_queue=None)
-        manager.set_processor(lambda c, m: "ok")
+        manager.set_async_processor(lambda c, m: "ok")
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
 
         msg = InboundMessage(
@@ -438,7 +439,7 @@ class TestLaneQueueIntegration:
             content="test",
             timestamp=time.time(),
         )
-        assert manager.route_message(msg) == "ok"
+        assert asyncio.run(manager.aroute_message(msg)) == "ok"
 
 
 class TestBindingConfigReload:
@@ -510,13 +511,13 @@ class TestBindingConfigReload:
 
 
 class TestMultiTurnMetadata:
-    """Verify that route_message passes metadata to the processor."""
+    """Verify that aroute_message passes metadata to the processor."""
 
     def test_metadata_contains_session_key(self):
         """Processor receives session_key in metadata."""
         captured: list[dict] = []
         manager = ChannelManager()
-        manager.set_processor(lambda c, m: (captured.append(m), "ok")[1])
+        manager.set_async_processor(lambda c, m: (captured.append(m), "ok")[1])
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C123"))
 
         msg = InboundMessage(
@@ -528,7 +529,7 @@ class TestMultiTurnMetadata:
             timestamp=time.time(),
             thread_id="1234567890.123456",
         )
-        manager.route_message(msg)
+        asyncio.run(manager.aroute_message(msg))
 
         assert len(captured) == 1
         meta = captured[0]
@@ -543,7 +544,7 @@ class TestMultiTurnMetadata:
         """Messages without thread_id still get session_key."""
         captured: list[dict] = []
         manager = ChannelManager()
-        manager.set_processor(lambda c, m: (captured.append(m), "ok")[1])
+        manager.set_async_processor(lambda c, m: (captured.append(m), "ok")[1])
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C123"))
 
         msg = InboundMessage(
@@ -554,7 +555,7 @@ class TestMultiTurnMetadata:
             content="hello",
             timestamp=time.time(),
         )
-        manager.route_message(msg)
+        asyncio.run(manager.aroute_message(msg))
 
         meta = captured[0]
         assert "session_key" in meta
@@ -564,7 +565,7 @@ class TestMultiTurnMetadata:
         """Different threads produce different session keys."""
         keys: list[str] = []
         manager = ChannelManager()
-        manager.set_processor(lambda c, m: (keys.append(m["session_key"]), "ok")[1])
+        manager.set_async_processor(lambda c, m: (keys.append(m["session_key"]), "ok")[1])
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C123"))
 
         for thread_id in ["111.000", "222.000"]:
@@ -577,7 +578,7 @@ class TestMultiTurnMetadata:
                 timestamp=time.time(),
                 thread_id=thread_id,
             )
-            manager.route_message(msg)
+            asyncio.run(manager.aroute_message(msg))
 
         assert len(keys) == 2
         assert keys[0] != keys[1]

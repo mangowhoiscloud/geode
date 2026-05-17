@@ -55,7 +55,7 @@ class ContextAssembler:
             project_memory=proj_mem,
             session_store=session_store,
         )
-        ctx = assembler.assemble("session-1", "Berserk")
+        ctx = assembler.assemble("session-1", "subject")
     """
 
     def __init__(
@@ -85,13 +85,13 @@ class ContextAssembler:
     def assemble(
         self,
         session_id: str,
-        ip_name: str,
+        subject_id: str,
     ) -> dict[str, Any]:
         """Assemble context from all 3 tiers.
 
         Args:
             session_id: Current session identifier.
-            ip_name: IP name to load context for.
+            subject_id: Subject identifier to load context for.
 
         Returns:
             Merged context dict with keys from all tiers.
@@ -135,7 +135,7 @@ class ContextAssembler:
         # Tier 1 (base): Organization Memory
         if self._org_memory:
             try:
-                org_ctx = self._org_memory.get_subject_context(ip_name)
+                org_ctx = self._org_memory.get_subject_context(subject_id)
                 if org_ctx:
                     context.update(org_ctx)
                     context["_org_loaded"] = True
@@ -146,7 +146,7 @@ class ContextAssembler:
         # Tier 2 (override): Project Memory
         if self._project_memory:
             try:
-                proj_ctx = self._project_memory.get_context_for_ip(ip_name)
+                proj_ctx = self._project_memory.get_context_for_subject(subject_id)
                 if proj_ctx:
                     # Merge project context (overrides org)
                     for key, value in proj_ctx.items():
@@ -173,7 +173,7 @@ class ContextAssembler:
         self._inject_project_env(context)
 
         # Run History: inject recent execution summaries (Karpathy P6 L3)
-        self._inject_run_history(ip_name, context)
+        self._inject_run_history(subject_id, context)
 
         # C2 Journal: inject project-level context (history + learned patterns)
         self._inject_journal_context(context)
@@ -184,7 +184,7 @@ class ContextAssembler:
         assembled_at = time.time()
         context["_assembled_at"] = assembled_at
         context["_session_id"] = session_id
-        context["_ip_name"] = ip_name
+        context["_subject_id"] = subject_id
 
         # ADR-007: Generate _llm_summary for PromptAssembler consumption
         context["_llm_summary"] = self._build_llm_summary(context)
@@ -211,13 +211,13 @@ class ContextAssembler:
 
     def _inject_run_history(
         self,
-        ip_name: str,
+        subject_id: str,
         context: dict[str, Any],
         max_entries: int = DEFAULT_RUN_HISTORY_MAX_ENTRIES,
     ) -> None:
         """P6 Context Budget L3: inject recent run results as 1-line summary.
 
-        Format: "Recent: Berserk S/81.3 (2h ago) | Cowboy Bebop A/68.4 (1d ago)"
+        Format: "Recent: subject score=81.3 (2h ago) | research done (1d ago)"
         """
         if not self._run_log_dir:
             return
@@ -246,11 +246,10 @@ class ContextAssembler:
             now = time.time()
             summaries = []
             for entry in recent:
-                tier = entry.metadata.get("tier", "?")
                 score = entry.metadata.get("score", "?")
                 age = _format_age(now - entry.timestamp)
-                name = entry.metadata.get("ip_name", ip_name)
-                summaries.append(f"{name} {tier}/{score} ({age})")
+                name = entry.metadata.get("subject_id", subject_id)
+                summaries.append(f"{name} score={score} ({age})")
 
             context["_run_history"] = " | ".join(summaries)
         except Exception:

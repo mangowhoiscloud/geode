@@ -2,8 +2,8 @@
 
 Wires HookSystem into the router so call_llm*/call_with_failover can emit
 LLM_CALL_START/END and retry_wait events without depending on hooks at
-import time. ``set_router_hooks`` is invoked from runtime wiring (bootstrap /
-pipeline_executor) after hooks are built.
+import time. ``set_router_hooks`` is invoked from runtime wiring after hooks
+are built.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ _hooks_ctx: Any = None  # HookSystem | None — set via set_router_hooks()
 def set_router_hooks(hooks: Any) -> None:
     """Wire HookSystem into the LLM router for LLM_CALL_START/END events.
 
-    Called from runtime wiring (bootstrap / pipeline_executor) after hooks are built.
+    Called from runtime wiring after hooks are built.
     """
     global _hooks_ctx
     _hooks_ctx = hooks

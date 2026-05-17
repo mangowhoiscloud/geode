@@ -167,11 +167,11 @@ class TestAddInsight:
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
 
-        result = mem.add_insight("Berserk shows high soulslike affinity")
+        result = mem.add_insight("Project Atlas shows high soulslike affinity")
         assert result is True
 
         content = mem.memory_file.read_text(encoding="utf-8")
-        assert "Berserk shows high soulslike affinity" in content
+        assert "Project Atlas shows high soulslike affinity" in content
 
     def test_add_insight_no_file(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
@@ -189,7 +189,7 @@ class TestAddInsight:
         assert "Second insight" in content
 
     def test_add_insight_dedup_same_ip_same_day(self, tmp_path: Path):
-        """Same IP + same date → second call returns False (dedup)."""
+        """Same subject + same date → second call returns False (dedup)."""
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
 
@@ -200,23 +200,23 @@ class TestAddInsight:
         assert content.count("TestDedup") == 1
 
     def test_add_insight_different_ip_same_day(self, tmp_path: Path):
-        """Different IPs on the same day → both succeed."""
+        """Different subjects on the same day → both succeed."""
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
 
-        assert mem.add_insight("[Berserk] tier=S, score=0.85") is True
-        assert mem.add_insight("[Cowboy Bebop] tier=A, score=0.70") is True
+        assert mem.add_insight("[Project Atlas] tier=S, score=0.85") is True
+        assert mem.add_insight("[Project Orion] tier=A, score=0.70") is True
 
         content = mem.memory_file.read_text(encoding="utf-8")
-        assert "Berserk" in content
-        assert "Cowboy Bebop" in content
+        assert "Project Atlas" in content
+        assert "Project Orion" in content
 
     def test_add_insight_rotation_max_50(self, tmp_path: Path):
         """51st insertion drops oldest entry (rotation)."""
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
 
-        # Insert MAX_INSIGHTS + 1 entries (each with unique IP to avoid dedup)
+        # Insert MAX_INSIGHTS + 1 entries (each with unique subject to avoid dedup)
         # Scores start at 0.50 to avoid score=0.00 quality gate rejection
         for i in range(MAX_INSIGHTS + 1):
             result = mem.add_insight(f"[IP_{i}] tier=B, score=0.{50 + i}")
@@ -245,7 +245,7 @@ class TestAddInsight:
         assert beta_idx < alpha_idx
 
     def test_add_insight_no_ip_bracket_no_dedup(self, tmp_path: Path):
-        """Insights without [IP] brackets don't trigger dedup."""
+        """Insights without [subject] brackets don't trigger dedup."""
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
 
@@ -257,12 +257,12 @@ class TestAddInsight:
         assert "General insight two" in content
 
 
-class TestGetContextForIP:
+class TestGetContextForSubject:
     def test_get_context(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
 
-        ctx = mem.get_context_for_ip("cowboy bebop")
+        ctx = mem.get_context_for_subject("demo subject")
         assert "memory" in ctx
         assert "rules" in ctx
         assert isinstance(ctx["memory"], str)
@@ -271,11 +271,11 @@ class TestGetContextForIP:
     def test_context_has_matching_rules(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
-        # Create a rule that matches "cowboy"
-        rule = '---\nname: test\npaths:\n  - "*cowboy*"\n---\n# Test\n'
+        # Create a rule that matches "demo"
+        rule = '---\nname: test\npaths:\n  - "*demo*"\n---\n# Test\n'
         (mem.rules_dir / "test.md").write_text(rule, encoding="utf-8")
 
-        ctx = mem.get_context_for_ip("cowboy")
+        ctx = mem.get_context_for_subject("demo")
         assert len(ctx["rules"]) >= 1
 
 
@@ -286,13 +286,16 @@ class TestIsValidInsight:
     """Direct unit tests for _is_valid_insight() validator."""
 
     def test_valid_analysis(self):
-        assert _is_valid_insight("[Berserk] tier=S, score=0.85") is True
+        assert _is_valid_insight("[Project Atlas] tier=S, score=0.85") is True
 
     def test_valid_note(self):
         assert _is_valid_insight("**preference**: dark mode enabled") is True
 
     def test_valid_turn_with_tools(self):
-        assert _is_valid_insight("[turn] analyze IP → tools=[analyze_ip, web_search]") is True
+        assert (
+            _is_valid_insight("[turn] analyze subject → tools=[analyze_subject, web_search]")
+            is True
+        )
 
     def test_reject_empty(self):
         assert _is_valid_insight("") is False
@@ -313,13 +316,13 @@ class TestIsValidInsight:
         assert _is_valid_insight("[unknown] tier=S, score=0.85") is False
 
     def test_reject_tier_question_mark(self):
-        assert _is_valid_insight("[Berserk] tier=?, score=0.85") is False
+        assert _is_valid_insight("[Project Atlas] tier=?, score=0.85") is False
 
     def test_reject_score_zero(self):
-        assert _is_valid_insight("[Berserk] tier=S, score=0.00") is False
+        assert _is_valid_insight("[Project Atlas] tier=S, score=0.00") is False
 
     def test_accept_nonzero_score(self):
-        assert _is_valid_insight("[Berserk] tier=S, score=0.01") is True
+        assert _is_valid_insight("[Project Atlas] tier=S, score=0.01") is True
 
     def test_reject_empty_tool_array(self):
         assert _is_valid_insight("[turn] some input → tools=[, , , , ]") is False
@@ -337,7 +340,7 @@ class TestInsightQualityGateIntegration:
     def test_reject_stub_tier(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
-        assert mem.add_insight("[Berserk] tier=?, score=0.00") is False
+        assert mem.add_insight("[Project Atlas] tier=?, score=0.00") is False
 
     def test_reject_unknown_ip(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
@@ -353,7 +356,9 @@ class TestInsightQualityGateIntegration:
     def test_accept_valid_insight(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
-        assert mem.add_insight("[Berserk] tier=S, score=0.85, cause=conversion_failure") is True
+        assert (
+            mem.add_insight("[Project Atlas] tier=S, score=0.85, cause=conversion_failure") is True
+        )
 
 
 class TestPurgeBadInsights:
@@ -365,9 +370,9 @@ class TestPurgeBadInsights:
         # Write bad entries directly to bypass the new gate
         content = mem.memory_file.read_text(encoding="utf-8")
         bad_entries = (
-            "- 2026-03-29: [Berserk] tier=?, score=0.00\n"
+            "- 2026-03-29: [Project Atlas] tier=?, score=0.00\n"
             "- 2026-03-29: [unknown] tier=?, score=0.00\n"
-            "- 2026-03-29: [Berserk] tier=S, score=0.85\n"
+            "- 2026-03-29: [Project Atlas] tier=S, score=0.85\n"
         )
         content = content.replace("## Recent Insights\n", f"## 최근 인사이트\n{bad_entries}")
         mem.memory_file.write_text(content, encoding="utf-8")
@@ -385,7 +390,7 @@ class TestPurgeBadInsights:
         mem.ensure_structure()
         # Add a valid insight (need the Korean marker for purge to find)
         content = mem.memory_file.read_text(encoding="utf-8")
-        content += "\n## 최근 인사이트\n- 2026-03-29: [Berserk] tier=S, score=0.85\n"
+        content += "\n## 최근 인사이트\n- 2026-03-29: [Project Atlas] tier=S, score=0.85\n"
         mem.memory_file.write_text(content, encoding="utf-8")
         assert mem.purge_bad_insights() == 0
 

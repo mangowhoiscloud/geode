@@ -27,15 +27,15 @@ class TestToolPolicy:
         assert p.is_allowed("any_tool") is True
 
     def test_allowed_tools_whitelist(self):
-        p = ToolPolicy(name="whitelist", mode="scoring", allowed_tools={"psm_calculate"})
-        assert p.is_allowed("psm_calculate") is True
+        p = ToolPolicy(name="whitelist", mode="scoring", allowed_tools={"score_calculate"})
+        assert p.is_allowed("score_calculate") is True
         assert p.is_allowed("run_analyst") is False
 
     def test_denied_tools_blacklist(self):
         p = ToolPolicy(
             name="blacklist", mode="dry_run", denied_tools={"run_analyst", "run_evaluator"}
         )
-        assert p.is_allowed("psm_calculate") is True
+        assert p.is_allowed("score_calculate") is True
         assert p.is_allowed("run_analyst") is False
         assert p.is_allowed("run_evaluator") is False
 
@@ -43,11 +43,11 @@ class TestToolPolicy:
         p = ToolPolicy(
             name="mixed",
             mode="*",
-            allowed_tools={"psm_calculate"},
-            denied_tools={"psm_calculate"},
+            allowed_tools={"score_calculate"},
+            denied_tools={"score_calculate"},
         )
         # allowed_tools takes precedence (whitelist mode)
-        assert p.is_allowed("psm_calculate") is True
+        assert p.is_allowed("score_calculate") is True
 
 
 class TestPolicyChain:
@@ -66,10 +66,10 @@ class TestPolicyChain:
             )
         )
         result = chain.filter_tools(
-            ["run_analyst", "run_evaluator", "psm_calculate"],
+            ["run_analyst", "run_evaluator", "score_calculate"],
             mode="dry_run",
         )
-        assert result == ["psm_calculate"]
+        assert result == ["score_calculate"]
 
     def test_policy_mode_matching(self):
         chain = PolicyChain()

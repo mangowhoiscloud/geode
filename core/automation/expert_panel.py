@@ -124,12 +124,12 @@ class _PanelStats:
 
 
 class ExpertPanel:
-    """Manage a panel of human experts for IP evaluation.
+    """Manage a panel of human experts for evaluation.
 
     Usage:
         panel = ExpertPanel()
         panel.add_expert(Expert(expert_id="e1", name="Alice", domain="anime"))
-        ratings = panel.collect_ratings("berserk", {"e1": 4.5, "e2": 4.0})
+        ratings = panel.collect_ratings("demo", {"e1": 4.5, "e2": 4.0})
         consensus = panel.compute_consensus(ratings)
     """
 
@@ -412,7 +412,7 @@ def create_pipeline_panel() -> ExpertPanel:
 
     Usage:
         panel = create_pipeline_panel()
-        panel.collect_ratings("berserk", {"quality_expert": 4.2, "market_expert": 3.8})
+        panel.collect_ratings("demo", {"quality_expert": 4.2, "market_expert": 3.8})
     """
     panel = ExpertPanel()
     panel.add_expert(

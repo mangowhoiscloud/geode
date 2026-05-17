@@ -78,8 +78,9 @@ metadata. It does not contain model weights.
 - `releases/v{version}/manifest.json` - machine-readable artifact manifest.
 - `latest.json` - pointer to the latest uploaded GEODE release.
 
-Install GEODE from PyPI or the GitHub release. Use this Hub repo as a mirrored
-artifact index for agent workflows and reproducibility checks.
+Install GEODE from PyPI as `geode-agent` or from the GitHub release. Use this
+Hub repo as a mirrored artifact index for agent workflows and reproducibility
+checks.
 
 Repository: `{repo_id}`
 """

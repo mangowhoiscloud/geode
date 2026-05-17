@@ -269,7 +269,6 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
 
     # 5. Always-available capabilities
     report.capabilities.append(Capability(name="Dry-Run Analysis", available=True))
-    report.capabilities.append(Capability(name="IP Search", available=True))
 
     # 5. Block if no LLM key at all
     report.blocked = not has_key

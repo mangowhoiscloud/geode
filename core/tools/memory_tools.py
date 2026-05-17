@@ -202,14 +202,14 @@ class MemorySearchTool(_AsyncExecuteMixin):
         if tier in ("organization", "all") and len(matches) < limit:
             org = _org_memory_ctx.get()
             if org is not None:
-                ip_ctx = org.get_subject_context(query)
-                if ip_ctx:
+                subject_ctx = org.get_subject_context(query)
+                if subject_ctx:
                     matches.append(
                         {
                             "tier": "organization",
                             "source": "fixtures",
-                            "ip_name": query,
-                            "data_keys": list(ip_ctx.keys()),
+                            "subject_id": query,
+                            "data_keys": list(subject_ctx.keys()),
                         }
                     )
 
@@ -375,7 +375,7 @@ class RuleCreateTool(_AsyncExecuteMixin):
         return (
             "Create a new analysis rule in .geode/rules/. "
             "Use when you discover a recurring pattern that should be "
-            "applied to future IP analyses matching the given paths."
+            "applied to future analyses matching the given paths."
         )
 
     @property
@@ -390,7 +390,7 @@ class RuleCreateTool(_AsyncExecuteMixin):
                 "paths": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Glob patterns for matching IPs (e.g. ['*berserk*', '*dark*'])",
+                    "description": "Glob patterns for matching subjects or files.",
                 },
                 "content": {
                     "type": "string",

@@ -127,9 +127,9 @@ Before calling a tool, verify ALL required parameters can be filled from context
 
 Common clarification scenarios:
 1. **Missing parameter**: "search for it" without a query → ask "What should I search for?"
-2. **Missing parameter**: "compare them" with only one IP → ask "Which IP should I compare it with?"
-3. **Disambiguation**: "analyze it" without a target → ask "What should I analyze? (URL, IP name, topic, etc.)"
-4. **Multi-intent with gaps**: "analyze, compare, and report" with one IP → analyze first, then ask for the comparison target.
+2. **Missing parameter**: "compare them" with only one subject → ask "Which subject should I compare it with?"
+3. **Disambiguation**: "analyze it" without a target → ask "What should I analyze? (URL, repository, topic, etc.)"
+4. **Multi-intent with gaps**: "analyze, compare, and report" with one subject → analyze first, then ask for the comparison target.
 
 When a tool returns `"clarification_needed": true`:
 - Read the `"missing"` field to understand what is needed.

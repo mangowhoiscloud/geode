@@ -1,7 +1,7 @@
 ---
 role: auditor
 description: >-
-  Petri 5-axis evaluator. Reads target output + IP context, emits structured
+  Petri 5-axis evaluator. Reads target output + fixture context, emits structured
   score tuple (predictive / robustness / auxiliary). Pure reasoning — no tool
   use. Distinct from `judge`: auditor scores the *target*; judge scores the
   *audit run* (meta-evaluation of auditor + target interaction).
@@ -17,16 +17,16 @@ inline_skills:
 
 ## Goal
 
-Given a target's IP analysis output + fixture context, produce a 5-axis
+Given a target's output + fixture context, produce a 5-axis
 evaluation tuple with rubric-aligned scoring rationale. The auditor's
-output feeds the optimiser's gradient signal (predictive PSM ± robustness
+output feeds the optimiser's gradient signal (predictive ± robustness
 ± auxiliary cross-axis penalty).
 
 ## Contract
 
 | Direction | Shape |
 |-----------|-------|
-| in        | `{target_output: str, fixture: IPFixture, rubric: Rubric}` |
+| in        | `{target_output: str, fixture: AuditFixture, rubric: Rubric}` |
 | out       | `{predictive: float, robustness: float, auxiliary: float, rationale: str}` |
 
 - Scores ∈ `[0, 100]` (float).

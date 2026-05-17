@@ -9,8 +9,6 @@ import { AutomationSection } from "@/components/geode/sections/automation";
 import { BootstrapSection } from "@/components/geode/sections/bootstrap";
 import { ContextTiersSection } from "@/components/geode/sections/context-tiers";
 import { GatewaySection } from "@/components/geode/sections/gateway";
-import { DomainDagSection } from "@/components/geode/sections/domain-dag";
-import { ScoringSection } from "@/components/geode/sections/scoring";
 import { MultiLlmSection } from "@/components/geode/sections/multi-llm";
 import { VerificationSection } from "@/components/geode/sections/verification";
 import { TimelineSection } from "@/components/geode/sections/timeline";
@@ -29,8 +27,6 @@ export default function GeodePage() {
       <BootstrapSection />
       <ContextTiersSection />
       <GatewaySection />
-      <DomainDagSection />
-      <ScoringSection />
       <MultiLlmSection />
       <VerificationSection />
       <TimelineSection />

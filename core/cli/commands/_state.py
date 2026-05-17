@@ -173,7 +173,7 @@ def show_help() -> None:
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
 
-    # Domain-specific help fragment (game-IP slashes etc.) appended below.
+    # Domain-specific help fragment appended below.
     try:
         from core.domains.port import get_domain_or_none
 

@@ -46,15 +46,15 @@ export function HeroSection() {
           <p>
             {t(
               locale,
-              "안드레이 카르파시의 LLM-OS 다이어그램을 코드로 옮긴 한 가지 답입니다. 위에 올린 두 도메인이 모두 작동합니다. Game IP 평가 플러그인. Java 1.8→22 자율 마이그레이션 5,523 파일, 83/83 모듈 통과, 5시간 48분. 도메인 어댑터만 바꿨고 그 위 5개 계층은 한 줄도 바뀌지 않았습니다.",
-              "GEODE renders Andrej Karpathy's LLM-OS diagram in production code. Two unrelated domains run on top, unmodified. A Game IP valuation plugin, and an autonomous Java 1.8→22 migration agent (5,523 files, 83/83 modules, 5h 48m). Only the domain adapter changed; the five layers above stayed identical."
+              "안드레이 카르파시의 LLM-OS 다이어그램을 코드로 옮긴 한 가지 답입니다. GEODE는 모델 라우팅, 도구 실행, 메모리, 스케줄링, 관측성을 하나의 자율 실행 하네스로 묶습니다.",
+              "GEODE renders Andrej Karpathy's LLM-OS diagram in production code. It combines model routing, tool execution, memory, scheduling, and observability into one autonomous execution harness."
             )}
           </p>
         </div>
 
         <div className="mt-8 rounded border border-[var(--rule)] bg-[var(--code-bg)] px-4 py-3 font-mono text-[12.5px] leading-relaxed text-[var(--code-text)]">
-          <span className="opacity-50">$</span> uv run geode analyze &quot;Cowboy Bebop&quot; --dry-run{"\n"}
-          <span className="opacity-50">→</span> A · 68.4 · undermarketed
+          <span className="opacity-50">$</span> geode{"\n"}
+          <span className="opacity-50">&gt;</span> inspect this repository and summarize release blockers
         </div>
 
         <p className="mt-6 font-mono text-[12px] text-[var(--ink-3)]">

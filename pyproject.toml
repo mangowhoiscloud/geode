@@ -1,6 +1,6 @@
 [project]
-name = "geode"
-version = "0.99.11"
+name = "geode-agent"
+version = "0.99.13"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -117,11 +117,20 @@ build-backend = "hatchling.build"
 # default `uv sync` is unaffected.
 allow-direct-references = true
 
-[tool.hatch.build.force-include]
-"core/skills/reports/templates/report.html" = "core/skills/reports/templates/report.html"
-
 [tool.hatch.build.targets.wheel]
 packages = ["core", "plugins"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/pyproject.toml",
+    "/README.md",
+    "/README.ko.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/NOTICE",
+    "/core",
+    "/plugins",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -181,9 +190,8 @@ name = "Agent stays pure (no CLI/server)"
 type = "forbidden"
 source_modules = ["core.agent"]
 forbidden_modules = ["core.cli", "core.server"]
-# v0.52 phase 6 — agent/ 모듈들이 여전히 cli/ 의 utilities (session_checkpoint,
-# transcript, redaction, ip_names, bash_tool, commands) 를 import. v0.53 에서
-# server/runtime_state/ 또는 utils/ 로 이동 예정.
+# Historical exceptions while agent/ still imports selected CLI utilities
+# (session_checkpoint, transcript, redaction, bash_tool, commands).
 ignore_imports = [
     # AgenticLoop implementation lives in core/agent/loop/agent_loop.py.
     "core.agent.loop.agent_loop -> core.cli.commands",
@@ -383,6 +391,10 @@ omit = [
     "core/mcp_server.py",
     "core/tools/web_tools.py",
     "core/tools/document_tools.py",
+    # External-API + GUI control tools — covered by live/integration tests,
+    # not by default unit suite. Same omit category as web_tools.py.
+    "core/tools/web_search.py",
+    "core/tools/computer_use.py",
     # Inspect/Petri artifact importers are edge tooling rather than default
     # runtime paths; diagnostics.py remains covered and in-scope.
     "core/audit/dim_extractor.py",

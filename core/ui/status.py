@@ -8,7 +8,7 @@ Usage::
     with GeodeStatus("Classifying intent...", model=ANTHROPIC_PRIMARY) as status:
         intent = router.classify(text)
         status.update(f"Tool: {intent.action}")
-    # prints: ✓ analyze · Berserk  ↑200 ↓50  $0.004  1.2s
+    # prints: ✓ summarize · repo  ↑200 ↓50  $0.004  1.2s
 """
 
 from __future__ import annotations

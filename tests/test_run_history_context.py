@@ -39,7 +39,7 @@ class TestRunHistoryInjection:
     def test_no_run_log_dir(self):
         """Without run_log_dir, no _run_history is injected."""
         assembler = ContextAssembler()
-        ctx = assembler.assemble("sess-1", "Berserk")
+        ctx = assembler.assemble("sess-1", "Project Atlas")
         assert "_run_history" not in ctx
 
     def test_empty_run_log_dir(self, tmp_path):
@@ -47,13 +47,13 @@ class TestRunHistoryInjection:
         log_dir = tmp_path / "runs"
         log_dir.mkdir()
         assembler = ContextAssembler(run_log_dir=log_dir)
-        ctx = assembler.assemble("sess-1", "Berserk")
+        ctx = assembler.assemble("sess-1", "Project Atlas")
         assert "_run_history" not in ctx
 
     def test_nonexistent_run_log_dir(self, tmp_path):
         """Non-existent run_log_dir is handled gracefully."""
         assembler = ContextAssembler(run_log_dir=tmp_path / "no_such_dir")
-        ctx = assembler.assemble("sess-1", "Berserk")
+        ctx = assembler.assemble("sess-1", "Project Atlas")
         assert "_run_history" not in ctx
 
     def test_injects_pipeline_end_entries(self, tmp_path):
@@ -61,40 +61,40 @@ class TestRunHistoryInjection:
         log_dir = tmp_path / "runs"
         log_dir.mkdir()
 
-        run_log = RunLog("ip_berserk_analysis", log_dir=log_dir)
+        run_log = RunLog("subject_demo_analysis", log_dir=log_dir)
         now = time.time()
         run_log.append(
             RunLogEntry(
-                session_key="ip_berserk_analysis",
+                session_key="subject_demo_analysis",
                 event="pipeline_end",
                 status="ok",
                 timestamp=now - 3600,  # 1h ago
-                metadata={"ip_name": "Berserk", "tier": "S", "score": 81.3},
+                metadata={"subject_id": "demo", "score": 81.3},
             )
         )
 
         assembler = ContextAssembler(run_log_dir=log_dir)
-        ctx = assembler.assemble("sess-1", "Berserk")
+        ctx = assembler.assemble("sess-1", "demo")
 
         assert "_run_history" in ctx
-        assert "Berserk" in ctx["_run_history"]
-        assert "S/81.3" in ctx["_run_history"]
+        assert "demo" in ctx["_run_history"]
+        assert "score=81.3" in ctx["_run_history"]
 
     def test_max_entries_limit(self, tmp_path):
         """Only up to max_entries are injected."""
         log_dir = tmp_path / "runs"
         log_dir.mkdir()
 
-        run_log = RunLog("ip_all_analysis", log_dir=log_dir)
+        run_log = RunLog("subject_all_analysis", log_dir=log_dir)
         now = time.time()
         for i in range(5):
             run_log.append(
                 RunLogEntry(
-                    session_key="ip_all_analysis",
+                    session_key="subject_all_analysis",
                     event="pipeline_end",
                     status="ok",
                     timestamp=now - (i * 3600),
-                    metadata={"ip_name": f"IP_{i}", "tier": "A", "score": 60 + i},
+                    metadata={"subject_id": f"subject_{i}", "score": 60 + i},
                 )
             )
 
@@ -109,25 +109,25 @@ class TestRunHistoryInjection:
         log_dir = tmp_path / "runs"
         log_dir.mkdir()
 
-        run_log = RunLog("ip_test_analysis", log_dir=log_dir)
+        run_log = RunLog("subject_test_analysis", log_dir=log_dir)
         now = time.time()
         run_log.append(
             RunLogEntry(
-                session_key="ip_test_analysis",
+                session_key="subject_test_analysis",
                 event="pipeline_start",
                 status="ok",
                 timestamp=now - 1800,
-                metadata={"ip_name": "Test"},
+                metadata={"subject_id": "Test"},
             )
         )
         run_log.append(
             RunLogEntry(
-                session_key="ip_test_analysis",
+                session_key="subject_test_analysis",
                 event="node_exit",
                 node="router",
                 status="ok",
                 timestamp=now - 1700,
-                metadata={"ip_name": "Test"},
+                metadata={"subject_id": "Test"},
             )
         )
 
@@ -141,30 +141,30 @@ class TestRunHistoryInjection:
         log_dir.mkdir()
 
         now = time.time()
-        log1 = RunLog("ip_berserk_analysis", log_dir=log_dir)
+        log1 = RunLog("subject_demo_analysis", log_dir=log_dir)
         log1.append(
             RunLogEntry(
-                session_key="ip_berserk_analysis",
+                session_key="subject_demo_analysis",
                 event="pipeline_end",
                 timestamp=now - 3600,
-                metadata={"ip_name": "Berserk", "tier": "S", "score": 81.3},
+                metadata={"subject_id": "Demo A", "score": 81.3},
             )
         )
-        log2 = RunLog("ip_cowboy_bebop_analysis", log_dir=log_dir)
+        log2 = RunLog("subject_other_analysis", log_dir=log_dir)
         log2.append(
             RunLogEntry(
-                session_key="ip_cowboy_bebop_analysis",
+                session_key="subject_other_analysis",
                 event="pipeline_end",
                 timestamp=now - 7200,
-                metadata={"ip_name": "Cowboy Bebop", "tier": "A", "score": 68.4},
+                metadata={"subject_id": "Demo B", "score": 68.4},
             )
         )
 
         assembler = ContextAssembler(run_log_dir=log_dir)
         ctx = assembler.assemble("sess-1", "Test")
         history = ctx["_run_history"]
-        assert "Berserk" in history
-        assert "Cowboy Bebop" in history
+        assert "Demo A" in history
+        assert "Demo B" in history
 
     def test_sorted_by_most_recent(self, tmp_path):
         """Entries are sorted newest first."""
@@ -172,21 +172,21 @@ class TestRunHistoryInjection:
         log_dir.mkdir()
 
         now = time.time()
-        run_log = RunLog("ip_mixed_analysis", log_dir=log_dir)
+        run_log = RunLog("subject_mixed_analysis", log_dir=log_dir)
         run_log.append(
             RunLogEntry(
-                session_key="ip_mixed_analysis",
+                session_key="subject_mixed_analysis",
                 event="pipeline_end",
                 timestamp=now - 86400,  # 1d ago
-                metadata={"ip_name": "Old", "tier": "C", "score": 30.0},
+                metadata={"subject_id": "Old", "score": 30.0},
             )
         )
         run_log.append(
             RunLogEntry(
-                session_key="ip_mixed_analysis",
+                session_key="subject_mixed_analysis",
                 event="pipeline_end",
                 timestamp=now - 60,  # 1m ago
-                metadata={"ip_name": "Recent", "tier": "S", "score": 90.0},
+                metadata={"subject_id": "Recent", "score": 90.0},
             )
         )
 

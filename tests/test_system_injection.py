@@ -44,8 +44,8 @@ class TestBuildSystemReminder:
 
     def test_extra_context_included(self) -> None:
         """Extra context key-value pairs are included."""
-        result = build_system_reminder(extra_context={"task": "analyze Berserk"})
-        assert "task: analyze Berserk" in result
+        result = build_system_reminder(extra_context={"task": "analyze Project Atlas"})
+        assert "task: analyze Project Atlas" in result
 
     def test_budget_enforcement(self) -> None:
         """Reminder truncated when exceeding budget."""
@@ -139,7 +139,7 @@ class TestIsSystemReminder:
         assert _is_system_reminder(msg) is False
 
     def test_rejects_normal_user(self) -> None:
-        msg = {"role": "user", "content": "Hello, please analyze Berserk"}
+        msg = {"role": "user", "content": "Hello, please analyze Project Atlas"}
         assert _is_system_reminder(msg) is False
 
     def test_rejects_list_content(self) -> None:

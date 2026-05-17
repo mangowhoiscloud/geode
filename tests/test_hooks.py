@@ -163,12 +163,12 @@ class TestHookSystem:
             calls.append({"event": event, "data": data})
 
         hooks.register(HookEvent.PIPELINE_STARTED, on_start)
-        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"ip": "Berserk"})
+        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"subject": "Project Atlas"})
 
         assert len(results) == 1
         assert results[0].success is True
         assert len(calls) == 1
-        assert calls[0]["data"]["ip"] == "Berserk"
+        assert calls[0]["data"]["subject"] == "Project Atlas"
 
     def test_priority_ordering(self):
         hooks = HookSystem()
@@ -291,11 +291,11 @@ class TestAsyncHookSystem:
 
         async def async_handler(_event, data):
             await asyncio.sleep(0)
-            calls.append(data["ip"])
+            calls.append(data["subject"])
 
         hooks.register(HookEvent.PIPELINE_STARTED, async_handler, name="async_handler")
 
-        results = asyncio.run(hooks.trigger_async(HookEvent.PIPELINE_STARTED, {"ip": "GEODE"}))
+        results = asyncio.run(hooks.trigger_async(HookEvent.PIPELINE_STARTED, {"subject": "GEODE"}))
 
         assert [r.success for r in results] == [True]
         assert calls == ["GEODE"]
@@ -332,7 +332,7 @@ class TestAsyncHookSystem:
         result = asyncio.run(
             hooks.trigger_interceptor_async(
                 HookEvent.TOOL_EXEC_STARTED,
-                {"tool_name": "list_ips", "tool_input": {"limit": 1}},
+                {"tool_name": "list_subjects", "tool_input": {"limit": 1}},
             )
         )
 

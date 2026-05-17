@@ -37,7 +37,7 @@ class TestSubAgentDeniedTools:
 
     def test_denied_tools_not_in_safe_set(self) -> None:
         """Denied tools should not overlap with commonly-needed tools."""
-        safe_tools = {"memory_search", "web_search", "analyze_ip", "list_ips"}
+        safe_tools = {"memory_search", "web_search", "analyze_subject", "list_subjects"}
         assert SUBAGENT_DENIED_TOOLS.isdisjoint(safe_tools)
 
     def test_filtered_handlers_exclude_denied(self) -> None:

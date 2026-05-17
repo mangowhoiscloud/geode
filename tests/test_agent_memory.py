@@ -18,8 +18,8 @@ class TestAgentMemoryStoreCRUD:
         return AgentMemoryStore("task-1", base_dir=tmp_path / "agent-memory")
 
     def test_save_and_get(self, store: AgentMemoryStore) -> None:
-        store.save("findings", "Berserk is S-tier")
-        assert store.get("findings") == "Berserk is S-tier"
+        store.save("findings", "Project Atlas is S-tier")
+        assert store.get("findings") == "Project Atlas is S-tier"
 
     def test_get_nonexistent_returns_none(self, store: AgentMemoryStore) -> None:
         assert store.get("nonexistent") is None

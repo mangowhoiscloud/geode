@@ -14,16 +14,16 @@ inline_skills: []
 
 ## Goal
 
-Run the full GEODE stack against a fixture and produce a complete
-IP analysis output. The auditor scores *this* output; the judge scores
-the auditor's scoring + the target's behaviour together.
+Run the full GEODE stack against a fixture and produce a complete target
+output. The auditor scores *this* output; the judge scores the auditor's
+scoring + the target's behaviour together.
 
 ## Contract
 
 | Direction | Shape |
 |-----------|-------|
-| in        | `{fixture: IPFixture, base_model: str}` |
-| out       | `{report: IPAnalysisReport, tool_trace: list[ToolCall], cost: CostBreakdown}` |
+| in        | `{fixture: AuditFixture, base_model: str}` |
+| out       | `{report: TargetReport, tool_trace: list[ToolCall], cost: CostBreakdown}` |
 
 - `base_model` ∈ `[petri.role.target].allowed_models` (manifest enforced).
 - Inspect identifier: always `geode/<base_model>` — the

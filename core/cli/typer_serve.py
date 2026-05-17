@@ -135,7 +135,7 @@ def serve(
     _serve_session_lane = _gw_services.lane_queue.session_lane
     _serve_global_lane = _gw_services.lane_queue.get_lane("global")
 
-    def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
+    async def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
         """Process a gateway message with multi-turn context.
 
         Uses SharedServices.create_session(DAEMON) — same shared resources
@@ -164,7 +164,7 @@ def serve(
             propagate_context=True,
         )
         try:
-            result = run_process_coroutine(loop.arun(content))
+            result = await loop.arun(content)
 
             # --- Persist conversation for next turn ---
             if session_key:
@@ -187,7 +187,11 @@ def serve(
             log.warning("Gateway processor error: %s", exc, exc_info=True)
             return f"Error: {exc}"
 
-    gateway.set_processor(_gateway_processor)
+    gateway.set_async_processor(_gateway_processor)
+
+    def _gateway_processor_sync(content: str, metadata: dict[str, Any]) -> str:
+        """Process-edge bridge for the stdlib HTTP webhook server."""
+        return run_process_coroutine(_gateway_processor(content, metadata))
 
     # L4 Gateway Hooks: optional webhook endpoint
     _webhook_server = None
@@ -195,7 +199,10 @@ def serve(
         try:
             from core.server.supervised.webhook_handler import start_webhook_server
 
-            _webhook_server = start_webhook_server(_gateway_processor, port=settings.webhook_port)
+            _webhook_server = start_webhook_server(
+                _gateway_processor_sync,
+                port=settings.webhook_port,
+            )
             console.print(
                 f"  [success]Webhook endpoint started on port {settings.webhook_port}[/success]"
             )

@@ -13,7 +13,7 @@ class TestRunRecord:
             ts=1710000000,
             session_id="s1",
             run_type="analysis",
-            summary="Berserk S/81.3",
+            summary="Project Atlas S/81.3",
             cost_usd=0.15,
             duration_ms=12000,
             metadata={"tier": "S"},
@@ -21,7 +21,7 @@ class TestRunRecord:
         line = rec.to_json()
         restored = RunRecord.from_json(line)
         assert restored.session_id == "s1"
-        assert restored.summary == "Berserk S/81.3"
+        assert restored.summary == "Project Atlas S/81.3"
         assert restored.cost_usd == 0.15
         assert restored.metadata["tier"] == "S"
 
@@ -36,12 +36,12 @@ class TestRunRecord:
 class TestProjectJournal:
     def test_record_and_get_runs(self, tmp_path):
         journal = ProjectJournal(tmp_path / "journal")
-        journal.record_run("s1", "analysis", "Berserk S/81.3", cost_usd=0.15)
+        journal.record_run("s1", "analysis", "Project Atlas S/81.3", cost_usd=0.15)
         journal.record_run("s2", "research", "AI trends", cost_usd=0.08)
 
         runs = journal.get_recent_runs(5)
         assert len(runs) == 2
-        assert runs[0].summary == "Berserk S/81.3"
+        assert runs[0].summary == "Project Atlas S/81.3"
         assert runs[1].summary == "AI trends"
 
     def test_record_cost(self, tmp_path):
@@ -87,12 +87,12 @@ class TestProjectJournal:
 
     def test_get_context_summary(self, tmp_path):
         journal = ProjectJournal(tmp_path / "journal")
-        journal.record_run("s1", "analysis", "Berserk S/81.3")
+        journal.record_run("s1", "analysis", "Project Atlas S/81.3")
         journal.record_run("s2", "research", "AI trends report")
 
         summary = journal.get_context_summary()
         assert "Project history:" in summary
-        assert "Berserk" in summary
+        assert "Project Atlas" in summary
         assert "AI trends" in summary
 
     def test_get_context_summary_empty(self, tmp_path):
@@ -130,8 +130,7 @@ class TestJournalHooks:
         end_handler(
             HookEvent.PIPELINE_ENDED,
             {
-                "ip_name": "Berserk",
-                "tier": "S",
+                "subject_id": "demo-subject",
                 "score": 81.3,
                 "cause": "conversion_failure",
                 "session_id": "test-s1",
@@ -140,12 +139,12 @@ class TestJournalHooks:
 
         runs = journal.get_recent_runs(5)
         assert len(runs) == 1
-        assert "Berserk" in runs[0].summary
-        assert "S/81.3" in runs[0].summary
+        assert "demo-subject" in runs[0].summary
+        assert "score=81.3" in runs[0].summary
 
         # Should also add learned pattern
         patterns = journal.get_learned_patterns()
-        assert any("Berserk" in p for p in patterns)
+        assert any("demo-subject" in p for p in patterns)
 
     def test_pipeline_error_records(self, tmp_path):
         from core.hooks import HookEvent
@@ -158,7 +157,7 @@ class TestJournalHooks:
         error_handler(
             HookEvent.PIPELINE_ERROR,
             {
-                "ip_name": "Test",
+                "subject_id": "demo-subject",
                 "error": "API timeout",
                 "session_id": "test-s2",
             },
@@ -177,7 +176,7 @@ class TestJournalHooks:
 
         end_handler = next(fn for name, fn in handlers if name == "journal_pipeline_end")
         # Send wrong event type
-        end_handler(HookEvent.NODE_ENTERED, {"ip_name": "X"})
+        end_handler(HookEvent.NODE_ENTERED, {"subject_id": "demo-subject"})
         assert journal.get_recent_runs(5) == []
 
 

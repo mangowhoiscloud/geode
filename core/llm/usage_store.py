@@ -55,7 +55,7 @@ class UsageRecord:
     output_tokens: int = field(metadata={"alias": "out"})
     cost_usd: float = field(metadata={"alias": "cost"})
     session: str = ""
-    ip_name: str = ""
+    subject_id: str = ""
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
     thinking_tokens: int = 0
@@ -74,8 +74,8 @@ class UsageRecord:
         }
         if self.session:
             d["session"] = self.session
-        if self.ip_name:
-            d["ip"] = self.ip_name
+        if self.subject_id:
+            d["subject"] = self.subject_id
         if self.cache_creation_tokens:
             d["cache_w"] = self.cache_creation_tokens
         if self.cache_read_tokens:
@@ -101,7 +101,7 @@ class UsageRecord:
             output_tokens=data.get("out", 0),
             cost_usd=data.get("cost", 0.0),
             session=data.get("session", ""),
-            ip_name=data.get("ip", ""),
+            subject_id=data.get("subject", ""),
             cache_creation_tokens=data.get("cache_w", 0),
             cache_read_tokens=data.get("cache_r", 0),
             thinking_tokens=data.get("think", 0),
@@ -139,7 +139,7 @@ class UsageStore:
         cost_usd: float,
         *,
         session: str = "",
-        ip_name: str = "",
+        subject_id: str = "",
         cache_creation_tokens: int = 0,
         cache_read_tokens: int = 0,
         thinking_tokens: int = 0,
@@ -161,7 +161,7 @@ class UsageStore:
             output_tokens=output_tokens,
             cost_usd=cost_usd,
             session=session,
-            ip_name=ip_name,
+            subject_id=subject_id,
             cache_creation_tokens=cache_creation_tokens,
             cache_read_tokens=cache_read_tokens,
             thinking_tokens=thinking_tokens,

@@ -936,7 +936,7 @@ def do_uninstall(
     if geode_bin:
         try:
             subprocess.run(
-                ["uv", "tool", "uninstall", "geode"],  # noqa: S607
+                ["uv", "tool", "uninstall", "geode-agent"],  # noqa: S607
                 capture_output=True,
                 text=True,
                 timeout=30,

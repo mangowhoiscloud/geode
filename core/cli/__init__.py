@@ -38,18 +38,6 @@ from core.cli.prompt_session import _get_prompt_session as _get_prompt_session
 from core.cli.prompt_session import _read_multiline_input as _read_multiline_input
 from core.cli.prompt_session import _restore_terminal as _restore_terminal
 from core.cli.prompt_session import _sigint_handler as _sigint_handler
-from core.cli.report_renderer import (
-    _build_skill_narrative as _build_skill_narrative,
-)
-from core.cli.report_renderer import (
-    _generate_report as _generate_report,
-)
-from core.cli.report_renderer import (
-    _parse_report_args as _parse_report_args,
-)
-from core.cli.report_renderer import (
-    _state_to_report_dict as _state_to_report_dict,
-)
 from core.cli.session_state import _get_last_result as _get_last_result
 from core.cli.session_state import _get_readiness as _get_readiness
 from core.cli.session_state import _result_cache as _result_cache
@@ -345,15 +333,29 @@ app.command()(audit)
 app.command(name="petri-archive")(petri_archive)
 
 
+def _version_option(value: bool) -> None:
+    if value:
+        console.print(f"GEODE v{__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
+    show_version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_option,
+        is_eager=True,
+        help="Show GEODE version and exit.",
+    ),
     continue_session: bool = typer.Option(
         False, "--continue", help="Resume the most recent session"
     ),
     resume: str = typer.Option("", "--resume", help="Resume a specific session by ID"),
 ) -> None:
     """GEODE — Autonomous Research Harness."""
+    _ = show_version
     if ctx.invoked_subcommand is None:
         _welcome_screen()
 

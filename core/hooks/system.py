@@ -199,10 +199,10 @@ class HookSystem:
         hooks = HookSystem()
 
         def on_start(event, data):
-            print(f"Pipeline started for {data.get('ip_name')}")
+            print(f"Pipeline started for {data.get('subject_id')}")
 
         hooks.register(HookEvent.PIPELINE_STARTED, on_start, priority=10)
-        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"ip_name": "Berserk"})
+        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"subject_id": "demo"})
     """
 
     # Events that support matcher-based tool_name filtering.

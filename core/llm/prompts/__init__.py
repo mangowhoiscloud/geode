@@ -159,24 +159,24 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 #   python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \
 #     print(dict(sorted(V.items())))"
 _PINNED_HASHES: dict[str, str] = {
-    "AGENTIC_SUFFIX": "5630f3a61683",
+    "AGENTIC_SUFFIX": "8f17f10eedca",
     "ANALYST_SPECIFIC": "44136fa355b3",
     "ANALYST_SYSTEM": "b800a57a4599",
     "ANALYST_TOOLS_SUFFIX": "36055d5618f4",
     "ANALYST_USER": "63711de6c099",
     "COMMENTARY_SYSTEM": "488d8916d958",
     "COMMENTARY_USER": "2024ac4eba69",
-    "CROSS_LLM_DUAL_VERIFY": "602669128ae2",
-    "CROSS_LLM_RESCORE": "163b08e97d66",
+    "CROSS_LLM_DUAL_VERIFY": "af09d54c3888",
+    "CROSS_LLM_RESCORE": "029da6a59d0b",
     "CROSS_LLM_SYSTEM": "bf303f600fce",
     "EVALUATOR_AXES": "44136fa355b3",
-    "EVALUATOR_SYSTEM": "93ecabb14a72",
+    "EVALUATOR_SYSTEM": "6f6cb9030222",
     "EVALUATOR_USER": "ad832adfadf0",
     "PROSPECT_EVALUATOR_AXES": "44136fa355b3",
     "ROUTER_SYSTEM": "c4220baeb6c0",
     "SYNTHESIZER_SYSTEM": "1cbe199613a1",
     "SYNTHESIZER_TOOLS_SUFFIX": "1fd89d3ece5a",
-    "SYNTHESIZER_USER": "e0bb4afab940",
+    "SYNTHESIZER_USER": "f3a405291fa9",
 }
 
 

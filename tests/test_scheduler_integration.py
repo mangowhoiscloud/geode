@@ -124,7 +124,7 @@ class TestNLToSchedulerIntegration:
 class TestPredefinedToScheduler:
     """Test that predefined templates can be registered as scheduler jobs."""
 
-    def test_cron_templates_registered(self, svc: SchedulerService) -> None:
+    def test_no_predefined_templates_registered(self, svc: SchedulerService) -> None:
         for tmpl in PREDEFINED_AUTOMATIONS:
             if tmpl.enabled and not tmpl.schedule.startswith("event:"):
                 job = ScheduledJob(
@@ -141,21 +141,10 @@ class TestPredefinedToScheduler:
                 svc.add_job(job)
 
         jobs = svc.list_jobs(include_disabled=True)
-        assert len(jobs) > 0
-        assert any(j.job_id.startswith("predefined:") for j in jobs)
+        assert jobs == []
 
-    def test_predefined_duplicate_raises(self, svc: SchedulerService) -> None:
-        tmpl = PREDEFINED_AUTOMATIONS[0]
-        job = ScheduledJob(
-            job_id=f"predefined:{tmpl.id}",
-            name=tmpl.name,
-            schedule=Schedule(kind=ScheduleKind.CRON, cron_expr=tmpl.schedule),
-            enabled=True,
-            action=f"run {tmpl.id}",
-        )
-        svc.add_job(job)
-        with pytest.raises(ValueError, match="already exists"):
-            svc.add_job(job)
+    def test_predefined_registry_empty(self) -> None:
+        assert PREDEFINED_AUTOMATIONS == []
 
 
 # ---------------------------------------------------------------------------
@@ -228,12 +217,11 @@ class TestCmdScheduleEnhanced:
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "not found" in output
 
-    def test_status_predefined(self, svc: SchedulerService) -> None:
-        tmpl_id = PREDEFINED_AUTOMATIONS[0].id
+    def test_status_unknown_template(self, svc: SchedulerService) -> None:
         with patch("core.cli.cmd_schedule.console") as mock_console:
-            cmd_schedule(f"status {tmpl_id}", scheduler_service=svc)
+            cmd_schedule("status missing-template", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
-            assert "Template:" in output
+            assert "Not found" in output
 
     def test_status_dynamic_job(self, svc: SchedulerService) -> None:
         job = ScheduledJob(

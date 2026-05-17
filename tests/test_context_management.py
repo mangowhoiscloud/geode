@@ -3,7 +3,7 @@
 Covers:
 1. Snapshot auto-GC (threshold-based pruning)
 2. Session file persistence (survive restart)
-3. Multi-IP LRU result cache
+3. Multi-subject LRU result cache
 """
 
 from __future__ import annotations
@@ -87,15 +87,15 @@ class TestSessionFilePersistence:
     def test_persist_and_restore(self, tmp_path: Path):
         """Sessions persisted to disk are restored on new store creation."""
         store1 = InMemorySessionStore(ttl=3600, storage_dir=tmp_path)
-        store1.set("ip:berserk:analysis", {"tier": "S", "score": 81.3})
-        store1.set("ip:cowboy-bebop:analysis", {"tier": "A", "score": 68.4})
+        store1.set("subject:demo:analysis", {"tier": "S", "score": 81.3})
+        store1.set("subject:project-orion:analysis", {"tier": "A", "score": 68.4})
 
         # Simulate restart: new store same dir
         store2 = InMemorySessionStore(ttl=3600, storage_dir=tmp_path)
-        data = store2.get("ip:berserk:analysis")
+        data = store2.get("subject:demo:analysis")
         assert data is not None
         assert data["tier"] == "S"
-        assert store2.get("ip:cowboy-bebop:analysis") is not None
+        assert store2.get("subject:project-orion:analysis") is not None
 
     def test_expired_not_restored(self, tmp_path: Path):
         """Expired sessions on disk are cleaned up, not restored."""
@@ -151,7 +151,7 @@ class TestSessionFilePersistence:
 
 
 # ---------------------------------------------------------------------------
-# 3. Multi-IP LRU result cache
+# 3. Multi-subject LRU result cache
 # ---------------------------------------------------------------------------
 
 
@@ -163,10 +163,10 @@ class TestResultCache:
         cache = _ResultCache(max_size=3)
         cache._cache.clear()  # isolate from disk
 
-        cache.put({"ip_name": "A", "score": 1})
-        cache.put({"ip_name": "B", "score": 2})
-        cache.put({"ip_name": "C", "score": 3})
-        cache.put({"ip_name": "D", "score": 4})
+        cache.put({"subject_id": "A", "score": 1})
+        cache.put({"subject_id": "B", "score": 2})
+        cache.put({"subject_id": "C", "score": 3})
+        cache.put({"subject_id": "D", "score": 4})
 
         # A should be evicted
         assert cache.get("A") is None
@@ -180,14 +180,14 @@ class TestResultCache:
         cache = _ResultCache(max_size=3)
         cache._cache.clear()
 
-        cache.put({"ip_name": "X", "score": 1})
-        cache.put({"ip_name": "Y", "score": 2})
-        cache.put({"ip_name": "Z", "score": 3})
+        cache.put({"subject_id": "X", "score": 1})
+        cache.put({"subject_id": "Y", "score": 2})
+        cache.put({"subject_id": "Z", "score": 3})
 
         # Access X → makes it MRU
         cache.get("X")
         # Add new item → Y should be evicted (oldest)
-        cache.put({"ip_name": "W", "score": 4})
+        cache.put({"subject_id": "W", "score": 4})
 
         assert cache.get("Y") is None
         assert cache.get("X") is not None
@@ -199,9 +199,9 @@ class TestResultCache:
         cache = _ResultCache(max_size=5)
         cache._cache.clear()
 
-        cache.put({"ip_name": "Berserk", "score": 81.3})
-        assert cache.get("berserk") is not None
-        assert cache.get("BERSERK") is not None
+        cache.put({"subject_id": "Demo", "score": 81.3})
+        assert cache.get("demo") is not None
+        assert cache.get("DEMO") is not None
 
     def test_disk_persistence(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """Cache persists to and loads from disk."""
@@ -211,7 +211,7 @@ class TestResultCache:
 
         cache1 = _rc_mod.ResultCache(max_size=5)
         cache1._cache.clear()
-        cache1.put({"ip_name": "TestIP", "score": 99})
+        cache1.put({"subject_id": "TestSubject", "score": 99})
 
         # Verify file exists
         files = list(tmp_path.glob("*.json"))
@@ -219,6 +219,6 @@ class TestResultCache:
 
         # New cache loads from disk
         cache2 = _rc_mod.ResultCache(max_size=5)
-        result = cache2.get("testip")
+        result = cache2.get("testsubject")
         assert result is not None
         assert result["score"] == 99

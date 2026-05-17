@@ -52,7 +52,6 @@ export const DOCS_SITEMAP: DocSection[] = [
     pages: [
       { slug: "run/pick-path", title: "Pick a Path", titleKo: "경로 선택", summary: "Subscription, API key, or free path. How to choose for your situation.", summaryKo: "구독, API 키, 무료 경로 중 본인 상황에 맞춰 고르는 법.", quadrant: "how-to" },
       { slug: "run/providers", title: "Configure Providers", titleKo: "프로바이더 설정", summary: "Anthropic, OpenAI, Codex, GLM. Where keys go, what fallback chain you get.", summaryKo: "Anthropic, OpenAI, Codex, GLM. 키를 어디에 두고 어떤 폴백 체인이 동작하는지.", quadrant: "how-to" },
-      { slug: "run/analyze", title: "Run an Analysis", titleKo: "분석 실행", summary: "Run the Game IP pipeline end to end, dry-run or live.", summaryKo: "Game IP 파이프라인을 dry-run 또는 라이브로 끝까지 돌리기.", quadrant: "how-to" },
       { slug: "run/schedule", title: "Schedule Tasks", titleKo: "작업 예약", summary: "Natural language plus cron, with jitter. Daily reports as a single command.", summaryKo: "자연어와 cron, jitter 포함. 일일 리포트를 한 줄 명령으로.", quadrant: "how-to" },
       { slug: "run/serve", title: "Run as Daemon", titleKo: "데몬으로 실행", summary: "Start serve, restart, stop. Thin CLI on top of an IPC-served runtime.", summaryKo: "serve 시작·재시작·종료. IPC 데몬 위에 thin CLI.", quadrant: "how-to" },
       { slug: "run/messaging", title: "Messaging Integrations", titleKo: "메신저 연동", summary: "Hook GEODE into Slack, Discord, or Telegram via gateway adapters.", summaryKo: "게이트웨이 어댑터로 Slack, Discord, Telegram에 연결.", quadrant: "how-to" },
@@ -112,7 +111,6 @@ export const DOCS_SITEMAP: DocSection[] = [
     titleKo: "검증",
     pages: [
       { slug: "verification/guardrails", title: "Guardrails G1-G4", titleKo: "가드레일 G1-G4", summary: "Schema, Range, Grounding, Coherence. Fail-fast ladder.", summaryKo: "Schema, Range, Grounding, Coherence. fail-fast 사다리.", quadrant: "reference" },
-      { slug: "verification/biasbuster", title: "BiasBuster", titleKo: "BiasBuster", summary: "Six bias detectors. Confirmation, recency, anchoring, and three more.", summaryKo: "6종 편향 검사기. Confirmation, recency, anchoring 외 3종.", quadrant: "reference" },
       { slug: "verification/observability", title: "Observability", titleKo: "관측성", summary: "Four lenses: hooks, RunLog, audit diagnostics, Petri. The native observability stack.", summaryKo: "네 가지 렌즈: 훅, RunLog, audit diagnostics, Petri. 자체 관측성 스택.", quadrant: "reference" },
       { slug: "petri/overview", title: "Petri × GEODE", titleKo: "Petri × GEODE", summary: "Anthropic Alignment Science's framework, wrapped over GEODE's agent. 173 seeds, 38 judge dimensions.", summaryKo: "Anthropic Alignment Science의 프레임워크를 GEODE 에이전트 위에 얹음. 173 seeds, 38 judge 차원.", quadrant: "explanation" },
       { slug: "petri/scenarios", title: "Petri Scenarios", titleKo: "Petri 시나리오", summary: "173 default seeds plus 13 GEODE-specific seeds. The full audit catalog.", summaryKo: "173 default seeds + GEODE 13 seeds. 전체 audit 시나리오 카탈로그.", quadrant: "reference" },
@@ -127,7 +125,6 @@ export const DOCS_SITEMAP: DocSection[] = [
     titleKo: "플러그인",
     pages: [
       { slug: "runtime/domains", title: "Domain Plugins", titleKo: "도메인 플러그인", summary: "DomainPort protocol. plugin loader. Add a domain in 30 lines.", summaryKo: "DomainPort 프로토콜. 플러그인 로더. 30 라인으로 도메인 추가.", quadrant: "reference" },
-      { slug: "plugins/game-ip", title: "Game IP Plugin", titleKo: "Game IP 플러그인", summary: "4 Analysts plus 3 Evaluators plus Synthesizer. 14-axis PSM scoring.", summaryKo: "Analyst 4 + Evaluator 3 + Synthesizer. 14-axis PSM 점수.", quadrant: "reference" },
     ],
   },
   {

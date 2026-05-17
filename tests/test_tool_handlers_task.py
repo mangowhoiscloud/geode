@@ -1,7 +1,7 @@
 """Unit tests for task management tool handlers.
 
 Tests task_create / task_update / task_get / task_list / task_stop handlers
-via _build_task_handlers() without touching the IP analysis pipeline.
+via _build_task_handlers() without touching the subject analysis pipeline.
 """
 
 from __future__ import annotations
@@ -27,11 +27,11 @@ def handlers():
 
 class TestTaskCreate:
     def test_creates_task_returns_task_id(self, handlers):
-        result = handlers["task_create"](subject="Analyze Berserk")
+        result = handlers["task_create"](subject="Analyze Project Atlas")
         assert result["status"] == "ok"
         assert result["action"] == "created"
         assert result["task_id"].startswith("t_")
-        assert result["subject"] == "Analyze Berserk"
+        assert result["subject"] == "Analyze Project Atlas"
 
     def test_missing_subject_returns_clarification(self, handlers):
         result = handlers["task_create"]()

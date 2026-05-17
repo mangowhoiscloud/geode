@@ -45,7 +45,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         from core.orchestration.plan_mode import PlanExecutionMode, PlanMode
 
         goal = kwargs.get("goal", "")
-        subject = kwargs.get("subject") or kwargs.get("ip_name", "")
+        subject = kwargs.get("subject") or kwargs.get("subject_id", "")
         custom_steps = kwargs.get("steps", [])
         plan_summary: dict[str, Any] = {}
 
@@ -76,7 +76,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
                         estimated_time_s=30.0,
                     )
                 ]
-            plan = AnalysisPlan(plan_id=plan_id, ip_name=plan_title, steps=steps)
+            plan = AnalysisPlan(plan_id=plan_id, subject_id=plan_title, steps=steps)
             planner = PlanMode()
             plan_summary = {"goal": goal or plan_title, "steps": len(steps)}
         else:
@@ -134,7 +134,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
                 "status": "ok",
                 "action": "plan",
                 "plan_id": plan.plan_id,
-                "subject": plan.ip_name,
+                "subject": plan.subject_id,
                 "template": template,
                 "step_count": plan.step_count,
                 "steps": [s.description for s in plan.steps],
@@ -156,7 +156,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             "status": "ok",
             "action": "plan",
             "plan_id": plan.plan_id,
-            "subject": plan.ip_name,
+            "subject": plan.subject_id,
             "template": template,
             "step_count": plan.step_count,
             "steps": [s.description for s in plan.steps],
@@ -181,17 +181,17 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         result = planner.execute_plan(plan)
         store.put(plan)
 
-        ip = plan.ip_name
-        console.print(f"  [success]✓ Plan approved: {ip}[/success]")
+        subject = plan.subject_id
+        console.print(f"  [success]✓ Plan approved: {subject}[/success]")
         console.print()
-        log.info("Plan '%s' approved for '%s'", plan.plan_id, ip)
+        log.info("Plan '%s' approved for '%s'", plan.plan_id, subject)
         return {
             "status": "ok",
             "action": "approve_plan",
             "plan_id": plan.plan_id,
             "executed": True,
             "result": str(result)[:500],
-            "hint": f"Plan approved for {ip}.",
+            "hint": f"Plan approved for {subject}.",
         }
 
     def handle_reject_plan(**kwargs: Any) -> dict[str, Any]:
@@ -206,7 +206,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         planner = PlanMode()
         planner.reject_plan(plan, reason=reason)
         store.put(plan)
-        console.print(f"  [warning]✗ Plan rejected: {plan.ip_name}[/warning]")
+        console.print(f"  [warning]✗ Plan rejected: {plan.subject_id}[/warning]")
         log.info(
             "Plan '%s' rejected (reason=%s)",
             plan.plan_id,
@@ -236,7 +236,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             remove_steps=remove,
         )
         store.put(plan)
-        console.print(f"  [header]● Plan modified: {plan.ip_name}[/header]")
+        console.print(f"  [header]● Plan modified: {plan.subject_id}[/header]")
         for i, step in enumerate(plan.steps, 1):
             console.print(f"    {i}. {step.description}")
         console.print()
@@ -264,7 +264,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             plans.append(
                 {
                     "plan_id": plan.plan_id,
-                    "ip_name": plan.ip_name,
+                    "subject_id": plan.subject_id,
                     "status": plan.status.value,
                     "steps": plan.step_count,
                 }

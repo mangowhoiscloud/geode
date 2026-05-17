@@ -85,7 +85,7 @@ class TestTriggerManager:
                 callback=lambda data: calls.append(data),
             )
         )
-        result = mgr.fire_manual("t1", {"ip": "Berserk"})
+        result = mgr.fire_manual("t1", {"subject": "Project Atlas"})
         assert result.success is True
         assert len(calls) == 1
         assert mgr.stats.fired == 1
@@ -204,11 +204,11 @@ class TestTriggerManager:
         fired = []
         config = mgr.register_pipeline_trigger(
             trigger_id="pipe-1",
-            ip_name="Berserk",
+            subject_id="demo-subject",
             callback=lambda data: fired.append(data),
         )
         assert config.trigger_id == "pipe-1"
-        assert config.metadata["ip_name"] == "Berserk"
+        assert config.metadata["subject_id"] == "demo-subject"
         assert config.metadata["source"] == "pipeline_trigger"
         # Fire it and verify callback
         result = mgr.fire_manual("pipe-1", {"test": True})
@@ -244,7 +244,9 @@ class TestDispatch:
                 callback=lambda data: calls.append(data),
             )
         )
-        result = mgr.dispatch(TriggerType.MANUAL, {"ip": "Berserk"}, automation_id="auto-1")
+        result = mgr.dispatch(
+            TriggerType.MANUAL, {"subject": "Project Atlas"}, automation_id="auto-1"
+        )
         assert result.success is True
         assert len(calls) == 1
         assert calls[0]["_dispatch"]["trigger_type"] == "manual"
@@ -287,7 +289,7 @@ class TestDispatch:
         mgr = TriggerManager()
         result = mgr.dispatch(
             TriggerType.EVENT,
-            {"event": "pipeline_complete", "ip": "test"},
+            {"event": "pipeline_complete", "subject": "test"},
         )
         assert result.success is True
         assert result.data["_follow_up"] is True

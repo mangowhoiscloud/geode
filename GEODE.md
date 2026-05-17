@@ -40,7 +40,7 @@ HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(4
 RUNTIME:  ToolRegistry(56), MCP Registry(API), Skills, Memory(4-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback)
 ─────────────────────────────────────────────────────────────────
-⊥ DOMAIN: DomainPort Protocol, GameIPDomain (cross-cutting, binds to Runtime + Harness via Port)
+⊥ DOMAIN: DomainPort Protocol, external domains (cross-cutting, bind to Runtime + Harness via Port)
 ```
 
 ### Sub-Agent System
@@ -70,7 +70,8 @@ DomainPort (Protocol)
 
 - **ContextVar Injection**: `set_domain()` / `get_domain()` — `contextvars`-based DI
 - **Domain Loader**: `load_domain_adapter(name)` — dynamic import + registry
-- **Default Domain**: `game_ip` → `core.domains.game_ip.adapter:GameIPDomain`
+- **Default Domain**: none bundled. External domain packages self-register through
+  `register_domain(...)`.
 
 ### Gateway Runtime (Thin-Only Architecture)
 
@@ -120,33 +121,11 @@ All free-text input goes directly to AgenticLoop. 56 tool definitions + autonomo
 - **Fallback chain** (OpenAI): `gpt-5.4` → `gpt-5.2` → `gpt-4.1`
 - **Fallback chain** (GLM): `glm-5` → `glm-5-turbo` → `glm-4.7-flash`
 
-## Domain Plugin: Game IP
+## Domain Plugins
 
-### Scoring Formula
-
-```
-Final = (0.25×PSM + 0.20×Quality + 0.18×Recovery + 0.12×Growth + 0.20×Momentum + 0.05×Dev)
-        × (0.7 + 0.3 × Confidence/100)
-
-Tier: S≥80, A≥60, B≥40, C<40
-```
-
-### Cause Classification
-
-Decision Tree on D-E-F axes:
-- D≥3, E≥3 → conversion_failure
-- D≥3, E<3 → undermarketed
-- D≤2, E≥3 → monetization_misfit
-- D≤2, E≤2, F≥3 → niche_gem
-- D≤2, E≤2, F≤2 → discovery_failure
-
-### Quality Evaluation (5-Layer)
-
-1. **Guardrails** G1-G4: Schema, Range, Grounding, 2σ Consistency
-2. **BiasBuster**: 6 bias types (CV < 0.05 → anchoring flag)
-3. **Cross-LLM**: Agreement ≥ 0.67, Krippendorff's α
-4. **Confidence Gate**: ≥ 0.7 → proceed, else loopback (max 5 iter)
-5. **Rights Risk**: CLEAR/NEGOTIABLE/RESTRICTED/EXPIRED/UNKNOWN
+GEODE core ships the `DomainPort` contract and loader only. Domain-specific
+DAGs, scoring rubrics, fixtures, CLI commands, MCP resources, and reports live
+in external plugin packages.
 
 ## Conventions
 
@@ -155,7 +134,7 @@ Decision Tree on D-E-F axes:
 - **Fixture vs Real**: External data = fixture, LLM calls = real Claude
 - **Verbose gating**: Debug prints only with `--verbose` flag
 - **Node contract**: Each node returns `dict` with only its output keys
-- **Reducer fields**: `analyses` and `errors` use `Annotated[list, operator.add]`
+- **Reducer fields**: list reducers use `Annotated[list, operator.add]`
 - **Hook-driven**: `core.hooks` — 48 lifecycle events. Cross-cutting; accessible from all layers.
 - **Domain Plugin**: `DomainPort` Protocol — per-domain pipeline swappable.
 - **LLM-consumed content in English**: All files injected into LLM context must be written in English.

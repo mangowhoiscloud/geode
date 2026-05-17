@@ -1,11 +1,10 @@
-"""Session-level timing state and pipeline IP context.
+"""Session-level timing state and pipeline subject context.
 
 Module-level context-local globals live here and are re-exported from the
 package ``__init__.py``:
 
 - ``_ipc_writer_local`` — task/thread-local IPC writer for structured tool events.
-- ``_pipeline_ip_local`` — task/thread-local pipeline IP name for forward-compatible
-  event tagging.
+- ``_pipeline_subject_local`` — task/thread-local pipeline subject for event tagging.
 - ``_meter_local`` — task/thread-local ``SessionMeter`` instance per session.
 
 The package-level ``_turn_snapshot`` global lives in ``__init__.py`` so that
@@ -26,20 +25,18 @@ from core.ui.context_local import ContextLocal
 # thin client to render per-tool spinners with in-place ✓ updates.
 _ipc_writer_local = ContextLocal("geode_ipc_writer_local")
 
-# Task/thread-local pipeline IP name for forward-compatible event tagging.
-# Set by _run_analysis() before pipeline execution; read by emit_pipeline_*
-# functions to tag events with the originating IP (for future parallel UI).
-_pipeline_ip_local = ContextLocal("geode_pipeline_ip_local")
+# Task/thread-local pipeline subject for structured event tagging.
+_pipeline_subject_local = ContextLocal("geode_pipeline_subject_local")
 
 
-def set_pipeline_ip(ip_name: str) -> None:
-    """Set the current pipeline's IP name (thread-safe)."""
-    _pipeline_ip_local.ip_name = ip_name
+def set_pipeline_subject(subject_id: str) -> None:
+    """Set the current pipeline subject."""
+    _pipeline_subject_local.subject_id = subject_id
 
 
-def _get_pipeline_ip() -> str:
-    """Get the current pipeline's IP name."""
-    return getattr(_pipeline_ip_local, "ip_name", "")
+def _get_pipeline_subject() -> str:
+    """Get the current pipeline subject."""
+    return getattr(_pipeline_subject_local, "subject_id", "")
 
 
 # ───────────────────────────────────────────────────────────────────────────

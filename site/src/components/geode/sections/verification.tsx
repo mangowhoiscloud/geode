@@ -6,7 +6,7 @@ import { ScrollReveal } from "../scroll-reveal";
 import { TabBar } from "../ui/tab-bar";
 import { useLocale, t } from "../locale-context";
 
-/* ── Pipeline Verification (GameIP Domain — Output Validation) ── */
+/* ── Pipeline Verification (Output Validation) ── */
 const pipelineLayers = [
   {
     tier: 1,
@@ -27,14 +27,14 @@ const pipelineLayers = [
   {
     tier: 3,
     title: "Rights Risk Check",
-    items: ["IP 권리 검증", "CLEAR/RESTRICTED", "라이선스 체크"],
+    items: ["subject 권리 검증", "CLEAR/RESTRICTED", "라이선스 체크"],
     accent: "#E87080",
-    description: "분석 대상 IP의 권리 상태를 사전 검증합니다. RESTRICTED 또는 UNKNOWN이면 분석을 중단하고 경고를 반환합니다.",
-    descriptionEn: "Pre-validates the rights status of the target IP. Halts analysis and returns a warning if RESTRICTED or UNKNOWN.",
+    description: "분석 대상 subject의 권리 상태를 사전 검증합니다. RESTRICTED 또는 UNKNOWN이면 분석을 중단하고 경고를 반환합니다.",
+    descriptionEn: "Pre-validates the rights status of the target subject. Halts analysis and returns a warning if RESTRICTED or UNKNOWN.",
   },
   {
     tier: 4,
-    title: "BiasBuster",
+    title: "panel guard",
     items: ["confirmation", "recency", "anchoring", "position", "verbosity", "self_enhancement"],
     accent: "#F5C542",
     description: "6종 인지 바이어스를 탐지합니다. CV < 0.05(n≥4)이면 앵커링 플래그. Fast path(CV ≥ 0.10, range ≥ 0.5)는 LLM 생략. 4단계 교정: RECOGNIZE → EXPLAIN → ALTER → EVALUATE.",
@@ -97,8 +97,8 @@ const agenticLayers = [
   {
     tier: 5,
     title: "Cost + MCP Gate",
-    items: ["analyze_ip $1.50", "batch $5.00", "MCP per-server 1회", "steam/arxiv auto"],
-    itemsEn: ["analyze_ip $1.50", "batch $5.00", "MCP per-server once", "steam/arxiv auto"],
+    items: ["expensive tool cost gate", "MCP per-server 1회", "steam/arxiv auto"],
+    itemsEn: ["expensive tool cost gate", "MCP per-server once", "steam/arxiv auto"],
     accent: "#F5C542",
     description: "EXPENSIVE 도구는 실행 전 비용 표시 후 [Y/n/A] 확인. MCP는 서버별 첫 호출 시 승인, 이후 세션 내 캐시. steam, arxiv, linkedin-reader는 사전 승인.",
     descriptionEn: "EXPENSIVE tools show cost before execution and require [Y/n/A]. MCP requires approval on first call per server, then cached for the session. steam, arxiv, linkedin-reader are pre-approved.",

@@ -30,11 +30,11 @@ export const geodeCategories: CategoryData[] = [
     statusEn: "Organization > Project > Session priority resolution",
     techBadges: ["MonoLake", "Redis", "PostgreSQL", "MEMORY.md"],
     descriptionKo:
-      "Organization(MonoLake/Snowflake SSOT) → Project(.claude/MEMORY.md) → Session(Redis L1 4hr TTL + PostgreSQL L2) 3계층 메모리. 우선순위: Project > Organization(루브릭 가중치), Organization = SSOT(IP 마스터 데이터). 세션 간 컨텍스트 유지와 분석 히스토리 누적을 관리합니다.",
+      "Organization(MonoLake/Snowflake SSOT) → Project(.claude/MEMORY.md) → Session(Redis L1 4hr TTL + PostgreSQL L2) 3계층 메모리. 우선순위: Project > Organization, Organization = 외부 지식/정책 데이터. 세션 간 컨텍스트 유지와 분석 히스토리 누적을 관리합니다.",
     descriptionEn:
-      "3-tier memory: Organization (MonoLake/Snowflake SSOT) → Project (.claude/MEMORY.md) → Session (Redis L1 4hr TTL + PostgreSQL L2). Priority: Project > Organization for rubric weights; Organization is SSOT for IP master data. Manages cross-session context and analysis history accumulation.",
+      "3-tier memory: Organization (MonoLake/Snowflake SSOT) → Project (.claude/MEMORY.md) → Session (Redis L1 4hr TTL + PostgreSQL L2). Priority: Project > Organization; Organization is the source for external knowledge and policy data. Manages cross-session context and analysis history accumulation.",
     achievements: [
-      { icon: "🏢", titleKo: "Organization Memory MonoLake/Snowflake SSOT — IP 마스터 데이터", titleEn: "Organization Memory MonoLake/Snowflake SSOT — IP master data", modalId: "modal-geode-org-context" },
+      { icon: "🏢", titleKo: "Organization Memory MonoLake/Snowflake SSOT — 외부 지식/정책", titleEn: "Organization Memory MonoLake/Snowflake SSOT — external knowledge/policy", modalId: "modal-geode-org-context" },
       { icon: "📁", titleKo: "Project Memory .claude/MEMORY.md + rules — 루브릭 오버라이드", titleEn: "Project Memory .claude/MEMORY.md + rules — rubric override", modalId: "modal-geode-project-context" },
       { icon: "💬", titleKo: "Session Memory Redis L1 (4hr TTL) + PostgreSQL L2 영구 저장", titleEn: "Session Memory Redis L1 (4hr TTL) + PostgreSQL L2 permanent storage", modalId: "modal-geode-session-context" },
     ],
@@ -70,9 +70,9 @@ export const geodeCategories: CategoryData[] = [
     statusEn: "StateGraph + Send API Parallel Fan-out",
     techBadges: ["LangGraph", "StateGraph", "Send API", "Reducer", "Confidence Loop"],
     descriptionKo:
-      "LangGraph StateGraph 기반 파이프라인: router → cortex → signals → analyst×4 (Send API fan-out) → evaluators×3 → scoring(PSM + LLM Judge) → verification → synthesizer. Confidence < 0.7이면 cortex로 루프백(최대 3회). Send API로 4명의 분석가를 analyses 필드 제거한 Clean Context에서 병렬 실행하여 앵커링 바이어스를 방지합니다.",
+      "LangGraph StateGraph 기반 파이프라인: router → gather → tools → scoring → verification → synthesizer. Confidence < 0.7이면 gather로 루프백(최대 3회). Send API fan-out은 외부 도메인 패키지가 필요한 경우 확장합니다.",
     descriptionEn:
-      "LangGraph StateGraph pipeline: router → cortex → signals → analyst×4 (Send API fan-out) → evaluators×3 → scoring (PSM + LLM Judge) → verification → synthesizer. Loops back to cortex if confidence < 0.7 (max 3 iterations). Send API executes 4 analysts in parallel with Clean Context (analyses field removed) to prevent anchoring bias.",
+      "LangGraph StateGraph pipeline: router → gather → tools → scoring → verification → synthesizer. Loops back to gather if confidence < 0.7 (max 3 iterations). External domain packages can add Send API fan-out when needed.",
     achievements: [
       { icon: "🗺️", titleKo: "StateGraph stream() 기반 실시간 진행 + Confidence Loop", titleEn: "StateGraph stream()-based real-time progress + Confidence Loop", modalId: "modal-geode-stategraph" },
       { icon: "📡", titleKo: "Send API Fan-out 4 분석가 Clean Context (analyses 제거) 병렬", titleEn: "Send API Fan-out 4 analysts Clean Context (no analyses) parallel", modalId: "modal-geode-send-api" },
@@ -149,17 +149,17 @@ export const geodeCategories: CategoryData[] = [
     icon: "✨",
     title: "Multi-LLM Orchestration",
     postsCount: 4,
-    statusKo: "5모델 LLMClientPort + 14축 Rubric + PSM",
-    statusEn: "5-model LLMClientPort + 14-axis Rubric + PSM",
+    statusKo: "5모델 LLMClientPort + 구조화 출력",
+    statusEn: "5-model LLMClientPort + structured output",
     techBadges: ["Opus 4.6", "Sonnet 4.6", "Haiku", "GPT-5.4", "GLM-5"],
     descriptionKo:
-      "LLMClientPort 추상화로 5개 모델을 역할별 배치: Claude Opus 4.6(Analyst×4, Evaluator×3, Synthesizer), Claude Sonnet 4(LLM Judge, Memory), Claude Haiku(Per-Agent Guardrail), GPT-5.4(Cortex SQL), GLM-5(Planner). 14축 루브릭(Quality 8 + Hidden Value 3 + Momentum 3)과 14-covariate PSM으로 정량 평가합니다.",
+      "LLMClientPort 추상화로 5개 모델을 역할별 배치합니다. Claude 계열, GPT-5 계열, GLM 계열을 라우팅 매니페스트와 노드별 정책으로 선택하고, 구조화 출력과 guardrail로 평가 품질을 유지합니다.",
     descriptionEn:
-      "LLMClientPort abstraction deploys 5 models by role: Claude Opus 4.6 (Analyst×4, Evaluator×3, Synthesizer), Claude Sonnet 4 (LLM Judge, Memory), Claude Haiku (Per-Agent Guardrail), GPT-5.4 (Cortex SQL), GLM-5 (Planner). 14-axis rubric (Quality 8 + Hidden Value 3 + Momentum 3) and 14-covariate PSM for quantitative evaluation.",
+      "LLMClientPort abstraction deploys models by role across Claude, GPT-5, Codex, and GLM families. Routing manifests and node policies choose the model, while structured output and guardrails preserve evaluation quality.",
     achievements: [
       { icon: "🤖", titleKo: "5-Model 배치 역할별 최적 모델 할당 (Opus→Haiku)", titleEn: "5-Model deployment role-optimized model assignment (Opus→Haiku)", modalId: "modal-geode-claude-client" },
-      { icon: "📐", titleKo: "14축 루브릭 Quality(8) + Hidden Value(3) + Momentum(3)", titleEn: "14-axis rubric Quality(8) + Hidden Value(3) + Momentum(3)", modalId: "modal-geode-structured-output" },
-      { icon: "📝", titleKo: "PSM Engine 14-covariate Propensity Score Matching (ATT)", titleEn: "PSM Engine 14-covariate Propensity Score Matching (ATT)", modalId: "modal-geode-prompts" },
+      { icon: "📐", titleKo: "구조화 출력 + schema guard", titleEn: "Structured output + schema guard", modalId: "modal-geode-structured-output" },
+      { icon: "📝", titleKo: "프롬프트 해시 래칫", titleEn: "Prompt hash ratchet", modalId: "modal-geode-prompts" },
     ],
     blogLink: "",
     color: "#FB923C",

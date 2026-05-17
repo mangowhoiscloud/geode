@@ -58,8 +58,8 @@ const safeguardSteps = [
     descKo: "모델 에스컬레이션이나 CRITICAL 에러 직전에 SessionCheckpoint를 자동 저장합니다. 최악의 경우에도 --resume으로 이어서 작업 가능합니다.",
     descEn: "Automatically saves SessionCheckpoint before model escalation or CRITICAL error. Worst case, resume from last checkpoint via --resume.",
     tags: ["conversation", "memory", "active plan", "--resume"],
-    tradeoffKo: "체크포인트 저장 ~50ms. 매 LLM 호출(~3s)의 1.6%. REODE 1,133턴에서 총 ~57s. 5시간 48분 대비 무시 가능.",
-    tradeoffEn: "Checkpoint save ~50ms. 1.6% of each LLM call (~3s). Total ~57s across REODE's 1,133 turns. Negligible vs. 5h48m.",
+    tradeoffKo: "체크포인트 저장 ~50ms. 매 LLM 호출(~3s)의 1.6% 수준이라 장시간 세션에서도 복구 가능성이 지연 비용보다 큽니다.",
+    tradeoffEn: "Checkpoint save is around 50ms, roughly 1.6% of a 3s LLM call, so recoverability outweighs the latency cost in long-running sessions.",
   },
   {
     id: "A2-c + A2-d", color: "#F4B8C8",
