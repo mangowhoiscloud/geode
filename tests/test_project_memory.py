@@ -45,7 +45,7 @@ class TestEnsureStructure:
         assert mem.rules_dir.is_dir()
 
     def test_no_sample_rule_by_default(self, tmp_path: Path):
-        """Generic template does not create domain-specific sample rules."""
+        """Generic template does not create specialized sample rules."""
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
         assert list(mem.rules_dir.glob("*.md")) == []

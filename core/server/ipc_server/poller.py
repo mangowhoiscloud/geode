@@ -946,8 +946,8 @@ class CLIPoller:
         """Set ContextVars needed by slash command handlers in this thread.
 
         Python ContextVars do NOT inherit across threads. The CLI poller
-        thread must explicitly set readiness, scheduler_service, domain,
-        memory, and profile so that ``_handle_command()`` works correctly.
+        thread must explicitly set readiness, scheduler_service, memory, and
+        profile so that ``_handle_command()`` works correctly.
         """
         try:
             from core.cli import _set_readiness
@@ -959,7 +959,7 @@ class CLIPoller:
             if self._scheduler_service is not None:
                 _scheduler_service_ctx.set(self._scheduler_service)
 
-            # Domain, memory, profile — delegated to SharedServices helper
+            # Memory and profile — delegated to SharedServices helper
             if hasattr(self._services, "_propagate_contextvars"):
                 self._services._propagate_contextvars()
         except Exception:

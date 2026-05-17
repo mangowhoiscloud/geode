@@ -97,8 +97,7 @@ def build_default_policies() -> PolicyChain:
 def build_default_registry() -> ToolRegistry:
     """Build ToolRegistry with GEODE core tools registered.
 
-    Domain-specific tools are expected to be provided by external plugin
-    packages.
+    Specialized tools are expected to be provided by external packages.
     """
     registry = ToolRegistry()
     # Data (2)

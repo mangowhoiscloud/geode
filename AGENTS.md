@@ -145,13 +145,12 @@ panel voting.
 Runtime SkillRegistry. Distinct from scaffold `.claude/skills/`.
 
 - `skill_registry.py` — 5-tier discovery (bundled → user → org → project → session).
-- `reports/` — report templates belong in external domain plugins, not GEODE
-  core.
+- `reports/` — report templates are not bundled in GEODE core.
 
 ### `core/verification/`
 
-Schema, Range, Grounding, Coherence guardrails (G1-G4). Domain-specific
-bias and calibration checks belong in external plugins.
+Schema, Range, Grounding, Coherence guardrails (G1-G4). Specialized bias and
+calibration checks belong in external packages.
 
 ### `core/scheduler/`, `core/orchestration/`
 
@@ -164,12 +163,6 @@ Typer commands and thin CLI surface. Slash commands.
 ### `core/gateway/`
 
 Slack / Discord / Telegram adapters. Lane queue concurrency.
-
-### External domain plugins
-
-Keep domain-specific analysts, evaluators, bias checks, calibration fixtures,
-scoring rubrics, CLI commands, MCP resources, reports, and fixtures outside the
-GEODE core repository.
 
 ### `plugins/petri_audit/`
 

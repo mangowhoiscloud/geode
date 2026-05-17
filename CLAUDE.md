@@ -12,7 +12,7 @@ A general-purpose autonomous execution agent built on LangGraph. Autonomously pe
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 302 core + 28 plugins = 330
+- **Modules**: 299 core + 28 plugins = 327
 - **Tests**: 4897 (+24 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -37,15 +37,15 @@ uv run geode "schedule daily standup reminder at 9am"
 
 | Document | Path | Content |
 |----------|------|---------|
-| Agent Identity | `GEODE.md` | Runtime architecture, domain rules, LLM models, conventions |
+| Agent Identity | `GEODE.md` | Runtime architecture, LLM models, conventions |
 | Hook System | `docs/architecture/hook-system.md` | HookSystem 58 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
 ## Project Structure
 
 Production code splits into two top-level Python packages:
-- `core/` — general-purpose autonomous agent runtime. 4-layer stack. Domain-agnostic.
-- `plugins/` — first-party auxiliary plugins. Domain analysis plugins are distributed separately and can self-register through `core/domains/loader.py`.
+- `core/` — general-purpose autonomous agent runtime. 4-layer stack.
+- `plugins/` — first-party auxiliary plugins.
 
 Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.
 Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap). Domain-specific pipelines live in external plugins via `core/domains/loader.py`.
@@ -65,8 +65,8 @@ uv run mypy core/ plugins/
 
 ### Expected Test Results
 
-Core tests pass without bundled domain fixtures. Domain packages own their own
-fixture/E2E gates.
+Core tests pass without bundled analysis fixtures. External packages own their
+own fixture/E2E gates.
 
 ## Implementation Workflow
 

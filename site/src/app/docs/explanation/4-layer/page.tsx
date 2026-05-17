@@ -56,7 +56,7 @@ export default function Page() {
             </table>
 
             <h2>Why the boundaries hold</h2>
-            <p>When swapping a domain adapter, the layer impact is immediately visible. Replacing one external domain package with another task harness should only change the adapter above L4. L1-L3 stay identical. That fact is the proof that the 4-layer split is real, not decorative.</p>
+            <p>When changing a runtime capability, the layer impact should be immediately visible. Replacing an external task package should not require changes in the model, runtime wiring, or CLI boundaries. That fact is the proof that the 4-layer split is real, not decorative.</p>
 
             <h2>Why not 3 or 5</h2>
             <ul>

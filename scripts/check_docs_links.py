@@ -109,8 +109,8 @@ def discover_app_pages(root: Path) -> set[str]:
     """Return the set of route paths reachable under ``site/src/app/``.
 
     A route is the directory of every `page.tsx` relative to ``app/`` with
-    a leading slash. Example: ``site/src/app/docs/runtime/domains/page.tsx``
-    → ``/docs/runtime/domains``.
+    a leading slash. Example: ``site/src/app/docs/runtime/tools/mcp/page.tsx``
+    → ``/docs/runtime/tools/mcp``.
     """
     app = root / "app"
     routes: set[str] = {"/"}  # root layout always serves /

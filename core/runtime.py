@@ -59,8 +59,6 @@ if TYPE_CHECKING:
 from core.auth.cooldown import CooldownTracker
 from core.auth.profiles import ProfileStore
 from core.auth.rotation import ProfileRotator
-from core.domains.loader import load_domain_adapter
-from core.domains.port import set_domain
 from core.hooks import HookSystem
 from core.llm.router import LLMClientPort
 from core.memory.port import SessionStorePort
@@ -224,7 +222,6 @@ class GeodeRuntime:
         subject_id: str,
         *,
         phase: str = "analysis",
-        domain_name: str = "",
         enable_checkpoint: bool = True,
         log_dir: Path | str | None = None,
         session_ttl: float = DEFAULT_SESSION_TTL,
@@ -233,7 +230,7 @@ class GeodeRuntime:
         """Factory method — create a fully wired runtime for a GEODE session.
 
         Staged initialization (Claude Code entrypoints/init.ts pattern):
-        1. _build_core: domain, sessions, hooks, config, auth, LLM, lanes
+        1. _build_core: sessions, hooks, config, auth, LLM, lanes
         2. _build_tools: MCP, skills, readiness, plugins, tool offload
         3. _build_memory: project/org memory, context assembler, automation
         4. Assembly: pack configs, create instance, attach optional components
@@ -241,12 +238,7 @@ class GeodeRuntime:
         from core.wiring import bootstrap
         from core.wiring import container as infra
 
-        # Stage 0: Optional domain + session identity.
-        # GEODE v1 no longer ships a built-in analysis domain. External
-        # domain packages may still self-register through core.domains.loader.
-        if domain_name:
-            domain = load_domain_adapter(domain_name)
-            set_domain(domain)
+        # Stage 0: Session identity.
         session_key = build_session_key(subject_id, phase)
         run_id = uuid.uuid4().hex[:12]
 
@@ -459,14 +451,14 @@ class GeodeRuntime:
         *,
         enable_checkpoint: bool = True,
     ) -> CompiledStateGraph[Any, None, Any, Any]:
-        """Compile a domain-provided graph with hooks and checkpointing.
+        """Compile a graph with hooks and checkpointing.
 
         Caches the compiled graph for reuse across multiple invocations.
         """
         raise RuntimeError(
             "GEODE core no longer ships a built-in analysis graph. "
-            "Install and select an external domain plugin that provides "
-            "a LangGraph pipeline before calling compile_graph()."
+            "Install an external package that provides a LangGraph pipeline "
+            "before calling compile_graph()."
         )
 
     def store_session_data(self, data: dict[str, Any]) -> None:

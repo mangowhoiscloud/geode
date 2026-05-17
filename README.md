@@ -305,8 +305,7 @@ geode update
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` for multi-step work. Disk-persistent (`.geode/plans.json`), survives restarts |
 | **Long-running daemon** | `geode serve` runs as background daemon. Slack / Discord / Telegram pollers + scheduler tick + IPC for the thin CLI |
 | **Sub-agents** | Full inheritance of parent capability, depth/cost guards, isolation by Lane |
-| **Core verification** | Guardrails G1-G4 (structural) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal). Domain plugins can add their own bias / calibration layers |
-| **Domain-specific DAG (swappable)** | Pipelines (research, multi-axis evaluation, synthesis) plug in via the `DomainPort` Protocol. Domain DAGs ship outside core so exploratory-research / signal-prediction plugins can evolve independently |
+| **Core verification** | Guardrails G1-G4 (structural) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal). External packages can add specialized bias / calibration layers |
 
 ---
 
@@ -371,9 +370,9 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| Plugin / extension surfaces | ✅ manifest + marketplace (user / project / local scopes) | ✅ `/plugins` slash command + plugin sharing (v0.130+) | ✅✅ 4 extension points (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ `DomainPort` Protocol + plugin loader |
+| Plugin / extension surfaces | ✅ manifest + marketplace (user / project / local scopes) | ✅ `/plugins` slash command + plugin sharing (v0.130+) | ✅✅ 4 extension points (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ runtime SkillRegistry + MCP/tool surfaces |
 | Skill system | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ skill filter + archive upload | ✅ runtime `SkillRegistry` (14 skills across bundled/global/project scopes) |
-| **Swappable domain DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — not a DAG abstraction) | ✅✅ `DomainPort` Protocol — pipeline is a first-class extension point |
+| **Swappable pipeline DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — not a DAG abstraction) | ⚠️ external package responsibility; GEODE core no longer ships a pipeline port |
 | Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Native RunLog + Petri eval integration (v0.90+) |
 | Cross-LLM verification | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 inter-rater agreement gate |
 
@@ -381,7 +380,7 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 
 ---
 
-Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via cloud sync. Use **OpenClaw** to run a multi-channel chat agent fleet across 23+ messaging surfaces. Use **GEODE** when an agent must work over hours or days on a non-coding domain with multi-tier memory, multi-layer verification, and a swappable domain pipeline.
+Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via cloud sync. Use **OpenClaw** to run a multi-channel chat agent fleet across 23+ messaging surfaces. Use **GEODE** when an agent must work over hours or days with multi-tier memory, multi-layer verification, scheduling, and daemon-backed tool execution.
 
 > Sources — Claude Code v2.1.72 (build 2026-03-09, reverse-engineered reference). Codex CLI v0.130.0 release notes + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw v2026.5.12-beta.1 (1.8M LoC TypeScript). GEODE — `CHANGELOG.md` (`v0.39` context overflow, `v0.40` 200K guard, `v0.85` 4-layer stack, `v0.90` Petri observability).
 
@@ -403,15 +402,10 @@ graph LR
     HA --> RT["Runtime<br/>Tools(61), MCP catalog<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
-    AG -.-> DP["⊥ Domain<br/>DomainPort Protocol<br/>(swappable DAG)"]
-    HA -.-> DP
-    RT -.-> DP
-
     style AG fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
     style HA fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
     style RT fill:#1e293b,stroke:#10b981,color:#e2e8f0
     style MD fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-    style DP fill:#1e293b,stroke:#06b6d4,color:#e2e8f0,stroke-dasharray: 5 5
 ```
 
 | Layer | Core | Entry points |
@@ -420,7 +414,6 @@ graph LR
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
 | **Runtime** | ToolRegistry(61), MCP Catalog (200 via Anthropic registry, 5 locally configured by default), Skills(14), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
-| **⊥ Domain** | `DomainPort` Protocol — domain-specific DAGs plug in through an external package. GEODE core ships the port/loader only; domain DAGs, CLI commands, fixtures, and reports live outside this repo | `core/domains/` |
 
 `.geode/` — agent context lifecycle (5-tier hierarchy assembled into every LLM call):
 
@@ -436,7 +429,7 @@ Tier 3    Session         In-memory — conversation, tool results, plans
 .geode/
 ├── config.toml         # Gateway, MCP servers, model
 ├── memory/             # T2: Project Memory (LRU rotate)
-├── rules/              # Auto-generated domain rules
+├── rules/              # Auto-generated project rules
 ├── vault/              # Permanent artifacts (reports, research)
 ├── skills/             # 15 runtime skills (3-tier visibility)
 ├── plans.json          # Disk-persistent PlanStore (v0.53.3)
@@ -467,7 +460,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/workflow.md](docs/workflow.md).
 
 In 2026, AI coding agents have made remarkable progress. They read, write, fix, and test code autonomously. But how much of real work is actually coding? Research, document analysis, scheduling, notifications, data pipelines, multi-axis evaluation for decision-making — the space requiring autonomous execution *beyond* coding is far broader.
 
-Yet the core of all autonomous behavior is surprisingly simple: an LLM calls tools, observes results, decides the next action — a `while(tool_use)` loop. Claude Code, Codex, OpenClaw — all frontier harnesses stand on this primitive. GEODE generalizes it: domain-agnostic harness, swappable `DomainPort` DAGs for whatever exploratory or signal-prediction problem you're solving.
+Yet the core of all autonomous behavior is surprisingly simple: an LLM calls tools, observes results, decides the next action — a `while(tool_use)` loop. Claude Code, Codex, OpenClaw — all frontier harnesses stand on this primitive. GEODE generalizes it into a daemon-backed, memoryful runtime for long-running tool work.
 
 </details>
 

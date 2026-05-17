@@ -3,7 +3,7 @@
 Defines the contract for reading/writing calendar events from external
 calendar services (Google Calendar, Apple Calendar via CalDAV).
 
-Injection via contextvars follows the same pattern as DomainPort.
+Injection is managed via contextvars.
 """
 
 from __future__ import annotations
@@ -94,7 +94,7 @@ class CalendarPort(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# contextvars injection (same pattern as DomainPort)
+# contextvars injection
 # ---------------------------------------------------------------------------
 
 _calendar_ctx: ContextVar[CalendarPort | None] = ContextVar("calendar_port", default=None)

@@ -1,7 +1,7 @@
 """Pre-defined automation template registry.
 
-GEODE core no longer ships domain-specific automation templates. External
-domain plugins may register their own templates through scheduler wiring.
+GEODE core no longer ships package-specific automation templates. External
+packages may register their own templates through scheduler wiring.
 """
 
 from __future__ import annotations

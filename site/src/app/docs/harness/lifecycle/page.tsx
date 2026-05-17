@@ -16,7 +16,7 @@ export default function Page() {
           <>
             <h2>다섯 단계</h2>
             <pre>{`1. Bootstrap     — read config, init paths, register hooks, set ContextVars
-2. Wire          — start MCP servers, load tools, discover skills, mount domain plugins
+2. Wire          — start MCP servers, load tools, discover skills
 3. Serve         — listen on IPC, accept commands, drive AgenticLoop
 4. Drain         — finish pending tool calls, flush queues, close LLM clients
 5. Shutdown      — close IPC socket, write session log, exit`}</pre>
@@ -101,7 +101,7 @@ def _send_client_capability(self) -> None:
           <>
             <h2>Five phases</h2>
             <pre>{`1. Bootstrap     — read config, init paths, register hooks, set ContextVars
-2. Wire          — start MCP servers, load tools, discover skills, mount domain plugins
+2. Wire          — start MCP servers, load tools, discover skills
 3. Serve         — listen on IPC, accept commands, drive AgenticLoop
 4. Drain         — finish pending tool calls, flush queues, close LLM clients
 5. Shutdown      — close IPC socket, write session log, exit`}</pre>

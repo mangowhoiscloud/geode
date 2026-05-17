@@ -50,7 +50,7 @@ export default function Page() {
                   <td>chat routing</td>
                   <td>open-domain</td>
                   <td>ML loop</td>
-                  <td>domain-neutral core, DomainPort 통해 외부 플러그인 연결</td>
+                  <td>daemon-backed runtime, skills, MCP, and tool registry</td>
                 </tr>
                 <tr>
                   <td>주요 기본 단위</td>
@@ -261,7 +261,7 @@ export default function Page() {
                   <td>chat routing</td>
                   <td>open-domain</td>
                   <td>ML loop</td>
-                  <td>domain-neutral core, external plugins via DomainPort</td>
+                  <td>daemon-backed runtime, skills, MCP, and tool registry</td>
                 </tr>
                 <tr>
                   <td>Main primitive</td>
@@ -332,15 +332,15 @@ export default function Page() {
             <h3>What GEODE has that none of the others do</h3>
             <ul>
               <li>
-                <strong>Domain verification separation</strong> — bias detection
-                and golden-set calibration are owned by external domain plugins.
+                <strong>Verification separation</strong> — bias detection
+                and golden-set calibration are owned by external packages.
                 GEODE core keeps G1-G4, Cross-LLM, Rights Risk, and the runtime
                 boundary.
               </li>
               <li>
-                <strong>Cause-Action decision tree</strong> — 6 causes →
-                5 actions supplied by external domain plugins. Core keeps the
-                runtime boundary only.
+                <strong>Package-owned decision trees</strong> — specialized
+                cause/action taxonomies live outside GEODE core. Core keeps
+                the runtime boundary only.
               </li>
               <li>
                 <strong>Plugin-owned calibration</strong> — Golden Sets, fixture

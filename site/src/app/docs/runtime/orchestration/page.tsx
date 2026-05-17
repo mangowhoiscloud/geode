@@ -74,7 +74,7 @@ Output`}</pre>
             <h2>What this layer owns</h2>
             <p>
               Where the agentic loop is a generic while-tool-use primitive,
-              orchestration is the structured graph layer for domain-specific
+              orchestration is the structured graph layer for specialized
               pipelines. External domain analysis, multi-agent verification,
               and parallel fan-out all connect here as StateGraphs.
             </p>

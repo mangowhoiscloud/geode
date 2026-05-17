@@ -37,7 +37,7 @@ def serve(
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
-    # ContextVars only (domain, memory, profile, env) — no resource creation
+    # ContextVars only (memory, profile, env) — no resource creation
     from core.cli.bootstrap import setup_contextvars
 
     setup_contextvars(load_env=True)
@@ -331,7 +331,7 @@ def serve(
 
 
 def _build_runtime_for_serve() -> Any:
-    """Minimal runtime init for serve mode (no REPL, no domain)."""
+    """Minimal runtime init for serve mode without REPL."""
     try:
         from core.runtime import GeodeRuntime
 

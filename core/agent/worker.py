@@ -50,7 +50,6 @@ class WorkerRequest:
     time_budget_s: float = 0.0  # 0 = inherit parent's budget
     thinking_budget: int = 0  # 0 = disabled; >0 = thinking tokens per call (legacy)
     effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh" (v0.56.0)
-    domain: str = ""  # Optional external domain adapter name.
     isolation: str = ""  # Reserved for Phase 3: "worktree" etc.
 
     def to_dict(self) -> dict[str, Any]:
@@ -76,7 +75,6 @@ class WorkerRequest:
             time_budget_s=data.get("time_budget_s", 0.0),
             thinking_budget=data.get("thinking_budget", 0),
             effort=data.get("effort", "high"),
-            domain=data.get("domain", ""),
             isolation=data.get("isolation", ""),
         )
 
@@ -129,30 +127,19 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
 
-    # 1. Domain context (optional)
-    if request.domain:
-        try:
-            from core.domains.loader import load_domain_adapter
-            from core.domains.port import set_domain
-
-            domain = load_domain_adapter(request.domain)
-            set_domain(domain)
-        except Exception as exc:
-            log.warning("Domain '%s' load failed: %s", request.domain, exc)
-
-    # 2. Build tool handlers (same factory as CLI)
+    # 1. Build tool handlers (same factory as CLI)
     from core.cli.tool_handlers import _build_tool_handlers
 
     handlers = _build_tool_handlers(verbose=False)
 
-    # 3. Filter denied tools
+    # 2. Filter denied tools
     denied = set(request.denied_tools)
     # Always deny delegate_task in worker (depth=1 enforcement)
     denied.add("delegate_task")
     if denied:
         handlers = {k: v for k, v in handlers.items() if k not in denied}
 
-    # 4. Build ToolExecutor (auto_approve=True for sub-agents)
+    # 3. Build ToolExecutor (auto_approve=True for sub-agents)
     from core.agent.tool_executor import ToolExecutor
 
     executor = ToolExecutor(
@@ -160,12 +147,12 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         auto_approve=True,  # Sub-agents skip HITL prompts
     )
 
-    # 5. Build ConversationContext
+    # 4. Build ConversationContext
     from core.agent.conversation import ConversationContext
 
     conversation = ConversationContext(max_turns=200)
 
-    # 6. Build AgenticLoop
+    # 5. Build AgenticLoop
     from core.agent.loop import AgenticLoop
 
     loop = AgenticLoop(

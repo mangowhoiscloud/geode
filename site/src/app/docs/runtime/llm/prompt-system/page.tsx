@@ -13,7 +13,7 @@ export default function Page() {
     >
       <h2>{<Bi ko="5계층" en="Five layers" />}</h2>
       <pre>{`1. Templates Layer       core/llm/prompts/*.md           — 8 markdown files
-2. Axes Layer            external domain plugin          — optional evaluator axes
+2. Axes Layer            core/llm/prompts/axes.py        — optional evaluator axes
 3. Hash Versioning       core/llm/prompts/__init__.py    — SHA-256[:12] x 18 pinned entries
 4. Assembly              core/llm/prompt_assembler.py    — base + skill + memory + bootstrap
                                                           (6 phases, append-only by default)

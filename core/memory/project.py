@@ -9,8 +9,8 @@ Directory structure:
     .geode/
     ├── memory/
     │   └── PROJECT.md      # GEODE project memory (first 200 lines → system context)
-    └── rules/              # Modular domain rules
-        ├── research-domain.md  # Category-specific rules
+    └── rules/              # Modular project rules
+        ├── research.md     # Category-specific rules
         └── ...
 """
 

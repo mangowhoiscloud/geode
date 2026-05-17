@@ -20,8 +20,7 @@ Handler groups:
 - :mod:`offload`        — recall_tool_result
 - :mod:`computer_use`   — computer (when enabled)
 
-Plus shared utilities in :mod:`_helpers` (``_clarify``, ``_safe_delegate``,
-``install_domain_tool_handlers``).
+Plus shared utilities in :mod:`_helpers` (``_clarify``, ``_safe_delegate``).
 
 The disk-persistent ``PlanStore`` singleton (``_PLAN_STORE`` /
 ``_get_plan_store``) lives at this package level so test fixtures can
@@ -36,7 +35,6 @@ from typing import Any
 from core.cli.tool_handlers._helpers import (
     _clarify,
     _safe_delegate,
-    install_domain_tool_handlers,
 )
 from core.cli.tool_handlers.audit import _build_audit_handlers
 from core.cli.tool_handlers.calendar import _build_calendar_handlers
@@ -81,7 +79,6 @@ __all__ = [
     "_get_plan_store",
     "_make_delegate_handler",
     "_safe_delegate",
-    "install_domain_tool_handlers",
 ]
 
 
@@ -148,7 +145,4 @@ def _build_tool_handlers(
     handlers.update(_build_computer_use_handler())
     handlers.update(_build_audit_handlers())
     handlers.update(_build_observability_handlers())
-    # Domain-supplied handlers (analysis + signals + generate_data for
-    # empty for non-pipeline domains).
-    install_domain_tool_handlers(handlers)
     return handlers
