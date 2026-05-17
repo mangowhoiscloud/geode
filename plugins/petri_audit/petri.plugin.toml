@@ -59,12 +59,16 @@ role_contract = "roles/judge.md"
 [petri.source.anthropic]
 # "auto" = consult settings.anthropic_credential_source, fall back to keychain
 # probe (see plugins.petri_audit.claude_code_provider.is_claude_oauth_available).
+# allowed[0] = priority for the auto resolver. OAuth first so the autoresearch
+# outer loop consumes the user's subscription quota when available; explicit
+# ANTHROPIC_API_KEY (api_key) still wins when set via settings or override.
 default = "auto"
-allowed = ["api_key", "claude-cli", "auto"]
+allowed = ["claude-cli", "api_key", "auto"]
 
 [petri.source.openai]
+# Same priority model as anthropic — OAuth (Codex / ChatGPT Plus quota) first.
 default = "auto"
-allowed = ["api_key", "openai-codex", "auto"]
+allowed = ["openai-codex", "api_key", "auto"]
 
 [petri.source.zhipuai]
 default = "api_key"

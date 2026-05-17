@@ -54,6 +54,32 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **Petri credential_source 모듈 (P1-D) — per-family resolve / list / suppress SOT.**
+  `plugins/petri_audit/credential_source.py` 신설 — Hermes
+  `agent/credential_sources.py` 패턴 정합. resolve_credential_source(
+  family, override=None) 가 manifest priority (override → settings →
+  manifest default → 'auto' expansion) 으로 concrete source 반환,
+  list_credential_sources(family) 가 /petri picker 용 entry list 노출,
+  suppress_credential_source(family, source) 가 process-수명 suppression
+  지원. manifest 의 `[petri.source.anthropic|openai].allowed` 순서를
+  OAuth 우선 (`["claude-cli", "api_key", "auto"]`, `["openai-codex",
+  "api_key", "auto"]`) 으로 재정렬 — autoresearch outer loop 의 subscription
+  quota 우선 소비. monkeypatch 기반 테스트 격리 + 후속 DI 리팩토 backlog
+  등록.
+
+- **Petri credential_source module (P1-D) — per-family SOT for resolve /
+  list / suppress.** Added `plugins/petri_audit/credential_source.py`
+  modelled on Hermes's `agent/credential_sources.py`. The resolver
+  priority is `override → settings → manifest default → 'auto'
+  expansion`, returning a concrete source key the adapter registry can
+  immediately load. `list_credential_sources` feeds the upcoming /petri
+  picker. `suppress_credential_source` lets the resolver drop an OAuth
+  source whose first call fails mid-run without restarting the
+  process. Manifest `allowed` order rebalanced to OAuth-first so the
+  autoresearch outer loop consumes subscription quota by default.
+  Test isolation via monkeypatch fixtures; class-based DI refactor
+  tracked as a follow-up backlog item.
+
 - **Petri adapter registry (P1-C) — manifest-driven lazy dispatch.**
   `plugins/petri_audit/adapters/` 신설 — 5 adapter wrapper +
   registry (`__init__.py`). 각 adapter (`http_anthropic`, `http_openai`,
