@@ -179,9 +179,18 @@ def make_auto_learn_handler(
 
     Returns (handler_name, handler_fn) for hook registration.
     """
-    # Per-session state (resets on process restart)
+    # Per-session state (resets on process restart).
+    #
+    # ``last_learn_ts = float("-inf")`` so the first call always passes the
+    # cooldown gate, regardless of how recently the process started. The
+    # previous init ``0.0`` assumed ``time.monotonic()`` was already past
+    # ``_COOLDOWN_S`` — true for long-lived servers, false for short-lived
+    # pytest-xdist worker processes that the ``load`` distribution strategy
+    # spins up fresh. That mismatch produced flaky failures in
+    # ``tests/test_auto_learn.py::TestAutoLearnHandler`` on PR #1220
+    # (2026-05-17, same commit, two CI runs — one PASS, one FAIL).
     session_count = 0
-    last_learn_ts = 0.0
+    last_learn_ts: float = float("-inf")
     tool_counter: Counter[str] = Counter()
 
     def _get_profile() -> Any:
