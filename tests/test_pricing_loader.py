@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,7 @@ from core.llm.pricing_loader import (
 
 
 @pytest.fixture(autouse=True)
-def _clear_cache():
+def _clear_cache() -> Iterator[None]:
     clear_pricing_cache()
     yield
     clear_pricing_cache()
@@ -24,12 +25,12 @@ def _clear_cache():
 # ── Default file presence + shape ──────────────────────────────────────────
 
 
-def test_default_file_exists():
+def test_default_file_exists() -> None:
     assert DEFAULT_PRICING_PATH.exists()
     assert DEFAULT_PRICING_PATH.suffix == ".toml"
 
 
-def test_load_default_catalogue():
+def test_load_default_catalogue() -> None:
     cat = load_pricing_catalogue()
     assert isinstance(cat, PricingCatalogue)
     assert isinstance(cat.pricing, dict)
@@ -39,7 +40,7 @@ def test_load_default_catalogue():
 # ── Parity with legacy MODEL_PRICING ───────────────────────────────────────
 
 
-def test_parity_with_legacy_pricing():
+def test_parity_with_legacy_pricing() -> None:
     """Loader output must match the legacy ``MODEL_PRICING`` dict P3-B replaces."""
     from core.llm.token_tracker import MODEL_PRICING
 
@@ -62,7 +63,7 @@ def test_parity_with_legacy_pricing():
 # ── Parity with legacy MODEL_CONTEXT_WINDOW ────────────────────────────────
 
 
-def test_parity_with_legacy_context_windows():
+def test_parity_with_legacy_context_windows() -> None:
     from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
     legacy = MODEL_CONTEXT_WINDOW
@@ -79,7 +80,7 @@ def test_parity_with_legacy_context_windows():
 # ── Anthropic derive formula ───────────────────────────────────────────────
 
 
-def test_anthropic_derive_formula(tmp_path: Path):
+def test_anthropic_derive_formula(tmp_path: Path) -> None:
     """Anthropic family: cache_write = input × 1.25, cache_read = input × 0.1,
     thinking = output."""
     toml = tmp_path / "p.toml"
@@ -106,7 +107,7 @@ output_per_mtok = 20.0
 # ── OpenAI derive formula ──────────────────────────────────────────────────
 
 
-def test_openai_derive_with_cached(tmp_path: Path):
+def test_openai_derive_with_cached(tmp_path: Path) -> None:
     toml = tmp_path / "p.toml"
     toml.write_text(
         """
@@ -126,7 +127,7 @@ cached_per_mtok = 0.5
     assert p.thinking == 0.0  # not reasoning
 
 
-def test_openai_derive_reasoning(tmp_path: Path):
+def test_openai_derive_reasoning(tmp_path: Path) -> None:
     """reasoning = true → thinking = output."""
     toml = tmp_path / "p.toml"
     toml.write_text(
@@ -147,7 +148,7 @@ reasoning = true
     assert p.cache_read == 0.0
 
 
-def test_openai_derive_no_cached(tmp_path: Path):
+def test_openai_derive_no_cached(tmp_path: Path) -> None:
     toml = tmp_path / "p.toml"
     toml.write_text(
         """
@@ -169,7 +170,7 @@ output_per_mtok = 4.4
 # ── Negative validation ────────────────────────────────────────────────────
 
 
-def test_unknown_family_raises(tmp_path: Path):
+def test_unknown_family_raises(tmp_path: Path) -> None:
     toml = tmp_path / "p.toml"
     toml.write_text(
         """
@@ -186,7 +187,7 @@ output_per_mtok = 2.0
         load_pricing_catalogue(toml)
 
 
-def test_missing_required_field_raises(tmp_path: Path):
+def test_missing_required_field_raises(tmp_path: Path) -> None:
     toml = tmp_path / "p.toml"
     toml.write_text(
         """
@@ -202,7 +203,7 @@ output_per_mtok = 20.0
         load_pricing_catalogue(toml)
 
 
-def test_non_int_context_window_raises(tmp_path: Path):
+def test_non_int_context_window_raises(tmp_path: Path) -> None:
     toml = tmp_path / "p.toml"
     toml.write_text(
         """
@@ -222,13 +223,13 @@ output_per_mtok = 2.0
 # ── Cache behaviour ────────────────────────────────────────────────────────
 
 
-def test_load_caches_by_path(tmp_path: Path):
+def test_load_caches_by_path(tmp_path: Path) -> None:
     a = load_pricing_catalogue()
     b = load_pricing_catalogue()
     assert a is b
 
 
-def test_clear_cache_forces_reload():
+def test_clear_cache_forces_reload() -> None:
     a = load_pricing_catalogue()
     clear_pricing_cache()
     b = load_pricing_catalogue()
@@ -238,7 +239,7 @@ def test_clear_cache_forces_reload():
 # ── ModelPrice dataclass ───────────────────────────────────────────────────
 
 
-def test_model_price_defaults():
+def test_model_price_defaults() -> None:
     p = ModelPrice(input=1.0, output=2.0)
     assert p.cache_write == 0.0
     assert p.cache_read == 0.0
