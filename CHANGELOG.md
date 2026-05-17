@@ -52,6 +52,35 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **GEODE routing manifest (P2-A) — `routing.toml` schema + loader.**
+  `core/config/routing.toml` 신설 (shipped default) + `core/config/
+  routing_manifest.py` 신설 (pydantic schema + loader). 5 layer:
+  `[model.defaults]`, `[model.fallbacks]`, `[routing.prefixes]` +
+  `codex_only_models`/`codex_suffixes`/`fallback_provider`,
+  `[credentials.patterns]`, `[credentials.keychain]`. Petri 의 검증된
+  manifest 패턴 (P1-A) 차용. `~/.geode/routing.toml` user override 는
+  section-별 deep-merge — single-key override 가 다른 default 를 보존.
+  cross-layer 검증: fallback chain 의 첫 항목이 default 와 일치해야 함
+  (drift 방지). `resolve_provider(model)` 도 동봉 — legacy
+  `_resolve_provider` 의 14 branch 와 parity (test_routing_manifest 가
+  검증). **P2-A 는 dormant** — 호출 site 변경 0; 후속 P2-B~E 가 점진
+  migration.
+
+- **GEODE routing manifest (P2-A) — `routing.toml` schema + loader.**
+  New `core/config/routing.toml` (shipped default) + `core/config/
+  routing_manifest.py` (pydantic). 5-section schema (model defaults,
+  fallbacks, routing rules, credential patterns, credential keychain)
+  mirroring the Petri plugin's manifest pattern from P1-A. User override
+  at `~/.geode/routing.toml` deep-merges per section so a single-key
+  override leaves other defaults intact. Cross-layer validator ensures
+  every fallback chain's head matches the corresponding default
+  (prevents drift). Companion `resolve_provider(model)` reproduces the
+  legacy `_resolve_provider`'s 14 branches at parity (covered by
+  test_routing_manifest). **P2-A is dormant** — no call site rewired;
+  subsequent P2-B..E migrate the hardcoded constants.
+
 ### Changed
 
 - **`to_inspect_model` 라우팅을 manifest-driven 으로 collapse (P1-G).**

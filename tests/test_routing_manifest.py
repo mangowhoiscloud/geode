@@ -1,0 +1,313 @@
+"""Unit tests for core.config.routing_manifest (P2-A schema + loader)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from core.config.routing_manifest import (
+    DEFAULT_MANIFEST_PATH,
+    ModelDefaults,
+    ModelFallbacks,
+    RoutingManifest,
+    RoutingRules,
+    _merge_routing_dicts,
+    _parse_manifest,
+    clear_routing_manifest_cache,
+    load_routing_manifest,
+    resolve_provider,
+)
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    clear_routing_manifest_cache()
+    yield
+    clear_routing_manifest_cache()
+
+
+def _valid_dict() -> dict:
+    """Minimal valid manifest dict — fixture for negative tests."""
+    return {
+        "model": {
+            "defaults": {
+                "anthropic": "claude-opus-4-7",
+                "openai": "gpt-5.5",
+                "codex": "gpt-5.5",
+                "glm": "glm-5.1",
+            },
+            "fallbacks": {
+                "anthropic": ["claude-opus-4-7", "claude-sonnet-4-6"],
+                "openai": ["gpt-5.5", "gpt-5.4"],
+                "codex": ["gpt-5.5", "gpt-5.3-codex"],
+                "glm": ["glm-5.1", "glm-5"],
+            },
+        },
+        "routing": {
+            "prefixes": {"claude-": "anthropic", "gpt-": "openai"},
+            "codex_only_models": ["gpt-5.5"],
+            "codex_suffixes": ["-codex"],
+            "fallback_provider": "openai",
+        },
+        "credentials": {
+            "patterns": {"^sk-ant-": "anthropic"},
+            "keychain": {"anthropic": "Claude Code-credentials"},
+        },
+    }
+
+
+# ── Default manifest happy path ────────────────────────────────────────────
+
+
+def test_default_manifest_loads():
+    manifest = load_routing_manifest()
+    assert isinstance(manifest, RoutingManifest)
+    assert manifest.defaults.anthropic == "claude-opus-4-7"
+    assert manifest.defaults.openai == "gpt-5.5"
+    assert manifest.defaults.glm == "glm-5.1"
+
+
+def test_default_manifest_path_exists():
+    assert DEFAULT_MANIFEST_PATH.name == "routing.toml"
+    assert DEFAULT_MANIFEST_PATH.exists()
+
+
+def test_default_manifest_fallback_chains_nonempty():
+    manifest = load_routing_manifest()
+    assert manifest.fallbacks.anthropic[0] == manifest.defaults.anthropic
+    assert manifest.fallbacks.openai[0] == manifest.defaults.openai
+    assert manifest.fallbacks.codex[0] == manifest.defaults.codex
+    assert manifest.fallbacks.glm[0] == manifest.defaults.glm
+
+
+def test_default_manifest_routing_rules():
+    manifest = load_routing_manifest()
+    assert manifest.routing.prefixes.get("claude-") == "anthropic"
+    assert "gpt-5.5" in manifest.routing.codex_only_models
+    assert manifest.routing.fallback_provider == "openai"
+
+
+def test_default_manifest_credentials_keychain():
+    manifest = load_routing_manifest()
+    assert manifest.credential_keychain.services.get("anthropic") == "Claude Code-credentials"
+
+
+def test_default_manifest_credentials_patterns():
+    manifest = load_routing_manifest()
+    assert manifest.credential_patterns.patterns.get("^sk-ant-") == "anthropic"
+
+
+# ── resolve_provider — legacy parity ───────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "model,expected",
+    [
+        ("claude-opus-4-7", "anthropic"),
+        ("claude-sonnet-4-6", "anthropic"),
+        ("glm-5.1", "glm"),
+        ("gpt-5.5", "openai-codex"),  # codex_only_models hits first
+        ("gpt-5.5-pro", "openai-codex"),
+        ("gpt-5.4", "openai"),  # gpt- prefix
+        ("gpt-5.3-codex", "openai-codex"),  # codex suffix
+        ("o3-mini", "openai"),
+        ("o4-mini", "openai"),
+        ("gemini-1.5-pro", "google"),
+        ("deepseek-r1", "deepseek"),
+        ("llama-3.3", "meta"),
+        ("qwen-72b", "alibaba"),
+        ("qwen3-72b", "alibaba"),
+        ("mystery-model", "openai"),  # fallback
+    ],
+)
+def test_resolve_provider_legacy_parity(model: str, expected: str):
+    """resolve_provider matches the legacy _resolve_provider behaviour for
+    every documented branch in core.config.__init__._resolve_provider."""
+    assert resolve_provider(model) == expected
+
+
+# ── Negative validation ────────────────────────────────────────────────────
+
+
+def test_fallback_default_drift_raises():
+    bad = _valid_dict()
+    bad["model"]["fallbacks"]["anthropic"] = ["claude-sonnet-4-6", "claude-opus-4-7"]
+    with pytest.raises(ValueError, match="drift between"):
+        _parse_manifest(bad)
+
+
+def test_empty_fallback_raises():
+    bad = _valid_dict()
+    bad["model"]["fallbacks"]["openai"] = []
+    with pytest.raises(ValueError, match="empty"):
+        _parse_manifest(bad)
+
+
+def test_prefix_target_empty_raises():
+    bad = _valid_dict()
+    bad["routing"]["prefixes"]["weird-"] = ""
+    with pytest.raises(ValueError, match="empty provider"):
+        _parse_manifest(bad)
+
+
+def test_missing_required_default_field_raises():
+    bad = _valid_dict()
+    del bad["model"]["defaults"]["openai"]
+    with pytest.raises(Exception):  # pydantic ValidationError
+        _parse_manifest(bad)
+
+
+# ── Schema dataclass roundtrip ─────────────────────────────────────────────
+
+
+def test_model_defaults_accessor():
+    d = ModelDefaults(
+        anthropic="x",
+        openai="y",
+        codex="z",
+        glm="g",
+    )
+    assert d.get("anthropic") == "x"
+    assert d.get("nonexistent") is None
+
+
+def test_model_fallbacks_accessor():
+    f = ModelFallbacks(
+        anthropic=["x"],
+        openai=["y"],
+        codex=["z"],
+        glm=["g"],
+    )
+    assert f.get("anthropic") == ["x"]
+    assert f.get("nonexistent") is None
+
+
+def test_routing_rules_defaults():
+    r = RoutingRules()
+    assert r.fallback_provider == "openai"
+    assert r.codex_only_models == []
+
+
+# ── User override merge ────────────────────────────────────────────────────
+
+
+def test_user_override_merges_single_key(tmp_path: Path):
+    """A user TOML that only sets ``[credentials.keychain]`` overrides exactly
+    that section, leaving every other default intact."""
+    override = tmp_path / "routing.toml"
+    override.write_text(
+        '[credentials.keychain]\nopenai = "Codex-credentials"\n',
+        encoding="utf-8",
+    )
+    manifest = load_routing_manifest(user_path=override)
+    assert manifest.credential_keychain.services.get("openai") == "Codex-credentials"
+    # Shipped keychain entries preserved
+    assert manifest.credential_keychain.services.get("anthropic") == "Claude Code-credentials"
+    # Other sections untouched
+    assert manifest.defaults.anthropic == "claude-opus-4-7"
+    assert manifest.defaults.openai == "gpt-5.5"
+
+
+def test_user_override_paired_default_and_fallback(tmp_path: Path):
+    """When the user overrides both default and fallback for a provider
+    consistently, the manifest accepts the change."""
+    override = tmp_path / "routing.toml"
+    override.write_text(
+        """
+[model.defaults]
+anthropic = "claude-sonnet-4-6"
+
+[model.fallbacks]
+anthropic = ["claude-sonnet-4-6", "claude-haiku-4-5-20251001"]
+""",
+        encoding="utf-8",
+    )
+    manifest = load_routing_manifest(user_path=override)
+    assert manifest.defaults.anthropic == "claude-sonnet-4-6"
+    assert manifest.fallbacks.anthropic[0] == "claude-sonnet-4-6"
+    # Other providers untouched
+    assert manifest.defaults.openai == "gpt-5.5"
+
+
+def test_user_override_merges_nested_section(tmp_path: Path):
+    """User overrides at ``[routing.prefixes]`` merge instead of replace."""
+    override = tmp_path / "routing.toml"
+    override.write_text(
+        '[routing.prefixes]\n"custom-" = "custom-provider"\n',
+        encoding="utf-8",
+    )
+    manifest = load_routing_manifest(user_path=override)
+    assert manifest.routing.prefixes.get("custom-") == "custom-provider"
+    # Shipped prefixes preserved
+    assert manifest.routing.prefixes.get("claude-") == "anthropic"
+
+
+def test_user_override_drift_invariant_still_enforced(tmp_path: Path):
+    """User can't break the default/fallback consistency by overriding only
+    one side — the validator runs on the merged manifest."""
+    override = tmp_path / "routing.toml"
+    override.write_text(
+        '[model.fallbacks]\nanthropic = ["claude-sonnet-4-6", "claude-opus-4-7"]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="drift between"):
+        load_routing_manifest(user_path=override)
+
+
+def test_use_user_override_false_ignores_override(tmp_path: Path):
+    override = tmp_path / "routing.toml"
+    override.write_text(
+        '[model.defaults]\nanthropic = "claude-sonnet-4-6"\n',
+        encoding="utf-8",
+    )
+    manifest = load_routing_manifest(user_path=override, use_user_override=False)
+    assert manifest.defaults.anthropic == "claude-opus-4-7"
+
+
+def test_user_override_missing_file_no_op(tmp_path: Path):
+    """A missing user TOML degrades to shipped default — no error."""
+    missing = tmp_path / "does_not_exist.toml"
+    manifest = load_routing_manifest(user_path=missing)
+    assert manifest.defaults.anthropic == "claude-opus-4-7"
+
+
+def test_user_override_malformed_toml_no_op(tmp_path: Path):
+    """A malformed user TOML degrades to shipped default — defensive."""
+    bad = tmp_path / "routing.toml"
+    bad.write_text("this is not toml [[[", encoding="utf-8")
+    manifest = load_routing_manifest(user_path=bad)
+    assert manifest.defaults.anthropic == "claude-opus-4-7"
+
+
+# ── Merge helper ───────────────────────────────────────────────────────────
+
+
+def test_merge_routing_dicts_deep_merge_one_level():
+    base = {"model": {"defaults": {"a": "1", "b": "2"}}}
+    override = {"model": {"defaults": {"a": "X"}}}
+    merged = _merge_routing_dicts(base, override)
+    assert merged["model"]["defaults"] == {"a": "X", "b": "2"}
+
+
+def test_merge_routing_dicts_disjoint_sections():
+    base = {"model": {"defaults": {"a": "1"}}}
+    override = {"routing": {"fallback_provider": "X"}}
+    merged = _merge_routing_dicts(base, override)
+    assert merged["model"]["defaults"] == {"a": "1"}
+    assert merged["routing"]["fallback_provider"] == "X"
+
+
+# ── Cache behaviour ────────────────────────────────────────────────────────
+
+
+def test_load_manifest_caches_per_path(tmp_path: Path):
+    a = load_routing_manifest()
+    b = load_routing_manifest()
+    assert a is b
+
+
+def test_clear_cache_forces_reload():
+    a = load_routing_manifest()
+    clear_routing_manifest_cache()
+    b = load_routing_manifest()
+    assert a is not b
