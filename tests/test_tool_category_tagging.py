@@ -146,7 +146,7 @@ class TestCategoryMembershsubject:
 
     def test_analysis_tools(self) -> None:
         m = self._category_map()
-        for name in ("generate_report", "accept_result"):
+        for name in ("generate_report", "export_json", "accept_result"):
             assert m.get(name) == "analysis", f"{name} should be analysis"
 
     def test_memory_tools(self) -> None:
@@ -194,6 +194,8 @@ class TestCostTierMembershsubject:
             "note_read",
             "manage_rule",
             "switch_model",
+            "generate_report",
+            "export_json",
         ):
             assert m.get(name) == "free", f"{name} should be free"
 

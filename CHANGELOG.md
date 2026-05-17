@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Agentic tool executor wiring.** Restored `generate_report` and `export_json`
+  in the AgenticLoop `ToolExecutor` handler map, added the missing generic
+  `generate_data` implementation, and added a regression check that every
+  LLM-exposed base tool has either a handler or an explicit executor path.
+
 ## [0.99.13] — 2026-05-18
 
 **Post-release sync** — main 의 v0.99.12 packaging refactor + game_ip

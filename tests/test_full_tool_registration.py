@@ -7,9 +7,10 @@ from pathlib import Path
 from core.runtime import GeodeRuntime, _build_default_policies, _build_default_registry
 
 ALL_TOOL_NAMES = {
-    # Data (2)
+    # Data (3)
     "cortex_analyst",
     "cortex_search",
+    "generate_data",
     # Search (2)
     "web_search",
     "wanted_jobs_search",
@@ -61,7 +62,7 @@ class TestPolicyChainDryRun:
 
     def test_dry_run_allows_data_tools(self) -> None:
         chain = _build_default_policies()
-        for tool in ("cortex_analyst", "cortex_search"):
+        for tool in ("cortex_analyst", "cortex_search", "generate_data"):
             assert chain.is_allowed(tool, mode="dry_run") is True
 
     def test_dry_run_allows_memory_tools(self) -> None:

@@ -126,17 +126,18 @@ class TestRuntimePolicyChain:
     def test_full_pipeline_blocks_notification(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="full_pipeline")
-        assert len(tools) == 14
+        assert len(tools) == 15
         assert "send_notification" not in tools
 
 
 class TestRuntimeToolRegistry:
     def test_registry_has_all_tools(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        assert len(runtime.tool_registry) == 15
+        assert len(runtime.tool_registry) == 16
         # Data tools
         assert "cortex_analyst" in runtime.tool_registry
         assert "cortex_search" in runtime.tool_registry
+        assert "generate_data" in runtime.tool_registry
         # Search tools
         assert "web_search" in runtime.tool_registry
         assert "wanted_jobs_search" in runtime.tool_registry
@@ -183,7 +184,7 @@ class TestDefaultBuilders:
 
     def test_default_registry(self):
         registry = _build_default_registry()
-        assert len(registry) == 15
+        assert len(registry) == 16
 
     def test_make_run_log_handler(self, tmp_path: Path):
         run_log = RunLog("test_session", log_dir=tmp_path)

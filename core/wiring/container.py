@@ -100,11 +100,12 @@ def build_default_registry() -> ToolRegistry:
     Specialized tools are expected to be provided by external packages.
     """
     registry = ToolRegistry()
-    # Data (2)
-    from core.tools.data_tools import CortexAnalystTool, CortexSearchTool
+    # Data (3)
+    from core.tools.data_tools import CortexAnalystTool, CortexSearchTool, GenerateDataTool
 
     registry.register(CortexAnalystTool())
     registry.register(CortexSearchTool())
+    registry.register(GenerateDataTool())
 
     # Search (2)
     from core.tools.jobs import WantedJobsSearchTool

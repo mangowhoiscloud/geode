@@ -3,6 +3,7 @@
 Layer 5 tools for data access:
 - CortexAnalystTool: Placeholder for Snowflake Cortex Analyst SQL
 - CortexSearchTool: Placeholder for Cortex Search semantic retrieval
+- GenerateDataTool: Deterministic synthetic records for tests/demo workflows
 
 Specialized fixture/query tools live in external packages.
 """
@@ -122,5 +123,65 @@ class CortexSearchTool(_AsyncExecuteMixin):
                 "message": (f"Cortex Search would return top-{top_k} results for: '{query}'"),
                 "documents": [],
                 "scores": [],
+            }
+        }
+
+
+class GenerateDataTool(_AsyncExecuteMixin):
+    """Generate deterministic generic sample records.
+
+    The tool intentionally avoids domain-specific fixtures. It exists for
+    demos, smoke tests, and workflows that need small structured input data.
+    """
+
+    @property
+    def name(self) -> str:
+        return "generate_data"
+
+    @property
+    def description(self) -> str:
+        return "Generate deterministic synthetic records for testing and demo workflows."
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "description": "Number of records to generate. Default 5, maximum 20.",
+                },
+                "genre": {
+                    "type": "string",
+                    "description": "Optional label applied to every generated record.",
+                },
+            },
+            "required": [],
+        }
+
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
+        raw_count = kwargs.get("count", 5)
+        try:
+            count = int(raw_count)
+        except (TypeError, ValueError):
+            return {"error": "count must be an integer", "status": "failure"}
+        count = max(1, min(count, 20))
+        genre = str(kwargs.get("genre") or "general")
+
+        records = [
+            {
+                "id": f"sample-{index + 1:03d}",
+                "label": f"{genre}-{index + 1}",
+                "genre": genre,
+                "score": round(100.0 - index * 3.7, 1),
+            }
+            for index in range(count)
+        ]
+        return {
+            "result": {
+                "status": "ok",
+                "count": count,
+                "genre": genre,
+                "records": records,
             }
         }
