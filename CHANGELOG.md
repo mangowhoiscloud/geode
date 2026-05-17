@@ -52,6 +52,29 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.6] — 2026-05-17
+
+### Fixed
+
+- **`login_anthropic()` — authorize URL host 변경 (`platform.claude.com` → `claude.com/cai`).**
+  v0.99.5 forensic dump 가 token exchange 단계 dump 0건 — 사용자 보고 결과
+  authorize 단계에서 "Invalid Request Format" 거절. Claude Code binary 의
+  authorize URL 생성 코드 `O ? CLAUDE_AI_AUTHORIZE_URL : CONSOLE_AUTHORIZE_URL`
+  분기에서 우리가 항상 CONSOLE URL 사용한 것이 root cause. Claude Max
+  (consumer) 사용자는 `claude.com/cai/oauth/authorize` 가 정답.
+  token endpoint (`platform.claude.com/v1/oauth/token`) 는 그대로 유지.
+
+- **`login_anthropic()` — switched authorize host from `platform.claude.com`
+  to `claude.com/cai` for Claude.ai consumer accounts.** v0.99.5 forensic
+  dumps showed no `response-*` stages — server-side authorize page
+  rejected the request with "Invalid Request Format" before any callback.
+  Claude Code's binary picks one of two authorize hosts via
+  `loginMethod`; we now mirror the Claude Pro / Max consumer branch
+  by default (`claude.com/cai/oauth/authorize`). Token endpoint
+  unchanged.
+
+
+
 ## [0.99.5] — 2026-05-17
 
 ### Observability
