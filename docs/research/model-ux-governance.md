@@ -66,7 +66,7 @@ MODEL_PROFILES = [
 ]
 ```
 
-**Auth resolution** (post v0.52.4): `core/llm/router.py:_route_provider` → `core/auth/plan_registry.py:resolve_routing` 4-step chain (explicit routing → equivalence-class scan with `PLAN_KIND_PRIORITY` → single-provider fallback → synthesize PAYG). `forced_login_method` honored at line 176.
+**Auth resolution** (post v0.52.4): `core/llm/router.py:_route_provider` → `core/llm/routing/plan_registry.py:resolve_routing` 4-step chain (explicit routing → equivalence-class scan with `PLAN_KIND_PRIORITY` → single-provider fallback → synthesize PAYG). `forced_login_method` honored at line 176.
 
 **Codex token resolution** (v0.52.5): `core/llm/providers/codex.py:54-101` — 2-pass (`managed_by=""` first, then borrowed CLI, then `~/.codex/auth.json`).
 
@@ -237,7 +237,7 @@ hermes auth reset      — reset cooldown timers for a provider
    - Step 2: provider selector (glm-coding / openai / anthropic / glm) (line 2244)
    - Step 3: endpoint/key/OAuth entry (line 2209 for subscription tier, getpass for key)
 2. What's stored at end?
-   - Files: `core/auth/plan_registry.py` + `core/auth/profiles.py` (Plan + AuthProfile)
+   - Files: `core/llm/routing/plan_registry.py` + `core/auth/profiles.py` (Plan + AuthProfile)
    - Plan stores: `{ id, kind, provider, base_url, quota, subscription_tier }`
    - Profile stores: `{ name, provider, credential_type, key, plan_id, expires_at, managed_by }`
    - Print: `[success]Registered[/success] {plan.display_name} ({plan.base_url})` (line 2238)
