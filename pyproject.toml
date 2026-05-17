@@ -391,6 +391,10 @@ omit = [
     "core/mcp_server.py",
     "core/tools/web_tools.py",
     "core/tools/document_tools.py",
+    # External-API + GUI control tools — covered by live/integration tests,
+    # not by default unit suite. Same omit category as web_tools.py.
+    "core/tools/web_search.py",
+    "core/tools/computer_use.py",
     # Inspect/Petri artifact importers are edge tooling rather than default
     # runtime paths; diagnostics.py remains covered and in-scope.
     "core/audit/dim_extractor.py",

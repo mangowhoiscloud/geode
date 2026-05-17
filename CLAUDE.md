@@ -48,7 +48,7 @@ Production code splits into two top-level Python packages:
 - `plugins/` — first-party auxiliary plugins. Domain analysis plugins are distributed separately and can self-register through `core/domains/loader.py`.
 
 Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.
-Key entry points: `core/agent/loop/`(AgenticLoop), `core/graph.py`(StateGraph), `core/runtime.py`(bootstrap).
+Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap). Domain-specific pipelines live in external plugins via `core/domains/loader.py`.
 
 ## Development
 
