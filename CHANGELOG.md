@@ -52,6 +52,29 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **Model pricing + context windows TOML (P3-A) — schema + loader.**
+  `core/llm/model_pricing.toml` 신설 (17 model pricing × 20 context
+  window entries) + `core/llm/pricing_loader.py` (lru_cache 기반).
+  Schema: `[pricing.<family>.<model>]` per-token base price (anthropic
+  derives cache_write/read/thinking; openai needs explicit cached +
+  reasoning flag) + `[context_windows]` model → int. `PricingCatalogue`
+  dataclass + `ModelPrice` NamedTuple (token_tracker's와 동일 shape) +
+  parity tests vs legacy `MODEL_PRICING` / `MODEL_CONTEXT_WINDOW` 모두
+  통과. **Dormant** — P3-B 가 token_tracker 의 dict 를 loader 호출로
+  교체.
+
+- **Model pricing + context windows TOML (P3-A) — schema + loader.**
+  New `core/llm/model_pricing.toml` (17 pricing + 20 context window
+  entries) and `core/llm/pricing_loader.py`. Schema uses
+  `[pricing.<family>.<model>]` with the base per-mtok pair; the loader
+  applies the family-specific derive formulas (anthropic's
+  cache_write/read/thinking multipliers; openai's explicit cached +
+  reasoning flag). Parity tests verify the loader's output matches the
+  legacy `MODEL_PRICING` / `MODEL_CONTEXT_WINDOW` dicts. **Dormant** —
+  P3-B will swap `token_tracker.py` over to the loader.
+
 ### Changed
 
 - **Pipeline node defaults migrated to routing.toml `[nodes]` (P2-E).**
