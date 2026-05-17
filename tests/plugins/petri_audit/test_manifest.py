@@ -9,11 +9,13 @@ from plugins.petri_audit.manifest import (
     DEFAULT_MANIFEST_PATH,
     AdapterSpec,
     PetriManifest,
+    RoleContract,
     RoleSpec,
     SourceSpec,
     _parse_manifest_dict,
     clear_manifest_cache,
     load_manifest,
+    parse_role_contract,
 )
 
 
@@ -255,3 +257,143 @@ def test_adapter_spec_optional_fields():
     assert spec.auth_env_vars == []
     assert spec.endpoint is None
     assert spec.binary is None
+
+
+# ── Role contract parsing ──────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("role", ["auditor", "target", "judge"])
+def test_default_role_contracts_parse(role: str):
+    """Every role enabled in the default manifest has a parsable contract MD
+    whose frontmatter agrees with the manifest entry."""
+    manifest = load_manifest()
+    contract = manifest.get_role_contract(role)
+    assert isinstance(contract, RoleContract)
+    assert contract.role == role
+    spec = manifest.get_role(role)
+    assert contract.default_model == spec.default_model
+    assert contract.default_model in spec.allowed_models
+
+
+def test_role_contract_inline_skills_optional(tmp_path: Path):
+    contract_path = tmp_path / "x.md"
+    contract_path.write_text(
+        """---
+role: x
+description: minimal
+default_model: m
+default_source: auto
+---
+
+body
+""",
+        encoding="utf-8",
+    )
+    contract = parse_role_contract(contract_path)
+    assert contract.inline_skills == []
+
+
+def test_parse_role_contract_missing_frontmatter(tmp_path: Path):
+    bad = tmp_path / "no_frontmatter.md"
+    bad.write_text("# Just a heading\n\nNo frontmatter here.\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="missing YAML frontmatter"):
+        parse_role_contract(bad)
+
+
+def test_parse_role_contract_malformed_unclosed(tmp_path: Path):
+    bad = tmp_path / "malformed.md"
+    bad.write_text("---\nrole: x\ndescription: never closes\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="malformed frontmatter"):
+        parse_role_contract(bad)
+
+
+def test_parse_role_contract_frontmatter_not_mapping(tmp_path: Path):
+    bad = tmp_path / "list_frontmatter.md"
+    bad.write_text("---\n- a\n- b\n---\nbody\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="not a YAML mapping"):
+        parse_role_contract(bad)
+
+
+def test_get_role_contract_role_mismatch(tmp_path: Path):
+    """Frontmatter role != manifest key → ValueError."""
+    contract_path = tmp_path / "wrong_role.md"
+    contract_path.write_text(
+        """---
+role: imposter
+description: wrong role
+default_model: claude-sonnet-4-6
+default_source: auto
+---
+""",
+        encoding="utf-8",
+    )
+    # Use the default manifest's auditor entry, but point its role_contract
+    # at our tmp file with a mismatched role frontmatter.
+    manifest = load_manifest()
+    auditor_spec = manifest.get_role("auditor")
+    # Build a transient PetriManifest pointing at the tmp file.
+    bad_manifest = PetriManifest(
+        enabled_roles=["auditor"],
+        roles={
+            "auditor": RoleSpec(
+                default_model=auditor_spec.default_model,
+                allowed_models=auditor_spec.allowed_models,
+                role_contract=str(contract_path.name),
+            )
+        },
+        sources=manifest.sources,
+        adapters=manifest.adapters,
+    )
+    with pytest.raises(ValueError, match="frontmatter role="):
+        bad_manifest.get_role_contract("auditor", base_dir=tmp_path)
+
+
+def test_get_role_contract_default_model_mismatch(tmp_path: Path):
+    """Frontmatter default_model != manifest default_model → ValueError."""
+    contract_path = tmp_path / "auditor.md"
+    contract_path.write_text(
+        """---
+role: auditor
+description: drifted default_model
+default_model: claude-opus-4-7
+default_source: auto
+---
+""",
+        encoding="utf-8",
+    )
+    manifest = load_manifest()
+    auditor_spec = manifest.get_role("auditor")
+    bad_manifest = PetriManifest(
+        enabled_roles=["auditor"],
+        roles={
+            "auditor": RoleSpec(
+                default_model=auditor_spec.default_model,  # claude-sonnet-4-6
+                allowed_models=auditor_spec.allowed_models,
+                role_contract="auditor.md",
+            )
+        },
+        sources=manifest.sources,
+        adapters=manifest.adapters,
+    )
+    with pytest.raises(ValueError, match="frontmatter default_model="):
+        bad_manifest.get_role_contract("auditor", base_dir=tmp_path)
+
+
+def test_get_role_contract_no_path_raises(tmp_path: Path):
+    """role_contract = None in manifest → get_role_contract raises."""
+    manifest = load_manifest()
+    auditor_spec = manifest.get_role("auditor")
+    bad_manifest = PetriManifest(
+        enabled_roles=["auditor"],
+        roles={
+            "auditor": RoleSpec(
+                default_model=auditor_spec.default_model,
+                allowed_models=auditor_spec.allowed_models,
+                role_contract=None,
+            )
+        },
+        sources=manifest.sources,
+        adapters=manifest.adapters,
+    )
+    with pytest.raises(ValueError, match="no role_contract path"):
+        bad_manifest.get_role_contract("auditor", base_dir=tmp_path)

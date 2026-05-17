@@ -54,6 +54,27 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **Petri role contracts (P1-B) — auditor/target/judge MD + frontmatter parser.**
+  `plugins/petri_audit/roles/{auditor,target,judge}.md` 신설 — Crumb
+  `agents/coordinator.md` 의 YAML frontmatter + Goal/Contract/Constraints
+  패턴 차용. 각 contract 는 frontmatter (role / description /
+  default_model / default_source / inline_skills) + 본문 (Goal /
+  Contract / Constraints / References). `manifest.py` 에 `RoleContract`
+  pydantic 모델 + `parse_role_contract()` (lazy pyyaml import) +
+  `PetriManifest.get_role_contract()` 일치성 검증 (frontmatter.role ↔
+  manifest key, frontmatter.default_model ↔ manifest default_model
+  ∈ allowed_models). P1-F 의 /petri picker 가 description 을 표시할
+  단일 SOT.
+
+- **Petri role contracts (P1-B) — auditor/target/judge MD + frontmatter parser.**
+  Added `plugins/petri_audit/roles/{auditor,target,judge}.md` following
+  Crumb's `agents/coordinator.md` pattern (YAML frontmatter + Goal /
+  Contract / Constraints / References). `manifest.py` gains a
+  `RoleContract` pydantic model + `parse_role_contract()` (lazy pyyaml
+  import) + `PetriManifest.get_role_contract()` cross-checking
+  frontmatter against the manifest entry. Single SOT for the upcoming
+  `/petri` picker's description text.
+
 - **Petri audit manifest (P1-A) — `petri.plugin.toml` 선언적 schema.**
   `plugins/petri_audit/petri.plugin.toml` 신설 + `manifest.py` pydantic
   loader. 4-layer schema — `[petri]` enabled_roles, `[petri.role.<name>]`
