@@ -1,10 +1,11 @@
-"""Plan — first-class subscription/credential entity.
+"""Plan — first-class LLM credential bucket.
 
 Pre-v0.50.0 GEODE collapsed three concepts into a single (provider, key)
 tuple: PAYG API keys, time-boxed subscriptions (GLM Coding Plan, ChatGPT
 Plus), and OAuth borrowed from external CLIs (Codex). This made it
 impossible to express "this key targets the Coding Plan endpoint with an
-80-call/5h quota". Plan adds the missing axis.
+80-call/5h quota". Plan adds that missing routing axis; OAuth is only one
+possible acquisition method.
 
 Each Plan binds:
   - a provider variant (openai, openai-codex, glm, glm-coding, ...)

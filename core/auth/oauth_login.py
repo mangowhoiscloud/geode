@@ -102,7 +102,7 @@ def reconcile_plan_tier_from_stored_jwt() -> tuple[str, str] | None:
     when no GEODE OAuth profile exists or the tier matches.
     """
     try:
-        from core.auth.plan_registry import get_plan_registry
+        from core.llm.routing.plan_registry import get_plan_registry
         from core.wiring.container import ensure_profile_store
     except Exception:
         return None
@@ -169,9 +169,9 @@ def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
     """Write Codex device-code creds into ``~/.geode/auth.toml`` SOT."""
     try:
         from core.auth.auth_toml import save_auth_toml
-        from core.auth.plan_registry import get_plan_registry
-        from core.auth.plans import Plan, PlanKind
         from core.auth.profiles import AuthProfile, CredentialType
+        from core.llm.routing.plan_registry import get_plan_registry
+        from core.llm.routing.plans import Plan, PlanKind
         from core.wiring.container import ensure_profile_store
     except Exception:  # pragma: no cover — import-time defensive
         log.debug("auth.toml persistence skipped — Plan modules unavailable")
@@ -249,7 +249,7 @@ def _load_auth_store() -> dict[str, Any]:
     # Re-build a json-shaped view from the auth.toml SOT for legacy callers
     # like get_auth_status().
     try:
-        from core.auth.plan_registry import get_plan_registry
+        from core.llm.routing.plan_registry import get_plan_registry
         from core.wiring.container import ensure_profile_store
     except Exception:  # pragma: no cover
         return {"version": 1, "providers": {}}

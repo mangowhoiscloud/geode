@@ -131,7 +131,7 @@ def cmd_login(args: str) -> None:
         # (Codex CLI OAuth) which never appear in auth.toml.
         try:
             from core.auth.auth_toml import auth_toml_path, load_auth_toml
-            from core.auth.plan_registry import get_plan_registry
+            from core.llm.routing.plan_registry import get_plan_registry
             from core.wiring.container import ensure_profile_store
 
             registry = get_plan_registry()
@@ -205,9 +205,9 @@ def _login_show_status() -> None:
     Status tab (plan + token source + provider).
     """
     from core.auth.oauth_login import get_auth_status as get_oauth_status
-    from core.auth.plan_registry import get_plan_registry
     from core.auth.profiles import CredentialType
     from core.cli import commands as _pkg
+    from core.llm.routing.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
 
     store = ensure_profile_store()
@@ -338,13 +338,13 @@ def _login_add_interactive(_args: str) -> None:
     """
     import sys
 
-    from core.auth.plan_registry import get_plan_registry
-    from core.auth.plans import (
+    from core.auth.profiles import AuthProfile, CredentialType
+    from core.cli import commands as _pkg
+    from core.llm.routing.plan_registry import get_plan_registry
+    from core.llm.routing.plans import (
         GLM_CODING_TIERS,
         default_plan_for_payg,
     )
-    from core.auth.profiles import AuthProfile, CredentialType
-    from core.cli import commands as _pkg
     from core.wiring.container import ensure_profile_store
 
     if not sys.stdin.isatty():
@@ -706,10 +706,10 @@ def _login_anthropic_api_key() -> None:
     import getpass
     from datetime import UTC, datetime
 
-    from core.auth.plan_registry import get_plan_registry
-    from core.auth.plans import Plan, PlanKind
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
+    from core.llm.routing.plan_registry import get_plan_registry
+    from core.llm.routing.plans import Plan, PlanKind
     from core.wiring.container import ensure_profile_store
 
     try:
@@ -769,8 +769,8 @@ def _login_set_key(rest: str) -> None:
         return
     plan_id, key = parts[0], parts[1].strip()
 
-    from core.auth.plan_registry import get_plan_registry
     from core.auth.profiles import AuthProfile, CredentialType
+    from core.llm.routing.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
 
     registry = get_plan_registry()
@@ -815,7 +815,7 @@ def _login_use(rest: str) -> None:
     if not plan_id:
         _pkg.console.print("  [warning]Usage: /login use <plan-id>[/warning]\n")
         return
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
 
     registry = get_plan_registry()
     plan = registry.get(plan_id)
@@ -846,7 +846,7 @@ def _login_remove(rest: str) -> None:
     if not plan_id:
         _pkg.console.print("  [warning]Usage: /login remove <plan-id>[/warning]\n")
         return
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
 
     registry = get_plan_registry()
@@ -871,7 +871,7 @@ def _login_route(rest: str) -> None:
         )
         return
     model, plan_ids = parts[0], parts[1:]
-    from core.auth.plan_registry import get_plan_registry
+    from core.llm.routing.plan_registry import get_plan_registry
 
     registry = get_plan_registry()
     unknown = [pid for pid in plan_ids if registry.get(pid) is None]
@@ -884,8 +884,8 @@ def _login_route(rest: str) -> None:
 
 
 def _login_quota() -> None:
-    from core.auth.plan_registry import get_plan_registry
     from core.cli import commands as _pkg
+    from core.llm.routing.plan_registry import get_plan_registry
 
     registry = get_plan_registry()
     plans = registry.list_all()

@@ -52,7 +52,14 @@ functional change.
 **Post-release sync** — main 의 v0.99.12 packaging refactor + game_ip
 domain extraction 작업과 develop 의 14 PR routing externalisation
 sprint 를 통합 release. 14 PR 의 코드는 v0.99.12 에 이미 머지된 상태.
-v0.99.13 은 packaging + domain cleanup + coverage scope 정리.
+v0.99.13 은 packaging + domain cleanup + coverage scope 정리 + plan
+routing ownership 이동.
+
+### Architecture
+
+- **LLM plan routing ownership.** Moved credential Plan and PlanRegistry
+  primitives from `core/auth` to `core/llm/routing`, keeping OAuth acquisition
+  under `core/auth` and preserving the LLM-facing `manage_login` tool surface.
 
 ### Infrastructure
 

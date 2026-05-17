@@ -224,9 +224,9 @@ class TestPlanTierReconcile:
 
     def test_no_drift_returns_none(self, tmp_path: Path, monkeypatch):
         from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
-        from core.auth.plan_registry import get_plan_registry, reset_plan_registry
-        from core.auth.plans import Plan, PlanKind
         from core.auth.profiles import AuthProfile, CredentialType
+        from core.llm.routing.plan_registry import get_plan_registry, reset_plan_registry
+        from core.llm.routing.plans import Plan, PlanKind
         from core.wiring import container as container_mod
 
         _isolate(tmp_path, monkeypatch)
@@ -263,9 +263,9 @@ class TestPlanTierReconcile:
 
     def test_drift_reconciles_and_returns_pair(self, tmp_path: Path, monkeypatch):
         from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
-        from core.auth.plan_registry import get_plan_registry, reset_plan_registry
-        from core.auth.plans import Plan, PlanKind
         from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
+        from core.llm.routing.plan_registry import get_plan_registry, reset_plan_registry
+        from core.llm.routing.plans import Plan, PlanKind
         from core.wiring import container as container_mod
 
         _isolate(tmp_path, monkeypatch)
@@ -309,8 +309,8 @@ class TestPlanTierReconcile:
 
     def test_no_profile_returns_none(self, tmp_path: Path, monkeypatch):
         from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
-        from core.auth.plan_registry import reset_plan_registry
         from core.auth.profiles import ProfileStore
+        from core.llm.routing.plan_registry import reset_plan_registry
         from core.wiring import container as container_mod
 
         _isolate(tmp_path, monkeypatch)

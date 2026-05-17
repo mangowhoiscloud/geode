@@ -788,7 +788,7 @@ def _resolve_plan_meta(model: str) -> dict[str, str]:
     path (``call_with_failover``) instead of ``retry_with_backoff_generic``.
     """
     try:
-        from core.auth.plan_registry import resolve_routing
+        from core.llm.routing.plan_registry import resolve_routing
 
         target = resolve_routing(model)
         if target is None:
