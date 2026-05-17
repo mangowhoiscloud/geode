@@ -43,7 +43,7 @@ class GenerateReportTool:
     """Tool for generating structured reports.
 
     Produces a lightweight artifact from caller-provided structured data.
-    Domain-specific report generators belong in external plugins.
+    Specialized report generators belong in external packages.
     """
 
     @property

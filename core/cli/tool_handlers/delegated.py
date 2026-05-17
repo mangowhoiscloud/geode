@@ -2,8 +2,6 @@
 
 Maps tool name → (module_path, class_name) for lazy-import delegation.
 Adding a new delegated tool requires only one line in ``_DELEGATED_TOOLS``.
-Domain-specific tools are merged in via ``DomainPort.register_tool_handlers``
-from external domain plugins.
 """
 
 from __future__ import annotations

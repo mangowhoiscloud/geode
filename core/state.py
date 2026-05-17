@@ -1,8 +1,8 @@
 """Generic GEODE workflow state types.
 
-Domain-specific state models live in external domain plugins. Core keeps only
-the small shared shape needed by generic orchestration, verification, and
-runtime plumbing.
+Specialized pipeline state models live outside GEODE core. Core keeps only the
+small shared shape needed by generic orchestration, verification, and runtime
+plumbing.
 """
 
 from __future__ import annotations
@@ -43,8 +43,7 @@ class GuardrailResult(BaseModel):
 class GeodeState(TypedDict, total=False):
     """Shared state fields owned by GEODE core.
 
-    External domain plugins may extend this TypedDict in their own package with
-    task-specific model fields.
+    External packages may extend this TypedDict with task-specific model fields.
     """
 
     subject_id: str

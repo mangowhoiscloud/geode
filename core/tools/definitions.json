@@ -398,7 +398,7 @@
           "enum": [
             "agentic"
           ],
-          "description": "Plan template. External domain packages may define additional templates."
+          "description": "Plan template."
         }
       },
       "required": [
@@ -779,7 +779,7 @@
   },
   {
     "name": "rerun_node",
-    "description": "Re-runs a specific pipeline node when the active domain exposes rerunnable nodes.",
+    "description": "Re-runs a specific pipeline node when rerun support is available.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {

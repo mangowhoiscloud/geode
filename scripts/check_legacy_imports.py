@@ -19,10 +19,10 @@ import sys
 from pathlib import Path
 
 LEGACY_PATTERNS: list[tuple[str, str]] = [
-    (r"from core\.nodes\b", "external domain plugin nodes"),
-    (r"import core\.nodes\b", "external domain plugin nodes"),
-    (r"from core\.fixtures\b", "external domain plugin fixtures"),
-    (r"import core\.fixtures\b", "external domain plugin fixtures"),
+    (r"from core\.nodes\b", "external package nodes"),
+    (r"import core\.nodes\b", "external package nodes"),
+    (r"from core\.fixtures\b", "external package fixtures"),
+    (r"import core\.fixtures\b", "external package fixtures"),
     # v0.52 — directional flip: ui와 auth가 top-level로 승격되어 cli.ui /
     # gateway.auth 가 이제 legacy. 새 위치를 권장.
     (r"from core\.cli\.ui\b", "core.ui"),

@@ -323,8 +323,8 @@ known_first_party = ["core", "plugins"]
 #   langgraph-checkpoint{,-sqlite}: namespace packages (langgraph.checkpoint.*),
 #       deptry's ImportFinder can't link the namespace import back to the
 #       distribution name reliably.
-#   langgraph: kept as the graph runtime contract for external domain
-#       plugins. GEODE core no longer builds a bundled graph in v1, so
+#   langgraph: kept as the graph runtime contract for external packages.
+#       GEODE core no longer builds a bundled graph in v1, so
 #       only TYPE_CHECKING references remain locally.
 #   openai-agents: kept for Responses-API runtime path even when no static
 #       import exists in core/ today; removing it would break the optional

@@ -89,11 +89,11 @@ def build_automation(
     )
     scheduler_service.load()
 
-    # Predefined automations are domain-specific templates.
+    # Predefined automations are package-specific templates.
     # They require a wired callback to be useful. Without callback/action,
     # they fire as empty jobs consuming resources.
     # Registration is skipped — users can enable predefined templates
-    # via /schedule enable <template_id> when a domain plugin provides
+    # via /schedule enable <template_id> when an external package provides
     # the callback wiring.
 
     if settings.scheduler_auto_start:
@@ -170,7 +170,7 @@ def wire_automation_hooks(
 ) -> None:
     """Wire L4.5 automation event handlers to the hook system.
 
-    ``subject_id`` is the domain-agnostic identifier for the analysis target.
+    ``subject_id`` is the generic identifier for the analysis target.
     """
 
     # Table-driven logger hooks

@@ -96,12 +96,6 @@ def _handle_command(
         if readiness:
             mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
             console.print(f"  Mode: [bold]{mode}[/bold]")
-        from core.domains.port import get_domain_or_none
-
-        domain = get_domain_or_none()
-        fixture_count = len(domain.list_fixtures()) if domain is not None else 0
-        console.print(f"  Domain fixtures: [bold]{fixture_count}[/bold]")
-
         # MCP status section
         _mcp_st = mcp_manager.get_status() if mcp_manager is not None else {"active": []}
         console.print()

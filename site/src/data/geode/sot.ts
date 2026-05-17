@@ -10,9 +10,9 @@
 export const GEODE_SOT = {
   version: "0.99.12",
   modules: {
-    core: 301,
+    core: 299,
     plugins: 28,
-    total: 329,
+    total: 327,
   },
   tests: {
     standard: 4897,

@@ -182,11 +182,6 @@ URL: https://mangowhoiscloud.github.io/geode/docs/petri/bundle
 EN: Live inspect_ai transcript viewer for the latest GEODE audit run.
 KO: 최신 GEODE 감사 run의 라이브 inspect_ai 트랜스크립트 뷰어.
 
-### Domain Plugins (도메인 플러그인)
-URL: https://mangowhoiscloud.github.io/geode/docs/runtime/domains
-EN: DomainPort protocol. plugin loader. Add a domain in 30 lines.
-KO: DomainPort 프로토콜. 플러그인 로더. 30 라인으로 도메인 추가.
-
 ### Long-running Safety (장기 실행 안전)
 URL: https://mangowhoiscloud.github.io/geode/docs/ops/long-running
 EN: Token guards, context overflow, sliding window. Graceful drain.

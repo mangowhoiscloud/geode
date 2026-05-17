@@ -2,7 +2,6 @@
 
 Single initialization path ensures both modes get identical:
 - Memory contextvars (ProjectMemory, OrgMemory)
-- Domain adapter
 - Readiness check
 - MCP manager
 - Skills
@@ -77,10 +76,10 @@ class GeodeBootstrap:
 
 
 def setup_contextvars(*, load_env: bool = False) -> None:
-    """Initialize ContextVars only (domain, memory, profile, env).
+    """Initialize ContextVars only (memory, profile, env).
 
     No resource creation. Call before GeodeRuntime.create() so that
-    domain adapter and memory ContextVars are available to all layers.
+    memory ContextVars are available to all layers.
     """
     if load_env:
         import os

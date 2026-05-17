@@ -197,7 +197,7 @@ $ jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/2026-05-12.jsonl  # Ï∫êÏ
                 <tr><td>approval</td><td>2</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
                 <tr><td>context</td><td>2</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
                 <tr><td>prompt</td><td>1</td><td>PROMPT_ASSEMBLED</td></tr>
-                <tr><td>(reserved)</td><td>17</td><td>plugin-specific, added by domain adapters</td></tr>
+                <tr><td>(reserved)</td><td>17</td><td>plugin-specific, added by external packages</td></tr>
               </tbody>
             </table>
             <p>

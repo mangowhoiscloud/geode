@@ -8,8 +8,8 @@ external consumers (CLI bootstrap, tool handlers, plugins, tests). Sub-
 modules:
 
 - :mod:`_state` — ``ModelProfile``, ``MODEL_PROFILES``, ``COMMAND_MAP``,
-  conversation ContextVar, ``show_help``, ``install_domain_commands``,
-  ``resolve_action``, ``_get_profile_store``
+  conversation ContextVar, ``show_help``, ``resolve_action``,
+  ``_get_profile_store``
 - :mod:`key`      — ``cmd_key`` + auth-state mirroring
 - :mod:`model`    — ``/model`` picker + ``_apply_model``
 - :mod:`mcp`      — ``/mcp`` server management
@@ -57,7 +57,6 @@ from ._state import (
     _conversation_ctx,
     _get_profile_store,
     get_conversation_context,
-    install_domain_commands,
     resolve_action,
     set_conversation_context,
     show_help,
@@ -131,7 +130,6 @@ __all__ = [
     "cmd_trigger",
     "console",
     "get_conversation_context",
-    "install_domain_commands",
     "resolve_action",
     "set_conversation_context",
     "show_help",

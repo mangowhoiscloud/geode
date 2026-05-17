@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from core.ui.console import console
-
-log = logging.getLogger(__name__)
 
 
 def _build_system_handlers(
@@ -23,10 +20,7 @@ def _build_system_handlers(
 
     def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
         show_help()
-        # Generic command list — domain-specific entries flow through
-        # COMMAND_MAP (which the active domain extends via
-        # ``register_slash_commands`` at bootstrap). We surface the
-        # registered slashes so the LLM has the same view as ``/help``.
+        # Surface the registered slashes so the LLM has the same view as /help.
         from core.cli.commands import COMMAND_MAP
 
         commands = sorted(COMMAND_MAP.keys())
@@ -35,16 +29,6 @@ def _build_system_handlers(
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
         from core import __version__ as geode_version
         from core.config import settings
-        from core.domains.port import get_domain_or_none
-
-        # Fixture count is domain-specific — sourced via DomainPort.
-        domain = get_domain_or_none()
-        fixture_count = 0
-        if domain is not None:
-            try:
-                fixture_count = len(domain.list_fixtures())
-            except Exception:
-                log.debug("Domain list_fixtures() failed", exc_info=True)
 
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
@@ -59,7 +43,6 @@ def _build_system_handlers(
         console.print(f"  Anthropic API: {ant_status}")
         console.print(f"  OpenAI API: {oai_status}")
         console.print(f"  Mode: [bold]{mode}[/bold]")
-        console.print(f"  Fixtures: [bold]{fixture_count} subjects[/bold]")
 
         # MCP status
         mcp_status = (
@@ -89,7 +72,6 @@ def _build_system_handlers(
             "anthropic_configured": ant_ok,
             "openai_configured": oai_ok,
             "mode": mode,
-            "fixture_count": fixture_count,
             "mcp_status": mcp_status,
         }
 

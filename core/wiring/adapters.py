@@ -1,4 +1,4 @@
-"""MCP adapter wiring — signal, notification, calendar, gateway.
+"""MCP adapter wiring — notification, calendar, gateway.
 
 Extracted from core.runtime as standalone functions (formerly GeodeRuntime staticmethods).
 """
@@ -11,25 +11,6 @@ from typing import Any
 from core.wiring.bootstrap import _plugin_status
 
 log = logging.getLogger(__name__)
-
-
-def build_signal_adapter() -> None:
-    """Wire the active domain's signal adapter, if it has one.
-
-    Domains with no signal sources simply omit the method, in which case
-    this becomes a no-op.
-    """
-    from core.domains.port import get_domain_or_none
-
-    domain = get_domain_or_none()
-    builder = getattr(domain, "build_signal_adapter", None) if domain else None
-    if not callable(builder):
-        log.debug("No domain signal adapter; skipping")
-        return
-    try:
-        builder()
-    except Exception:
-        log.debug("Domain build_signal_adapter failed", exc_info=True)
 
 
 def _load_mcp_manager_for_plugin(
@@ -268,8 +249,7 @@ def build_gateway() -> None:
 
 
 def build_plugins() -> None:
-    """Wire all MCP plugin adapters: signal, notification, calendar, gateway."""
-    build_signal_adapter()
+    """Wire all MCP plugin adapters: notification, calendar, gateway."""
     build_notification_adapter()
     build_calendar_adapter()
     build_gateway()

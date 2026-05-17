@@ -81,19 +81,7 @@ def _build_hitl_handlers() -> dict[str, Any]:
         if not node_name or not subject:
             missing = [k for k, v in {"node_name": node_name, "subject": subject}.items() if not v]
             return _clarify("rerun_node", missing, "재실행할 노드와 대상을 알려주세요.")
-        # Allowlist supplied by the active domain (DomainPort v2). Empty
-        # set ⇒ no rerunnable nodes for non-pipeline domains.
-        from core.domains.port import get_domain_or_none
-
         allowed: set[str] = set()
-        domain = get_domain_or_none()
-        if domain is not None:
-            getter = getattr(domain, "get_rerunnable_nodes", None)
-            if callable(getter):
-                try:
-                    allowed = set(getter())
-                except Exception:
-                    log.debug("get_rerunnable_nodes() failed", exc_info=True)
         if node_name not in allowed:
             return {
                 "error": (f"Cannot rerun '{node_name}'. Allowed: {sorted(allowed)}"),
