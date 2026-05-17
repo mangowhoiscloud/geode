@@ -52,6 +52,36 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.10] — 2026-05-17
+
+### Changed
+
+- **`/login anthropic` — 3-옵션 picker + Crumb-style stdio pipe.**
+  v0.99.9 의 두 옵션 (API key / claude /login subprocess) 에서 후자가
+  claude REPL 을 spawn 해 사용자가 Claude Code 의 full session 에 갇히는
+  문제 (사용자 보고). 3 옵션으로 확장 + delegate path 의 명령을
+  `claude /login` → `claude auth login` 으로 교체 (non-REPL).
+  stdio = `[ignore, pipe, pipe]` 로 Crumb 의 `src/adapters/claude-local.ts`
+  패턴 정합 — claude 의 TUI 아티팩트는 GEODE 가 필터링하고 진행 신호
+  (browser URL, success/fail 마커) 만 흘림. picker:
+
+    1. **API key** (Anthropic Console PAYG) — 변경 없음
+    2. **claude CLI auth login** (subprocess, first-time) — non-REPL, stdio pipe
+    3. **claude keychain** (read existing) — subprocess 없이 keychain 만 read
+
+  공통 helper `_mirror_claude_keychain_to_authtoml` 추출.
+
+- **`/login anthropic` — 3-option picker + Crumb-style stdio pipe.**
+  v0.99.9's claude-CLI option spawned the REPL (the user ended up
+  inside a full Claude Code session). v0.99.10 swaps the command to
+  the non-REPL `claude auth login`, pipes stdio per Crumb's
+  `src/adapters/claude-local.ts` adapter (`stdio: ['ignore','pipe','pipe']`),
+  and filters claude's output so only OAuth-progress lines surface in
+  the GEODE REPL. A third picker option lets users who already ran
+  `claude auth login` skip the spawn and just import the keychain.
+
+
+
 ## [0.99.9] — 2026-05-17
 
 ### Changed

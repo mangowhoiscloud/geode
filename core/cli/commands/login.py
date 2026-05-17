@@ -687,8 +687,15 @@ def _login_oauth_anthropic() -> None:
     from core.cli import commands as _pkg
 
     sources: list[tuple[str, str]] = [
-        ("api_key", "API key      (Anthropic Console PAYG)"),
-        ("claude_cli", "claude CLI   (subprocess — uses Claude subscription)"),
+        ("api_key", "API key         (Anthropic Console PAYG)"),
+        (
+            "claude_subprocess",
+            "claude CLI      (auth login subprocess — first-time setup)",
+        ),
+        (
+            "claude_keychain",
+            "claude keychain (read existing — if already signed in via claude)",
+        ),
     ]
     menu = TerminalMenu(
         [label for _, label in sources],
@@ -706,8 +713,10 @@ def _login_oauth_anthropic() -> None:
     source_id = sources[idx][0]
     if source_id == "api_key":
         _login_anthropic_api_key()
-    elif source_id == "claude_cli":
-        _login_anthropic_via_claude_cli()
+    elif source_id == "claude_subprocess":
+        _login_anthropic_via_claude_subprocess()
+    elif source_id == "claude_keychain":
+        _login_anthropic_via_claude_keychain()
 
 
 def _login_anthropic_api_key() -> None:
@@ -780,17 +789,14 @@ def _login_anthropic_api_key() -> None:
     _pkg.console.print("  [muted]Stored: ~/.geode/auth.toml[/muted]\n")
 
 
-def _login_anthropic_via_claude_cli() -> None:
-    """Branch 2 — claude CLI subprocess (paperclip ACP-style delegation).
+def _mirror_claude_keychain_to_authtoml(*, after_subprocess: bool) -> bool:
+    """Read claude CLI's OAuth keychain and persist to ``auth.toml``.
 
-    Spawns ``claude /login`` in the user's TTY; the first-party CLI drives
-    its own OAuth flow (browser → claude.ai consent → keychain persist).
-    On exit we re-read the keychain via :mod:`plugins.petri_audit.claude_code_provider`
-    and mirror the token into ``~/.geode/auth.toml`` so GEODE picks it up
-    without going through claude CLI on every call.
+    Shared between the subprocess branch (after ``claude auth login``
+    completes) and the keychain-only branch (when the user has already
+    signed in via claude separately). Returns True on success, False if
+    no token is available.
     """
-    import shutil
-    import subprocess
     from datetime import UTC, datetime
 
     from core.auth.plan_registry import get_plan_registry
@@ -798,34 +804,6 @@ def _login_anthropic_via_claude_cli() -> None:
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
     from core.wiring.container import ensure_profile_store
-
-    claude_bin = shutil.which("claude")
-    if not claude_bin:
-        _pkg.console.print()
-        _pkg.console.print("  [warning]`claude` CLI not found in PATH.[/warning]")
-        _pkg.console.print("  [muted]Install: npm install -g @anthropic-ai/claude-code[/muted]\n")
-        return
-
-    _pkg.console.print()
-    _pkg.console.print(f"  [muted]Found claude CLI: {claude_bin}[/muted]")
-    _pkg.console.print("  [bold]Spawning `claude /login`[/bold] — browser will open via the CLI.")
-    _pkg.console.print("  [muted]Finish OAuth in your browser, then return here.[/muted]\n")
-
-    try:
-        proc = subprocess.run(  # noqa: S603 — explicit binary from shutil.which
-            [claude_bin, "/login"],
-            check=False,
-            timeout=600,
-        )
-    except (KeyboardInterrupt, subprocess.TimeoutExpired):
-        _pkg.console.print("  [muted]Cancelled.[/muted]\n")
-        return
-
-    if proc.returncode != 0:
-        _pkg.console.print(
-            f"  [warning]claude /login exited with code {proc.returncode}.[/warning]\n"
-        )
-        return
 
     try:
         from plugins.petri_audit.claude_code_provider import (
@@ -836,12 +814,22 @@ def _login_anthropic_via_claude_cli() -> None:
         _pkg.console.print(
             "  [warning]Cannot read claude keychain — `plugins.petri_audit` missing.[/warning]\n"
         )
-        return
+        return False
 
     token = resolve_claude_oauth_token()
     if not token:
-        _pkg.console.print("  [warning]claude /login completed but keychain is empty.[/warning]\n")
-        return
+        if after_subprocess:
+            _pkg.console.print(
+                "  [warning]claude auth login completed but keychain is empty.[/warning]\n"
+            )
+        else:
+            _pkg.console.print()
+            _pkg.console.print("  [warning]claude keychain is empty.[/warning]")
+            _pkg.console.print(
+                "  [muted]Run `claude auth login` first, or pick "
+                "'claude CLI (auth login subprocess)' to delegate.[/muted]\n"
+            )
+        return False
 
     meta = get_claude_oauth_metadata() or {}
     expires_at = float(meta.get("expires_at", 0) or 0)
@@ -852,7 +840,7 @@ def _login_anthropic_via_claude_cli() -> None:
         id=plan_id,
         provider="anthropic",
         kind=PlanKind.OAUTH_BORROWED,
-        display_name="Anthropic (Claude CLI subprocess)",
+        display_name="Anthropic (Claude CLI keychain)",
         base_url="https://api.anthropic.com",
         auth_type="oauth_external",
     )
@@ -879,6 +867,115 @@ def _login_anthropic_via_claude_cli() -> None:
     _pkg.console.print()
     _pkg.console.print("  [success]✓ Imported from claude CLI keychain.[/success]")
     _pkg.console.print("  [muted]Stored: ~/.geode/auth.toml[/muted]\n")
+    return True
+
+
+def _login_anthropic_via_claude_subprocess() -> None:
+    """Branch 2 — ``claude auth login`` subprocess (Crumb adapter pattern).
+
+    Spawns the first-party CLI's non-REPL login command with
+    ``stdio=[ignore, pipe, pipe]`` (mirrors Crumb's ``claude-local``
+    adapter: ``src/adapters/claude-local.ts:72``). GEODE filters the
+    piped output so claude's TUI artifacts do not leak into the GEODE
+    REPL — only progress-relevant lines (browser URL, success/failure
+    markers) bubble up. On exit, the keychain is mirrored into
+    ``auth.toml`` via :func:`_mirror_claude_keychain_to_authtoml`.
+
+    v0.99.10 — replaced ``claude /login`` (which entered the REPL) with
+    ``claude auth login`` (non-REPL) after user reported the previous
+    flow drops them into a full Claude Code session.
+    """
+    import re
+    import shutil
+    import subprocess
+    import threading
+
+    from core.cli import commands as _pkg
+
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
+        _pkg.console.print()
+        _pkg.console.print("  [warning]`claude` CLI not found in PATH.[/warning]")
+        _pkg.console.print("  [muted]Install: npm install -g @anthropic-ai/claude-code[/muted]\n")
+        return
+
+    _pkg.console.print()
+    _pkg.console.print(f"  [muted]Delegating to {claude_bin} auth login…[/muted]")
+    _pkg.console.print("  [bold]Browser will open;[/bold] finish OAuth there, GEODE waits below.\n")
+
+    proc = subprocess.Popen(  # noqa: S603 — explicit binary from shutil.which
+        [claude_bin, "auth", "login"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    # Filter claude's piped output. Keep only lines that signal progress —
+    # drop ANSI box-drawing, version banners, REPL prompts, mode-banner
+    # text. Pattern derived from observing v0.99.9 user report.
+    _ansi_re = re.compile(r"\x1b\[[0-9;]*[mGKHJABCDsuf]")
+    _keywords = (
+        "browser",
+        "open",
+        "url",
+        "http",
+        "code",
+        "token",
+        "success",
+        "fail",
+        "error",
+        "expir",
+        "logging in",
+        "signed in",
+    )
+
+    def _filter() -> None:
+        if proc.stdout is None:
+            return
+        for raw in proc.stdout:
+            stripped = _ansi_re.sub("", raw).strip()
+            if not stripped:
+                continue
+            low = stripped.lower()
+            if any(k in low for k in _keywords):
+                _pkg.console.print(f"  [muted]→ {stripped}[/muted]")
+
+    reader = threading.Thread(target=_filter, daemon=True)
+    reader.start()
+
+    try:
+        rc = proc.wait(timeout=600)
+    except KeyboardInterrupt:
+        proc.terminate()
+        _pkg.console.print("\n  [muted]Cancelled.[/muted]\n")
+        return
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+        _pkg.console.print("  [warning]Timed out after 10 min.[/warning]\n")
+        return
+
+    if rc != 0:
+        _pkg.console.print(f"  [warning]claude auth login exited with code {rc}.[/warning]\n")
+        return
+
+    _mirror_claude_keychain_to_authtoml(after_subprocess=True)
+
+
+def _login_anthropic_via_claude_keychain() -> None:
+    """Branch 3 — read existing claude CLI keychain (Crumb pattern).
+
+    No subprocess spawn. Assumes the user has already authenticated via
+    ``claude auth login`` in a separate session and just wants GEODE to
+    import the existing token. Pure keychain read (PR #1202 pattern).
+    """
+    from core.cli import commands as _pkg
+
+    _pkg.console.print()
+    _pkg.console.print("  [muted]Reading claude CLI keychain…[/muted]")
+    _mirror_claude_keychain_to_authtoml(after_subprocess=False)
+    _pkg.console.print()
 
 
 def _login_set_key(rest: str) -> None:
