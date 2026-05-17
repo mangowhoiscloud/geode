@@ -174,6 +174,32 @@ Open items:
 - Verify whether `inspect-petri` git dependency in the optional `audit` extra
   should remain excluded from Homebrew resources.
 
+GEODE keeps the formula source in this repo as a renderable template, not as
+the tap itself:
+
+```bash
+uv run python scripts/render_homebrew_formula.py \
+  --version 0.99.11 \
+  --sdist-url https://github.com/mangowhoiscloud/geode/releases/download/v0.99.11/geode-0.99.11.tar.gz \
+  --sdist-sha256 <sha256-from-SHA256SUMS> \
+  --output packaging/homebrew/geode.rb
+```
+
+Before copying `geode.rb` into `homebrew-geode`, fill the Python dependency
+resources in the tap checkout with Homebrew's official helper:
+
+```bash
+brew update-python-resources --print-only geode
+```
+
+Then run the tap-local gates:
+
+```bash
+brew audit --new --strict geode
+brew install --build-from-source ./Formula/geode.rb
+brew test geode
+```
+
 ### 4. Hugging Face Hub
 
 GEODE should not publish to a model repo unless it ships model weights. Use
